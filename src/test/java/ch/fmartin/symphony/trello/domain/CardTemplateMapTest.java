@@ -13,7 +13,7 @@ final class CardTemplateMapTest {
     @Test
     void exposesBlockersAsTemplateFriendlyMaps() {
         // given
-        Card card = new Card(
+        var card = new Card(
                 TestCards.card("card-1", "TRELLO-abc", "Ready for Codex").id(),
                 "TRELLO-abc",
                 "Implement feature",

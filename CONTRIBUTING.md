@@ -232,6 +232,26 @@ SYMPHONY_TRELLO_TEST_PWSH=./scripts/pwsh-docker.sh ./mvnw -Dtest=InstallerScript
 
 Prefix these commands with `SYMPHONY_TRELLO_CONTAINER_RUNTIME=podman` on a Podman host.
 
+## OpenRewrite Maintenance
+
+The opt-in OpenRewrite profile provides a curated semantic-maintenance pipeline without changing
+the normal non-mutating `./mvnw -q spotless:check verify` command. Apply OpenRewrite first and let
+Spotless normalize its output second:
+
+```bash
+./mvnw -Popenrewrite rewrite:discover
+./mvnw -Popenrewrite rewrite:run
+./mvnw -q spotless:apply
+git diff
+./mvnw -q spotless:check verify
+```
+
+Use a clean branch or disposable worktree, review the complete combined diff, and commit only a
+state for which `OpenRewrite -> Spotless` leaves no Git changes. A raw `rewrite:dryRun` remains
+available as an optional preview, but its unformatted output is not the accepted repository state.
+The [OpenRewrite maintenance guide](docs/openrewrite.md) documents the pinned inventory, exhaustive
+recipe decisions, artifact handling, rollback, validation, and update policy.
+
 ## Commit Style
 
 Use Conventional Commits. The pull request template asks how the change should appear in `main`:

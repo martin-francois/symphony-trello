@@ -13,6 +13,7 @@ import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpExchange;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -122,8 +123,8 @@ final class TrelloClientChaosTest {
     @Test
     void readRateLimitRetriesButWriteRateLimitDoesNotRetry() throws IOException {
         // given
-        CountingResponse board = new CountingResponse(429, boardJson("board-1", "Board", false));
-        trello.on("/1/boards/input", exchange -> board.respond(exchange));
+        var board = new CountingResponse(429, boardJson("board-1", "Board", false));
+        trello.on("/1/boards/input", board::respond);
         trello.on(
                 "/1/boards/board-1/lists",
                 exchange -> respond(exchange, listsJson(trelloList("list-todo", "Todo", 1))));
@@ -211,7 +212,7 @@ final class TrelloClientChaosTest {
             this.successBody = successBody;
         }
 
-        private void respond(com.sun.net.httpserver.HttpExchange exchange) throws IOException {
+        private void respond(HttpExchange exchange) throws IOException {
             requests++;
             if (requests == 1) {
                 FakeTrelloServer.respond(exchange, firstStatus, "{}");

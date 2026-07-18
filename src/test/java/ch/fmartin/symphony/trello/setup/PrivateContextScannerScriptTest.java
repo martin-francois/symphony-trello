@@ -32,7 +32,7 @@ final class PrivateContextScannerScriptTest {
         ProcessResult result = runScanner("Found " + PRIVATE_TRELLO_URL + "\n", "--stdin");
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output())
                 .contains("trello-url-private-context")
                 .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");
@@ -48,7 +48,7 @@ final class PrivateContextScannerScriptTest {
                 runScannerWithEnvironment(dockerFallbackEnvironment(), "Found " + PRIVATE_TRELLO_URL + "\n", "--stdin");
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output())
                 .contains("trello-url-private-context")
                 .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");
@@ -77,13 +77,13 @@ final class PrivateContextScannerScriptTest {
         // given
         assumeToolsAvailable();
         Path body = tempDir.resolve("body.md");
-        Files.writeString(body, "board id " + PRIVATE_TRELLO_ID + "\n", StandardCharsets.UTF_8);
+        Files.writeString(body, "board id " + PRIVATE_TRELLO_ID + "\n");
 
         // when
         ProcessResult result = runScanner("", "--file", body.toString());
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output()).contains("trello-id-private-context").doesNotContain(PRIVATE_TRELLO_ID);
     }
 
@@ -111,7 +111,7 @@ final class PrivateContextScannerScriptTest {
         // given
         assumeToolsAvailable();
         Path body = tempDir.resolve("blank.md");
-        Files.writeString(body, "\n\n", StandardCharsets.UTF_8);
+        Files.writeString(body, "\n\n");
 
         // when
         ProcessResult result = runScanner("", "--file", body.toString());
@@ -125,7 +125,7 @@ final class PrivateContextScannerScriptTest {
         // given
         assumeToolsAvailable();
         Path body = tempDir.resolve("whitespace.md");
-        Files.writeString(body, "   \n\t \n", StandardCharsets.UTF_8);
+        Files.writeString(body, "   \n\t \n");
 
         // when
         ProcessResult result = runScanner("", "--file", body.toString());
@@ -140,7 +140,7 @@ final class PrivateContextScannerScriptTest {
         assumeToolsAvailable();
         assumeTrue(commandExists("git"));
         initializeGitRepositoryWithCleanNote();
-        Files.writeString(tempDir.resolve("other.md"), "still clean\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("other.md"), "still clean\n");
         run(Map.of(), tempDir, "git", "add", "other.md").assertSuccess();
         run(Map.of(), tempDir, "git", "commit", "-m", "test: mention " + PRIVATE_TRELLO_URL)
                 .assertSuccess();
@@ -149,7 +149,7 @@ final class PrivateContextScannerScriptTest {
         ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--git-range", "HEAD~1..HEAD");
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output())
                 .contains("git-range:HEAD~1..HEAD", "trello-url-private-context")
                 .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");
@@ -161,7 +161,7 @@ final class PrivateContextScannerScriptTest {
         assumeToolsAvailable();
         assumeTrue(commandExists("git"));
         initializeGitRepositoryWithCleanNote();
-        Files.writeString(tempDir.resolve("note.md"), "board " + PRIVATE_TRELLO_URL + "\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("note.md"), "board " + PRIVATE_TRELLO_URL + "\n");
         run(Map.of(), tempDir, "git", "add", "note.md").assertSuccess();
         run(Map.of(), tempDir, "git", "commit", "-m", "test: mention " + PRIVATE_TRELLO_ID)
                 .assertSuccess();
@@ -170,7 +170,7 @@ final class PrivateContextScannerScriptTest {
         ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--git-range", "HEAD~1..HEAD");
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output())
                 .contains("git-range:HEAD~1..HEAD", "git-patch:HEAD~1..HEAD", "trello-url-private-context")
                 .doesNotContain(PRIVATE_TRELLO_ID, PRIVATE_TRELLO_URL, "AbCd1234");
@@ -182,7 +182,7 @@ final class PrivateContextScannerScriptTest {
         assumeToolsAvailable();
         assumeTrue(commandExists("git"));
         initializeGitRepositoryWithCleanNote();
-        Files.writeString(tempDir.resolve("note.md"), "board " + PRIVATE_TRELLO_URL + "\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("note.md"), "board " + PRIVATE_TRELLO_URL + "\n");
         run(Map.of(), tempDir, "git", "add", "note.md").assertSuccess();
         run(Map.of(), tempDir, "git", "commit", "-m", "test: update note").assertSuccess();
 
@@ -190,7 +190,7 @@ final class PrivateContextScannerScriptTest {
         ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--git-range", "HEAD~1..HEAD");
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output())
                 .contains("trello-url-private-context")
                 .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");
@@ -202,7 +202,7 @@ final class PrivateContextScannerScriptTest {
         assumeToolsAvailable();
         assumeTrue(commandExists("git"));
         initializeGitRepositoryWithCleanNote();
-        Files.writeString(tempDir.resolve("note.md"), "+" + PRIVATE_TRELLO_URL + "\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("note.md"), "+" + PRIVATE_TRELLO_URL + "\n");
         run(Map.of(), tempDir, "git", "add", "note.md").assertSuccess();
         run(Map.of(), tempDir, "git", "commit", "-m", "test: add plus-prefixed note")
                 .assertSuccess();
@@ -211,7 +211,7 @@ final class PrivateContextScannerScriptTest {
         ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--git-range", "HEAD~1..HEAD");
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output())
                 .contains("git-patch:HEAD~1..HEAD", "trello-url-private-context")
                 .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");
@@ -223,11 +223,11 @@ final class PrivateContextScannerScriptTest {
         assumeToolsAvailable();
         assumeTrue(commandExists("git"));
         initializeGitRepositoryWithCleanNote();
-        Files.writeString(tempDir.resolve("note.md"), "board " + PRIVATE_TRELLO_URL + "\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("note.md"), "board " + PRIVATE_TRELLO_URL + "\n");
         run(Map.of(), tempDir, "git", "add", "note.md").assertSuccess();
         run(Map.of(), tempDir, "git", "commit", "-m", "test: add temporary private fixture")
                 .assertSuccess();
-        Files.writeString(tempDir.resolve("note.md"), "board clean\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("note.md"), "board clean\n");
         run(Map.of(), tempDir, "git", "add", "note.md").assertSuccess();
         run(Map.of(), tempDir, "git", "commit", "-m", "test: remove temporary private fixture")
                 .assertSuccess();
@@ -236,7 +236,7 @@ final class PrivateContextScannerScriptTest {
         ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--git-range", "HEAD~2..HEAD");
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output())
                 .contains("git-patch:HEAD~2..HEAD", "trello-url-private-context")
                 .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");
@@ -248,11 +248,11 @@ final class PrivateContextScannerScriptTest {
         assumeToolsAvailable();
         assumeTrue(commandExists("git"));
         initializeGitRepository();
-        Files.writeString(tempDir.resolve("note.md"), "board " + PRIVATE_TRELLO_URL + "\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("note.md"), "board " + PRIVATE_TRELLO_URL + "\n");
         run(Map.of(), tempDir, "git", "add", "note.md").assertSuccess();
         run(Map.of(), tempDir, "git", "commit", "-m", "test: add private fixture")
                 .assertSuccess();
-        Files.writeString(tempDir.resolve("note.md"), "board " + SYNTHETIC_TRELLO_URL + "\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("note.md"), "board " + SYNTHETIC_TRELLO_URL + "\n");
         run(Map.of(), tempDir, "git", "add", "note.md").assertSuccess();
         run(Map.of(), tempDir, "git", "commit", "-m", "test: replace private fixture")
                 .assertSuccess();
@@ -270,17 +270,16 @@ final class PrivateContextScannerScriptTest {
         assumeToolsAvailable();
         assumeTrue(commandExists("git"));
         initializeGitRepository();
-        Files.writeString(tempDir.resolve("tracked.md"), "tracked\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("tracked.md"), "tracked\n");
         run(Map.of(), tempDir, "git", "add", "tracked.md").assertSuccess();
         run(Map.of(), tempDir, "git", "commit", "-m", "test: add tracked note").assertSuccess();
-        Files.writeString(
-                tempDir.resolve("untracked.md"), "board " + PRIVATE_TRELLO_URL + "\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("untracked.md"), "board " + PRIVATE_TRELLO_URL + "\n");
 
         // when
         ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--worktree");
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output())
                 .contains("trello-url-private-context")
                 .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");
@@ -293,14 +292,13 @@ final class PrivateContextScannerScriptTest {
         assumeTrue(commandExists("git"));
         initializeGitRepository();
         Path subdirectory = Files.createDirectories(tempDir.resolve("nested"));
-        Files.writeString(
-                tempDir.resolve("untracked.md"), "board " + PRIVATE_TRELLO_URL + "\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("untracked.md"), "board " + PRIVATE_TRELLO_URL + "\n");
 
         // when
         ProcessResult result = run(scannerEnvironment(), subdirectory, scanner().toString(), "--worktree");
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output())
                 .contains("trello-url-private-context")
                 .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");
@@ -312,16 +310,13 @@ final class PrivateContextScannerScriptTest {
         assumeToolsAvailable();
         assumeTrue(commandExists("git"));
         initializeGitRepository();
-        Files.writeString(tempDir.resolve(".gitignore"), "node_modules/\n", StandardCharsets.UTF_8);
-        Files.writeString(tempDir.resolve("tracked.md"), "tracked\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve(".gitignore"), "node_modules/\n");
+        Files.writeString(tempDir.resolve("tracked.md"), "tracked\n");
         run(Map.of(), tempDir, "git", "add", ".gitignore", "tracked.md").assertSuccess();
         run(Map.of(), tempDir, "git", "commit", "-m", "test: ignore dependencies")
                 .assertSuccess();
         Path ignoredDirectory = Files.createDirectories(tempDir.resolve("node_modules"));
-        Files.writeString(
-                ignoredDirectory.resolve("dependency.md"),
-                "ignored board " + PRIVATE_TRELLO_URL + "\n",
-                StandardCharsets.UTF_8);
+        Files.writeString(ignoredDirectory.resolve("dependency.md"), "ignored board " + PRIVATE_TRELLO_URL + "\n");
 
         // when
         ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--worktree");
@@ -336,17 +331,17 @@ final class PrivateContextScannerScriptTest {
         assumeToolsAvailable();
         assumeTrue(commandExists("git"));
         initializeGitRepository();
-        Files.writeString(tempDir.resolve("tracked.md"), "tracked\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("tracked.md"), "tracked\n");
         run(Map.of(), tempDir, "git", "add", "tracked.md").assertSuccess();
         run(Map.of(), tempDir, "git", "commit", "-m", "test: add tracked note").assertSuccess();
-        Files.writeString(tempDir.resolve(".gitignore"), "tracked.md\n", StandardCharsets.UTF_8);
-        Files.writeString(tempDir.resolve("tracked.md"), "board " + PRIVATE_TRELLO_URL + "\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve(".gitignore"), "tracked.md\n");
+        Files.writeString(tempDir.resolve("tracked.md"), "board " + PRIVATE_TRELLO_URL + "\n");
 
         // when
         ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--worktree");
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output())
                 .contains("trello-url-private-context")
                 .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");
@@ -358,13 +353,13 @@ final class PrivateContextScannerScriptTest {
         assumeToolsAvailable();
         assumeTrue(commandExists("git"));
         initializeGitRepository();
-        Files.writeString(tempDir.resolve("-note.md"), "board " + PRIVATE_TRELLO_URL + "\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("-note.md"), "board " + PRIVATE_TRELLO_URL + "\n");
 
         // when
         ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--worktree");
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output())
                 .contains("trello-url-private-context")
                 .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");
@@ -376,7 +371,7 @@ final class PrivateContextScannerScriptTest {
         assumeToolsAvailable();
         assumeTrue(commandExists("git"));
         initializeGitRepository();
-        Files.writeString(tempDir.resolve(".git/index"), "invalid index", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve(".git/index"), "invalid index");
 
         // when
         ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--worktree");
@@ -394,8 +389,7 @@ final class PrivateContextScannerScriptTest {
         initializeGitRepository();
         Path nestedRepository = Files.createDirectories(tempDir.resolve("nested"));
         run(Map.of(), nestedRepository, "git", "init", "-b", "main").assertSuccess();
-        Files.writeString(
-                nestedRepository.resolve("note.md"), "board " + PRIVATE_TRELLO_URL + "\n", StandardCharsets.UTF_8);
+        Files.writeString(nestedRepository.resolve("note.md"), "board " + PRIVATE_TRELLO_URL + "\n");
 
         // when
         ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--worktree");
@@ -412,9 +406,7 @@ final class PrivateContextScannerScriptTest {
         initializeGitRepository();
         Path configDirectory = Files.createDirectories(tempDir.resolve("config/betterleaks"));
         Files.writeString(
-                configDirectory.resolve("private-context.toml"),
-                "example = \"" + PRIVATE_TRELLO_URL + "\"\n",
-                StandardCharsets.UTF_8);
+                configDirectory.resolve("private-context.toml"), "example = \"" + PRIVATE_TRELLO_URL + "\"\n");
         run(Map.of(), tempDir, "git", "add", "config/betterleaks/private-context.toml")
                 .assertSuccess();
 
@@ -432,13 +424,12 @@ final class PrivateContextScannerScriptTest {
         assumeTrue(commandExists("git"));
         initializeGitRepository();
         Path trackedDirectory = Files.createDirectories(tempDir.resolve("tracked"));
-        Files.writeString(trackedDirectory.resolve("note.md"), "clean\n", StandardCharsets.UTF_8);
-        Files.writeString(tempDir.resolve(".gitignore"), ".ignored-outside/\n", StandardCharsets.UTF_8);
+        Files.writeString(trackedDirectory.resolve("note.md"), "clean\n");
+        Files.writeString(tempDir.resolve(".gitignore"), ".ignored-outside/\n");
         run(Map.of(), tempDir, "git", "add", ".gitignore", "tracked/note.md").assertSuccess();
         run(Map.of(), tempDir, "git", "commit", "-m", "test: add tracked note").assertSuccess();
         Path outsideDirectory = Files.createDirectories(tempDir.resolve(".ignored-outside"));
-        Files.writeString(
-                outsideDirectory.resolve("note.md"), "board " + PRIVATE_TRELLO_URL + "\n", StandardCharsets.UTF_8);
+        Files.writeString(outsideDirectory.resolve("note.md"), "board " + PRIVATE_TRELLO_URL + "\n");
         Files.delete(trackedDirectory.resolve("note.md"));
         Files.delete(trackedDirectory);
         Files.createSymbolicLink(tempDir.resolve("tracked"), outsideDirectory);
@@ -456,7 +447,7 @@ final class PrivateContextScannerScriptTest {
 
     private ProcessResult runScannerWithEnvironment(Map<String, String> environment, String input, String... arguments)
             throws Exception {
-        ProcessBuilder processBuilder = new ProcessBuilder(scannerCommand(arguments));
+        var processBuilder = new ProcessBuilder(scannerCommand(arguments));
         processBuilder.directory(Path.of(".").toAbsolutePath().normalize().toFile());
         processBuilder.environment().remove("BETTERLEAKS_COMMAND");
         processBuilder.environment().putAll(environment);
@@ -472,7 +463,7 @@ final class PrivateContextScannerScriptTest {
 
     private void initializeGitRepositoryWithCleanNote() throws Exception {
         initializeGitRepository();
-        Files.writeString(tempDir.resolve("note.md"), "clean\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("note.md"), "clean\n");
         run(Map.of(), tempDir, "git", "add", "note.md").assertSuccess();
         run(Map.of(), tempDir, "git", "commit", "-m", "test: add clean note").assertSuccess();
     }

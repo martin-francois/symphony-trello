@@ -68,8 +68,8 @@ final class ApiExceptionMapperTest {
     }
 
     private static String errorCode(Response response) {
-        Map<?, ?> body = (Map<?, ?>) response.getEntity();
-        Map<?, ?> error = (Map<?, ?>) body.get("error");
+        var body = (Map<?, ?>) response.getEntity();
+        var error = (Map<?, ?>) body.get("error");
         return String.valueOf(error.get("code"));
     }
 }

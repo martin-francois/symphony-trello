@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -41,7 +42,7 @@ final class WorkspaceManagerTest {
         Path workspacePath = marker.getParent().toAbsolutePath().normalize();
         assertThat(first).isEqualTo(new Workspace(workspacePath, "TRELLO-a_b", true));
         assertThat(second).isEqualTo(new Workspace(workspacePath, "TRELLO-a_b", false));
-        assertThat(Files.readString(marker)).contains("created");
+        assertThat(marker).content(StandardCharsets.UTF_8).contains("created");
     }
 
     @Test
@@ -110,7 +111,7 @@ final class WorkspaceManagerTest {
 
         // then
         assertThat(workspace.path()).doesNotExist();
-        assertThat(Files.readString(marker)).contains("removed");
+        assertThat(marker).content(StandardCharsets.UTF_8).contains("removed");
     }
 
     @Test

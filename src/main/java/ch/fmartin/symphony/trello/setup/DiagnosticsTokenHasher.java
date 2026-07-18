@@ -74,7 +74,7 @@ final class DiagnosticsTokenHasher {
             return Optional.empty();
         }
         try {
-            return parseKey(Files.readString(keyPath, StandardCharsets.UTF_8)).map(DiagnosticsTokenHasher::persisted);
+            return parseKey(Files.readString(keyPath)).map(DiagnosticsTokenHasher::persisted);
         } catch (IOException ignored) {
             return Optional.empty();
         }
@@ -99,12 +99,11 @@ final class DiagnosticsTokenHasher {
     private static void createKeyFile(Path keyPath, byte[] key) throws IOException {
         if (supportsPosixFilePermissions(keyPath)) {
             Files.createFile(keyPath, PosixFilePermissions.asFileAttribute(ownerOnlyKeyPermissions()));
-            Files.writeString(keyPath, HexFormat.of().formatHex(key) + "\n", StandardCharsets.UTF_8);
+            Files.writeString(keyPath, HexFormat.of().formatHex(key) + "\n");
         } else {
             Files.writeString(
                     keyPath,
                     HexFormat.of().formatHex(key) + "\n",
-                    StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE_NEW,
                     StandardOpenOption.WRITE);
         }

@@ -27,9 +27,8 @@ final class LocalLogTailerTest {
                         "\n",
                         IntStream.rangeClosed(1, 150)
                                 .mapToObj(line -> "line-" + line)
-                                .toList()),
-                StandardCharsets.UTF_8);
-        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
+                                .toList()));
+        var stdout = new ByteArrayOutputStream();
 
         // when
         new LocalLogTailer().printRecent(List.of(logFile), 5, new PrintStream(stdout, true, StandardCharsets.UTF_8));
@@ -49,8 +48,8 @@ final class LocalLogTailerTest {
         for (int line = 1; line <= 300; line++) {
             allLines.add("line-%03d-%s".formatted(line, payload));
         }
-        Files.writeString(logFile, String.join("\n", allLines), StandardCharsets.UTF_8);
-        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
+        Files.writeString(logFile, String.join("\n", allLines));
+        var stdout = new ByteArrayOutputStream();
 
         // when
         new LocalLogTailer().printRecent(List.of(logFile), 250, new PrintStream(stdout, true, StandardCharsets.UTF_8));

@@ -70,16 +70,16 @@ final class CodexModelDefaultsResolverTest {
 
         // then
         assertThat(defaults.defaults()).isEqualTo(new CodexModelDefaults("gpt-5.4", "medium"));
-        assertThat(defaults.reasoningEffortForModel("gpt-5.4")).contains("medium");
-        assertThat(defaults.reasoningEffortForModel("gpt-5.6-sol")).contains("low");
+        assertThat(defaults.reasoningEffortForModel("gpt-5.4")).hasValue("medium");
+        assertThat(defaults.reasoningEffortForModel("gpt-5.6-sol")).hasValue("low");
         assertThat(defaults.reasoningEffortChoicesForModel("gpt-5.4"))
-                .contains(List.of("low", "medium", "high", "xhigh"));
+                .hasValue(List.of("low", "medium", "high", "xhigh"));
         assertThat(defaults.reasoningEffortChoicesForModel("gpt-5.6-sol"))
-                .contains(List.of("low", "medium", "high", "xhigh", "max", "ultra"));
+                .hasValue(List.of("low", "medium", "high", "xhigh", "max", "ultra"));
         assertThat(defaults.reasoningEffortDescriptionForModel("gpt-5.6-sol", "max"))
-                .contains("Maximum reasoning depth for the hardest problems");
+                .hasValue("Maximum reasoning depth for the hardest problems");
         assertThat(defaults.reasoningEffortDescriptionForModel("gpt-5.6-sol", "ultra"))
-                .contains("Maximum reasoning with automatic task delegation");
+                .hasValue("Maximum reasoning with automatic task delegation");
     }
 
     @Test
@@ -104,9 +104,9 @@ final class CodexModelDefaultsResolverTest {
                 new CodexModelDefaultsResolver(json, List.of(appServer.toString())).resolveSelectionDefaults();
 
         // then
-        assertThat(defaults.reasoningEffortChoicesForModel("gpt-5.6-sol")).contains(List.of("low", "medium", "high"));
+        assertThat(defaults.reasoningEffortChoicesForModel("gpt-5.6-sol")).hasValue(List.of("low", "medium", "high"));
         assertThat(defaults.reasoningEffortDescriptionForModel("gpt-5.6-sol", "low"))
-                .contains("First");
+                .hasValue("First");
     }
 
     @MethodSource("catalogControlCharacterScenarios")
@@ -167,9 +167,9 @@ final class CodexModelDefaultsResolverTest {
 
         // then
         assertThat(defaults.defaults()).isEqualTo(new CodexModelDefaults("gpt-visible", "high"));
-        assertThat(defaults.reasoningEffortChoicesForModel("gpt-5.6-terra")).contains(List.of("low", "medium", "high"));
+        assertThat(defaults.reasoningEffortChoicesForModel("gpt-5.6-terra")).hasValue(List.of("low", "medium", "high"));
         assertThat(defaults.reasoningEffortDescriptionForModel("gpt-5.6-terra", "high"))
-                .contains("Deep Terra");
+                .hasValue("Deep Terra");
     }
 
     @Test
@@ -214,10 +214,10 @@ final class CodexModelDefaultsResolverTest {
 
         // then
         assertThat(defaults.defaults()).isEqualTo(new CodexModelDefaults("gpt-5.6-terra", "high"));
-        assertThat(defaults.reasoningEffortForModel("gpt-5.6-terra")).contains("high");
-        assertThat(defaults.reasoningEffortChoicesForModel("gpt-5.6-terra")).contains(List.of("high", "max"));
+        assertThat(defaults.reasoningEffortForModel("gpt-5.6-terra")).hasValue("high");
+        assertThat(defaults.reasoningEffortChoicesForModel("gpt-5.6-terra")).hasValue(List.of("high", "max"));
         assertThat(defaults.reasoningEffortDescriptionForModel("gpt-5.6-terra", "high"))
-                .contains("Terra recommendation from Codex");
+                .hasValue("Terra recommendation from Codex");
     }
 
     @Test
@@ -244,7 +244,7 @@ final class CodexModelDefaultsResolverTest {
         // then
         assertThat(defaults.defaults()).isEqualTo(CodexModelDefaults.partial("gpt-5.6-terra", null));
         assertThat(defaults.reasoningEffortForModel("gpt-5.6-terra")).isEmpty();
-        assertThat(defaults.reasoningEffortChoicesForModel("gpt-5.6-terra")).contains(List.of("low", "high"));
+        assertThat(defaults.reasoningEffortChoicesForModel("gpt-5.6-terra")).hasValue(List.of("low", "high"));
     }
 
     @Test
@@ -271,7 +271,7 @@ final class CodexModelDefaultsResolverTest {
         // then
         assertThat(defaults.defaults()).isEqualTo(CodexModelDefaults.partial("gpt-no-default", null));
         assertThat(defaults.reasoningEffortForModel("gpt-no-default")).isEmpty();
-        assertThat(defaults.reasoningEffortChoicesForModel("gpt-no-default")).contains(List.of("low", "high"));
+        assertThat(defaults.reasoningEffortChoicesForModel("gpt-no-default")).hasValue(List.of("low", "high"));
     }
 
     @Test

@@ -126,10 +126,8 @@ abstract class LocalSetupFixtureSupport {
         return setupWithBoardSetup(new TrelloBoardSetup(new ObjectMapper(), codexDefaults));
     }
 
-    /**
-     * Returns a setup whose port-availability checks use the given probe instead of real loopback
-     * sockets, so port-selection assertions stay independent of live host port occupancy.
-     */
+    /// Returns a setup whose port-availability checks use the given probe instead of real loopback
+    /// sockets, so port-selection assertions stay independent of live host port occupancy.
     protected LocalSetup setupWithPortProbe(IntPredicate portInUse) {
         return setupWithBoardSetup(new TrelloBoardSetup(new ObjectMapper()).withPortProbe(portInUse));
     }
@@ -178,7 +176,7 @@ abstract class LocalSetupFixtureSupport {
     }
 
     protected static int availablePort() {
-        try (ServerSocket socket = new ServerSocket(0)) {
+        try (var socket = new ServerSocket(0)) {
             return socket.getLocalPort();
         } catch (IOException e) {
             throw new AssertionError("Could not allocate test port", e);

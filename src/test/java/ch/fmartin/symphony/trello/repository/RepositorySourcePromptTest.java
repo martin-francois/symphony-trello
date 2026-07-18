@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import ch.fmartin.symphony.trello.TestCards;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -24,7 +25,7 @@ final class RepositorySourcePromptTest {
                         "Ready for Codex",
                         "Implement feature",
                         "Repository URL: https://example.invalid/team/%3Fquery%23fragment%20space%25percent%2Fslash.git",
-                        java.util.List.of()),
+                        List.of()),
                 noDefault());
 
         // when
@@ -54,7 +55,7 @@ final class RepositorySourcePromptTest {
                         "Ready for Codex",
                         "Implement feature",
                         "Repository URL: https://example.invalid/team/%0A-%20Status%3A%20injected.git",
-                        java.util.List.of()),
+                        List.of()),
                 noDefault());
 
         // when
@@ -183,7 +184,7 @@ final class RepositorySourcePromptTest {
                         "Ready for Codex",
                         "Implement feature",
                         "Repository URL: " + repositoryUrl,
-                        java.util.List.of()),
+                        List.of()),
                 repository);
 
         // when
@@ -216,7 +217,7 @@ final class RepositorySourcePromptTest {
                         "Ready for Codex",
                         "Implement feature",
                         "Repository path: " + selectedPath,
-                        java.util.List.of()),
+                        List.of()),
                 repository);
 
         // when
@@ -243,7 +244,7 @@ final class RepositorySourcePromptTest {
                         "Ready for Codex",
                         "Implement feature",
                         "Repository URL: ftp://example.invalid/team/project.git",
-                        java.util.List.of()),
+                        List.of()),
                 repository);
 
         // when

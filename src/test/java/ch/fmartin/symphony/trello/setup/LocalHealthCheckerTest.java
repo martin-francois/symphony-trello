@@ -40,7 +40,7 @@ final class LocalHealthCheckerTest {
                 {"workflowPath":"%s","boardId":"full-board-id","configuredBoardId":"abc123"}
                 """
                         .formatted(workflow));
-        LocalHealthChecker checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
+        var checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
 
         // when
         BoardHealth health = checker.workflowHealth(
@@ -48,7 +48,7 @@ final class LocalHealthCheckerTest {
 
         // then
         assertThat(health.kind()).isEqualTo(BoardHealthKind.SAME_WORKFLOW);
-        assertThat(health.actualBoardId()).contains("full-board-id");
+        assertThat(health.actualBoardId()).hasValue("full-board-id");
         assertThat(health.workerPid()).isEmpty();
     }
 
@@ -61,7 +61,7 @@ final class LocalHealthCheckerTest {
                 {"workflowPath":"%s","boardId":"full-board-id","configuredBoardId":"abc123","pid":4242}
                 """
                         .formatted(workflow));
-        LocalHealthChecker checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
+        var checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
 
         // when
         BoardHealth health = checker.workflowHealth(
@@ -69,14 +69,14 @@ final class LocalHealthCheckerTest {
 
         // then
         assertThat(health.kind()).isEqualTo(BoardHealthKind.SAME_WORKFLOW);
-        assertThat(health.workerPid()).contains(4242L);
+        assertThat(health.workerPid()).hasValue(4242L);
     }
 
     @Test
     void workflowHealthRetriesTransientLocalStatusFailureBeforeReportingPortUsed() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md").toAbsolutePath().normalize();
-        AtomicInteger requests = new AtomicInteger();
+        var requests = new AtomicInteger();
         server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         server.createContext("/api/v1/local-status", exchange -> {
             if (requests.incrementAndGet() == 1) {
@@ -95,7 +95,7 @@ final class LocalHealthCheckerTest {
             exchange.close();
         });
         server.start();
-        LocalHealthChecker checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
+        var checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
 
         // when
         BoardHealth health = checker.workflowHealth(
@@ -121,8 +121,7 @@ final class LocalHealthCheckerTest {
     @Test
     void managedHealthPortRejectsOutOfRangeHttpPortOverride() {
         // given
-        LocalHealthChecker checker =
-                new LocalHealthChecker(Map.of("SYMPHONY_HTTP_PORT", "70000"), new WorkflowConfigEditor());
+        var checker = new LocalHealthChecker(Map.of("SYMPHONY_HTTP_PORT", "70000"), new WorkflowConfigEditor());
 
         // when
         Throwable thrown = catchThrowable(() -> checker.managedHealthPort(tempDir.resolve("WORKFLOW.md"), 18080, null));
@@ -146,10 +145,9 @@ final class LocalHealthCheckerTest {
                   port: $SYMPHONY_TEST_PORT
                 ---
                 Prompt
-                """,
-                StandardCharsets.UTF_8);
-        Files.writeString(dotenv, "SYMPHONY_TEST_PORT=19091\n", StandardCharsets.UTF_8);
-        LocalHealthChecker checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
+                """);
+        Files.writeString(dotenv, "SYMPHONY_TEST_PORT=19091\n");
+        var checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
 
         // when
         int port = checker.managedHealthPort(workflow, 18080, dotenv);
@@ -162,7 +160,7 @@ final class LocalHealthCheckerTest {
     void waitForSameWorkflowReturnsImmediatelyWhenTheProcessAlreadyDied() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md").toAbsolutePath().normalize();
-        LocalHealthChecker checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
+        var checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
         int unboundPort = unboundLoopbackPort();
         long started = System.nanoTime();
 
@@ -181,9 +179,9 @@ final class LocalHealthCheckerTest {
     void waitForSameWorkflowStopsPollingWhenTheProcessDiesMidWait() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md").toAbsolutePath().normalize();
-        LocalHealthChecker checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
+        var checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
         int unboundPort = unboundLoopbackPort();
-        AtomicInteger aliveProbes = new AtomicInteger();
+        var aliveProbes = new AtomicInteger();
         long started = System.nanoTime();
 
         // when
@@ -202,7 +200,7 @@ final class LocalHealthCheckerTest {
     void waitForSameWorkflowOutlastsSlowStartupWhileTheProcessIsAlive() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md").toAbsolutePath().normalize();
-        AtomicInteger requests = new AtomicInteger();
+        var requests = new AtomicInteger();
         String healthyJson =
                 """
                 {"workflowPath":"%s","boardId":"board-1"}
@@ -223,7 +221,7 @@ final class LocalHealthCheckerTest {
         });
         server.start();
         int port = server.getAddress().getPort();
-        LocalHealthChecker checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
+        var checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
 
         // when
         BoardHealth health =
@@ -246,9 +244,9 @@ final class LocalHealthCheckerTest {
                 .build();
     }
 
-    /** A port that was just bound and released, so nothing accepts connections on it. */
+    /// A port that was just bound and released, so nothing accepts connections on it.
     private static int unboundLoopbackPort() throws IOException {
-        try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+        try (var socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
             return socket.getLocalPort();
         }
     }

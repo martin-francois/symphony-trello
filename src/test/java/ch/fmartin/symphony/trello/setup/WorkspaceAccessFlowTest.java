@@ -26,7 +26,7 @@ final class WorkspaceAccessFlowTest {
     void parsesWorkspaceAccessPaths(String name, String input) throws Exception {
         // given
         LocalSetup.Options options = SetupOptionFactory.options(tempDir);
-        RecordingTerminal terminal = new RecordingTerminal("y", input, "n");
+        var terminal = new RecordingTerminal("y", input, "n");
         Path expected =
                 switch (name) {
                     case "home" -> Path.of(System.getProperty("user.home"));
@@ -48,7 +48,7 @@ final class WorkspaceAccessFlowTest {
     void defaultNoKeepsAdditionalPathsEmpty() throws Exception {
         // given
         LocalSetup.Options options = SetupOptionFactory.options(tempDir);
-        RecordingTerminal terminal = new RecordingTerminal("n");
+        var terminal = new RecordingTerminal("n");
 
         // when
         List<Path> paths = new WorkspaceAccessFlow().resolve(options, terminal);
@@ -73,7 +73,7 @@ final class WorkspaceAccessFlowTest {
     void acceptingAdditionalPathsPrintsDetailsBeforePathPrompt() throws Exception {
         // given
         LocalSetup.Options options = SetupOptionFactory.options(tempDir);
-        RecordingTerminal terminal = new RecordingTerminal("y", "project");
+        var terminal = new RecordingTerminal("y", "project");
 
         // when
         List<Path> paths = new WorkspaceAccessFlow().resolve(options, terminal);
@@ -93,7 +93,7 @@ final class WorkspaceAccessFlowTest {
     void additionalPathCsvRetainsJavaTrimSemantics() throws Exception {
         // given
         LocalSetup.Options options = SetupOptionFactory.options(tempDir);
-        RecordingTerminal terminal = new RecordingTerminal(
+        var terminal = new RecordingTerminal(
                 "y",
                 JAVA_TRIMMED_END_OF_TRANSMISSION + "project" + JAVA_TRIMMED_END_OF_TRANSMISSION + ","
                         + PRESERVED_EN_SPACE + "project" + PRESERVED_EN_SPACE);

@@ -59,7 +59,7 @@ final class WindowsManagedProcessPlatformTest {
     @Test
     void redirectedWorkerLogsAreRewrittenByStartProcess() {
         // given
-        WindowsManagedProcessPlatform platform = new WindowsManagedProcessPlatform();
+        var platform = new WindowsManagedProcessPlatform();
 
         // when
         boolean appendsToExistingLogs = platform.appendsToExistingLogs();

@@ -6,7 +6,6 @@ import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.writeExecu
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -33,7 +32,7 @@ final class ContainerRuntimeScriptTest {
 
         // then
         result.assertSuccess();
-        String invocationArguments = Files.readString(invocation, StandardCharsets.UTF_8);
+        String invocationArguments = Files.readString(invocation);
         assertThat(invocationArguments).contains("run", "--security-opt\nlabel=disable", "--userns=keep-id", image);
         if (script.equals("semgrep-docker.sh")) {
             assertThat(invocationArguments).contains("-e\nHOME=/tmp", "--disable-version-check");
@@ -53,7 +52,7 @@ final class ContainerRuntimeScriptTest {
 
         // then
         result.assertSuccess();
-        String invocationArguments = Files.readString(invocation, StandardCharsets.UTF_8);
+        String invocationArguments = Files.readString(invocation);
         assertThat(invocationArguments)
                 .contains("run", "--security-opt\nlabel=disable", image)
                 .doesNotContain("--userns=keep-id");
@@ -144,7 +143,7 @@ final class ContainerRuntimeScriptTest {
     }
 
     private ProcessResult runWrapper(String script, Map<String, String> environment) throws Exception {
-        ProcessBuilder processBuilder = new ProcessBuilder(wrapper(script).toString(), "--version");
+        var processBuilder = new ProcessBuilder(wrapper(script).toString(), "--version");
         processBuilder.directory(Path.of(".").toAbsolutePath().normalize().toFile());
         processBuilder.environment().remove("SYMPHONY_TRELLO_CONTAINER_RUNTIME");
         processBuilder.environment().remove("SYMPHONY_TRELLO_PWSH_DOCKER_IMAGE");

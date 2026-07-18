@@ -28,7 +28,7 @@ public class PromptRenderer {
 
         try {
             PebbleTemplate compiled = engine.getLiteralTemplate(effectiveTemplate);
-            StringWriter writer = new StringWriter();
+            var writer = new StringWriter();
             compiled.evaluate(writer, context);
             return writer.toString();
         } catch (PebbleException e) {

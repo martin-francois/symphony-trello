@@ -75,7 +75,7 @@ final class TestSupportAssertionsTest {
     @Test
     void recordingTerminalQueuesConstructorInputInEncounterOrder() {
         // given
-        RecordingTerminal terminal = new RecordingTerminal("first", "second");
+        var terminal = new RecordingTerminal("first", "second");
 
         // when
         String first = terminal.readLine("one: ");
@@ -102,10 +102,10 @@ final class TestSupportAssertionsTest {
     }
 
     private static List<Arguments> acceptedRunResultCases() {
-        CliRunResult cliOrdered = new CliRunResult(0, "alpha---beta", "");
-        SetupRunResult setupOrdered = new SetupRunResult(0, "alpha---beta", "");
-        CliRunResult cliEmpty = new CliRunResult(0, null, "");
-        SetupRunResult setupEmpty = new SetupRunResult(0, null, "");
+        var cliOrdered = new CliRunResult(0, "alpha---beta", "");
+        var setupOrdered = new SetupRunResult(0, "alpha---beta", "");
+        var cliEmpty = new CliRunResult(0, null, "");
+        var setupEmpty = new SetupRunResult(0, null, "");
         Supplier<Object> cliOrderedAssertion = () -> cliOrdered.stdoutContainsSubsequence(ALPHA, BETA);
         Supplier<Object> setupOrderedAssertion = () -> setupOrdered.stdoutContainsSubsequence(ALPHA, BETA);
         Supplier<Object> cliEmptyAssertion = cliEmpty::stdoutContainsSubsequence;
@@ -118,10 +118,10 @@ final class TestSupportAssertionsTest {
     }
 
     private static List<Arguments> rejectedRunResultCases() {
-        CliRunResult cli = new CliRunResult(0, "alpha---beta", "");
-        SetupRunResult setup = new SetupRunResult(0, "alpha---beta", "");
-        CliRunResult cliNullStdout = new CliRunResult(0, null, "");
-        SetupRunResult setupNullStdout = new SetupRunResult(0, null, "");
+        var cli = new CliRunResult(0, "alpha---beta", "");
+        var setup = new SetupRunResult(0, "alpha---beta", "");
+        var cliNullStdout = new CliRunResult(0, null, "");
+        var setupNullStdout = new SetupRunResult(0, null, "");
         return List.of(
                 Arguments.of(
                         "CLI: reversed fragments",

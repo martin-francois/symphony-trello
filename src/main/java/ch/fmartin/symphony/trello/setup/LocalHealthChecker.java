@@ -60,19 +60,17 @@ final class LocalHealthChecker {
         return waitForSameWorkflow(board, port, processAlive, STARTUP_ALIVE_WAIT);
     }
 
-    /**
-     * Waits for the freshly started worker to report the expected workflow. A cold JVM on a slow
-     * host can need well over ten seconds to bind its HTTP port, so the budget is generous while
-     * the process is still alive; a worker whose process has died can never become healthy, so
-     * that case returns immediately instead of burning the remaining budget.
-     *
-     * <p>This polls instead of waiting for a worker-side readiness event. A readiness marker file
-     * watched with {@code WatchService} was considered and deferred: the HTTP probe stays
-     * mandatory because only the answer on the port proves the listener is the expected worker
-     * for this workflow and board, and the event would save at most one poll interval on a wait
-     * dominated by multi-second JVM startup. See
-     * docs/adr/0053-sleep-based-waits-kept-as-polling-boundaries.md.
-     */
+    /// Waits for the freshly started worker to report the expected workflow. A cold JVM on a slow
+    /// host can need well over ten seconds to bind its HTTP port, so the budget is generous while
+    /// the process is still alive; a worker whose process has died can never become healthy, so
+    /// that case returns immediately instead of burning the remaining budget.
+    ///
+    /// This polls instead of waiting for a worker-side readiness event. A readiness marker file
+    /// watched with `WatchService` was considered and deferred: the HTTP probe stays
+    /// mandatory because only the answer on the port proves the listener is the expected worker
+    /// for this workflow and board, and the event would save at most one poll interval on a wait
+    /// dominated by multi-second JVM startup. See
+    /// docs/adr/0053-sleep-based-waits-kept-as-polling-boundaries.md.
     BoardHealth waitForSameWorkflow(ConnectedBoard board, int port, BooleanSupplier processAlive, Duration aliveWait) {
         long deadline = System.nanoTime() + aliveWait.toNanos();
         while (true) {
@@ -101,7 +99,7 @@ final class LocalHealthChecker {
         return probeWorkflowHealth(expectedWorkflowPath, expectedBoardId, expectedBoardKey, port);
     }
 
-    /** Returns false when interrupted, so callers report the freshest health instead of probing on. */
+    /// Returns false when interrupted, so callers report the freshest health instead of probing on.
     private static boolean sleptWithoutInterrupt(Duration delay) {
         try {
             Thread.sleep(delay);
@@ -181,7 +179,7 @@ final class LocalHealthChecker {
         if (port <= 0) {
             return false;
         }
-        try (Socket socket = new Socket()) {
+        try (var socket = new Socket()) {
             socket.connect(new InetSocketAddress(LOOPBACK_IPV4, port), 150);
             return true;
         } catch (IOException e) {

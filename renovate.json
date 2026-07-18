@@ -90,6 +90,26 @@
   },
   "packageRules": [
     {
+      "matchDatasources": ["maven"],
+      "matchPackageNames": [
+        "org.openrewrite:*",
+        "org.openrewrite.maven:*",
+        "org.openrewrite.recipe:*",
+        "tech.picnic.error-prone-support:error-prone-contrib",
+        "io.quarkus:quarkus-update-recipes"
+      ],
+      "groupName": null,
+      "minimumReleaseAge": "7 days",
+      "automerge": false,
+      "dependencyDashboardApproval": true,
+      "addLabels": ["openrewrite"],
+      "prBodyNotes": [
+        "OpenRewrite updates change executable transformations and MUST NOT be automerged.",
+        "Before merge, the required CI ordered OpenRewrite and Spotless check and the full Maven gate MUST pass.",
+        "In a clean branch or disposable worktree, a maintainer MUST run `./mvnw -Popenrewrite rewrite:run` followed by `./mvnw -q spotless:apply`, review the complete combined diff, and confirm that the same ordered pipeline leaves the committed state unchanged."
+      ]
+    },
+    {
       "matchPackageNames": ["tessl-labs/good-oss-citizen"],
       "minimumReleaseAge": "7 days",
       "automerge": false,

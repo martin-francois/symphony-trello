@@ -177,4 +177,6 @@ class ArchitectureTest {
             }
         };
     }
+
+    private ArchitectureTest() {}
 }

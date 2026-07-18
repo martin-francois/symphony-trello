@@ -9,7 +9,7 @@ import java.net.URI;
 import java.util.Locale;
 import java.util.Objects;
 
-/** Stable, non-secret identity for one tracker board namespace. */
+/// Stable, non-secret identity for one tracker board namespace.
 record TrackerTarget(String kind, String endpointFingerprint, String resolvedBoardId) {
     static TrackerTarget from(EffectiveConfig config) {
         EffectiveConfig.TrackerConfig tracker = config.tracker();
@@ -52,7 +52,7 @@ record TrackerTarget(String kind, String endpointFingerprint, String resolvedBoa
         if (value == null || value.isEmpty()) {
             return "";
         }
-        StringBuilder normalized = new StringBuilder(value.length());
+        var normalized = new StringBuilder(value.length());
         int percentEscapeCharactersRemaining = 0;
         for (int index = 0; index < value.length(); index++) {
             char current = value.charAt(index);

@@ -84,7 +84,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     }
 
     static int run(String[] args, PrintStream out, PrintStream err) {
-        ObjectMapper json = new ObjectMapper();
+        var json = new ObjectMapper();
         return runWithSelectionDefaults(
                 args, out, err, () -> new CodexModelDefaultsResolver(json).resolveSelectionDefaults());
     }
@@ -116,9 +116,9 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             PrintStream out,
             PrintStream err,
             Supplier<CodexModelSelectionDefaults> codexModelSelectionDefaults) {
-        ObjectMapper json = new ObjectMapper();
-        TrelloBoardSetup boardSetup = new TrelloBoardSetup(json, codexModelSelectionDefaults);
-        LocalWorkerManager workerManager = new LocalWorkerManager(System.getenv());
+        var json = new ObjectMapper();
+        var boardSetup = new TrelloBoardSetup(json, codexModelSelectionDefaults);
+        var workerManager = new LocalWorkerManager(System.getenv());
         return run(
                 args,
                 new TrelloBoardSetupService(boardSetup, workerManager, System.getenv()),
@@ -612,7 +612,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             if (parent != null) {
                 Files.createDirectories(parent);
             }
-            Files.writeString(absolute, body, StandardCharsets.UTF_8);
+            Files.writeString(absolute, body);
         }
     }
 
@@ -850,12 +850,10 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             }
         }
 
-        /**
-         * The appended cause summary keeps local CLI stderr diagnosable: without it the underlying
-         * filesystem exception is invisible and a transient write-probe failure cannot be
-         * root-caused (issue #388). The actionable first sentences stay unchanged so existing user
-         * guidance and the {@code setup_env_write_failed} hint mapping remain valid.
-         */
+        /// The appended cause summary keeps local CLI stderr diagnosable: without it the underlying
+        /// filesystem exception is invisible and a transient write-probe failure cannot be
+        /// root-caused (issue #388). The actionable first sentences stay unchanged so existing user
+        /// guidance and the `setup_env_write_failed` hint mapping remain valid.
         private static TrelloBoardSetupException envWriteFailure(IOException exception) {
             return new TrelloBoardSetupException(
                     "setup_env_write_failed",

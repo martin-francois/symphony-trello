@@ -39,8 +39,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.MockedConstruction;
 
 final class LocalWorkerManagerTest {
@@ -52,7 +53,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startLaunchesPackagedAppAndWritesManagedPid() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         fixture.stubHealthyStartedWorker(board, 42);
@@ -75,17 +76,19 @@ final class LocalWorkerManagerTest {
                         any(),
                         any(),
                         any());
-        assertThat(Files.readString(onlyPidFile(fixture.paths.stateHome()))).isEqualTo("42");
+        assertThat(onlyPidFile(fixture.paths.stateHome()))
+                .content(StandardCharsets.UTF_8)
+                .isEqualTo("42");
     }
 
     @Test
     void startDoesNotRewriteExistingGithubWorkflowBeforeLaunchingWorker() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         writeExistingGithubWorkflowWithoutSandboxPolicy(board, "  board_id: \"board-1\"\n", "");
-        String originalWorkflow = Files.readString(board.workflowPath(), StandardCharsets.UTF_8);
-        ConnectedBoard githubBoard = new ConnectedBoard(
+        String originalWorkflow = Files.readString(board.workflowPath());
+        var githubBoard = new ConnectedBoard(
                 board.boardId(),
                 board.boardKey(),
                 board.boardName(),
@@ -112,7 +115,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startResolvesRelativeEnvPathBeforeLaunchingPackagedApp() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         Path relativeEnv = Path.of(".env.relative");
@@ -130,8 +133,7 @@ final class LocalWorkerManagerTest {
                   port: 18080
                 ---
                 # Queue
-                """,
-                StandardCharsets.UTF_8);
+                """);
         when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
                 .thenReturn(new ManagedProcessHandle(42));
         when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), expectedEnv))
@@ -167,7 +169,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startAllLaunchesEveryConnectedBoard() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         saveConnectedBoardsAndStubSuccessfulStarts(fixture, "First Queue", "Second Queue");
 
         // when
@@ -181,7 +183,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startFailsWhenAnotherWorkerProvidesHealthButNewProcessExited() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         ManagedProcessStore.ManagedProcessFiles files = fixture.managedFiles(board);
@@ -205,7 +207,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startStopsNewlyStartedWorkerWhenPidValidationFails() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         fixture.stubStartedWorkerProcessValidation(board, 42, true, false);
@@ -226,7 +228,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startValidatesManagedHealthPortBeforeLaunchingPackagedApp() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), board.envPath()))
@@ -244,7 +246,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startFailsBeforeLaunchingPackagedAppWhenWorkerCredentialsAreMissing() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         Files.deleteIfExists(board.envPath());
         fixture.save(board);
@@ -256,9 +258,9 @@ final class LocalWorkerManagerTest {
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
             assertThat(failure.code()).isEqualTo("setup_worker_missing_trello_credentials");
             assertThat(failure).hasMessage("Missing Trello credentials for worker start.");
-            assertThat(failure.dotenvPath()).contains(board.envPath());
-            assertThat(failure.trelloApiKeyEnvironmentName()).contains("TRELLO_API_KEY");
-            assertThat(failure.trelloApiTokenEnvironmentName()).contains("TRELLO_API_TOKEN");
+            assertThat(failure.dotenvPath()).hasValue(board.envPath());
+            assertThat(failure.trelloApiKeyEnvironmentName()).hasValue("TRELLO_API_KEY");
+            assertThat(failure.trelloApiTokenEnvironmentName()).hasValue("TRELLO_API_TOKEN");
         });
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
@@ -266,12 +268,12 @@ final class LocalWorkerManagerTest {
     @Test
     void startAllowsFileBackedWorkflowCredentialsWithoutDotenvCredentials() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         Path secrets = fixture.paths.configDir().resolve("secrets");
         Files.createDirectories(secrets);
-        Files.writeString(secrets.resolve("trello-api-key"), "key-from-file\n", StandardCharsets.UTF_8);
-        Files.writeString(secrets.resolve("trello-api-token"), "token-from-file\n", StandardCharsets.UTF_8);
+        Files.writeString(secrets.resolve("trello-api-key"), "key-from-file\n");
+        Files.writeString(secrets.resolve("trello-api-token"), "token-from-file\n");
         Files.writeString(
                 board.workflowPath(),
                 """
@@ -285,8 +287,7 @@ final class LocalWorkerManagerTest {
                   port: 18080
                 ---
                 # Queue
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.deleteIfExists(board.envPath());
         fixture.save(board);
         fixture.stubHealthyStartedWorker(board, 42);
@@ -302,7 +303,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startFailsBeforeLaunchingPackagedAppWhenCustomEnvironmentCredentialsAreMissing() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         Files.writeString(
                 board.workflowPath(),
@@ -317,8 +318,7 @@ final class LocalWorkerManagerTest {
                   port: 18080
                 ---
                 # Queue
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.deleteIfExists(board.envPath());
         fixture.save(board);
 
@@ -329,8 +329,8 @@ final class LocalWorkerManagerTest {
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
             assertThat(failure.code()).isEqualTo("setup_worker_missing_trello_credentials");
             assertThat(failure).hasMessage("Missing Trello credentials for worker start.");
-            assertThat(failure.trelloApiKeyEnvironmentName()).contains("CUSTOM_TRELLO_API_KEY");
-            assertThat(failure.trelloApiTokenEnvironmentName()).contains("CUSTOM_TRELLO_API_TOKEN");
+            assertThat(failure.trelloApiKeyEnvironmentName()).hasValue("CUSTOM_TRELLO_API_KEY");
+            assertThat(failure.trelloApiTokenEnvironmentName()).hasValue("CUSTOM_TRELLO_API_TOKEN");
         });
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
@@ -338,7 +338,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startRejectsUnresolvedWorkflowServerPortBeforeLaunchingPackagedApp() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         Files.writeString(
                 board.workflowPath(),
@@ -353,8 +353,7 @@ final class LocalWorkerManagerTest {
                   port: $SYMPHONY_TEST_PORT
                 ---
                 # Queue
-                """,
-                StandardCharsets.UTF_8);
+                """);
         fixture.save(board);
 
         // when
@@ -373,8 +372,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startRejectsInvalidWorkflowServerPortEnvironmentValueWithActionableMessage() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture =
-                new LocalWorkerManagerTestFixture(tempDir, Map.of("SYMPHONY_TEST_PORT", "70000"));
+        var fixture = new LocalWorkerManagerTestFixture(tempDir, Map.of("SYMPHONY_TEST_PORT", "70000"));
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         Files.writeString(
                 board.workflowPath(),
@@ -389,8 +387,7 @@ final class LocalWorkerManagerTest {
                   port: $SYMPHONY_TEST_PORT
                 ---
                 # Queue
-                """,
-                StandardCharsets.UTF_8);
+                """);
         fixture.save(board);
 
         // when
@@ -411,7 +408,7 @@ final class LocalWorkerManagerTest {
     void startAllowsUnresolvedWorkflowServerPortWhenHttpPortOverrideIsConfigured(
             UnresolvedServerPortStartSelector selector) throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = unresolvedServerPortBoardWithHttpOverride(fixture);
 
         // when
@@ -432,7 +429,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startRejectsUnresolvedWorkflowBoardIdBeforeLaunchingPackagedApp() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         Files.writeString(
                 board.workflowPath(),
@@ -447,8 +444,7 @@ final class LocalWorkerManagerTest {
                   port: 18080
                 ---
                 # Queue
-                """,
-                StandardCharsets.UTF_8);
+                """);
         fixture.save(board);
 
         // when
@@ -467,7 +463,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startRejectsUnsupportedTrackerKindWithoutCredentialPreflightError() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         Files.writeString(
                 board.workflowPath(),
@@ -480,8 +476,7 @@ final class LocalWorkerManagerTest {
                   port: 18080
                 ---
                 # Queue
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.deleteIfExists(board.envPath());
         fixture.save(board);
 
@@ -501,7 +496,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startIsIdempotentWhenExpectedWorkerIsAlreadyHealthy() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         stubManagedSameWorkflow(fixture, board, 42);
@@ -516,7 +511,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startDoesNotResolveLaunchFileSecretsWhenExpectedWorkerIsAlreadyHealthy() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         Path missingSecret = fixture.paths.configDir().resolve("missing-secret.txt");
         writeWorkflowWithMissingFileSecret(board, missingSecret);
@@ -534,13 +529,13 @@ final class LocalWorkerManagerTest {
     @Test
     void concurrentStartsForSameBoardReportOnlyOneStartAction() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         fixture.stubManagedPort(board);
-        CountDownLatch firstStartEntered = new CountDownLatch(1);
-        CountDownLatch releaseFirstStart = new CountDownLatch(1);
-        AtomicInteger startCalls = new AtomicInteger();
+        var firstStartEntered = new CountDownLatch(1);
+        var releaseFirstStart = new CountDownLatch(1);
+        var startCalls = new AtomicInteger();
         when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
                 .thenAnswer(invocation -> {
                     startCalls.incrementAndGet();
@@ -559,11 +554,11 @@ final class LocalWorkerManagerTest {
                         board.workflowPath(), board.boardId(), board.boardKey(), board.serverPort()))
                 .thenReturn(fixture.stopped(board), fixture.sameWorkflow(board));
 
-        AtomicReference<Thread> secondThread = new AtomicReference<>();
-        AtomicReference<WorkerRunResult> firstResult = new AtomicReference<>();
-        AtomicReference<Throwable> firstError = new AtomicReference<>();
-        AtomicReference<WorkerRunResult> secondResult = new AtomicReference<>();
-        AtomicReference<Throwable> secondError = new AtomicReference<>();
+        var secondThread = new AtomicReference<Thread>();
+        var firstResult = new AtomicReference<WorkerRunResult>();
+        var firstError = new AtomicReference<Throwable>();
+        var secondResult = new AtomicReference<WorkerRunResult>();
+        var secondError = new AtomicReference<Throwable>();
         Thread first = startThread(() -> fixture.start(fixture.startRequest("Queue")), firstResult, firstError);
         Thread second = null;
         try {
@@ -598,11 +593,11 @@ final class LocalWorkerManagerTest {
     @Test
     void startWaitsForAnotherProcessHoldingTheWorkerLock() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         fixture.stubHealthyStartedWorker(board, 42);
-        AtomicInteger startCalls = new AtomicInteger();
+        var startCalls = new AtomicInteger();
         when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
                 .thenAnswer(invocation -> {
                     startCalls.incrementAndGet();
@@ -620,8 +615,8 @@ final class LocalWorkerManagerTest {
                 .start();
         try {
             assertThat(lockHolder.inputReader().readLine()).isEqualTo("locked");
-            AtomicReference<WorkerRunResult> startResult = new AtomicReference<>();
-            AtomicReference<Throwable> startError = new AtomicReference<>();
+            var startResult = new AtomicReference<WorkerRunResult>();
+            var startError = new AtomicReference<Throwable>();
             Thread start = startThread(() -> fixture.start(fixture.startRequest("Queue")), startResult, startError);
 
             // when
@@ -652,7 +647,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startIdempotencyWithManagedPidReportsExplicitEnvOverrideWasNotApplied() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         Path envPath = fixture.paths.configDir().resolve(".env.override");
         int overridePort = 19090;
@@ -688,10 +683,10 @@ final class LocalWorkerManagerTest {
     @Test
     void startIgnoresInvalidExplicitEnvOverrideWhenWorkerIsAlreadyRunning() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         Path envPath = fixture.paths.configDir().resolve(".env.key-only");
-        Files.writeString(envPath, "TRELLO_API_KEY=test-key\n", StandardCharsets.UTF_8);
+        Files.writeString(envPath, "TRELLO_API_KEY=test-key\n");
         fixture.save(board);
         fixture.stubManagedPid(board, 42);
         fixture.stubWorkflowHealth(board, envPath, board.serverPort(), fixture.sameWorkflow(board));
@@ -707,10 +702,10 @@ final class LocalWorkerManagerTest {
     @Test
     void startValidatesExplicitEnvOverrideBeforeLaunchingWorker() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         Path envPath = fixture.paths.configDir().resolve(".env.key-only");
-        Files.writeString(envPath, "TRELLO_API_KEY=test-key\n", StandardCharsets.UTF_8);
+        Files.writeString(envPath, "TRELLO_API_KEY=test-key\n");
         fixture.save(board);
         fixture.stubWorkflowHealth(board, envPath, board.serverPort(), fixture.stopped(board));
 
@@ -727,17 +722,14 @@ final class LocalWorkerManagerTest {
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
 
-    @CsvSource({"$REAL_KEY", "${REAL_KEY}", "${REAL_KEY:-fallback}"})
     @ParameterizedTest
+    @ValueSource(strings = {"$REAL_KEY", "${REAL_KEY}", "${REAL_KEY:-fallback}"})
     void startRejectsReferenceLookingDotenvCredentialsBeforeTrelloPreflightAndLaunch(String dotenvValue)
             throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
-        Files.writeString(
-                board.envPath(),
-                "TRELLO_API_KEY=" + dotenvValue + "\nTRELLO_API_TOKEN=real-token\n",
-                StandardCharsets.UTF_8);
+        Files.writeString(board.envPath(), "TRELLO_API_KEY=" + dotenvValue + "\nTRELLO_API_TOKEN=real-token\n");
         fixture.save(board);
 
         // when
@@ -749,7 +741,7 @@ final class LocalWorkerManagerTest {
                     .as("the expected local error must fire instead of a misleading Trello auth failure")
                     .isEqualTo("setup_credentials_environment_reference");
             assertThat(failure).hasMessageContaining("credential file values are used literally");
-            assertThat(failure.dotenvPath()).contains(board.envPath());
+            assertThat(failure.dotenvPath()).hasValue(board.envPath());
         });
         verify(fixture.credentialPreflight, never()).verify(any(), any(), any());
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
@@ -758,13 +750,10 @@ final class LocalWorkerManagerTest {
     @Test
     void startPrefersShellEnvironmentCredentialsOverReferenceLookingDotenvValues() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(
+        var fixture = new LocalWorkerManagerTestFixture(
                 tempDir, Map.of("TRELLO_API_KEY", "env-key", "TRELLO_API_TOKEN", "env-token"));
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
-        Files.writeString(
-                board.envPath(),
-                "TRELLO_API_KEY=${REAL_KEY}\nTRELLO_API_TOKEN=${REAL_TOKEN}\n",
-                StandardCharsets.UTF_8);
+        Files.writeString(board.envPath(), "TRELLO_API_KEY=${REAL_KEY}\nTRELLO_API_TOKEN=${REAL_TOKEN}\n");
         fixture.save(board);
         fixture.stubHealthyStartedWorker(board, 42);
 
@@ -781,7 +770,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startIsIdempotentWhenExpectedWorkerIsHealthyButPidFileIsMissing() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Docs Queue");
         fixture.save(board);
         stubSameWorkflowHealthProbe(fixture, board);
@@ -797,7 +786,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startDoesNotResolveLaunchFileSecretsWhenHealthProbeFindsAlreadyHealthyWorkerWithoutPid() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Docs Queue");
         Path missingSecret = fixture.paths.configDir().resolve("missing-secret.txt");
         writeWorkflowWithMissingFileSecret(board, missingSecret);
@@ -817,10 +806,10 @@ final class LocalWorkerManagerTest {
     void startRejectsInvalidWorkflowConfigurationBeforeLaunch(String workflowContent, String expectedMessagePart)
             throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        Files.writeString(board.workflowPath(), workflowContent, StandardCharsets.UTF_8);
+        Files.writeString(board.workflowPath(), workflowContent);
 
         // when
         Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
@@ -912,7 +901,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startRejectsMissingWorkflowFileBeforeLaunch() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         Files.delete(board.workflowPath());
@@ -928,9 +917,9 @@ final class LocalWorkerManagerTest {
     @Test
     void lifecycleCommandsReportMalformedManifestAsExpectedConfigError() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Files.createDirectories(fixture.paths.configDir());
-        Files.writeString(fixture.paths.manifestPath(), "not-valid-json", StandardCharsets.UTF_8);
+        Files.writeString(fixture.paths.manifestPath(), "not-valid-json");
 
         // when
         Throwable thrown = catchThrowable(() -> fixture.status(fixture.statusRequest("Queue")));
@@ -947,7 +936,7 @@ final class LocalWorkerManagerTest {
     @Test
     void statusEscapesEmbeddedQuotesInBoardNames() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Quote \" Board");
         fixture.save(board);
 
@@ -961,7 +950,7 @@ final class LocalWorkerManagerTest {
     @Test
     void statusEscapesNewlinesInBoardNames() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Line1\nLine2");
         fixture.save(board);
 
@@ -979,7 +968,7 @@ final class LocalWorkerManagerTest {
     void statusReportsLinuxRuntimeHealthWithoutQueryingSystemd() throws Exception {
         // given
         Path home = tempDir.resolve("linux-home");
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(
+        var fixture = new LocalWorkerManagerTestFixture(
                 tempDir, Map.of("SYMPHONY_TRELLO_TEST_OS", "Linux", "SYMPHONY_TRELLO_TEST_HOME", home.toString()));
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
@@ -998,7 +987,7 @@ final class LocalWorkerManagerTest {
     void statusReportsMacosRuntimeHealthWithoutQueryingLaunchctl() throws Exception {
         // given
         Path home = tempDir.resolve("mac-home");
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(
+        var fixture = new LocalWorkerManagerTestFixture(
                 tempDir,
                 Map.of(
                         "SYMPHONY_TRELLO_TEST_OS",
@@ -1021,7 +1010,7 @@ final class LocalWorkerManagerTest {
     void statusReportsWindowsRuntimeHealthWithoutQueryingTaskScheduler() throws Exception {
         // given
         Path appData = tempDir.resolve("windows-appdata");
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(
+        var fixture = new LocalWorkerManagerTestFixture(
                 tempDir, Map.of("SYMPHONY_TRELLO_TEST_OS", "Windows 11", "APPDATA", appData.toString()));
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
@@ -1036,12 +1025,12 @@ final class LocalWorkerManagerTest {
     @Test
     void statusReportsEverySelectedWorkflowIndependentlyWithoutAutostartOutput() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard running = fixture.connectedBoard("board-running", "Running", "01-running");
         ConnectedBoard stopped = fixture.connectedBoard("board-stopped", "Stopped", "02-stopped");
         ConnectedBoard wrongWorkflow = fixture.connectedBoard("board-wrong", "Wrong", "03-wrong");
         ConnectedBoard invalid = fixture.connectedBoard("board-invalid", "Invalid", "04-invalid");
-        Files.writeString(invalid.workflowPath(), "plain body\n", StandardCharsets.UTF_8);
+        Files.writeString(invalid.workflowPath(), "plain body\n");
         fixture.save(running, stopped, wrongWorkflow, invalid);
         fixture.stubManagedPidWithHealth(running, 41, fixture.sameWorkflowWithPid(running, 41));
         fixture.stubManagedPidWithHealth(wrongWorkflow, 42, fixture.wrongWorkflow(wrongWorkflow));
@@ -1069,7 +1058,7 @@ final class LocalWorkerManagerTest {
     void statusReportsHealthProbeFailureAndContinuesWithSiblings(
             String ignoredDescription, RuntimeException failure, String expectedStatus) throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard broken = fixture.connectedBoard("board-broken", "Broken", "01-broken");
         ConnectedBoard stopped = fixture.connectedBoard("board-stopped", "Stopped", "02-stopped");
         fixture.save(broken, stopped);
@@ -1091,13 +1080,12 @@ final class LocalWorkerManagerTest {
     void statusContainsUncheckedWorkflowDiagnosticsFailureAndContinuesWithSiblings() throws Exception {
         // given
         WorkflowConfigEditor workflowConfig = mock();
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir, Map.of(), workflowConfig);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir, Map.of(), workflowConfig);
         ConnectedBoard broken = fixture.connectedBoard("board-broken", "Broken", "01-broken");
         ConnectedBoard stopped = fixture.connectedBoard("board-stopped", "Stopped", "02-stopped");
         fixture.save(broken, stopped);
         ManagedProcessStore.ManagedProcessFiles files = fixture.writeManagedPid(broken, 42);
-        IllegalStateException failure =
-                new IllegalStateException("private workflow environment and local path context");
+        var failure = new IllegalStateException("private workflow environment and local path context");
         when(workflowConfig.diagnosticsValidation(eq(broken.workflowPath()), any()))
                 .thenThrow(failure);
         when(workflowConfig.diagnosticsValidation(eq(stopped.workflowPath()), any()))
@@ -1115,12 +1103,12 @@ final class LocalWorkerManagerTest {
     @Test
     void statusContainsUncheckedProcessEvidenceFailureAndContinuesWithSiblings() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard broken = fixture.connectedBoard("board-broken", "Broken", "01-broken");
         ConnectedBoard stopped = fixture.connectedBoard("board-stopped", "Stopped", "02-stopped");
         fixture.save(broken, stopped);
         ManagedProcessStore.ManagedProcessFiles files = fixture.writeManagedPid(broken, 42);
-        IllegalStateException failure = new IllegalStateException("private process evidence context");
+        var failure = new IllegalStateException("private process evidence context");
         when(fixture.platform.isAlive(42)).thenThrow(failure);
 
         // when
@@ -1134,11 +1122,11 @@ final class LocalWorkerManagerTest {
     @Test
     void statusDoesNotCatchErrorsFromPerWorkflowEvidence() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard broken = fixture.connectedBoard("board-broken", "Broken", "01-broken");
         ConnectedBoard stopped = fixture.connectedBoard("board-stopped", "Stopped", "02-stopped");
         fixture.save(broken, stopped);
-        AssertionError failure = new AssertionError("fatal evidence failure");
+        var failure = new AssertionError("fatal evidence failure");
         when(fixture.healthChecker.boardHealth(broken)).thenThrow(failure);
 
         // when
@@ -1152,10 +1140,10 @@ final class LocalWorkerManagerTest {
     @Test
     void stopEscapesEmbeddedQuotesInBoardNamesWhenSkippingStalePids() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Quote \" Board");
         fixture.save(board);
-        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        var store = new ManagedProcessStore(fixture.paths.stateHome());
         store.writePid(store.files(board.workflowPath()).pidFile(), 42);
         when(fixture.platform.isAlive(42L)).thenReturn(true);
         when(fixture.platform.isManaged(42L, fixture.paths.appHome(), board.workflowPath()))
@@ -1172,7 +1160,7 @@ final class LocalWorkerManagerTest {
     @Test
     void statusResolvesSymlinkedWorkflowSelectorToConnectedBoard() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         Path link = tempDir.resolve("workflow-link.md");
@@ -1188,7 +1176,7 @@ final class LocalWorkerManagerTest {
     @Test
     void statusDisambiguatesDuplicateConnectedBoardNames() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard first = fixture.connectedBoard("board-1", "Queue", "queue-one");
         ConnectedBoard second = fixture.connectedBoard("board-2", "Queue", "queue-two");
         fixture.save(first, second);
@@ -1212,7 +1200,7 @@ final class LocalWorkerManagerTest {
     @Test
     void statusKeepsConciseLabelForUniqueBoardNames() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
 
@@ -1226,13 +1214,13 @@ final class LocalWorkerManagerTest {
     @Test
     void rotateLogsForReplacedBoardsMovesLogsWhenWorkflowPathIsReusedForDifferentBoard() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard oldBoard = fixture.connectedBoard("board-old", "Queue", "queue");
         ConnectedBoard newBoard = fixture.connectedBoard("board-new", "Queue Reborn", "queue");
-        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        var store = new ManagedProcessStore(fixture.paths.stateHome());
         ManagedProcessStore.ManagedProcessFiles files = store.files(oldBoard.workflowPath());
         Files.createDirectories(fixture.paths.stateHome());
-        Files.writeString(files.stdoutLog(), "old board startup failure", StandardCharsets.UTF_8);
+        Files.writeString(files.stdoutLog(), "old board startup failure");
 
         // when
         fixture.manager.rotateLogsForReplacedBoards(fixture.paths, newBoard, List.of(oldBoard));
@@ -1246,12 +1234,12 @@ final class LocalWorkerManagerTest {
     @Test
     void rotateLogsForReplacedBoardsKeepsLogsForSameBoardIdentity() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
-        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        var store = new ManagedProcessStore(fixture.paths.stateHome());
         ManagedProcessStore.ManagedProcessFiles files = store.files(board.workflowPath());
         Files.createDirectories(fixture.paths.stateHome());
-        Files.writeString(files.stdoutLog(), "same board history", StandardCharsets.UTF_8);
+        Files.writeString(files.stdoutLog(), "same board history");
 
         // when
         fixture.manager.rotateLogsForReplacedBoards(fixture.paths, board, List.of(board));
@@ -1263,7 +1251,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startRejectsOccupiedNonSymphonyStatusPortBeforeLaunch() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         when(fixture.healthChecker.workflowHealth(
@@ -1293,7 +1281,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startWorkflowRejectsBoardAlreadyManagedByAnotherRunningWorkflow() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         fixture.stubManagedPid(board, 4242L);
@@ -1309,8 +1297,7 @@ final class LocalWorkerManagerTest {
                   port: 18081
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         Throwable thrown = catchThrowable(() -> fixture.start(fixture.startWorkflowRequest(staleWorkflow)));
@@ -1328,7 +1315,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startWorkflowRejectsBoardManagedThroughStoredUrlShortLink() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Path rowWorkflow = fixture.paths.configDir().resolve("WORKFLOW.shortlink-row.md");
         Files.createDirectories(fixture.paths.configDir());
         Files.writeString(
@@ -1343,8 +1330,7 @@ final class LocalWorkerManagerTest {
                 ---
                 # Shortlink Queue
                 """
-                        .formatted(ConfigDefaults.DEFAULT_SERVER_PORT),
-                StandardCharsets.UTF_8);
+                        .formatted(ConfigDefaults.DEFAULT_SERVER_PORT));
         fixture.writeEnv(fixture.paths.defaultEnvPath());
         ConnectedBoard row = ConnectedBoardBuilder.connectedBoard(
                         rowWorkflow.toAbsolutePath().normalize())
@@ -1369,8 +1355,7 @@ final class LocalWorkerManagerTest {
                   port: 18081
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         Throwable thrown = catchThrowable(() -> fixture.start(fixture.startWorkflowRequest(staleWorkflow)));
@@ -1390,9 +1375,9 @@ final class LocalWorkerManagerTest {
     void lifecycleCommandsClassifyInvalidManifestShapesAsExpectedConfigErrors(String name, String content)
             throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Files.createDirectories(fixture.paths.configDir());
-        Files.writeString(fixture.paths.manifestPath(), content, StandardCharsets.UTF_8);
+        Files.writeString(fixture.paths.manifestPath(), content);
 
         // when
         List<Throwable> failures = lifecycleCommandFailures(fixture);
@@ -1415,9 +1400,9 @@ final class LocalWorkerManagerTest {
     @Test
     void lifecycleCommandsClassifyIncompleteManifestRowsAsExpectedConfigErrors() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Files.createDirectories(fixture.paths.configDir());
-        Files.writeString(fixture.paths.manifestPath(), "{\"boards\":[{}]}", StandardCharsets.UTF_8);
+        Files.writeString(fixture.paths.manifestPath(), "{\"boards\":[{}]}");
 
         // when
         List<Throwable> failures = lifecycleCommandFailures(fixture);
@@ -1429,7 +1414,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startAllSkipsBoardAlreadyManagedByAnotherRunningWorkflow() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard running = fixture.connectedBoard("board-1", "Queue", "queue-running");
         ConnectedBoard stale = fixture.connectedBoard("board-1", "Queue", "queue-stale");
         fixture.save(running, stale);
@@ -1450,7 +1435,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startWorkflowAttemptsLaunchWhenOtherWorkflowForSameBoardIsNotRunning() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         Path staleWorkflow = fixture.paths.configDir().resolve("WORKFLOW.stale-copy.md");
@@ -1465,8 +1450,7 @@ final class LocalWorkerManagerTest {
                   port: 18081
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
                 .thenReturn(new ManagedProcessHandle(99L));
         when(fixture.platform.stop(eq(99L), any(Duration.class), any(Duration.class)))
@@ -1481,27 +1465,31 @@ final class LocalWorkerManagerTest {
         verify(fixture.platform).start(any(), eq(fixture.paths.appHome()), any(), any(), any());
     }
 
-    @Test
-    void startRestartsAliveManagedWorkerWhenHealthProbeStopsResponding() throws Exception {
+    @EnumSource
+    @ParameterizedTest(name = "{0}")
+    void startRestartsAliveManagedWorkerWhenHealthProbeRequiresRestart(ManagedWorkerRestartTrigger trigger)
+            throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = saveBoardWithManagedPid(fixture);
-        stubSuccessfulManagedRestart(fixture, board, portUsed(board));
+        stubSuccessfulManagedRestart(fixture, board, trigger.initialHealth(fixture, board));
 
         // when
         WorkerRunResult result = fixture.start(fixture.startRequest("Queue"));
 
         // then
         result.assertSuccess().stdoutContains("Started Symphony for Trello: \"Queue\"");
-        assertThat(Files.readString(onlyPidFile(fixture.paths.stateHome()))).isEqualTo("99");
+        assertThat(onlyPidFile(fixture.paths.stateHome()))
+                .content(StandardCharsets.UTF_8)
+                .isEqualTo("99");
         verify(fixture.platform).stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5));
-        verify(fixture.platform, times(1)).start(any(), eq(fixture.paths.appHome()), any(), any(), any());
+        verify(fixture.platform).start(any(), eq(fixture.paths.appHome()), any(), any(), any());
     }
 
     @Test
     void startReportsPortConflictAfterStoppingHungManagedWorkerWhenPortRemainsOccupied() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = saveBoardWithManagedPid(fixture);
         when(fixture.healthChecker.workflowHealth(
                         board.workflowPath(), board.boardId(), board.boardKey(), board.serverPort()))
@@ -1525,26 +1513,9 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
-    void startRestartsAliveManagedWorkerWhenHealthProbeReportsAnotherWorkflow() throws Exception {
-        // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
-        ConnectedBoard board = saveBoardWithManagedPid(fixture);
-        stubSuccessfulManagedRestart(fixture, board, fixture.wrongWorkflow(board));
-
-        // when
-        WorkerRunResult result = fixture.start(fixture.startRequest("Queue"));
-
-        // then
-        result.assertSuccess().stdoutContains("Started Symphony for Trello: \"Queue\"");
-        assertThat(Files.readString(onlyPidFile(fixture.paths.stateHome()))).isEqualTo("99");
-        verify(fixture.platform).stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5));
-        verify(fixture.platform).start(any(), eq(fixture.paths.appHome()), any(), any(), any());
-    }
-
-    @Test
     void startReportsPathSafeConflictWhenPostStopHealthReportsAnotherWorkflow() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = saveBoardWithManagedPid(fixture);
         when(fixture.healthChecker.workflowHealth(
                         board.workflowPath(), board.boardId(), board.boardKey(), board.serverPort()))
@@ -1587,7 +1558,8 @@ final class LocalWorkerManagerTest {
                 .stdoutContains(
                         "already running", "Restored missing managed worker tracking pid=" + scenario.reportedPid());
         assertNoLifecyclePrivateOutput(result, scenario.fixture(), scenario.board());
-        assertThat(Files.readString(onlyPidFile(scenario.fixture().paths.stateHome())))
+        assertThat(onlyPidFile(scenario.fixture().paths.stateHome()))
+                .content(StandardCharsets.UTF_8)
                 .isEqualTo(Long.toString(scenario.reportedPid()));
         verifyPostStopStoppedWithoutLaunch(scenario.fixture());
     }
@@ -1612,7 +1584,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startReportsManualStopWhenPostStopHealthReportsSameWorkflowWithoutPid() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = saveBoardWithManagedPid(fixture);
         when(fixture.healthChecker.workflowHealth(
                         board.workflowPath(), board.boardId(), board.boardKey(), board.serverPort()))
@@ -1642,7 +1614,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startRestoresMissingManagedPidForHealthyUntrackedManagedWorker() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Docs Queue");
         fixture.save(board);
         long workerPid = stubUntrackedWorkerStartHealth(fixture, board, true);
@@ -1653,7 +1625,7 @@ final class LocalWorkerManagerTest {
         // then
         result.assertSuccess()
                 .stdoutContains("already running", "Restored missing managed worker tracking pid=" + workerPid);
-        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        var store = new ManagedProcessStore(fixture.paths.stateHome());
         assertThat(store.readPid(store.files(board.workflowPath()).pidFile())).isEqualTo(workerPid);
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
@@ -1661,7 +1633,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startReportsUntrackedWorkerPidWhenProcessIsNotManagedByThisInstall() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Docs Queue");
         fixture.save(board);
         long workerPid = stubUntrackedWorkerStartHealth(fixture, board, false);
@@ -1673,7 +1645,7 @@ final class LocalWorkerManagerTest {
         result.assertSuccess()
                 .stdoutContains("already running", "Reported worker pid=" + workerPid)
                 .stdoutDoesNotContain("Restored missing managed worker tracking");
-        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        var store = new ManagedProcessStore(fixture.paths.stateHome());
         assertThat(store.readPid(store.files(board.workflowPath()).pidFile())).isNull();
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
@@ -1681,7 +1653,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startIdempotencyHealthCheckUsesExplicitEnvOverrideWhenPidFileIsMissing() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Docs Queue");
         Path envPath = fixture.paths.configDir().resolve(".env.override");
         int overridePort = 19090;
@@ -1707,7 +1679,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startReportsInvalidWorkflowInsteadOfOccupiedFallbackPort() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         Files.writeString(
@@ -1721,8 +1693,7 @@ final class LocalWorkerManagerTest {
                   port: "not-a-port"
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         fixture.stubWorkflowHealth(
                 board,
                 new BoardHealth(BoardHealthKind.PORT_USED, board.serverPort(), Optional.empty(), Optional.empty()));
@@ -1744,7 +1715,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startRejectsPortAlreadyServingAnotherWorkflowBeforeLaunch() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         fixture.stubWorkflowHealth(board, fixture.wrongWorkflow(board));
@@ -1778,7 +1749,7 @@ final class LocalWorkerManagerTest {
     @Test
     void failedArchivedBoardStartLeavesNoMisleadingStoppedLifecycleState() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         fixture.stubStoppedStartedWorkerWithStartupLog(board, 42, "Configured Trello board is archived\n");
@@ -1803,7 +1774,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startClassifiesInvalidTrelloCredentialsBeforeLaunch() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         doThrow(new TrelloBoardSetupException(
@@ -1817,7 +1788,7 @@ final class LocalWorkerManagerTest {
         // then
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
             assertThat(failure.code()).isEqualTo("trello_auth_failed");
-            assertThat(failure.dotenvPath()).contains(fixture.paths.defaultEnvPath());
+            assertThat(failure.dotenvPath()).hasValue(fixture.paths.defaultEnvPath());
             assertThat(failure.getMessage()).doesNotContain(".log", ".err");
         });
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
@@ -1827,7 +1798,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startClassifiesMalformedCredentialRejectionBeforeLaunch() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         doThrow(new TrelloBoardSetupException(
@@ -1842,7 +1813,7 @@ final class LocalWorkerManagerTest {
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
             assertThat(failure.code()).isEqualTo("trello_auth_failed");
             assertThat(failure.getMessage()).contains("Trello rejected the resolved API credentials");
-            assertThat(failure.dotenvPath()).contains(fixture.paths.defaultEnvPath());
+            assertThat(failure.dotenvPath()).hasValue(fixture.paths.defaultEnvPath());
             assertThat(failure.getMessage()).doesNotContain(".log", ".err");
         });
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
@@ -1852,7 +1823,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startProceedsWhenCredentialPreflightHitsTransportProblems() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         doThrow(new TrelloBoardSetupException("trello_api_request", "Trello request failed"))
@@ -1871,7 +1842,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startSurfacesTrelloAuthFailureFromWorkerStartupLogs() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         fixture.stubStoppedStartedWorkerWithStartupLog(
@@ -1895,7 +1866,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startAttachesShellCredentialSourceToTrelloAuthFailures() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(
+        var fixture = new LocalWorkerManagerTestFixture(
                 tempDir, Map.of("TRELLO_API_KEY", "shell-key", "TRELLO_API_TOKEN", "shell-token"));
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
@@ -1909,17 +1880,17 @@ final class LocalWorkerManagerTest {
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
             assertThat(failure.code()).isEqualTo("trello_auth_failed");
             assertThat(failure.trelloApiKeyCredentialSource())
-                    .contains(TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT);
+                    .hasValue(TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT);
             assertThat(failure.trelloApiTokenCredentialSource())
-                    .contains(TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT);
-            assertThat(failure.dotenvPath()).contains(board.envPath());
+                    .hasValue(TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT);
+            assertThat(failure.dotenvPath()).hasValue(board.envPath());
         });
     }
 
     @Test
     void startIgnoresStaleTrelloAuthFailureFromPreviousStartupLogs() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         ManagedProcessStore.ManagedProcessFiles files = fixture.managedFiles(board);
@@ -1927,8 +1898,7 @@ final class LocalWorkerManagerTest {
                 files.stdoutLog(),
                 """
                 Caused by: ch.fmartin.symphony.trello.tracker.TrelloException: Trello authentication failed
-                """,
-                StandardCharsets.UTF_8);
+                """);
         fixture.stubStoppedStartedWorker(board, 42);
         String workflowToken = PrivateContextTokens.pathToken(fixture.paths.configDir(), board.workflowPath());
         String stdoutToken = PrivateContextTokens.pathToken(fixture.paths.configDir(), files.stdoutLog());
@@ -1957,7 +1927,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startSurfacesTrelloAuthFailureWhenWorkerTruncatesPreviousLogs() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         ManagedProcessStore.ManagedProcessFiles files = fixture.managedFiles(board);
@@ -1966,12 +1936,11 @@ final class LocalWorkerManagerTest {
                 """
                 Stale startup log content that is longer than the next worker startup failure.
                 This simulates redirect targets left behind by an earlier managed process start.
-                """,
-                StandardCharsets.UTF_8);
+                """);
         fixture.stubStoppedStartedWorker(board, 42);
         when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
                 .thenAnswer(invocation -> {
-                    Files.writeString(files.stdoutLog(), "Trello authentication failed\n", StandardCharsets.UTF_8);
+                    Files.writeString(files.stdoutLog(), "Trello authentication failed\n");
                     return new ManagedProcessHandle(42);
                 });
 
@@ -1988,12 +1957,12 @@ final class LocalWorkerManagerTest {
     @Test
     void startSurfacesTrelloAuthFailureWhenWorkerRewritesLogsToLargerFile() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         when(fixture.platform.appendsToExistingLogs()).thenReturn(false);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         ManagedProcessStore.ManagedProcessFiles files = fixture.managedFiles(board);
-        Files.writeString(files.stdoutLog(), "stale log\n", StandardCharsets.UTF_8);
+        Files.writeString(files.stdoutLog(), "stale log\n");
         stubStartupLogRewrite(
                 fixture,
                 board,
@@ -2016,7 +1985,7 @@ final class LocalWorkerManagerTest {
     @Test
     void statusReportsUnhealthyWhenManagedPidLocalHealthDoesNotMatch() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         fixture.stubManagedPidWithHealth(board, 42, fixture.wrongWorkflow(board));
@@ -2033,7 +2002,7 @@ final class LocalWorkerManagerTest {
     @Test
     void statusReportsUnhealthyWhenEndpointPidDoesNotMatchManagedPid() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         fixture.stubManagedPidWithHealth(board, 42, fixture.sameWorkflowWithPid(board, 99));
@@ -2050,7 +2019,7 @@ final class LocalWorkerManagerTest {
     @Test
     void statusReportsUnhealthyWhenMatchingEndpointOmitsWorkerPid() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         fixture.stubManagedPidWithHealth(board, 42, fixture.sameWorkflow(board));
@@ -2067,7 +2036,7 @@ final class LocalWorkerManagerTest {
     @Test
     void statusReportsUntrackedRunningWorkerWhenPidFileIsMissingButHealthMatches() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         stubUntrackedStatusHealth(fixture, board, 73, true);
@@ -2084,7 +2053,7 @@ final class LocalWorkerManagerTest {
     @Test
     void statusRejectsUntrackedEndpointWhoseReportedPidIsNotManaged() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         stubUntrackedStatusHealth(fixture, board, 73, false);
@@ -2101,7 +2070,7 @@ final class LocalWorkerManagerTest {
     @Test
     void statusRejectsManagedEndpointPidWhenWorkflowIdentityDoesNotMatch() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         when(fixture.healthChecker.boardHealth(board))
@@ -2127,7 +2096,7 @@ final class LocalWorkerManagerTest {
     @Test
     void statusReportsForeignPortWithoutManagedPidAsUnhealthy() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         when(fixture.healthChecker.boardHealth(board)).thenReturn(portUsed(board));
@@ -2144,7 +2113,7 @@ final class LocalWorkerManagerTest {
     @Test
     void statusReportsStalePidFileTokenWithoutRawPath() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         ManagedProcessStore.ManagedProcessFiles files = fixture.writeManagedPid(board, 42);
@@ -2170,7 +2139,7 @@ final class LocalWorkerManagerTest {
     @Test
     void statusPrefersVerifiedReplacementWorkerOverStaleManagedPidMetadata() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         ManagedProcessStore.ManagedProcessFiles files = fixture.writeManagedPid(board, 42);
@@ -2195,7 +2164,7 @@ final class LocalWorkerManagerTest {
     @Test
     void statusLeavesDeadManagedPidStateUnchanged() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         ManagedProcessStore.ManagedProcessFiles files = fixture.writeManagedPid(board, 42);
@@ -2211,9 +2180,9 @@ final class LocalWorkerManagerTest {
     @Test
     void statusReportsInvalidConnectedBoardWorkflowInsteadOfStoppedForPlainFile() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
-        Files.writeString(board.workflowPath(), "plain body\n", StandardCharsets.UTF_8);
+        Files.writeString(board.workflowPath(), "plain body\n");
         fixture.save(board);
 
         // when
@@ -2233,7 +2202,7 @@ final class LocalWorkerManagerTest {
     @Test
     void statusReportsInvalidConnectedBoardWorkflowInsteadOfStoppedForMissingFile() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         Files.delete(board.workflowPath());
         fixture.save(board);
@@ -2252,7 +2221,7 @@ final class LocalWorkerManagerTest {
     @Test
     void statusResolvesWorkflowServerPortFromConnectedBoardEnvFile() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue").withServerPort(19091);
         Files.writeString(
                 board.workflowPath(),
@@ -2265,16 +2234,14 @@ final class LocalWorkerManagerTest {
                   port: $SYMPHONY_TEST_PORT
                 ---
                 # Queue
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.writeString(
                 board.envPath(),
                 """
                 TRELLO_API_KEY=test-key
                 TRELLO_API_TOKEN=test-token
                 SYMPHONY_TEST_PORT=19091
-                """,
-                StandardCharsets.UTF_8);
+                """);
         fixture.save(board);
         when(fixture.healthChecker.boardHealth(board)).thenReturn(fixture.stopped(19091));
 
@@ -2290,12 +2257,10 @@ final class LocalWorkerManagerTest {
     @Test
     void statusStillReportsRunningWorkerWhenManifestConsistencyValidationWarns() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         Files.writeString(
-                board.workflowPath(),
-                Files.readString(board.workflowPath(), StandardCharsets.UTF_8).replace("port: 18080", "port: 18081"),
-                StandardCharsets.UTF_8);
+                board.workflowPath(), Files.readString(board.workflowPath()).replace("port: 18080", "port: 18081"));
         fixture.save(board);
         stubUntrackedStatusHealth(fixture, board, 73, true);
 
@@ -2311,7 +2276,7 @@ final class LocalWorkerManagerTest {
     @Test
     void stopFailsForUntrackedRunningWorkerWhenPidFileIsMissingButHealthMatches() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         when(fixture.healthChecker.boardHealth(board)).thenReturn(fixture.sameWorkflow(board));
@@ -2327,7 +2292,7 @@ final class LocalWorkerManagerTest {
     @Test
     void stopStopsHealthyUntrackedWorkerWhenPidIsVerifiablyManaged() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         long workerPid = stubUntrackedWorkerStopHealth(fixture, board, true);
@@ -2345,7 +2310,7 @@ final class LocalWorkerManagerTest {
     @Test
     void stopReportsUntrackedWorkerPidWhenProcessIsNotManagedByThisInstall() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         long workerPid = stubUntrackedWorkerStopHealth(fixture, board, false);
@@ -2364,7 +2329,7 @@ final class LocalWorkerManagerTest {
     @Test
     void stopBoardSelectorReportsAlreadyStoppedWhenNoWorkerIsRunning() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
 
@@ -2381,7 +2346,7 @@ final class LocalWorkerManagerTest {
     @Test
     void stopWorkflowSelectorReportsAlreadyStoppedWhenNoWorkerIsRunning() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
 
@@ -2398,7 +2363,7 @@ final class LocalWorkerManagerTest {
     @Test
     void stopWorkflowSelectorDoesNotRequireResolvedWorkflowServerPort() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         Files.writeString(
                 board.workflowPath(),
@@ -2411,8 +2376,7 @@ final class LocalWorkerManagerTest {
                   port: $SYMPHONY_TEST_PORT
                 ---
                 # Queue
-                """,
-                StandardCharsets.UTF_8);
+                """);
         fixture.save(board);
         fixture.writeManagedPid(board, 42);
         when(fixture.platform.isAlive(42)).thenReturn(true);
@@ -2431,7 +2395,7 @@ final class LocalWorkerManagerTest {
     @Test
     void logsWorkflowSelectorDoesNotRequireResolvedWorkflowServerPort() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         Files.writeString(
                 board.workflowPath(),
@@ -2444,11 +2408,10 @@ final class LocalWorkerManagerTest {
                   port: $SYMPHONY_TEST_PORT
                 ---
                 # Queue
-                """,
-                StandardCharsets.UTF_8);
+                """);
         fixture.save(board);
         ManagedProcessStore.ManagedProcessFiles files = fixture.managedFiles(board);
-        Files.writeString(files.stdoutLog(), "worker log line\n", StandardCharsets.UTF_8);
+        Files.writeString(files.stdoutLog(), "worker log line\n");
 
         // when
         WorkerRunResult result = fixture.logs(fixture.logsWorkflowRequest(board.workflowPath()));
@@ -2460,13 +2423,13 @@ final class LocalWorkerManagerTest {
     @Test
     void concurrentStopsForSameBoardReportOnlyOneStopAction() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         fixture.writeManagedPid(board, 42);
-        CountDownLatch firstStopEntered = new CountDownLatch(1);
-        CountDownLatch releaseFirstStop = new CountDownLatch(1);
-        AtomicInteger stopCalls = new AtomicInteger();
+        var firstStopEntered = new CountDownLatch(1);
+        var releaseFirstStop = new CountDownLatch(1);
+        var stopCalls = new AtomicInteger();
         when(fixture.platform.isAlive(42)).thenReturn(true);
         when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
                 .thenReturn(true);
@@ -2480,11 +2443,11 @@ final class LocalWorkerManagerTest {
                     return true;
                 });
 
-        AtomicReference<Thread> secondThread = new AtomicReference<>();
-        AtomicReference<WorkerRunResult> firstResult = new AtomicReference<>();
-        AtomicReference<Throwable> firstError = new AtomicReference<>();
-        AtomicReference<WorkerRunResult> secondResult = new AtomicReference<>();
-        AtomicReference<Throwable> secondError = new AtomicReference<>();
+        var secondThread = new AtomicReference<Thread>();
+        var firstResult = new AtomicReference<WorkerRunResult>();
+        var firstError = new AtomicReference<Throwable>();
+        var secondResult = new AtomicReference<WorkerRunResult>();
+        var secondError = new AtomicReference<Throwable>();
         Thread first = startThread(() -> fixture.stop(fixture.stopRequest("Queue")), firstResult, firstError);
         Thread second = null;
         try {
@@ -2520,11 +2483,11 @@ final class LocalWorkerManagerTest {
     @Test
     void stopWithoutSelectorStopsAllConnectedManagedWorkers() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard first = fixture.connectedBoard("board-1", "First");
         ConnectedBoard second = fixture.connectedBoard("board-2", "Second");
         fixture.save(first, second);
-        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        var store = new ManagedProcessStore(fixture.paths.stateHome());
         Files.createDirectories(fixture.paths.stateHome());
         store.writePid(store.files(first.workflowPath()).pidFile(), 41);
         store.writePid(store.files(second.workflowPath()).pidFile(), 42);
@@ -2550,8 +2513,8 @@ final class LocalWorkerManagerTest {
     @Test
     void stopWithoutSelectorFallsBackToManagedPidFilesWhenNoBoardsAreConnected() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
-        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var store = new ManagedProcessStore(fixture.paths.stateHome());
         Files.createDirectories(fixture.paths.stateHome());
         ManagedProcessStore.ManagedProcessFiles files =
                 store.files(fixture.paths.configDir().resolve("WORKFLOW.direct.md"));
@@ -2572,7 +2535,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startWithoutSelectorLaunchesEveryConnectedBoard() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard first = fixture.connectedBoard("board-1", "First");
         ConnectedBoard second = fixture.connectedBoard("board-2", "Second");
         saveConnectedBoardsAndStubSuccessfulStarts(fixture, first, second);
@@ -2588,7 +2551,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startEnvWithoutSelectorRequiresBoardOrWorkflow() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard first = fixture.connectedBoard("board-1", "First");
         ConnectedBoard second = fixture.connectedBoard("board-2", "Second");
         fixture.save(first, second);
@@ -2609,7 +2572,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startRejectsAmbiguousBoardNameSelector() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard first = fixture.connectedBoard("board-1", "Duplicate", "duplicate-one");
         ConnectedBoard second = fixture.connectedBoard("board-2", "Duplicate", "duplicate-two");
         fixture.save(first, second);
@@ -2630,7 +2593,7 @@ final class LocalWorkerManagerTest {
     @Test
     void statusRejectsAmbiguousBoardNameSelectorButAllowsWorkflowSelector() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard first = fixture.connectedBoard("board-1", "Duplicate", "duplicate-one");
         ConnectedBoard second = fixture.connectedBoard("board-2", "Duplicate", "duplicate-two");
         fixture.save(first, second);
@@ -2656,7 +2619,7 @@ final class LocalWorkerManagerTest {
     @Test
     void stopRejectsAmbiguousBoardNameSelectorButAllowsWorkflowSelector() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard first = fixture.connectedBoard("board-1", "Duplicate", "duplicate-one");
         ConnectedBoard second = fixture.connectedBoard("board-2", "Duplicate", "duplicate-two");
         fixture.save(first, second);
@@ -2684,7 +2647,7 @@ final class LocalWorkerManagerTest {
     @Test
     void lifecycleWorkflowSelectorsRejectDuplicateManifestRows() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard first = fixture.connectedBoard("board-1", "Dup Workflow A", "shared-workflow");
         ConnectedBoard second = ConnectedBoardBuilder.connectedBoard(first.workflowPath())
                 .withBoardId("board-2")
@@ -2712,7 +2675,7 @@ final class LocalWorkerManagerTest {
     @Test
     void lifecycleWorkflowSelectorsRejectMissingWorkflowFileBeforeActing() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Path workflow = fixture.paths.configDir().resolve("missing.WORKFLOW.md");
 
         // when
@@ -2734,8 +2697,8 @@ final class LocalWorkerManagerTest {
     void statusWorkflowSelectorRejectsMissingWorkflowDespiteState(MissingWorkflowArtifactScenario scenario)
             throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
-        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var store = new ManagedProcessStore(fixture.paths.stateHome());
         Path workflow = fixture.paths.configDir().resolve("missing.WORKFLOW.md");
         ManagedProcessStore.ManagedProcessFiles files = store.files(workflow);
         scenario.create(fixture, files);
@@ -2756,8 +2719,8 @@ final class LocalWorkerManagerTest {
     void stopWorkflowSelectorRejectsMissingWorkflowDespiteState(MissingWorkflowArtifactScenario scenario)
             throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
-        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var store = new ManagedProcessStore(fixture.paths.stateHome());
         Path workflow = fixture.paths.configDir().resolve("missing.WORKFLOW.md");
         ManagedProcessStore.ManagedProcessFiles files = store.files(workflow);
         scenario.create(fixture, files);
@@ -2778,8 +2741,8 @@ final class LocalWorkerManagerTest {
     void logsWorkflowSelectorRejectsMissingWorkflowDespiteState(MissingWorkflowArtifactScenario scenario)
             throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
-        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var store = new ManagedProcessStore(fixture.paths.stateHome());
         Path workflow = fixture.paths.configDir().resolve("missing.WORKFLOW.md");
         ManagedProcessStore.ManagedProcessFiles files = store.files(workflow);
         scenario.create(fixture, files);
@@ -2853,7 +2816,7 @@ final class LocalWorkerManagerTest {
         if (parent != null) {
             Files.createDirectories(parent);
         }
-        Files.writeString(path, text, StandardCharsets.UTF_8);
+        Files.writeString(path, text);
     }
 
     private static void createSymbolicLinkOrSkip(Path link, Path target) throws IOException {
@@ -2872,7 +2835,7 @@ final class LocalWorkerManagerTest {
     @Test
     void lifecycleWorkflowSelectorsRejectDirectoryWorkflowBeforeActing() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Path workflowDirectory = fixture.paths.configDir().resolve("directory.WORKFLOW.md");
         Files.createDirectories(workflowDirectory);
 
@@ -2890,7 +2853,7 @@ final class LocalWorkerManagerTest {
     @Test
     void lifecycleWorkflowSelectorsRejectMissingWorkflowPathAliasesBeforeActing() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Path nested = fixture.paths.configDir().resolve("nested");
         Files.createDirectories(nested);
         List<Path> missingAliases = List.of(
@@ -2920,7 +2883,7 @@ final class LocalWorkerManagerTest {
     @Test
     void lifecycleWorkflowSelectorsRejectDanglingWorkflowSymlinkBeforeActing() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Path target = fixture.paths.configDir().resolve("missing-target.WORKFLOW.md");
         Path link = fixture.paths.configDir().resolve("dangling-link.WORKFLOW.md");
         createSymbolicLinkOrSkip(link, target);
@@ -2942,7 +2905,7 @@ final class LocalWorkerManagerTest {
     @Test
     void lifecycleWorkflowSelectorsRejectParentSymlinkToMissingWorkflowBeforeActing() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Path realParent = fixture.paths.configDir().resolve("real-parent");
         Path linkedParent = fixture.paths.configDir().resolve("linked-parent");
         Files.createDirectories(realParent);
@@ -2966,7 +2929,7 @@ final class LocalWorkerManagerTest {
     @Test
     void lifecycleWorkflowSelectorsAcceptSymlinkToRegularWorkflow() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         Path link = fixture.paths.configDir().resolve("workflow-link.md");
         createSymbolicLinkOrSkip(link, board.workflowPath());
@@ -2982,7 +2945,7 @@ final class LocalWorkerManagerTest {
     @Test
     void lifecycleWorkflowSelectorsRejectSymlinkToDirectoryAsNonRegularWorkflow() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Path directory = fixture.paths.configDir().resolve("workflow-dir");
         Files.createDirectories(directory);
         Path link = fixture.paths.configDir().resolve("workflow-dir-link.md");
@@ -3005,10 +2968,10 @@ final class LocalWorkerManagerTest {
     void startWorkflowSelectorRejectsUnusableWorkflowContentButRecoveryCommandsCanStillAct(
             UnusableWorkflowContent invalidWorkflow) throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Files.createDirectories(fixture.paths.configDir());
         Path workflow = fixture.paths.configDir().resolve(invalidWorkflow.fileName());
-        Files.writeString(workflow, invalidWorkflow.content(), StandardCharsets.UTF_8);
+        Files.writeString(workflow, invalidWorkflow.content());
 
         // when
         writeManagedLog(fixture, workflow);
@@ -3040,11 +3003,11 @@ final class LocalWorkerManagerTest {
     @ParameterizedTest(name = "{0}")
     void startWorkflowReportsInvalidContentThroughLaunchValidation(InvalidWorkflowCase invalidCase) throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Files.createDirectories(fixture.paths.configDir());
         fixture.writeEnv(fixture.paths.defaultEnvPath());
         Path workflow = fixture.paths.configDir().resolve(invalidCase.fileName());
-        Files.writeString(workflow, invalidCase.content(), StandardCharsets.UTF_8);
+        Files.writeString(workflow, invalidCase.content());
 
         // when
         Throwable thrown = catchThrowable(() -> fixture.start(fixture.startWorkflowRequest(workflow)));
@@ -3117,7 +3080,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startWorkflowDoesNotLeakMissingSecretFilePathFromInvalidWorkflow() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Files.createDirectories(fixture.paths.configDir());
         fixture.writeEnv(fixture.paths.defaultEnvPath());
         Path privateDir = tempDir.resolve("Users").resolve("Jane Doe").resolve("Secrets");
@@ -3140,8 +3103,7 @@ final class LocalWorkerManagerTest {
                 ---
                 Body
                 """
-                        .formatted(secretPath),
-                StandardCharsets.UTF_8);
+                        .formatted(secretPath));
         ConnectedBoard board = ConnectedBoardBuilder.connectedBoard(
                         workflow.toAbsolutePath().normalize())
                 .withBoardId("board-1")
@@ -3202,13 +3164,13 @@ final class LocalWorkerManagerTest {
     @Test
     void startAllDoesNotLeakOversizedSecretFilePathFromInvalidWorkflow() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         Path privateDir = tempDir.resolve("Users").resolve("Jane Doe").resolve("Secrets");
         Path secretPath = privateDir.resolve("trello-token.txt");
         String secretFileToken = PrivateContextTokens.pathToken(fixture.paths.configDir(), secretPath);
         Files.createDirectories(privateDir);
-        Files.writeString(secretPath, "x".repeat(70_000), StandardCharsets.UTF_8);
+        Files.writeString(secretPath, "x".repeat(70_000));
         Files.writeString(
                 board.workflowPath(),
                 """
@@ -3223,8 +3185,7 @@ final class LocalWorkerManagerTest {
                 ---
                 Body
                 """
-                        .formatted(secretPath),
-                StandardCharsets.UTF_8);
+                        .formatted(secretPath));
         fixture.save(board);
 
         // when
@@ -3249,7 +3210,7 @@ final class LocalWorkerManagerTest {
     @Test
     void explicitWorkflowUsesWorkflowBoardIdAndPortWithoutManifestEntry() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Path workflow = fixture.paths.configDir().resolve("WORKFLOW.direct.md");
         Path env = fixture.paths.defaultEnvPath();
         Files.createDirectories(fixture.paths.configDir());
@@ -3265,8 +3226,7 @@ final class LocalWorkerManagerTest {
                   port: 19090
                 ---
                 # Direct
-                """,
-                StandardCharsets.UTF_8);
+                """);
         when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
                 .thenReturn(new ManagedProcessHandle(42));
         when(fixture.healthChecker.managedHealthPort(any(), anyInt(), nullable(Path.class)))
@@ -3297,7 +3257,7 @@ final class LocalWorkerManagerTest {
     @Test
     void explicitWorkflowResolvesBoardIdFromDefaultEnvBeforeHealthMatching() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Path workflow = fixture.paths.configDir().resolve("WORKFLOW.direct-env-board.md");
         Path env = fixture.paths.defaultEnvPath();
         Files.createDirectories(fixture.paths.configDir());
@@ -3307,8 +3267,7 @@ final class LocalWorkerManagerTest {
                 TRELLO_API_KEY=test-key
                 TRELLO_API_TOKEN=test-token
                 DIRECT_BOARD_ID=resolved-direct-board
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.writeString(
                 workflow,
                 """
@@ -3320,8 +3279,7 @@ final class LocalWorkerManagerTest {
                   port: 19092
                 ---
                 # Direct
-                """,
-                StandardCharsets.UTF_8);
+                """);
         when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
                 .thenReturn(new ManagedProcessHandle(42));
         when(fixture.healthChecker.managedHealthPort(any(), anyInt(), nullable(Path.class)))
@@ -3353,7 +3311,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startExplicitWorkflowUsesExplicitEnvOverrideForWorkflowValidation() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-override", "Override");
         fixture.save(board);
         Path overrideEnv = fixture.paths.configDir().resolve("override.env");
@@ -3363,8 +3321,7 @@ final class LocalWorkerManagerTest {
                 TRELLO_API_KEY=test-key
                 TRELLO_API_TOKEN=test-token
                 WORKER_PORT=19093
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.writeString(
                 board.workflowPath(),
                 """
@@ -3376,8 +3333,7 @@ final class LocalWorkerManagerTest {
                   port: $WORKER_PORT
                 ---
                 # Override
-                """,
-                StandardCharsets.UTF_8);
+                """);
         when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
                 .thenReturn(new ManagedProcessHandle(42));
         when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), overrideEnv))
@@ -3403,7 +3359,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startExplicitWorkflowUsesConnectedBoardEnvPathForWorkflowValidation() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-custom-env", "Custom Env");
         Path customEnv = fixture.paths.configDir().resolve("custom.env");
         fixture.writeEnv(customEnv);
@@ -3426,7 +3382,7 @@ final class LocalWorkerManagerTest {
     @Test
     void statusHandlesExplicitWorkflowWithoutManifestEntryOrEnvPath() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Path workflow = fixture.paths.configDir().resolve("WORKFLOW.direct-status.md");
         Files.createDirectories(fixture.paths.configDir());
         Files.writeString(
@@ -3439,8 +3395,7 @@ final class LocalWorkerManagerTest {
                   port: 19091
                 ---
                 # Direct status
-                """,
-                StandardCharsets.UTF_8);
+                """);
         when(fixture.healthChecker.boardHealth(any()))
                 .thenReturn(new BoardHealth(BoardHealthKind.STOPPED, 19091, Optional.empty(), Optional.empty()));
 
@@ -3454,7 +3409,7 @@ final class LocalWorkerManagerTest {
     @Test
     void statusResolvesExplicitWorkflowFromDefaultEnvWhenManifestHasNoEntry() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Path workflow = fixture.paths.configDir().resolve("WORKFLOW.direct-status-env.md");
         Files.createDirectories(fixture.paths.configDir());
         Files.writeString(
@@ -3462,8 +3417,7 @@ final class LocalWorkerManagerTest {
                 """
                 DIRECT_STATUS_BOARD_ID=resolved-status-board
                 DIRECT_STATUS_PORT=19093
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.writeString(
                 workflow,
                 """
@@ -3474,8 +3428,7 @@ final class LocalWorkerManagerTest {
                   port: $DIRECT_STATUS_PORT
                 ---
                 # Direct status
-                """,
-                StandardCharsets.UTF_8);
+                """);
         when(fixture.healthChecker.boardHealth(argThat(
                         board -> "resolved-status-board".equals(board.boardId()) && board.serverPort() == 19093)))
                 .thenReturn(new BoardHealth(BoardHealthKind.STOPPED, 19093, Optional.empty(), Optional.empty()));
@@ -3490,7 +3443,7 @@ final class LocalWorkerManagerTest {
     @Test
     void stopResolvesExplicitWorkflowFromDefaultEnvWhenManifestHasNoEntry() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Path workflow = fixture.paths.configDir().resolve("WORKFLOW.direct-stop-env.md");
         Files.createDirectories(fixture.paths.configDir());
         Files.writeString(
@@ -3498,8 +3451,7 @@ final class LocalWorkerManagerTest {
                 """
                 DIRECT_STOP_BOARD_ID=resolved-stop-board
                 DIRECT_STOP_PORT=19094
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.writeString(
                 workflow,
                 """
@@ -3510,8 +3462,7 @@ final class LocalWorkerManagerTest {
                   port: $DIRECT_STOP_PORT
                 ---
                 # Direct stop
-                """,
-                StandardCharsets.UTF_8);
+                """);
         ConnectedBoard expectedBoard = ConnectedBoardBuilder.connectedBoard(
                         workflow.toAbsolutePath().normalize())
                 .withBoardId("resolved-stop-board")
@@ -3540,7 +3491,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startDoesNotStopReusedPidBelongingToAnotherWorkflow() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         StalePidScenario scenario = stalePidScenario(fixture);
 
         // when
@@ -3564,7 +3515,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startValidatesWorkflowConfigBeforeDeletingStalePid() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         ManagedProcessStore.ManagedProcessFiles files = fixture.writeManagedPid(board, 42);
@@ -3584,7 +3535,7 @@ final class LocalWorkerManagerTest {
     @Test
     void startValidatesWorkflowConfigBeforeStoppingManagedProcess() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         ManagedProcessStore.ManagedProcessFiles files = fixture.writeManagedPid(board, 42);
@@ -3616,7 +3567,7 @@ final class LocalWorkerManagerTest {
     @Test
     void stopDoesNotStopReusedPidBelongingToAnotherWorkflow() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         StalePidScenario scenario = stalePidScenario(fixture);
 
         // when
@@ -3632,7 +3583,7 @@ final class LocalWorkerManagerTest {
                         "Removed the stale managed pid file.")
                 .stdoutDoesNotContain("Skipped unmanaged stale pid WORKFLOW");
         secondStop.assertSuccess().stdoutDoesNotContain("Skipped unmanaged stale pid");
-        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        var store = new ManagedProcessStore(fixture.paths.stateHome());
         assertThat(store.readPid(store.files(scenario.board().workflowPath()).pidFile()))
                 .isNull();
         verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
@@ -3641,13 +3592,13 @@ final class LocalWorkerManagerTest {
     @Test
     void stopReportsFailedStalePidCleanupActionablyWithoutKillingTheProcess() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Files.createDirectories(fixture.paths.configDir());
         Path pidFile = fixture.paths.stateHome().resolve("WORKFLOW.private.abc123.pid");
         Files.createDirectories(pidFile.getParent());
         Files.writeString(pidFile, "42", StandardCharsets.US_ASCII);
         assertThat(pidFile).exists();
-        IOException deleteFailure = new IOException("denied " + pidFile);
+        var deleteFailure = new IOException("denied " + pidFile);
         when(fixture.platform.isAlive(42L)).thenReturn(true);
         when(fixture.platform.isManaged(42L, fixture.paths.appHome())).thenReturn(false);
         String pidToken = PrivateContextTokens.pathToken(fixture.paths.configDir(), pidFile);
@@ -3689,8 +3640,8 @@ final class LocalWorkerManagerTest {
     @Test
     void stopAllReportsHashFreeLabelsAndSharesStaleCleanupSemantics() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
-        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var store = new ManagedProcessStore(fixture.paths.stateHome());
         Path managedWorkflow = fixture.paths.configDir().resolve("WORKFLOW.managed.md");
         Path staleWorkflow = fixture.paths.configDir().resolve("WORKFLOW.stale.md");
         store.writePid(store.files(managedWorkflow).pidFile(), 41);
@@ -3718,8 +3669,8 @@ final class LocalWorkerManagerTest {
     @Test
     void statusFallbackReportsUnverifiedManagedProcessWithoutClaimingRuntimeHealth() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
-        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var store = new ManagedProcessStore(fixture.paths.stateHome());
         Path workflow = fixture.paths.configDir().resolve("WORKFLOW.fallback.md");
         store.writePid(store.files(workflow).pidFile(), 41);
         when(fixture.platform.isAlive(41L)).thenReturn(true);
@@ -3739,9 +3690,9 @@ final class LocalWorkerManagerTest {
     @Test
     void statusAllReportsStalePidFileTokenWithoutRawPath() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Files.createDirectories(fixture.paths.configDir());
-        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        var store = new ManagedProcessStore(fixture.paths.stateHome());
         Path workflow = fixture.paths.configDir().resolve("WORKFLOW.fallback-stale.md");
         Path pidFile = store.files(workflow).pidFile();
         store.writePid(pidFile, 42);
@@ -3768,8 +3719,8 @@ final class LocalWorkerManagerTest {
     @Test
     void statusFallbackLeavesDeadManagedPidStateUnchanged() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
-        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var store = new ManagedProcessStore(fixture.paths.stateHome());
         Path workflow = fixture.paths.configDir().resolve("WORKFLOW.dead.md");
         Path pidFile = store.files(workflow).pidFile();
         store.writePid(pidFile, 42);
@@ -3785,8 +3736,8 @@ final class LocalWorkerManagerTest {
     @Test
     void stopAllTreatsConcurrentlyRemovedStalePidFileAsAlreadyCleaned() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
-        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var store = new ManagedProcessStore(fixture.paths.stateHome());
         Path workflow = fixture.paths.configDir().resolve("WORKFLOW.vanishing.md");
         Path pidFile = store.files(workflow).pidFile();
         store.writePid(pidFile, 42);
@@ -3924,7 +3875,7 @@ final class LocalWorkerManagerTest {
             if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
                 return new FileSnapshot(true, true, "");
             }
-            return new FileSnapshot(true, false, Files.readString(path, StandardCharsets.UTF_8));
+            return new FileSnapshot(true, false, Files.readString(path));
         }
 
         void assertUnchanged(Path path) throws IOException {
@@ -3934,7 +3885,7 @@ final class LocalWorkerManagerTest {
             }
             assertThat(Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)).isEqualTo(directory);
             if (!directory) {
-                assertThat(Files.readString(path, StandardCharsets.UTF_8)).isEqualTo(content);
+                assertThat(path).content(StandardCharsets.UTF_8).isEqualTo(content);
             }
         }
     }
@@ -3942,7 +3893,7 @@ final class LocalWorkerManagerTest {
     @Test
     void canStopRunningWorkerCoversHealthyUntrackedManagedWorker() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = stubHealthyUntrackedWorker(fixture, 7331L, true);
 
         // when
@@ -3957,7 +3908,7 @@ final class LocalWorkerManagerTest {
     @Test
     void canStopRunningWorkerRejectsUnverifiableUntrackedWorker() throws Exception {
         // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = stubHealthyUntrackedWorker(fixture, 7331L, false);
 
         // when
@@ -4020,8 +3971,7 @@ final class LocalWorkerManagerTest {
                 ---
                 # Queue
                 """
-                        .formatted(missingSecret, board.boardId(), board.serverPort()),
-                StandardCharsets.UTF_8);
+                        .formatted(missingSecret, board.boardId(), board.serverPort()));
     }
 
     private static List<Throwable> lifecycleCommandFailures(LocalWorkerManagerTestFixture fixture) {
@@ -4050,7 +4000,7 @@ final class LocalWorkerManagerTest {
         Files.createDirectories(fixture.paths.stateHome());
         ManagedProcessStore.ManagedProcessFiles files =
                 new ManagedProcessStore(fixture.paths.stateHome()).files(workflow);
-        Files.writeString(files.stdoutLog(), "worker log line\n", StandardCharsets.UTF_8);
+        Files.writeString(files.stdoutLog(), "worker log line\n");
     }
 
     private static ConnectedBoard saveBoardWithManagedPid(LocalWorkerManagerTestFixture fixture) throws Exception {
@@ -4061,7 +4011,7 @@ final class LocalWorkerManagerTest {
     }
 
     private PostStopSameWorkflow postStopSameWorkflowWithReportedPid(boolean managed) throws Exception {
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = saveBoardWithManagedPid(fixture);
         long reportedPid = 99L;
         when(fixture.healthChecker.workflowHealth(
@@ -4160,16 +4110,14 @@ final class LocalWorkerManagerTest {
                   port: $SYMPHONY_TEST_PORT
                 ---
                 # Queue
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.writeString(
                 board.envPath(),
                 """
                 TRELLO_API_KEY=test-key
                 TRELLO_API_TOKEN=test-token
                 SYMPHONY_HTTP_PORT=19094
-                """,
-                StandardCharsets.UTF_8);
+                """);
         fixture.save(board);
         when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
                 .thenReturn(new ManagedProcessHandle(42));
@@ -4218,8 +4166,7 @@ final class LocalWorkerManagerTest {
 
                 Card URL: {{ card.url }}
                 """
-                        .formatted(trackerFields, board.serverPort(), codexFields),
-                StandardCharsets.UTF_8);
+                        .formatted(trackerFields, board.serverPort(), codexFields));
     }
 
     private static void stubStartupLogRewrite(
@@ -4231,7 +4178,7 @@ final class LocalWorkerManagerTest {
         fixture.stubStoppedStartedWorker(board, 42);
         when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
                 .thenAnswer(invocation -> {
-                    Files.writeString(files.stdoutLog(), logText, StandardCharsets.UTF_8);
+                    Files.writeString(files.stdoutLog(), logText);
                     return new ManagedProcessHandle(42);
                 });
     }
@@ -4251,8 +4198,7 @@ final class LocalWorkerManagerTest {
                   turn_sandbox_policy: []
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
     }
 
     private static Thread startThread(
@@ -4328,6 +4274,34 @@ final class LocalWorkerManagerTest {
         }
     }
 
+    private enum ManagedWorkerRestartTrigger {
+        STOPS_RESPONDING("health probe stops responding") {
+            @Override
+            BoardHealth initialHealth(LocalWorkerManagerTestFixture fixture, ConnectedBoard board) {
+                return portUsed(board);
+            }
+        },
+        REPORTS_ANOTHER_WORKFLOW("health probe reports another workflow") {
+            @Override
+            BoardHealth initialHealth(LocalWorkerManagerTestFixture fixture, ConnectedBoard board) {
+                return fixture.wrongWorkflow(board);
+            }
+        };
+
+        private final String description;
+
+        ManagedWorkerRestartTrigger(String description) {
+            this.description = description;
+        }
+
+        abstract BoardHealth initialHealth(LocalWorkerManagerTestFixture fixture, ConnectedBoard board);
+
+        @Override
+        public String toString() {
+            return description;
+        }
+    }
+
     private record PostStopSameWorkflow(
             LocalWorkerManagerTestFixture fixture, ConnectedBoard board, long reportedPid) {}
 
@@ -4359,7 +4333,9 @@ final class LocalWorkerManagerTest {
             LocalWorkerManagerTestFixture fixture, ConnectedBoard board, String originalWorkflow, String expectedPid)
             throws Exception {
         assertThat(board.workflowPath()).content(StandardCharsets.UTF_8).isEqualTo(originalWorkflow);
-        assertThat(Files.readString(onlyPidFile(fixture.paths.stateHome()))).isEqualTo(expectedPid);
+        assertThat(onlyPidFile(fixture.paths.stateHome()))
+                .content(StandardCharsets.UTF_8)
+                .isEqualTo(expectedPid);
         verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }

@@ -65,7 +65,7 @@ final class InstalledCliDefaultsTest {
         // given
         Path environmentWorkspaceRoot = Path.of("/tmp/environment-workspaces");
         Path environmentStateHome = Path.of("/tmp/environment-state");
-        InstalledCliDefaults.InstalledPaths paths = new InstalledCliDefaults.InstalledPaths(
+        var paths = new InstalledCliDefaults.InstalledPaths(
                 Optional.of(configDir.toString()),
                 Optional.of(environmentWorkspaceRoot.toString()),
                 Optional.of(environmentStateHome.toString()),

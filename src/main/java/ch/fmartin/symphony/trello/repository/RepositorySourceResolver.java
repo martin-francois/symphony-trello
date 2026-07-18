@@ -39,10 +39,8 @@ public final class RepositorySourceResolver {
         return workflowDefault(repository);
     }
 
-    /**
-     * Validates a repository URL intended for {@code repository.default_url} without resolving or
-     * contacting the repository.
-     */
+    /// Validates a repository URL intended for `repository.default_url` without resolving or
+    /// contacting the repository.
     public RepositorySourceSelection selectWorkflowDefaultUrl(String value) {
         if (!RepositorySourceText.safePromptLine(value)) {
             return invalid(
@@ -149,7 +147,7 @@ public final class RepositorySourceResolver {
             }
         }
         try {
-            URI uri = new URI(value);
+            var uri = new URI(value);
             String scheme = lower(uri.getScheme());
             if ("http".equals(scheme) || "https".equals(scheme)) {
                 return httpRemote(uri, origin);
@@ -212,7 +210,7 @@ public final class RepositorySourceResolver {
         }
         String repositoryPath = stripSlashes(rawPath);
         try {
-            RepositoryIdentity identity = new RepositoryIdentity(authorityHost(uri), repositoryPath);
+            var identity = new RepositoryIdentity(authorityHost(uri), repositoryPath);
             return RepositorySourceSelection.selected(new RepositorySource(
                     RepositorySource.Kind.REMOTE,
                     origin,
@@ -274,7 +272,7 @@ public final class RepositorySourceResolver {
         String path = stripSlashes(rawPath);
         try {
             String prefix = user == null ? "" : user + "@";
-            RepositoryIdentity identity = new RepositoryIdentity(host, path);
+            var identity = new RepositoryIdentity(host, path);
             return RepositorySourceSelection.selected(new RepositorySource(
                     RepositorySource.Kind.REMOTE, origin, prefix + identity.host() + ":" + path, identity, null));
         } catch (IllegalArgumentException e) {
@@ -286,7 +284,7 @@ public final class RepositorySourceResolver {
 
     private static RepositorySourceSelection fileUriPath(String value, RepositorySource.Origin origin) {
         try {
-            URI uri = new URI(value);
+            var uri = new URI(value);
             if (!"file".equals(lower(uri.getScheme()))
                     || hasQueryOrFragment(uri)
                     || unsafeUriComponent(uri.getRawPath(), uri.getPath())) {

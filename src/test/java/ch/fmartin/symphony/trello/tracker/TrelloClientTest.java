@@ -233,7 +233,7 @@ final class TrelloClientTest {
     @Test
     void fetchesCandidatesWithOAuthHeaderAndNormalizesPriorityAndIdentifiers() {
         // given
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("input", Map.of("active_states", List.of("Todo")));
 
         // when
@@ -242,7 +242,7 @@ final class TrelloClientTest {
         // then
         assertThat(cards).singleElement().satisfies(card -> {
             assertThat(card.identifier()).isEqualTo("TRELLO-abc");
-            assertThat(card.priority()).isEqualTo(1);
+            assertThat(card.priority()).isOne();
             assertThat(card.state()).isEqualTo("Todo");
             assertThat(card.comments()).isEmpty();
             assertThat(card.createdAt()).isNotNull();
@@ -258,7 +258,7 @@ final class TrelloClientTest {
     @Test
     void fetchesTerminalCardsFromTerminalListsArchivedCardsAndArchivedListsWithoutDuplicates() {
         // given
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("terminal-input", Map.of());
 
         // when
@@ -277,7 +277,7 @@ final class TrelloClientTest {
         // production behavior under test; muting shared logger categories would be JVM-global
         // state and is unsafe with parallel test execution.
         // given
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("lookup-input", Map.of());
 
         // when
@@ -313,7 +313,7 @@ final class TrelloClientTest {
     void idShortIsParsedAsWholeNumberOrRejectedAsMalformedPayload(
             String scenario, Integer expectedIdShort, String description) {
         // given
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("lookup-input", Map.of());
         String cardId = "idshort-probe-" + scenario;
 
@@ -345,7 +345,7 @@ final class TrelloClientTest {
     @Test
     void fetchCardStateForWorkpadRequestsDeepCommentWindowAndActionIds() {
         // given
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("lookup-input", Map.of());
 
         // when
@@ -365,7 +365,7 @@ final class TrelloClientTest {
     @Test
     void fetchCardStatesByIdsDoesNotFetchOlderWorkpadDuringStateRefresh() {
         // given
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("lookup-input", Map.of());
 
         // when
@@ -388,7 +388,7 @@ final class TrelloClientTest {
     @Test
     void fetchCardStatesForPromptByIdsIncludesOlderWorkpadWithoutExpandingRecentComments() {
         // given
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("lookup-input", Map.of());
 
         // when
@@ -415,7 +415,7 @@ final class TrelloClientTest {
         // client log its operator guidance; muting shared logger categories would be JVM-global
         // state and is unsafe with parallel test execution.
         // given
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("lookup-input", Map.of("max_api_retries", 0));
 
         // when
@@ -466,7 +466,7 @@ final class TrelloClientTest {
                     """
                             .formatted(cardUrl("CTXATT1"), cardUrl("CTXATT1")));
         });
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("lookup-input", Map.of("blocker_enforced_states", List.of()));
 
         // when
@@ -530,7 +530,7 @@ final class TrelloClientTest {
                     """
                             .formatted(cardUrl("CTXSHARED"), cardUrl("CTXSHARED")));
         });
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("lookup-input", Map.of("blocker_enforced_states", List.of()));
 
         // when
@@ -556,7 +556,7 @@ final class TrelloClientTest {
         // client log its operator guidance; muting shared logger categories would be JVM-global
         // state and is unsafe with parallel test execution.
         // given
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("input", Map.of());
 
         // when
@@ -593,7 +593,7 @@ final class TrelloClientTest {
                   {"id":"checklist-2","name":"Release tasks","checkItems":[]}
                 ]
                 """);
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("input", Map.of());
 
         // when
@@ -623,7 +623,7 @@ final class TrelloClientTest {
                   }
                 ]
                 """);
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("input", Map.of());
 
         // when
@@ -642,7 +642,7 @@ final class TrelloClientTest {
     void urlAttachmentWriteRejectsInvalidSuccessfulAttachmentPayloads(String responseBody) {
         // given
         attachmentResponse.set(responseBody);
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("input", Map.of());
 
         // when
@@ -706,7 +706,7 @@ final class TrelloClientTest {
     @Test
     void prepareForDispatchMovesQueueCardToConfiguredInProgressListAndReturnsRefreshedCard() {
         // given
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config(
                 "input", Map.of("active_states", List.of("Todo", "In Progress"), "in_progress_state", "In Progress"));
         Card queueCard = card("000000000000000000000107", "TRELLO-pickup", "Todo", "list-todo", null, BigDecimal.ONE);
@@ -725,7 +725,7 @@ final class TrelloClientTest {
     @Test
     void releaseFromDispatchMovesInProgressCardBackToPreviousActiveList() {
         // given
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config(
                 "input", Map.of("active_states", List.of("Todo", "In Progress"), "in_progress_state", "In Progress"));
         Card inProgressCard =
@@ -742,7 +742,7 @@ final class TrelloClientTest {
     void releaseFromDispatchReturnsToSourceStateListWhenSeveralQueuesPrecedeInProgress() {
         // given
         configureMultiQueueBoard();
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config(
                 "input",
                 Map.of(
@@ -766,7 +766,7 @@ final class TrelloClientTest {
     void releaseFromDispatchReturnsToSourceListIdWhenSeveralConfiguredListsPrecedeInProgress() {
         // given
         configureMultiQueueBoard();
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config(
                 "input",
                 Map.of(
@@ -792,7 +792,7 @@ final class TrelloClientTest {
     void releaseFromDispatchDoesNotPromoteWhenSourceListCannotBeResolved() {
         // given
         configureMultiQueueBoardWithoutNormalQueue();
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config(
                 "input",
                 Map.of(
@@ -816,7 +816,7 @@ final class TrelloClientTest {
     void fetchCandidateCardsPopulatesBlockersFromPrerequisiteChecklistAndWritesOneWaitingComment() {
         // given
         configureDependencyBoard("Todo");
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("dependency-input", Map.of("blocker_enforced_states", List.of("Todo")))
                 .withResolvedBoardId("dependency-board");
 
@@ -878,7 +878,7 @@ final class TrelloClientTest {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(exchange, 500, "{}");
         });
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("input", Map.of("active_states", List.of("Todo")));
 
         // when
@@ -917,7 +917,7 @@ final class TrelloClientTest {
             writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(exchange, "{\"id\":\"waiting-comment\"}");
         });
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config =
                 config("input", Map.of("active_states", List.of("Todo"), "blocker_enforced_states", List.of("Todo")));
 
@@ -978,7 +978,7 @@ final class TrelloClientTest {
             writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(exchange, "{\"id\":\"waiting-comment-older\"}");
         });
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config =
                 config("input", Map.of("active_states", List.of("Todo"), "blocker_enforced_states", List.of("Todo")));
 
@@ -1045,7 +1045,7 @@ final class TrelloClientTest {
                     """
                             .formatted(cardUrl("PREREQ01")));
         });
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("dependency-input", Map.of("blocker_enforced_states", List.of("Todo")))
                 .withResolvedBoardId("dependency-board");
 
@@ -1070,7 +1070,7 @@ final class TrelloClientTest {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(exchange, 404, "{}");
         });
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("dependency-input", Map.of("blocker_enforced_states", List.of("Todo")))
                 .withResolvedBoardId("dependency-board");
 
@@ -1117,7 +1117,7 @@ final class TrelloClientTest {
                     """
                             .formatted(cardUrl("WAITING1"), cardUrl("WAITING1")));
         });
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("dependency-input", Map.of("blocker_enforced_states", List.of("Todo")))
                 .withResolvedBoardId("dependency-board");
 
@@ -1140,7 +1140,7 @@ final class TrelloClientTest {
     void terminalPrerequisiteSyncsChecklistItemCompleteWithoutBlockingCandidate() {
         // given
         configureDependencyBoard("Done");
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("dependency-input", Map.of("blocker_enforced_states", List.of("Todo")))
                 .withResolvedBoardId("dependency-board");
 
@@ -1157,7 +1157,7 @@ final class TrelloClientTest {
     void ambiguousPrerequisiteChecklistBlocksCandidateWithVisibleGuidance() {
         // given
         configureAmbiguousPrerequisiteBoard();
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("ambiguous-input", Map.of("blocker_enforced_states", List.of("Todo")))
                 .withResolvedBoardId("ambiguous-board");
 
@@ -1189,7 +1189,7 @@ final class TrelloClientTest {
                 """
                 {"id":"item-note","name":"Update docs","state":"incomplete"}
                 """));
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("mixed-input", Map.of("blocker_enforced_states", List.of("Todo")))
                 .withResolvedBoardId("mixed-board");
 
@@ -1212,7 +1212,7 @@ final class TrelloClientTest {
                 {"id":"item-markdown","name":"related to [the card](%s)","state":"incomplete"}
                 """
                         .formatted(cardUrl("CTXMARK2"))));
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("mixed-input", Map.of("blocker_enforced_states", List.of("Todo")))
                 .withResolvedBoardId("mixed-board");
 
@@ -1233,7 +1233,7 @@ final class TrelloClientTest {
             writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(exchange, 500, "{}");
         });
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("dependency-input", Map.of("blocker_enforced_states", List.of("Todo")))
                 .withResolvedBoardId("dependency-board");
 
@@ -1258,7 +1258,7 @@ final class TrelloClientTest {
     @Test
     void resolveBoardIdRejectsClosedBoard() {
         // given
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("closed-input", Map.of());
 
         // when
@@ -1278,7 +1278,7 @@ final class TrelloClientTest {
         Card highPriorityReview = card("card-1", "TRELLO-a", "Review", "review", 1, BigDecimal.TEN);
         Card highPriorityReady = card("card-2", "TRELLO-b", "Ready", "ready", 1, BigDecimal.ZERO);
         Card done = card("card-4", "TRELLO-d", "Done", "done", null, BigDecimal.ONE);
-        Card outOfScope = new Card(
+        var outOfScope = new Card(
                 "card-5",
                 "TRELLO-e",
                 "Out of scope",
@@ -1588,7 +1588,7 @@ final class TrelloClientTest {
     }
 
     private List<Card> fetchDependencyCandidates() {
-        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var client = new TrelloClient(new ObjectMapper());
         var config = config("dependency-input", Map.of("blocker_enforced_states", List.of("Todo")))
                 .withResolvedBoardId("dependency-board");
         return client.fetchCandidateCards(config);
@@ -1667,7 +1667,7 @@ final class TrelloClientTest {
 
     private static String queryValue(String request, String name) {
         int queryStart = request.indexOf('?');
-        assertThat(queryStart).as("request has query").isGreaterThanOrEqualTo(0);
+        assertThat(queryStart).as("request has query").isNotNegative();
         for (String part : Splitter.on('&').split(request.substring(queryStart + 1))) {
             int separator = part.indexOf('=');
             String key = separator < 0 ? part : part.substring(0, separator);

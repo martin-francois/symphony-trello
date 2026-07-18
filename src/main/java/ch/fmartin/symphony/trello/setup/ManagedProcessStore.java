@@ -44,7 +44,7 @@ final class ManagedProcessStore {
 
     Long readPid(Path pidFile) {
         try {
-            String text = Files.readString(pidFile, StandardCharsets.UTF_8).trim();
+            String text = Files.readString(pidFile).trim();
             return text.isBlank() ? null : Long.parseLong(text);
         } catch (IOException | NumberFormatException e) {
             return null;
@@ -63,11 +63,9 @@ final class ManagedProcessStore {
         return Files.deleteIfExists(pidFile);
     }
 
-    /**
-     * Moves the worker logs aside when a workflow path is reused for a different Trello board, so
-     * diagnostics for the new board do not surface the previous board's history. Rotated files use
-     * a suffix that the diagnostics log selection does not match.
-     */
+    /// Moves the worker logs aside when a workflow path is reused for a different Trello board, so
+    /// diagnostics for the new board do not surface the previous board's history. Rotated files use
+    /// a suffix that the diagnostics log selection does not match.
     void rotateLogsForNewBoardIdentity(Path workflowPath) throws IOException {
         ManagedProcessFiles files = files(workflowPath);
         rotateLog(files.stdoutLog());

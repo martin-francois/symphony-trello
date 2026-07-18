@@ -68,13 +68,13 @@ final class LiveTrelloE2eIT {
         Path runDir = Path.of("target/live-e2e-it", runId);
         Path workspaceRoot = runDir.resolve("workspaces");
         Files.createDirectories(runDir);
-        LiveTrelloClient trello = new LiveTrelloClient(credentials);
+        var trello = new LiveTrelloClient(credentials);
         String workspaceId = workspaceIdOrFail(credentials);
         List<String> disposableBoardIds = new ArrayList<>();
         Throwable bodyFailure = null;
 
         try {
-            TrelloBoardSetup setup = new TrelloBoardSetup(json);
+            var setup = new TrelloBoardSetup(json);
             Path boardAWorkflow = runDir.resolve("board-a.WORKFLOW.md");
             Path importedAWorkflow = runDir.resolve("imported-a.WORKFLOW.md");
             Path boardBWorkflow = runDir.resolve("board-b.WORKFLOW.md");
@@ -243,13 +243,13 @@ final class LiveTrelloE2eIT {
         Path externalProject = runDir.resolve("external-docker-project");
         Files.createDirectories(runDir);
         createExternalDockerProject(externalProject, runId);
-        LiveTrelloClient trello = new LiveTrelloClient(credentials);
+        var trello = new LiveTrelloClient(credentials);
         String workspaceId = workspaceIdOrFail(credentials);
         List<String> disposableBoardIds = new ArrayList<>();
         Throwable bodyFailure = null;
 
         try {
-            TrelloBoardSetup setup = new TrelloBoardSetup(json);
+            var setup = new TrelloBoardSetup(json);
             Path workflow = runDir.resolve("external-docker.WORKFLOW.md");
             Path completions = runDir.resolve("fake-codex-external-completions.log");
 
@@ -310,13 +310,13 @@ final class LiveTrelloE2eIT {
         Path expectedOutput = externalProject.resolve("docker-output.txt");
         Files.createDirectories(runDir);
         createExternalDockerProject(externalProject, runId);
-        LiveTrelloClient trello = new LiveTrelloClient(credentials);
+        var trello = new LiveTrelloClient(credentials);
         String workspaceId = workspaceIdOrFail(credentials);
         List<String> disposableBoardIds = new ArrayList<>();
         Throwable bodyFailure = null;
 
         try {
-            TrelloBoardSetup setup = new TrelloBoardSetup(json);
+            var setup = new TrelloBoardSetup(json);
             Path workflow = runDir.resolve("real-codex-docker.WORKFLOW.md");
 
             var board = setup.createRecommendedBoard(
@@ -342,7 +342,7 @@ final class LiveTrelloE2eIT {
                 assertCardList(trello, card, lists.get(TrelloBoardSetup.RECOMMENDED_IN_PROGRESS_STATE));
                 waitForHandoff(trello, card, lists.get(TrelloBoardSetup.RECOMMENDED_REVIEW_STATE));
                 assertStateDrained(process);
-                assertThat(Files.readString(expectedOutput)).contains(runId);
+                assertThat(expectedOutput).content(StandardCharsets.UTF_8).contains(runId);
             }
         } catch (Exception e) {
             bodyFailure = e;
@@ -620,8 +620,8 @@ final class LiveTrelloE2eIT {
                 STARTUP_TIMEOUT,
                 () -> {
                     List<String> cardIds = trello.cardIdsInList(listId);
-                    return cardIds.indexOf(higherCard.id()) >= 0
-                            && cardIds.indexOf(lowerCard.id()) >= 0
+                    return cardIds.contains(higherCard.id())
+                            && cardIds.contains(lowerCard.id())
                             && cardIds.indexOf(higherCard.id()) < cardIds.indexOf(lowerCard.id());
                 },
                 "moved Trello card reaches the expected list order");
@@ -735,15 +735,14 @@ final class LiveTrelloE2eIT {
         }
 
         if (!failures.isEmpty()) {
-            AssertionError cleanupFailure =
-                    new AssertionError("Live E2E cleanup could not archive every disposable board");
+            var cleanupFailure = new AssertionError("Live E2E cleanup could not archive every disposable board");
             failures.forEach(cleanupFailure::addSuppressed);
             throw cleanupFailure;
         }
     }
 
     private static int freePort() {
-        try (ServerSocket socket = new ServerSocket(0)) {
+        try (var socket = new ServerSocket(0)) {
             return socket.getLocalPort();
         } catch (IOException e) {
             throw new AssertionError("Could not allocate a free local port", e);
