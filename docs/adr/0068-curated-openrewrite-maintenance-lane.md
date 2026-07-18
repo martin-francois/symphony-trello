@@ -35,6 +35,9 @@ mutations.
 * Evaluate semantic value after OpenRewrite output has been normalized by Spotless.
 * Parse every Maven main and test source with type attribution before promoting a recipe.
 * Accept a large diff when the final code is meaningfully clearer or more maintainable.
+* Accept compatible correctness repairs even when the corrected behavior is observable.
+* Keep preferable transformations that stop supported, working use visible for an explicit
+  breaking-release decision instead of activating or dismissing them.
 * Preserve explicit ownership of dependency versions, Quarkus updates, analyzers, and exact
   external protocols.
 * Record an evidence-based decision for every evaluated leaf; zero current results are evidence of
@@ -45,6 +48,7 @@ mutations.
 ## Considered Options
 
 * Use the OpenRewrite Maven plugin with a curated repository composite and Spotless normalization.
+* Exclude every recipe with any observable behavior change.
 * Require raw OpenRewrite dry-run cleanliness or raw OpenRewrite idempotence.
 * Require the Moderne CLI or platform.
 * Use the Quarkus update command as the only semantic transformation tool.
@@ -80,6 +84,13 @@ give every evaluated candidate its own status, evidence, and rationale. A safe l
 general Java, Maven, or existing-ecosystem invariant remains active even when the audited baseline
 already conforms. Broad parents remain inactive when their descendants have mixed decisions; the
 parent disposition does not replace child decisions.
+
+Recipe compatibility follows the repository pull-request contract: a change is compatible when no
+previously supported, working use stops working. Correcting invalid or already-broken behavior is
+compatible when the generated result is genuinely better; observable output alone does not make
+that repair breaking. A transformation that is preferable but stops working use remains inactive
+and is recorded as a breaking-release candidate. Unsafe, context-dependent, defective, or worse
+output remains rejected rather than being relabelled as a future improvement.
 
 The Maven plugin and core Maven/Java recipes are Apache-2.0. The static-analysis, testing, and
 migration catalogs use the Moderne Source Available license, whose end-user grant covers applying
@@ -120,6 +131,9 @@ supported runtime or user contract, so `SPEC.md` does not need an update.
 * Good, because every evaluated rejection has a durable recipe-specific explanation.
 * Good, because useful recurrence guards remain enforced even when the current baseline has no
   matching source.
+* Good, because compatible bug corrections are not rejected merely for changing broken behavior.
+* Good, because preferable breaking transformations remain grouped for a deliberate future release
+  instead of entering the compatible recurring lane.
 * Good, because CI detects drift without receiving authority to persist a mutation.
 * Good, because direct artifact pins make generated Picnic recipe IDs reproducible and make a
   removed or renamed ID fail validation.
@@ -141,6 +155,8 @@ This decision remains implemented when:
 * CI detects tracked and nonignored untracked changes and has no repository write permission;
 * every newly evaluated leaf receives an individual decision, and zero results alone never decide
   against activation;
+* compatible bug corrections remain eligible, preferable breaking transformations remain inactive
+  and separately recorded, and unsafe transformations remain rejected;
 * Renovate cannot group or automerge a recipe update and requires its release-age delay and
   dashboard approval; and
 * Quarkus and general dependency versions remain outside the recurring composite.
@@ -154,6 +170,13 @@ This decision remains implemented when:
   ownership.
 * Good, because repository drift is detected through a normal Git worktree comparison.
 * Bad, because the repository must inventory mixed catalog licenses and re-review generated diffs.
+
+### Exclude Every Observable Behavior Change
+
+* Good, because it creates a simple conservative selection rule.
+* Bad, because it rejects correctness repairs solely because broken behavior becomes correct.
+* Bad, because it conflates preferable breaking migrations with unsafe or defective recipes instead
+  of preserving the former for an explicit breaking release.
 
 ### Raw OpenRewrite Cleanliness Or Idempotence
 

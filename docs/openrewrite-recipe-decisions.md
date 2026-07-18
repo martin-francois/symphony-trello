@@ -17,9 +17,11 @@ source change was evaluated as `OpenRewrite -> Spotless`, not as raw OpenRewrite
 
 - **Accepted**: selected in `rewrite.yml` and applied to the baseline.
 - **Accepted recurrence guard**: selected after an invariant review despite zero current findings.
+- **Breaking-release candidate**: preferable transformation that remains inactive because it stops
+  previously supported, working use.
 - **Rejected**: evaluated and not selected for the recipe-specific reason in its row.
-- **Not applicable**: not selected because its language, build tool, library, framework, or
-  capability is absent.
+- **Contingent**: not selected because its language, build tool, library, framework, capability, or
+  required migration target is absent from the recurring lane.
 - **Deferred**: evaluation or activation requires a separate target-version or toolchain decision.
 - **Parent/configured primitive**: not selected as a bare recipe ID; use reviewed children or an
   exactly configured wrapper.
@@ -76,7 +78,9 @@ source change was evaluated as `OpenRewrite -> Spotless`, not as raw OpenRewrite
 
 ## Rejected Recipes
 
-Each row is an independent rejection. Parent-composite names do not stand in for these decisions.
+Each row is an independent result-producing rejection. The complete re-audit retained every row
+below: none of these concrete outputs became better merely because behavior changes are now
+eligible. Parent-composite names do not stand in for these decisions.
 
 | Recipe ID or configured instance | Catalog | Evidence | Individual rejection reason |
 | --- | --- | --- | --- |
@@ -88,7 +92,7 @@ Each row is an independent rejection. Parent-composite names do not stand in for
 | `org.openrewrite.staticanalysis.FixStringFormatExpressions` | Static | 1 / 1 | Replaces an exact newline inside generated shell content with `%n`, making the generated protocol host-dependent. |
 | `org.openrewrite.staticanalysis.UsePortableNewlines` | Static | 4 / 4 | Rewrites exact shell and JSON fixture newlines and generated invalid Java (`\%n`) in one helper; the protocol bytes must remain platform-independent. |
 | `org.openrewrite.staticanalysis.UnnecessaryExplicitTypeArguments` | Static | 2 / 2, 3 edits | Removing Optional type witnesses makes Java infer sibling subtypes and fails compilation (`Failed` versus `Found`, and `ItemClassification` versus `Exact`). |
-| `org.openrewrite.staticanalysis.DeclarationSiteTypeVariance` | Static | 18 files | Adds `? super` and `? extends` wildcards to internal functional signatures without a subtype caller, increasing signature noise without useful flexibility. |
+| `org.openrewrite.staticanalysis.DeclarationSiteTypeVariance` | Static | 18 files | Adds `? super` and `? extends` wildcards to internal functional signatures without a subtype caller; the isolated ordered rerun then failed compilation in four production classes, so the output is neither valid nor clearer. |
 | `org.openrewrite.staticanalysis.UnnecessaryThrows` | Static | 17 files | Removes declarations but also deletes intentional `catch (Exception)` behavior in installer helpers, changing runtime behavior. |
 | `org.openrewrite.staticanalysis.UseCollectionInterfaces` | Static | 3 / 3 | Changes insertion-ordered `LinkedHashMap` declarations to `Map` even where oldest-entry eviction depends on insertion order, hiding the required data-structure invariant. |
 | `org.openrewrite.java.migrate.io.ReplaceSystemOutWithIOPrint` | Migrate | 1 / 1 | Produces `IO.println(...)` followed by `System.out.flush()` in a subprocess handshake, splitting one exact protocol across two output APIs. |
@@ -120,16 +124,34 @@ Each row is an independent rejection. Parent-composite names do not stand in for
 ## Zero-Result Candidate Decisions
 
 Zero current results are evidence that the frozen baseline already conforms; they are not a reason
-to omit a useful rule. The audit therefore activates behavior-preserving, generally applicable
-guards for Java, Maven, JUnit, Mockito, AssertJ, Picnic, Guava, and JSpecify where those ecosystems
-already exist. A candidate remains inactive only for its own semantic, readability, ownership,
-prerequisite, or target-version reason.
+to omit a useful rule. The audit therefore activates compatible improvements and generally
+applicable guards for Java, Maven, JUnit, Mockito, AssertJ, Picnic, Guava, and JSpecify where those
+ecosystems already exist. Compatibility means that no previously supported, working use stops
+working. A correction to invalid or already-broken behavior remains compatible when the generated
+behavior is genuinely better.
+
+A candidate remains inactive only for its own safety, context, readability, ownership,
+prerequisite, target-version, or compatibility reason. Preferable transformations that stop
+supported, working use are recorded separately as breaking-release candidates instead of being
+mislabelled as unsafe or valueless.
 
 The [zero-result decision appendix](openrewrite-zero-result-decisions.md) records every known
 zero-result recipe ID individually, including the former 14-row sample, mixed parents,
-parameterized implementation recipes, and recipes that are not applicable because their ecosystem
-is absent. Quarkus updater declarations are listed separately there because no target migration was
+parameterized implementation recipes, and recipes that are contingent because their ecosystem is
+absent. Quarkus updater declarations are listed separately there because no target migration was
 executed; they are target-specific recipes, not zero-result evidence.
+
+## Preferable Breaking-Release Candidates
+
+The complete rejected-inventory re-audit identified 37 zero-result recipes whose default result is
+preferable but whose transformation can stop a previously supported, working use. They remain
+inactive in this compatible pull request. The
+[dedicated breaking-release section](openrewrite-zero-result-decisions.md#preferable-breaking-release-candidates)
+lists every recipe and its exact compatibility boundary.
+
+No result-producing rejection moved into this section. Every measured positive output remains
+rejected for its individual invalid-source, failed-gate, readability, diagnostics, protocol,
+mutability, or ownership reason in the table above.
 
 ## Deferred Migrations
 

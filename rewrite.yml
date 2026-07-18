@@ -6,7 +6,7 @@ description: >-
   Applies the reviewed semantic-maintenance recipes that complement the repository's blocking
   formatting, compiler, static-analysis, and test gates.
 recipeList:
-  # Reviewed production-neutral Java, JDK, Guava, JSpecify, and InputStream recipes.
+  # Reviewed compatible Java, JDK, Guava, JSpecify, and InputStream recipes.
   - org.openrewrite.java.ShortenFullyQualifiedTypeReferences
   - org.openrewrite.java.migrate.lang.JavadocToMarkdownDocComment
   - org.openrewrite.java.migrate.lang.var.UseVarForConstructors
@@ -83,6 +83,7 @@ recipeList:
   - org.openrewrite.java.migrate.util.OptionalNotEmptyToIsPresent
   - org.openrewrite.java.migrate.util.OptionalNotPresentToIsEmpty
   - org.openrewrite.java.migrate.util.OptionalStreamRecipe
+  - org.openrewrite.java.migrate.util.ReplaceMathRandomWithThreadLocalRandomRecipe
   - org.openrewrite.java.migrate.util.UsePredicateNot
   - org.openrewrite.staticanalysis.BigDecimalRoundingConstantsToEnums
   - org.openrewrite.staticanalysis.CatchClauseOnlyRethrows
@@ -126,6 +127,7 @@ recipeList:
   - tech.picnic.errorprone.refasterrules.InputStreamRulesRecipes$InputStreamSkipNBytesRecipe
   # Maven guards preserve existing dependency and plugin version ownership.
   - org.openrewrite.maven.cleanup.ExplicitPluginGroupId
+  - org.openrewrite.maven.cleanup.ExplicitDependencyVersion
   - org.openrewrite.maven.plugin.DependencyPluginGoalResolveSources
   # JUnit discovery, lifecycle, visibility, and source-shape guards.
   - org.openrewrite.java.testing.junit5.CsvSourceToValueSource
@@ -275,6 +277,8 @@ recipeList:
   - tech.picnic.errorprone.refasterrules.AssertJBooleanRulesRecipes$AbstractBooleanAssertIsFalseRecipe
   - tech.picnic.errorprone.refasterrules.AssertJBooleanRulesRecipes$AbstractBooleanAssertIsNotEqualToRecipe
   - tech.picnic.errorprone.refasterrules.AssertJBooleanRulesRecipes$AbstractBooleanAssertIsTrueRecipe
+  - tech.picnic.errorprone.refasterrules.AssertJBooleanRulesRecipes$AssertThatIsFalseRecipe
+  - tech.picnic.errorprone.refasterrules.AssertJBooleanRulesRecipes$AssertThatIsTrueRecipe
   - tech.picnic.errorprone.refasterrules.AssertJCharSequenceRulesRecipes$AssertThatHasSizeRecipe
   - tech.picnic.errorprone.refasterrules.AssertJCharSequenceRulesRecipes$AssertThatIsEmptyRecipe
   - tech.picnic.errorprone.refasterrules.AssertJCharSequenceRulesRecipes$AssertThatIsNotEmptyRecipe

@@ -7,8 +7,8 @@ compiler, static-analysis, and test gates; it does not replace them. The normal
 The reviewed allowlist is the `ch.fmartin.symphony.trello.OpenRewriteMaintenance` composite in
 [`rewrite.yml`](../rewrite.yml). The recipe-specific positive and zero-result decisions are in the
 [recipe decision record](openrewrite-recipe-decisions.md) and its linked audit appendix. The
-composite contains 401 exact entries: the original 31 reviewed entries plus 370 newly accepted
-zero-result recurrence-guard entries.
+composite contains 405 exact entries: the previous 401-entry reviewed state plus four compatible
+improvements accepted by the complete rejected-inventory re-audit.
 
 ## Accepted Ordered State
 
@@ -135,8 +135,12 @@ combined diff, runs the full gate, and proves that the committed state remains a
 point.
 
 A catalog update also requires a fresh applicability review of every newly discovered zero-result
-leaf. Zero current results do not justify exclusion. Select a behavior-preserving leaf when it
-enforces a generally useful invariant for Java, Maven, or an existing repository ecosystem. Do not
+leaf. Zero current results do not justify exclusion. Select a compatible leaf when it makes code
+meaningfully better or enforces a generally useful invariant for Java, Maven, or an existing
+repository ecosystem. Compatible means that no previously supported, working use stops working;
+correcting invalid or already-broken behavior is compatible when the generated behavior is
+genuinely better. Record preferable transformations that stop working use as inactive
+breaking-release candidates. Reject unsafe, context-dependent, defective, or worse output. Do not
 load a recipe solely for an absent language, build system, library, framework, or capability. Keep
 target-version migrations with the workflow that selects that target.
 
@@ -153,7 +157,8 @@ applicable audit covered all 142 Maven main and 113 Maven test Java files plus t
 and therefore outside this lane.
 
 Counts, provider and license ownership, exact decisions, compilation failures, formatting failures,
-and recurrence guards are recorded per candidate in the
+compatible bug corrections, breaking-release candidates, and recurrence guards are recorded per
+candidate in the
 [recipe decision record](openrewrite-recipe-decisions.md) and its linked zero-result appendix. A
 parent composite is not treated as an individual rejection when its descendants have mixed
 decisions.

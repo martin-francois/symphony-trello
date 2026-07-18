@@ -36,13 +36,17 @@ itself lives in [Java style & design preferences](java-style.md).
   raw `rewrite:dryRun` result or a second unformatted OpenRewrite run is not a substitute.
 - Give every evaluated leaf recipe an individual status and evidence-based rationale in the
   repository recipe decision record. A parent-composite decision MUST NOT stand in for its
-  children. Zero current results MUST NOT exclude a recipe. Select a behavior-preserving,
-  generally applicable leaf as a recurrence guard when it enforces a useful invariant for Java,
-  Maven, or an ecosystem already used by the repository. Mark a leaf not applicable only when its
-  language, build tool, library, framework, or capability is absent. Reject or defer it only for a
-  recipe-specific semantic, readability, ownership, or target-version reason. Quarkus target-BOM
-  migrations remain owned by the selected `quarkus:update` migration rather than the recurring
-  composite.
+  children. Zero current results MUST NOT exclude a recipe. Select a compatible, generally
+  applicable leaf as a recurrence guard when it makes code meaningfully better or enforces a useful
+  invariant for Java, Maven, or an ecosystem already used by the repository. Compatible means no
+  previously supported, working use stops working. A correction to invalid or already-broken
+  behavior remains compatible when the generated behavior is genuinely better; an observable
+  behavior change alone does not make the repair breaking. Record a preferable transformation that
+  stops supported, working use as an inactive breaking-release candidate. Reject unsafe,
+  context-dependent, defective, or worse output. Mark a leaf Contingent only when its language,
+  build tool, library, framework, capability, or required migration target is absent from the
+  recurring lane. Quarkus target-BOM migrations remain owned by the selected `quarkus:update`
+  migration rather than the recurring composite.
 - Do not treat a report-only or candidate static-analysis profile as finished while it still
   contains known justified findings. If the current branch cannot fix every finding, make the
   remaining work explicit in GitHub issues before finishing and link every follow-up issue from the
