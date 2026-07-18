@@ -10,6 +10,13 @@ engineer driven by that spec.
 **Package manager:** Maven via `./mvnw` (do not invoke a system Maven). The few Node-based tools
 use pnpm via Corepack; do not add a `package.json` only to run a JavaScript CLI.
 
+Before creating any commit that may be pushed, verify the configured author against the
+authenticated GitHub account even when the checkout already carries an author-verification marker.
+Before every push, inspect the author of every outgoing commit. Never publish generic or test
+identities such as `Test User` or `example.invalid`; follow the commit and push skills to correct a
+feature branch, and stop on the default branch unless the maintainer explicitly authorizes a history
+rewrite.
+
 Before starting any task, open [docs/agents/default-workflow.md](docs/agents/default-workflow.md)
 and follow it.
 
