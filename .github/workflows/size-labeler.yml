@@ -18,7 +18,7 @@ on:
     branches-ignore:
       - release-please--branches--**
   schedule:
-    - cron: "7,22,37,52 * * * *"
+    - cron: "7 * * * *"
 
 permissions: read-all
 
@@ -70,6 +70,7 @@ jobs:
                 openPullRequests = await github.paginate(github.rest.pulls.list, {
                   owner,
                   repo,
+                  per_page: 100,
                   state: "open",
                 });
               } catch (error) {
@@ -77,17 +78,31 @@ jobs:
                 return;
               }
 
-              setIssueNumbers(
-                openPullRequests
-                  .filter(
-                    (candidate) =>
-                      Number.isSafeInteger(candidate.number)
-                      && candidate.number > 0
-                      && candidate.state === "open"
-                      && candidate.base?.repo?.full_name === `${owner}/${repo}`,
-                  )
-                  .map(({ number }) => number),
-              );
+              const openIssueNumbers = [
+                ...new Set(
+                  openPullRequests
+                    .filter(
+                      (candidate) =>
+                        Number.isSafeInteger(candidate.number)
+                        && candidate.number > 0
+                        && candidate.state === "open"
+                        && candidate.base?.repo?.full_name === `${owner}/${repo}`,
+                    )
+                    .map(({ number }) => number),
+                ),
+              ].sort((left, right) => left - right);
+              const maximumScheduledPullRequests = 100;
+              const scheduledHour = Math.floor(Date.now() / (60 * 60 * 1000));
+              const start =
+                openIssueNumbers.length === 0
+                  ? 0
+                  : ((scheduledHour % openIssueNumbers.length) * maximumScheduledPullRequests)
+                    % openIssueNumbers.length;
+              const rotatedIssueNumbers = [
+                ...openIssueNumbers.slice(start),
+                ...openIssueNumbers.slice(0, start),
+              ];
+              setIssueNumbers(rotatedIssueNumbers.slice(0, maximumScheduledPullRequests));
               return;
             }
 
