@@ -95,8 +95,7 @@
         "org.openrewrite:*",
         "org.openrewrite.maven:*",
         "org.openrewrite.recipe:*",
-        "tech.picnic.error-prone-support:error-prone-contrib",
-        "io.quarkus:quarkus-update-recipes"
+        "tech.picnic.error-prone-support:error-prone-contrib"
       ],
       "groupName": null,
       "minimumReleaseAge": "7 days",
@@ -107,6 +106,19 @@
         "OpenRewrite updates change executable transformations and MUST NOT be automerged.",
         "Before merge, the required CI ordered OpenRewrite and Spotless check and the full Maven gate MUST pass.",
         "In a clean branch or disposable worktree, a maintainer MUST run `./mvnw -Popenrewrite rewrite:run` followed by `./mvnw -q spotless:apply`, review the complete combined diff, and confirm that the same ordered pipeline leaves the committed state unchanged."
+      ]
+    },
+    {
+      "matchDatasources": ["maven"],
+      "matchPackageNames": ["io.quarkus:quarkus-update-recipes"],
+      "groupName": null,
+      "minimumReleaseAge": "7 days",
+      "automerge": false,
+      "dependencyDashboardApproval": true,
+      "addLabels": ["quarkus"],
+      "prBodyNotes": [
+        "Quarkus updater recipe changes MUST NOT be validated as general OpenRewrite maintenance updates.",
+        "Before merge, a maintainer MUST review the target Quarkus migration guide, run `quarkus:update` in the dependency-update branch, review the complete diff, and pass the full Maven gate."
       ]
     },
     {
