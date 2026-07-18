@@ -668,9 +668,11 @@ final class TestConventionTest {
                 Path.of("src/main/java/ch/fmartin/symphony/trello/workflow/WorkflowDefinition.java"),
                 Path.of("src/main/java/ch/fmartin/symphony/trello/tracker/CardLookupResult.java"),
                 Path.of("src/main/java/ch/fmartin/symphony/trello/domain/BlockerRef.java"));
+        Path codexSandboxPolicy = Path.of("src/main/java/ch/fmartin/symphony/trello/workflow/CodexSandboxPolicy.java");
 
         // when
         Map<Path, String> sources = sourcesByPath(nullMarkedBoundaries);
+        String codexSandboxPolicySource = Files.readString(codexSandboxPolicy);
 
         // then
         assertThat(sources).allSatisfy((boundary, source) -> assertThat(source)
@@ -680,6 +682,12 @@ final class TestConventionTest {
                 .contains("@Nullable RepositoryIdentity identity", "@Nullable Path path");
         assertThat(sources.get(Path.of("src/main/java/ch/fmartin/symphony/trello/config/EffectiveConfig.java")))
                 .contains("record RepositoryConfig(@Nullable String defaultUrl, @Nullable Path defaultPath)");
+        assertThat(codexSandboxPolicySource)
+                .as("%s should document intentional nullable public contracts", codexSandboxPolicy)
+                .contains(
+                        "public static void validateCodexSection(@Nullable Object codexValue)",
+                        "public static boolean hasExplicitPolicy(@Nullable Object codexValue)",
+                        "public static @Nullable JsonNode effectivePolicy(");
     }
 
     private static Map<Path, String> sourcesByPath(List<Path> paths) throws IOException {

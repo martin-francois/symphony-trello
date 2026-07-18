@@ -114,8 +114,10 @@ Each row is an independent rejection. Parent-composite names do not stand in for
 ## Audited Recipes With Zero Findings
 
 These IDs were invoked directly or evaluated under a directly invoked parent and produced no
-current source-file result. They are not rejected. Only the independently justified
-`MigrateProcessWaitForDuration` recurrence guard appears in the active composite.
+current source-file result. They are not rejected. None of the recipe IDs in the table below appears
+in the active composite. The active zero-current-finding recurrence guards are recorded under
+Accepted Recipes: `tech.picnic.errorprone.refasterrules.AssertJPathRulesRecipes$AssertThatIsSymbolicLinkRecipe`
+and `org.openrewrite.java.migrate.lang.MigrateProcessWaitForDuration`.
 
 | Recipe ID | Catalog | Status and evidence |
 | --- | --- | --- |

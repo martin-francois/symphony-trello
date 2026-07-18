@@ -23,7 +23,7 @@ public final class CodexSandboxPolicy {
 
     private CodexSandboxPolicy() {}
 
-    public static void validateCodexSection(Object codexValue) {
+    public static void validateCodexSection(@Nullable Object codexValue) {
         validateCodexSection(codexValue, false);
     }
 
@@ -42,7 +42,7 @@ public final class CodexSandboxPolicy {
         }
     }
 
-    public static boolean hasExplicitPolicy(Object codexValue) {
+    public static boolean hasExplicitPolicy(@Nullable Object codexValue) {
         return codexValue instanceof Map<?, ?> codex && codex.containsKey(TURN_SANDBOX_POLICY);
     }
 
@@ -64,7 +64,7 @@ public final class CodexSandboxPolicy {
         }
     }
 
-    public static JsonNode effectivePolicy(
+    public static @Nullable JsonNode effectivePolicy(
             ObjectMapper json,
             @Nullable Object configuredPolicy,
             List<Path> additionalWritableRoots,
