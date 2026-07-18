@@ -43,6 +43,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 final class SetupDiagnosticReporterTest {
+    private static final int OUT_OF_RANGE_PORT_LOW = -1;
+    private static final int OUT_OF_RANGE_PORT_HIGH = 99_999;
     private static final String SYNTHETIC_BOARD_ID = "000000000000000000000001";
     private static final String ANSI_ESCAPE_IN_LOG = "\u001B";
     private static final String TERMINAL_BELL_IN_LOG = "\u0007";
@@ -204,7 +206,7 @@ final class SetupDiagnosticReporterTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {-1, 99999})
+    @ValueSource(ints = {OUT_OF_RANGE_PORT_LOW, OUT_OF_RANGE_PORT_HIGH})
     void selectedWorkflowDiagnosticsSkipsOutOfRangeFrontMatterPorts(int port) throws Exception {
         // given
         DiagnosticsFixture fixture =
@@ -284,7 +286,7 @@ final class SetupDiagnosticReporterTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {-1, 99999})
+    @ValueSource(ints = {OUT_OF_RANGE_PORT_LOW, OUT_OF_RANGE_PORT_HIGH})
     void diagnosticsSkipDeclaredOutOfRangeWorkflowPortWithoutManifestFallback(int port) throws Exception {
         // given
         DiagnosticsFixture fixture =
