@@ -2211,10 +2211,10 @@ final class TrelloBoardSetupMainTest {
         Path workflow = tempDir.resolve(".").resolve("generated workflow.WORKFLOW.md");
         Path normalizedWorkflow = workflow.toAbsolutePath().normalize();
         Path env = tempDir.resolve(".env.next-steps");
-        int expectedPort = firstAvailableManagedPort();
+        int expectedPort = ConfigDefaults.DEFAULT_SERVER_PORT;
 
         // when
-        CliRunResult result = runCli(
+        CliRunResult result = runCliWithNoBusyPorts(
                 "new-board",
                 "--endpoint",
                 endpoint(),
@@ -2282,31 +2282,37 @@ final class TrelloBoardSetupMainTest {
         // given
         Path workflow = tempDir.resolve("direct-repository-defaults-" + scenario.fileSuffix() + ".WORKFLOW.md");
         Path manifest = tempDir.resolve("manifest-repository-defaults-" + scenario.fileSuffix() + ".json");
-        int serverPort = firstAvailableManagedPort();
-        Files.writeString(
-                workflow,
-                TestWorkflows.workflowWithRepositoryDefaults(
-                        "existing-board", serverPort, REPOSITORY_URL_REFERENCE, REPOSITORY_PATH_REFERENCE),
-                StandardCharsets.UTF_8);
-        SetupCommandBuilder command = scenario.newBoard()
-                ? SetupCommandBuilder.newBoard(endpoint()).name("Preserved Direct Defaults Queue")
-                : SetupCommandBuilder.importBoard(endpoint())
-                        .board("https://trello.com/b/input/existing-board")
-                        .active("Queue for Codex")
-                        .terminal("Released");
-        command.credentials("key", "token")
-                .workflow(workflow)
-                .manifest(manifest)
-                .option("--server-port", String.valueOf(serverPort))
-                .flag("--force");
-        scenario.explicitRepositoryUrl().ifPresent(url -> command.option("--repository-url", url));
+        HttpServer listeningServer = startLoopbackServer();
+        try {
+            int serverPort = listeningServer.getAddress().getPort();
+            Files.writeString(
+                    workflow,
+                    TestWorkflows.workflowWithRepositoryDefaults(
+                            "existing-board", serverPort, REPOSITORY_URL_REFERENCE, REPOSITORY_PATH_REFERENCE),
+                    StandardCharsets.UTF_8);
+            SetupCommandBuilder command = scenario.newBoard()
+                    ? SetupCommandBuilder.newBoard(endpoint()).name("Preserved Direct Defaults Queue")
+                    : SetupCommandBuilder.importBoard(endpoint())
+                            .board("https://trello.com/b/input/existing-board")
+                            .active("Queue for Codex")
+                            .terminal("Released");
+            command.credentials("key", "token")
+                    .workflow(workflow)
+                    .manifest(manifest)
+                    .option("--server-port", String.valueOf(serverPort))
+                    .flag("--force");
+            scenario.explicitRepositoryUrl().ifPresent(url -> command.option("--repository-url", url));
 
-        // when
-        CliRunResult result = runCli(command.build());
+            // when
+            CliRunResult result = runCliWithNoBusyPorts(command.build());
 
-        // then
-        result.assertSuccess().stdoutContains("Repository clone URL saved in repository.default_url");
-        assertThatWorkflow(workflow).hasRepositoryDefaults(scenario.expectedRepositoryUrl(), REPOSITORY_PATH_REFERENCE);
+            // then
+            result.assertSuccess().stdoutContains("Repository clone URL saved in repository.default_url");
+            assertThatWorkflow(workflow)
+                    .hasRepositoryDefaults(scenario.expectedRepositoryUrl(), REPOSITORY_PATH_REFERENCE);
+        } finally {
+            listeningServer.stop(0);
+        }
     }
 
     private static Stream<DirectRepositoryDefaultsScenario> forcedDirectRepositoryDefaultScenarios() {
@@ -5354,10 +5360,13 @@ final class TrelloBoardSetupMainTest {
                 StandardCharsets.UTF_8);
         Path workflow = tempDir.resolve("new-import.WORKFLOW.md");
         Path env = tempDir.resolve(".env.import-port-scan");
-        Files.writeString(env, "SYNTHETIC_IMPORT_STATUS_PORT=18080\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                env,
+                "SYNTHETIC_IMPORT_STATUS_PORT=" + ConfigDefaults.DEFAULT_SERVER_PORT + "\n",
+                StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli(
+        CliRunResult result = runCliWithNoBusyPorts(
                 "import-board",
                 "--endpoint",
                 endpoint(),
@@ -5401,10 +5410,13 @@ final class TrelloBoardSetupMainTest {
                 StandardCharsets.UTF_8);
         Path workflow = tempDir.resolve("new-board-env-port.WORKFLOW.md");
         Path env = tempDir.resolve(".env.new-board-port-scan");
-        Files.writeString(env, "SYNTHETIC_NEW_BOARD_STATUS_PORT=18080\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                env,
+                "SYNTHETIC_NEW_BOARD_STATUS_PORT=" + ConfigDefaults.DEFAULT_SERVER_PORT + "\n",
+                StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli(
+        CliRunResult result = runCliWithNoBusyPorts(
                 "new-board",
                 "--endpoint",
                 endpoint(),
@@ -5429,13 +5441,13 @@ final class TrelloBoardSetupMainTest {
 
     private void assertSiblingWorkflowPortUsesEnvironmentVariable(CliRunResult result, Path workflow, Path env)
             throws Exception {
-        int expectedPort = firstAvailableManagedPort(18080);
+        int expectedPort = ConfigDefaults.DEFAULT_SERVER_PORT + 1;
 
         result.assertSuccess();
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("port: " + expectedPort)
-                .doesNotContain("port: 18080");
+                .doesNotContain("port: " + ConfigDefaults.DEFAULT_SERVER_PORT);
         assertConnectedBoardUsesWorkflowEnvAndPort(workflow, env, expectedPort);
         result.stdoutContains("HTTP status port: " + expectedPort);
     }
@@ -7061,6 +7073,14 @@ final class TrelloBoardSetupMainTest {
 
     private CliRunResult runCli(String... args) {
         return runCli(() -> TrelloBoardSetup.CodexModelDefaults.fallback(), withIsolatedDirectCredentialEnv(args));
+    }
+
+    private CliRunResult runCliWithNoBusyPorts(String... args) {
+        TrelloBoardSetup setup = new TrelloBoardSetup(
+                        new ObjectMapper(),
+                        () -> CodexModelSelectionDefaults.of(TrelloBoardSetup.CodexModelDefaults.fallback()))
+                .withPortProbe(ignoredPort -> false);
+        return runCli(setup, new LocalWorkerManager(Map.of()), args);
     }
 
     private CliRunResult runCliWithoutTrelloCredentials(String... args) throws IOException, InterruptedException {
