@@ -86,10 +86,13 @@ The workflow uses three trusted routes:
   base-branch diff drift, transient API failures, pre-existing pull requests, and the residual case
   where every changed path is excluded from both immediate workflows.
 
-The resolver deduplicates pull-request numbers, rejects invalid identities, and limits a scheduled
-matrix to GitHub's 256-job maximum. Empty results do not start label jobs. Label jobs use
-`fail-fast: false` and a non-cancelling per-pull-request concurrency group, so one pull request does
-not suppress another and an older in-flight mutation is allowed to finish.
+The resolver deduplicates pull-request numbers and rejects invalid identities. Hourly scheduled
+runs sort all open pull-request numbers and select a rotating window of at most 100. Stable open
+pull requests therefore enter a later scheduled window when one run cannot include all of them,
+without exceeding GitHub's 256-job matrix limit or consuming the repository token's entire hourly
+API budget. Empty results do not start label jobs. Label jobs use `fail-fast: false` and a
+non-cancelling per-pull-request concurrency group, so one pull request does not suppress another and
+an older in-flight mutation is allowed to finish.
 
 The label step validates the pull-request number and non-negative safe-integer change counts before
 mutation. It paginates existing labels, adds the target label first, and then removes only stale
@@ -160,7 +163,7 @@ does not contain a checkout step or execute head-branch content.
 
 The script tests must extract and execute both exact JavaScript blocks from the workflow. They must
 cover every size boundary, additions plus deletions, direct and fallback identity resolution, forks,
-empty and multiple associations, scheduled reconciliation, the 256-job boundary, validation before
+empty and multiple associations, scheduled rotation above the matrix limit, validation before
 mutation, add-before-remove ordering, idempotence, unrelated-label preservation, pagination,
 concurrency, and API failures.
 

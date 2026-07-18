@@ -44,7 +44,9 @@ interface RunOptions {
   readonly deletions?: number;
   readonly existingLabels?: readonly string[];
   readonly labelReadFailure?: Error;
+  readonly nowMs?: number;
   readonly pullRequestReadFailure?: Error;
+  readonly pullRequestReadFailureNumbers?: readonly number[];
   readonly removeFailureLabels?: readonly string[];
 }
 
@@ -76,6 +78,7 @@ interface PullRequestParameters {
 interface CandidateQueryParameters {
   readonly head?: string;
   readonly owner: string;
+  readonly per_page?: number;
   readonly repo: string;
   readonly state: string;
 }
@@ -196,8 +199,12 @@ async function runLabeler(
         }> => {
           pullRequestReads++;
           pullRequestNumbers.push(pull_number);
-          if (options.pullRequestReadFailure) {
-            throw options.pullRequestReadFailure;
+          const targetedReadFailure = options.pullRequestReadFailureNumbers?.includes(pull_number);
+          if (
+            targetedReadFailure
+            || (!options.pullRequestReadFailureNumbers && options.pullRequestReadFailure)
+          ) {
+            throw options.pullRequestReadFailure ?? new Error(`pull request read failed for ${pull_number}`);
           }
           return {
             data: {
@@ -229,8 +236,9 @@ async function runLabeler(
     "context",
     "github",
     "core",
+    "Date",
     workflowScript("Resolve pull requests from trusted event metadata"),
-  )(context, github, core);
+  )(context, github, core, {now: (): number => options.nowMs ?? 0});
   for (const issueNumber of JSON.parse(issueNumbersOutput ?? "[]") as unknown[]) {
     await new AsyncFunction(
       "context",
@@ -356,9 +364,9 @@ test("scheduled reconciliation labels every valid open repository pull request",
   assertChanges(result, {added: ["size M", "size M"], removed: []});
   assert.equal(result.candidatePullRequestReads, 1);
   assert.deepEqual(result.candidateQueries, [
-    {owner: "owner", repo: "repo", state: "open"},
+    {owner: "owner", per_page: 100, repo: "repo", state: "open"},
   ]);
-  assert.deepEqual(result.pullRequestNumbers, [84, 42]);
+  assert.deepEqual(result.pullRequestNumbers, [42, 84]);
 });
 
 test("scheduled reconciliation with no open pull requests performs no mutation", async () => {
@@ -370,35 +378,65 @@ test("scheduled reconciliation with no open pull requests performs no mutation",
   assert.equal(result.labelReads, 0);
 });
 
-for (const count of [256, 257]) {
-  test(`scheduled reconciliation handles the ${count}-pull-request matrix boundary`, async () => {
-    const result = await runLabeler(
-      {},
-      {
-        candidatePullRequests: Array.from({length: count}, (_, index) => ({
-          ...MATCHING_FORK_PULL_REQUEST,
-          number: index + 1,
-        })),
-        existingLabels: ["size XS"],
-      },
-      "schedule",
-    );
+for (const count of [256, 257, 513]) {
+  test(`scheduled reconciliation rotates through all ${count} pull requests`, async () => {
+    const processed = new Set<number>();
+    const runs = Math.ceil(count / 100);
+    for (let hour = 0; hour < runs; hour++) {
+      const result = await runLabeler(
+        {},
+        {
+          candidatePullRequests: Array.from({length: count}, (_, index) => ({
+            ...MATCHING_FORK_PULL_REQUEST,
+            number: index + 1,
+          })),
+          existingLabels: ["size XS"],
+          nowMs: hour * 60 * 60 * 1000,
+        },
+        "schedule",
+      );
 
-    if (count === 256) {
       assert.deepEqual(result.failures, []);
       assert.deepEqual(result.warnings, []);
-      assert.equal(result.pullRequestReads, 256);
-      assert.equal(result.labelReads, 256);
-    } else {
-      assert.deepEqual(result.failures, [
-        "Cannot reconcile 257 pull requests in one 256-job matrix",
-      ]);
-      assert.equal(result.pullRequestReads, 0);
-      assert.equal(result.labelReads, 0);
+      assert.ok(result.pullRequestReads <= 100);
+      assert.equal(result.labelReads, result.pullRequestReads);
+      result.pullRequestNumbers.forEach((issueNumber) => processed.add(issueNumber));
+      assert.deepEqual(result.attempts, {added: [], removed: []});
     }
-    assert.deepEqual(result.attempts, {added: [], removed: []});
+    assert.deepEqual(
+      [...processed].sort((left, right) => left - right),
+      Array.from({length: count}, (_, index) => index + 1),
+    );
   });
 }
+
+test("one scheduled pull-request failure does not suppress later jobs", async () => {
+  const count = 100;
+  const result = await runLabeler(
+    {},
+    {
+      candidatePullRequests: Array.from({length: count}, (_, index) => ({
+        ...MATCHING_FORK_PULL_REQUEST,
+        number: index + 1,
+      })),
+      existingLabels: ["size XS"],
+      pullRequestReadFailure: new Error("scheduled pull request read failed"),
+      pullRequestReadFailureNumbers: [1],
+    },
+    "schedule",
+  );
+
+  assert.deepEqual(result.failures, []);
+  assert.equal(result.warnings.length, 1);
+  assert.match(
+    result.warnings[0] ?? "",
+    /Unable to read changed lines for #1.*scheduled pull request read failed/,
+  );
+  assert.equal(result.pullRequestReads, count);
+  assert.equal(result.labelReads, count - 1);
+  assert.deepEqual(result.pullRequestNumbers, Array.from({length: count}, (_, index) => index + 1));
+  assert.deepEqual(result.attempts, {added: [], removed: []});
+});
 
 test("a scheduled pull-request read failure warns and performs no mutation", async () => {
   const result = await runLabeler(
