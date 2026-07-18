@@ -1598,12 +1598,11 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
 
         // when
         scenario.orchestrator().start();
-        waitUntil(() -> scenario.requests().containsKey("command-a"));
-        scenario.requests()
-                .get("command-a")
+        AgentRunner.AgentRunRequest commandARequest = scenario.requests().await("command-a");
+        commandARequest
                 .listener()
                 .onEvent(rateLimitEvent(
-                        scenario.requests().get("command-a"),
+                        commandARequest,
                         COMMENT_TIME,
                         new ObjectMapper().createObjectNode().put("account", "A")));
         AgentRunner.AgentRunRequest commandBRequest = dispatchCommandB(workflow, scenario);
@@ -1619,7 +1618,6 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     }
 
     @Test
-    // TODO Flaky: #578
     void latePreviousCommandRateLimitEventCannotOverwriteCurrentCommandSnapshot() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
@@ -1627,7 +1625,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
 
         // when
         scenario.orchestrator().start();
-        waitUntil(() -> scenario.requests().containsKey("command-a"));
+        AgentRunner.AgentRunRequest commandARequest = scenario.requests().await("command-a");
         AgentRunner.AgentRunRequest commandBRequest = dispatchCommandB(workflow, scenario);
         commandBRequest
                 .listener()
@@ -1635,11 +1633,10 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                         commandBRequest,
                         COMMENT_TIME,
                         new ObjectMapper().createObjectNode().put("account", "B")));
-        scenario.requests()
-                .get("command-a")
+        commandARequest
                 .listener()
                 .onEvent(rateLimitEvent(
-                        scenario.requests().get("command-a"),
+                        commandARequest,
                         COMMENT_TIME.plusSeconds(1),
                         new ObjectMapper().createObjectNode().put("account", "A")));
         RuntimeSnapshot snapshot = scenario.orchestrator().snapshot();
@@ -1654,7 +1651,6 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
 
     private static AgentRunner.AgentRunRequest dispatchCommandB(Path workflow, ConcurrentCommandScenario scenario)
             throws Exception {
-        scenario.tracker().setCandidates(List.of(scenario.first(), scenario.second()));
         rewriteWorkflowWithCommand(
                 workflow,
                 "command-b",
@@ -1663,11 +1659,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                   max_concurrent_agents: 2
                 """);
         scenario.orchestrator().tickNowForTests();
-        assertThat(scenario.workersStarted().await(5, TimeUnit.SECONDS))
-                .as("the previous- and current-command workers should start within 5 seconds")
-                .isTrue();
-        waitUntil(() -> scenario.requests().containsKey("command-b"));
-        return scenario.requests().get("command-b");
+        scenario.tracker().setCandidates(List.of(scenario.first(), scenario.second()));
+        scenario.orchestrator().tickNowForTests();
+        return scenario.requests().await("command-b");
     }
 
     @Test
