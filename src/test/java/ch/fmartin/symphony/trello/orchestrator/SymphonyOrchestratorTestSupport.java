@@ -39,6 +39,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -89,14 +90,12 @@ final class SymphonyOrchestratorTestSupport {
         Card first = TestCards.card("card-a", "TRELLO-a", "Todo");
         Card second = TestCards.card("card-b", "TRELLO-b", "Todo");
         FakeTracker tracker = new FakeTracker(List.of(first));
-        Map<String, AgentRunner.AgentRunRequest> requests = new ConcurrentHashMap<>();
-        CountDownLatch workersStarted = new CountDownLatch(2);
+        PublishedAgentRequests requests = new PublishedAgentRequests();
         CountDownLatch releaseWorkers = new CountDownLatch(1);
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
-            requests.put(request.config().codex().command(), request);
-            workersStarted.countDown();
+            requests.publish(request);
             assertThat(releaseWorkers.await(5, TimeUnit.SECONDS))
                     .as("the concurrent-command workers should be released within 5 seconds")
                     .isTrue();
@@ -104,18 +103,34 @@ final class SymphonyOrchestratorTestSupport {
         });
         SymphonyOrchestrator orchestrator = orchestrator(
                 workflow, tracker, runner, Clock.fixed(COMMENT_TIME, ZoneOffset.UTC), successfulWorkpadHandler());
-        return new ConcurrentCommandScenario(
-                first, second, tracker, requests, workersStarted, releaseWorkers, orchestrator);
+        return new ConcurrentCommandScenario(first, second, tracker, requests, releaseWorkers, orchestrator);
     }
 
     record ConcurrentCommandScenario(
             Card first,
             Card second,
             FakeTracker tracker,
-            Map<String, AgentRunner.AgentRunRequest> requests,
-            CountDownLatch workersStarted,
+            PublishedAgentRequests requests,
             CountDownLatch releaseWorkers,
             SymphonyOrchestrator orchestrator) {}
+
+    static final class PublishedAgentRequests {
+        private final Map<String, CompletableFuture<AgentRunner.AgentRunRequest>> requests = new ConcurrentHashMap<>();
+
+        void publish(AgentRunner.AgentRunRequest request) {
+            requests.computeIfAbsent(request.config().codex().command(), ignored -> new CompletableFuture<>())
+                    .complete(request);
+        }
+
+        AgentRunner.AgentRunRequest await(String command) {
+            CompletableFuture<AgentRunner.AgentRunRequest> request =
+                    requests.computeIfAbsent(command, ignored -> new CompletableFuture<>());
+            assertThat(request)
+                    .as("the %s request should be published within 5 seconds", command)
+                    .succeedsWithin(Duration.ofSeconds(5));
+            return request.join();
+        }
+    }
 
     static AgentRunner commandScopedUsageLimitRunner(Instant now, CountDownLatch commandBReturnedUsage) {
         AgentRunner runner = mock();
