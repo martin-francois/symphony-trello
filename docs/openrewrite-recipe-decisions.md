@@ -4,13 +4,13 @@ This record classifies every result-producing recipe evaluated for the initial m
 It also records the specifically audited zero-finding candidates. A parent composite does not
 replace a leaf decision.
 
-The initial allowlist evidence was measured against pre-application source and incorporated into
-rebased PR commit `582ca3c4`. Supplemental audits used clean worktrees at that commit on 2026-07-18.
-Every applicable audit covered all 142 Maven main and 113 Maven test Java files plus the root POM,
-with no `SourcesFileErrors`. Counts are positive `SourcesFileResults` rows and unique files unless a
-row states another unit. OpenRewrite's broader `sourceFiles` run metric includes non-Java and
-ignored tooling inputs, so it is not used as a coverage claim. Every accepted source change was
-evaluated as `OpenRewrite -> Spotless`, not as raw OpenRewrite output.
+The initial allowlist evidence was measured against the pre-application source that became this
+PR's reviewed feature-commit baseline. Supplemental audits used clean worktrees at that same
+baseline on 2026-07-18. Every applicable audit covered all 142 Maven main and 113 Maven test Java
+files plus the root POM, with no `SourcesFileErrors`. Counts are positive `SourcesFileResults` rows
+and unique files unless a row states another unit. OpenRewrite's broader `sourceFiles` run metric
+includes non-Java and ignored tooling inputs, so it is not used as a coverage claim. Every accepted
+source change was evaluated as `OpenRewrite -> Spotless`, not as raw OpenRewrite output.
 
 ## Statuses
 
