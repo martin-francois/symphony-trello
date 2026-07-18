@@ -36,8 +36,13 @@ itself lives in [Java style & design preferences](java-style.md).
   raw `rewrite:dryRun` result or a second unformatted OpenRewrite run is not a substitute.
 - Give every evaluated leaf recipe an individual status and evidence-based rationale in the
   repository recipe decision record. A parent-composite decision MUST NOT stand in for its
-  children. Classify a zero-finding recipe as not applicable or as an accepted recurrence guard
-  after an independent invariant review; do not call it rejected without a recipe-specific reason.
+  children. Zero current results MUST NOT exclude a recipe. Select a behavior-preserving,
+  generally applicable leaf as a recurrence guard when it enforces a useful invariant for Java,
+  Maven, or an ecosystem already used by the repository. Mark a leaf not applicable only when its
+  language, build tool, library, framework, or capability is absent. Reject or defer it only for a
+  recipe-specific semantic, readability, ownership, or target-version reason. Quarkus target-BOM
+  migrations remain owned by the selected `quarkus:update` migration rather than the recurring
+  composite.
 - Do not treat a report-only or candidate static-analysis profile as finished while it still
   contains known justified findings. If the current branch cannot fix every finding, make the
   remaining work explicit in GitHub issues before finishing and link every follow-up issue from the

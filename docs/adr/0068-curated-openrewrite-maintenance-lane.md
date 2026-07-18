@@ -25,8 +25,9 @@ protocol changes, and formatting that differs from the repository's Spotless res
 releases can also change their generated diff while retaining the same recipe ID.
 
 The repository needs a pinned and auditable local lane. It must allow justified large cleanups,
-keep Spotless authoritative for final formatting, document each rejected result-producing leaf,
-and block drift without giving CI authority to persist mutations.
+keep Spotless authoritative for final formatting, document each executed candidate leaf whether
+or not it currently produces a result, and block drift without giving CI authority to persist
+mutations.
 
 ## Decision Drivers
 
@@ -36,7 +37,8 @@ and block drift without giving CI authority to persist mutations.
 * Accept a large diff when the final code is meaningfully clearer or more maintainable.
 * Preserve explicit ownership of dependency versions, Quarkus updates, analyzers, and exact
   external protocols.
-* Record an evidence-based decision for every evaluated result-producing leaf.
+* Record an evidence-based decision for every evaluated leaf; zero current results are evidence of
+  baseline conformance, not a reason to exclude a generally applicable recurrence guard.
 * Enforce the accepted ordered state in required CI with read-only repository permission and no
   hosted source upload.
 
@@ -73,10 +75,11 @@ require raw OpenRewrite idempotence, and does not require OpenRewrite and Spotle
 The selected leaves modernize Java documentation, type-obvious local declarations, file API use,
 pattern dispatch, multiline strings, nullness contracts, utility classes, private cleanup, Maven
 metadata, Mockito verification, JUnit sources, and AssertJ assertions. The
-[recipe decision record](../openrewrite-recipe-decisions.md) gives every evaluated
-result-producing leaf its own status, counts, evidence, and rationale. Broad parents remain
-inactive when their descendants have mixed decisions; the parent disposition does not replace
-child decisions.
+[recipe decision record](../openrewrite-recipe-decisions.md) and its linked zero-result appendix
+give every evaluated candidate its own status, evidence, and rationale. A safe leaf that enforces a
+general Java, Maven, or existing-ecosystem invariant remains active even when the audited baseline
+already conforms. Broad parents remain inactive when their descendants have mixed decisions; the
+parent disposition does not replace child decisions.
 
 The Maven plugin and core Maven/Java recipes are Apache-2.0. The static-analysis, testing, and
 migration catalogs use the Moderne Source Available license, whose end-user grant covers applying
@@ -115,6 +118,8 @@ supported runtime or user contract, so `SPEC.md` does not need an update.
   otherwise useful recipe.
 * Good, because large justified modernizations are accepted after semantic and full-gate review.
 * Good, because every evaluated rejection has a durable recipe-specific explanation.
+* Good, because useful recurrence guards remain enforced even when the current baseline has no
+  matching source.
 * Good, because CI detects drift without receiving authority to persist a mutation.
 * Good, because direct artifact pins make generated Picnic recipe IDs reproducible and make a
   removed or renamed ID fail validation.
@@ -134,7 +139,8 @@ This decision remains implemented when:
 * OpenRewrite followed by Spotless leaves clean committed `HEAD` unchanged;
 * the required CI job applies those tools in that order before the full Maven gate;
 * CI detects tracked and nonignored untracked changes and has no repository write permission;
-* every newly evaluated result-producing leaf receives an individual decision;
+* every newly evaluated leaf receives an individual decision, and zero results alone never decide
+  against activation;
 * Renovate cannot group or automerge a recipe update and requires its release-age delay and
   dashboard approval; and
 * Quarkus and general dependency versions remain outside the recurring composite.

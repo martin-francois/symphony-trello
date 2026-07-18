@@ -309,9 +309,9 @@ final class InstallerScriptTest {
         repeatedFirst.assertSuccess();
         Path firstHome = Path.of(first.output());
         Path secondHome = Path.of(second.output());
-        assertThat(firstHome.getParent()).isEqualTo(temporaryDirectory);
+        assertThat(firstHome).hasParentRaw(temporaryDirectory);
         assertThat(firstHome).isDirectory().hasFileName("first-symphony-home-user-home");
-        assertThat(secondHome.getParent()).isEqualTo(temporaryDirectory);
+        assertThat(secondHome).hasParentRaw(temporaryDirectory);
         assertThat(secondHome).isDirectory().isNotEqualTo(firstHome).hasFileName("second-symphony-home-user-home");
         assertThat(Path.of(repeatedFirst.output())).isEqualTo(firstHome);
     }

@@ -11,7 +11,7 @@ import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 
 @AnalyzeClasses(packages = "ch.fmartin.symphony.trello", importOptions = DoNotIncludeTests.class)
-class ArchitectureTest {
+final class ArchitectureTest {
     @ArchTest
     static final ArchRule TOP_LEVEL_PRODUCTION_PACKAGES_DO_NOT_HAVE_CIRCULAR_DEPENDENCIES = slices().matching(
                     "ch.fmartin.symphony.trello.(*)..")

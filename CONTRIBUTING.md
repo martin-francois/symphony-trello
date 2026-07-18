@@ -249,8 +249,9 @@ git diff
 Use a clean branch or disposable worktree, review the complete combined diff, and commit only a
 state for which `OpenRewrite -> Spotless` leaves no Git changes. A raw `rewrite:dryRun` remains
 available as an optional preview, but its unformatted output is not the accepted repository state.
-The [OpenRewrite maintenance guide](docs/openrewrite.md) documents the pinned inventory, exhaustive
-recipe decisions, artifact handling, rollback, validation, and update policy.
+The [OpenRewrite maintenance guide](docs/openrewrite.md) documents the pinned inventory,
+recipe-specific positive and zero-result decisions, artifact handling, rollback, validation, and
+update policy.
 
 ## Commit Style
 

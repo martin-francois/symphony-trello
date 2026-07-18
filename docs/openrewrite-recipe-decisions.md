@@ -1,8 +1,9 @@
 # OpenRewrite Recipe Decision Record
 
-This record classifies every result-producing recipe evaluated for the initial maintenance lane.
-It also records the specifically audited zero-finding candidates. A parent composite does not
-replace a leaf decision.
+This record classifies the result-producing recipes evaluated for the initial maintenance lane and
+defines the decision boundary for every evaluated zero-result candidate. The
+[zero-result decision appendix](openrewrite-zero-result-decisions.md) gives each such recipe ID an
+individual status and reason. A parent composite does not replace a leaf decision.
 
 The initial allowlist evidence was measured against the pre-application source that became this
 PR's reviewed feature-commit baseline. Supplemental audits used clean worktrees at that same
@@ -17,8 +18,11 @@ source change was evaluated as `OpenRewrite -> Spotless`, not as raw OpenRewrite
 - **Accepted**: selected in `rewrite.yml` and applied to the baseline.
 - **Accepted recurrence guard**: selected after an invariant review despite zero current findings.
 - **Rejected**: evaluated and not selected for the recipe-specific reason in its row.
-- **Not applicable**: evaluated with zero current findings and not selected.
+- **Not applicable**: not selected because its language, build tool, library, framework, or
+  capability is absent.
 - **Deferred**: evaluation or activation requires a separate target-version or toolchain decision.
+- **Parent/configured primitive**: not selected as a bare recipe ID; use reviewed children or an
+  exactly configured wrapper.
 
 ## Catalog Legend
 
@@ -45,6 +49,7 @@ source change was evaluated as `OpenRewrite -> Spotless`, not as raw OpenRewrite
 | `org.openrewrite.java.migrate.nio.file.RedundantUtf8Charset` | Migrate | 39 rows / 39 files | Removes redundant charset arguments only from Java file APIs whose contract already specifies UTF-8, reducing call noise without changing bytes. Later AssertJ composition expands the combined UTF-8 diff to 42 files. |
 | `org.openrewrite.staticanalysis.AnnotateNullableParameters` | Static | 4 / 4 | Adds `@Nullable` where the method body already accepts and guards null at reviewed configuration, hook, and workspace boundaries. |
 | `org.openrewrite.staticanalysis.HideUtilityClassConstructor` | Static | 2 files | Adds private constructors to two all-static test classes so their non-instantiable role is explicit. |
+| `org.openrewrite.staticanalysis.FinalClass` | Static | expanded ordered run: 1 / 1 | Marks `ArchitectureTest` final after the earlier utility-class recipe makes its constructor private, stating the resulting non-subclassable contract explicitly. |
 | `org.openrewrite.staticanalysis.RemoveUnusedPrivateMethods` | Static | 1 file | Removes the unused `validateServerPort` forwarding wrapper; the owning validation method remains directly exercised. |
 | `org.openrewrite.staticanalysis.ReplaceLambdaWithMethodReference` | Static | 2 files / 4 direct edits | Replaces forwarding lambdas with target-typed method references. Four additional broad-family rows depended on a rejected equals rewrite and were not applied. |
 | `org.openrewrite.staticanalysis.IndexOfReplaceableByContains` | Static | 1 / 1, 2 edits | Replaces only existence checks; adjacent index comparisons that encode ordering remain intact. |
@@ -58,6 +63,7 @@ source change was evaluated as `OpenRewrite -> Spotless`, not as raw OpenRewrite
 | `tech.picnic.errorprone.refasterrules.AssertJObjectRulesRecipes$AssertThatHasToStringRecipe` | Picnic | 2 rows / 2 files, 3 edits | Keeps each JSON node or `StringBuilder` as the assertion subject and expresses its exact string representation with `hasToString`. It leaves `ByteArrayOutputStream.toString(Charset)` calls unchanged, avoiding the overload error in the rejected generic wrapper. |
 | `tech.picnic.errorprone.refasterrules.AssertJOptionalRulesRecipes$AbstractOptionalAssertHasValueRecipe` | Picnic | 13 / 13 | Replaces Optional `contains(value)` with `hasValue(value)`; AssertJ delegates `hasValue` to the same presence and equality check. |
 | `tech.picnic.errorprone.refasterrules.AssertJPathRulesRecipes$AssertThatHasFileNameRecipe` | Picnic | 2 rows / 2 files, 4 edits | Keeps the path as the diagnostic subject instead of asserting on `getFileName().toString()`. It runs before the general object-string leaf so the more specific path assertion wins. |
+| `tech.picnic.errorprone.refasterrules.AssertJPathRulesRecipes$AssertThatHasParentRawRecipe` | Picnic | expanded ordered run: 2 edits / 1 file | Keeps each path as the assertion subject and expresses its expected raw parent directly, improving failure diagnostics without filesystem access. |
 | `tech.picnic.errorprone.refasterrules.AssertJRulesRecipes$AssertThatContainsExactlyElementsOfListRecipe` | Picnic | 1 / 1 | Uses element-oriented ordered list comparison and improves mismatch diagnostics. |
 | `tech.picnic.errorprone.refasterrules.AssertJRulesRecipes$AssertThatHasSameElementsAsSetRecipe` | Picnic | 1 / 1 | Uses set-oriented comparison only where actual and expected values are sets, so duplicate semantics cannot differ. |
 | `tech.picnic.errorprone.refasterrules.AssertJStringRulesRecipes$AssertThatContentRecipe` | Picnic | isolated audit: 5 rows / 5 files | Moves file reads with an explicit charset into path content assertions while preserving that charset and improving path diagnostics. The preceding redundant-UTF-8 cleanup removes its current UTF-8 inputs, but the independently reviewed leaf remains selected for non-default charset assertions. |
@@ -111,28 +117,19 @@ Each row is an independent rejection. Parent-composite names do not stand in for
 | `org.openrewrite.maven.UseMavenCompilerPluginReleaseConfiguration` | Maven | 1 / 1 | Replaces `${maven.compiler.release}` with `${java.version}`, bypassing the repository's explicit compiler-release boundary. |
 | `org.openrewrite.maven.AddProperty` through configured `org.openrewrite.maven.cleanup.AddProjectBuildOutputTimestamp` | Maven | 1 row / 1 POM | Writes `1980-01-01T00:00:00Z`; `maven-pmd-plugin:3.28.0:pmd` rejects that value because its valid range starts at `1980-01-01T00:00:02Z`, so the repository verification gate fails. |
 
-## Audited Recipes With Zero Findings
+## Zero-Result Candidate Decisions
 
-These IDs were invoked directly or evaluated under a directly invoked parent and produced no
-current source-file result. They are not rejected. Only the independently justified
-`MigrateProcessWaitForDuration` recurrence guard appears in the active composite.
+Zero current results are evidence that the frozen baseline already conforms; they are not a reason
+to omit a useful rule. The audit therefore activates behavior-preserving, generally applicable
+guards for Java, Maven, JUnit, Mockito, AssertJ, Picnic, Guava, and JSpecify where those ecosystems
+already exist. A candidate remains inactive only for its own semantic, readability, ownership,
+prerequisite, or target-version reason.
 
-| Recipe ID | Catalog | Status and evidence |
-| --- | --- | --- |
-| `org.openrewrite.staticanalysis.RemoveRedundantTypeCast` | Static | Not applicable: zero findings on the audited baseline. |
-| `org.openrewrite.staticanalysis.RemoveUnusedLocalVariables` | Static | Not applicable: zero findings on the audited baseline. |
-| `org.openrewrite.staticanalysis.SimplifyElseBranch` | Static | Not applicable: zero findings on the audited baseline. |
-| `org.openrewrite.staticanalysis.SimplifyTernaryRecipes` | Static | Not applicable: zero findings on the audited baseline. |
-| `org.openrewrite.staticanalysis.UnwrapElseAfterReturn` | Static | Not applicable: zero findings on the audited baseline. |
-| `org.openrewrite.staticanalysis.UseLambdaForFunctionalInterface` | Static | Not applicable: zero findings on the audited baseline. |
-| `org.openrewrite.staticanalysis.UseMapContainsKey` | Static | Not applicable: zero findings on the audited baseline. |
-| `org.openrewrite.staticanalysis.UseStringReplace` | Static | Not applicable: zero findings on the audited baseline. |
-| `org.openrewrite.staticanalysis.LowercasePackage` | Static | Not applicable: zero findings on the audited baseline. |
-| `org.openrewrite.staticanalysis.RenameLocalVariablesToCamelCase` | Static | Not applicable: zero findings on the audited baseline. |
-| `org.openrewrite.staticanalysis.RenamePrivateFieldsToCamelCase` | Static | Not applicable: zero findings on the audited baseline. |
-| `org.openrewrite.staticanalysis.AddSerialVersionUidToSerializable` | Static | Not applicable: zero findings on the audited baseline. |
-| `org.openrewrite.java.testing.cleanup.RemoveTestPrefix` | Testing | Not applicable: zero findings on the audited baseline. |
-| `org.openrewrite.maven.RemoveMavenWrapper` | Maven | Not applicable: zero findings on the audited baseline. |
+The [zero-result decision appendix](openrewrite-zero-result-decisions.md) records every known
+zero-result recipe ID individually, including the former 14-row sample, mixed parents,
+parameterized implementation recipes, and recipes that are not applicable because their ecosystem
+is absent. Quarkus updater declarations are listed separately there because no target migration was
+executed; they are target-specific recipes, not zero-result evidence.
 
 ## Deferred Migrations
 
@@ -143,26 +140,26 @@ lane. Their deferral is not a blanket rejection of unrelated children.
 | --- | --- | --- | --- |
 | `org.openrewrite.xml.ChangeTagValue` through configured `org.openrewrite.maven.UpgradeToModelVersion410` and `org.openrewrite.maven.MigrateToMaven4` | XML through Maven | 1 / 1 POM | Changes the POM model version to 4.1.0 while the repository wrapper remains Maven 3.9.16, so the rewritten project is not runnable with its committed toolchain. Evaluate it only with an explicit Maven 4 wrapper and CI migration. |
 | `org.openrewrite.xml.ChangeTagAttribute` through configured `org.openrewrite.maven.UpgradeToModelVersion410` and `org.openrewrite.maven.MigrateToMaven4` | XML through Maven | 2 rows / 1 POM | Changes the POM namespace and schema location to the Maven 4.1 model while the repository wrapper remains Maven 3.9.16. Evaluate it only with an explicit Maven 4 wrapper and CI migration. |
-| Quarkus target migration recipes | Quarkus updater, not loaded by this lane | No target migration selected | Quarkus migrations encode version-specific platform changes. Evaluate their result-producing leaves in the dependency-update branch only after selecting the target BOM and reviewing its migration guide. |
+| Quarkus target migration recipes | Quarkus updater, not loaded by this lane | 141 declarations discovered; no target migration executed | Every discovered declaration belongs to a named Quarkus, Camel Quarkus, or Minio version/extension migration. The appendix records each declaration. Evaluate it in the dependency-update branch only after selecting the target BOM and reviewing its migration guide. |
 
 ## Parent Composite Disposition
 
-The following measured parents are not active because their descendants have mixed decisions or no
-current applicability. This is an activation decision, not a blanket rejection, and it does not
-replace any leaf row above.
+The following measured parents are not active because their descendants have mixed decisions or
+require individually stable leaf IDs. This is an activation decision, not a blanket rejection, and
+it does not replace any leaf row in this record or its appendix.
 
 | Parent composite | Disposition |
 | --- | --- |
-| `org.openrewrite.staticanalysis.CommonStaticAnalysis` | Not active; selected and rejected result-producing descendants are listed individually. |
-| `org.openrewrite.java.testing.junit5.JUnit5BestPractices` through `org.openrewrite.java.testing.junit.JupiterBestPractices` | Not active; it combines the accepted value-source cleanup with precise-throws and fuzz-template regressions. |
-| `org.openrewrite.java.testing.junit.JUnit6BestPractices` | Not active; its only positive leaves were the individually rejected precise-throws and fuzz-template changes, while JUnit 5-to-6 migration leaves had zero findings. |
-| `org.openrewrite.java.testing.mockito.MockitoBestPractices` | Not active; only `RemoveTimesZeroAndOne` produced a useful result, so the leaf is selected without migration or dependency-version children. |
-| `org.openrewrite.maven.BestPractices` | Not active; only explicit plugin groups passed the POM ownership review. |
-| `org.openrewrite.java.migrate.UpgradeToJava25` | Not active; selected Java 25 leaves coexist with version and compiler-boundary changes owned elsewhere. |
-| `org.openrewrite.java.migrate.JavaBestPractices` | Not active; its source-breaking and type-obscuring leaves coexist with individually selected modernization leaves. |
-| `org.openrewrite.java.testing.assertj.Assertj` | Not active; two descendants fail compilation and other descendants have individual readability decisions. |
-| `org.openrewrite.staticanalysis.CodeCleanup` | Not active; semantic cleanups coexist with Spotless-owned whitespace and import recipes. |
+| `org.openrewrite.staticanalysis.CommonStaticAnalysis` | Not active; individually selected general Java guards coexist with semantic changes, formatter-owned rules, and absent-capability leaves. |
+| `org.openrewrite.java.testing.junit5.JUnit5BestPractices` through `org.openrewrite.java.testing.junit.JupiterBestPractices` | Not active; accepted JUnit recurrence guards coexist with precise-throws, raw-boolean, and fuzz-template regressions. |
+| `org.openrewrite.java.testing.junit.JUnit6BestPractices` | Not active; accepted recurrence guards coexist with rejected assertion/test-removal behavior and target-specific JUnit migration children. |
+| `org.openrewrite.java.testing.mockito.MockitoBestPractices` | Not active; accepted call-shape cleanup guards coexist with unsafe resource rewrites, rejected strictness changes, and absent legacy migrations. |
+| `org.openrewrite.maven.BestPractices` | Not active; accepted POM recurrence guards coexist with Spotless-owned order, Maven 4 migration, and version-ownership changes. |
+| `org.openrewrite.java.migrate.UpgradeToJava25` | Not active; individually selected Java 25 guards coexist with target-version, compiler-boundary, removed-subsystem, and dependency changes owned elsewhere. |
+| `org.openrewrite.java.migrate.JavaBestPractices` | Not active; individually selected Java, Guava, JSpecify, and JDK guards coexist with source-breaking, target-specific, and absent-capability leaves. |
+| `org.openrewrite.java.testing.assertj.Assertj` | Not active; individually selected assertion guards coexist with descendants that fail compilation or conflict with the repository's diagnostic conventions. |
+| `org.openrewrite.staticanalysis.CodeCleanup` | Not active; individually selected semantic guards coexist with Spotless-owned whitespace and import recipes. |
 | `org.openrewrite.staticanalysis.CommonDeclarationSiteTypeVariances` | Not active; its sole positive child, `DeclarationSiteTypeVariance`, is individually rejected. |
-| `org.openrewrite.staticanalysis.JavaApiBestPractices` | Not applicable; its direct audit and `UseMapContainsKey` child produced no current findings. |
+| `org.openrewrite.staticanalysis.JavaApiBestPractices` | Not active; `UseMapContainsKey` is selected as a recurrence guard while its parent does not provide a stable leaf-only boundary. |
 | `org.openrewrite.java.testing.cleanup.BestPractices` | Not active; `TestsShouldIncludeAssertions` misclassifies repository domain assertions. |
 | `org.openrewrite.maven.ReproducibleBuilds` | Not active; the timestamp child fails the PMD gate and the plugin-version child violates version ownership. |

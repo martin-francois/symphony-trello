@@ -5,8 +5,10 @@ compiler, static-analysis, and test gates; it does not replace them. The normal
 `./mvnw -q spotless:check verify` command remains non-mutating and does not activate OpenRewrite.
 
 The reviewed allowlist is the `ch.fmartin.symphony.trello.OpenRewriteMaintenance` composite in
-[`rewrite.yml`](../rewrite.yml). The exhaustive result-producing leaf decisions are in the
-[recipe decision record](openrewrite-recipe-decisions.md).
+[`rewrite.yml`](../rewrite.yml). The recipe-specific positive and zero-result decisions are in the
+[recipe decision record](openrewrite-recipe-decisions.md) and its linked audit appendix. The
+composite contains 401 exact entries: the original 31 reviewed entries plus 370 newly accepted
+zero-result recurrence-guard entries.
 
 ## Accepted Ordered State
 
@@ -132,6 +134,12 @@ automerge. Before merging an update, a maintainer applies the ordered pipeline, 
 combined diff, runs the full gate, and proves that the committed state remains an ordered fixed
 point.
 
+A catalog update also requires a fresh applicability review of every newly discovered zero-result
+leaf. Zero current results do not justify exclusion. Select a behavior-preserving leaf when it
+enforces a generally useful invariant for Java, Maven, or an existing repository ecosystem. Do not
+load a recipe solely for an absent language, build system, library, framework, or capability. Keep
+target-version migrations with the workflow that selects that target.
+
 Quarkus migrations remain owned by `quarkus:update` in the dependency-update branch. Generic
 dependency and plugin version changes remain owned by their POM properties and Renovate. The
 general maintenance composite does not update the Quarkus BOM or dependency versions.
@@ -145,6 +153,7 @@ applicable audit covered all 142 Maven main and 113 Maven test Java files plus t
 and therefore outside this lane.
 
 Counts, provider and license ownership, exact decisions, compilation failures, formatting failures,
-and recurrence guards are recorded per leaf in
-[`docs/openrewrite-recipe-decisions.md`](openrewrite-recipe-decisions.md). A parent composite is not
-treated as an individual rejection when its descendants have mixed decisions.
+and recurrence guards are recorded per candidate in the
+[recipe decision record](openrewrite-recipe-decisions.md) and its linked zero-result appendix. A
+parent composite is not treated as an individual rejection when its descendants have mixed
+decisions.
