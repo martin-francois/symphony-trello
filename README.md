@@ -95,6 +95,9 @@ All Symphony for Trello features work with Trello's Free plan.
 - One local workspace per Trello card so Codex work is separated by task.
 - Optional GitHub pull request flow for repository-changing work.
 - Trello comments that show progress, blockers, validation, and handoff notes on the card.
+- Scoped Trello tools let Codex comment on, update, and move its current Trello card without access
+  to the Trello API credentials. Symphony performs permitted Trello operations on Codex's behalf
+  and enforces the configured write controls.
 - A local worker status page and JSON API for running, retrying, blocked, and finished work.
 - Configurable workflow files for board lists, workspace paths, Codex settings, concurrency, and
   safe local file access.
@@ -1487,8 +1490,9 @@ secrets outside the workflow file and does not want Trello secrets in the servic
 ## Safety Posture
 
 This implementation targets trusted automation environments by default. Workspace boundaries are
-enforced, hooks run inside the per-card workspace, and Trello credentials are injected into HTTP
-requests rather than prompts. Hooks and Codex still execute trusted local code, so production
+enforced, hooks run inside the per-card workspace, and Codex manages Trello cards through scoped
+tools without access to the Trello API credentials. Symphony injects those credentials into Trello
+HTTP requests rather than prompts. Hooks and Codex still execute trusted local code, so production
 deployments should use a dedicated OS user, a dedicated workspace volume, narrowly scoped Trello
 credentials, and Codex approval/sandbox settings appropriate to the board's trust level.
 
