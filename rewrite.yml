@@ -34,6 +34,12 @@ recipeList:
   - org.openrewrite.java.migrate.concurrent.MigrateAtomicReferenceArrayWeakCompareAndSetToWeakCompareAndSetPlain
   - org.openrewrite.java.migrate.concurrent.MigrateAtomicReferenceWeakCompareAndSetToWeakCompareAndSetPlain
   - org.openrewrite.java.migrate.guava.NoGuavaAtomicsNewReference
+  - org.openrewrite.java.migrate.guava.NoGuavaImmutableListCopyOf
+  - org.openrewrite.java.migrate.guava.NoGuavaImmutableListOf
+  - org.openrewrite.java.migrate.guava.NoGuavaImmutableMapCopyOf
+  - org.openrewrite.java.migrate.guava.NoGuavaImmutableMapOf
+  - org.openrewrite.java.migrate.guava.NoGuavaImmutableSetCopyOf
+  - org.openrewrite.java.migrate.guava.NoGuavaImmutableSetOf
   - org.openrewrite.java.migrate.guava.NoGuavaListsNewArrayList
   - org.openrewrite.java.migrate.guava.NoGuavaListsNewCopyOnWriteArrayList
   - org.openrewrite.java.migrate.guava.NoGuavaListsNewLinkedList
@@ -49,8 +55,10 @@ recipeList:
   - org.openrewrite.java.migrate.guava.PreferJavaNioCharsetStandardCharsets
   - org.openrewrite.java.migrate.guava.PreferJavaUtilCollectionsSynchronizedNavigableMap
   - org.openrewrite.java.migrate.guava.PreferJavaUtilCollectionsUnmodifiableNavigableMap
+  - org.openrewrite.java.migrate.guava.PreferJavaUtilFunction
   - org.openrewrite.java.migrate.guava.PreferJavaUtilObjectsEquals
   - org.openrewrite.java.migrate.guava.PreferJavaUtilObjectsHashCode
+  - org.openrewrite.java.migrate.guava.PreferJavaUtilSupplier
   - org.openrewrite.java.migrate.guava.PreferLongCompare
   - org.openrewrite.java.migrate.guava.PreferMathAddExact
   - org.openrewrite.java.migrate.guava.PreferMathClamp
@@ -69,6 +77,7 @@ recipeList:
   - org.openrewrite.java.migrate.lang.MigrateCharacterIsJavaLetterOrDigitToIsJavaIdentifierPart
   - org.openrewrite.java.migrate.lang.MigrateCharacterIsJavaLetterToIsJavaIdentifierStart
   - org.openrewrite.java.migrate.lang.MigrateCharacterIsSpaceToIsWhitespace
+  - org.openrewrite.java.migrate.lang.MigrateClassNewInstanceToGetDeclaredConstructorNewInstance
   - org.openrewrite.java.migrate.lang.MigrateRuntimeVersionMajorToFeature
   - org.openrewrite.java.migrate.lang.MigrateRuntimeVersionMinorToInterim
   - org.openrewrite.java.migrate.lang.MigrateRuntimeVersionSecurityToUpdate
@@ -79,13 +88,26 @@ recipeList:
   - org.openrewrite.java.migrate.lang.SwitchCaseReturnsToSwitchExpression
   - org.openrewrite.java.migrate.lang.SwitchExpressionYieldToArrow
   - org.openrewrite.java.migrate.nio.file.PathsGetToPathOf
+  - org.openrewrite.java.migrate.sql.MigrateDriverManagerSetLogStream
   - org.openrewrite.java.migrate.util.IteratorNext
+  - org.openrewrite.java.migrate.util.MigrateCollectionsEmptyList
+  - org.openrewrite.java.migrate.util.MigrateCollectionsEmptyMap
+  - org.openrewrite.java.migrate.util.MigrateCollectionsEmptySet
+  - org.openrewrite.java.migrate.util.MigrateCollectionsSingletonList
+  - org.openrewrite.java.migrate.util.MigrateCollectionsSingletonMap
+  - org.openrewrite.java.migrate.util.MigrateCollectionsSingletonSet
+  - org.openrewrite.java.migrate.util.MigrateCollectionsUnmodifiableList
+  - org.openrewrite.java.migrate.util.MigrateCollectionsUnmodifiableSet
   - org.openrewrite.java.migrate.util.OptionalNotEmptyToIsPresent
   - org.openrewrite.java.migrate.util.OptionalNotPresentToIsEmpty
   - org.openrewrite.java.migrate.util.OptionalStreamRecipe
   - org.openrewrite.java.migrate.util.ReplaceMathRandomWithThreadLocalRandomRecipe
+  - org.openrewrite.java.migrate.util.UseLocaleOf
   - org.openrewrite.java.migrate.util.UsePredicateNot
+  - org.openrewrite.staticanalysis.AbstractClassPublicConstructor
+  - org.openrewrite.staticanalysis.BigDecimalDoubleConstructorRecipe
   - org.openrewrite.staticanalysis.BigDecimalRoundingConstantsToEnums
+  - org.openrewrite.staticanalysis.CaseInsensitiveComparisonsDoNotChangeCase
   - org.openrewrite.staticanalysis.CatchClauseOnlyRethrows
   - org.openrewrite.staticanalysis.CollectionToArrayShouldHaveProperType
   - org.openrewrite.staticanalysis.DefaultComesLast
@@ -94,15 +116,18 @@ recipeList:
   - org.openrewrite.staticanalysis.IndexOfShouldNotCompareGreaterThanZero
   - org.openrewrite.staticanalysis.InstanceOfPatternMatch
   - org.openrewrite.staticanalysis.IsEmptyCallOnCollections
+  - org.openrewrite.staticanalysis.MethodNameCasing
   - org.openrewrite.staticanalysis.MissingOverrideAnnotation
   - org.openrewrite.staticanalysis.MultipleVariableDeclarations
   - org.openrewrite.staticanalysis.NeedBraces
   - org.openrewrite.staticanalysis.NestedEnumsAreNotStatic
+  - org.openrewrite.staticanalysis.NoDoubleBraceInitialization
   - org.openrewrite.staticanalysis.NoEmptyCollectionWithRawType
   - org.openrewrite.staticanalysis.NoPrimitiveWrappersForToStringOrCompareTo
   - org.openrewrite.staticanalysis.RedundantFileCreation
   - org.openrewrite.staticanalysis.RemoveExtraSemicolons
   - org.openrewrite.staticanalysis.RemoveRedundantTypeCast
+  - org.openrewrite.staticanalysis.RenamePrivateFieldsToCamelCase
   - org.openrewrite.staticanalysis.ReplaceClassIsInstanceWithInstanceof
   - org.openrewrite.staticanalysis.ReplaceWeekYearWithYear
   - org.openrewrite.staticanalysis.SimplifyArraysAsList
@@ -114,11 +139,14 @@ recipeList:
   - org.openrewrite.staticanalysis.UnnecessaryParentheses
   - org.openrewrite.staticanalysis.UnnecessaryReturnAsLastStatement
   - org.openrewrite.staticanalysis.UpperCaseLiteralSuffixes
+  - org.openrewrite.staticanalysis.URLEqualsHashCodeRecipes$URLEqualsRecipe
+  - org.openrewrite.staticanalysis.URLEqualsHashCodeRecipes$URLHashCodeRecipe
   - org.openrewrite.staticanalysis.UseDiamondOperator
   - org.openrewrite.staticanalysis.UseJavaStyleArrayDeclarations
   - org.openrewrite.staticanalysis.UseListSort
   - org.openrewrite.staticanalysis.UseMapContainsKey
   - org.openrewrite.staticanalysis.UseStandardCharset
+  - org.openrewrite.staticanalysis.UseSystemLineSeparator
   - org.openrewrite.staticanalysis.WhileInsteadOfFor
   - org.openrewrite.staticanalysis.WriteOctalValuesAsDecimal
   - tech.picnic.errorprone.refasterrules.InputStreamRulesRecipes$InputStreamTransferToRecipe
@@ -128,17 +156,21 @@ recipeList:
   # Maven guards preserve existing dependency and plugin version ownership.
   - org.openrewrite.maven.cleanup.ExplicitPluginGroupId
   - org.openrewrite.maven.cleanup.ExplicitDependencyVersion
+  - org.openrewrite.maven.cleanup.NoSystemScopeDependencies
   - org.openrewrite.maven.plugin.DependencyPluginGoalResolveSources
   # JUnit discovery, lifecycle, visibility, and source-shape guards.
   - org.openrewrite.java.testing.junit5.CsvSourceToValueSource
   - org.openrewrite.java.testing.junit5.TempDirNonFinal
   - org.openrewrite.java.testing.junit5.LifecycleNonPrivate
+  - org.openrewrite.java.testing.cleanup.TestsShouldNotBePublic
   # Mockito call-shape cleanup guards.
+  - org.openrewrite.java.testing.mockito.RemoveInitMocksIfRunnersSpecified
   - org.openrewrite.java.testing.mockito.RemoveTimesZeroAndOne
   - org.openrewrite.java.testing.mockito.SimplifyMockitoVerifyWhenGiven
   # JUnit assertion producers run before every JUnit-to-AssertJ consumer.
   - org.openrewrite.java.testing.cleanup.AssertEqualsNullToAssertNull
   - org.openrewrite.java.testing.cleanup.AssertFalseNullToAssertNotNull
+  - org.openrewrite.java.testing.cleanup.AssertLiteralBooleanRemovedRecipe
   - org.openrewrite.java.testing.cleanup.AssertLiteralBooleanToFailRecipes$WithMessageRecipe
   - org.openrewrite.java.testing.cleanup.AssertLiteralBooleanToFailRecipes$WithoutMessageRecipe
   - org.openrewrite.java.testing.cleanup.AssertTrueNullToAssertNull

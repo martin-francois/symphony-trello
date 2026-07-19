@@ -18,7 +18,7 @@ source change was evaluated as `OpenRewrite -> Spotless`, not as raw OpenRewrite
 - **Accepted**: selected in `rewrite.yml` and applied to the baseline.
 - **Accepted recurrence guard**: selected after an invariant review despite zero current findings.
 - **Breaking-release candidate**: preferable transformation that remains inactive because it stops
-  previously supported, working use.
+  previously supported, working deployed-application use.
 - **Rejected**: evaluated and not selected for the recipe-specific reason in its row.
 - **Contingent**: not selected because its language, build tool, library, framework, capability, or
   required migration target is absent from the recurring lane.
@@ -78,9 +78,10 @@ source change was evaluated as `OpenRewrite -> Spotless`, not as raw OpenRewrite
 
 ## Rejected Recipes
 
-Each row is an independent result-producing rejection. The complete re-audit retained every row
-below: none of these concrete outputs became better merely because behavior changes are now
-eligible. Parent-composite names do not stand in for these decisions.
+Each row is an independent result-producing matcher rejection. The complete re-audit retained every
+bare recipe or configured instance below for its stated boundary. The two safe current `UseListOf`
+outputs were applied manually without accepting that broader matcher. Parent-composite names do not
+stand in for these decisions.
 
 | Recipe ID or configured instance | Catalog | Evidence | Individual rejection reason |
 | --- | --- | --- | --- |
@@ -103,6 +104,7 @@ eligible. Parent-composite names do not stand in for these decisions.
 | `org.openrewrite.java.migrate.lang.var.UseVarForGenericsConstructors` | Migrate | 52 / 52 | Replaces interface-typed local declarations with variables inferred as concrete collection implementations, weakening the abstraction expressed at the declaration site. |
 | `org.openrewrite.java.migrate.lang.var.UseVarForPrimitive` | Migrate | 94 / 94 | Hides primitive width and boolean/numeric type information where the initializer does not repeat it. |
 | `org.openrewrite.java.migrate.util.UseEnumSetOf` | Migrate | 2 / 2 | Replaces immutable `Set.of` values, including a static constant, with mutable `EnumSet` instances. |
+| `org.openrewrite.java.migrate.util.UseListOf` | Migrate | issue #600 direct run: 2 / 2, applied manually | Both current staged initializers become clearer mutable `ArrayList` wrappers around values required to be non-null on every successful path. The bare guard remains rejected because other matched shapes can consume calls on another receiver, become immutable, or pass unknown-null expressions to `List.of`. |
 | `org.openrewrite.staticanalysis.AnnotateNullableMethods` | Static | 5 / 5 | Annotates implementations such as `StreamTerminal` and `RecordingTerminal` but leaves the owning `Terminal` contract unchanged, producing an incomplete nullness boundary. |
 | `org.openrewrite.staticanalysis.AnnotateRequiredParameters` | Static | 1 / 1 | Removes the existing null guard in `WorkspaceManager.sanitize`, changing a domain-specific exception into a null-pointer exception. |
 | `org.openrewrite.staticanalysis.LambdaBlockToExpression` | Static | 1 / 1 | Removes the outer block from a nested `Optional.ifPresent(... ifPresentOrElse(...))` chain in `WorkflowConfigEditor`. The denser indentation and closing delimiters make control flow harder to read, so the original block is retained. |
@@ -126,14 +128,16 @@ eligible. Parent-composite names do not stand in for these decisions.
 Zero current results are evidence that the frozen baseline already conforms; they are not a reason
 to omit a useful rule. The audit therefore activates compatible improvements and generally
 applicable guards for Java, Maven, JUnit, Mockito, AssertJ, Picnic, Guava, and JSpecify where those
-ecosystems already exist. Compatibility means that no previously supported, working use stops
-working. A correction to invalid or already-broken behavior remains compatible when the generated
-behavior is genuinely better.
+ecosystems already exist. Compatibility is evaluated from the generated diff and this deployed
+application's supported behavior, not hypothetical binary compatibility for a Java library that
+the repository does not publish. A zero-result guard changes no deployment, and a future finding
+receives a new generated-diff review. A correction to invalid or already-broken behavior remains
+compatible when the generated behavior is genuinely better.
 
 A candidate remains inactive only for its own safety, context, readability, ownership,
 prerequisite, target-version, or compatibility reason. Preferable transformations that stop
-supported, working use are recorded separately as breaking-release candidates instead of being
-mislabelled as unsafe or valueless.
+supported, working deployed-application use are recorded separately as breaking-release candidates
+instead of being mislabelled as unsafe or valueless.
 
 The [zero-result decision appendix](openrewrite-zero-result-decisions.md) records every known
 zero-result recipe ID individually, including the former 14-row sample, mixed parents,
@@ -141,17 +145,40 @@ parameterized implementation recipes, and recipes that are contingent because th
 absent. Quarkus updater declarations are listed separately there because no target migration was
 executed; they are target-specific recipes, not zero-result evidence.
 
+## Issue #600 Application-Context Re-evaluation
+
+All 36 issue #600 candidates other than `UseMapOf` were rerun individually at
+`ae8db9910089a34733522fc22ba197b724ddcf30` with their exact pinned IDs. Every run completed
+successfully. Thirty-five produced no patch. `UseListOf` produced two safe current findings, which
+were applied manually as mutable `ArrayList` wrappers around values required to be non-null on every
+successful path.
+
+The application-context review activates 32 generally useful guards. `PreferJavaUtilOptional`
+remains an inactive mixed parent because its `NoGuavaOptionalAsSet` child emits a mutable result for
+an API that returned an immutable set. `UseListOf`, `UseSetOf`, and `UseMapOf` remain inactive
+because their pinned matchers do not prove all receiver, null, duplicate, ordering, or mutability
+requirements. `LowercasePackage` remains inactive because its pinned default-locale conversion is
+host-dependent. These are recipe-correctness decisions, not breaking-release deferrals.
+
+`RemoveTryCatchFailBlocks` was audited separately because it was not part of issue #600. Replacing a
+simple `try`/`catch` whose catch only calls `fail` with `assertDoesNotThrow` is clearer and retains
+the unexpected exception as the cause. The pinned visitor remains inactive because isolated
+controls proved that it can move outer-local mutation, `break`, or `continue` across a lambda
+boundary and emit uncompilable Java. The rejection is about matcher breadth, not a preference for
+manual exception scaffolding.
+
 ## Preferable Breaking-Release Candidates
 
-The complete rejected-inventory re-audit identified 37 zero-result recipes whose default result is
-preferable but whose transformation can stop a previously supported, working use. They remain
-inactive in this compatible pull request. The
+No audited recipe currently has this status. Issue #600 re-evaluated the former 37 candidates as
+application maintenance rather than a published Java-library migration. Thirty-two zero-result
+guards are active, one mixed parent remains inactive, and four defective implementations are
+rejected. The
 [dedicated breaking-release section](openrewrite-zero-result-decisions.md#preferable-breaking-release-candidates)
-lists every recipe and its exact compatibility boundary.
+remains the synchronized inventory for any future recipe that stops supported deployed-application
+use.
 
-No result-producing rejection moved into this section. Every measured positive output remains
-rejected for its individual invalid-source, failed-gate, readability, diagnostics, protocol,
-mutability, or ownership reason in the table above.
+The two safe current `UseListOf` outputs were applied manually. The recipe remains rejected as an
+unconditional guard because its other matched shapes can emit incorrect source.
 
 ## Deferred Migrations
 

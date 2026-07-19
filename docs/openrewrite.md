@@ -7,8 +7,8 @@ compiler, static-analysis, and test gates; it does not replace them. The normal
 The reviewed allowlist is the `ch.fmartin.symphony.trello.OpenRewriteMaintenance` composite in
 [`rewrite.yml`](../rewrite.yml). The recipe-specific positive and zero-result decisions are in the
 [recipe decision record](openrewrite-recipe-decisions.md) and its linked audit appendix. The
-composite contains 405 exact entries: the previous 401-entry reviewed state plus four compatible
-improvements accepted by the complete rejected-inventory re-audit.
+composite contains 437 exact entries: the previous 405-entry reviewed state plus 32 application
+maintenance guards selected by the issue #600 re-evaluation.
 
 ## Accepted Ordered State
 
@@ -137,12 +137,15 @@ point.
 A catalog update also requires a fresh applicability review of every newly discovered zero-result
 leaf. Zero current results do not justify exclusion. Select a compatible leaf when it makes code
 meaningfully better or enforces a generally useful invariant for Java, Maven, or an existing
-repository ecosystem. Compatible means that no previously supported, working use stops working;
-correcting invalid or already-broken behavior is compatible when the generated behavior is
-genuinely better. Record preferable transformations that stop working use as inactive
-breaking-release candidates. Reject unsafe, context-dependent, defective, or worse output. Do not
-load a recipe solely for an absent language, build system, library, framework, or capability. Keep
-target-version migrations with the workflow that selects that target.
+repository ecosystem. Judge compatibility from the current generated diff and supported behavior
+of this deployed application, not hypothetical compatibility for a Java library the repository
+does not publish. A zero-result guard changes no deployment, and each future finding requires a new
+generated-diff review. Correcting invalid or already-broken behavior is compatible when the
+generated behavior is genuinely better. Record preferable transformations that stop supported
+application use as inactive breaking-release candidates. Reject unsafe, context-dependent,
+defective, or worse output. Do not load a recipe solely for an absent language, build system,
+library, framework, or capability. Keep target-version migrations with the workflow that selects
+that target.
 
 Quarkus migrations remain owned by `quarkus:update` in the dependency-update branch. Generic
 dependency and plugin version changes remain owned by their POM properties and Renovate. The

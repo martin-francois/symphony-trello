@@ -4,6 +4,7 @@ date: 2026-07-18
 decision-makers: [François Martin, Codex]
 consulted:
   - "[Guarded OpenRewrite modernization lane issue](https://github.com/martin-francois/symphony-trello/issues/587)"
+  - "[Application-context recipe review issue](https://github.com/martin-francois/symphony-trello/issues/600)"
   - "[OpenRewrite Maven plugin reference](https://docs.openrewrite.org/reference/rewrite-maven-plugin)"
   - "[OpenRewrite licensing](https://docs.openrewrite.org/licensing/openrewrite-licensing)"
   - "[ADR 0059](0059-keep-palantir-java-format.md)"
@@ -36,8 +37,10 @@ mutations.
 * Parse every Maven main and test source with type attribution before promoting a recipe.
 * Accept a large diff when the final code is meaningfully clearer or more maintainable.
 * Accept compatible correctness repairs even when the corrected behavior is observable.
-* Keep preferable transformations that stop supported, working use visible for an explicit
-  breaking-release decision instead of activating or dismissing them.
+* Judge compatibility from the generated diff and supported deployed-application behavior rather
+  than hypothetical Java-library binary compatibility.
+* Keep preferable transformations that stop supported, working application use visible for an
+  explicit breaking-release decision instead of activating or dismissing them.
 * Preserve explicit ownership of dependency versions, Quarkus updates, analyzers, and exact
   external protocols.
 * Record an evidence-based decision for every evaluated leaf; zero current results are evidence of
@@ -85,12 +88,16 @@ general Java, Maven, or existing-ecosystem invariant remains active even when th
 already conforms. Broad parents remain inactive when their descendants have mixed decisions; the
 parent disposition does not replace child decisions.
 
-Recipe compatibility follows the repository pull-request contract: a change is compatible when no
-previously supported, working use stops working. Correcting invalid or already-broken behavior is
-compatible when the generated result is genuinely better; observable output alone does not make
-that repair breaking. A transformation that is preferable but stops working use remains inactive
-and is recorded as a breaking-release candidate. Unsafe, context-dependent, defective, or worse
-output remains rejected rather than being relabelled as a future improvement.
+Recipe compatibility follows the repository pull-request contract and the repository's application
+scope. It is evaluated from the current generated diff and supported behavior when the rebuilt
+application is deployed, not from hypothetical binary, reflection, or serialization compatibility
+for a Java library that this repository does not publish. A zero-result guard changes no deployed
+application. If it finds source later, that generated diff receives another application-behavior
+review in its owning pull request. Correcting invalid or already-broken behavior is compatible when
+the generated result is genuinely better; observable output alone does not make that repair
+breaking. A transformation that is preferable but stops supported working application use remains
+inactive and is recorded as a breaking-release candidate. Unsafe, context-dependent, defective, or
+worse output remains rejected rather than being relabelled as a future improvement.
 
 The Maven plugin and core Maven/Java recipes are Apache-2.0. The static-analysis, testing, and
 migration catalogs use the Moderne Source Available license, whose end-user grant covers applying
@@ -132,8 +139,8 @@ supported runtime or user contract, so `SPEC.md` does not need an update.
 * Good, because useful recurrence guards remain enforced even when the current baseline has no
   matching source.
 * Good, because compatible bug corrections are not rejected merely for changing broken behavior.
-* Good, because preferable breaking transformations remain grouped for a deliberate future release
-  instead of entering the compatible recurring lane.
+* Good, because any transformation that stops supported deployed-application use remains grouped
+  for a deliberate future release instead of entering the compatible recurring lane.
 * Good, because CI detects drift without receiving authority to persist a mutation.
 * Good, because direct artifact pins make generated Picnic recipe IDs reproducible and make a
   removed or renamed ID fail validation.
@@ -155,8 +162,10 @@ This decision remains implemented when:
 * CI detects tracked and nonignored untracked changes and has no repository write permission;
 * every newly evaluated leaf receives an individual decision, and zero results alone never decide
   against activation;
-* compatible bug corrections remain eligible, preferable breaking transformations remain inactive
-  and separately recorded, and unsafe transformations remain rejected;
+* compatibility is judged from the current generated diff and deployed-application behavior;
+  compatible bug corrections remain eligible, future findings require review, preferable breaking
+  transformations remain inactive and separately recorded, and unsafe transformations remain
+  rejected;
 * Renovate cannot group or automerge a recipe update and requires its release-age delay and
   dashboard approval; and
 * Quarkus and general dependency versions remain outside the recurring composite.
@@ -175,8 +184,8 @@ This decision remains implemented when:
 
 * Good, because it creates a simple conservative selection rule.
 * Bad, because it rejects correctness repairs solely because broken behavior becomes correct.
-* Bad, because it conflates preferable breaking migrations with unsafe or defective recipes instead
-  of preserving the former for an explicit breaking release.
+* Bad, because it can conflate an application-compatible source-policy improvement with a
+  hypothetical library compatibility boundary that this repository does not publish.
 
 ### Raw OpenRewrite Cleanliness Or Idempotence
 

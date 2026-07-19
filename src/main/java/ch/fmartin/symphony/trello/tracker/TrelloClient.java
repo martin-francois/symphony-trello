@@ -684,12 +684,12 @@ public class TrelloClient implements TrackerClient {
     }
 
     private static String prerequisiteWaitingText(Card card) {
-        List<String> lines = new ArrayList<>();
-        lines.add(PREREQUISITE_STATUS_COMMENT_MARKER);
-        lines.add("");
-        lines.add("Status: waiting for prerequisites.");
-        lines.add("");
-        lines.add("Symphony has not started this Trello card because prerequisite checklists are not resolved.");
+        List<String> lines = new ArrayList<>(List.of(
+                PREREQUISITE_STATUS_COMMENT_MARKER,
+                "",
+                "Status: waiting for prerequisites.",
+                "",
+                "Symphony has not started this Trello card because prerequisite checklists are not resolved."));
         if (!card.blockedBy().isEmpty()) {
             lines.add("");
             lines.add("Waiting for:");

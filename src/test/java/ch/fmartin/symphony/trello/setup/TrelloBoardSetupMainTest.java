@@ -7385,12 +7385,12 @@ final class TrelloBoardSetupMainTest {
     private static MainProcessResult runMainProcess(
             Path workingDir, Map<String, String> environment, List<String> environmentToRemove, String... arguments)
             throws IOException, InterruptedException {
-        List<String> command = new ArrayList<>();
-        command.add(Path.of(System.getProperty("java.home"), "bin", javaExecutable())
-                .toString());
-        command.add("-cp");
-        command.add(System.getProperty("java.class.path"));
-        command.add(TrelloBoardSetupMain.class.getName());
+        List<String> command = new ArrayList<>(List.of(
+                Path.of(System.getProperty("java.home"), "bin", javaExecutable())
+                        .toString(),
+                "-cp",
+                System.getProperty("java.class.path"),
+                TrelloBoardSetupMain.class.getName()));
         command.addAll(Arrays.asList(arguments));
         ProcessBuilder processBuilder = new ProcessBuilder(command).directory(workingDir.toFile());
         processBuilder.environment().putAll(environment);

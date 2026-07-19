@@ -9,17 +9,20 @@ changes and the governing policy.
 
 ## Decision Rule
 
-A compatible recipe is active when it makes the code meaningfully better or enforces a useful
-general Java or Maven invariant, or an invariant for a library or framework already present in the
-repository. Compatible means that no previously supported, working use stops working. A correction
-to invalid or already-broken behavior is compatible when the generated behavior is genuinely
-better; an observable behavior change is not automatically breaking.
+A recipe is active when it makes this application meaningfully better or enforces a useful general
+Java or Maven invariant, or an invariant for a library or framework already present in the
+repository. Compatibility is evaluated from the generated diff and the deployed application's
+supported behavior, not from hypothetical Java-library binary compatibility. A zero-result guard
+changes no deployed application. A future finding receives the same generated-diff and application
+behavior review in its owning pull request. Correcting invalid or already-broken behavior is
+compatible when the generated behavior is genuinely better; an observable behavior change is not
+automatically breaking.
 
-A preferable transformation that stops supported, working use is a breaking-release candidate and
-stays inactive in this compatible pull request. A recipe also remains inactive when its own
-semantics are unsafe, context-dependent, defective, or less maintainable; Spotless or another
-repository gate already owns the invariant; it is a parent or parameterized implementation recipe
-rather than a stable standalone decision; it requires an absent capability; or it selects a
+A preferable transformation that stops supported, working application use is a breaking-release
+candidate and stays inactive until an explicitly breaking release. A recipe also remains inactive
+when its own semantics are unsafe, context-dependent, defective, or less maintainable; Spotless or
+another repository gate already owns the invariant; it is a parent or parameterized implementation
+recipe rather than a stable standalone decision; it requires an absent capability; or it selects a
 versioned migration target owned by another workflow. Zero results alone never decide against
 activation.
 
@@ -62,16 +65,16 @@ evidence.
 | Status | Rows | Meaning |
 | --- | ---: | --- |
 | Active before review | 7 | Already selected in the 31-entry composite; another audit can also have positive evidence. |
-| Activate | 373 | Compatible improvement or useful recurrence guard for the repository's existing language, build, or dependency stack. |
-| Breaking-release candidate | 37 | Preferable transformation that stops previously supported, working use; inactive until an explicitly breaking release. |
+| Activate | 405 | Compatible improvement or useful recurrence guard for the repository's existing language, build, or dependency stack. |
+| Breaking-release candidate | 0 | No audited recipe currently requires a breaking application release. |
 | Contingent | 386 | Requires an absent capability or an explicit migration/version target; includes all 141 Quarkus declarations. |
-| Parent/configured primitive | 103 | Select reviewed children or a configured wrapper instead of the bare ID. |
-| Rejected | 197 | Has a recipe-specific safety, context, readability, diagnostics, source-defect, or ownership problem. |
+| Parent/configured primitive | 104 | Select reviewed children or a configured wrapper instead of the bare ID. |
+| Rejected | 201 | Has a recipe-specific safety, context, readability, diagnostics, source-defect, or ownership problem. |
 | **Total** | **1,103** | One row per distinct audited or discovered recipe ID. |
 
-The 373 `Activate` IDs map to 374 exact allowlist entries because
+The 405 `Activate` IDs map to 406 exact allowlist entries because
 `org.openrewrite.staticanalysis.SimplifyTernaryRecipes` is represented by its two reviewed
-generated leaves. Together with the original 31 entries, `rewrite.yml` therefore contains 405
+generated leaves. Together with the original 31 entries, `rewrite.yml` therefore contains 437
 active entries. `com.google.guava.InlineGuavaMethods` is the one accepted generated composite
 whose Guava-authored `@InlineMe` inventory has no stable public leaf IDs; its generated inventory
 must be re-audited whenever `rewrite-migrate-java` changes.
@@ -153,16 +156,16 @@ must be re-audited whenever `rewrite-migrate-java` changes.
 | `org.openrewrite.java.migrate.guava.NoGuavaCreateTempDir` | Rejected | `global-zero:javabest` | Guava creates owner-restricted temporary directories and reports failure as IllegalStateException; the recipe omits the POSIX rwx------ attribute and introduces IOException behavior. |
 | `org.openrewrite.java.migrate.guava.NoGuavaDirectExecutor` | Rejected | `global-zero:javabest` | `Runnable::run` is legal only in a target-typed context, but the pinned visitor rewrites every invocation without checking its parent; a valid chained call such as `MoreExecutors.directExecutor().execute(task)` can therefore become uncompilable. |
 | `org.openrewrite.java.migrate.guava.NoGuavaFunctionsCompose` | Rejected | `global-zero:javabest` | The recipe returns java.util.function.Function where Guava Functions.compose returns com.google.common.base.Function; Guava-typed assignments, overloads, and public signatures can stop compiling. |
-| `org.openrewrite.java.migrate.guava.NoGuavaImmutableListCopyOf` | Breaking-release candidate | `global-zero:javabest` | List.copyOf removes a Guava factory when the result is already consumed as List and preserves element order, but supported null probes change from false or -1 to NullPointerException; adopt it only with a breaking null-contract decision. |
-| `org.openrewrite.java.migrate.guava.NoGuavaImmutableListOf` | Breaking-release candidate | `global-zero:javabest` | List.of removes a Guava factory when the result is already consumed as List and preserves element order, but supported null probes change from false or -1 to NullPointerException; adopt it only with a breaking null-contract decision. |
-| `org.openrewrite.java.migrate.guava.NoGuavaImmutableMapCopyOf` | Breaking-release candidate | `global-zero:javabest` | Map.copyOf reduces Guava surface and keeps an immutable Map contract, but it changes supported null-key queries and loses ImmutableMap's encounter-order guarantee, so callers must accept a breaking map contract. |
-| `org.openrewrite.java.migrate.guava.NoGuavaImmutableMapOf` | Breaking-release candidate | `global-zero:javabest` | Map.of reduces Guava surface and keeps an immutable Map contract, but it changes supported null-key queries and loses ImmutableMap's encounter-order guarantee, so callers must accept a breaking map contract. |
-| `org.openrewrite.java.migrate.guava.NoGuavaImmutableSetCopyOf` | Breaking-release candidate | `global-zero:javabest` | Set.copyOf reduces Guava surface and keeps an immutable Set contract, but it changes supported null probes and encounter order, so it belongs in a coordinated breaking collection migration. |
-| `org.openrewrite.java.migrate.guava.NoGuavaImmutableSetOf` | Breaking-release candidate | `global-zero:javabest` | Set.of reduces Guava surface and keeps an immutable Set contract, but it changes supported null probes and encounter order, so it belongs in a coordinated breaking collection migration. |
+| `org.openrewrite.java.migrate.guava.NoGuavaImmutableListCopyOf` | Activate | `global-zero:javabest` | Standard List.copyOf removes an unnecessary Guava factory and preserves element order; this application selects the modern null-rejecting collection contract. |
+| `org.openrewrite.java.migrate.guava.NoGuavaImmutableListOf` | Activate | `global-zero:javabest` | Standard List.of removes an unnecessary Guava factory and preserves element order; this application selects the modern null-rejecting collection contract. |
+| `org.openrewrite.java.migrate.guava.NoGuavaImmutableMapCopyOf` | Activate | `global-zero:javabest` | Standard Map.copyOf removes an unnecessary Guava result type; null-rejecting maps are the application default, and order-sensitive code must name an ordered map type. |
+| `org.openrewrite.java.migrate.guava.NoGuavaImmutableMapOf` | Activate | `global-zero:javabest` | Standard Map.of removes an unnecessary Guava result type; null-rejecting maps are the application default, and order-sensitive code must name an ordered map type. |
+| `org.openrewrite.java.migrate.guava.NoGuavaImmutableSetCopyOf` | Activate | `global-zero:javabest` | Standard Set.copyOf removes an unnecessary Guava result type; null-rejecting sets are the application default, and order-sensitive code must name an ordered set type. |
+| `org.openrewrite.java.migrate.guava.NoGuavaImmutableSetOf` | Activate | `global-zero:javabest` | Standard Set.of removes an unnecessary Guava result type; null-rejecting sets are the application default, and order-sensitive code must name an ordered set type. |
 | `org.openrewrite.java.migrate.guava.NoGuavaIterablesAll` | Rejected | `global-zero:javabest` | The pinned recipe matches any Iterable but supplies it to a JavaTemplate placeholder typed Collection, so a valid non-Collection Iterable is not safely transformable. |
 | `org.openrewrite.java.migrate.guava.NoGuavaIterablesAnyFilter` | Rejected | `global-zero:javabest` | The recipe bundles any() with filter(); the filter replacement changes a lazy live Iterable into an eager unmodifiable list, so the recipe cannot be accepted as a whole. |
 | `org.openrewrite.java.migrate.guava.NoGuavaIterablesTransform` | Rejected | `global-zero:javabest` | Iterables.transform is a lazy view and the recipe eagerly materializes a list, changing evaluation timing, repeated mapper calls, and visibility of source changes. |
-| `org.openrewrite.java.migrate.guava.NoGuavaJava11` | Parent/configured primitive | `global-zero:javabest` | This parent includes the rejected immutable-collection migrations and a Springfox dependency upgrade; exact safe leaves avoid semantic and version-ownership changes. |
+| `org.openrewrite.java.migrate.guava.NoGuavaJava11` | Parent/configured primitive | `global-zero:javabest` | This parent combines accepted immutable-collection guards with rejected semantic children and a Springfox dependency upgrade; exact reviewed leaves preserve decision and version ownership. |
 | `org.openrewrite.java.migrate.guava.NoGuavaJava21` | Parent/configured primitive | `global-zero:javabest` | This parent includes NoMapsAndSetsWithExpectedSize, whose pinned implementation loses expected-size capacity semantics; PreferMathClamp is selected separately. |
 | `org.openrewrite.java.migrate.guava.NoGuavaListsNewArrayList` | Activate | `global-zero:javabest` | The pinned visitor rewrites only no-arg, explicit-capacity, and Collection-backed cases to the corresponding ArrayList constructors and deliberately skips Iterable-only inputs. |
 | `org.openrewrite.java.migrate.guava.NoGuavaListsNewCopyOnWriteArrayList` | Activate | `global-zero:javabest` | The pinned visitor uses the corresponding CopyOnWriteArrayList constructors and deliberately skips Iterable-only inputs that a JDK constructor cannot accept. |
@@ -195,14 +198,14 @@ must be re-audited whenever `rewrite-migrate-java` changes.
 | `org.openrewrite.java.migrate.guava.PreferJavaStringJoin` | Rejected | `global-zero:javabest` | Guava Joiner rejects a null element, while String.join silently renders it as the text "null"; masking invalid data is not a uniformly preferable default for existing Joiner call sites. |
 | `org.openrewrite.java.migrate.guava.PreferJavaUtilCollectionsSynchronizedNavigableMap` | Activate | `global-zero:javabest` | Guava exposes this only as a compatibility convenience for Collections.synchronizedNavigableMap; both return the same synchronized navigable-map contract. |
 | `org.openrewrite.java.migrate.guava.PreferJavaUtilCollectionsUnmodifiableNavigableMap` | Activate | `global-zero:javabest` | Guava exposes this only as a compatibility convenience for Collections.unmodifiableNavigableMap; both return the same unmodifiable navigable-map contract. |
-| `org.openrewrite.java.migrate.guava.PreferJavaUtilFunction` | Breaking-release candidate | `global-zero:javabest` | java.util.function.Function is the preferable standard API, but changing declared Guava Function types changes public binary signatures, accepted arguments, overload resolution, and serialization; reserve it for a coordinated breaking API migration. |
+| `org.openrewrite.java.migrate.guava.PreferJavaUtilFunction` | Activate | `global-zero:javabest` | java.util.function.Function is the standard application abstraction; this rebuilt application does not publish Guava-backed binary or serialization contracts. |
 | `org.openrewrite.java.migrate.guava.PreferJavaUtilObjectsEquals` | Activate | `global-zero:javabest` | Guava Objects.equal and java.util.Objects.equals have the same null-safe equality contract. |
 | `org.openrewrite.java.migrate.guava.PreferJavaUtilObjectsHashCode` | Activate | `global-zero:javabest` | Guava Objects.hashCode(Object...) and java.util.Objects.hash(Object...) both use the array hash contract for the supplied values. |
 | `org.openrewrite.java.migrate.guava.PreferJavaUtilObjectsRequireNonNullElse` | Rejected | `global-zero:javabest` | Besides degrading the both-null diagnostic, the template emits simple `Objects.requireNonNullElse`; a legal nested `Objects` type can capture the call and silently select unrelated behavior. |
-| `org.openrewrite.java.migrate.guava.PreferJavaUtilOptional` | Breaking-release candidate | `global-zero:javabest` | java.util.Optional is the preferable standard abstraction, but the composite changes public types, serialization, null-mapper behavior, fallback timing, and accepted functional interfaces; it requires a breaking release and coordinated caller migration. |
-| `org.openrewrite.java.migrate.guava.PreferJavaUtilOptionalOrElseNull` | Rejected | `global-zero:javabest` | The leaf matches Guava Optional but emits the JDK-only orElse(null) call, so it is valid only inside the broader rejected type migration and introduces null-style flow. |
+| `org.openrewrite.java.migrate.guava.PreferJavaUtilOptional` | Parent/configured primitive | `global-zero:javabest` | The migration goal is preferable, but the parent has mixed children: NoGuavaOptionalAsSet changes an immutable result to a mutable collected set, while other children require the coordinated type change. Keep the bare parent inactive until that output is fixed or an exact safe wrapper is configured. |
+| `org.openrewrite.java.migrate.guava.PreferJavaUtilOptionalOrElseNull` | Rejected | `global-zero:javabest` | The leaf matches Guava Optional but emits the JDK-only orElse(null) call, so it is valid only inside the inactive coordinated type migration and introduces null-style flow. |
 | `org.openrewrite.java.migrate.guava.PreferJavaUtilOptionalOrSupplier` | Rejected | `global-zero:javabest` | Guava Optional.or(secondChoice) evaluates secondChoice before the call; the replacement moves the expression into Optional.or(() -> ...), making evaluation lazy and changing side effects and exceptions. |
-| `org.openrewrite.java.migrate.guava.PreferJavaUtilSupplier` | Breaking-release candidate | `global-zero:javabest` | java.util.function.Supplier is the preferable standard API, but changing declared Guava Supplier types changes public binary signatures, accepted arguments, overload resolution, and serialization; reserve it for a breaking API migration. |
+| `org.openrewrite.java.migrate.guava.PreferJavaUtilSupplier` | Activate | `global-zero:javabest` | java.util.function.Supplier is the standard application abstraction; this rebuilt application does not publish Guava-backed binary or serialization contracts. |
 | `org.openrewrite.java.migrate.guava.PreferLongCompare` | Activate | `global-zero:javabest` | Longs.compare(long,long) and Long.compare(long,long) implement the same signed comparison and the latter is the standard JDK API. |
 | `org.openrewrite.java.migrate.guava.PreferLongCompareUnsigned` | Rejected | `global-zero:javabest` | The pinned YAML matches int parameters for UnsignedLongs compare methods, whose real signatures use long; the guard does not match its stated target. |
 | `org.openrewrite.java.migrate.guava.PreferLongDivideUnsigned` | Rejected | `global-zero:javabest` | The pinned YAML matches int parameters for UnsignedLongs divide methods, whose real signatures use long; the guard does not match its stated target. |
@@ -253,7 +256,7 @@ must be re-audited whenever `rewrite-migrate-java` changes.
 | `org.openrewrite.java.migrate.lang.MigrateCharacterIsJavaLetterToIsJavaIdentifierStart` | Activate | `global-zero:java25,javabest` | Exact replacement for a deprecated Character alias. |
 | `org.openrewrite.java.migrate.lang.MigrateCharacterIsSpaceToIsWhitespace` | Activate | `global-zero:java25,javabest` | Exact replacement for a deprecated Character alias. |
 | `org.openrewrite.java.migrate.lang.MigrateClassLoaderDefineClass` | Contingent | `global-zero:java25,javabest` | Only relevant after a custom class-loading subsystem exists; none is present. |
-| `org.openrewrite.java.migrate.lang.MigrateClassNewInstanceToGetDeclaredConstructorNewInstance` | Breaking-release candidate | `global-zero:java25,javabest` | getDeclaredConstructor().newInstance is the supported reflection API and the recipe limits output to broad Exception or Throwable boundaries, but constructor failures become InvocationTargetException instead of propagating their original type, which can break intentional error handling. |
+| `org.openrewrite.java.migrate.lang.MigrateClassNewInstanceToGetDeclaredConstructorNewInstance` | Activate | `global-zero:java25,javabest` | getDeclaredConstructor().newInstance is the supported reflection API, exposes constructor lookup explicitly, and preserves the original constructor failure as the InvocationTargetException cause under the recipe's broad-catch precondition. |
 | `org.openrewrite.java.migrate.lang.MigrateMainMethodToInstanceMain` | Rejected | `global-zero:javabest` | Changes launcher/framework entry-point visibility, staticness, and arguments; the Quarkus launcher contract owns this. |
 | `org.openrewrite.java.migrate.lang.MigrateProcessWaitForDuration` | Active before review | `global-zero:java25,javabest` | Already active as an accepted recurrence guard. |
 | `org.openrewrite.java.migrate.lang.MigrateRuntimeVersionMajorToFeature` | Activate | `global-zero:java25,javabest` | Exact replacement for the deprecated Runtime.Version alias. |
@@ -308,7 +311,7 @@ must be re-audited whenever `rewrite-migrate-java` changes.
 | `org.openrewrite.java.migrate.ReplaceComSunAWTUtilitiesMethods` | Contingent | `global-zero:java25,javabest` | Requires the absent AWT peer/internal-utility capability and reflection behavior must be reviewed with its introduction. |
 | `org.openrewrite.java.migrate.ReplaceLocalizedStreamMethods` | Contingent | `global-zero:java25,javabest` | Requires the removed localized stream APIs and a finding-specific charset/stream migration. |
 | `org.openrewrite.java.migrate.sql.JavaSqlAPIs` | Parent/configured primitive | `global-zero:java25,javabest` | Container; its leaves are recorded separately. |
-| `org.openrewrite.java.migrate.sql.MigrateDriverManagerSetLogStream` | Breaking-release candidate | `global-zero:java25,javabest` | DriverManager.setLogWriter is the supported character API, but wrapping a PrintStream changes writer identity, buffering, autoflush, and close behavior; JDBC logging users need a breaking contract review before migration. |
+| `org.openrewrite.java.migrate.sql.MigrateDriverManagerSetLogStream` | Activate | `global-zero:java25,javabest` | DriverManager.setLogWriter is the supported character-oriented API; this application does not expose the deprecated logging stream's wrapper identity or lifecycle as a deployment contract. |
 | `org.openrewrite.java.migrate.SunNetSslPackageUnavailable` | Contingent | `global-zero:java25,javabest` | Requires a legacy JSSE/certificate API migration; direct ownership and exception/identity behavior must be reviewed with that security capability. |
 | `org.openrewrite.java.migrate.SwitchPatternMatching` | Parent/configured primitive | `global-zero:java25,javabest` | Container; its switch-transformation leaves have individual decisions in the JDK/static audit. |
 | `org.openrewrite.java.migrate.SystemGetSecurityManagerToNull` | Rejected | `global-zero:java25,javabest` | After the valid constant replacement, the composite runs `SimplifyConstantIfBranchExecution` across the whole compilation unit and can discard side effects from an unrelated short-circuited operand. |
@@ -331,14 +334,14 @@ must be re-audited whenever `rewrite-migrate-java` changes.
 | `org.openrewrite.java.migrate.UseJavaUtilBase64` | Rejected | `global-zero:java25,javabest` | The Java 25 module/compiler boundary already blocks sun.misc Base64, and this recipe additionally requires a MIME/basic semantic option. |
 | `org.openrewrite.java.migrate.util.IteratorNext` | Activate | `global-zero:java25,javabest` | For SequencedCollection, iterator().next() and getFirst() select the same encounter-first element and throw on emptiness. |
 | `org.openrewrite.java.migrate.util.ListFirstAndLast` | Active before review | `global-zero:java25,javabest` | Already active after its positive findings and non-empty preconditions were reviewed. |
-| `org.openrewrite.java.migrate.util.MigrateCollectionsEmptyList` | Breaking-release candidate | `global-zero:javabest` | List.of is the clearer modern empty-list factory, but Collections.emptyList supports successful null contains and index probes that List.of changes to NullPointerException; adopt with an explicit breaking null-query contract. |
-| `org.openrewrite.java.migrate.util.MigrateCollectionsEmptyMap` | Breaking-release candidate | `global-zero:javabest` | Map.of is the clearer modern empty-map factory, but Collections.emptyMap supports successful null key and value probes that Map.of changes to NullPointerException; adopt with an explicit breaking null-query contract. |
-| `org.openrewrite.java.migrate.util.MigrateCollectionsEmptySet` | Breaking-release candidate | `global-zero:javabest` | Set.of is the clearer modern empty-set factory, but Collections.emptySet supports a successful contains(null) probe that Set.of changes to NullPointerException; adopt with an explicit breaking null-query contract. |
-| `org.openrewrite.java.migrate.util.MigrateCollectionsSingletonList` | Breaking-release candidate | `global-zero:javabest` | List.of is concise and fail-fast for null, but Collections.singletonList intentionally permits a null element and successful null probes; those supported contracts must change only in a breaking release. |
-| `org.openrewrite.java.migrate.util.MigrateCollectionsSingletonMap` | Breaking-release candidate | `global-zero:javabest` | Map.of is concise and fail-fast for null, but Collections.singletonMap intentionally permits null keys and values and successful null probes; those supported contracts require a breaking release. |
-| `org.openrewrite.java.migrate.util.MigrateCollectionsSingletonSet` | Breaking-release candidate | `global-zero:javabest` | Set.of is concise and fail-fast for null, but Collections.singleton intentionally permits a null element and successful null probes; those supported contracts require a breaking release. |
-| `org.openrewrite.java.migrate.util.MigrateCollectionsUnmodifiableList` | Breaking-release candidate | `global-zero:javabest` | List.of removes wrapper noise and creates a truly immutable snapshot, but the matched Arrays.asList form can contain null or remain backed by an external array; supported null and live-view behavior would break. |
-| `org.openrewrite.java.migrate.util.MigrateCollectionsUnmodifiableSet` | Breaking-release candidate | `global-zero:javabest` | Set.of removes wrapper and defensive-copy noise and fails fast on duplicates, but the original HashSet form collapses duplicates and permits null; supported construction behavior would break. |
+| `org.openrewrite.java.migrate.util.MigrateCollectionsEmptyList` | Activate | `global-zero:javabest` | List.of is the clearer modern empty-list factory, and fail-fast null queries match the application's null-free collection policy. |
+| `org.openrewrite.java.migrate.util.MigrateCollectionsEmptyMap` | Activate | `global-zero:javabest` | Map.of is the clearer modern empty-map factory, and fail-fast null queries match the application's null-free collection policy. |
+| `org.openrewrite.java.migrate.util.MigrateCollectionsEmptySet` | Activate | `global-zero:javabest` | Set.of is the clearer modern empty-set factory, and fail-fast null queries match the application's null-free collection policy. |
+| `org.openrewrite.java.migrate.util.MigrateCollectionsSingletonList` | Activate | `global-zero:javabest` | List.of is concise and fail-fast; nullable collection elements and null probes are not desirable application contracts. |
+| `org.openrewrite.java.migrate.util.MigrateCollectionsSingletonMap` | Activate | `global-zero:javabest` | Map.of is concise and fail-fast; nullable keys, values, and probes are not desirable application contracts. |
+| `org.openrewrite.java.migrate.util.MigrateCollectionsSingletonSet` | Activate | `global-zero:javabest` | Set.of is concise and fail-fast; nullable collection elements and null probes are not desirable application contracts. |
+| `org.openrewrite.java.migrate.util.MigrateCollectionsUnmodifiableList` | Activate | `global-zero:javabest` | List.of removes wrapper noise and creates an immutable snapshot; nullable elements and hidden external-array mutation are not desirable application contracts. |
+| `org.openrewrite.java.migrate.util.MigrateCollectionsUnmodifiableSet` | Activate | `global-zero:javabest` | Set.of removes wrapper and defensive-copy noise; rejecting nulls and duplicate initializer values makes invalid application input explicit. |
 | `org.openrewrite.java.migrate.util.MigrateInflaterDeflaterToClose` | Contingent | `global-zero:java25,javabest` | Only relevant after an explicit zip/deflate resource lifecycle exists; that capability is absent. |
 | `org.openrewrite.java.migrate.util.MigrateStringReaderToReaderOf` | Rejected | `global-zero:java25,javabest` | Reader.of is not synchronized like StringReader, changing concurrency behavior. |
 | `org.openrewrite.java.migrate.util.OptionalNotEmptyToIsPresent` | Activate | `global-zero:java25,javabest` | Rewrites negated isEmpty to the direct equivalent isPresent form. |
@@ -349,11 +352,11 @@ must be re-audited whenever `rewrite-migrate-java` changes.
 | `org.openrewrite.java.migrate.util.ReplaceStreamCollectWithToList` | Rejected | `global-zero:javabest` | Collector and Stream.toList differ in null acceptance, mutability contract, and concrete behavior. |
 | `org.openrewrite.java.migrate.util.SequencedCollection` | Parent/configured primitive | `global-zero:java25,javabest` | Container; its leaves are recorded separately. |
 | `org.openrewrite.java.migrate.util.StreamFindFirst` | Rejected | `global-zero:java25,javabest` | If a null-permitting SequencedCollection has null first, findFirst throws NullPointerException while getFirst returns null. |
-| `org.openrewrite.java.migrate.util.UseListOf` | Breaking-release candidate | `global-zero:javabest` | Collapsing staged initialization and eliminating double-brace subclasses improves readability, but the leaf can make the anonymous result immutable and rejects nullable expressions that ArrayList accepts; use only with a breaking collection contract. |
-| `org.openrewrite.java.migrate.util.UseLocaleOf` | Breaking-release candidate | `global-zero:java25,javabest` | Locale.of is the supported modern factory and enables canonical caching, but new Locale guarantees a distinct object while the factory can return a shared constant; intentional identity-based use would break. |
-| `org.openrewrite.java.migrate.util.UseMapOf` | Breaking-release candidate | `global-zero:javabest` | Collapsing staged initialization and eliminating double-brace subclasses improves readability, but Map.of rejects nullable or duplicate entries, can change iteration behavior, and makes the anonymous result immutable; this needs a breaking collection contract. |
+| `org.openrewrite.java.migrate.util.UseListOf` | Rejected | `global-zero:javabest;direct-positive:issue-600` | Two current staged initializers were safely collapsed by hand to mutable ArrayList wrappers. The pinned guard remains inactive because its anonymous arm can consume add calls on another receiver, make the result immutable, and pass unknown-null expressions to List.of. |
+| `org.openrewrite.java.migrate.util.UseLocaleOf` | Activate | `global-zero:java25,javabest` | Locale.of is the supported cached factory; object identity for equal Locale values is not a desirable application contract. |
+| `org.openrewrite.java.migrate.util.UseMapOf` | Rejected | `global-zero:javabest` | The pinned guard does not prove receiver identity, unique non-null entries, encounter-order irrelevance, or required mutability before emitting Map.of; activating it can introduce a regression rather than a modernization. |
 | `org.openrewrite.java.migrate.util.UsePredicateNot` | Activate | `global-zero:java25,javabest` | Replaces only the cast-to-Predicate then negate idiom with the equivalent Predicate.not form. |
-| `org.openrewrite.java.migrate.util.UseSetOf` | Breaking-release candidate | `global-zero:javabest` | Collapsing staged initialization and eliminating double-brace subclasses improves readability, but Set.of rejects nullable or duplicate elements, can change iteration behavior, and makes the anonymous result immutable; this needs a breaking collection contract. |
+| `org.openrewrite.java.migrate.util.UseSetOf` | Rejected | `global-zero:javabest` | The pinned guard can consume add calls on another receiver and does not prove non-null, unique elements or required mutability; Set.of can turn valid deduplication into an exception. |
 | `org.openrewrite.java.RemoveAnnotation` | Parent/configured primitive | `global-zero:junit,assertj` | Parameterized transformation primitive instantiated by Mockito/PowerMock migration composites; it has no safe repository-wide meaning without those exact options. |
 | `org.openrewrite.java.RemoveAnnotationAttribute` | Parent/configured primitive | `direct-zero:junit6` | Parameterized transformation primitive instantiated by version-migration composites; it has no safe repository-wide meaning without those exact options. |
 | `org.openrewrite.java.RemoveMethodInvocations` | Parent/configured primitive | `global-zero:java25,javabest` | Parameterized Java transformation primitive with no safe repository-wide meaning without the parent-provided method, type, package, or dependency options. |
@@ -443,7 +446,7 @@ must be re-audited whenever `rewrite-migrate-java` changes.
 | `org.openrewrite.java.testing.cleanup.AssertFalseNegationToAssertTrue` | Rejected | `global-zero:junit,assertj` | The pinned visitor discards a fully qualified JUnit select and emits simple Assertions.assertTrue; a legal nested Assertions type can capture that call, fail compilation, or silently invoke an unrelated method. |
 | `org.openrewrite.java.testing.cleanup.AssertFalseNullToAssertNotNull` | Activate | `global-zero:junit,assertj` | Expresses the non-null contract directly. |
 | `org.openrewrite.java.testing.cleanup.AssertionsArgumentOrder` | Rejected | `global-zero:junit,assertj` | Its literal/array/Iterable heuristic can swap intentional expected and actual operands without semantic proof. |
-| `org.openrewrite.java.testing.cleanup.AssertLiteralBooleanRemovedRecipe` | Breaking-release candidate | `global-zero:junit,assertj` | Removing an always-passing assertion is cleaner, but an eager message expression is evaluated by the supported source program and deleting the invocation also deletes that behavior. |
+| `org.openrewrite.java.testing.cleanup.AssertLiteralBooleanRemovedRecipe` | Activate | `global-zero:junit,assertj` | Removes an always-passing assertion; relying on an assertion message expression for test behavior is a test defect, not a supported application or test contract. |
 | `org.openrewrite.java.testing.cleanup.AssertLiteralBooleanToFailRecipes` | Parent/configured primitive | `global-zero:junit,assertj` | Homogeneous two-leaf container; record and select its individually reviewed message and no-message leaves. |
 | `org.openrewrite.java.testing.cleanup.AssertLiteralBooleanToFailRecipes$WithMessageRecipe` | Activate | `global-zero:junit,assertj` | Replaces an always-failing boolean assertion with direct fail(message) while preserving its diagnostic. |
 | `org.openrewrite.java.testing.cleanup.AssertLiteralBooleanToFailRecipes$WithoutMessageRecipe` | Activate | `global-zero:junit,assertj` | Replaces an always-failing boolean assertion with direct fail() without changing pass/fail behavior. |
@@ -456,7 +459,7 @@ must be re-audited whenever `rewrite-migrate-java` changes.
 | `org.openrewrite.java.testing.cleanup.KotlinTestMethodsShouldReturnUnit` | Contingent | `global-zero:junit,assertj` | Only applies to Kotlin tests; the repository contains no Kotlin source or Kotlin build lane. |
 | `org.openrewrite.java.testing.cleanup.RemoveTestPrefix` | Rejected | `global-zero:junit,assertj;supplemental-direct-zero` | Renames valid tests for subjective style, adds churn, and provides no correctness or diagnostic benefit. |
 | `org.openrewrite.java.testing.cleanup.TestMethodsShouldBeVoid` | Rejected | `global-zero:junit,assertj` | The visitor deletes a non-statement return expression such as `return condition ? callA() : callB()` and then makes the test discoverable without its original side effect; repair requires finding-specific intent. |
-| `org.openrewrite.java.testing.cleanup.TestsShouldNotBePublic` | Breaking-release candidate | `global-zero:junit,assertj` | Package-private JUnit 5 tests reduce unnecessary visibility, but public test classes and methods are supported targets for external suites and cross-package references that stop compiling after the access reduction. |
+| `org.openrewrite.java.testing.cleanup.TestsShouldNotBePublic` | Activate | `global-zero:junit,assertj` | Package-private JUnit tests express their repository-local role; this application does not publish test classes or methods as an external suite API. |
 | `org.openrewrite.java.testing.dbrider.ExecutionListenerToDbRiderAnnotation` | Contingent | `global-zero:junit,assertj` | Requires an absent testing extension and belongs to an explicit extension-to-JUnit migration. |
 | `org.openrewrite.java.testing.dbrider.MigrateDbRiderSpringToDbRiderJUnit5` | Contingent | `global-zero:junit,assertj` | Requires an absent testing extension and belongs to an explicit extension-to-JUnit migration. |
 | `org.openrewrite.java.testing.hamcrest.AddHamcrestIfUsed` | Contingent | `global-zero:junit,assertj` | Requires the absent Hamcrest library and belongs to an explicit migration to repository-standard AssertJ/JUnit assertions. |
@@ -510,7 +513,7 @@ must be re-audited whenever `rewrite-migrate-java` changes.
 | `org.openrewrite.java.testing.junit5.ParameterizedRunnerToParameterized` | Contingent | `global-zero:junit,assertj` | Legacy JUnit 4-to-5 migration child; the repository already uses JUnit 6 and does not carry the legacy input API. |
 | `org.openrewrite.java.testing.junit5.RemoveDuplicateTestTemplates` | Rejected | `global-zero:junit,assertj` | Removing the outer duplicate `@Test` is a compatible correction, but the pinned visitor removes `@Test` throughout the matched method subtree and can delete an unrelated local-class test method. |
 | `org.openrewrite.java.testing.junit5.RemoveObsoleteRunners` | Contingent | `global-zero:junit,assertj` | Legacy JUnit 4-to-5 migration child; the repository already uses JUnit 6 and does not carry the legacy input API. |
-| `org.openrewrite.java.testing.junit5.RemoveTryCatchFailBlocks` | Rejected | `global-zero:junit,assertj` | Replacing a catch for one selected exception type with `assertDoesNotThrow` widens the boundary to every `Throwable` and wraps nested AssertJ or `AssertionError` failures, degrading their original diagnostics. |
+| `org.openrewrite.java.testing.junit5.RemoveTryCatchFailBlocks` | Rejected | `global-zero:junit,assertj;direct-compile-controls` | The intended assertDoesNotThrow form is clearer and retains the unexpected exception as its cause. The pinned visitor is broader: it moves the try body into a lambda without checking mutation of an outer local or break and continue targeting an enclosing loop; isolated controls generated uncompilable Java. It also turns a narrow-catch test abort into a failure. Refactor safe occurrences directly until the matcher proves lambda-boundary legality. |
 | `org.openrewrite.java.testing.junit5.RunnerToExtension` | Contingent | `global-zero:junit,assertj` | Legacy JUnit 4-to-5 migration child; the repository already uses JUnit 6 and does not carry the legacy input API. |
 | `org.openrewrite.java.testing.junit5.StaticImports` | Activate | `global-zero:junit,assertj` | Enforces the repository convention to statically import framework assertion/assumption methods; run after assertion conversions. |
 | `org.openrewrite.java.testing.junit5.TempDirNonFinal` | Activate | `global-zero:junit,assertj` | Removes final only from @TempDir fields/parameters that current Jupiter must inject. |
@@ -567,7 +570,7 @@ must be re-audited whenever `rewrite-migrate-java` changes.
 | `org.openrewrite.java.testing.mockito.PowerMockWhiteboxSetInternalStateToJavaReflection` | Contingent | `global-zero:junit,assertj` | Requires the absent PowerMock library; reflection/hierarchy and mocking-scope differences require review in an explicit PowerMock removal migration. |
 | `org.openrewrite.java.testing.mockito.PowerMockWhiteboxToJavaReflection` | Contingent | `global-zero:junit,assertj` | Absent-PowerMock migration container; its individual reflection and mocking leaves require case-by-case semantic review. |
 | `org.openrewrite.java.testing.mockito.RemoveDoNothingForDefaultMocks` | Rejected | `global-zero:junit,assertj` | A `doNothing` stub can intentionally reset earlier `doThrow` behavior for the same void method; deleting it leaves the throwing stub active. |
-| `org.openrewrite.java.testing.mockito.RemoveInitMocksIfRunnersSpecified` | Breaking-release candidate | `global-zero:junit,assertj` | Removing a duplicate manual mock session restores the extension's preferable strict-stubbing behavior, but a passing test that intentionally uses the manual session for leniency stops working unless it explicitly opts into leniency. |
+| `org.openrewrite.java.testing.mockito.RemoveInitMocksIfRunnersSpecified` | Activate | `global-zero:junit,assertj` | Removes duplicate mock initialization when the runner or extension already owns it; intentional leniency must be expressed explicitly rather than through competing sessions. |
 | `org.openrewrite.java.testing.mockito.RemovePowerMockClassExtensions` | Contingent | `global-zero:junit,assertj` | Requires the absent PowerMock library; reflection/hierarchy and mocking-scope differences require review in an explicit PowerMock removal migration. |
 | `org.openrewrite.java.testing.mockito.ReplaceInitMockToOpenMock` | Rejected | `global-zero:junit,assertj` | It appends `mocks.close()` to an existing teardown body instead of guaranteed cleanup, so an earlier teardown exception or return skips the close and leaks the opened session. |
 | `org.openrewrite.java.testing.mockito.ReplaceMockitoTestExecutionListener` | Parent/configured primitive | `global-zero:junit,assertj` | Requires a target-framework option; select only a framework-specific wrapper during an explicit listener migration. |
@@ -610,7 +613,7 @@ must be re-audited whenever `rewrite-migrate-java` changes.
 | `org.openrewrite.maven.cleanup.DependencyManagementDependencyRequiresVersion` | Rejected | `global-zero:maven` | A child dependency-management entry can inherit its version from a parent or imported BOM while still overriding scope or exclusions; raw absence of a version does not prove the entry inert. |
 | `org.openrewrite.maven.cleanup.ExplicitDependencyVersion` | Activate | `global-zero:maven` | The pinned rule replaces only deprecated LATEST or RELEASE dependency versions with a resolved exact version, improving reproducibility without duplicating BOM-managed versions. |
 | `org.openrewrite.maven.cleanup.ExplicitPluginGroupId` | Active before review | `global-zero:maven` | Already selected after an audited positive result and keeps standard plugin ownership explicit. |
-| `org.openrewrite.maven.cleanup.NoSystemScopeDependencies` | Breaking-release candidate | `global-zero:maven` | Using repository-resolved compile scope is more reproducible, but it changes a working system dependency's transitivity and runtime classpath and removes its explicit systemPath. |
+| `org.openrewrite.maven.cleanup.NoSystemScopeDependencies` | Activate | `global-zero:maven` | Repository-resolved dependencies make builds reproducible; a machine-local systemPath is not a supported deployment or build contract and must be replaced with a declared repository dependency. |
 | `org.openrewrite.maven.cleanup.PrefixlessExpressions` | Contingent | `global-zero:maven` | Addresses Maven 4 MNG-7404; activate only with the explicit Maven 4 wrapper/CI migration. |
 | `org.openrewrite.maven.ExcludeDependency` | Parent/configured primitive | `global-zero:junit,assertj` | Parameterized build transformation observed only under a target migration; coordinates, versions, and target values require an owning migration decision. |
 | `org.openrewrite.maven.ModernizeObsoletePoms` | Contingent | `global-zero:maven` | Only upgrades pre-model-4 obsolete POMs and is a migration starting point, not a guard for this current single-module POM. |
@@ -631,14 +634,14 @@ must be re-audited whenever `rewrite-migrate-java` changes.
 | `org.openrewrite.maven.UpgradePluginVersion` | Rejected | `mixed:zero-result:junit,assertj;positive-result:java25,javabest` | The configured latest.release upgrade bypasses exact POM properties and Renovate ownership. |
 | `org.openrewrite.properties.DeleteProperty` | Parent/configured primitive | `direct-zero:junit6` | Parameterized primitive used only for named removed JUnit properties during a major migration. |
 | `org.openrewrite.scala.migrate.UpgradeScala_2_12` | Contingent | `global-zero:java25,javabest` | Requires the absent Scala language and build lane. |
-| `org.openrewrite.staticanalysis.AbstractClassPublicConstructor` | Breaking-release candidate | `global-zero:common` | Protected constructors express an abstract class's subclass-only construction model, but reducing a public member's access changes its published and reflective API. |
+| `org.openrewrite.staticanalysis.AbstractClassPublicConstructor` | Activate | `global-zero:common` | Protected constructors express an abstract class's subclass-only construction model; this application does not publish abstract classes as a constructor API. |
 | `org.openrewrite.staticanalysis.AddSerialAnnotationToSerialVersionUID` | Contingent | `global-zero:java25,javabest` | Only relevant after deliberate Java serialization is present. |
 | `org.openrewrite.staticanalysis.AddSerialVersionUidToSerializable` | Contingent | `supplemental-direct-zero` | Only relevant after deliberately adopting Java serialization; forcing 1L can also break existing serialized data and freezes a policy choice. |
 | `org.openrewrite.staticanalysis.AtomicPrimitiveEqualsUsesGet` | Rejected | `global-zero:common` | Value equality is often intended, but the pinned rewrite changes `equals(null)` from false to a dereference `NullPointerException`, so it is not a safe general bug correction. |
-| `org.openrewrite.staticanalysis.BigDecimalDoubleConstructorRecipe` | Breaking-release candidate | `global-zero:common` | BigDecimal.valueOf normally represents the intended decimal value more clearly, but exact-binary-double construction is documented and supported, so existing numeric results can change. |
+| `org.openrewrite.staticanalysis.BigDecimalDoubleConstructorRecipe` | Activate | `global-zero:common` | BigDecimal.valueOf represents the human-readable decimal value and is the application default; exact binary-double expansion must be written as an explicit exceptional requirement. |
 | `org.openrewrite.staticanalysis.BigDecimalRoundingConstantsToEnums` | Activate | `global-zero:common,java25,javabest` | Replaces deprecated integer rounding constants with the corresponding typed RoundingMode overload. |
 | `org.openrewrite.staticanalysis.BooleanChecksNotInverted` | Rejected | `global-zero:common` | Blind relational inversion is not equivalent for floating-point NaN, for example !(a < b) versus a >= b. |
-| `org.openrewrite.staticanalysis.CaseInsensitiveComparisonsDoNotChangeCase` | Breaking-release candidate | `global-zero:common` | equalsIgnoreCase avoids allocation and default-locale surprises, but it replaces supported locale-sensitive and Unicode case-conversion semantics. |
+| `org.openrewrite.staticanalysis.CaseInsensitiveComparisonsDoNotChangeCase` | Activate | `global-zero:common` | Removes redundant locale-sensitive case conversion around equalsIgnoreCase, avoiding allocation and default-locale bugs while retaining the intended case-insensitive comparison. |
 | `org.openrewrite.staticanalysis.CatchClauseOnlyRethrows` | Activate | `global-zero:common` | Removes only a catch whose sole action is rethrowing its own parameter, while retaining handlers needed before wider catches. |
 | `org.openrewrite.staticanalysis.ChainStringBuilderAppendCalls` | Rejected | `global-zero:common` | Splitting a concatenation changes overload selection for values such as char[] and can change rendered text. |
 | `org.openrewrite.staticanalysis.CodeCleanup` | Parent/configured primitive | `direct-zero:code-cleanup` | This composite mixes formatting leaves with behavior-changing rejected leaves such as EmptyBlock, ExplicitInitialization, and ReplaceThreadRunWithThreadStart; safe leaves must be selected individually. |
@@ -665,8 +668,8 @@ must be re-audited whenever `rewrite-migrate-java` changes.
 | `org.openrewrite.staticanalysis.InstanceOfPatternMatch` | Activate | `global-zero:java25,javabest` | Uses Java pattern variables with flow-scope, type, and naming guards to remove redundant casts. |
 | `org.openrewrite.staticanalysis.IsEmptyCallOnCollections` | Activate | `global-zero:common` | Uses the collection contract's direct emptiness query instead of size comparison. |
 | `org.openrewrite.staticanalysis.java.MoveFieldAnnotationToType` | Parent/configured primitive | `global-zero:javabest` | Implementation recipe whose annotation matcher is supplied by an owning composite; not meaningful as an unconfigured standalone activation. |
-| `org.openrewrite.staticanalysis.LowercasePackage` | Breaking-release candidate | `supplemental-direct-zero` | Lowercase packages follow Java convention and avoid case-insensitive-filesystem confusion, but renaming packages changes FQCN-based resources, configuration, serialization, reflection, and external references. |
-| `org.openrewrite.staticanalysis.MethodNameCasing` | Breaking-release candidate | `global-zero:common` | Consistent method casing improves readability, but the default recipe still renames protected and package-visible methods and therefore can break subclasses, reflection, and framework name lookup. |
+| `org.openrewrite.staticanalysis.LowercasePackage` | Rejected | `supplemental-direct-zero;source-audit:default-locale` | Lowercase packages are desirable, but the pinned visitor calls String.toLowerCase() with the host default locale. The same package can therefore rewrite differently under Turkish and English hosts; keep this guard inactive until it uses Locale.ROOT. |
+| `org.openrewrite.staticanalysis.MethodNameCasing` | Activate | `global-zero:common` | Enforces Java casing for non-public methods; future framework or reflection findings remain visible in the generated diff and require their owning review. |
 | `org.openrewrite.staticanalysis.MinimumSwitchCases` | Rejected | `global-zero:common` | Converting a small switch is stylistic and generated if chains can repeat selector evaluation. |
 | `org.openrewrite.staticanalysis.MissingOverrideAnnotation` | Activate | `global-zero:javabest` | Adds source-retained @Override when type attribution proves an override. |
 | `org.openrewrite.staticanalysis.ModifierOrder` | Rejected | `global-zero:common` | Modifier ordering belongs to the accepted OpenRewrite-then-Spotless formatting boundary. |
@@ -674,7 +677,7 @@ must be re-audited whenever `rewrite-migrate-java` changes.
 | `org.openrewrite.staticanalysis.NeedBraces` | Activate | `global-zero:common` | Adds braces without changing the enclosed statement's control flow and prevents future dangling-statement mistakes. |
 | `org.openrewrite.staticanalysis.NestedEnumsAreNotStatic` | Activate | `global-zero:common` | Removes a redundant source modifier because nested enums are implicitly static. |
 | `org.openrewrite.staticanalysis.NewStringBuilderBufferWithCharArgument` | Rejected | `global-zero:common` | The literal conversion blindly replaces quote delimiters; a valid double-quote character literal becomes an invalid `"""` token instead of a quoted one-character string. |
-| `org.openrewrite.staticanalysis.NoDoubleBraceInitialization` | Breaking-release candidate | `global-zero:common` | Removing double-brace initialization avoids hidden outer capture and anonymous subtype overhead, but changes runtime class identity, serialization, and any supported subtype observation. |
+| `org.openrewrite.staticanalysis.NoDoubleBraceInitialization` | Activate | `global-zero:common` | Removes hidden outer capture and anonymous-subtype overhead; depending on an initializer's anonymous runtime class is not a supported application contract. |
 | `org.openrewrite.staticanalysis.NoEmptyCollectionWithRawType` | Activate | `global-zero:common` | Replaces raw empty collection constants with generic factory methods and preserves empty immutable semantics. |
 | `org.openrewrite.staticanalysis.NoEqualityInForCondition` | Rejected | `global-zero:common` | Exact-sentinel loops can be intentional, and the pinned visitor also chooses comparison direction only from the update operator, so a valid right-hand control variable such as `limit != i` can be rewritten incorrectly. |
 | `org.openrewrite.staticanalysis.NoFinalizer` | Rejected | `global-zero:common` | Deletes cleanup behavior instead of supplying an application-specific replacement. |
@@ -701,7 +704,7 @@ must be re-audited whenever `rewrite-migrate-java` changes.
 | `org.openrewrite.staticanalysis.RemoveUnusedLocalVariables` | Rejected | `supplemental-direct-zero` | Its side-effect detector preserves calls and assignments but can delete initializers whose field/array access, division, unboxing, or cast throws. |
 | `org.openrewrite.staticanalysis.RenameLocalVariablesToCamelCase` | Rejected | `supplemental-direct-zero` | The visitor does not exclude Java keywords after formatting; a valid uppercase local such as `CLASS` is renamed to the uncompilable identifier `class`. |
 | `org.openrewrite.staticanalysis.RenameMethodsNamedHashcodeEqualOrToString` | Rejected | `global-zero:common` | A near-miss normally signals a bug, but the pinned visitor lacks a collision guard when the class already declares the proper `Object` method and can create duplicate declarations. |
-| `org.openrewrite.staticanalysis.RenamePrivateFieldsToCamelCase` | Breaking-release candidate | `supplemental-direct-zero` | Camel-case private fields improve consistency, but field names remain a supported input to reflection, dependency injection, and serialization frameworks and the recipe does not exclude those annotations. |
+| `org.openrewrite.staticanalysis.RenamePrivateFieldsToCamelCase` | Activate | `supplemental-direct-zero` | Enforces the private-field naming convention; a future generated rename remains subject to review for explicit serialization, injection, or reflection metadata. |
 | `org.openrewrite.staticanalysis.ReplaceClassIsInstanceWithInstanceof` | Activate | `global-zero:common` | For class literals, instanceof preserves Class.isInstance null behavior and makes the type check compiler-visible. |
 | `org.openrewrite.staticanalysis.ReplaceDeprecatedRuntimeExecMethods` | Rejected | `global-zero:java25,javabest` | Runtime.exec(String) tokenization and quoting are not equivalent to the generated split/argument form. |
 | `org.openrewrite.staticanalysis.ReplaceStringBuilderWithString` | Rejected | `global-zero:common,javabest` | String concatenation and StringBuilder.append select different behavior for values such as char[]. |
@@ -725,9 +728,9 @@ must be re-audited whenever `rewrite-migrate-java` changes.
 | `org.openrewrite.staticanalysis.UnnecessaryThrows` | Rejected | `global-zero:java25,javabest` | Already rejected because positive findings removed intentional broad catch behavior. |
 | `org.openrewrite.staticanalysis.UnwrapElseAfterReturn` | Rejected | `supplemental-direct-zero` | Hoisting an else body can collide with a same-named local declared later in the enclosing block. |
 | `org.openrewrite.staticanalysis.UpperCaseLiteralSuffixes` | Activate | `global-zero:common` | Normalizes numeric literal suffix casing without changing literal value or type. |
-| `org.openrewrite.staticanalysis.URLEqualsHashCodeRecipes` | Parent/configured primitive | `global-zero:javabest` | Container; its two leaves are rejected individually. |
-| `org.openrewrite.staticanalysis.URLEqualsHashCodeRecipes$URLEqualsRecipe` | Breaking-release candidate | `global-zero:javabest` | URI textual equality avoids URL's blocking DNS lookup and is preferable for service code, but it changes URL's documented host-resolution equality semantics. |
-| `org.openrewrite.staticanalysis.URLEqualsHashCodeRecipes$URLHashCodeRecipe` | Breaking-release candidate | `global-zero:javabest` | URI textual hashing avoids URL's blocking DNS lookup and is preferable for service code, but it changes URL's documented host-resolution hash semantics. |
+| `org.openrewrite.staticanalysis.URLEqualsHashCodeRecipes` | Parent/configured primitive | `global-zero:javabest` | Container; its two leaves are active individually in equals-then-hash order. |
+| `org.openrewrite.staticanalysis.URLEqualsHashCodeRecipes$URLEqualsRecipe` | Activate | `global-zero:javabest` | URI textual equality avoids URL's blocking DNS lookup; this service application does not support host-resolution equality as a domain contract. |
+| `org.openrewrite.staticanalysis.URLEqualsHashCodeRecipes$URLHashCodeRecipe` | Activate | `global-zero:javabest` | URI textual hashing avoids URL's blocking DNS lookup and remains ordered with the matching equality leaf. |
 | `org.openrewrite.staticanalysis.UseDiamondOperator` | Activate | `global-zero:common,javabest` | Uses compiler inference where the explicit constructor type arguments are redundant. |
 | `org.openrewrite.staticanalysis.UseJavaStyleArrayDeclarations` | Activate | `global-zero:common` | Moves array brackets to the Java type position without changing the declared type. |
 | `org.openrewrite.staticanalysis.UseLambdaForFunctionalInterface` | Rejected | `supplemental-direct-zero` | Anonymous-class identity, serialization, and implicit this/getClass semantics are not equivalent to a lambda. |
@@ -736,7 +739,7 @@ must be re-audited whenever `rewrite-migrate-java` changes.
 | `org.openrewrite.staticanalysis.UseObjectNotifyAll` | Rejected | `global-zero:javabest` | Replacing notify with notifyAll changes scheduling, wakeups, and performance. |
 | `org.openrewrite.staticanalysis.UseStandardCharset` | Activate | `global-zero:javabest` | Replaces recognized standard charset literals with the corresponding guaranteed StandardCharsets constant. |
 | `org.openrewrite.staticanalysis.UseStringReplace` | Rejected | `global-zero:javabest;supplemental-direct-zero` | The pinned classifier removes `\b` word-boundary escapes before regex detection and rewrites `replaceAll("\\bfoo\\b", ...)` to literal `replace("bfoob", ...)`, producing different matches. |
-| `org.openrewrite.staticanalysis.UseSystemLineSeparator` | Breaking-release candidate | `global-zero:javabest` | System.lineSeparator is the clearer modern API for the startup line separator, but it stops observing supported runtime changes to the line.separator property. |
+| `org.openrewrite.staticanalysis.UseSystemLineSeparator` | Activate | `global-zero:javabest` | System.lineSeparator is the clearer modern API; mutating line.separator after startup is not a supported application behavior. |
 | `org.openrewrite.staticanalysis.UseTryWithResources` | Rejected | `global-zero:java25,javabest` | Try-with-resources normally improves cleanup, but this pinned Java 25 output can emit an unused resource named `_` that the accepted Palantir formatter rejects; it also moves close exceptions across catch and suppression boundaries. |
 | `org.openrewrite.staticanalysis.WhileInsteadOfFor` | Activate | `global-zero:common` | Converts only a for loop with no initializer and no update, preserving condition, body, and continue behavior. |
 | `org.openrewrite.staticanalysis.WriteOctalValuesAsDecimal` | Activate | `global-zero:common` | Prints the same integer value in less surprising decimal notation. |
@@ -1045,50 +1048,11 @@ must be re-audited whenever `rewrite-migrate-java` changes.
 
 ## Preferable Breaking-Release Candidates
 
-The following 37 recipes would improve the default code shape, API choice, diagnostics, or
-maintainability, but each can stop a previously supported, working use. They remain inactive in this
-compatible pull request. Their exhaustive decision rows above are the canonical per-recipe record;
-this section keeps the future-breaking inventory visible as one reviewable group.
-
-| Recipe ID | Breaking boundary |
-| --- | --- |
-| `org.openrewrite.java.migrate.guava.NoGuavaImmutableListCopyOf` | `List.copyOf` changes supported null probes to `NullPointerException`. |
-| `org.openrewrite.java.migrate.guava.NoGuavaImmutableListOf` | `List.of` changes supported null probes to `NullPointerException`. |
-| `org.openrewrite.java.migrate.guava.NoGuavaImmutableMapCopyOf` | `Map.copyOf` changes null-key queries and encounter-order guarantees. |
-| `org.openrewrite.java.migrate.guava.NoGuavaImmutableMapOf` | `Map.of` changes null-key queries and encounter-order guarantees. |
-| `org.openrewrite.java.migrate.guava.NoGuavaImmutableSetCopyOf` | `Set.copyOf` changes null probes and encounter order. |
-| `org.openrewrite.java.migrate.guava.NoGuavaImmutableSetOf` | `Set.of` changes null probes and encounter order. |
-| `org.openrewrite.java.migrate.guava.PreferJavaUtilFunction` | The JDK functional interface changes public binary signatures, accepted arguments, overloads, and serialization. |
-| `org.openrewrite.java.migrate.guava.PreferJavaUtilOptional` | JDK `Optional` changes public types, serialization, null mapper behavior, and fallback timing. |
-| `org.openrewrite.java.migrate.guava.PreferJavaUtilSupplier` | The JDK functional interface changes public binary signatures, accepted arguments, overloads, and serialization. |
-| `org.openrewrite.java.migrate.lang.MigrateClassNewInstanceToGetDeclaredConstructorNewInstance` | Constructor failures become wrapped in `InvocationTargetException`. |
-| `org.openrewrite.java.migrate.sql.MigrateDriverManagerSetLogStream` | `PrintWriter` wrapping changes writer identity, buffering, autoflush, and close behavior. |
-| `org.openrewrite.java.migrate.util.MigrateCollectionsEmptyList` | `List.of` rejects successful null probes. |
-| `org.openrewrite.java.migrate.util.MigrateCollectionsEmptyMap` | `Map.of` rejects successful null-key and null-value probes. |
-| `org.openrewrite.java.migrate.util.MigrateCollectionsEmptySet` | `Set.of` rejects a successful null probe. |
-| `org.openrewrite.java.migrate.util.MigrateCollectionsSingletonList` | `List.of` rejects a supported null element and null probe. |
-| `org.openrewrite.java.migrate.util.MigrateCollectionsSingletonMap` | `Map.of` rejects supported null keys, values, and probes. |
-| `org.openrewrite.java.migrate.util.MigrateCollectionsSingletonSet` | `Set.of` rejects a supported null element and null probe. |
-| `org.openrewrite.java.migrate.util.MigrateCollectionsUnmodifiableList` | `List.of` replaces nullable, array-backed view behavior with an immutable snapshot. |
-| `org.openrewrite.java.migrate.util.MigrateCollectionsUnmodifiableSet` | `Set.of` rejects nulls and duplicates accepted by the original construction. |
-| `org.openrewrite.java.migrate.util.UseListOf` | The result becomes immutable and null-rejecting. |
-| `org.openrewrite.java.migrate.util.UseLocaleOf` | Cached factories replace guaranteed-distinct constructed identities. |
-| `org.openrewrite.java.migrate.util.UseMapOf` | The result becomes immutable and rejects nulls or duplicate keys. |
-| `org.openrewrite.java.migrate.util.UseSetOf` | The result becomes immutable and rejects nulls or duplicate elements. |
-| `org.openrewrite.java.testing.cleanup.AssertLiteralBooleanRemovedRecipe` | Removing an always-passing assertion also removes eager message-expression evaluation. |
-| `org.openrewrite.java.testing.cleanup.TestsShouldNotBePublic` | External suites and cross-package references can lose access to public test types or methods. |
-| `org.openrewrite.java.testing.mockito.RemoveInitMocksIfRunnersSpecified` | Tests that intentionally use a lenient manual session can fail under extension strictness. |
-| `org.openrewrite.maven.cleanup.NoSystemScopeDependencies` | Compile scope changes transitivity and runtime classpaths and removes `systemPath`. |
-| `org.openrewrite.staticanalysis.AbstractClassPublicConstructor` | Protected constructors reduce published and reflective access. |
-| `org.openrewrite.staticanalysis.BigDecimalDoubleConstructorRecipe` | `BigDecimal.valueOf` changes documented exact-binary-double numeric results. |
-| `org.openrewrite.staticanalysis.CaseInsensitiveComparisonsDoNotChangeCase` | Direct `equalsIgnoreCase` changes locale-sensitive and Unicode case-conversion results. |
-| `org.openrewrite.staticanalysis.LowercasePackage` | Package renames change FQCN-based resources, configuration, serialization, reflection, and callers. |
-| `org.openrewrite.staticanalysis.MethodNameCasing` | Renaming protected and package-visible methods changes subclass, reflection, and framework lookups. |
-| `org.openrewrite.staticanalysis.NoDoubleBraceInitialization` | Removing the anonymous subtype changes runtime identity, serialization, and subtype observation. |
-| `org.openrewrite.staticanalysis.RenamePrivateFieldsToCamelCase` | Field renames change reflection, dependency-injection, and serialization names. |
-| `org.openrewrite.staticanalysis.URLEqualsHashCodeRecipes$URLEqualsRecipe` | URI textual equality replaces URL host-resolution equality. |
-| `org.openrewrite.staticanalysis.URLEqualsHashCodeRecipes$URLHashCodeRecipe` | URI textual hashing replaces URL host-resolution hashing. |
-| `org.openrewrite.staticanalysis.UseSystemLineSeparator` | The startup separator stops observing runtime changes to the `line.separator` property. |
+No audited recipe currently has this status. The issue #600 application-context review activated 32
+useful zero-result guards, reclassified one mixed parent, and rejected four defective collection or
+host-dependent implementations. The section remains as an enforced inventory boundary: any future
+recipe assigned `Breaking-release candidate` MUST appear here with its exact deployed-application
+compatibility boundary.
 
 ## Quarkus Target Declarations
 
