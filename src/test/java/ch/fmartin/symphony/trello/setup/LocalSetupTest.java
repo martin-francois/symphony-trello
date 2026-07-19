@@ -112,7 +112,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.invalid-repository-url.md");
         Path env = tempDir.resolve(".env.invalid-repository-url");
-        AtomicInteger catalogResolutions = new AtomicInteger();
+        var catalogResolutions = new AtomicInteger();
         LocalSetup catalogBackedSetup = setupWithCodexSelectionDefaults(() -> {
             catalogResolutions.incrementAndGet();
             return CodexModelSelectionDefaults.of(TrelloBoardSetup.CodexModelDefaults.fallback());
@@ -186,8 +186,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Files.writeString(
                 workflow,
                 TestWorkflows.workflowWithRepositoryDefaults(
-                        "existing-board", availablePort(), REPOSITORY_URL_REFERENCE, REPOSITORY_PATH_REFERENCE),
-                StandardCharsets.UTF_8);
+                        "existing-board", availablePort(), REPOSITORY_URL_REFERENCE, REPOSITORY_PATH_REFERENCE));
         String[] command = Stream.concat(
                         Stream.of(
                                 "--non-interactive",
@@ -361,7 +360,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @Test
     void dryRunDoesNotResolveDynamicCodexCatalog() {
         // given
-        AtomicInteger resolutions = new AtomicInteger();
+        var resolutions = new AtomicInteger();
         LocalSetup resolverBackedSetup = setupWithCodexSelectionDefaults(() -> {
             resolutions.incrementAndGet();
             return new CodexModelSelectionDefaults(
@@ -431,8 +430,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                   reasoning_effort: "low"
                 ---
                 Existing workflow
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         SetupRunResult result = runSetup(
@@ -478,8 +476,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                   reasoning_effort: "low"
                 ---
                 Existing workflow
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         SetupRunResult result = runSetup(
@@ -786,7 +783,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
             throws Exception {
         // given
         Path workspaceFile = tempDir.resolve("workspace-root-file");
-        Files.writeString(workspaceFile, "not a directory", StandardCharsets.UTF_8);
+        Files.writeString(workspaceFile, "not a directory");
         Path workflow = tempDir.resolve("WORKFLOW.invalid-workspace-root.md");
 
         // when
@@ -967,10 +964,10 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path invalidManifestFile = tempDir.resolve("invalid-manifest.json");
         Path manifestParentFile = tempDir.resolve("manifest-parent-file");
         Path manifestWithFileParent = manifestParentFile.resolve(ConnectedBoardManifest.FILE_NAME);
-        Files.writeString(configFile, "file", StandardCharsets.UTF_8);
+        Files.writeString(configFile, "file");
         Files.createDirectories(manifestDirectory);
-        Files.writeString(invalidManifestFile, "file", StandardCharsets.UTF_8);
-        Files.writeString(manifestParentFile, "file", StandardCharsets.UTF_8);
+        Files.writeString(invalidManifestFile, "file");
+        Files.writeString(manifestParentFile, "file");
         Map<String, String> pathReplacements = Map.of(
                 "<configFile>",
                 configFile.toString(),
@@ -1414,7 +1411,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env.quoted-name-repair");
         int port = availablePort();
         writeWorkflow(workflow, "board-1", port);
-        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials());
         writeManifest(
                 """
                 {
@@ -1462,7 +1459,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env.expanding-name-repair");
         int port = availablePort();
         writeWorkflow(workflow, "board-1", port);
-        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials());
         writeManifest(
                 """
                 {
@@ -1734,11 +1731,11 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                                 json(betaWorkflow),
                                 json(tempDir.resolve("config/.env.beta")),
                                 json(tempDir.resolve("workspaces/beta"))));
-        String manifestBefore = Files.readString(fixture.manifestPath(), StandardCharsets.UTF_8);
+        String manifestBefore = Files.readString(fixture.manifestPath());
         CommandRunner forbiddenCommands = command -> {
             throw new AssertionError("completion-only setup must not run commands: " + String.join(" ", command));
         };
-        LocalSetup completionSetup = new LocalSetup(
+        var completionSetup = new LocalSetup(
                 new TrelloBoardSetup(new ObjectMapper()),
                 forbiddenCommands,
                 installerCompletionEnvironment("print"),
@@ -2135,8 +2132,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                   max_concurrent_agents: 4
                 ---
                 Old body
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         SetupRunResult result = runSetup(
@@ -2175,8 +2171,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                   max_concurrent_agents: 64
                 ---
                 Old body
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         SetupRunResult result = runSetup(
@@ -2214,8 +2209,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                   max_concurrent_agents: 64
                 ---
                 Old body
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         SetupRunResult result = runSetupWithInput(
@@ -2509,15 +2503,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @Test
     void nonInteractiveSetupReusesPreflightCodexModelCatalogSnapshot() throws Exception {
         // given
-        CodexModelSelectionDefaults acceptedCatalog = new CodexModelSelectionDefaults(
+        var acceptedCatalog = new CodexModelSelectionDefaults(
                 new TrelloBoardSetup.CodexModelDefaults("gpt-5.5", "medium"),
                 Map.of("gpt-5.5", "medium", "gpt-5.6-sol", "low"),
                 Map.of("gpt-5.6-sol", List.of("low", "medium", "high", "xhigh", "max", "ultra")));
-        CodexModelSelectionDefaults changedCatalog = new CodexModelSelectionDefaults(
+        var changedCatalog = new CodexModelSelectionDefaults(
                 new TrelloBoardSetup.CodexModelDefaults("gpt-5.5", "medium"),
                 Map.of("gpt-5.5", "medium", "gpt-5.6-sol", "low"),
                 Map.of("gpt-5.6-sol", List.of("low")));
-        AtomicInteger resolutions = new AtomicInteger();
+        var resolutions = new AtomicInteger();
         LocalSetup catalogBackedSetup = setupWithCodexSelectionDefaults(
                 () -> resolutions.getAndIncrement() == 0 ? acceptedCatalog : changedCatalog);
         Path workflow = tempDir.resolve("WORKFLOW.single-codex-catalog-snapshot.md");
@@ -2863,8 +2857,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                   reasoning_effort: "medium"
                 ---
                 Old body
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         SetupRunResult result = runSetupWithInput(
@@ -2917,8 +2910,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                   reasoning_effort: "ultra"
                 ---
                 Old body
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         SetupRunResult result = runSetupWithInput(
@@ -2977,8 +2969,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                   reasoning_effort: "low"
                 ---
                 Old body
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         SetupRunResult result = runSetupWithInput(
@@ -3033,8 +3024,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                   model: "gpt-existing"
                 ---
                 Old body
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         SetupRunResult result = runSetup(
@@ -3081,8 +3071,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                   command: codex app-server
                 ---
                 Old body
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         SetupRunResult result = runSetupWithInput(
@@ -3159,8 +3148,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                   reasoning_effort: "low"
                 ---
                 Old body
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         SetupRunResult result = runSetup(
@@ -3210,8 +3198,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                   reasoning_effort: "low"
                 ---
                 Old body
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         SetupRunResult result = runSetup(
@@ -3293,8 +3280,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                   command: codex app-server
                 ---
                 Old body
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         SetupRunResult result = runSetup(
@@ -3368,8 +3354,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                   command: codex app-server
                 ---
                 Old body
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         SetupRunResult result = runSetupWithInput(
@@ -3410,8 +3395,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                   command: codex app-server
                 ---
                 Old body
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         SetupRunResult result = runSetup(
@@ -3454,8 +3438,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                   reasoning_effort: "low"
                 ---
                 Old body
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         SetupRunResult result = runSetup(
@@ -3488,7 +3471,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.custom-env.md");
         Path env = tempDir.resolve(".env.custom");
-        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials());
 
         // when
         SetupRunResult result = runSetup(
@@ -3793,7 +3776,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         String invalidRepositoryUrl = HTTPS + "?private=ref";
         commands.githubAuthenticated = false;
         commands.githubCliAvailable = false;
-        AtomicInteger catalogResolutions = new AtomicInteger();
+        var catalogResolutions = new AtomicInteger();
         LocalSetup catalogBackedSetup = setupWithCodexSelectionDefaults(() -> {
             catalogResolutions.incrementAndGet();
             return CodexModelSelectionDefaults.of(TrelloBoardSetup.CodexModelDefaults.fallback());
@@ -3873,7 +3856,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.bound-port.md");
         Path env = tempDir.resolve(".env");
-        try (ServerSocket occupiedPort = new ServerSocket()) {
+        try (var occupiedPort = new ServerSocket()) {
             try {
                 occupiedPort.bind(
                         new InetSocketAddress(InetAddress.getLoopbackAddress(), TrelloBoardSetup.DEFAULT_SERVER_PORT));
@@ -3967,8 +3950,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 TRELLO_API_TOKEN=token
                 SYMPHONY_HTTP_PORT=%d
                 """
-                        .formatted(overridePort),
-                StandardCharsets.UTF_8);
+                        .formatted(overridePort));
 
         // when
         SetupRunResult setupResult = runSetup(
@@ -4152,7 +4134,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env.requested-conflict-new-board");
         int reservedPort = firstAvailableManagedPort();
         writeConnectedBoardManifest(manifest, "Reserved New Board", reservedWorkflow, reservedEnv, reservedPort);
-        String originalManifest = Files.readString(manifest, StandardCharsets.UTF_8);
+        String originalManifest = Files.readString(manifest);
 
         // when
         SetupRunResult result = runSetup(
@@ -4185,7 +4167,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(trello.createdLists()).isEmpty();
         assertThat(workflow).doesNotExist();
         assertThat(env).doesNotExist();
-        assertThat(Files.readString(manifest, StandardCharsets.UTF_8)).isEqualTo(originalManifest);
+        assertThat(manifest).content(StandardCharsets.UTF_8).isEqualTo(originalManifest);
     }
 
     @Test
@@ -4195,12 +4177,12 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path workflow = tempDir.resolve("WORKFLOW.requested-listening-import.md");
         Path env = tempDir.resolve(".env.requested-listening-import");
         Files.createDirectories(manifest.getParent());
-        Files.writeString(manifest, "{ \"boards\": [] }\n", StandardCharsets.UTF_8);
-        String originalManifest = Files.readString(manifest, StandardCharsets.UTF_8);
+        Files.writeString(manifest, "{ \"boards\": [] }\n");
+        String originalManifest = Files.readString(manifest);
 
         // when
         SetupRunResult result;
-        try (ServerSocket occupiedPort = new ServerSocket()) {
+        try (var occupiedPort = new ServerSocket()) {
             occupiedPort.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
             int port = occupiedPort.getLocalPort();
             result = runSetup(
@@ -4235,7 +4217,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(trello.createdLists()).isEmpty();
         assertThat(workflow).doesNotExist();
         assertThat(env).doesNotExist();
-        assertThat(Files.readString(manifest, StandardCharsets.UTF_8)).isEqualTo(originalManifest);
+        assertThat(manifest).content(StandardCharsets.UTF_8).isEqualTo(originalManifest);
     }
 
     @Test
@@ -4256,8 +4238,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                   port: $SIBLING_WORKFLOW_PORT
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.writeString(
                 env,
                 """
@@ -4265,8 +4246,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 TRELLO_API_TOKEN=token
                 SIBLING_WORKFLOW_PORT=%d
                 """
-                        .formatted(ConfigDefaults.DEFAULT_SERVER_PORT),
-                StandardCharsets.UTF_8);
+                        .formatted(ConfigDefaults.DEFAULT_SERVER_PORT));
         // The scan runs in the production 18080+ range where live workers bind and release ports,
         // so the probe fakes every port as free; skipping the default port must come from the
         // sibling workflow's environment-backed reservation alone.
@@ -4346,7 +4326,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Files.createDirectories(config);
         Path existingWorkflow = config.resolve("WORKFLOW.imported-queue.md");
         Path expectedWorkflow = config.resolve("WORKFLOW.imported-queue-2.md");
-        Files.writeString(existingWorkflow, "existing", StandardCharsets.UTF_8);
+        Files.writeString(existingWorkflow, "existing");
         Path env = tempDir.resolve(".env");
 
         // when
@@ -4917,7 +4897,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path config = tempDir.resolve("config");
         Files.createDirectories(config);
         Path existingWorkflow = config.resolve("WORKFLOW.repeat-queue.md");
-        Files.writeString(existingWorkflow, "existing", StandardCharsets.UTF_8);
+        Files.writeString(existingWorkflow, "existing");
         Path expectedWorkflow = config.resolve("WORKFLOW.repeat-queue-2.md");
         Path env = tempDir.resolve(".env");
 
@@ -4998,7 +4978,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path config = tempDir.resolve("config");
         Files.createDirectories(config);
         Path workflow = config.resolve("WORKFLOW.shared.md");
-        Files.writeString(workflow, "existing", StandardCharsets.UTF_8);
+        Files.writeString(workflow, "existing");
         Path manifest = config.resolve(ConnectedBoardManifest.FILE_NAME);
         writeOldBoardManifest(manifest, workflow);
         Path env = tempDir.resolve(".env");
@@ -5047,9 +5027,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         fixture.givenWorkflow(workflow, "board-1", configuredPort);
         Files.writeString(
                 workflow,
-                Files.readString(workflow, StandardCharsets.UTF_8)
-                        .replace("port: " + configuredPort, "port: $ENV_BACKED_IMPORT_PORT"),
-                StandardCharsets.UTF_8);
+                Files.readString(workflow).replace("port: " + configuredPort, "port: $ENV_BACKED_IMPORT_PORT"));
         Files.writeString(
                 env,
                 """
@@ -5057,8 +5035,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 TRELLO_API_TOKEN=token
                 ENV_BACKED_IMPORT_PORT=%d
                 """
-                        .formatted(configuredPort),
-                StandardCharsets.UTF_8);
+                        .formatted(configuredPort));
 
         // when
         SetupRunResult result = runSetupWithProductionDefaultPort(
@@ -5097,7 +5074,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         int configuredPort = availablePort();
         fixture.givenConnectedBoard("Running Import", workflow, env, configuredPort, false);
         fixture.givenWorkflow(workflow, "board-1", configuredPort);
-        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials());
         commands.startHealthServer(workflow);
 
         // when
@@ -5139,7 +5116,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         int configuredPort = availablePort();
         fixture.givenConnectedBoard("Running Explicit Import", workflow, env, configuredPort, false);
         fixture.givenWorkflow(workflow, "board-1", configuredPort);
-        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials());
         commands.startHealthServer(workflow);
 
         // when
@@ -5180,8 +5157,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         int configuredPort = availablePort();
         fixture.givenConnectedBoard("Unmanaged Live Import", workflow, env, configuredPort, false);
         fixture.givenWorkflow(workflow, "board-1", configuredPort);
-        String originalWorkflow = Files.readString(workflow, StandardCharsets.UTF_8);
-        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        String originalWorkflow = Files.readString(workflow);
+        Files.writeString(env, TestEnv.trelloCredentials());
         commands.startHealthServer(workflow);
         doReturn(false).when(workerManager).canStopManagedWorker(any(), any());
 
@@ -5223,7 +5200,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path config = tempDir.resolve("config");
         Files.createDirectories(config);
         Path workflow = config.resolve("WORKFLOW.shared-no-start.md");
-        Files.writeString(workflow, "existing", StandardCharsets.UTF_8);
+        Files.writeString(workflow, "existing");
         Path manifest = config.resolve(ConnectedBoardManifest.FILE_NAME);
         writeOldBoardManifest(manifest, workflow);
         Path env = tempDir.resolve(".env");
@@ -5424,7 +5401,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     void repairPortFailsActionablyWhenNoBoardsAreConnected() throws Exception {
         // given
         Path emptyManifest = tempDir.resolve("empty-connected-boards.json");
-        Files.writeString(emptyManifest, "{\"boards\":[]}", StandardCharsets.UTF_8);
+        Files.writeString(emptyManifest, "{\"boards\":[]}");
 
         // when
         SetupRunResult result = runSetup(
@@ -5462,7 +5439,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
         firstResult.assertSuccess();
         // Force a repair by occupying the configured port with a foreign listener.
-        try (ServerSocket portBlocker = new ServerSocket(boardPort, 1, InetAddress.getLoopbackAddress())) {
+        try (var portBlocker = new ServerSocket(boardPort, 1, InetAddress.getLoopbackAddress())) {
             assertThat(portBlocker.isBound())
                     .as("the foreign listener occupies the configured board port")
                     .isTrue();
@@ -5480,8 +5457,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                     ---
                     Body
                     """
-                            .formatted(stalePort),
-                    StandardCharsets.UTF_8);
+                            .formatted(stalePort));
             commands.startedWorkflows.clear();
             commands.stoppedWorkflows.clear();
 
@@ -5518,8 +5494,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 String.valueOf(availablePort()),
                 "--no-github");
         firstResult.assertSuccess();
-        String originalWorkflow = Files.readString(workflow, StandardCharsets.UTF_8);
-        String originalManifest = Files.readString(manifest, StandardCharsets.UTF_8);
+        String originalWorkflow = Files.readString(workflow);
+        String originalManifest = Files.readString(manifest);
         commands.startedWorkflows.clear();
         commands.startedEnvFiles.clear();
         commands.stoppedWorkflows.clear();
@@ -5535,8 +5511,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .stdoutContains("No port repair needed.", "already configured for an available port")
                 .stdoutDoesNotContain("WOULD   update");
         repairResult.assertSuccess().stdoutContains("No port repair needed.").stdoutDoesNotContain("Updated ");
-        assertThat(Files.readString(workflow, StandardCharsets.UTF_8)).isEqualTo(originalWorkflow);
-        assertThat(Files.readString(manifest, StandardCharsets.UTF_8)).isEqualTo(originalManifest);
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(originalWorkflow);
+        assertThat(manifest).content(StandardCharsets.UTF_8).isEqualTo(originalManifest);
         assertThat(commands.commandEvents).isEmpty();
         assertThat(commands.stoppedWorkflows).isEmpty();
         assertThat(commands.startedEnvFiles).isEmpty();
@@ -5573,7 +5549,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         commands.stoppedWorkflows.clear();
         commands.commandEvents.clear();
 
-        try (ServerSocket listener = new ServerSocket(occupiedPort, 50, LocalHealthChecker.loopbackIpv4ForTests())) {
+        try (var listener = new ServerSocket(occupiedPort, 50, LocalHealthChecker.loopbackIpv4ForTests())) {
             Thread acceptThread = Thread.ofVirtual()
                     .name("repair-port-foreign-listener")
                     .start(() -> acceptConnectionsUntilClosed(listener));
@@ -5624,7 +5600,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path manifest = tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME);
         int workflowPort = availablePort();
         writeWorkflow(workflow, "board-1", workflowPort);
-        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials());
         writeConnectedBoardManifest(manifest, "Stale Check Queue", workflow, env, ConfigDefaults.DEFAULT_SERVER_PORT);
         commands.startHealthServer(workflow);
 
@@ -5664,7 +5640,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     void dryRunRejectsWorkflowUnderFileParentAsExpectedInput() throws Exception {
         // given
         Path plainFile = tempDir.resolve("dry-run-not-a-directory");
-        Files.writeString(plainFile, "plain", StandardCharsets.UTF_8);
+        Files.writeString(plainFile, "plain");
         Path workflow = plainFile.resolve("child.WORKFLOW.md");
 
         // when
@@ -5711,7 +5687,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     void repairPortClassifiesInvalidManifestShapesAsExpectedConfigErrors(String manifestContent) throws Exception {
         // given
         Path manifest = tempDir.resolve("invalid-shape-connected-boards.json");
-        Files.writeString(manifest, manifestContent, StandardCharsets.UTF_8);
+        Files.writeString(manifest, manifestContent);
 
         // when
         SetupRunResult result = runSetup(
@@ -5736,7 +5712,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     void guidedSetupRejectsReferenceLookingCredentialFileValuesBeforeTrello() throws Exception {
         // given
         Path env = tempDir.resolve(".env.reference");
-        Files.writeString(env, "TRELLO_API_KEY=${REAL_KEY}\nTRELLO_API_TOKEN=real-token\n", StandardCharsets.UTF_8);
+        Files.writeString(env, "TRELLO_API_KEY=${REAL_KEY}\nTRELLO_API_TOKEN=real-token\n");
         Path workflow = tempDir.resolve("WORKFLOW.reference-creds.md");
 
         // when
@@ -5767,7 +5743,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
             throws Exception {
         // given
         Files.createDirectories(fixture.configDir());
-        Files.writeString(fixture.manifestPath(), manifestContent, StandardCharsets.UTF_8);
+        Files.writeString(fixture.manifestPath(), manifestContent);
         Path workflow = tempDir.resolve("WORKFLOW.invalid-manifest.md");
 
         // when
@@ -5814,7 +5790,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     void checkWarnsOnMalformedManifestJsonWithoutRawParserInternals() throws Exception {
         // given
         Path manifest = tempDir.resolve("malformed-connected-boards.json");
-        Files.writeString(manifest, "not-valid-json", StandardCharsets.UTF_8);
+        Files.writeString(manifest, "not-valid-json");
 
         // when
         SetupRunResult result = runSetup("check", "--non-interactive", "--manifest", manifest.toString());
@@ -5829,7 +5805,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     void checkWarnsOnIncompleteManifestRowsWithoutNullPointerInternals() throws Exception {
         // given
         Path manifest = tempDir.resolve("incomplete-connected-boards.json");
-        Files.writeString(manifest, "{\"boards\":[{}]}", StandardCharsets.UTF_8);
+        Files.writeString(manifest, "{\"boards\":[{}]}");
 
         // when
         SetupRunResult result = runSetup("check", "--non-interactive", "--manifest", manifest.toString());
@@ -5865,9 +5841,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 ---
                 Body
                 """
-                        .formatted(port),
-                StandardCharsets.UTF_8);
-        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+                        .formatted(port));
+        Files.writeString(env, TestEnv.trelloCredentials());
         writeConnectedBoardManifest(manifest, "Overlap Check Queue", workflow, env, port);
 
         // when
@@ -5887,10 +5862,10 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path manifest = tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME);
         int workflowPort = availablePort();
         writeWorkflow(workflow, "board-1", workflowPort);
-        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials());
         writeConnectedBoardManifest(manifest, "Stale Repair Queue", workflow, env, ConfigDefaults.DEFAULT_SERVER_PORT);
-        String originalWorkflow = Files.readString(workflow, StandardCharsets.UTF_8);
-        String originalManifest = Files.readString(manifest, StandardCharsets.UTF_8);
+        String originalWorkflow = Files.readString(workflow);
+        String originalManifest = Files.readString(manifest);
         commands.startHealthServer(workflow);
 
         // when
@@ -5907,8 +5882,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "WOULD   update \"Stale Repair Queue\" to use http://127.0.0.1:"
                                 + ConfigDefaults.DEFAULT_SERVER_PORT,
                         "WOULD   restart Symphony");
-        assertThat(Files.readString(workflow, StandardCharsets.UTF_8)).isEqualTo(originalWorkflow);
-        assertThat(Files.readString(manifest, StandardCharsets.UTF_8)).isEqualTo(originalManifest);
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(originalWorkflow);
+        assertThat(manifest).content(StandardCharsets.UTF_8).isEqualTo(originalManifest);
     }
 
     @Test
@@ -5919,10 +5894,10 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path manifest = tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME);
         int workflowPort = availablePort();
         writeWorkflow(workflow, "board-1", workflowPort);
-        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials());
         writeConnectedBoardManifest(
                 manifest, "Stale Actual Repair Queue", workflow, env, ConfigDefaults.DEFAULT_SERVER_PORT);
-        String originalWorkflow = Files.readString(workflow, StandardCharsets.UTF_8);
+        String originalWorkflow = Files.readString(workflow);
         commands.startHealthServer(workflow);
 
         // when
@@ -5934,7 +5909,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "OK      Updated connected-board manifest for \"Stale Actual Repair Queue\" to use http://127.0.0.1:"
                                 + workflowPort)
                 .stdoutDoesNotContain("Restart:", "Updated \"Stale Actual Repair Queue\" to use");
-        assertThat(Files.readString(workflow, StandardCharsets.UTF_8)).isEqualTo(originalWorkflow);
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(originalWorkflow);
         assertThatManifest(manifest).hasBoardWithPort("Stale Actual Repair Queue", workflowPort);
         assertThat(commands.commandEvents).isEmpty();
     }
@@ -5959,8 +5934,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         LocalSetup probedSetup = setupWithPortProbe(port -> port != expectedPort);
         writeWorkflow(workflow, "board-1", conflictingPort);
         writeWorkflow(otherWorkflow, "board-2", conflictingPort);
-        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
-        Files.writeString(otherEnv, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials());
+        Files.writeString(otherEnv, TestEnv.trelloCredentials());
         writeManifest(
                 """
                 {
@@ -6037,8 +6012,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         int conflictingPort = availablePort();
         writeWorkflow(workflow, "board-1", conflictingPort);
         writeWorkflow(otherWorkflow, "board-2", conflictingPort);
-        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
-        Files.writeString(otherEnv, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials());
+        Files.writeString(otherEnv, TestEnv.trelloCredentials());
         writeManifest(
                 """
                 {
@@ -6155,8 +6130,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--env",
                 env.toString(),
                 "--no-github");
-        String originalWorkflow = Files.readString(workflow, StandardCharsets.UTF_8);
-        String originalManifest = Files.readString(manifest, StandardCharsets.UTF_8);
+        String originalWorkflow = Files.readString(workflow);
+        String originalManifest = Files.readString(manifest);
         Files.writeString(env, "SYMPHONY_HTTP_PORT=%d%n".formatted(availablePort()), StandardOpenOption.APPEND);
         commands.startedWorkflows.clear();
         commands.startedEnvFiles.clear();
@@ -6174,8 +6149,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "setup_repair_port_http_override",
                         "SYMPHONY_HTTP_PORT in " + env,
                         "Remove or update SYMPHONY_HTTP_PORT/QUARKUS_HTTP_PORT");
-        assertThat(Files.readString(workflow, StandardCharsets.UTF_8)).isEqualTo(originalWorkflow);
-        assertThat(Files.readString(manifest, StandardCharsets.UTF_8)).isEqualTo(originalManifest);
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(originalWorkflow);
+        assertThat(manifest).content(StandardCharsets.UTF_8).isEqualTo(originalManifest);
         assertThat(commands.commandEvents).isEmpty();
         assertThat(commands.stoppedWorkflows).isEmpty();
         assertThat(commands.startedEnvFiles).isEmpty();
@@ -6202,8 +6177,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--env",
                 env.toString(),
                 "--no-github");
-        String originalWorkflow = Files.readString(workflow, StandardCharsets.UTF_8);
-        String originalManifest = Files.readString(manifest, StandardCharsets.UTF_8);
+        String originalWorkflow = Files.readString(workflow);
+        String originalManifest = Files.readString(manifest);
         LocalSetup setupWithOverride = setupWithEnvironment(Map.of(
                 "SYMPHONY_TRELLO_CONFIG_DIR",
                 tempDir.resolve("config").toString(),
@@ -6228,8 +6203,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "setup_repair_port_http_override",
                         "QUARKUS_HTTP_PORT environment variable",
                         "Remove or update SYMPHONY_HTTP_PORT/QUARKUS_HTTP_PORT");
-        assertThat(Files.readString(workflow, StandardCharsets.UTF_8)).isEqualTo(originalWorkflow);
-        assertThat(Files.readString(manifest, StandardCharsets.UTF_8)).isEqualTo(originalManifest);
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(originalWorkflow);
+        assertThat(manifest).content(StandardCharsets.UTF_8).isEqualTo(originalManifest);
         assertThat(commands.commandEvents).isEmpty();
         assertThat(commands.stoppedWorkflows).isEmpty();
         assertThat(commands.startedEnvFiles).isEmpty();
@@ -6300,12 +6275,12 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--env",
                 env.toString(),
                 "--no-github");
-        String content = Files.readString(workflow, StandardCharsets.UTF_8);
+        String content = Files.readString(workflow);
         content = content.replace("- \"Ready for Codex\"", "- \"Ready\\nCodex\"")
                 .replace("in_progress_state: \"In Progress\"", "in_progress_state: \"Doing\\tNow\"")
                 .replace("- \"In Progress\"", "- \"Doing\\tNow\"")
                 .replace("- \"Done\"", "- \"Done \\\"Q\\\"\"");
-        Files.writeString(workflow, content, StandardCharsets.UTF_8);
+        Files.writeString(workflow, content);
 
         // when
         SetupRunResult secondResult = runSetup("--non-interactive", "--no-github");
@@ -6566,15 +6541,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @Test
     void configureGithubAppliesExplicitCodexModelOverrides() throws Exception {
         // given
-        CodexModelSelectionDefaults acceptedCatalog = new CodexModelSelectionDefaults(
+        var acceptedCatalog = new CodexModelSelectionDefaults(
                 new TrelloBoardSetup.CodexModelDefaults("gpt-default", "medium"),
                 Map.of("gpt-default", "medium", "gpt-new", "high"),
                 Map.of("gpt-new", List.of("high", "max")));
-        CodexModelSelectionDefaults changedCatalog = new CodexModelSelectionDefaults(
+        var changedCatalog = new CodexModelSelectionDefaults(
                 new TrelloBoardSetup.CodexModelDefaults("gpt-default", "medium"),
                 Map.of("gpt-default", "medium", "gpt-new", "low"),
                 Map.of("gpt-new", List.of("low")));
-        AtomicInteger resolutions = new AtomicInteger();
+        var resolutions = new AtomicInteger();
         LocalSetup catalogBackedSetup = setupWithCodexSelectionDefaults(
                 () -> resolutions.getAndIncrement() == 0 ? acceptedCatalog : changedCatalog);
         Path workflow = tempDir.resolve("WORKFLOW.github-upgrade-model.md");
@@ -6703,9 +6678,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--env",
                 env.toString(),
                 "--no-github");
-        String content = Files.readString(workflow, StandardCharsets.UTF_8)
-                .replace("max_concurrent_agents: 1", "max_concurrent_agents: 64");
-        Files.writeString(workflow, content, StandardCharsets.UTF_8);
+        String content = Files.readString(workflow).replace("max_concurrent_agents: 1", "max_concurrent_agents: 64");
+        Files.writeString(workflow, content);
         commands.githubAuthenticated = true;
         commands.startedWorkflows.clear();
         commands.startedEnvFiles.clear();
@@ -6748,10 +6722,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         firstResult.assertSuccess();
         Files.writeString(
                 workflow,
-                Files.readString(workflow, StandardCharsets.UTF_8)
+                Files.readString(workflow)
                         .replace("default_url: null", "default_url: " + REPOSITORY_URL_REFERENCE)
-                        .replace("default_path: null", "default_path: " + REPOSITORY_PATH_REFERENCE),
-                StandardCharsets.UTF_8);
+                        .replace("default_path: null", "default_path: " + REPOSITORY_PATH_REFERENCE));
         commands.githubAuthenticated = true;
         commands.startedWorkflows.clear();
         commands.startedEnvFiles.clear();
@@ -6800,10 +6773,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
         firstResult.assertSuccess();
         Files.writeString(
-                workflow,
-                Files.readString(workflow, StandardCharsets.UTF_8)
-                        .replace("port: " + configuredPort, "port: $GITHUB_UPGRADE_PORT"),
-                StandardCharsets.UTF_8);
+                workflow, Files.readString(workflow).replace("port: " + configuredPort, "port: $GITHUB_UPGRADE_PORT"));
         Files.writeString(env, "GITHUB_UPGRADE_PORT=" + configuredPort + "\n", StandardOpenOption.APPEND);
         commands.githubAuthenticated = true;
         commands.startedWorkflows.clear();
@@ -7325,7 +7295,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .extractingByKey("codex")
                 .asString()
                 .contains(allowedPath.toString());
-        assertThat(Files.readString(workflow, StandardCharsets.UTF_8)).doesNotStartWith("---\n---\n");
+        assertThat(workflow).content(StandardCharsets.UTF_8).doesNotStartWith("---\n---\n");
     }
 
     @Test
@@ -7677,8 +7647,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 """
                 export TRELLO_API_KEY=old-key
                 TRELLO_API_TOKEN = old-token
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         SetupRunResult result = runSetup(
@@ -7762,7 +7731,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     void explicitWorkflowPathFailsWhenFileExistsWithoutForce() throws Exception {
         // given
         Path workflow = tempDir.resolve("existing.md");
-        Files.writeString(workflow, "existing", StandardCharsets.UTF_8);
+        Files.writeString(workflow, "existing");
         Path env = tempDir.resolve(".env");
 
         // when
@@ -8004,15 +7973,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @Test
     void interactiveSetupResolvesCodexCatalogAfterCompletingLogin() throws Exception {
         // given
-        CodexModelSelectionDefaults preLoginCatalog = new CodexModelSelectionDefaults(
+        var preLoginCatalog = new CodexModelSelectionDefaults(
                 new TrelloBoardSetup.CodexModelDefaults("gpt-selected", "low"),
                 Map.of("gpt-selected", "low"),
                 Map.of("gpt-selected", List.of("low")));
-        CodexModelSelectionDefaults postLoginCatalog = new CodexModelSelectionDefaults(
+        var postLoginCatalog = new CodexModelSelectionDefaults(
                 new TrelloBoardSetup.CodexModelDefaults("gpt-selected", "high"),
                 Map.of("gpt-selected", "high"),
                 Map.of("gpt-selected", List.of("low", "high")));
-        AtomicInteger resolutions = new AtomicInteger();
+        var resolutions = new AtomicInteger();
         LocalSetup loginAwareSetup = setupWithCodexSelectionDefaults(() -> {
             resolutions.incrementAndGet();
             return commands.codexAuthenticated ? postLoginCatalog : preLoginCatalog;
@@ -8126,8 +8095,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                                 workflow,
                                 tempDir.resolve(".env.old"),
                                 tempDir.resolve("workspaces"),
-                                ConfigDefaults.DEFAULT_SERVER_PORT),
-                StandardCharsets.UTF_8);
+                                ConfigDefaults.DEFAULT_SERVER_PORT));
     }
 
     private void writeConnectedBoardManifest(Path manifest, String boardName, Path workflow, Path env, int serverPort)
@@ -8154,8 +8122,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                   ]
                 }
                 """
-                        .formatted(boardName, workflow, env, tempDir.resolve("workspaces"), serverPort),
-                StandardCharsets.UTF_8);
+                        .formatted(boardName, workflow, env, tempDir.resolve("workspaces"), serverPort));
     }
 
     private static int firstAvailableManagedPort(int... reservedPorts) {
@@ -8251,8 +8218,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path firstEnv = tempDir.resolve("private-env").resolve(".env.duplicate-a");
         Path secondEnv = tempDir.resolve("private-env").resolve(".env.duplicate-b");
         Files.createDirectories(firstEnv.getParent());
-        Files.writeString(firstEnv, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
-        Files.writeString(secondEnv, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        Files.writeString(firstEnv, TestEnv.trelloCredentials());
+        Files.writeString(secondEnv, TestEnv.trelloCredentials());
         writeWorkflow(firstWorkflow, "private-board-id-one", 19101);
         writeWorkflow(secondWorkflow, "private-board-id-two", 19102);
         writeDuplicateConnectedBoardsManifest(firstWorkflow, firstEnv, secondWorkflow, secondEnv);

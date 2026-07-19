@@ -24,6 +24,7 @@ import ch.fmartin.symphony.trello.tracker.TrackerClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import ch.fmartin.symphony.trello.workspace.HookRunner;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.nio.file.Files;
@@ -53,8 +54,8 @@ final class SymphonyOrchestratorTestSupport {
     static final Duration POLL_INTERVAL = Duration.ofMillis(25);
 
     static UsageProbeScenario usageProbeScenario(Path workflow, MutableClock clock, Card first, Card second) {
-        FakeTracker tracker = new FakeTracker(List.of(first, second));
-        AtomicInteger runs = new AtomicInteger();
+        var tracker = new FakeTracker(List.of(first, second));
+        var runs = new AtomicInteger();
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
@@ -89,9 +90,9 @@ final class SymphonyOrchestratorTestSupport {
                 """);
         Card first = TestCards.card("card-a", "TRELLO-a", "Todo");
         Card second = TestCards.card("card-b", "TRELLO-b", "Todo");
-        FakeTracker tracker = new FakeTracker(List.of(first));
-        PublishedAgentRequests requests = new PublishedAgentRequests();
-        CountDownLatch releaseWorkers = new CountDownLatch(1);
+        var tracker = new FakeTracker(List.of(first));
+        var requests = new PublishedAgentRequests();
+        var releaseWorkers = new CountDownLatch(1);
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
@@ -166,8 +167,8 @@ final class SymphonyOrchestratorTestSupport {
     }
 
     static BlockingRun blockRunnerUntilCancelled(AgentRunner runner) {
-        CountDownLatch started = new CountDownLatch(1);
-        AtomicInteger cancelled = new AtomicInteger();
+        var started = new CountDownLatch(1);
+        var cancelled = new AtomicInteger();
         doAnswer(invocation -> {
                     started.countDown();
                     try {
@@ -191,7 +192,7 @@ final class SymphonyOrchestratorTestSupport {
     record BlockingRun(CountDownLatch started, AtomicInteger cancelled) {}
 
     static String dispatchFirstCard(Path workflow, FakeTracker tracker) throws Exception {
-        AtomicReference<String> dispatched = new AtomicReference<>();
+        var dispatched = new AtomicReference<String>();
         AgentRunner runner = mock();
         doAnswer(invocation -> {
                     AgentRunner.AgentRunRequest request = invocation.getArgument(0);
@@ -474,8 +475,7 @@ final class SymphonyOrchestratorTestSupport {
         return endpoint + "|" + boardId;
     }
 
-    static AgentEvent rateLimitEvent(
-            AgentRunner.AgentRunRequest request, Instant timestamp, com.fasterxml.jackson.databind.JsonNode payload) {
+    static AgentEvent rateLimitEvent(AgentRunner.AgentRunRequest request, Instant timestamp, JsonNode payload) {
         return new AgentEvent(
                 "account/rateLimits/updated",
                 timestamp,
@@ -577,7 +577,7 @@ final class SymphonyOrchestratorTestSupport {
 
     static SymphonyOrchestrator orchestrator(
             Path workflow, TrackerClient tracker, AgentRunner runner, WorkspaceManager workspaces) {
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
+        var orchestrator = new SymphonyOrchestrator(
                 new WorkflowLoader(), new ConfigResolver(), tracker, runner, new PromptRenderer(), workspaces);
         orchestrator.workflowPath = workflow;
         return orchestrator;
@@ -589,7 +589,7 @@ final class SymphonyOrchestratorTestSupport {
             AgentRunner runner,
             Clock clock,
             TrelloHandoffToolHandler usageWorkpads) {
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
+        var orchestrator = new SymphonyOrchestrator(
                 new WorkflowLoader(),
                 new ConfigResolver(),
                 tracker,
@@ -975,4 +975,6 @@ final class SymphonyOrchestratorTestSupport {
             return now.get();
         }
     }
+
+    private SymphonyOrchestratorTestSupport() {}
 }

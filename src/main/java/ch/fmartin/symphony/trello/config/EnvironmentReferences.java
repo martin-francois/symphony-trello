@@ -1,16 +1,15 @@
 package ch.fmartin.symphony.trello.config;
 
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 
-/**
- * Parses workflow environment-variable references. Supports the generated {@code $NAME} form and
- * the common shell-style {@code ${NAME}} form. Values with other shapes, including shell default
- * expansions such as {@code ${NAME:-fallback}}, are not references and stay literal text.
- */
+/// Parses workflow environment-variable references. Supports the generated `$NAME` form and
+/// the common shell-style `${NAME}` form. Values with other shapes, including shell default
+/// expansions such as `${NAME:-fallback}`, are not references and stay literal text.
 public final class EnvironmentReferences {
     private EnvironmentReferences() {}
 
-    public static Optional<String> referenceName(String value) {
+    public static Optional<String> referenceName(@Nullable String value) {
         if (value == null) {
             return Optional.empty();
         }

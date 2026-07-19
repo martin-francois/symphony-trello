@@ -10,10 +10,8 @@ final class PathsEqual {
         return canonical(first).equals(canonical(second));
     }
 
-    /**
-     * Resolves symlinks when the path exists so selectors such as a symlinked workflow file match
-     * the connected board and managed worker of the real target path.
-     */
+    /// Resolves symlinks when the path exists so selectors such as a symlinked workflow file match
+    /// the connected board and managed worker of the real target path.
     static Path canonical(Path path) {
         Path absolute = path.toAbsolutePath().normalize();
         try {

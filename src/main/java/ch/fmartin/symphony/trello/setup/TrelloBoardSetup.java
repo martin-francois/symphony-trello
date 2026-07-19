@@ -159,11 +159,9 @@ public final class TrelloBoardSetup {
         this.portInUse = Objects.requireNonNull(portInUse, "portInUse");
     }
 
-    /**
-     * Returns a copy whose port-availability checks use the given probe. Port-selection behavior
-     * depends on which loopback ports already accept connections, so tests inject a deterministic
-     * probe instead of inheriting the host's real port occupancy.
-     */
+    /// Returns a copy whose port-availability checks use the given probe. Port-selection behavior
+    /// depends on which loopback ports already accept connections, so tests inject a deterministic
+    /// probe instead of inheriting the host's real port occupancy.
     TrelloBoardSetup withPortProbe(IntPredicate probe) {
         return new TrelloBoardSetup(
                 json,
@@ -174,7 +172,7 @@ public final class TrelloBoardSetup {
                 probe);
     }
 
-    /** Whether something on the loopback interface already accepts connections on the port. */
+    /// Whether something on the loopback interface already accepts connections on the port.
     boolean portInUse(int port) {
         return portInUse.test(port);
     }
@@ -310,11 +308,9 @@ public final class TrelloBoardSetup {
         return "trello_auth_failed".equals(e.code()) || "trello_permission_denied".equals(e.code());
     }
 
-    /**
-     * Distinguishes an invalid workspace id from genuinely bad credentials: when the same
-     * credentials can read the member profile, the earlier authorization failure was about the
-     * requested Workspace, not the API key or token.
-     */
+    /// Distinguishes an invalid workspace id from genuinely bad credentials: when the same
+    /// credentials can read the member profile, the earlier authorization failure was about the
+    /// requested Workspace, not the API key or token.
     private boolean credentialsUsable(NewBoardRequest request) {
         try {
             getMemberInfo(new MemberInfoRequest(request.endpoint(), request.credentials()));
@@ -552,10 +548,8 @@ public final class TrelloBoardSetup {
         return codexModelSelectionDefaults();
     }
 
-    /**
-     * Returns a catalog only when it was already materialized without process startup. Dynamic
-     * suppliers are intentionally absent because resolving one can initialize Codex-owned files.
-     */
+    /// Returns a catalog only when it was already materialized without process startup. Dynamic
+    /// suppliers are intentionally absent because resolving one can initialize Codex-owned files.
     Optional<CodexModelSelectionDefaults> resolvedCodexModelSelectionDefaultsForDryRun() {
         return codexModelSelectionDefaultsForDryRun;
     }
@@ -753,14 +747,9 @@ public final class TrelloBoardSetup {
                 Files.createDirectories(parent);
             }
             if (force) {
-                Files.writeString(
-                        absolute,
-                        workflow,
-                        StandardCharsets.UTF_8,
-                        StandardOpenOption.CREATE,
-                        StandardOpenOption.TRUNCATE_EXISTING);
+                Files.writeString(absolute, workflow, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
             } else {
-                Files.writeString(absolute, workflow, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
+                Files.writeString(absolute, workflow, StandardOpenOption.CREATE_NEW);
             }
         } catch (IOException e) {
             throw new TrelloBoardSetupException(
@@ -925,7 +914,7 @@ public final class TrelloBoardSetup {
             return Optional.empty();
         }
         try {
-            String text = Files.readString(workflowPath, StandardCharsets.UTF_8);
+            String text = Files.readString(workflowPath);
             return readYamlFrontMatter(text);
         } catch (IOException e) {
             throw new TrelloBoardSetupException(
@@ -969,10 +958,6 @@ public final class TrelloBoardSetup {
         if (port != null) {
             LocalPort.validateCliServerPort(port);
         }
-    }
-
-    private static void validateServerPort(int port, String label) {
-        LocalPort.validateWorkflowServerPort(port, label);
     }
 
     private static Path ensureWorkflowWritable(Path workflowPath, boolean force) {
@@ -1405,7 +1390,7 @@ public final class TrelloBoardSetup {
         if (!codexModelDefaults.firstClassFieldsSupported()) {
             return "";
         }
-        StringBuilder yaml = new StringBuilder();
+        var yaml = new StringBuilder();
         if (!blank(codexModelDefaults.model())) {
             yaml.append("  model: ")
                     .append(yamlScalar(codexModelDefaults.model()))
@@ -1804,8 +1789,9 @@ public final class TrelloBoardSetup {
                     ? "update the workpad with a short rework plan"
                     : "record a short rework plan for the final response";
             String reworkEvidence = workpadToolEnabled
-                    ? "update the existing workpad with the rework evidence, and add one concise handoff comment. Do not create\n"
-                            + "duplicate progress summary comments when the workpad already contains the details."
+                    ? """
+                            update the existing workpad with the rework evidence, and add one concise handoff comment. Do not create
+                            duplicate progress summary comments when the workpad already contains the details."""
                     : "include the rework evidence in the final response.";
             return """
                     ## Rework From Human Review
@@ -1829,8 +1815,9 @@ public final class TrelloBoardSetup {
                 ? "update the workpad with a short rework plan"
                 : "record a short rework plan for the final response";
         String reworkEvidence = workpadToolEnabled
-                ? "update the existing workpad with the rework evidence, and add one concise handoff comment. Do not create\n"
-                        + "duplicate progress summary comments when the workpad already contains the details."
+                ? """
+                        update the existing workpad with the rework evidence, and add one concise handoff comment. Do not create
+                        duplicate progress summary comments when the workpad already contains the details."""
                 : "include the rework evidence in the final response.";
         String resetRestrictions = workpadToolEnabled
                 ? "close the existing PR, delete the workpad, or create a new branch"
@@ -2212,13 +2199,11 @@ public final class TrelloBoardSetup {
                 .collect(Collectors.joining(System.lineSeparator()));
     }
 
-    /**
-     * Double-quoted YAML scalar whose parsed value round-trips the input exactly. Raw control
-     * characters such as newlines would fold or break the scalar (and make the generated file
-     * unreadable), so they are emitted as YAML escape sequences instead.
-     */
+    /// Double-quoted YAML scalar whose parsed value round-trips the input exactly. Raw control
+    /// characters such as newlines would fold or break the scalar (and make the generated file
+    /// unreadable), so they are emitted as YAML escape sequences instead.
     private static String yamlScalar(String value) {
-        StringBuilder safe = new StringBuilder(value.length());
+        var safe = new StringBuilder(value.length());
         for (int index = 0; index < value.length(); index++) {
             char current = value.charAt(index);
             switch (current) {

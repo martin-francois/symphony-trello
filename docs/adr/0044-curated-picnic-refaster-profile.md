@@ -65,8 +65,11 @@ The following families are rejected for this project at this time:
 * `OptionalRules`: several suggested rewrites make Optional code harder to read or conflict with the
   project's Optional guidance. Optional cleanup remains covered by explicit review and the dedicated
   Optional rules.
-* `FileRules.FilesReadString`: explicit `StandardCharsets.UTF_8` in file reads is clearer for this
-  project, even though Java 25 defaults to UTF-8.
+* `FileRules.FilesReadString`: keep this Picnic rule outside the Refaster profile because
+  [ADR 0070](0070-curated-openrewrite-maintenance-lane.md) now gives the broader, consistently
+  measured `RedundantUtf8Charset` OpenRewrite leaf ownership of redundant charset cleanup. ADR 0070
+  supersedes this ADR's earlier conclusion that repeating `StandardCharsets.UTF_8` on Java APIs
+  whose contract already specifies UTF-8 is clearer.
 * `StringRules`, `StreamRules.StreamMapFirst`, `StreamRules.StreamCollectLeastStream`, and
   `ComparatorRules`: the suggested rewrites are not clearly more readable in the current call
   sites.

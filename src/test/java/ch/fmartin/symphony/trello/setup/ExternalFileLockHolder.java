@@ -5,7 +5,7 @@ import java.nio.channels.FileLock;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
-/** Holds a Java file lock in a separate test process until its standard input closes. */
+/// Holds a Java file lock in a separate test process until its standard input closes.
 public final class ExternalFileLockHolder {
     private ExternalFileLockHolder() {}
 

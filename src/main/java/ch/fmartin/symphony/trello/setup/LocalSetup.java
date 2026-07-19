@@ -101,7 +101,7 @@ public final class LocalSetup {
     }
 
     public static int run(String[] args, InputStream in, PrintStream out, PrintStream err) {
-        ObjectMapper json = new ObjectMapper();
+        var json = new ObjectMapper();
         return run(args, in, out, err, () -> new CodexModelDefaultsResolver(json).resolveSelectionDefaults());
     }
 
@@ -111,7 +111,7 @@ public final class LocalSetup {
             PrintStream out,
             PrintStream err,
             Supplier<CodexModelSelectionDefaults> codexModelSelectionDefaults) {
-        ObjectMapper json = new ObjectMapper();
+        var json = new ObjectMapper();
         return new SetupLocalCommandFactory()
                 .execute(
                         args,
@@ -474,16 +474,14 @@ public final class LocalSetup {
         return board.boardId();
     }
 
-    /**
-     * The suggested repair command wraps the selector in plain double quotes, where {@code $} and
-     * backticks still expand in POSIX shells and PowerShell, {@code !} still triggers history
-     * expansion in interactive bash, paired {@code %} still expands in cmd, backslashes and
-     * embedded quotes break the quoting itself, and the CLI rejects control characters in its own
-     * arguments. A board name containing any of those can never become a copyable runnable
-     * suggestion, so the opaque board key or id selects the same board safely instead. All other
-     * characters, including spaces and the remaining punctuation, are literal inside double quotes
-     * in POSIX shells, PowerShell, and cmd.
-     */
+    /// The suggested repair command wraps the selector in plain double quotes, where `$` and
+    /// backticks still expand in POSIX shells and PowerShell, `!` still triggers history
+    /// expansion in interactive bash, paired `%` still expands in cmd, backslashes and
+    /// embedded quotes break the quoting itself, and the CLI rejects control characters in its own
+    /// arguments. A board name containing any of those can never become a copyable runnable
+    /// suggestion, so the opaque board key or id selects the same board safely instead. All other
+    /// characters, including spaces and the remaining punctuation, are literal inside double quotes
+    /// in POSIX shells, PowerShell, and cmd.
     private static boolean commandSafeSelector(String value) {
         return value != null && !value.isBlank() && UNSAFE_COMMAND_SELECTOR_CHARACTER.matchesNoneOf(value);
     }
@@ -1175,7 +1173,7 @@ public final class LocalSetup {
         applyCodexAccess(
                 options.withCodexAccess(access.additionalWritableRoots(), access.dangerFullAccess()),
                 board.workflowPath());
-        ConnectedBoard upgraded = new ConnectedBoard(
+        var upgraded = new ConnectedBoard(
                 board.boardId(),
                 board.boardKey(),
                 board.boardName(),
@@ -1353,7 +1351,7 @@ public final class LocalSetup {
                         List.of(),
                         false));
         try {
-            try (PrintStream out = new PrintStream(OutputStream.nullOutputStream(), true, StandardCharsets.UTF_8)) {
+            try (var out = new PrintStream(OutputStream.nullOutputStream(), true, StandardCharsets.UTF_8)) {
                 workerManager.stop(localWorkerPaths(options), board, out);
             }
         } catch (IOException e) {

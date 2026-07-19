@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -13,7 +12,7 @@ public final class WorkflowAssertions {
 
     private WorkflowAssertions(Path workflow) {
         try {
-            this.content = Files.readString(workflow, StandardCharsets.UTF_8);
+            this.content = Files.readString(workflow);
         } catch (IOException e) {
             throw new UncheckedIOException("Could not read workflow " + workflow, e);
         }

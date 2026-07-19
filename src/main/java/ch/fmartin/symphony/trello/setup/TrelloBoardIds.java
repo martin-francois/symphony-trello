@@ -54,12 +54,10 @@ final class TrelloBoardIds {
         return selector;
     }
 
-    /**
-     * Copied or shell-completed bare short links often gain a harmless trailing slash, query
-     * string, or fragment, such as {@code SYNTH001/}, {@code SYNTH001?utm=test}, or
-     * {@code SYNTH001#fragment}. Strip those decorations only when the remainder is a plain
-     * board id or short link, so board names containing the same characters stay untouched.
-     */
+    /// Copied or shell-completed bare short links often gain a harmless trailing slash, query
+    /// string, or fragment, such as `SYNTH001/`, `SYNTH001?utm=test`, or
+    /// `SYNTH001#fragment`. Strip those decorations only when the remainder is a plain
+    /// board id or short link, so board names containing the same characters stay untouched.
     private static String normalizeBareSelector(String selector) {
         String candidate = withoutQueryAndFragment(selector);
         if (candidate.endsWith("/")) {
@@ -71,11 +69,9 @@ final class TrelloBoardIds {
         return selector;
     }
 
-    /**
-     * URI parsing decides whether {@code ?} or {@code #} starts a real query or fragment: board
-     * names that merely contain those characters, such as {@code What? Board}, are not parseable
-     * URIs and are returned unchanged.
-     */
+    /// URI parsing decides whether `?` or `#` starts a real query or fragment: board
+    /// names that merely contain those characters, such as `What? Board`, are not parseable
+    /// URIs and are returned unchanged.
     private static String withoutQueryAndFragment(String selector) {
         if (selector.indexOf('?') < 0 && selector.indexOf('#') < 0) {
             return selector;

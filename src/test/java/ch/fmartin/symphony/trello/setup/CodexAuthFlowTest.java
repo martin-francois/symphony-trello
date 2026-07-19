@@ -16,7 +16,7 @@ final class CodexAuthFlowTest {
         FakeCommandRunner commands = unauthenticatedCodex()
                 .returns(0, "", "codex", "login")
                 .returns(0, "authenticated", "codex", "login", "status");
-        RecordingTerminal terminal = new RecordingTerminal("");
+        var terminal = new RecordingTerminal("");
 
         // when
         new CodexAuthFlow(commands)
@@ -34,7 +34,7 @@ final class CodexAuthFlowTest {
         FakeCommandRunner commands = unauthenticatedCodex()
                 .returns(0, "", "codex", "login", "--device-auth")
                 .returns(0, "authenticated", "codex", "login", "status");
-        RecordingTerminal terminal = new RecordingTerminal("n");
+        var terminal = new RecordingTerminal("n");
 
         // when
         new CodexAuthFlow(commands)
@@ -52,7 +52,7 @@ final class CodexAuthFlowTest {
     void nonInteractiveMissingAuthFailsBeforePrompting() {
         // given
         FakeCommandRunner commands = unauthenticatedCodex();
-        RecordingTerminal terminal = new RecordingTerminal();
+        var terminal = new RecordingTerminal();
         LocalSetup.Options options = SetupOptionFactory.options(
                 Path.of("target/codex-non-interactive"), true, Optional.empty(), List.of(), false, false);
 
@@ -70,7 +70,7 @@ final class CodexAuthFlowTest {
         FakeCommandRunner commands = unauthenticatedCodex()
                 .returns(0, "", "codex", "login")
                 .returns(1, "missing", "codex", "login", "status");
-        RecordingTerminal terminal = new RecordingTerminal("");
+        var terminal = new RecordingTerminal("");
 
         // when
         Throwable thrown = catchThrowable(() -> new CodexAuthFlow(commands)
@@ -89,7 +89,7 @@ final class CodexAuthFlowTest {
         FakeCommandRunner commands = unauthenticatedCodex()
                 .returns(0, "", "codex", "login", "--device-auth")
                 .returns(1, "missing", "codex", "login", "status");
-        RecordingTerminal terminal = new RecordingTerminal("n");
+        var terminal = new RecordingTerminal("n");
 
         // when
         Throwable thrown = catchThrowable(() -> new CodexAuthFlow(commands)

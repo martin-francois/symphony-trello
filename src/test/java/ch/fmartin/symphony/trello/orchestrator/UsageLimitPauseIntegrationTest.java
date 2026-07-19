@@ -72,13 +72,13 @@ final class UsageLimitPauseIntegrationTest {
                         .formatted(fakeAppServer));
         Card first = TestCards.cardWithLabels("card-1", FIRST_CARD, "Ready for Codex", List.of("p1"));
         Card second = TestCards.cardWithLabels("card-2", SECOND_CARD, "Ready for Codex", List.of("p2"));
-        LocalTracker tracker = new LocalTracker(List.of(first, second));
+        var tracker = new LocalTracker(List.of(first, second));
         tracker.setPreparedCard(inProgress(first));
-        ObjectMapper json = new ObjectMapper();
-        WorkspaceManager workspaces = new WorkspaceManager(new HookRunner());
+        var json = new ObjectMapper();
+        var workspaces = new WorkspaceManager(new HookRunner());
         var codex = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
         var runner = new LocalAgentRunner(workspaces, new HookRunner(), codex, tracker, new PromptRenderer());
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
+        var orchestrator = new SymphonyOrchestrator(
                 new WorkflowLoader(), new ConfigResolver(), tracker, runner, new PromptRenderer(), workspaces);
         orchestrator.workflowPath = workflow;
 

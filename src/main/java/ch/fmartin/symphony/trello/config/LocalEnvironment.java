@@ -68,10 +68,8 @@ public final class LocalEnvironment {
         }
     }
 
-    /**
-     * UTF-8 editors, notably on Windows, commonly write a byte order mark at the start of the
-     * file. Exactly one leading mark is ignorable so the first key is not silently dropped.
-     */
+    /// UTF-8 editors, notably on Windows, commonly write a byte order mark at the start of the
+    /// file. Exactly one leading mark is ignorable so the first key is not silently dropped.
     private static String stripLeadingByteOrderMark(String firstLine) {
         return firstLine.startsWith(UNICODE_BYTE_ORDER_MARK) ? firstLine.substring(1) : firstLine;
     }
@@ -133,11 +131,9 @@ public final class LocalEnvironment {
         return stripUnquotedTrailingComment(raw);
     }
 
-    /**
-     * Parses a quoted value and tolerates a trailing {@code # comment} after the closing quote.
-     * Returns empty when the text after the closing quote is not a comment, so ambiguous
-     * hand-written lines keep the whole-line interpretation instead of silently losing text.
-     */
+    /// Parses a quoted value and tolerates a trailing `# comment` after the closing quote.
+    /// Returns empty when the text after the closing quote is not a comment, so ambiguous
+    /// hand-written lines keep the whole-line interpretation instead of silently losing text.
     private static Optional<String> parseQuoted(String raw, char quote, boolean unescape) {
         int closing = closingQuoteIndex(raw, quote, unescape);
         if (closing < 0) {
@@ -191,7 +187,7 @@ public final class LocalEnvironment {
     }
 
     private static String unescapeDoubleQuoted(String value) {
-        StringBuilder unescaped = new StringBuilder(value.length());
+        var unescaped = new StringBuilder(value.length());
         int index = 0;
         while (index < value.length()) {
             char current = value.charAt(index);

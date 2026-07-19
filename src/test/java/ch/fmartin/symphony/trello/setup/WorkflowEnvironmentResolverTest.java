@@ -20,6 +20,6 @@ final class WorkflowEnvironmentResolverTest {
         var source = WorkflowEnvironmentResolver.externalHttpPortOverrideSource(environment, tempDir.resolve(".env"));
 
         // then
-        assertThat(source).contains("SYMPHONY_HTTP_PORT environment variable");
+        assertThat(source).hasValue("SYMPHONY_HTTP_PORT environment variable");
     }
 }

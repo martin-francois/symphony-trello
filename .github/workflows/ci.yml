@@ -95,10 +95,19 @@ jobs:
           distribution: temurin
           java-version: "25"
           cache: maven
-      - name: Formatting
-        run: ./mvnw spotless:check
+      - name: Apply curated OpenRewrite recipes
+        run: ./mvnw -Popenrewrite rewrite:run
+      - name: Apply Spotless formatting
+        run: ./mvnw spotless:apply
+      - name: Verify the generated maintenance state is committed
+        run: |
+          if [[ -n "$(git status --porcelain=v1 --untracked-files=all)" ]]; then
+            git status --short
+            git diff HEAD
+            exit 1
+          fi
       - name: Test and coverage, including fuzz, chaos, and installer lifecycle
-        run: ./mvnw -Djunit.parallel.enabled=true -Djunit.parallel.config.fixed.parallelism=2 verify
+        run: ./mvnw -Djunit.parallel.enabled=true -Djunit.parallel.config.fixed.parallelism=2 spotless:check verify
 
   windows-powershell:
     if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}

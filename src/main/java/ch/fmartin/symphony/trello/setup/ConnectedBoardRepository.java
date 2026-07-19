@@ -85,11 +85,9 @@ final class ConnectedBoardRepository {
         return append(warnings, "Connected-board manifest contains invalid values and could not be loaded for checks.");
     }
 
-    /**
-     * Strict load for lifecycle and setup commands: any invalid manifest shape or incomplete board
-     * row is an expected local configuration error here, never a null dereference deeper in the
-     * command. Only diagnostics and setup-local check load more leniently, via loadForCheck().
-     */
+    /// Strict load for lifecycle and setup commands: any invalid manifest shape or incomplete board
+    /// row is an expected local configuration error here, never a null dereference deeper in the
+    /// command. Only diagnostics and setup-local check load more leniently, via loadForCheck().
     ConnectedBoardManifest loadForLifecycle() throws IOException {
         ConnectedBoardManifest manifest = load();
         if (!Files.isRegularFile(manifestPath)) {

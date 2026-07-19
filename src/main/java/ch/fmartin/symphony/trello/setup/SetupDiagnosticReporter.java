@@ -64,10 +64,8 @@ final class SetupDiagnosticReporter {
     private static final int LOG_LINE_LIMIT = 80;
     private static final int LOG_BYTE_LIMIT = 128 * 1024;
 
-    /**
-     * More same-second failure reports than this means something is looping; give up instead of
-     * scanning the directory forever. The caller treats the failure as report-write-unavailable.
-     */
+    /// More same-second failure reports than this means something is looping; give up instead of
+    /// scanning the directory forever. The caller treats the failure as report-write-unavailable.
     private static final int MAX_REPORT_NAME_ATTEMPTS = 100;
 
     private static final List<String> DIAGNOSTIC_TOOL_COMMANDS =
@@ -76,11 +74,9 @@ final class SetupDiagnosticReporter {
             "git", "java", "javac", "mvn", "npm", "node", "codex", "gh", "apt-get", "sudo", "doas", "brew", "winget",
             "dnf", "yum", "pacman", "zypper", "docker");
     private static final Set<String> HASHED_INSTALLER_CONTEXT_KEYS = Set.of("repo_url", "ref", "source_commit");
-    /**
-     * Installer refs are used as diagnostics redaction terms only when they are distinctive. Common
-     * branch names appear in normal logs and framework thread names, so redacting them would damage
-     * public-safe diagnostics more than it would protect private context.
-     */
+    /// Installer refs are used as diagnostics redaction terms only when they are distinctive. Common
+    /// branch names appear in normal logs and framework thread names, so redacting them would damage
+    /// public-safe diagnostics more than it would protect private context.
     private static final Set<String> NON_DISTINCTIVE_INSTALLER_REFS = Set.of("head", "main", "master", "trunk");
 
     private static final Pattern GIT_COMMIT_ID = Pattern.compile("(?i)[0-9a-f]{7,64}");
@@ -307,7 +303,7 @@ final class SetupDiagnosticReporter {
         if (!shouldReport(exception)) {
             return Optional.empty();
         }
-        SetupDiagnosticReporter reporter = new SetupDiagnosticReporter(System.getenv(), new ProcessCommandRunner());
+        var reporter = new SetupDiagnosticReporter(System.getenv(), new ProcessCommandRunner());
         List<String> arguments = List.of(args);
         if (arguments.contains("--dry-run")) {
             return Optional.empty();
@@ -528,7 +524,7 @@ final class SetupDiagnosticReporter {
         sensitiveValues = sensitiveValues(context.manifest(), context.paths(), args);
         deepDiagnostics = request.deep();
 
-        StringBuilder body = new StringBuilder();
+        var body = new StringBuilder();
         body.append("# Symphony for Trello Diagnostics\n\n");
         body.append("Review this output before sharing it. It is intended to omit secrets and private context.\n");
 
@@ -611,7 +607,7 @@ final class SetupDiagnosticReporter {
             throws IOException {
         DiagnosticsContext context = diagnosticsContext(request, sharedTokenHasher);
 
-        StringBuilder body = new StringBuilder();
+        var body = new StringBuilder();
         body.append("# Symphony for Trello Private Context\n\n");
         body.append("Private diagnostics context. Do not paste this output into public issues.\n");
         body.append("It may include Trello board names, board ids, board URLs, and local paths.\n");
@@ -814,7 +810,7 @@ final class SetupDiagnosticReporter {
     }
 
     private void addWorkflowMappings(List<PrivateContextMapping> mappings, SequencedSet<Path> workflowPaths) {
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        var editor = new WorkflowConfigEditor();
         for (Path workflow : workflowPaths) {
             String boardId = editor.boardId(workflow).orElse("");
             addMapping(mappings, "workflow", "workflow_path", pathToken(workflow.toString()), workflow);
@@ -900,7 +896,7 @@ final class SetupDiagnosticReporter {
         DiagnosticsSelection selection =
                 selectDiagnostics(manifest, request.board(), request.workflow(), paths.configDir());
         tokenHasher = sharedTokenHasher.orElseGet(() -> diagnosticsTokenHasher(request, paths));
-        ConnectedBoardManifest selectedManifest = new ConnectedBoardManifest(selection.boards());
+        var selectedManifest = new ConnectedBoardManifest(selection.boards());
         boolean selected = selection.kind() != DiagnosticsSelectorKind.NONE;
         // A request without a --board/--workflow selector is a "broad" run: it reports every
         // connected board and also workflow files that are merely present in the config directory.
@@ -1018,16 +1014,14 @@ final class SetupDiagnosticReporter {
         }
     }
 
-    /**
-     * Creates the report with CREATE_NEW and a numeric suffix so two failures in the same second
-     * cannot overwrite each other's report.
-     */
+    /// Creates the report with CREATE_NEW and a numeric suffix so two failures in the same second
+    /// cannot overwrite each other's report.
     private static Path writeUniqueReport(Path reportDir, String timestamp, String content) throws IOException {
         for (int attempt = 1; attempt <= MAX_REPORT_NAME_ATTEMPTS; attempt++) {
             String suffix = attempt == 1 ? "" : "-" + attempt;
             Path report = reportDir.resolve("setup-failure-" + timestamp + suffix + ".md");
             try {
-                Files.writeString(report, content, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
+                Files.writeString(report, content, StandardOpenOption.CREATE_NEW);
                 return report;
             } catch (FileAlreadyExistsException ignored) {
                 // Another report from the same second owns this name; loop to the next suffix.
@@ -1049,7 +1043,7 @@ final class SetupDiagnosticReporter {
         tokenHasher = DiagnosticsTokenHasher.load(paths.configDir());
         sensitiveValues = sensitiveValues(manifest, paths, args);
 
-        StringBuilder body = new StringBuilder();
+        var body = new StringBuilder();
         body.append("# Symphony for Trello Setup Failure\n\n");
         section(body, "Failure");
         line(body, "time_utc", now().toString());
@@ -1123,7 +1117,7 @@ final class SetupDiagnosticReporter {
             return Optional.empty();
         }
         try {
-            List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
+            List<String> lines = Files.readAllLines(path);
             return osReleaseValue(lines, "PRETTY_NAME").or(() -> osReleaseNameAndVersion(lines));
         } catch (IOException ignored) {
             return Optional.empty();
@@ -1609,7 +1603,7 @@ final class SetupDiagnosticReporter {
             LocalWorkerPaths paths,
             List<String> args,
             WorkflowPathResolution workflowPathResolution) {
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        var editor = new WorkflowConfigEditor();
         SequencedSet<Path> workflowPaths =
                 reportWorkflowPaths(manifest, paths, args, workflowPathResolution, !hasBoardOption(args));
         MarkdownTable table = workflowTable();
@@ -1625,7 +1619,7 @@ final class SetupDiagnosticReporter {
             ConnectedBoardManifest manifest,
             SequencedSet<Path> workflowPaths,
             Path defaultEnvPath) {
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        var editor = new WorkflowConfigEditor();
         MarkdownTable table = workflowTable();
         for (Path workflow : workflowPaths) {
             appendWorkflowRow(table, editor, workflow, workflowEnvironmentResolver(manifest, workflow, defaultEnvPath));
@@ -1669,7 +1663,7 @@ final class SetupDiagnosticReporter {
             ConnectedBoardManifest manifest,
             SequencedSet<Path> workflowPaths,
             Path defaultEnvPath) {
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        var editor = new WorkflowConfigEditor();
         List<InvalidWorkflowFile> invalidWorkflows = workflowPaths.stream()
                 .map(workflow -> editor.diagnosticsWarning(
                                 workflow, workflowEnvironmentResolver(manifest, workflow, defaultEnvPath))
@@ -1689,7 +1683,7 @@ final class SetupDiagnosticReporter {
 
     private void appendInvalidConnectedBoardWorkflows(
             StringBuilder body, ConnectedBoardManifest manifest, Path defaultEnvPath) {
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        var editor = new WorkflowConfigEditor();
         List<InvalidConnectedBoardWorkflow> invalidWorkflows = manifest.boards().stream()
                 .map(board -> invalidConnectedBoardWorkflow(editor, board, defaultEnvPath))
                 .flatMap(Optional::stream)
@@ -1722,7 +1716,7 @@ final class SetupDiagnosticReporter {
     }
 
     private void appendLocalWorkflowIdentifiers(StringBuilder body, SequencedSet<Path> workflowPaths) {
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        var editor = new WorkflowConfigEditor();
         MarkdownTable table = MarkdownTable.of(
                 List.of(
                         "workflow_token",
@@ -1784,7 +1778,7 @@ final class SetupDiagnosticReporter {
     }
 
     private List<SecretFileMapping> secretFileMappings(SequencedSet<Path> workflowPaths) {
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        var editor = new WorkflowConfigEditor();
         List<SecretFileMapping> secretFiles = new ArrayList<>();
         for (Path workflow : workflowPaths) {
             editor.trackerCredentialReferences(workflow).ifPresent(credentials -> {
@@ -1847,7 +1841,7 @@ final class SetupDiagnosticReporter {
             LocalWorkerPaths paths,
             List<String> args,
             WorkflowPathResolution workflowPathResolution) {
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        var editor = new WorkflowConfigEditor();
         SequencedSet<Integer> ports = probePorts(
                 editor,
                 manifest,
@@ -1874,7 +1868,7 @@ final class SetupDiagnosticReporter {
             ConnectedBoardManifest manifest,
             SequencedSet<Path> workflowPaths,
             Path defaultEnvPath) {
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        var editor = new WorkflowConfigEditor();
         SequencedSet<Integer> ports = probePorts(editor, manifest, workflowPaths, defaultEnvPath);
         if (ports.isEmpty()) {
             body.append("No configured local ports found.\n");
@@ -1933,10 +1927,8 @@ final class SetupDiagnosticReporter {
         }
     }
 
-    /**
-     * A symlinked selector and its manifest target are the same workflow, so uniqueness is keyed
-     * on the canonical path: one symlinked workflow must not appear as two selected rows.
-     */
+    /// A symlinked selector and its manifest target are the same workflow, so uniqueness is keyed
+    /// on the canonical path: one symlinked workflow must not appear as two selected rows.
     private static void addUniqueWorkflow(
             SequencedSet<Path> workflowPaths, Set<Path> canonicalIdentities, Path workflow) {
         if (canonicalIdentities.add(PathsEqual.canonical(workflow))) {
@@ -1990,11 +1982,9 @@ final class SetupDiagnosticReporter {
         };
     }
 
-    /**
-     * One effective port per board: the workflow file's server.port is current, and the manifest
-     * port is only the fallback when the workflow does not declare a readable port. Unioning both
-     * would probe stale historical ports after a workflow path was reused or repaired.
-     */
+    /// One effective port per board: the workflow file's server.port is current, and the manifest
+    /// port is only the fallback when the workflow does not declare a readable port. Unioning both
+    /// would probe stale historical ports after a workflow path was reused or repaired.
     private SequencedSet<Integer> probePorts(
             WorkflowConfigEditor editor,
             ConnectedBoardManifest manifest,
@@ -2019,13 +2009,11 @@ final class SetupDiagnosticReporter {
         return ports;
     }
 
-    /**
-     * The effective workflow declaration wins over the manifest: a declared or env-resolved
-     * out-of-range port renders the safe skip line and a non-numeric port is reported by the
-     * workflow summary, in both cases without probing the stale manifest port. The manifest port
-     * only covers workflows that omit server.port, cannot be read, or reference an environment
-     * value the board environment does not define.
-     */
+    /// The effective workflow declaration wins over the manifest: a declared or env-resolved
+    /// out-of-range port renders the safe skip line and a non-numeric port is reported by the
+    /// workflow summary, in both cases without probing the stale manifest port. The manifest port
+    /// only covers workflows that omit server.port, cannot be read, or reference an environment
+    /// value the board environment does not define.
     private Optional<Integer> boardProbePort(WorkflowConfigEditor editor, ConnectedBoard board, Path defaultEnvPath) {
         if (board.workflowPath() == null) {
             return Optional.of(board.serverPort());
@@ -2071,12 +2059,10 @@ final class SetupDiagnosticReporter {
         return exception.getClass().getSimpleName() + ": " + message;
     }
 
-    /**
-     * Like {@link #exceptionSummary(Exception)}, but safe for user-facing setup stderr:
-     * {@link FileSystemException} messages embed the affected paths, so only the path-free
-     * reason is kept for them. Other IOException messages at the setup boundaries are
-     * hand-written without paths.
-     */
+    /// Like [#exceptionSummary(Exception)], but safe for user-facing setup stderr:
+    /// [FileSystemException] messages embed the affected paths, so only the path-free
+    /// reason is kept for them. Other IOException messages at the setup boundaries are
+    /// hand-written without paths.
     static String pathFreeExceptionSummary(Exception exception) {
         if (!(exception instanceof FileSystemException fileSystemException)) {
             return exceptionSummary(exception);
@@ -2259,7 +2245,7 @@ final class SetupDiagnosticReporter {
     }
 
     private static Set<Path> expectedLogFiles(Path stateHome, SequencedSet<Path> workflowPaths) {
-        ManagedProcessStore store = new ManagedProcessStore(stateHome);
+        var store = new ManagedProcessStore(stateHome);
         return workflowPaths.stream()
                 .flatMap(workflow -> {
                     ManagedProcessStore.ManagedProcessFiles files = store.files(workflow);
@@ -2270,7 +2256,7 @@ final class SetupDiagnosticReporter {
     }
 
     private static Set<Path> expectedPidFiles(Path stateHome, SequencedSet<Path> workflowPaths) {
-        ManagedProcessStore store = new ManagedProcessStore(stateHome);
+        var store = new ManagedProcessStore(stateHome);
         return workflowPaths.stream()
                 .map(workflow -> store.files(workflow).pidFile())
                 .map(path -> path.toAbsolutePath().normalize())
@@ -2298,7 +2284,7 @@ final class SetupDiagnosticReporter {
             if (answer == null || !answer.toLowerCase(Locale.ROOT).startsWith("y")) {
                 return;
             }
-            String body = Files.readString(reportPath, StandardCharsets.UTF_8);
+            String body = Files.readString(reportPath);
             PrintStream out = borrowedOut(terminal); // NOPMD - Terminal owns the stream.
             out.println();
             out.println("Issue title:");
@@ -2439,12 +2425,10 @@ final class SetupDiagnosticReporter {
         return CliInputValidation.safeDiagnosticsText(redactAbsolutePosixPaths(sanitized));
     }
 
-    /**
-     * Replaces a sensitive value. An absolute-path value extends over a following path remainder
-     * and always renders as a path token, so one private path renders as one stable token that
-     * matches the path tokens elsewhere in the report instead of a value token or adjacent value
-     * and path tokens.
-     */
+    /// Replaces a sensitive value. An absolute-path value extends over a following path remainder
+    /// and always renders as a path token, so one private path renders as one stable token that
+    /// matches the path tokens elsewhere in the report instead of a value token or adjacent value
+    /// and path tokens.
     private String replaceSensitiveValue(String text, String sensitiveValue) {
         if (!looksLikeAbsolutePath(sensitiveValue)) {
             return text.replace(sensitiveValue, "<value:" + hash(sensitiveValue) + ">");
@@ -2458,7 +2442,7 @@ final class SetupDiagnosticReporter {
     }
 
     private String redactUrlUserInfo(String value) {
-        StringBuilder redacted = new StringBuilder(value.length());
+        var redacted = new StringBuilder(value.length());
         int cursor = 0;
         while (cursor < value.length()) {
             int schemeStart = nextHttpScheme(value, cursor);
@@ -2504,7 +2488,7 @@ final class SetupDiagnosticReporter {
     }
 
     private String redactGithubSshRemotes(String value) {
-        StringBuilder redacted = new StringBuilder(value.length());
+        var redacted = new StringBuilder(value.length());
         int cursor = 0;
         while (cursor < value.length()) {
             int git = indexOfIgnoreCase(value, GITHUB_SSH_HOST, cursor);
@@ -2556,7 +2540,7 @@ final class SetupDiagnosticReporter {
     }
 
     private String redactAbsolutePosixPaths(String value) {
-        StringBuilder redacted = new StringBuilder(value.length());
+        var redacted = new StringBuilder(value.length());
         int cursor = 0;
         while (cursor < value.length()) {
             int start = nextAbsolutePosixPathStart(value, cursor);
@@ -2941,7 +2925,7 @@ final class SetupDiagnosticReporter {
     private static String tail(Path path, int maxLines) {
         try (FileChannel channel = openLogFile(path)) {
             long size = channel.size();
-            int bytesToRead = (int) Math.min(LOG_BYTE_LIMIT, size);
+            var bytesToRead = (int) Math.min(LOG_BYTE_LIMIT, size);
             ByteBuffer buffer = ByteBuffer.allocate(bytesToRead);
             channel.position(Math.max(0, size - bytesToRead));
             while (buffer.hasRemaining() && channel.read(buffer) != -1) {

@@ -28,10 +28,8 @@ public record WorkflowServerPortClassification(Kind kind, Optional<Integer> port
         return new WorkflowServerPortClassification(Kind.UNREADABLE, Optional.empty());
     }
 
-    /**
-     * Ports the diagnostics report should list: valid ports get probed, out-of-range ports render
-     * the safe skip line. Omitted, unreadable, and non-numeric settings list nothing.
-     */
+    /// Ports the diagnostics report should list: valid ports get probed, out-of-range ports render
+    /// the safe skip line. Omitted, unreadable, and non-numeric settings list nothing.
     public Optional<Integer> probeOrSkipPort() {
         return kind == Kind.VALID || kind == Kind.OUT_OF_RANGE ? port : Optional.empty();
     }

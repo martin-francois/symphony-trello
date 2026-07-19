@@ -12,7 +12,7 @@ final class RepositoryDefaultSummaryTest {
     @Test
     void reportsPreservedPathDefaultWithoutCallingWorkflowRepositoryGeneral() {
         // given
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        var output = new ByteArrayOutputStream();
         TrelloBoardSetup.RepositoryDefaults defaults =
                 TrelloBoardSetup.RepositoryDefaults.preserved(null, "$SYNTHETIC_REPOSITORY_PATH");
 

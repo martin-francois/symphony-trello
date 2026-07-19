@@ -32,10 +32,8 @@ final class PromptSupport {
         return parseBoundedChoice(answer, maxChoice);
     }
 
-    /**
-     * Parses a finite prompt choice as an expected input error, so a typo never produces a raw
-     * Java parse message or an unexpected troubleshooting report.
-     */
+    /// Parses a finite prompt choice as an expected input error, so a typo never produces a raw
+    /// Java parse message or an unexpected troubleshooting report.
     static int parseBoundedChoice(String answer, int maxChoice) {
         int parsed;
         try {

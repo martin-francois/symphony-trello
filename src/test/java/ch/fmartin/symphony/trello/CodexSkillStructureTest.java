@@ -300,10 +300,10 @@ final class CodexSkillStructureTest {
 
     private SkillMetadata readSkillMetadata(Path file) {
         try {
-            String content = Files.readString(file, StandardCharsets.UTF_8);
+            String content = Files.readString(file);
             assertThat(content).as("front matter start for %s", file).startsWith("---\n");
             int end = content.indexOf("\n---\n", 4);
-            assertThat(end).as("front matter end for %s", file).isGreaterThan(0);
+            assertThat(end).as("front matter end for %s", file).isPositive();
             Map<String, Object> frontMatter = yaml.readValue(content.substring(4, end), MAP_TYPE);
             String body = content.substring(end + "\n---\n".length());
             return new SkillMetadata(

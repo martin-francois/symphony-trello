@@ -1,9 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
-/**
- * Help text shared by setup commands that declare the same option in different option classes,
- * so the descriptions and the documented max-agents bound cannot drift apart.
- */
+/// Help text shared by setup commands that declare the same option in different option classes,
+/// so the descriptions and the documented max-agents bound cannot drift apart.
 final class SetupOptionHelp {
     static final String SERVER_PORT = "Local HTTP status port.";
     static final String MAX_AGENTS = "Maximum cards processed concurrently for this board (1-"

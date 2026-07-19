@@ -63,7 +63,7 @@ final class StatusResourceTest {
         // given
         RuntimeSnapshot base = snapshotWithRunningCard();
         RuntimeSnapshot.RunningRow first = base.running().getFirst();
-        RuntimeSnapshot.RunningRow second = new RuntimeSnapshot.RunningRow(
+        var second = new RuntimeSnapshot.RunningRow(
                 "card-2",
                 "TRELLO-second",
                 "https://trello.com/c/SYNTH003",
@@ -96,7 +96,7 @@ final class StatusResourceTest {
         sourceLog.put("path", "session.log");
         List<Map<String, Object>> sourceLogs = new ArrayList<>();
         sourceLogs.add(sourceLog);
-        CardDebugDetails.LogInfo logInfo = new CardDebugDetails.LogInfo(sourceLogs);
+        var logInfo = new CardDebugDetails.LogInfo(sourceLogs);
 
         // when
         List<Map<String, Object>> snapshot = logInfo.codexSessionLogs();
@@ -114,7 +114,7 @@ final class StatusResourceTest {
     void statusBannerDoesNotRenderRateLimitAccountProviderOrCommandDetails() {
         // given
         RuntimeSnapshot base = snapshotWithRunningCard();
-        RuntimeSnapshot privateSnapshot = new RuntimeSnapshot(
+        var privateSnapshot = new RuntimeSnapshot(
                 base.generatedAt(),
                 base.counts(),
                 base.routing(),
@@ -152,7 +152,7 @@ final class StatusResourceTest {
 
         // then
         assertThat(state).isInstanceOf(StateSnapshotResponse.class);
-        StateSnapshotResponse response = (StateSnapshotResponse) state;
+        var response = (StateSnapshotResponse) state;
         assertThat(response.running()).singleElement().satisfies(row -> assertThat(row.cardUrl())
                 .isEqualTo("https://trello.com/c/SYNTH001"));
         assertThat(response.retrying()).singleElement().satisfies(row -> assertThat(row.cardUrl())
@@ -205,7 +205,7 @@ final class StatusResourceTest {
     @Test
     void returnsCardDetailsOrTypedNotFound() {
         // given
-        CardDebugDetails details = new CardDebugDetails(
+        var details = new CardDebugDetails(
                 "TRELLO-abc",
                 "card-1",
                 "running",

@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.sun.source.tree.AnnotationTree;
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.tree.ExpressionTree;
@@ -29,6 +30,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -57,6 +59,38 @@ import org.junit.jupiter.api.io.TempDir;
 final class TestConventionTest {
     private static final TypeReference<LinkedHashMap<String, Object>> JSON_OBJECT = new TypeReference<>() {};
     private static final ObjectMapper JSON = new ObjectMapper();
+    private static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
+    private static final String OPENREWRITE_STATUS_ACTIVE_BEFORE_REVIEW = "Active before review";
+    private static final String OPENREWRITE_STATUS_ACTIVATE = "Activate";
+    private static final String OPENREWRITE_STATUS_BREAKING_RELEASE_CANDIDATE = "Breaking-release candidate";
+    private static final String OPENREWRITE_STATUS_CONTINGENT = "Contingent";
+    private static final String OPENREWRITE_STATUS_PARENT_CONFIGURED_PRIMITIVE = "Parent/configured primitive";
+    private static final String OPENREWRITE_STATUS_REJECTED = "Rejected";
+    private static final Set<String> OPENREWRITE_ACTIVE_STATUSES =
+            Set.of(OPENREWRITE_STATUS_ACTIVE_BEFORE_REVIEW, OPENREWRITE_STATUS_ACTIVATE);
+    private static final Set<String> OPENREWRITE_STATUSES = Set.of(
+            OPENREWRITE_STATUS_ACTIVE_BEFORE_REVIEW,
+            OPENREWRITE_STATUS_ACTIVATE,
+            OPENREWRITE_STATUS_BREAKING_RELEASE_CANDIDATE,
+            OPENREWRITE_STATUS_CONTINGENT,
+            OPENREWRITE_STATUS_PARENT_CONFIGURED_PRIMITIVE,
+            OPENREWRITE_STATUS_REJECTED);
+    private static final Pattern OPENREWRITE_DECISION_ROW =
+            Pattern.compile("^\\| `([^`]+)` \\| ([^|]+) \\| ([^|]+) \\| (.*) \\|$");
+    private static final Pattern OPENREWRITE_STATUS_SUMMARY_ROW =
+            Pattern.compile("^\\| ([^|]+) \\| ([^|]+) \\| (.*) \\|$");
+    private static final Pattern OPENREWRITE_TABLE_RECIPE_ROW = Pattern.compile("^\\| `([^`]+)`");
+    private static final Pattern OPENREWRITE_ACTIVE_COUNT =
+            Pattern.compile("`rewrite\\.yml` therefore contains ([0-9,]+)\\s+active entries");
+    private static final Pattern OPENREWRITE_COUNT = Pattern.compile("(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)");
+    private static final Pattern OPENREWRITE_BOLD_COUNT =
+            Pattern.compile("\\*\\*((?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+))\\*\\*");
+    private static final String USE_STATIC_IMPORT = "org.openrewrite.java.UseStaticImport";
+    private static final String ASSERTJ_STATIC_IMPORTS = "org.openrewrite.java.testing.assertj.StaticImports";
+    private static final String SIMPLIFY_TERNARY_PARENT = "org.openrewrite.staticanalysis.SimplifyTernaryRecipes";
+    private static final Set<String> SIMPLIFY_TERNARY_LEAVES = Set.of(
+            "org.openrewrite.staticanalysis.SimplifyTernaryRecipes$SimplifyTernaryTrueFalseRecipe",
+            "org.openrewrite.staticanalysis.SimplifyTernaryRecipes$SimplifyTernaryFalseTrueRecipe");
     private static final Pattern SIMPLE_MANUAL_MOCK = Pattern.compile(
             "\\b(new\\s+AgentRunner\\s*\\(\\)|extends\\s+(SymphonyOrchestrator|CodexAppServerClient)|implements\\s+AgentRunner)");
     private static final Set<String> ASSERTJ_BOOLEAN_ENTRY_POINTS = Set.of("assertThat", "assumeThat", "given", "then");
@@ -668,9 +702,11 @@ final class TestConventionTest {
                 Path.of("src/main/java/ch/fmartin/symphony/trello/workflow/WorkflowDefinition.java"),
                 Path.of("src/main/java/ch/fmartin/symphony/trello/tracker/CardLookupResult.java"),
                 Path.of("src/main/java/ch/fmartin/symphony/trello/domain/BlockerRef.java"));
+        Path codexSandboxPolicy = Path.of("src/main/java/ch/fmartin/symphony/trello/workflow/CodexSandboxPolicy.java");
 
         // when
         Map<Path, String> sources = sourcesByPath(nullMarkedBoundaries);
+        String codexSandboxPolicySource = Files.readString(codexSandboxPolicy);
 
         // then
         assertThat(sources).allSatisfy((boundary, source) -> assertThat(source)
@@ -680,6 +716,316 @@ final class TestConventionTest {
                 .contains("@Nullable RepositoryIdentity identity", "@Nullable Path path");
         assertThat(sources.get(Path.of("src/main/java/ch/fmartin/symphony/trello/config/EffectiveConfig.java")))
                 .contains("record RepositoryConfig(@Nullable String defaultUrl, @Nullable Path defaultPath)");
+        assertThat(codexSandboxPolicySource)
+                .as("%s should document intentional nullable public contracts", codexSandboxPolicy)
+                .contains(
+                        "public static void validateCodexSection(@Nullable Object codexValue)",
+                        "public static boolean hasExplicitPolicy(@Nullable Object codexValue)",
+                        "public static @Nullable JsonNode effectivePolicy(");
+    }
+
+    @Test
+    void openRewriteAllowlistMatchesDecisionLedger() throws IOException {
+        // given
+        Map<String, Object> rewrite = YAML.readValue(Path.of("rewrite.yml").toFile(), JSON_OBJECT);
+        List<String> decisionLines = Files.readAllLines(Path.of("docs/openrewrite-zero-result-decisions.md"));
+        List<String> positiveDecisionLines = Files.readAllLines(Path.of("docs/openrewrite-recipe-decisions.md"));
+
+        // when
+        List<String> configuredRecipeIds = configuredOpenRewriteRecipeIds(rewrite);
+        assertThat(configuredRecipeIds)
+                .as("rewrite.yml recipeList should not contain duplicate recipe IDs")
+                .doesNotHaveDuplicates();
+        Set<String> activeRecipeIds = new LinkedHashSet<>(configuredRecipeIds);
+        Map<String, String> decisions = openRewriteDecisions(decisionLines);
+        Set<String> expectedActiveRecipeIds = expectedActiveOpenRewriteRecipeIds(decisions, positiveDecisionLines);
+        Set<String> breakingDecisionIds =
+                openRewriteDecisionIdsWithStatuses(decisions, Set.of(OPENREWRITE_STATUS_BREAKING_RELEASE_CANDIDATE));
+        List<String> listedBreakingIds =
+                openRewriteRecipeIdsInSection(decisionLines, "## Preferable Breaking-Release Candidates");
+        OpenRewriteStatusSummary documentedSummary =
+                openRewriteStatusSummary(openRewriteLinesInSection(decisionLines, "## Status Summary"));
+        var activeCountMatcher = OPENREWRITE_ACTIVE_COUNT.matcher(String.join("\n", decisionLines));
+
+        // then
+        assertThat(activeCountMatcher.find())
+                .as("the decision ledger should state the exact active rewrite.yml entry count")
+                .isTrue();
+        int documentedActiveCount =
+                parseOpenRewriteCount(activeCountMatcher.group(1), "documented OpenRewrite active-entry count");
+        assertThat(configuredRecipeIds).hasSize(documentedActiveCount);
+        assertThat(activeRecipeIds).hasSameElementsAs(expectedActiveRecipeIds);
+        assertThat(listedBreakingIds).doesNotHaveDuplicates();
+        assertThat(listedBreakingIds).containsExactlyInAnyOrderElementsOf(breakingDecisionIds);
+        assertOpenRewriteStatusSummaryMatchesDecisions(decisions, documentedSummary);
+        assertThat(decisions.entrySet())
+                .allSatisfy(decision -> assertOpenRewriteDecisionMatchesAllowlist(activeRecipeIds, decision));
+    }
+
+    @Test
+    void openRewriteStatusSummaryAcceptsDocumentedZeroCounts() {
+        // given
+        List<String> summaryLines = List.of(
+                "| Rejected | 1 | One canonical decision. |",
+                "| Contingent | 0 | No contingent decisions. |",
+                "| **Total** | **1** | One canonical decision. |");
+        Map<String, String> decisions = Map.of("example.Recipe", OPENREWRITE_STATUS_REJECTED);
+        OpenRewriteStatusSummary documentedSummary = openRewriteStatusSummary(summaryLines);
+
+        // when
+        Throwable failure =
+                catchThrowable(() -> assertOpenRewriteStatusSummaryMatchesDecisions(decisions, documentedSummary));
+
+        // then
+        assertThat(failure)
+                .as("a documented status with zero decisions should match the decision ledger")
+                .isNull();
+    }
+
+    @Test
+    void openRewriteDecisionLedgerRejectsMalformedRowsUnknownStatusesAndStaleCounts() {
+        // given
+        List<String> unknownDecisionLines = List.of(
+                "## Zero-Result and Mixed-Evidence Decisions",
+                "| Recipe ID | Decision | Evidence scope | Individual reason |",
+                "| --- | --- | --- | --- |",
+                "| `example.Recipe` | Unexpected | `fixture` | Unknown statuses must fail. |",
+                "## Preferable Breaking-Release Candidates",
+                "## Quarkus Target Declarations");
+        List<String> malformedDecisionLines = List.of(
+                "## Zero-Result and Mixed-Evidence Decisions",
+                "| Recipe ID | Decision | Evidence scope | Individual reason |",
+                "| --- | --- | --- | --- |",
+                "| example.Recipe | Rejected | `fixture` | Malformed rows must fail. |",
+                "## Preferable Breaking-Release Candidates",
+                "## Quarkus Target Declarations");
+        List<String> unknownSummaryLines = List.of("| Status typo | 1 | Header-like unknown statuses must fail. |");
+        List<String> malformedCountLines = List.of("| Rejected | 3,73 | Malformed numeric grouping must fail. |");
+        List<String> staleTotalLines = List.of(
+                "| Rejected | 1 | One canonical decision. |", "| **Total** | **2** | A stale total must fail. |");
+
+        // when
+        Throwable unknownDecisionFailure = catchThrowable(() -> openRewriteDecisions(unknownDecisionLines));
+        Throwable malformedDecisionFailure = catchThrowable(() -> openRewriteDecisions(malformedDecisionLines));
+        Throwable unknownSummaryFailure = catchThrowable(() -> openRewriteStatusSummary(unknownSummaryLines));
+        Throwable malformedCountFailure = catchThrowable(() -> openRewriteStatusSummary(malformedCountLines));
+        OpenRewriteStatusSummary staleSummary = openRewriteStatusSummary(staleTotalLines);
+        Throwable staleTotalFailure = catchThrowable(() -> assertOpenRewriteStatusSummaryMatchesDecisions(
+                Map.of("example.Recipe", OPENREWRITE_STATUS_REJECTED), staleSummary));
+
+        // then
+        assertThat(unknownDecisionFailure)
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("decision status should be recognized")
+                .hasMessageContaining("Unexpected");
+        assertThat(malformedDecisionFailure)
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("decision row should have an ID and status")
+                .hasMessageContaining("example.Recipe");
+        assertThat(unknownSummaryFailure)
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("summary status should be recognized")
+                .hasMessageContaining("Status typo");
+        assertThat(malformedCountFailure)
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("documented OpenRewrite Rejected row count")
+                .hasMessageContaining("3,73");
+        assertThat(staleTotalFailure)
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("documented OpenRewrite total")
+                .hasMessageContaining("2");
+    }
+
+    private static List<String> configuredOpenRewriteRecipeIds(Map<String, Object> rewrite) {
+        Object configuredRecipes = rewrite.get("recipeList");
+        assertThat(configuredRecipes).as("rewrite.yml recipeList").isInstanceOf(List.class);
+
+        List<String> recipeIds = new ArrayList<>();
+        for (Object configuredRecipe : (List<?>) configuredRecipes) {
+            String recipeId;
+            if (configuredRecipe instanceof String scalarRecipeId) {
+                recipeId = scalarRecipeId;
+            } else {
+                assertThat(configuredRecipe).as("configured OpenRewrite recipe").isInstanceOf(Map.class);
+                var configuredRecipeMap = (Map<?, ?>) configuredRecipe;
+                assertThat(configuredRecipeMap).hasSize(1);
+                Object configuredRecipeId =
+                        configuredRecipeMap.keySet().iterator().next();
+                assertThat(configuredRecipeId).isInstanceOf(String.class);
+                recipeId = (String) configuredRecipeId;
+            }
+            recipeIds.add(recipeId);
+        }
+        return recipeIds;
+    }
+
+    private static Set<String> expectedActiveOpenRewriteRecipeIds(
+            Map<String, String> decisions, List<String> positiveDecisionLines) {
+        Set<String> expectedRecipeIds = openRewriteDecisionIdsWithStatuses(decisions, OPENREWRITE_ACTIVE_STATUSES);
+        assertThat(expectedRecipeIds.remove(SIMPLIFY_TERNARY_PARENT))
+                .as("%s should be represented by its reviewed leaves", SIMPLIFY_TERNARY_PARENT)
+                .isTrue();
+        expectedRecipeIds.addAll(SIMPLIFY_TERNARY_LEAVES);
+
+        List<String> acceptedRecipeIds = openRewriteRecipeIdsInSection(positiveDecisionLines, "## Accepted Recipes");
+        assertThat(acceptedRecipeIds)
+                .as("accepted OpenRewrite recipe IDs should be unique")
+                .doesNotHaveDuplicates();
+        for (String acceptedRecipeId : acceptedRecipeIds) {
+            expectedRecipeIds.add(
+                    USE_STATIC_IMPORT.equals(acceptedRecipeId) ? ASSERTJ_STATIC_IMPORTS : acceptedRecipeId);
+        }
+        return expectedRecipeIds;
+    }
+
+    private static Set<String> openRewriteDecisionIdsWithStatuses(
+            Map<String, String> decisions, Set<String> expectedStatuses) {
+        Set<String> recipeIds = new LinkedHashSet<>();
+        for (Map.Entry<String, String> decision : decisions.entrySet()) {
+            if (expectedStatuses.contains(decision.getValue())) {
+                recipeIds.add(decision.getKey());
+            }
+        }
+        return recipeIds;
+    }
+
+    private static List<String> openRewriteRecipeIdsInSection(List<String> lines, String heading) {
+        List<String> recipeIds = new ArrayList<>();
+        for (String line : openRewriteLinesInSection(lines, heading)) {
+            var matcher = OPENREWRITE_TABLE_RECIPE_ROW.matcher(line);
+            if (matcher.find()) {
+                recipeIds.add(matcher.group(1));
+            }
+        }
+        return recipeIds;
+    }
+
+    private static Map<String, String> openRewriteDecisions(List<String> decisionLines) {
+        Map<String, String> decisions = new LinkedHashMap<>();
+        List<String> decisionHeadings =
+                List.of("## Zero-Result and Mixed-Evidence Decisions", "## Quarkus Target Declarations");
+        for (String heading : decisionHeadings) {
+            for (String line : openRewriteLinesInSection(decisionLines, heading)) {
+                if (!line.startsWith("|")
+                        || "| Recipe ID | Decision | Evidence scope | Individual reason |".equals(line)
+                        || "| --- | --- | --- | --- |".equals(line)) {
+                    continue;
+                }
+                var matcher = OPENREWRITE_DECISION_ROW.matcher(line);
+                assertThat(matcher.find())
+                        .as("OpenRewrite decision row should have an ID and status: %s", line)
+                        .isTrue();
+                String recipeId = matcher.group(1);
+                String status = matcher.group(2).strip();
+                assertThat(OPENREWRITE_STATUSES)
+                        .as("OpenRewrite decision status should be recognized: %s", status)
+                        .contains(status);
+                assertThat(decisions.put(recipeId, status))
+                        .as("OpenRewrite decision IDs should be unique: %s", recipeId)
+                        .isNull();
+            }
+        }
+        return decisions;
+    }
+
+    private static OpenRewriteStatusSummary openRewriteStatusSummary(List<String> decisionLines) {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        List<Integer> totals = new ArrayList<>();
+        for (String line : decisionLines) {
+            if (!line.startsWith("|")
+                    || "| Status | Rows | Meaning |".equals(line)
+                    || "| --- | ---: | --- |".equals(line)) {
+                continue;
+            }
+            var matcher = OPENREWRITE_STATUS_SUMMARY_ROW.matcher(line);
+            assertThat(matcher.find())
+                    .as("OpenRewrite status summary row should have a status and count: %s", line)
+                    .isTrue();
+            String status = matcher.group(1).strip();
+            String rawCount = matcher.group(2).strip();
+            if ("**Total**".equals(status)) {
+                var totalMatcher = OPENREWRITE_BOLD_COUNT.matcher(rawCount);
+                assertThat(totalMatcher.matches())
+                        .as("documented OpenRewrite total should be a bold, valid integer: %s", rawCount)
+                        .isTrue();
+                totals.add(parseOpenRewriteCount(totalMatcher.group(1), "documented OpenRewrite total"));
+                continue;
+            }
+            assertThat(OPENREWRITE_STATUSES)
+                    .as("OpenRewrite summary status should be recognized: %s", status)
+                    .contains(status);
+            assertThat(counts.put(
+                            status,
+                            parseOpenRewriteCount(rawCount, "documented OpenRewrite %s row count".formatted(status))))
+                    .as("OpenRewrite status summary rows should be unique: %s", status)
+                    .isNull();
+        }
+        assertThat(totals)
+                .as("OpenRewrite status summary should contain one total row")
+                .hasSize(1);
+        return new OpenRewriteStatusSummary(counts, totals.getFirst());
+    }
+
+    private static void assertOpenRewriteStatusSummaryMatchesDecisions(
+            Map<String, String> decisions, OpenRewriteStatusSummary documentedSummary) {
+        Map<String, Integer> actualCounts = new LinkedHashMap<>();
+        for (String documentedStatus : documentedSummary.counts().keySet()) {
+            actualCounts.put(documentedStatus, 0);
+        }
+        for (String status : decisions.values()) {
+            actualCounts.merge(status, 1, Integer::sum);
+        }
+        assertThat(actualCounts).containsExactlyInAnyOrderEntriesOf(documentedSummary.counts());
+        assertThat(decisions)
+                .as("documented OpenRewrite total %s should equal the decision-row count", documentedSummary.total())
+                .hasSize(documentedSummary.total());
+    }
+
+    private static List<String> openRewriteLinesInSection(List<String> lines, String heading) {
+        List<String> sectionLines = new ArrayList<>();
+        boolean sectionFound = false;
+        for (String line : lines) {
+            if (heading.equals(line)) {
+                sectionFound = true;
+            } else if (sectionFound && line.startsWith("## ")) {
+                break;
+            } else if (sectionFound) {
+                sectionLines.add(line);
+            }
+        }
+        assertThat(sectionFound).as("OpenRewrite decision section %s", heading).isTrue();
+        return sectionLines;
+    }
+
+    private static int parseOpenRewriteCount(String rawCount, String description) {
+        assertThat(rawCount)
+                .as("%s should be a valid integer with conventional comma grouping: %s", description, rawCount)
+                .matches(OPENREWRITE_COUNT);
+        try {
+            return Integer.parseInt(rawCount.replace(",", ""));
+        } catch (NumberFormatException e) {
+            throw new AssertionError("%s should be a valid integer: %s".formatted(description, rawCount), e);
+        }
+    }
+
+    private static void assertOpenRewriteDecisionMatchesAllowlist(
+            Set<String> activeRecipeIds, Map.Entry<String, String> decision) {
+        String recipeId = decision.getKey();
+        boolean activeDecision = OPENREWRITE_ACTIVE_STATUSES.contains(decision.getValue());
+        if (SIMPLIFY_TERNARY_PARENT.equals(recipeId)) {
+            assertThat(activeDecision)
+                    .as("%s should retain an active ledger status", SIMPLIFY_TERNARY_PARENT)
+                    .isTrue();
+            assertThat(activeRecipeIds).containsAll(SIMPLIFY_TERNARY_LEAVES).doesNotContain(recipeId);
+        } else if (activeDecision) {
+            assertThat(activeRecipeIds)
+                    .as("%s should be active because its ledger status is %s", recipeId, decision.getValue())
+                    .contains(recipeId);
+        } else {
+            assertThat(activeRecipeIds)
+                    .as("%s should remain inactive because its ledger status is %s", recipeId, decision.getValue())
+                    .doesNotContain(recipeId);
+        }
     }
 
     private static Map<Path, String> sourcesByPath(List<Path> paths) throws IOException {
@@ -988,11 +1334,11 @@ final class TestConventionTest {
     private static ParsedJavaFile compileJava(Path file, String source, boolean analyze) throws IOException {
         JavaCompiler compiler =
                 Objects.requireNonNull(ToolProvider.getSystemJavaCompiler(), "Test convention checks require a JDK");
-        DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+        var diagnostics = new DiagnosticCollector<JavaFileObject>();
         try (StandardJavaFileManager fileManager =
                 compiler.getStandardFileManager(diagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
             JavaFileObject sourceFile = sourceFile(file, source);
-            JavacTask task = (JavacTask)
+            var task = (JavacTask)
                     compiler.getTask(null, fileManager, diagnostics, List.of("-proc:none"), null, List.of(sourceFile));
             List<CompilationUnitTree> units = parseCompilationUnits(task);
             rejectParseErrors(file, diagnostics);
@@ -1008,7 +1354,7 @@ final class TestConventionTest {
     private static List<ParsedJavaFile> analyzeJava(List<Path> files) throws IOException {
         JavaCompiler compiler =
                 Objects.requireNonNull(ToolProvider.getSystemJavaCompiler(), "Test convention checks require a JDK");
-        DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+        var diagnostics = new DiagnosticCollector<JavaFileObject>();
         Map<Path, Path> sourcePaths = new HashMap<>();
         for (Path file : files) {
             sourcePaths.put(file.toAbsolutePath().normalize(), file);
@@ -1016,7 +1362,7 @@ final class TestConventionTest {
         try (StandardJavaFileManager fileManager =
                 compiler.getStandardFileManager(diagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
             Iterable<? extends JavaFileObject> sourceFiles = fileManager.getJavaFileObjectsFromPaths(files);
-            JavacTask task = (JavacTask)
+            var task = (JavacTask)
                     compiler.getTask(null, fileManager, diagnostics, List.of("-proc:none"), null, sourceFiles);
             List<CompilationUnitTree> units = parseCompilationUnits(task);
             rejectParseErrors(diagnostics);
@@ -1189,6 +1535,8 @@ final class TestConventionTest {
         CHARACTER,
         TEXT_BLOCK
     }
+
+    private record OpenRewriteStatusSummary(Map<String, Integer> counts, int total) {}
 
     private record ParsedJavaFile(Path file, CompilationUnitTree unit, Trees trees, Types types) {}
 

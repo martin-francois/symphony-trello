@@ -28,7 +28,7 @@ final class WorkflowLoaderTest {
 
                 Current workflow body.
                 """);
-        Files.writeString(workflow, original, StandardCharsets.UTF_8);
+        Files.writeString(workflow, original);
 
         // when
         WorkflowDefinition loaded = loader.load(workflow);
@@ -50,7 +50,7 @@ final class WorkflowLoaderTest {
 
                 This workflow uses a private top-level symphony note.
                 """);
-        Files.writeString(workflow, original, StandardCharsets.UTF_8);
+        Files.writeString(workflow, original);
 
         // when
         WorkflowDefinition loaded = loader.load(workflow);
@@ -79,7 +79,7 @@ final class WorkflowLoaderTest {
 
                 Card URL: {{ card.url }}
                 """);
-        Files.writeString(workflow, original, StandardCharsets.UTF_8);
+        Files.writeString(workflow, original);
 
         // when
         WorkflowDefinition loaded = loader.load(workflow);
@@ -95,7 +95,7 @@ final class WorkflowLoaderTest {
     void rejectsNullTopLevelFrontMatterEntries(String frontMatter) throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.null-top-level.md");
-        Files.writeString(workflow, workflowWithExtraFrontMatter(frontMatter, "Body"), StandardCharsets.UTF_8);
+        Files.writeString(workflow, workflowWithExtraFrontMatter(frontMatter, "Body"));
 
         // when
         WorkflowException failure = catchThrowableOfType(() -> loader.load(workflow), WorkflowException.class);
@@ -117,7 +117,7 @@ final class WorkflowLoaderTest {
                   default_path: null
                 """,
                 "Body");
-        Files.writeString(workflow, original, StandardCharsets.UTF_8);
+        Files.writeString(workflow, original);
 
         // when
         WorkflowDefinition loaded = loader.load(workflow);

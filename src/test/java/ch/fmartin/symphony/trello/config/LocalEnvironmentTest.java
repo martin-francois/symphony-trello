@@ -3,7 +3,6 @@ package ch.fmartin.symphony.trello.config;
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_BYTE_ORDER_MARK;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -33,51 +32,47 @@ final class LocalEnvironmentTest {
         var apiToken = LocalEnvironment.get("TRELLO_API_TOKEN", dotenv, Map.of());
 
         // then
-        assertThat(apiKey).contains("key-from-dotenv");
-        assertThat(apiToken).contains("token-from-dotenv");
+        assertThat(apiKey).hasValue("key-from-dotenv");
+        assertThat(apiToken).hasValue("token-from-dotenv");
     }
 
     @Test
     void ignoresOneLeadingUtf8ByteOrderMarkBeforeTheFirstKey() throws Exception {
         // given
         Path dotenv = tempDir.resolve(".env");
-        Files.writeString(dotenv, UNICODE_BYTE_ORDER_MARK + "TRELLO_API_KEY=key-behind-bom\n", StandardCharsets.UTF_8);
+        Files.writeString(dotenv, UNICODE_BYTE_ORDER_MARK + "TRELLO_API_KEY=key-behind-bom\n");
 
         // when
         var apiKey = LocalEnvironment.get("TRELLO_API_KEY", dotenv, Map.of());
 
         // then
-        assertThat(apiKey).contains("key-behind-bom");
+        assertThat(apiKey).hasValue("key-behind-bom");
     }
 
     @Test
     void parsesQuotedValueWithTrailingCommentBehindAByteOrderMark() throws Exception {
         // given
         Path dotenv = tempDir.resolve(".env");
-        Files.writeString(
-                dotenv,
-                UNICODE_BYTE_ORDER_MARK + "TRELLO_API_KEY=\"quoted-key\" # personal key\n",
-                StandardCharsets.UTF_8);
+        Files.writeString(dotenv, UNICODE_BYTE_ORDER_MARK + "TRELLO_API_KEY=\"quoted-key\" # personal key\n");
 
         // when
         var apiKey = LocalEnvironment.get("TRELLO_API_KEY", dotenv, Map.of());
 
         // then
-        assertThat(apiKey).contains("quoted-key");
+        assertThat(apiKey).hasValue("quoted-key");
     }
 
     @Test
     void parsesExportPrefixBehindAByteOrderMark() throws Exception {
         // given
         Path dotenv = tempDir.resolve(".env");
-        Files.writeString(
-                dotenv, UNICODE_BYTE_ORDER_MARK + "export TRELLO_API_KEY=exported-key\n", StandardCharsets.UTF_8);
+        Files.writeString(dotenv, UNICODE_BYTE_ORDER_MARK + "export TRELLO_API_KEY=exported-key\n");
 
         // when
         var apiKey = LocalEnvironment.get("TRELLO_API_KEY", dotenv, Map.of());
 
         // then
-        assertThat(apiKey).contains("exported-key");
+        assertThat(apiKey).hasValue("exported-key");
     }
 
     @Test
@@ -86,8 +81,7 @@ final class LocalEnvironmentTest {
         Path dotenv = tempDir.resolve(".env");
         Files.writeString(
                 dotenv,
-                UNICODE_BYTE_ORDER_MARK + UNICODE_BYTE_ORDER_MARK + "TRELLO_API_KEY=value\nTRELLO_API_TOKEN=token\n",
-                StandardCharsets.UTF_8);
+                UNICODE_BYTE_ORDER_MARK + UNICODE_BYTE_ORDER_MARK + "TRELLO_API_KEY=value\nTRELLO_API_TOKEN=token\n");
 
         // when
         var apiKey = LocalEnvironment.get("TRELLO_API_KEY", dotenv, Map.of());
@@ -95,7 +89,7 @@ final class LocalEnvironmentTest {
 
         // then
         assertThat(apiKey).isEmpty();
-        assertThat(apiToken).contains("token");
+        assertThat(apiToken).hasValue("token");
     }
 
     @Test
@@ -108,7 +102,7 @@ final class LocalEnvironmentTest {
         var apiKey = LocalEnvironment.get("TRELLO_API_KEY", dotenv, Map.of("TRELLO_API_KEY", "key-from-env"));
 
         // then
-        assertThat(apiKey).contains("key-from-env");
+        assertThat(apiKey).hasValue("key-from-env");
     }
 
     @Test
@@ -122,7 +116,7 @@ final class LocalEnvironmentTest {
                 dotenv, Map.of("QUARKUS_HTTP_PORT", "19080"), "SYMPHONY_HTTP_PORT", "QUARKUS_HTTP_PORT");
 
         // then
-        assertThat(port).contains("19080");
+        assertThat(port).hasValue("19080");
     }
 
     @Test
@@ -139,7 +133,7 @@ final class LocalEnvironmentTest {
                 "QUARKUS_HTTP_PORT");
 
         // then
-        assertThat(port).contains("18080");
+        assertThat(port).hasValue("18080");
     }
 
     @Test
@@ -152,7 +146,7 @@ final class LocalEnvironmentTest {
         var apiToken = LocalEnvironment.get("TRELLO_API_TOKEN", dotenv, Map.of());
 
         // then
-        assertThat(apiToken).contains("token\"quoted\\path\tvalue");
+        assertThat(apiToken).hasValue("token\"quoted\\path\tvalue");
     }
 
     @Test
@@ -165,7 +159,7 @@ final class LocalEnvironmentTest {
         var workflowPath = LocalEnvironment.get("SYMPHONY_WORKFLOW_PATH", dotenv, Map.of());
 
         // then
-        assertThat(workflowPath).contains("C:\\Users\\Jane Doe\\WORKFLOW.md");
+        assertThat(workflowPath).hasValue("C:\\Users\\Jane Doe\\WORKFLOW.md");
     }
 
     @Test
@@ -211,8 +205,7 @@ final class LocalEnvironmentTest {
                 PLAIN=plain-value # plain comment
                 HASH_IN_VALUE=abc#def
                 HASH_IN_QUOTES="value # not a comment"
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         Map<String, String> values = LocalEnvironment.load(dotenv);

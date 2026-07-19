@@ -531,7 +531,7 @@ public class TrelloHandoffToolHandler {
     }
 
     private static String shortTaskSummary(String title) {
-        StringBuilder plain = new StringBuilder();
+        var plain = new StringBuilder();
         boolean previousWhitespace = true;
         if (title != null) {
             PrimitiveIterator.OfInt codePoints = title.codePoints().iterator();
@@ -897,12 +897,10 @@ public class TrelloHandoffToolHandler {
                 + " comments manually and keep this one.";
     }
 
-    /**
-     * A managed comment family should have one authoritative comment, so destructive-policy cleanup
-     * removes duplicates only after the authoritative state is safe. Failed or unaddressable deletes
-     * stay visible and are reported instead of disappearing from the cleanup totals. Workpad callers
-     * additionally fail when an undeleted duplicate owns the managed usage section.
-     */
+    /// A managed comment family should have one authoritative comment, so destructive-policy cleanup
+    /// removes duplicates only after the authoritative state is safe. Failed or unaddressable deletes
+    /// stay visible and are reported instead of disappearing from the cleanup totals. Workpad callers
+    /// additionally fail when an undeleted duplicate owns the managed usage section.
     private DuplicateCleanup removeDuplicateManagedComments(
             EffectiveConfig config, List<Card.Comment> managedComments, Card.Comment primary, String logEvent) {
         int removed = 0;
@@ -969,11 +967,9 @@ public class TrelloHandoffToolHandler {
                 + TrelloMarkdown.escapeLeadingHashtags(trimmed);
     }
 
-    /**
-     * Agents often echo the previous workpad body into the next upsert, so a cleanup note from an
-     * earlier update is dropped before the fresh state is decided. This keeps the note from
-     * accumulating and removes it once the duplicates are gone.
-     */
+    /// Agents often echo the previous workpad body into the next upsert, so a cleanup note from an
+    /// earlier update is dropped before the fresh state is decided. This keeps the note from
+    /// accumulating and removes it once the duplicates are gone.
     private static String stripManualCleanupNotes(String text) {
         if (!text.contains(DUPLICATE_WORKPADS_NOTE_PREFIX)) {
             return text;
