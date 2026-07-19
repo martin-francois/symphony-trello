@@ -66,8 +66,8 @@ The following families are rejected for this project at this time:
   project's Optional guidance. Optional cleanup remains covered by explicit review and the dedicated
   Optional rules.
 * `FileRules.FilesReadString`: keep this Picnic rule outside the Refaster profile because
-  [ADR 0068](0068-curated-openrewrite-maintenance-lane.md) now gives the broader, consistently
-  measured `RedundantUtf8Charset` OpenRewrite leaf ownership of redundant charset cleanup. ADR 0068
+  [ADR 0070](0070-curated-openrewrite-maintenance-lane.md) now gives the broader, consistently
+  measured `RedundantUtf8Charset` OpenRewrite leaf ownership of redundant charset cleanup. ADR 0070
   supersedes this ADR's earlier conclusion that repeating `StandardCharsets.UTF_8` on Java APIs
   whose contract already specifies UTF-8 is clearer.
 * `StringRules`, `StreamRules.StreamMapFirst`, `StreamRules.StreamCollectLeastStream`, and

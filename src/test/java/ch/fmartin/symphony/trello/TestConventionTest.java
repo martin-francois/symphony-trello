@@ -60,13 +60,21 @@ final class TestConventionTest {
     private static final TypeReference<LinkedHashMap<String, Object>> JSON_OBJECT = new TypeReference<>() {};
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
+    private static final String OPENREWRITE_STATUS_ACTIVE_BEFORE_REVIEW = "Active before review";
+    private static final String OPENREWRITE_STATUS_ACTIVATE = "Activate";
+    private static final String OPENREWRITE_STATUS_BREAKING_RELEASE_CANDIDATE = "Breaking-release candidate";
+    private static final String OPENREWRITE_STATUS_CONTINGENT = "Contingent";
+    private static final String OPENREWRITE_STATUS_PARENT_CONFIGURED_PRIMITIVE = "Parent/configured primitive";
+    private static final String OPENREWRITE_STATUS_REJECTED = "Rejected";
+    private static final Set<String> OPENREWRITE_ACTIVE_STATUSES =
+            Set.of(OPENREWRITE_STATUS_ACTIVE_BEFORE_REVIEW, OPENREWRITE_STATUS_ACTIVATE);
     private static final Set<String> OPENREWRITE_STATUSES = Set.of(
-            "Active before review",
-            "Activate",
-            "Breaking-release candidate",
-            "Contingent",
-            "Parent/configured primitive",
-            "Rejected");
+            OPENREWRITE_STATUS_ACTIVE_BEFORE_REVIEW,
+            OPENREWRITE_STATUS_ACTIVATE,
+            OPENREWRITE_STATUS_BREAKING_RELEASE_CANDIDATE,
+            OPENREWRITE_STATUS_CONTINGENT,
+            OPENREWRITE_STATUS_PARENT_CONFIGURED_PRIMITIVE,
+            OPENREWRITE_STATUS_REJECTED);
     private static final Pattern OPENREWRITE_DECISION_ROW =
             Pattern.compile("^\\| `([^`]+)` \\| ([^|]+) \\| ([^|]+) \\| (.*) \\|$");
     private static final Pattern OPENREWRITE_STATUS_SUMMARY_ROW =
@@ -725,10 +733,14 @@ final class TestConventionTest {
 
         // when
         List<String> configuredRecipeIds = configuredOpenRewriteRecipeIds(rewrite);
+        assertThat(configuredRecipeIds)
+                .as("rewrite.yml recipeList should not contain duplicate recipe IDs")
+                .doesNotHaveDuplicates();
         Set<String> activeRecipeIds = new LinkedHashSet<>(configuredRecipeIds);
         Map<String, String> decisions = openRewriteDecisions(decisionLines);
         Set<String> expectedActiveRecipeIds = expectedActiveOpenRewriteRecipeIds(decisions, positiveDecisionLines);
-        Set<String> breakingDecisionIds = openRewriteDecisionIdsWithStatus(decisions, "Breaking-release candidate");
+        Set<String> breakingDecisionIds =
+                openRewriteDecisionIdsWithStatuses(decisions, Set.of(OPENREWRITE_STATUS_BREAKING_RELEASE_CANDIDATE));
         List<String> listedBreakingIds =
                 openRewriteRecipeIdsInSection(decisionLines, "## Preferable Breaking-Release Candidates");
         OpenRewriteStatusSummary documentedSummary =
@@ -746,9 +758,28 @@ final class TestConventionTest {
         assertThat(listedBreakingIds).doesNotHaveDuplicates();
         assertThat(listedBreakingIds).containsExactlyInAnyOrderElementsOf(breakingDecisionIds);
         assertOpenRewriteStatusSummaryMatchesDecisions(decisions, documentedSummary);
-        for (Map.Entry<String, String> decision : decisions.entrySet()) {
-            assertOpenRewriteDecisionMatchesAllowlist(activeRecipeIds, decision);
-        }
+        assertThat(decisions.entrySet())
+                .allSatisfy(decision -> assertOpenRewriteDecisionMatchesAllowlist(activeRecipeIds, decision));
+    }
+
+    @Test
+    void openRewriteStatusSummaryAcceptsDocumentedZeroCounts() {
+        // given
+        List<String> summaryLines = List.of(
+                "| Rejected | 1 | One canonical decision. |",
+                "| Contingent | 0 | No contingent decisions. |",
+                "| **Total** | **1** | One canonical decision. |");
+        Map<String, String> decisions = Map.of("example.Recipe", OPENREWRITE_STATUS_REJECTED);
+        OpenRewriteStatusSummary documentedSummary = openRewriteStatusSummary(summaryLines);
+
+        // when
+        Throwable failure =
+                catchThrowable(() -> assertOpenRewriteStatusSummaryMatchesDecisions(decisions, documentedSummary));
+
+        // then
+        assertThat(failure)
+                .as("a documented status with zero decisions should match the decision ledger")
+                .isNull();
     }
 
     @Test
@@ -779,8 +810,8 @@ final class TestConventionTest {
         Throwable unknownSummaryFailure = catchThrowable(() -> openRewriteStatusSummary(unknownSummaryLines));
         Throwable malformedCountFailure = catchThrowable(() -> openRewriteStatusSummary(malformedCountLines));
         OpenRewriteStatusSummary staleSummary = openRewriteStatusSummary(staleTotalLines);
-        Throwable staleTotalFailure = catchThrowable(() ->
-                assertOpenRewriteStatusSummaryMatchesDecisions(Map.of("example.Recipe", "Rejected"), staleSummary));
+        Throwable staleTotalFailure = catchThrowable(() -> assertOpenRewriteStatusSummaryMatchesDecisions(
+                Map.of("example.Recipe", OPENREWRITE_STATUS_REJECTED), staleSummary));
 
         // then
         assertThat(unknownDecisionFailure)
@@ -830,14 +861,16 @@ final class TestConventionTest {
 
     private static Set<String> expectedActiveOpenRewriteRecipeIds(
             Map<String, String> decisions, List<String> positiveDecisionLines) {
-        Set<String> expectedRecipeIds = openRewriteDecisionIdsWithStatus(decisions, "Activate");
-        expectedRecipeIds.addAll(openRewriteDecisionIdsWithStatus(decisions, "Active before review"));
+        Set<String> expectedRecipeIds = openRewriteDecisionIdsWithStatuses(decisions, OPENREWRITE_ACTIVE_STATUSES);
         assertThat(expectedRecipeIds.remove(SIMPLIFY_TERNARY_PARENT))
                 .as("%s should be represented by its reviewed leaves", SIMPLIFY_TERNARY_PARENT)
                 .isTrue();
         expectedRecipeIds.addAll(SIMPLIFY_TERNARY_LEAVES);
 
         List<String> acceptedRecipeIds = openRewriteRecipeIdsInSection(positiveDecisionLines, "## Accepted Recipes");
+        assertThat(acceptedRecipeIds)
+                .as("accepted OpenRewrite recipe IDs should be unique")
+                .doesNotHaveDuplicates();
         for (String acceptedRecipeId : acceptedRecipeIds) {
             expectedRecipeIds.add(
                     USE_STATIC_IMPORT.equals(acceptedRecipeId) ? ASSERTJ_STATIC_IMPORTS : acceptedRecipeId);
@@ -845,10 +878,11 @@ final class TestConventionTest {
         return expectedRecipeIds;
     }
 
-    private static Set<String> openRewriteDecisionIdsWithStatus(Map<String, String> decisions, String expectedStatus) {
+    private static Set<String> openRewriteDecisionIdsWithStatuses(
+            Map<String, String> decisions, Set<String> expectedStatuses) {
         Set<String> recipeIds = new LinkedHashSet<>();
         for (Map.Entry<String, String> decision : decisions.entrySet()) {
-            if (expectedStatus.equals(decision.getValue())) {
+            if (expectedStatuses.contains(decision.getValue())) {
                 recipeIds.add(decision.getKey());
             }
         }
@@ -935,6 +969,9 @@ final class TestConventionTest {
     private static void assertOpenRewriteStatusSummaryMatchesDecisions(
             Map<String, String> decisions, OpenRewriteStatusSummary documentedSummary) {
         Map<String, Integer> actualCounts = new LinkedHashMap<>();
+        for (String documentedStatus : documentedSummary.counts().keySet()) {
+            actualCounts.put(documentedStatus, 0);
+        }
         for (String status : decisions.values()) {
             actualCounts.merge(status, 1, Integer::sum);
         }
@@ -974,8 +1011,7 @@ final class TestConventionTest {
     private static void assertOpenRewriteDecisionMatchesAllowlist(
             Set<String> activeRecipeIds, Map.Entry<String, String> decision) {
         String recipeId = decision.getKey();
-        boolean activeDecision =
-                "Activate".equals(decision.getValue()) || "Active before review".equals(decision.getValue());
+        boolean activeDecision = OPENREWRITE_ACTIVE_STATUSES.contains(decision.getValue());
         if (SIMPLIFY_TERNARY_PARENT.equals(recipeId)) {
             assertThat(activeDecision)
                     .as("%s should retain an active ledger status", SIMPLIFY_TERNARY_PARENT)
