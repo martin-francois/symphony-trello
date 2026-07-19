@@ -1,0 +1,1547 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>Symphony for Trello README demo</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #f8fafc;
+      }
+      body {
+        font-family: "Inter", sans-serif;
+        color: #08283a;
+      }
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #f8fafc;
+      }
+      .clip {
+        position: absolute;
+        inset: 0;
+      }
+
+      /* ---- Caption block: the most important text sits near the top. ---- */
+      .cap {
+        position: absolute;
+        top: 44px;
+        left: 80px;
+        right: 80px;
+        display: grid;
+        gap: 12px;
+        justify-items: start;
+      }
+      .who {
+        display: inline-block;
+        padding: 8px 20px;
+        border-radius: 999px;
+        font-size: 25px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: #ffffff;
+      }
+      .who-you {
+        background: #0a5dcf;
+      }
+      .who-symphony {
+        background: #5e4db2;
+      }
+      .who-codex {
+        background: #1a6e4b;
+      }
+      .cap h2 {
+        font-size: 54px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1.12;
+        color: #08283a;
+      }
+      .cap p {
+        font-size: 29px;
+        line-height: 1.3;
+        color: #3d5565;
+        max-width: 1500px;
+      }
+
+      /* ---- Shared window chrome. ---- */
+      .win {
+        position: absolute;
+        border-radius: 14px;
+        overflow: hidden;
+        background: #ffffff;
+        border: 1px solid rgba(8, 40, 58, 0.25);
+        box-shadow: 0 24px 70px rgba(8, 40, 58, 0.22);
+      }
+      .win-bar {
+        height: 44px;
+        background: #eef2f6;
+        border-bottom: 1px solid rgba(8, 40, 58, 0.08);
+        display: flex;
+        align-items: center;
+        padding: 0 16px;
+        gap: 8px;
+        position: relative;
+      }
+      .win-bar i {
+        width: 13px;
+        height: 13px;
+        border-radius: 50%;
+        display: block;
+      }
+      .win-bar i:nth-child(1) {
+        background: #ff5f56;
+      }
+      .win-bar i:nth-child(2) {
+        background: #ffbd2e;
+      }
+      .win-bar i:nth-child(3) {
+        background: #27c93f;
+      }
+      .win-title {
+        position: absolute;
+        left: 50%;
+        translate: -50% 0;
+        font-size: 17px;
+        font-weight: 700;
+        color: #5b6b7a;
+      }
+      .win-body {
+        position: relative;
+        overflow: hidden;
+      }
+
+      /* ---- Trello board scenes. ---- */
+      .board-win {
+        left: 80px;
+        top: 216px;
+        width: 1762px;
+        height: 800px;
+      }
+      .board-win .win-body {
+        height: 756px;
+        background: #0079bf;
+      }
+      /* Fit the 1920x822 capture into the 1760-wide window body. */
+      .board-fit {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1920px;
+        height: 822px;
+        transform: scale(0.9167);
+        transform-origin: 0 0;
+      }
+      .board-zoom {
+        position: absolute;
+        inset: 0;
+        width: 1920px;
+        height: 822px;
+      }
+      .board-img {
+        position: absolute;
+        inset: 0;
+        width: 1920px;
+        height: 822px;
+      }
+      .overlay {
+        position: absolute;
+        inset: 0;
+      }
+
+      /* Overlay pieces are positioned in raw capture pixels by the script.
+         They imitate how Trello lists grow, shrink, and show a placeholder
+         slot while a card is picked up. */
+      .patch-expand {
+        position: absolute;
+        background: #f1f2f4;
+        border-radius: 0 0 12px 12px;
+      }
+      .patch-slot {
+        position: absolute;
+        background: #dcdfe4;
+        border-radius: 8px;
+      }
+      .patch-cap {
+        position: absolute;
+        background: #f1f2f4;
+        border-radius: 0 0 12px 12px;
+      }
+      .patch-blue {
+        position: absolute;
+        background: #0079bf;
+      }
+      .patch-group {
+        position: absolute;
+        inset: 0;
+      }
+      .counter-patch {
+        position: absolute;
+        background: #f1f2f4;
+        font-size: 17px;
+        color: #626f86;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        padding-right: 10px;
+      }
+      .card-replica {
+        position: absolute;
+        background: #ffffff;
+        border-radius: 8px;
+        box-shadow: 0 1px 2px rgba(9, 30, 66, 0.2);
+        padding: 10px 14px 8px;
+      }
+      .card-replica .card-title {
+        font-size: 15px;
+        line-height: 20px;
+        color: #172b4d;
+      }
+      .card-replica .card-badges {
+        margin-top: 6px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        color: #626f86;
+        font-size: 13px;
+      }
+      .card-badges svg {
+        display: block;
+      }
+      .auto-badge {
+        position: absolute;
+        right: -10px;
+        bottom: -36px;
+        background: #5e4db2;
+        color: #ffffff;
+        font-size: 15px;
+        font-weight: 700;
+        padding: 5px 14px;
+        border-radius: 999px;
+        box-shadow: 0 4px 14px rgba(94, 77, 178, 0.45);
+        opacity: 0;
+      }
+      .cursor {
+        position: absolute;
+        left: 200px;
+        top: 26px;
+        width: 34px;
+        height: 40px;
+        opacity: 0;
+        filter: drop-shadow(0 4px 8px rgba(8, 40, 58, 0.35));
+      }
+      .focus-ring {
+        position: absolute;
+        border: 4px solid #0a5dcf;
+        border-radius: 11px;
+        opacity: 0;
+      }
+
+      /* ---- Intro and hero. ---- */
+      .center-stack {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        text-align: center;
+        gap: 26px;
+        padding: 0 160px;
+      }
+      .brand-pill {
+        border: 1px solid rgba(8, 40, 58, 0.18);
+        border-radius: 12px;
+        padding: 12px 26px;
+        font-size: 27px;
+        font-weight: 700;
+        background: #ffffff;
+        box-shadow: 0 4px 12px rgba(8, 40, 58, 0.06);
+      }
+      .intro-title {
+        font-size: 92px;
+        line-height: 1.06;
+        letter-spacing: -0.02em;
+        font-weight: 700;
+        max-width: 1500px;
+      }
+      .intro-sub {
+        font-size: 33px;
+        line-height: 1.35;
+        color: #3d5565;
+        max-width: 1240px;
+      }
+      .hero-head {
+        font-size: 56px;
+        line-height: 1.18;
+        letter-spacing: -0.02em;
+        font-weight: 700;
+        max-width: 1560px;
+        margin: 64px auto 0;
+        text-align: center;
+      }
+      .hero-sub {
+        margin: 22px auto 0;
+        font-size: 31px;
+        line-height: 1.35;
+        color: #3d5565;
+        text-align: center;
+      }
+      .hero-sub strong {
+        color: #1a6e4b;
+      }
+      .hero-media {
+        position: absolute;
+        left: 160px;
+        right: 160px;
+        top: 420px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 40px;
+      }
+      .hero-tile .win {
+        position: relative;
+        width: 100%;
+      }
+      .hero-tile .win-body {
+        height: 400px;
+      }
+      .hero-tile img {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+      }
+      /* Show the Done side of the board, not the empty left lanes. */
+      .hero-tile img.crop-right {
+        left: auto;
+        right: 0;
+        width: 1560px;
+      }
+      .hero-tile-label {
+        margin-top: 14px;
+        text-align: center;
+        font-size: 27px;
+        font-weight: 700;
+        color: #3d5565;
+      }
+
+      /* ---- Card detail scene. ---- */
+      .task-win {
+        left: 210px;
+        top: 300px;
+        width: 1500px;
+        height: 592px;
+      }
+      .task-win .win-body {
+        height: 547px;
+        background: #ffffff;
+      }
+      .task-win img {
+        position: absolute;
+        left: 0;
+        top: 32px;
+        width: 1500px;
+      }
+
+      /* ---- Workpad scenes (Trello comment styling). ---- */
+      .comment-panel {
+        position: absolute;
+        left: 260px;
+        top: 250px;
+        width: 1400px;
+        border-radius: 16px;
+        background: #ffffff;
+        border: 1px solid rgba(8, 40, 58, 0.14);
+        box-shadow: 0 20px 60px rgba(8, 40, 58, 0.14);
+        padding: 44px 56px 48px;
+      }
+      .comment-author {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+      .comment-avatar {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: #5e4db2;
+        color: #ffffff;
+        display: grid;
+        place-items: center;
+        font-size: 26px;
+        font-weight: 700;
+      }
+      .comment-author-name {
+        font-size: 27px;
+        font-weight: 700;
+        color: #172b4d;
+      }
+      .comment-author-sub {
+        font-size: 21px;
+        color: #626f86;
+      }
+      .workpad-title {
+        margin-top: 30px;
+        font-size: 40px;
+        font-weight: 700;
+        color: #172b4d;
+      }
+      .workpad-section {
+        margin-top: 26px;
+        font-size: 21px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #626f86;
+      }
+      .workpad-list {
+        margin-top: 12px;
+        list-style: none;
+      }
+      .workpad-list li {
+        font-size: 27px;
+        line-height: 1.45;
+        color: #172b4d;
+        padding-left: 34px;
+        position: relative;
+        margin-top: 12px;
+        opacity: 0;
+      }
+      .workpad-list li::before {
+        content: "";
+        position: absolute;
+        left: 6px;
+        top: 15px;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #1a6e4b;
+      }
+      .workpad-list code {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 24px;
+        background: #f1f2f4;
+        border-radius: 5px;
+        padding: 2px 8px;
+      }
+
+      /* ---- GitHub scenes. ---- */
+      /* The pan/zoom container intentionally overflows the clipped window
+         body; that is the camera move, not a layout defect. */
+      .gh-win {
+        left: 235px;
+        top: 232px;
+        width: 1450px;
+        height: 822px;
+      }
+      .gh-win .win-body {
+        height: 777px;
+        background: #ffffff;
+      }
+      .gh-fit {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1600px;
+        transform: scale(0.90625);
+        transform-origin: 0 0;
+      }
+      .gh-pan {
+        position: relative;
+        width: 1600px;
+      }
+      .gh-pan img {
+        display: block;
+        width: 1600px;
+      }
+
+      /* ---- Anywhere scene. ---- */
+      .anywhere-board {
+        left: 80px;
+        top: 300px;
+        width: 1130px;
+        height: 484px;
+      }
+      .anywhere-board .win-body {
+        height: 439px;
+        background: #0079bf;
+      }
+      .anywhere-board img {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1560px;
+      }
+      .phone {
+        position: absolute;
+        left: 1300px;
+        top: 300px;
+        width: 548px;
+        height: 900px;
+        border-radius: 56px 56px 0 0;
+        background: #10243a;
+        padding: 18px 18px 0;
+        box-shadow: 0 24px 70px rgba(8, 40, 58, 0.3);
+      }
+      .phone-screen {
+        width: 512px;
+        height: 762px;
+        border-radius: 40px 40px 0 0;
+        overflow: hidden;
+        background: #0079bf;
+        position: relative;
+      }
+      .phone-screen img {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 512px;
+      }
+      .anywhere-note {
+        position: absolute;
+        left: 80px;
+        top: 830px;
+        width: 1130px;
+        font-size: 30px;
+        line-height: 1.4;
+        color: #3d5565;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-no-timeline
+      data-start="0"
+      data-duration="86"
+      data-width="1920"
+      data-height="1080"
+    >
+      <!-- Scene starts are cumulative; the script reads them back from data-start,
+           so per-scene animation offsets stay relative and there is no duplicated
+           timing table. -->
+
+      <section id="s01" class="clip" data-start="0" data-duration="4" data-track-index="1">
+        <div class="center-stack">
+          <div class="brand-pill" data-enter>Symphony for Trello</div>
+          <h1 id="intro-title" class="intro-title" data-enter>
+            From Trello card to merged pull request
+          </h1>
+          <p class="intro-sub" data-enter>
+            A real run: you plan work in Trello, Codex implements it, and Symphony keeps the
+            handoff moving.
+          </p>
+        </div>
+      </section>
+
+      <section id="s02" class="clip" data-start="4" data-duration="5" data-track-index="1">
+        <header class="cap" data-enter>
+          <span class="who who-you">You plan</span>
+          <h2>Plan work where your team already plans work.</h2>
+          <p>A task starts as an ordinary card on a real Trello board.</p>
+        </header>
+        <div class="win board-win">
+          <div class="win-bar">
+            <i></i><i></i><i></i>
+            <span class="win-title">Trello — Symphony for Trello — Demo</span>
+          </div>
+          <div class="win-body">
+            <div class="board-fit">
+              <div class="board-zoom" data-board="s02">
+                <img class="board-img" src="assets/captures/trello-board-inbox.jpg" alt="" />
+                <div class="overlay"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="s03" class="clip" data-start="9" data-duration="5" data-track-index="1">
+        <header class="cap" data-enter>
+          <span class="who who-you">You plan</span>
+          <h2>Describe the task like you would for a teammate.</h2>
+          <p>The card title and description are the whole prompt.</p>
+        </header>
+        <div class="win task-win">
+          <div class="win-bar">
+            <i></i><i></i><i></i>
+            <span class="win-title">Trello card</span>
+          </div>
+          <div class="win-body">
+            <img id="s03-card" src="assets/captures/trello-card-task.jpg" alt="" />
+          </div>
+        </div>
+      </section>
+
+      <section id="s04" class="clip" data-start="14" data-duration="6" data-track-index="1">
+        <header class="cap" data-enter>
+          <span class="who who-you">You</span>
+          <h2>Move the card to Ready for Codex.</h2>
+          <p>One drag tells Symphony this task is ready to start.</p>
+        </header>
+        <div class="win board-win">
+          <div class="win-bar">
+            <i></i><i></i><i></i>
+            <span class="win-title">Trello — Symphony for Trello — Demo</span>
+          </div>
+          <div class="win-body">
+            <div class="board-fit">
+              <div class="board-zoom" data-board="s04">
+                <img class="board-img" src="assets/captures/trello-board-inbox.jpg" alt="" />
+                <div class="overlay"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="s05" class="clip" data-start="20" data-duration="5" data-track-index="1">
+        <header class="cap" data-enter>
+          <span class="who who-symphony">Symphony</span>
+          <h2>Symphony picks it up automatically.</h2>
+          <p>No human dragged this one: the worker claims the card and starts Codex.</p>
+        </header>
+        <div class="win board-win">
+          <div class="win-bar">
+            <i></i><i></i><i></i>
+            <span class="win-title">Trello — Symphony for Trello — Demo</span>
+          </div>
+          <div class="win-body">
+            <div class="board-fit">
+              <div class="board-zoom" data-board="s05">
+                <img class="board-img" src="assets/captures/trello-board-in-progress.jpg" alt="" />
+                <div class="overlay"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="s06" class="clip" data-start="25" data-duration="7" data-track-index="1">
+        <header class="cap" data-enter>
+          <span class="who who-codex">Codex</span>
+          <h2>Progress stays visible on the Trello card.</h2>
+          <p>Codex keeps one workpad comment current while it implements the task.</p>
+        </header>
+        <div class="comment-panel">
+          <div class="comment-author">
+            <div class="comment-avatar">S</div>
+            <div>
+              <div class="comment-author-name">Symphony for Trello</div>
+              <div class="comment-author-sub">Trello comment on the card</div>
+            </div>
+          </div>
+          <div class="workpad-title">Codex Workpad</div>
+          <div class="workpad-section">Progress</div>
+          <ul class="workpad-list" data-stagger>
+            <li>Repository selected from the Trello card.</li>
+            <li>Created task branch <code>clarify-missing-trello-token-error</code>.</li>
+            <li>Updated <code>src/config.ts</code> with a clearer status-check error.</li>
+          </ul>
+          <div class="workpad-section">Validation</div>
+          <ul class="workpad-list" data-stagger data-stagger-offset="3">
+            <li>Passed: <code>npm run typecheck</code> and <code>npm test</code>.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="s07" class="clip" data-start="32" data-duration="4.5" data-track-index="1">
+        <header class="cap" data-enter>
+          <span class="who who-symphony">Symphony</span>
+          <h2>The PR is ready for review.</h2>
+          <p>Symphony moves the card to Human Review and links the pull request.</p>
+        </header>
+        <div class="win board-win">
+          <div class="win-bar">
+            <i></i><i></i><i></i>
+            <span class="win-title">Trello — Symphony for Trello — Demo</span>
+          </div>
+          <div class="win-body">
+            <div class="board-fit">
+              <div class="board-zoom" data-board="s07">
+                <img
+                  class="board-img"
+                  src="assets/captures/trello-board-human-review-staged.jpg"
+                  alt=""
+                />
+                <div class="overlay"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="s08" class="clip" data-start="36.5" data-duration="7.5" data-track-index="1">
+        <header class="cap" data-enter>
+          <span class="who who-you">You review</span>
+          <h2>Review the PR and leave one clear comment.</h2>
+          <p>The review comment is tied to the real diff Codex produced.</p>
+        </header>
+        <div class="win gh-win">
+          <div class="win-bar">
+            <i></i><i></i><i></i>
+            <span class="win-title">GitHub — fix: clarify missing Trello token error #1</span>
+          </div>
+          <div class="win-body">
+            <div class="gh-fit">
+              <div class="gh-pan" data-gh="s08">
+                <img src="assets/captures/github-review-diff.jpg" alt="" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="s09" class="clip" data-start="44" data-duration="5" data-track-index="1">
+        <header class="cap" data-enter>
+          <span class="who who-you">You</span>
+          <h2>Move the card back and Codex continues.</h2>
+          <p>Your review comment becomes the next Codex task on the same card.</p>
+        </header>
+        <div class="win board-win">
+          <div class="win-bar">
+            <i></i><i></i><i></i>
+            <span class="win-title">Trello — Symphony for Trello — Demo</span>
+          </div>
+          <div class="win-body">
+            <div class="board-fit">
+              <div class="board-zoom" data-board="s09">
+                <img
+                  class="board-img"
+                  src="assets/captures/trello-board-human-review-staged.jpg"
+                  alt=""
+                />
+                <div class="overlay"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="s10" class="clip" data-start="49" data-duration="5.5" data-track-index="1">
+        <header class="cap" data-enter>
+          <span class="who who-codex">Codex</span>
+          <h2>Codex reads the review and updates the PR.</h2>
+          <p>The workpad records the rework, so the card keeps the whole story.</p>
+        </header>
+        <div class="comment-panel">
+          <div class="comment-author">
+            <div class="comment-avatar">S</div>
+            <div>
+              <div class="comment-author-name">Symphony for Trello</div>
+              <div class="comment-author-sub">Trello comment on the card</div>
+            </div>
+          </div>
+          <div class="workpad-title">Codex Workpad</div>
+          <div class="workpad-section">Rework</div>
+          <ul class="workpad-list" data-stagger>
+            <li>Review feedback: report whichever credential is actually missing.</li>
+            <li>Updated <code>src/config.ts</code> for missing API key, token, or both.</li>
+            <li>Added tests for every missing-credential case.</li>
+          </ul>
+          <div class="workpad-section">Validation</div>
+          <ul class="workpad-list" data-stagger data-stagger-offset="3">
+            <li>Passed: <code>npm run typecheck</code> and <code>npm test</code>.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="s11" class="clip" data-start="54.5" data-duration="6" data-track-index="1">
+        <header class="cap" data-enter>
+          <span class="who who-codex">Codex</span>
+          <h2>Comment answered. Thread resolved.</h2>
+          <p>Codex replies on the same review thread with what changed.</p>
+        </header>
+        <div class="win gh-win">
+          <div class="win-bar">
+            <i></i><i></i><i></i>
+            <span class="win-title">GitHub — fix: clarify missing Trello token error #1</span>
+          </div>
+          <div class="win-body">
+            <div class="gh-fit">
+              <div class="gh-pan" data-gh="s11">
+                <img src="assets/captures/github-comment-resolved.jpg" alt="" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="s12" class="clip" data-start="60.5" data-duration="5.5" data-track-index="1">
+        <header class="cap" data-enter>
+          <span class="who who-you">You</span>
+          <h2>Happy with the PR? Move the card to Merging.</h2>
+          <p>Dropping the card here tells Symphony to merge the pull request.</p>
+        </header>
+        <div class="win board-win">
+          <div class="win-bar">
+            <i></i><i></i><i></i>
+            <span class="win-title">Trello — Symphony for Trello — Demo</span>
+          </div>
+          <div class="win-body">
+            <div class="board-fit">
+              <div class="board-zoom" data-board="s12">
+                <img class="board-img" src="assets/captures/trello-board-merging.jpg" alt="" />
+                <div class="overlay"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="s13" class="clip" data-start="66" data-duration="4.5" data-track-index="1">
+        <header class="cap" data-enter>
+          <span class="who who-symphony">Symphony</span>
+          <h2>Symphony merges the pull request.</h2>
+          <p>No IDE, no terminal: the merge happens from the board.</p>
+        </header>
+        <div class="win gh-win">
+          <div class="win-bar">
+            <i></i><i></i><i></i>
+            <span class="win-title">GitHub — fix: clarify missing Trello token error #1</span>
+          </div>
+          <div class="win-body">
+            <div class="gh-fit">
+              <div class="gh-pan" data-gh="s13">
+                <img src="assets/captures/github-pr-merged.jpg" alt="" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="s14" class="clip" data-start="70.5" data-duration="4.5" data-track-index="1">
+        <header class="cap" data-enter>
+          <span class="who who-symphony">Symphony</span>
+          <h2>The card lands in Done.</h2>
+          <p>The board shows the task as merged and finished.</p>
+        </header>
+        <div class="win board-win">
+          <div class="win-bar">
+            <i></i><i></i><i></i>
+            <span class="win-title">Trello — Symphony for Trello — Demo</span>
+          </div>
+          <div class="win-body">
+            <div class="board-fit">
+              <div class="board-zoom" data-board="s14">
+                <img class="board-img" src="assets/captures/trello-board-done.jpg" alt="" />
+                <div class="overlay"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="s15" class="clip" data-start="75" data-duration="5" data-track-index="1">
+        <header class="cap" data-enter>
+          <span class="who who-you">Anywhere</span>
+          <h2>Start from your phone. Review from your laptop.</h2>
+        </header>
+        <div class="win anywhere-board" data-enter>
+          <div class="win-bar">
+            <i></i><i></i><i></i>
+            <span class="win-title">Trello — Symphony for Trello — Demo</span>
+          </div>
+          <div class="win-body">
+            <img id="s15-board-img" src="assets/captures/trello-board-done.jpg" alt="" />
+          </div>
+        </div>
+        <p class="anywhere-note" data-enter>
+          It is the same Trello board everywhere, so planning a Codex task from a phone is just
+          adding a card.
+        </p>
+        <div id="s15-phone" class="phone">
+          <div class="phone-screen">
+            <img src="assets/captures/trello-mobile-card.jpg" alt="" />
+          </div>
+        </div>
+      </section>
+
+      <section id="s16" class="clip" data-start="80" data-duration="6" data-track-index="1">
+        <h2 id="hero-head" class="hero-head" data-enter>
+          You plan work in Trello. Codex implements it. Symphony keeps everything moving.
+        </h2>
+        <p class="hero-sub" data-enter>
+          From phone to laptop, from card to merged PR.
+          <strong>No IDE required. No CLI babysitting.</strong>
+        </p>
+        <div class="hero-media" id="hero-media">
+          <div class="hero-tile" data-enter>
+            <div class="win">
+              <div class="win-bar">
+                <i></i><i></i><i></i>
+                <span class="win-title">Trello — Symphony for Trello — Demo</span>
+              </div>
+              <div class="win-body">
+                <img class="crop-right" src="assets/captures/trello-board-done.jpg" alt="" />
+              </div>
+            </div>
+            <div class="hero-tile-label">Trello: Done</div>
+          </div>
+          <div class="hero-tile" data-enter>
+            <div class="win">
+              <div class="win-bar">
+                <i></i><i></i><i></i>
+                <span class="win-title">GitHub — pull request</span>
+              </div>
+              <div class="win-body">
+                <img src="assets/captures/github-pr-merged.jpg" alt="" />
+              </div>
+            </div>
+            <div class="hero-tile-label">Pull request: Merged</div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      // Deterministic Web Animations API build. Every animation is created
+      // synchronously with a finite duration and an absolute delay, then
+      // paused, so the HyperFrames `waapi` adapter can seek any frame from
+      // its time value alone.
+      "use strict";
+
+      const EASE = "cubic-bezier(0.2, 0, 0, 1)";
+
+      // Board capture geometry, measured in raw pixels of the committed
+      // 1920x822 Trello captures.
+      const LANE_PITCH = 341.33;
+      const LANE_LEFT = 15;
+      const LANE_W = 322;
+      const CARD_X_INSET = 9;
+      const CARD_W = 307;
+      const CARD_H = 78;
+      const COUNTER = { x: 280, y: 16, w: 44, h: 30 };
+      // Vertical card slot positions used by this story: first card in a
+      // list, second card under the two-line "Support multiple boards per
+      // worker" card, and third card in the Done list.
+      const ROW_Y = { pos1: 59, pos2: 136, pos3: 163 };
+      // List containers in the captures end at these heights.
+      const LIST_BOTTOM = { empty: 60, oneCard: 146 };
+      const LANES = {
+        inbox: 0,
+        ready: 1,
+        inProgress: 2,
+        humanReview: 3,
+        merging: 4,
+        done: 5,
+      };
+
+      const laneX = (lane) => LANE_LEFT + LANES[lane] * LANE_PITCH + CARD_X_INSET;
+
+      const sceneStart = (sceneId) =>
+        Number(document.getElementById(sceneId).dataset.start);
+
+      const animate = (el, keyframes, startSec, durationSec, options = {}) => {
+        const animation = el.animate(keyframes, {
+          duration: durationSec * 1000,
+          delay: startSec * 1000,
+          easing: options.easing ?? EASE,
+          fill: "both",
+          iterations: options.iterations ?? 1,
+        });
+        animation.pause();
+        return animation;
+      };
+
+      // Discrete visibility over one scene: exactly one animation per
+      // element (two fill-both animations on the same property would
+      // backfill each other), flipping opacity at the given scene-relative
+      // times. Undefined onAt means "visible from scene start"; undefined
+      // offAt means "stays visible".
+      const stepVisibility = (target, t0, sceneDur, onAt, offAt) => {
+        const startsVisible = onAt === undefined || onAt <= 0;
+        const frames = [{ opacity: startsVisible ? 1 : 0, offset: 0 }];
+        if (!startsVisible) {
+          const at = Math.min(onAt / sceneDur, 1);
+          frames.push({ opacity: 0, offset: at }, { opacity: 1, offset: at });
+        }
+        if (offAt !== undefined) {
+          const at = Math.min(offAt / sceneDur, 1);
+          frames.push({ opacity: 1, offset: at }, { opacity: 0, offset: at });
+        }
+        frames.push({ opacity: frames[frames.length - 1].opacity, offset: 1 });
+        animate(target, frames, t0, sceneDur, { easing: "linear" });
+      };
+
+      const el = (tag, className, parent) => {
+        const node = document.createElement(tag);
+        node.className = className;
+        parent.appendChild(node);
+        return node;
+      };
+
+      const CARD_TITLE = "Clarify missing Trello token error";
+      const DESCRIPTION_ICON =
+        '<svg width="16" height="16" viewBox="0 0 16 16" fill="none">' +
+        '<path d="M2 4h12M2 8h12M2 12h8" stroke="#626f86" stroke-width="1.8" stroke-linecap="round"/></svg>';
+      const COMMENT_ICON =
+        '<svg width="16" height="16" viewBox="0 0 16 16" fill="none">' +
+        '<path d="M2.5 3.5h11v8h-6l-3 2.5v-2.5h-2z" stroke="#626f86" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+      const CURSOR_SVG =
+        '<svg width="34" height="40" viewBox="0 0 70 82" fill="none">' +
+        '<path d="M12 8L56 53L36 57L27 76L12 8Z" fill="white" stroke="#08283a" stroke-width="6" stroke-linejoin="round"/></svg>';
+
+      const buildReplicaCard = (overlay) => {
+        const card = el("div", "card-replica", overlay);
+        card.style.width = CARD_W + "px";
+        card.style.height = CARD_H + "px";
+        card.innerHTML =
+          '<div class="card-title">' +
+          CARD_TITLE +
+          "</div>" +
+          '<div class="card-badges">' +
+          DESCRIPTION_ICON +
+          '<span style="display:flex;align-items:center;gap:5px">' +
+          COMMENT_ICON +
+          "8</span></div>";
+        return card;
+      };
+
+      // One board movement scene: the real capture is the background and a
+      // pixel-aligned replica card performs the motion. Patch elements
+      // reproduce how Trello lists behave around a move: the source list
+      // keeps a drop placeholder until the card crosses to the destination
+      // list, containers grow and shrink, and list counters stay truthful.
+      //
+      // move.mode "drag" shows a cursor grabbing the card (human action);
+      // "auto" glides the card with a Symphony badge (automated action).
+      //
+      // Patch visibility can be phase-based: "lift", "crossing", and "drop"
+      // resolve against the move timing; numbers are scene-relative seconds.
+      const buildBoardScene = (config) => {
+        const zoomEl = document.querySelector('[data-board="' + config.scene + '"]');
+        const overlay = zoomEl.querySelector(".overlay");
+        const t0 = sceneStart(config.scene);
+        const move = config.move;
+
+        const phaseTime = (phase) => {
+          if (typeof phase === "number") {
+            return phase;
+          }
+          return {
+            lift: move.begin,
+            departed: move.begin + move.flight * 0.35,
+            crossing: move.begin + move.flight * 0.45,
+            approach: move.begin + move.flight * 0.8,
+            drop: move.begin + move.flight,
+          }[phase];
+        };
+        const sceneDur = Number(document.getElementById(config.scene).dataset.duration);
+        const applyVisibility = (patch, spec) => {
+          if (spec.from === undefined && spec.until === undefined) {
+            return;
+          }
+          stepVisibility(
+            patch,
+            t0,
+            sceneDur,
+            spec.from === undefined ? undefined : phaseTime(spec.from),
+            spec.until === undefined ? undefined : phaseTime(spec.until),
+          );
+        };
+
+        // Camera: zoom toward the lanes where the action happens.
+        if (config.zoom) {
+          zoomEl.style.transformOrigin = `${config.zoom.x}px 0px`;
+          animate(
+            zoomEl,
+            [{ transform: "scale(1)" }, { transform: `scale(${config.zoom.scale})` }],
+            t0 + 0.15,
+            1.1,
+          );
+        }
+
+        // A list container grown beyond its capture state (holds our card).
+        for (const expand of config.expands ?? []) {
+          const patch = el("div", "patch-expand", overlay);
+          patch.style.left = LANE_LEFT + LANES[expand.lane] * LANE_PITCH + "px";
+          patch.style.top = expand.top + "px";
+          patch.style.width = LANE_W + "px";
+          patch.style.height = expand.bottom - expand.top + "px";
+          applyVisibility(patch, expand);
+        }
+
+        // A list container shrunk below its capture state: blue board color
+        // over the extra area plus a rounded bottom cap for the container.
+        for (const shrink of config.collapses ?? []) {
+          const group = el("div", "patch-group", overlay);
+          const blue = el("div", "patch-blue", group);
+          blue.style.left = LANE_LEFT + LANES[shrink.lane] * LANE_PITCH - 4 + "px";
+          blue.style.top = shrink.capTop + "px";
+          blue.style.width = LANE_W + 8 + "px";
+          blue.style.height = shrink.oldBottom + 8 - shrink.capTop + "px";
+          const cap = el("div", "patch-cap", group);
+          cap.style.left = LANE_LEFT + LANES[shrink.lane] * LANE_PITCH + "px";
+          cap.style.top = shrink.capTop + "px";
+          cap.style.width = LANE_W + "px";
+          cap.style.height = shrink.newBottom - shrink.capTop + "px";
+          applyVisibility(group, shrink);
+        }
+
+        // Card-sized cover: hides the capture's own card, either as a plain
+        // empty list area or as Trello's gray drop placeholder.
+        for (const cover of config.covers ?? []) {
+          const patch = el("div", "patch-slot", overlay);
+          patch.style.left = laneX(cover.lane) + "px";
+          patch.style.top = ROW_Y[cover.row] + "px";
+          patch.style.width = CARD_W + "px";
+          patch.style.height = CARD_H + "px";
+          if (cover.placeholder !== true) {
+            patch.style.background = "#f1f2f4";
+          }
+          applyVisibility(patch, cover);
+        }
+
+        for (const counter of config.counters ?? []) {
+          const patch = el("div", "counter-patch", overlay);
+          patch.style.left = LANE_LEFT + LANES[counter.lane] * LANE_PITCH + COUNTER.x + "px";
+          patch.style.top = COUNTER.y + "px";
+          patch.style.width = COUNTER.w + "px";
+          patch.style.height = COUNTER.h + "px";
+          patch.textContent = counter.value;
+          applyVisibility(patch, counter);
+        }
+
+        if (config.highlight) {
+          const ring = el("div", "focus-ring", overlay);
+          ring.style.left = laneX(config.highlight.lane) - 7 + "px";
+          ring.style.top = ROW_Y[config.highlight.row] - 7 + "px";
+          ring.style.width = CARD_W + 14 + "px";
+          ring.style.height = CARD_H + 14 + "px";
+          animate(
+            ring,
+            [
+              { opacity: 0, transform: "scale(1.06)" },
+              { opacity: 1, transform: "scale(1)" },
+            ],
+            t0 + config.highlight.at,
+            0.5,
+          );
+          animate(
+            ring,
+            [{ opacity: 1 }, { opacity: 1, offset: 0.7 }, { opacity: 0 }],
+            t0 + config.highlight.at + 0.5,
+            config.highlight.hold,
+            { easing: "linear" },
+          );
+        }
+
+        if (!move) {
+          return;
+        }
+
+        const card = buildReplicaCard(overlay);
+        const fromX = laneX(move.from);
+        const fromY = ROW_Y[move.fromRow];
+        const toX = laneX(move.to);
+        const toY = ROW_Y[move.toRow];
+        card.style.left = fromX + "px";
+        card.style.top = fromY + "px";
+
+        const dx = toX - fromX;
+        const dy = toY - fromY;
+        const lift = move.mode === "drag" ? -14 : -8;
+        const tilt = move.mode === "drag" ? (dx > 0 ? 2.5 : -2.5) : 0;
+
+        // Flight path: lift, arc across the board, settle.
+        animate(
+          card,
+          [
+            { translate: "0px 0px", rotate: "0deg", scale: 1 },
+            {
+              translate: `${dx * 0.18}px ${dy * 0.18 + lift}px`,
+              rotate: `${tilt}deg`,
+              scale: 1.04,
+              offset: 0.22,
+            },
+            {
+              translate: `${dx * 0.82}px ${dy * 0.82 + lift}px`,
+              rotate: `${tilt}deg`,
+              scale: 1.04,
+              offset: 0.82,
+            },
+            { translate: `${dx}px ${dy}px`, rotate: "0deg", scale: 1 },
+          ],
+          t0 + move.begin,
+          move.flight,
+        );
+        animate(
+          card,
+          [
+            { boxShadow: "0 1px 2px rgba(9, 30, 66, 0.2)" },
+            { boxShadow: "0 14px 30px rgba(9, 30, 66, 0.35)", offset: 0.2 },
+            { boxShadow: "0 14px 30px rgba(9, 30, 66, 0.35)", offset: 0.8 },
+            { boxShadow: "0 1px 2px rgba(9, 30, 66, 0.2)" },
+          ],
+          t0 + move.begin,
+          move.flight,
+          { easing: "linear" },
+        );
+
+        if (move.mode === "drag") {
+          const cursor = document.createElement("div");
+          cursor.className = "cursor";
+          cursor.innerHTML = CURSOR_SVG;
+          card.appendChild(cursor);
+          // The pointer approaches the card, grabs it, rides the drag
+          // (the cursor is a child of the card), and leaves after the drop.
+          animate(
+            cursor,
+            [
+              { opacity: 0, translate: "170px 230px" },
+              { opacity: 1, translate: "0px 0px" },
+            ],
+            t0 + move.begin - 0.8,
+            0.75,
+          );
+          animate(
+            cursor,
+            [
+              { opacity: 1, translate: "0px 0px" },
+              { opacity: 0, translate: "60px 130px" },
+            ],
+            t0 + move.begin + move.flight + 0.35,
+            0.6,
+          );
+        } else {
+          const badge = el("div", "auto-badge", card);
+          badge.textContent = "Symphony";
+          animate(
+            badge,
+            [
+              { opacity: 0, translate: "0px 8px" },
+              { opacity: 1, translate: "0px 0px" },
+            ],
+            t0 + move.begin - 0.55,
+            0.45,
+          );
+          animate(
+            badge,
+            [
+              { opacity: 1, translate: "0px 0px" },
+              { opacity: 0, translate: "0px -8px" },
+            ],
+            t0 + move.begin + move.flight + 0.6,
+            0.5,
+          );
+        }
+      };
+
+      // ---- Scene-by-scene build. ----
+
+      // The GitHub camera containers deliberately overflow their clipped
+      // window bodies while panning; opt them out of the overflow audit.
+      for (const fit of document.querySelectorAll(".gh-fit")) {
+        fit.setAttribute("data-layout-allow-overflow", "");
+      }
+
+      // Caption and panel entrances.
+      for (const scene of document.querySelectorAll(".clip")) {
+        const t0 = Number(scene.dataset.start);
+        for (const [i, entering] of scene.querySelectorAll("[data-enter]").entries()) {
+          animate(
+            entering,
+            [
+              { opacity: 0, translate: "0px 26px" },
+              { opacity: 1, translate: "0px 0px" },
+            ],
+            t0 + 0.08 + i * 0.12,
+            0.55,
+          );
+        }
+        // Workpad panels enter, then drift very slowly for the rest of the
+        // scene so the frame never freezes while the viewer reads the list.
+        for (const panel of scene.querySelectorAll(".comment-panel")) {
+          const duration = Number(scene.dataset.duration);
+          animate(
+            panel,
+            [
+              { translate: "0px 40px", opacity: 0, easing: EASE },
+              { translate: "0px 10px", opacity: 1, offset: 0.6 / duration, easing: "linear" },
+              { translate: "0px -10px", opacity: 1 },
+            ],
+            t0 + 0.1,
+            duration - 0.1,
+          );
+        }
+        for (const list of scene.querySelectorAll("[data-stagger]")) {
+          const offset = Number(list.dataset.staggerOffset ?? 0);
+          for (const [i, item] of list.querySelectorAll("li").entries()) {
+            animate(
+              item,
+              [
+                { opacity: 0, translate: "0px 16px" },
+                { opacity: 1, translate: "0px 0px" },
+              ],
+              t0 + 1.0 + (offset + i) * 0.65,
+              0.5,
+            );
+          }
+        }
+      }
+
+      // s02 — the task waits in Inbox on the real board.
+      buildBoardScene({
+        scene: "s02",
+        zoom: { x: 0, scale: 1.22 },
+        highlight: { lane: "inbox", row: "pos1", at: 1.4, hold: 2.6 },
+      });
+
+      // s03 — slow push-in on the open card.
+      animate(
+        document.getElementById("s03-card"),
+        [{ scale: 1 }, { scale: 1.045 }],
+        sceneStart("s03") + 0.2,
+        4.6,
+        { easing: "linear" },
+      );
+
+      // s04 — you drag the card from Inbox to Ready for Codex. The capture
+      // shows the card in Inbox; after the pointer crosses lanes, the Inbox
+      // list collapses and Ready grows around a drop placeholder.
+      buildBoardScene({
+        scene: "s04",
+        zoom: { x: 0, scale: 1.35 },
+        move: {
+          mode: "drag",
+          from: "inbox",
+          fromRow: "pos1",
+          to: "ready",
+          toRow: "pos1",
+          begin: 1.7,
+          flight: 1.5,
+        },
+        covers: [
+          { lane: "inbox", row: "pos1", placeholder: true, from: "lift", until: "crossing" },
+          { lane: "ready", row: "pos1", placeholder: true, from: "crossing" },
+        ],
+        collapses: [
+          { lane: "inbox", capTop: 44, newBottom: 60, oldBottom: 146, from: "crossing" },
+        ],
+        expands: [{ lane: "ready", top: 46, bottom: 146, from: "crossing" }],
+        counters: [
+          { lane: "inbox", value: "0", from: "drop" },
+          { lane: "ready", value: "1", from: "drop" },
+        ],
+      });
+
+      // s05 — Symphony claims the card: Ready -> In Progress, no cursor.
+      // The capture already shows the arrival state, so Ready is held
+      // expanded until the card departs and the In Progress card stays
+      // covered until the replica lands on it.
+      buildBoardScene({
+        scene: "s05",
+        zoom: { x: 690, scale: 1.35 },
+        move: {
+          mode: "auto",
+          from: "ready",
+          fromRow: "pos1",
+          to: "inProgress",
+          toRow: "pos1",
+          begin: 1.3,
+          flight: 1.3,
+        },
+        expands: [{ lane: "ready", top: 46, bottom: 146, until: "departed" }],
+        collapses: [
+          { lane: "inProgress", capTop: 44, newBottom: 60, oldBottom: 146, until: "approach" },
+        ],
+        covers: [{ lane: "inProgress", row: "pos1", from: "approach" }],
+        counters: [
+          { lane: "ready", value: "1", until: "lift" },
+          { lane: "inProgress", value: "0", until: "drop" },
+        ],
+      });
+
+      // s07 — Symphony hands the card to Human Review. The Human Review
+      // list is held at its one-card height until the card approaches.
+      buildBoardScene({
+        scene: "s07",
+        zoom: { x: 1030, scale: 1.35 },
+        move: {
+          mode: "auto",
+          from: "inProgress",
+          fromRow: "pos1",
+          to: "humanReview",
+          toRow: "pos2",
+          begin: 1.1,
+          flight: 1.3,
+        },
+        expands: [{ lane: "inProgress", top: 46, bottom: 146, until: "departed" }],
+        collapses: [
+          { lane: "humanReview", capTop: 128, newBottom: 136, oldBottom: 223, until: "approach" },
+        ],
+        covers: [{ lane: "humanReview", row: "pos2", from: "approach" }],
+        counters: [
+          { lane: "inProgress", value: "1", until: "lift" },
+          { lane: "humanReview", value: "1", until: "drop" },
+        ],
+      });
+
+      // s09 — you drag the card back to Ready for Codex for rework.
+      buildBoardScene({
+        scene: "s09",
+        zoom: { x: 858, scale: 1.3 },
+        move: {
+          mode: "drag",
+          from: "humanReview",
+          fromRow: "pos2",
+          to: "ready",
+          toRow: "pos1",
+          begin: 1.5,
+          flight: 1.4,
+        },
+        covers: [
+          {
+            lane: "humanReview",
+            row: "pos2",
+            placeholder: true,
+            from: "lift",
+            until: "crossing",
+          },
+          { lane: "ready", row: "pos1", placeholder: true, from: "crossing" },
+        ],
+        collapses: [
+          { lane: "humanReview", capTop: 128, newBottom: 136, oldBottom: 223, from: "crossing" },
+        ],
+        expands: [{ lane: "ready", top: 46, bottom: 146, from: "crossing" }],
+        counters: [
+          { lane: "humanReview", value: "1", from: "drop" },
+          { lane: "ready", value: "1", from: "drop" },
+        ],
+      });
+
+      // s12 — you approve by dragging the card to Merging. The capture
+      // shows the arrival state, so Human Review is held expanded with our
+      // card until the pointer crosses, and the Merging card stays covered
+      // (a placeholder after crossing) until the drop.
+      buildBoardScene({
+        scene: "s12",
+        zoom: { x: 1370, scale: 1.3 },
+        move: {
+          mode: "drag",
+          from: "humanReview",
+          fromRow: "pos2",
+          to: "merging",
+          toRow: "pos1",
+          begin: 1.6,
+          flight: 1.4,
+        },
+        expands: [{ lane: "humanReview", top: 126, bottom: 223, until: "crossing" }],
+        covers: [
+          {
+            lane: "humanReview",
+            row: "pos2",
+            placeholder: true,
+            from: "lift",
+            until: "crossing",
+          },
+          { lane: "merging", row: "pos1", until: "crossing" },
+          { lane: "merging", row: "pos1", placeholder: true, from: "crossing" },
+        ],
+        counters: [
+          { lane: "humanReview", value: "2", until: "drop" },
+          { lane: "merging", value: "0", until: "drop" },
+        ],
+      });
+
+      // s14 — Symphony finishes: Merging -> Done. Done is held at its
+      // two-card height until the card approaches its final slot.
+      buildBoardScene({
+        scene: "s14",
+        zoom: { x: 1920, scale: 1.3 },
+        move: {
+          mode: "auto",
+          from: "merging",
+          fromRow: "pos1",
+          to: "done",
+          toRow: "pos3",
+          begin: 1.1,
+          flight: 1.3,
+        },
+        expands: [{ lane: "merging", top: 46, bottom: 146, until: "departed" }],
+        collapses: [
+          { lane: "done", capTop: 157, newBottom: 165, oldBottom: 252, until: "approach" },
+        ],
+        covers: [{ lane: "done", row: "pos3", from: "approach" }],
+        counters: [{ lane: "merging", value: "1", until: "lift" }],
+      });
+
+      // GitHub scenes: pan and zoom the real screenshots to the region the
+      // caption talks about, then hold it readable.
+      const ghMove = (sceneId, keyframes, begin, duration) => {
+        const pan = document.querySelector('[data-gh="' + sceneId + '"]');
+        animate(pan, keyframes, sceneStart(sceneId) + begin, duration);
+      };
+      // s08: start on the diff, then travel down to the review comment.
+      document.querySelector('[data-gh="s08"]').style.transformOrigin = "560px 620px";
+      ghMove(
+        "s08",
+        [
+          { translate: "0px 0px", scale: 1 },
+          { translate: "0px 0px", scale: 1, offset: 0.25 },
+          { translate: "0px -300px", scale: 1.28 },
+        ],
+        0.4,
+        4.4,
+      );
+      // s11: settle on the resolved thread and the Codex reply.
+      document.querySelector('[data-gh="s11"]').style.transformOrigin = "560px 540px";
+      ghMove(
+        "s11",
+        [
+          { translate: "0px 0px", scale: 1 },
+          { translate: "0px -140px", scale: 1.24 },
+        ],
+        0.5,
+        2.2,
+      );
+      // s13: push in gently on the Merged badge without cutting the title.
+      document.querySelector('[data-gh="s13"]').style.transformOrigin = "0px 120px";
+      ghMove("s13", [{ scale: 1 }, { scale: 1.15 }], 0.3, 3.6);
+
+      // s15 — the phone slides up next to the laptop board, and the board
+      // keeps a slow push-in so the scene never freezes.
+      animate(
+        document.getElementById("s15-phone"),
+        [
+          { opacity: 0, translate: "0px 260px" },
+          { opacity: 1, translate: "0px 0px" },
+        ],
+        sceneStart("s15") + 0.5,
+        0.9,
+      );
+      document.getElementById("s15-board-img").style.transformOrigin = "170px 60px";
+      animate(
+        document.getElementById("s15-board-img"),
+        [{ scale: 1 }, { scale: 1.07 }],
+        sceneStart("s15") + 0.2,
+        4.7,
+        { easing: "linear" },
+      );
+
+      // s16 — hero: slow breathing zoom keeps the closing frame alive.
+      animate(
+        document.getElementById("hero-media"),
+        [{ scale: 1 }, { scale: 1.025 }],
+        sceneStart("s16") + 0.8,
+        5.2,
+        { easing: "linear" },
+      );
+    </script>
+  </body>
+</html>
