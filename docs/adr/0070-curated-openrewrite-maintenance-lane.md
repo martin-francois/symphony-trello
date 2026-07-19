@@ -14,6 +14,10 @@ informed: [Future maintainers, Contributors]
 
 # Use A Curated OpenRewrite-To-Spotless Maintenance Pipeline
 
+The manual Renovate update flow in this decision is amended by
+[ADR 0071](0071-automate-openrewrite-renovate-updates.md). The curated pipeline, allowlist,
+compatibility policy, and ordered fixed-point contract remain current.
+
 ## Context and Problem Statement
 
 Symphony for Trello targets Java 25 and has blocking formatting, compiler, static-analysis, and test
@@ -117,9 +121,9 @@ The separate formatter invocation reloads a POM changed by OpenRewrite. The chec
 because both tools apply changes locally, but the job has only `contents: read` permission. It
 never commits, pushes, comments, opens a pull request, or uploads generated output.
 
-Renovate separates OpenRewrite and Picnic recipe updates from unrelated dependency groups, delays
-them for seven days, requires dependency-dashboard approval, and disables automerge. Each update
-must pass the same ordered fixed-point check and full Maven gate after complete diff review.
+Renovate publication and merge policy is owned by
+[ADR 0071](0071-automate-openrewrite-renovate-updates.md). Each update must still pass the same
+ordered fixed-point check and full Maven gate.
 
 Quarkus migrations remain owned by `quarkus:update` in the specific dependency-update branch.
 Generic dependency and plugin versions remain owned by POM properties and Renovate. The general
@@ -146,8 +150,8 @@ supported runtime or user contract, so `SPEC.md` does not need an update.
   removed or renamed ID fail validation.
 * Bad, because CI performs two mutating tool invocations before it can prove the checkout was
   already canonical.
-* Bad, because maintainers must repeat candidate measurement and complete diff review when a
-  catalog release changes behavior.
+* Neutral, because generated behavior changes still require complete diff review through the
+  automation defined by ADR 0071.
 * Neutral, because Quarkus upgrades and dependency versions continue through their existing owners.
 
 ### Confirmation
@@ -166,8 +170,7 @@ This decision remains implemented when:
   compatible bug corrections remain eligible, future findings require review, preferable breaking
   transformations remain inactive and separately recorded, and unsafe transformations remain
   rejected;
-* Renovate cannot group or automerge a recipe update and requires its release-age delay and
-  dashboard approval; and
+* Renovate automation continues to satisfy ADR 0071; and
 * Quarkus and general dependency versions remain outside the recurring composite.
 
 ## Pros and Cons of the Options

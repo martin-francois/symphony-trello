@@ -86,20 +86,31 @@ jobs:
     # than the local Maven default to minimize normalized Blacksmith cost.
     if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    env:
+      ISOLATE_OPENREWRITE: >-
+        ${{ github.event_name == 'pull_request'
+        && (github.head_ref == 'renovate/openrewrite-toolchain'
+        || startsWith(github.head_ref, 'automation/openrewrite/renovate-')) }}
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
       - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5
+        if: ${{ env.ISOLATE_OPENREWRITE != 'true' }}
         with:
           distribution: temurin
           java-version: "25"
           cache: maven
       - name: Apply curated OpenRewrite recipes
+        if: ${{ env.ISOLATE_OPENREWRITE != 'true' }}
         run: ./mvnw -Popenrewrite rewrite:run
       - name: Apply Spotless formatting
+        if: ${{ env.ISOLATE_OPENREWRITE != 'true' }}
         run: ./mvnw spotless:apply
       - name: Verify the generated maintenance state is committed
+        if: ${{ env.ISOLATE_OPENREWRITE != 'true' }}
         run: |
           if [[ -n "$(git status --porcelain=v1 --untracked-files=all)" ]]; then
             git status --short
@@ -107,11 +118,54 @@ jobs:
             exit 1
           fi
       - name: Test and coverage, including fuzz, chaos, and installer lifecycle
+        if: ${{ env.ISOLATE_OPENREWRITE != 'true' }}
         run: ./mvnw -Djunit.parallel.enabled=true -Djunit.parallel.config.fixed.parallelism=2 spotless:check verify
+      - name: Test the OpenRewrite update in isolation
+        if: ${{ env.ISOLATE_OPENREWRITE == 'true' }}
+        env:
+          OPENREWRITE_IMAGE: >-
+            docker.io/library/maven:3.9.11-eclipse-temurin-25@sha256:407c4423cec0cf2981055bc2c6c0dc211d9605b6669279b95997f2d1c7e91e2c
+        run: |
+          set -euo pipefail
+          container_cache="$RUNNER_TEMP/openrewrite-ci-container-cache"
+          mkdir -p "$container_cache/home/.m2" "$container_cache/m2"
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --env HOME=/cache/home \
+            --env GIT_OPTIONAL_LOCKS=0 \
+            --env MAVEN_CONFIG=/cache/home/.m2 \
+            --env "MAVEN_OPTS=-Duser.home=/cache/home -Dmaven.repo.local=/cache/m2" \
+            --volume "$PWD:/workspace" \
+            --volume "$PWD/.git:/workspace/.git:ro" \
+            --volume "$container_cache:/cache" \
+            --workdir /workspace \
+            --entrypoint bash \
+            "$OPENREWRITE_IMAGE" \
+            -euo pipefail -c '
+              ./mvnw -Popenrewrite rewrite:run
+              ./mvnw spotless:apply
+              if [[ -n "$(git status --porcelain=v1 --untracked-files=all)" ]]; then
+                git status --short
+                git diff HEAD
+                exit 1
+              fi
+              ./mvnw \
+                -Djunit.parallel.enabled=true \
+                -Djunit.parallel.config.fixed.parallelism=2 \
+                spotless:check \
+                verify
+            '
 
   windows-powershell:
     if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}
     runs-on: blacksmith-2vcpu-windows-2025
+    env:
+      ISOLATE_OPENREWRITE: >-
+        ${{ github.event_name == 'pull_request'
+        && (github.head_ref == 'renovate/openrewrite-toolchain'
+        || startsWith(github.head_ref, 'automation/openrewrite/renovate-')) }}
     permissions:
       contents: read
     steps:
@@ -152,8 +206,11 @@ jobs:
             exit 1
           }
       - name: PowerShell installer option tests
+        if: ${{ env.ISOLATE_OPENREWRITE != 'true' }}
         run: .\mvnw.cmd -q '-Djunit.parallel.enabled=false' '-Dtest=InstallerScriptTest#*powershell*+*powerShell*' test
       - name: Diagnostics tool probe tests
+        if: ${{ env.ISOLATE_OPENREWRITE != 'true' }}
         run: .\mvnw.cmd -q '-Djunit.parallel.enabled=false' '-Dtest=SetupDiagnosticReporterTest#diagnosticsToolProbeUsesWindowsPathextWithoutHelperShell+diagnosticsRunsNativeWindowsPathextExecutableDirectly+deepDiagnosticsUsesWindowsPathextCodexExecutableForLoginStatus+deepDiagnosticsKeepsWindowsPathextCodexAvailableWhenLoginStatusFails+deepDiagnosticsUsesWindowsPathextGithubExecutableForAuthStatus+deepDiagnosticsKeepsWindowsPathextGithubAvailableWhenAuthStatusFails+diagnosticsMarksFoundToolWithUnavailableVersionAsAvailable+diagnosticsMarksFoundButUnlaunchableToolSeparately' test
       - name: PowerShell generated-wrapper lifecycle
+        if: ${{ env.ISOLATE_OPENREWRITE != 'true' }}
         run: .\mvnw.cmd -q '-Djunit.parallel.enabled=false' -Dtest=InstallerScriptLifecycleTest#powershellInstallerLifecycleInstallsStartsStopsAndUninstallsWithFakeJavaOnWindows test
