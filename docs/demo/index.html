@@ -292,10 +292,10 @@
         position: absolute;
         left: 200px;
         top: 26px;
-        width: 34px;
-        height: 40px;
+        width: 30px;
+        height: 38px;
         opacity: 0;
-        filter: drop-shadow(0 4px 8px rgba(8, 40, 58, 0.35));
+        filter: drop-shadow(0 3px 6px rgba(8, 40, 58, 0.4));
       }
       .focus-ring {
         position: absolute;
@@ -532,6 +532,19 @@
         display: block;
         width: 1600px;
       }
+      /* White mask over the capture's second, redundant Codex reply so the
+         answered-thread scene shows one comment and one response. */
+      .gh-mask {
+        position: absolute;
+        background: #ffffff;
+      }
+      /* Callout box around the Codex response. */
+      .gh-highlight {
+        position: absolute;
+        border: 3px solid #1a6e4b;
+        border-radius: 10px;
+        opacity: 0;
+      }
 
       /* ---- Anywhere scene. ---- */
       .anywhere-board {
@@ -615,7 +628,7 @@
 
       <section id="s02" class="clip" data-start="3.5" data-duration="5" data-track-index="1">
         <header class="cap" data-enter>
-          <span class="who who-you">You plan</span>
+          <span class="who who-you">You</span>
           <h2>Plan work where your team already plans work.</h2>
           <p>A task starts as an ordinary card on a real Trello board.</p>
         </header>
@@ -637,7 +650,7 @@
 
       <section id="s03" class="clip" data-start="8.5" data-duration="4.5" data-track-index="1">
         <header class="cap" data-enter>
-          <span class="who who-you">You plan</span>
+          <span class="who who-you">You</span>
           <h2>Describe the task like you would for a teammate.</h2>
           <p>The card title and description are the whole prompt.</p>
         </header>
@@ -1103,8 +1116,9 @@
         '<svg width="16" height="16" viewBox="0 0 16 16" fill="none">' +
         '<path d="M2.5 3.5h11v8h-6l-3 2.5v-2.5h-2z" stroke="#626f86" stroke-width="1.5" stroke-linejoin="round"/></svg>';
       const CURSOR_SVG =
-        '<svg width="34" height="40" viewBox="0 0 70 82" fill="none">' +
-        '<path d="M12 8L56 53L36 57L27 76L12 8Z" fill="white" stroke="#08283a" stroke-width="6" stroke-linejoin="round"/></svg>';
+        '<svg width="30" height="38" viewBox="0 0 26 34" fill="none">' +
+        '<path d="M4 2L4 26L9.7 20.3L13.2 29.3L17.4 27.6L13.8 18.8L21.5 18.8Z" ' +
+        'fill="#111827" stroke="#ffffff" stroke-width="1.6" stroke-linejoin="round"/></svg>';
 
       const cardInnerHtml = (card) => {
         let html = '<div class="card-title">' + card.text + "</div>";
@@ -1222,22 +1236,10 @@
           ring.style.top = slotTop([]) - 7 + "px";
           ring.style.width = CARD_W + 14 + "px";
           ring.style.height = CARD_H.badged + 14 + "px";
-          animate(
-            ring,
-            [
-              { opacity: 0, transform: "scale(1.06)" },
-              { opacity: 1, transform: "scale(1)" },
-            ],
-            t0 + config.highlight.at,
-            0.5,
-          );
-          animate(
-            ring,
-            [{ opacity: 1 }, { opacity: 1, offset: 0.7 }, { opacity: 0 }],
-            t0 + config.highlight.at + 0.5,
-            config.highlight.hold,
-            { easing: "linear" },
-          );
+          // Fade in at its final size and stay for the rest of the scene.
+          animate(ring, [{ opacity: 0 }, { opacity: 1 }], t0 + config.highlight.at, 0.35, {
+            easing: "linear",
+          });
         }
 
         const move = config.move;
@@ -1402,7 +1404,7 @@
           { at: 1.3, left: 0, width: 1280 },
           { at: 5, left: 0, width: 1230 },
         ],
-        highlight: { lane: "inbox", at: 1.6, hold: 2.6 },
+        highlight: { lane: "inbox", at: 1.6 },
       });
 
       // s03 — slow push-in on the open card.
@@ -1623,9 +1625,28 @@
       ghCamera("s11", [
         { at: 0, left: 50, top: 300, width: 1500 },
         { at: 1.5, left: 50, top: 300, width: 1500 },
-        { at: 3.0, left: 105, top: 700, width: 1160 },
-        { at: 7, left: 110, top: 704, width: 1150 },
+        { at: 3.0, left: 105, top: 660, width: 1160 },
+        { at: 7, left: 110, top: 664, width: 1150 },
       ]);
+      // The capture carries two near-identical Codex replies; mask the
+      // second so the thread reads as one comment and one response, and
+      // draw a callout box around the response once the camera lands.
+      {
+        const pan = document.querySelector('[data-gh="s11"]');
+        const mask = el("div", "gh-mask", pan);
+        mask.style.left = "133px";
+        mask.style.top = "1100px";
+        mask.style.width = "1131px";
+        mask.style.height = "181px";
+        const highlightBox = el("div", "gh-highlight", pan);
+        highlightBox.style.left = "150px";
+        highlightBox.style.top = "922px";
+        highlightBox.style.width = "1090px";
+        highlightBox.style.height = "182px";
+        animate(highlightBox, [{ opacity: 0 }, { opacity: 1 }], sceneStart("s11") + 3.9, 0.4, {
+          easing: "linear",
+        });
+      }
       ghCamera("s13", [
         { at: 0, left: 0, top: 0, width: 1600 },
         { at: 0.5, left: 0, top: 0, width: 1600 },

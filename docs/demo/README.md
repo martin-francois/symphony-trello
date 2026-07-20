@@ -64,6 +64,9 @@ What is code-rendered on top of the captures, rather than captured:
   wherever it matters, and the two truncated background card titles ("Retry Trello polling on…",
   "Add status page for ru…") are completed as "Retry Trello polling on errors" and "Add status
   page for runs";
+- in the answered-review scene, a white mask over the second, near-duplicate Codex reply in the
+  capture (the run replied twice), so the thread reads as one review comment and one response,
+  plus a green callout box around the kept response;
 - the Codex Workpad panel, restyled from the workpad content of the real run so the text stays
   readable at video size.
 
