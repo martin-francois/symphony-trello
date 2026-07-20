@@ -605,7 +605,7 @@
       data-composition-id="main"
       data-no-timeline
       data-start="0"
-      data-duration="90"
+      data-duration="95"
       data-width="1920"
       data-height="1080"
     >
@@ -924,7 +924,7 @@
         </div>
       </section>
 
-      <section id="s15" class="clip" data-start="79.5" data-duration="4.5" data-track-index="1">
+      <section id="s15" class="clip" data-start="79.5" data-duration="9.5" data-track-index="1">
         <header class="cap" data-enter>
           <span class="who who-you">Anywhere</span>
           <h2>Start from your phone. Review from your laptop.</h2>
@@ -949,7 +949,7 @@
         </div>
       </section>
 
-      <section id="s16" class="clip" data-start="84" data-duration="6" data-track-index="1">
+      <section id="s16" class="clip" data-start="89" data-duration="6" data-track-index="1">
         <h2 id="hero-head" class="hero-head" data-enter>
           You plan work in Trello. Codex implements it. Symphony keeps everything moving.
         </h2>
@@ -1625,25 +1625,26 @@
       ghCamera("s11", [
         { at: 0, left: 50, top: 300, width: 1500 },
         { at: 1.5, left: 50, top: 300, width: 1500 },
-        { at: 3.0, left: 105, top: 660, width: 1160 },
-        { at: 7, left: 110, top: 664, width: 1150 },
+        { at: 3.0, left: 114, top: 675, width: 1170 },
+        { at: 7, left: 118, top: 679, width: 1160 },
       ]);
-      // The capture carries two near-identical Codex replies; mask the
-      // second so the thread reads as one comment and one response, and
-      // draw a callout box around the response once the camera lands.
+      // The capture carries two near-identical Codex replies; mask the full
+      // page width below the response (including the thread box borders) so
+      // the thread reads as one comment and one response, and draw a
+      // callout box around the response as the camera lands.
       {
         const pan = document.querySelector('[data-gh="s11"]');
         const mask = el("div", "gh-mask", pan);
-        mask.style.left = "133px";
+        mask.style.left = "80px";
         mask.style.top = "1100px";
-        mask.style.width = "1131px";
-        mask.style.height = "181px";
+        mask.style.width = "1440px";
+        mask.style.height = "190px";
         const highlightBox = el("div", "gh-highlight", pan);
-        highlightBox.style.left = "150px";
-        highlightBox.style.top = "922px";
-        highlightBox.style.width = "1090px";
-        highlightBox.style.height = "182px";
-        animate(highlightBox, [{ opacity: 0 }, { opacity: 1 }], sceneStart("s11") + 3.9, 0.4, {
+        highlightBox.style.left = "130px";
+        highlightBox.style.top = "918px";
+        highlightBox.style.width = "1080px";
+        highlightBox.style.height = "167px";
+        animate(highlightBox, [{ opacity: 0 }, { opacity: 1 }], sceneStart("s11") + 3.05, 0.35, {
           easing: "linear",
         });
       }
@@ -1660,23 +1661,25 @@
         fit.setAttribute("data-layout-allow-overflow", "");
       }
 
-      // s15 — the phone slides up next to the laptop board, and the board
-      // keeps a slow push-in so the scene never freezes.
+      // s15 — the phone slides up next to the laptop board, then drifts
+      // gently while the board keeps a slow push-in so the long hold never
+      // freezes.
       animate(
         document.getElementById("s15-phone"),
         [
-          { opacity: 0, translate: "0px 260px" },
-          { opacity: 1, translate: "0px 0px" },
+          { opacity: 0, translate: "0px 260px", easing: EASE },
+          { opacity: 1, translate: "0px 0px", offset: 0.1, easing: "linear" },
+          { opacity: 1, translate: "0px -14px" },
         ],
         sceneStart("s15") + 0.5,
-        0.9,
+        9.0,
       );
       document.getElementById("s15-board-img").style.transformOrigin = "170px 60px";
       animate(
         document.getElementById("s15-board-img"),
-        [{ scale: 1 }, { scale: 1.07 }],
+        [{ scale: 1 }, { scale: 1.09 }],
         sceneStart("s15") + 0.2,
-        4.2,
+        9.2,
         { easing: "linear" },
       );
 
