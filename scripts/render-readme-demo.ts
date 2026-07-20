@@ -20,11 +20,11 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HYPERFRAMES = "hyperframes@0.7.64";
-/** Constant-rate factor chosen so the 86s video stays README-friendly. */
+/** Constant-rate factor chosen so the demo video stays README-friendly. */
 const VIDEO_CRF = "27";
 /** The final hero frame; keep inside the last scene of docs/demo/index.html. */
-const POSTER_TIME_SECONDS = "94.5";
-const EXPECTED_DURATION_SECONDS = 95;
+const POSTER_TIME_SECONDS = "92.5";
+const EXPECTED_DURATION_SECONDS = 93;
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const demoDir = join(repoRoot, "docs", "demo");
