@@ -620,6 +620,21 @@ that launched them. Late typed usage results and stale callbacks cannot change t
 pause, while normal card lifecycle may create an ordinary retry under the new command when the
 Trello target is unchanged. Invalid workflow reloads keep the existing command scope unchanged.
 
+### Queueing Work For Later Capacity
+
+You do not have to babysit the CLI to make good use of a Codex usage window. Add clear, ready cards
+to an active list such as `Ready for Codex` whenever you have them, even if there are more queued
+cards than the current concurrency setting can run at once. Symphony works through that queue
+according to workflow state, priority labels, prerequisite checklists, and
+`agent.max_concurrent_agents`, so Symphony starts ready cards as capacity becomes available without
+you starting each one by hand.
+
+If capacity is temporarily unavailable, such as during a Codex usage-limit pause, queued cards wait
+in their active list instead of failing. Symphony resumes dispatching them automatically when
+capacity returns. A queue prepared ahead of time therefore continues across a reset period without
+requiring you to retrigger each card by hand. This queueing behavior does not bypass Codex usage
+limits or grant extra capacity.
+
 Diagnostics are safe to paste into public issues by default. They summarize local setup, connected
 boards, workflow files, health probes, and recent logs while hiding secrets and private context. Use
 `symphony-trello diagnostics` when asking for help. Use `--deep` when a maintainer needs deeper
