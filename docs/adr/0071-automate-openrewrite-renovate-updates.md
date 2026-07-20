@@ -8,6 +8,7 @@ consulted:
   - "[Renovate branch update documentation](https://docs.renovatebot.com/updating-rebasing/)"
   - "[GitHub pull-request-target security guidance](https://docs.github.com/en/actions/reference/security/securely-using-pull_request_target)"
   - "[GitHub workflow-trigger documentation](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)"
+  - "[YAML package documentation](https://eemeli.org/yaml/)"
 informed: [Future maintainers, Contributors]
 ---
 
@@ -40,6 +41,7 @@ from the credential that publishes a branch.
 * Keep the seven-day minimum release age and exact Maven version pins.
 * Retain the repository-wide manual guard for major dependency updates.
 * Fail closed for unexpected authors, repositories, commits, paths, recipes, or non-fixed output.
+* Keep workflow behavior tests independent of semantically equivalent YAML indentation choices.
 
 ## Considered Options
 
@@ -49,6 +51,8 @@ from the credential that publishes a branch.
 * Run the ordered pipeline through Renovate `postUpgradeTasks`.
 * Publish a derived pull request with the workflow's default `GITHUB_TOKEN`.
 * Keep the manual update procedure from ADR 0070.
+* Parse workflow test fixtures with a directly declared YAML library.
+* Extract workflow scripts with repository-owned line and indentation matching.
 
 ## Decision Outcome
 
@@ -135,6 +139,11 @@ execution.
 This decision changes contributor automation only. It does not change a supported runtime or user
 contract, so `SPEC.md` does not need an update.
 
+Workflow behavior tests parse the workflow with the directly declared `yaml` development dependency
+and select `actions/github-script` content through the exact step name and `with.script` structure.
+They do not infer YAML structure from source indentation. This dependency runs only in repository
+test tooling; it is not part of the application or GitHub Actions runtime.
+
 ### Consequences
 
 * Good, because eligible non-major no-result OpenRewrite updates merge without maintainer work.
@@ -147,10 +156,13 @@ contract, so `SPEC.md` does not need an update.
 * Good, because inactive upstream recipe additions do not create mandatory catalog-review work.
 * Good, because major updates retain explicit maintainer approval even when the current generated
   result is empty.
+* Good, because semantically equivalent YAML indentation changes do not silently break workflow
+  script extraction in tests.
 * Bad, because updates with generated output temporarily have a blocked Renovate source pull
   request and a separate generated pull request.
 * Bad, because repository owners must create and install one narrowly scoped GitHub App and keep its
   private key in Actions secrets.
+* Bad, because script tests now carry one additional development dependency.
 * Bad, because a grouped update can require separating one defective artifact before the remaining
   artifacts can merge.
 * Neutral, because the existing CI fixed-point check remains the final merge guard.
@@ -185,7 +197,8 @@ This decision remains implemented when:
 * scheduled reconciliation marks stale output pending before generation and repairs missed events;
 * unchanged reconciliation preserves the generated commit, CI result, and maintainer approval;
 * changed generated branches invalidate stale maintainer approval; and
-* inactive newly discovered recipe leaves do not block a dependency update.
+* inactive newly discovered recipe leaves do not block a dependency update; and
+* workflow behavior tests locate inline scripts through parsed YAML structure and exact step names.
 
 ## Pros and Cons of the Options
 
@@ -235,6 +248,25 @@ every toolchain version.
 * Good, because it needs no branch-writing automation.
 * Bad, because no-result updates consume the same maintainer steps as semantic changes.
 * Bad, because an unattended update does not progress until a maintainer notices it.
+
+### Parse Workflow Tests With A YAML Library
+
+This option parses the workflow through the `yaml` package and locates each tested inline script by
+its exact step name and `with.script` property.
+
+* Good, because the test reads the same YAML structure that defines the workflow.
+* Good, because valid indentation changes do not alter script extraction.
+* Bad, because repository test tooling gains one directly declared development dependency.
+
+### Extract Workflow Scripts With Line And Indentation Matching
+
+This option scans the workflow as text, finds a step-name line, and removes a fixed number of spaces
+from the following script block.
+
+* Good, because it does not add a dependency.
+* Bad, because valid indentless sequences or different indentation widths produce incomplete or
+  incorrectly indented JavaScript.
+* Bad, because the test helper duplicates part of YAML's block-scalar grammar.
 
 ## More Information
 

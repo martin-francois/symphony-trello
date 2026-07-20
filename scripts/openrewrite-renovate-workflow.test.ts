@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import test from "node:test";
+import {parse} from "yaml";
 
 interface PullRequest {
   readonly base: {readonly ref: string; readonly repo: {readonly full_name: string}};
@@ -24,6 +25,20 @@ interface CommitStatus {
   readonly sha: string;
   readonly state: string;
   readonly target_url: string;
+}
+
+interface WorkflowDocument {
+  readonly jobs?: Readonly<
+    Record<
+      string,
+      {
+        readonly steps?: readonly {
+          readonly name?: unknown;
+          readonly with?: {readonly script?: unknown};
+        }[];
+      }
+    >
+  >;
 }
 
 type ExecutableAsyncFunction = (...arguments_: readonly unknown[]) => Promise<unknown>;
@@ -63,25 +78,49 @@ const CANDIDATE: PullRequest = {
   user: {login: "renovate[bot]"},
 };
 
-function workflowScript(stepName: string): string {
-  const lines = WORKFLOW.split("\n");
-  const stepStart = lines.findIndex((line) => line.trim() === `- name: ${stepName}`);
-  assert.notEqual(stepStart, -1, `${stepName} step must exist`);
-  const relativeScriptStart = lines
-    .slice(stepStart + 1)
-    .findIndex((line) => line.trim() === "script: |");
-  assert.notEqual(relativeScriptStart, -1, `${stepName} script block must exist`);
-  const scriptStart = stepStart + relativeScriptStart + 1;
-
-  const scriptLines: string[] = [];
-  for (const line of lines.slice(scriptStart + 1)) {
-    if (line && !line.startsWith("            ")) {
-      break;
-    }
-    scriptLines.push(line.slice(12));
-  }
-  return scriptLines.join("\n");
+function workflowScript(stepName: string, workflow = WORKFLOW): string {
+  const document = parse(workflow) as WorkflowDocument;
+  assert.ok(document.jobs, "workflow jobs must exist");
+  const matchingSteps = Object.values(document.jobs)
+    .flatMap(({steps}) => steps ?? [])
+    .filter(({name}) => name === stepName);
+  assert.equal(matchingSteps.length, 1, `${stepName} step must exist exactly once`);
+  const script = matchingSteps[0]?.with?.script;
+  assert.ok(typeof script === "string", `${stepName} script block must exist`);
+  return script;
 }
+
+test("workflow script extraction follows YAML structure across indentation styles", () => {
+  const workflow = `jobs:
+  verify:
+    steps:
+    - name: Execute workflow script
+      uses: actions/github-script@pinned
+      with:
+        script: |
+          return "parsed";
+`;
+
+  assert.equal(workflowScript("Execute workflow script", workflow), 'return "parsed";\n');
+});
+
+test("workflow script extraction reports missing structure clearly", () => {
+  const workflow = `jobs:
+  verify:
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@pinned
+`;
+
+  assert.throws(
+    () => workflowScript("Absent", workflow),
+    /Absent step must exist exactly once/,
+  );
+  assert.throws(
+    () => workflowScript("Checkout source", workflow),
+    /Checkout source script block must exist/,
+  );
+});
 
 async function resolve(
   eventName: "pull_request_target" | "schedule" | "workflow_dispatch",
