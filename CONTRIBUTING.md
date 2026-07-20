@@ -249,6 +249,10 @@ git diff
 Use a clean branch or disposable worktree, review the complete combined diff, and commit only a
 state for which `OpenRewrite -> Spotless` leaves no Git changes. A raw `rewrite:dryRun` remains
 available as an optional preview, but its unformatted output is not the accepted repository state.
+Renovate toolchain updates use a derived-pull-request workflow: eligible non-major updates with no
+generated change automerge, while updates with a generated change require only review and merge of
+the generated pull request. Major updates retain the repository-wide manual guard. Maintainers do
+not add commits to Renovate's source branch.
 The [OpenRewrite maintenance guide](docs/openrewrite.md) documents the pinned inventory,
 recipe-specific positive and zero-result decisions, artifact handling, rollback, validation, and
 update policy.
