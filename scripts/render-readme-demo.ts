@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Renders the README demo video and poster from the HyperFrames composition
  * in docs/demo, then verifies the committed outputs:
@@ -14,7 +13,14 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,18 +30,44 @@ const HYPERFRAMES = "hyperframes@0.7.64";
 const VIDEO_CRF = "27";
 /** The final hero frame; keep inside the last scene of docs/demo/index.html. */
 const POSTER_TIME_SECONDS = "92.5";
-const EXPECTED_DURATION_SECONDS = 93;
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const demoDir = join(repoRoot, "docs", "demo");
 const videoPath = join(repoRoot, "docs", "assets", "readme-demo.mp4");
 const posterPath = join(repoRoot, "docs", "assets", "readme-demo-poster.png");
 
+function readExpectedDurationSeconds(): number {
+  const html = readFileSync(join(demoDir, "index.html"), "utf8");
+  const rootTag = html.match(/<main\b[^>]*\bid=["']root["'][^>]*>/)?.[0];
+  const htmlDuration = Number(rootTag?.match(/\bdata-duration=["']([^"']+)["']/)?.[1]);
+  if (!Number.isFinite(htmlDuration) || htmlDuration <= 0) {
+    throw new Error("docs/demo/index.html must declare a positive data-duration on #root");
+  }
+
+  const motion = JSON.parse(readFileSync(join(demoDir, "index.motion.json"), "utf8")) as {
+    duration?: unknown;
+  };
+  if (typeof motion.duration !== "number" || !Number.isFinite(motion.duration) || motion.duration <= 0) {
+    throw new Error("docs/demo/index.motion.json must declare a positive numeric duration");
+  }
+  if (htmlDuration !== motion.duration) {
+    throw new Error(
+      `demo duration mismatch: index.html declares ${htmlDuration}s, ` +
+      `index.motion.json declares ${motion.duration}s`,
+    );
+  }
+  return htmlDuration;
+}
+
 function run(command: string, args: string[]): void {
   console.log(`\n$ ${command} ${args.join(" ")}`);
   const result = spawnSync(command, args, { cwd: demoDir, stdio: "inherit" });
   if (result.status !== 0) {
-    throw new Error(`${command} ${args[0] ?? ""} failed with status ${result.status}`);
+    const detail = result.error?.message;
+    throw new Error(
+      `${command} ${args[0] ?? ""} failed with status ${result.status}` +
+      (detail === undefined ? "" : `: ${detail}`),
+    );
   }
 }
 
@@ -46,7 +78,8 @@ function ffprobe(path: string): { codec: string; duration: number; streamCount: 
     { encoding: "utf8" },
   );
   if (result.status !== 0) {
-    throw new Error(`ffprobe failed for ${path}: ${result.stderr}`);
+    const detail = result.stderr?.trim() || result.error?.message || "no error detail";
+    throw new Error(`ffprobe failed for ${path}: ${detail}`);
   }
   const parsed = JSON.parse(result.stdout) as {
     streams: { codec_type: string; codec_name: string }[];
@@ -63,6 +96,7 @@ function ffprobe(path: string): { codec: string; duration: number; streamCount: 
   };
 }
 
+const expectedDurationSeconds = readExpectedDurationSeconds();
 const skipCheck = process.argv.includes("--skip-check");
 
 if (!skipCheck) {
@@ -108,9 +142,9 @@ if (probe.streamCount !== 1 || probe.codec !== "h264") {
     `expected exactly one H.264 video stream, found ${probe.streamCount} stream(s), codec ${probe.codec}`,
   );
 }
-if (Math.abs(probe.duration - EXPECTED_DURATION_SECONDS) > 1) {
+if (Math.abs(probe.duration - expectedDurationSeconds) > 1) {
   throw new Error(
-    `expected ~${EXPECTED_DURATION_SECONDS}s of video, ffprobe reports ${probe.duration}s`,
+    `expected ~${expectedDurationSeconds}s of video, ffprobe reports ${probe.duration}s`,
   );
 }
 
