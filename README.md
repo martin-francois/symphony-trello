@@ -629,7 +629,11 @@ according to workflow state, priority labels, prerequisite checklists, and
 `agent.max_concurrent_agents`, so Symphony starts ready cards as capacity becomes available without
 you starting each one by hand.
 
-If capacity is temporarily unavailable, for example during a Codex usage-limit pause, queued cards simply wait in their active list instead of failing. Symphony resumes dispatching them automatically once capacity returns, so a queue prepared ahead of time keeps making progress across a reset period instead of requiring you to retrigger each card by hand. This describes queueing and automatic continuation only; it does not bypass Codex usage limits or grant extra capacity.
+If capacity is temporarily unavailable, such as during a Codex usage-limit pause, queued cards wait
+in their active list instead of failing. Symphony resumes dispatching them automatically when
+capacity returns. A queue prepared ahead of time therefore continues across a reset period without
+requiring you to retrigger each card by hand. This queueing behavior does not bypass Codex usage
+limits or grant extra capacity.
 
 Diagnostics are safe to paste into public issues by default. They summarize local setup, connected
 boards, workflow files, health probes, and recent logs while hiding secrets and private context. Use
