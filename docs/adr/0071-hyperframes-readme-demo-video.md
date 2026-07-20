@@ -64,9 +64,12 @@ The visual source stays the committed, already-sanitized captures of the real di
 (real Trello board, real Codex run, real GitHub PR review/rework/merge) that the earlier Remotion
 attempts produced. This environment has no Trello credentials, and those captures are real product
 UI from a real run, which is exactly what the issue asks for; re-recording would add risk without
-adding authenticity. The still captures are composited with code-rendered card movement, list
-grow/shrink patches, and counter patches so board transitions between captured states read as real
-Trello behavior.
+adding authenticity. The still captures are composited with a code-rendered moving card, and the
+two Trello lists involved in each move are re-rendered in code over the capture so placeholders,
+list growth and shrink, and counter changes animate the way Trello animates them between the
+captured states. The Done list, which the capture cuts off at the right edge, is code-rendered in
+full where the story needs it; the completion of its two truncated background card titles is
+documented in [docs/demo/README.md](../demo/README.md).
 
 ### Consequences
 

@@ -40,7 +40,7 @@ pnpm dlx hyperframes@0.7.64 snapshot --at 17,29,42.5   # stills for visual revie
   `data-start` times, plus a script that builds the board overlays and every animation. The
   script reads scene timing back from the `data-start` attributes, so the HTML is the single
   timing table. The file stays monolithic on purpose: the scenes share the board geometry
-  constants and overlay builder, which sub-composition files would have to duplicate, so the
+  constants and list builder, which sub-composition files would have to duplicate, so the
   `composition_file_too_large` and `timeline_track_too_dense` lint warnings are accepted.
 - `index.motion.json` — motion assertions `check` verifies against the seeked timeline.
 - `assets/captures/` — safe, optimized exports from the real run (see below).
@@ -56,9 +56,14 @@ include browser/session metadata and UI chrome that is not needed to regenerate 
 What is code-rendered on top of the captures, rather than captured:
 
 - captions, actor badges, window chrome, the intro and hero frames, and the phone bezel;
-- the moving Trello card, its cursor drag and automated glide, the list grow/shrink patches, and
-  the list counter patches that keep counts truthful while the card is in flight (the captures
-  are still frames, so the movement between them is reconstructed in code);
+- the moving Trello card and, for the two lists involved in each move, complete code-rendered
+  Trello lists over the capture, so drag placeholders, list growth and shrink, and counter
+  changes animate the way Trello animates them (the captures are still frames, so the movement
+  between them is reconstructed in code);
+- the complete Done list: the capture cuts it off at the right edge, so it is code-rendered
+  wherever it matters, and the two truncated background card titles ("Retry Trello polling on…",
+  "Add status page for ru…") are completed as "Retry Trello polling on errors" and "Add status
+  page for runs";
 - the Codex Workpad panel, restyled from the workpad content of the real run so the text stays
   readable at video size.
 

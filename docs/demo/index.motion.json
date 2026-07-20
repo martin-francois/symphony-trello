@@ -1,9 +1,9 @@
 {
-  "duration": 86,
+  "duration": 90,
   "assertions": [
     { "kind": "appearsBy", "selector": "#intro-title", "bySec": 1 },
     { "kind": "before", "a": "#intro-title", "b": "#hero-head" },
-    { "kind": "appearsBy", "selector": "#hero-head", "bySec": 81.5 },
+    { "kind": "appearsBy", "selector": "#hero-head", "bySec": 85.5 },
     { "kind": "staysInFrame", "selector": "#hero-head" },
     { "kind": "keepsMoving", "maxStaticSec": 3.5 }
   ]
