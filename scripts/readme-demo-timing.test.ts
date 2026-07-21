@@ -37,6 +37,7 @@ function createDemoFixture(t: test.TestContext, normalWpm: number, reflectiveWpm
       <script>
         const NORMAL_READING_WORDS_PER_MINUTE = ${normalWpm};
         const REFLECTIVE_READING_WORDS_PER_MINUTE = ${reflectiveWpm};
+        const MANUAL_DRAG_SETTLE_SECONDS = 1;
       </script>
     `,
     "utf8",
@@ -109,6 +110,29 @@ test("overlaps reading with visual action after a declared lead", (t) => {
   assert.match(
     resolvedHtml,
     /id="s02"[\s\S]*?data-duration="5"[\s\S]*?data-visual-duration="3"/,
+  );
+});
+
+test("adds the manual drag settle hold after visual action", (t) => {
+  // given
+  const demoDir = createDemoFixture(t, 75, 50);
+  const htmlPath = join(demoDir, "index.html");
+  const html = readFileSync(htmlPath, "utf8").replace(
+    'id="s02"',
+    'id="s02" data-post-action-hold="manual-drag"',
+  );
+  writeFileSync(htmlPath, html, "utf8");
+
+  // when
+  const timing = materializeReadmeDemoTiming(demoDir);
+
+  // then
+  assert.equal(timing.duration, 22.8);
+  assert.equal(timing.sceneStarts.get("s03"), 14);
+  const resolvedHtml = readFileSync(htmlPath, "utf8");
+  assert.match(
+    resolvedHtml,
+    /id="s02"[\s\S]*?data-duration="8"[\s\S]*?data-visual-duration="3"/,
   );
 });
 

@@ -660,7 +660,8 @@
     >
       <!-- Scene durations below are fixed visual-action durations. By default,
            the calculated reading hold precedes that action. data-action-lead
-           lets ambient motion overlap reading after a short declared lead. -->
+           lets ambient motion overlap reading after a short declared lead.
+           Manual card drags add their separate post-action settle hold. -->
 
       <section
         id="s01"
@@ -744,6 +745,7 @@
         data-start="s03"
         data-duration="4.8"
         data-reading-pace="normal"
+        data-post-action-hold="manual-drag"
         data-track-index="1"
       >
         <header class="cap" data-enter data-reading-copy>
@@ -900,6 +902,7 @@
         data-start="s08"
         data-duration="4.4"
         data-reading-pace="normal"
+        data-post-action-hold="manual-drag"
         data-track-index="1"
       >
         <header class="cap" data-enter data-reading-copy>
@@ -998,6 +1001,7 @@
         data-start="s11"
         data-duration="4.4"
         data-reading-pace="reflective"
+        data-post-action-hold="manual-drag"
         data-track-index="1"
       >
         <header class="cap" data-enter data-reading-copy>
@@ -1227,6 +1231,7 @@
 
       const NORMAL_READING_WORDS_PER_MINUTE = 240;
       const REFLECTIVE_READING_WORDS_PER_MINUTE = 160;
+      const MANUAL_DRAG_SETTLE_SECONDS = 1;
       const READING_WORDS_PER_MINUTE = Object.freeze({
         normal: NORMAL_READING_WORDS_PER_MINUTE,
         reflective: REFLECTIVE_READING_WORDS_PER_MINUTE,
@@ -1264,6 +1269,17 @@
         return actionLead;
       };
 
+      const postActionHoldSeconds = (scene) => {
+        const hold = scene.dataset.postActionHold;
+        if (hold === undefined) {
+          return 0;
+        }
+        if (hold !== "manual-drag") {
+          throw new Error(`${scene.id} declares an unknown post-action hold`);
+        }
+        return MANUAL_DRAG_SETTLE_SECONDS;
+      };
+
       const root = document.getElementById("root");
       if (!root.hasAttribute("data-timing-resolved")) {
         let nextStart = 0;
@@ -1274,8 +1290,11 @@
           }
           const readingHold = readingHoldSeconds(scene);
           const actionLead = actionLeadSeconds(scene);
+          const postActionHold = postActionHoldSeconds(scene);
           const duration =
-            Math.round(Math.max(readingHold, actionLead + visualDuration) * 10) / 10;
+            Math.round(
+              Math.max(readingHold, actionLead + visualDuration + postActionHold) * 10,
+            ) / 10;
           scene.dataset.visualDuration = visualDuration.toFixed(1).replace(/\.0$/, "");
           scene.dataset.start = nextStart.toFixed(1).replace(/\.0$/, "");
           scene.dataset.duration = duration.toFixed(1).replace(/\.0$/, "");

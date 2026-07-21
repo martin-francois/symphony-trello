@@ -34,6 +34,17 @@ function readWordsPerMinute(html: string, constantName: string): number {
   return wordsPerMinute;
 }
 
+function readNonNegativeSeconds(html: string, constantName: string): number {
+  const match = html.match(
+    new RegExp(`const\\s+${constantName}\\s*=\\s*(\\d+(?:\\.\\d+)?)\\s*;`),
+  );
+  const seconds = Number(match?.[1]);
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    throw new Error(`docs/demo/index.html must define a non-negative ${constantName}`);
+  }
+  return seconds;
+}
+
 function readAttribute(tag: string, name: string): string | undefined {
   return tag.match(new RegExp(`\\b${name}=["']([^"']+)["']`, "i"))?.[1];
 }
@@ -68,6 +79,10 @@ function calculateSceneTiming(html: string): SceneTiming[] {
     normal: readWordsPerMinute(html, "NORMAL_READING_WORDS_PER_MINUTE"),
     reflective: readWordsPerMinute(html, "REFLECTIVE_READING_WORDS_PER_MINUTE"),
   } as const;
+  const manualDragSettleSeconds = readNonNegativeSeconds(
+    html,
+    "MANUAL_DRAG_SETTLE_SECONDS",
+  );
   const scenes: SceneTiming[] = [];
   let nextStart = 0;
 
@@ -99,7 +114,17 @@ function calculateSceneTiming(html: string): SceneTiming[] {
       throw new Error(`${id} must declare a non-negative data-action-lead`);
     }
 
-    const duration = roundToTenth(Math.max(readingHold, actionLead + visualDuration));
+    const postActionHold = readAttribute(tag, "data-post-action-hold");
+    if (postActionHold !== undefined && postActionHold !== "manual-drag") {
+      throw new Error(`${id} declares an unknown post-action hold`);
+    }
+    const postActionHoldSeconds = postActionHold === "manual-drag"
+      ? manualDragSettleSeconds
+      : 0;
+
+    const duration = roundToTenth(
+      Math.max(readingHold, actionLead + visualDuration + postActionHoldSeconds),
+    );
     scenes.push({duration, id, start: nextStart, visualDuration});
     nextStart = roundToTenth(nextStart + duration);
   }
