@@ -54,6 +54,11 @@ pending version does not prevent eligible versions from creating or updating the
 request. Renovate's security-update cooldown bypass remains available for disclosed
 vulnerabilities.
 
+Pure `digest`, `pin`, and `pinDigest` updates remain disabled because Renovate does not apply the
+minimum release age to them. `statusCheckWhen.minimumReleaseAge: "never"` omits the branch-level
+status; strict filtering decides version eligibility before branch creation, while the disabled
+update-type rule prevents timestamp-less digest and pin updates from bypassing that filter.
+
 The repository-wide major-update rule keeps `automerge: false`, so any pull request containing a
 major update requires human pull-request approval and manual merge. Package-specific rules for
 Quarkus update recipes and vendored Tessl guidance also retain `automerge: false` because their
@@ -87,6 +92,9 @@ This decision remains implemented when:
 * no package rule overrides `dependencyDashboardApproval`;
 * repository-level `minimumReleaseAge` is `7 days`, `minimumReleaseAgeBehaviour` is
   `timestamp-required`, and `internalChecksFilter` is `strict`;
+* the minimum-release-age status is disabled because strict filtering enforces the cooldown before
+  branch creation;
+* `digest`, `pin`, and `pinDigest` updates are disabled because Renovate cannot age-gate them;
 * no package rule overrides the repository-wide minimum release age;
 * the major-update package rule has `automerge: false`;
 * Quarkus update recipe and Tessl tile updates retain their existing manual-merge policy; and

@@ -60,6 +60,13 @@ from versions that have passed the cooldown; newer ineligible versions join only
 cooldown passes. Renovate security updates retain their documented cooldown bypass so a disclosed
 vulnerability does not wait seven days for remediation.
 
+Renovate does not apply `minimumReleaseAge` to `digest`, `pin`, or `pinDigest` updates. Those update
+types are disabled because the repository cannot prove that their target has completed the
+cooldown. A GitHub Action version update still replaces its full SHA as part of the eligible
+major, minor, or patch update. `statusCheckWhen.minimumReleaseAge: "never"` suppresses the redundant
+branch status: strict filtering is the enforcement mechanism, and unsupported update types cannot
+enter a Renovate branch.
+
 ### Consequences
 
 * Good, because GitHub Actions references are immutable full SHAs.
@@ -75,8 +82,12 @@ vulnerability does not wait seven days for remediation.
   before its seven-day cooldown passes.
 * Good, because eligible updates continue without waiting for unrelated versions that remain in
   cooldown.
+* Good, because a pure digest change without a release timestamp cannot bypass the cooldown and
+  execute in repository CI.
 * Bad, because SHA-pinned actions are less readable than tag-only action references.
 * Bad, because ordinary fixes remain unavailable to Renovate for seven days after publication.
+* Bad, because a digest-only refresh waits for an eligible version update or an explicitly reviewed
+  manual change.
 * Bad, because the regex manager must stay aligned with the workflow command text.
 
 ### Confirmation
@@ -84,8 +95,10 @@ vulnerability does not wait seven days for remediation.
 Run `pnpm dlx --package renovate renovate-config-validator renovate.json` and
 `./mvnw -q spotless:check verify`. Repository tests confirm that the only release-age policy is the
 repository-wide seven-day cooldown, timestamp-less releases remain ineligible, and strict internal
-checks prevent early branch creation. Review should also confirm `.github/workflows/*.yml` uses full
-action SHAs with version comments and commitlint package pins are Renovate-managed.
+checks prevent early branch creation. Tests also confirm that Renovate does not create unageable
+digest or pin updates and does not publish a redundant minimum-release-age status. Review should
+also confirm `.github/workflows/*.yml` uses full action SHAs with version comments and commitlint
+package pins are Renovate-managed.
 
 ## Pros and Cons of the Options
 
@@ -139,4 +152,6 @@ seven-day cooldown is a supply-chain observation window, not an assertion that r
 after seven days. The upstream Semgrep supply-chain rule requires a repeated release age inside every
 package rule and does not account for Renovate's inherited repository-level setting. The Semgrep
 wrapper excludes that rule; the repository test instead enforces the stronger single global policy
-and rejects package-level overrides.
+and rejects package-level overrides. Renovate release-age filtering supports version updates but not
+pure digest or pin updates, so those update types remain disabled unless a future implementation can
+provide and enforce trustworthy release timestamps.

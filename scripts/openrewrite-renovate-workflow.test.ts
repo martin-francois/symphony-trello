@@ -66,6 +66,7 @@ const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
     readonly automerge?: boolean;
     readonly branchTopic?: string;
     readonly dependencyDashboardApproval?: boolean;
+    readonly enabled?: boolean;
     readonly groupName?: string;
     readonly matchDepTypes?: readonly string[];
     readonly matchPackageNames?: readonly string[];
@@ -74,6 +75,9 @@ const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
     readonly platformAutomerge?: boolean;
   }[];
   readonly prConcurrentLimit?: number;
+  readonly statusCheckWhen?: {
+    readonly minimumReleaseAge?: string;
+  };
 };
 const CANDIDATE: PullRequest = {
   base: {ref: "main", repo: {full_name: "owner/repo"}},
@@ -938,10 +942,17 @@ test("Renovate enforces the repository-wide seven-day dependency cooldown", () =
   assert.equal(RENOVATE_CONFIG.minimumReleaseAge, "7 days");
   assert.equal(RENOVATE_CONFIG.minimumReleaseAgeBehaviour, "timestamp-required");
   assert.equal(RENOVATE_CONFIG.internalChecksFilter, "strict");
+  assert.equal(RENOVATE_CONFIG.statusCheckWhen?.minimumReleaseAge, "never");
   assert.ok(RENOVATE_CONFIG.extends?.includes("group:all"));
   for (const rule of RENOVATE_CONFIG.packageRules) {
     assert.equal(rule.minimumReleaseAge, undefined);
   }
+
+  const unsupportedUpdateRule = RENOVATE_CONFIG.packageRules.find(({matchUpdateTypes}) =>
+    matchUpdateTypes?.includes("digest"),
+  );
+  assert.deepEqual(unsupportedUpdateRule?.matchUpdateTypes, ["digest", "pin", "pinDigest"]);
+  assert.equal(unsupportedUpdateRule?.enabled, false);
 });
 
 test("Renovate permits unlimited concurrent branches and pull requests", () => {
