@@ -82,9 +82,10 @@ jobs:
         run: pnpm run verify:scripts
 
   test:
-    # ADR 0048 requires the hosted JUnit parallelism to match the runner's vCPU count.
+    # ADR 0048 keeps this job on 2 vCPU and matches hosted JUnit parallelism
+    # to the runner's vCPU count to minimize normalized Blacksmith cost.
     if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     env:
       ISOLATE_OPENREWRITE: >-
         ${{ github.event_name == 'pull_request'
@@ -118,7 +119,7 @@ jobs:
           fi
       - name: Test and coverage, including fuzz, chaos, and installer lifecycle
         if: ${{ env.ISOLATE_OPENREWRITE != 'true' }}
-        run: ./mvnw -Djunit.parallel.enabled=true -Djunit.parallel.config.fixed.parallelism=4 spotless:check verify
+        run: ./mvnw -Djunit.parallel.enabled=true -Djunit.parallel.config.fixed.parallelism=2 spotless:check verify
       - name: Test the OpenRewrite update in isolation
         if: ${{ env.ISOLATE_OPENREWRITE == 'true' }}
         env:
