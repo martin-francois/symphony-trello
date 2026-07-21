@@ -10,6 +10,7 @@ interface SceneTiming {
   duration: number;
   id: string;
   start: number;
+  visualDuration: number;
 }
 
 const WORD_PATTERN = /\b[\w’'-]+\b/g;
@@ -43,6 +44,13 @@ function replaceAttribute(tag: string, name: string, value: string): string {
     throw new Error(`docs/demo/index.html is missing ${name}`);
   }
   return tag.replace(pattern, `$1${value}$2`);
+}
+
+function appendAttribute(tag: string, name: string, value: string): string {
+  if (readAttribute(tag, name) !== undefined) {
+    throw new Error(`docs/demo/index.html must not define generated ${name}`);
+  }
+  return tag.replace(/>$/, ` ${name}="${value}">`);
 }
 
 function readReadingCopy(content: string, sceneId: string): string {
@@ -83,8 +91,16 @@ function calculateSceneTiming(html: string): SceneTiming[] {
     const wordCount = readingText.match(WORD_PATTERN)?.length ?? 0;
     const readingHold = Math.ceil((wordCount * 60 * 10) / wordsPerMinute[readingPace]) / 10;
 
-    const duration = roundToTenth(visualDuration + readingHold);
-    scenes.push({duration, id, start: nextStart});
+    const actionLeadAttribute = readAttribute(tag, "data-action-lead");
+    const actionLead = actionLeadAttribute === undefined
+      ? readingHold
+      : Number(actionLeadAttribute);
+    if (!Number.isFinite(actionLead) || actionLead < 0) {
+      throw new Error(`${id} must declare a non-negative data-action-lead`);
+    }
+
+    const duration = roundToTenth(Math.max(readingHold, actionLead + visualDuration));
+    scenes.push({duration, id, start: nextStart, visualDuration});
     nextStart = roundToTenth(nextStart + duration);
   }
 
@@ -118,10 +134,14 @@ export function materializeReadmeDemoTiming(demoDir: string): CompositionTiming 
       "i",
     );
     resolvedHtml = resolvedHtml.replace(scenePattern, (tag) =>
-      replaceAttribute(
-        replaceAttribute(tag, "data-start", formatSeconds(scene.start)),
-        "data-duration",
-        formatSeconds(scene.duration),
+      appendAttribute(
+        replaceAttribute(
+          replaceAttribute(tag, "data-start", formatSeconds(scene.start)),
+          "data-duration",
+          formatSeconds(scene.duration),
+        ),
+        "data-visual-duration",
+        formatSeconds(scene.visualDuration),
       ));
   }
   writeFileSync(htmlPath, resolvedHtml, "utf8");

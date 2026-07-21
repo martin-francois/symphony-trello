@@ -62,17 +62,6 @@
         position: absolute;
         inset: 0;
       }
-      .reading-progress {
-        position: absolute;
-        left: 80px;
-        bottom: 38px;
-        width: 120px;
-        height: 5px;
-        border-radius: 999px;
-        background: #0a5dcf;
-        z-index: 20;
-      }
-
       /* ---- Caption block: the most important text sits near the top. ---- */
       .cap {
         position: absolute;
@@ -664,9 +653,9 @@
       data-width="1920"
       data-height="1080"
     >
-      <!-- Scene durations below are fixed visual-action durations. The script
-           adds each scene's calculated reading hold, resolves every cumulative
-           start, and sets the root duration before animations are built. -->
+      <!-- Scene durations below are fixed visual-action durations. By default,
+           the calculated reading hold precedes that action. data-action-lead
+           lets ambient motion overlap reading after a short declared lead. -->
 
       <section
         id="s01"
@@ -674,6 +663,7 @@
         data-start="0"
         data-duration="3.5"
         data-reading-pace="normal"
+        data-action-lead="0"
         data-track-index="1"
       >
         <header class="center-stack" data-reading-copy>
@@ -694,6 +684,7 @@
         data-start="s01"
         data-duration="5"
         data-reading-pace="normal"
+        data-action-lead="1.5"
         data-track-index="1"
       >
         <header class="cap" data-enter data-reading-copy>
@@ -723,6 +714,7 @@
         data-start="s02"
         data-duration="4.5"
         data-reading-pace="reflective"
+        data-action-lead="1.5"
         data-track-index="1"
       >
         <header class="cap" data-enter data-reading-copy>
@@ -805,6 +797,7 @@
         data-start="s05"
         data-duration="7.5"
         data-reading-pace="normal"
+        data-action-lead="1.5"
         data-track-index="1"
       >
         <header class="cap" data-enter data-reading-copy>
@@ -873,6 +866,7 @@
         data-start="s07"
         data-duration="8"
         data-reading-pace="reflective"
+        data-action-lead="1.5"
         data-track-index="1"
       >
         <header class="cap" data-enter data-reading-copy>
@@ -934,6 +928,7 @@
         data-start="s09"
         data-duration="6"
         data-reading-pace="normal"
+        data-action-lead="1.5"
         data-track-index="1"
       >
         <header class="cap" data-enter data-reading-copy>
@@ -969,6 +964,7 @@
         data-start="s10"
         data-duration="7"
         data-reading-pace="reflective"
+        data-action-lead="1.5"
         data-track-index="1"
       >
         <header class="cap" data-enter data-reading-copy>
@@ -1026,6 +1022,7 @@
         data-start="s12"
         data-duration="4.5"
         data-reading-pace="normal"
+        data-action-lead="1.5"
         data-track-index="1"
       >
         <header class="cap" data-enter data-reading-copy>
@@ -1081,8 +1078,9 @@
         id="s15"
         class="clip"
         data-start="s14"
-        data-duration="7.5"
-        data-reading-pace="reflective"
+        data-duration="6.5"
+        data-reading-pace="normal"
+        data-action-lead="1.5"
         data-track-index="1"
       >
         <header class="cap" data-enter data-reading-copy>
@@ -1118,6 +1116,7 @@
         data-start="s15"
         data-duration="6"
         data-reading-pace="reflective"
+        data-action-lead="1.5"
         data-track-index="1"
       >
         <h2 id="hero-head" class="hero-head" data-enter data-reading-copy>
@@ -1240,6 +1239,17 @@
         return Math.ceil((words.length * 60 * 10) / wordsPerMinute) / 10;
       };
 
+      const actionLeadSeconds = (scene) => {
+        if (scene.dataset.actionLead === undefined) {
+          return readingHoldSeconds(scene);
+        }
+        const actionLead = Number(scene.dataset.actionLead);
+        if (!Number.isFinite(actionLead) || actionLead < 0) {
+          throw new Error(`${scene.id} must declare a non-negative data-action-lead`);
+        }
+        return actionLead;
+      };
+
       const root = document.getElementById("root");
       if (!root.hasAttribute("data-timing-resolved")) {
         let nextStart = 0;
@@ -1249,7 +1259,10 @@
             throw new Error(`${scene.id} must declare a positive duration`);
           }
           const readingHold = readingHoldSeconds(scene);
-          const duration = Math.round((visualDuration + readingHold) * 10) / 10;
+          const actionLead = actionLeadSeconds(scene);
+          const duration =
+            Math.round(Math.max(readingHold, actionLead + visualDuration) * 10) / 10;
+          scene.dataset.visualDuration = visualDuration.toFixed(1).replace(/\.0$/, "");
           scene.dataset.start = nextStart.toFixed(1).replace(/\.0$/, "");
           scene.dataset.duration = duration.toFixed(1).replace(/\.0$/, "");
           nextStart = Math.round((nextStart + duration) * 10) / 10;
@@ -1260,10 +1273,11 @@
       const sceneStart = (sceneId) => Number(document.getElementById(sceneId).dataset.start);
       const sceneDuration = (sceneId) =>
         Number(document.getElementById(sceneId).dataset.duration);
-      const sceneReadingHold = (sceneId) =>
-        readingHoldSeconds(document.getElementById(sceneId));
-      const sceneActionStart = (sceneId) => sceneStart(sceneId) + sceneReadingHold(sceneId);
-      const sceneActionDuration = (sceneId) => sceneDuration(sceneId) - sceneReadingHold(sceneId);
+      const sceneActionLead = (sceneId) =>
+        actionLeadSeconds(document.getElementById(sceneId));
+      const sceneActionStart = (sceneId) => sceneStart(sceneId) + sceneActionLead(sceneId);
+      const sceneActionDuration = (sceneId) =>
+        Number(document.getElementById(sceneId).dataset.visualDuration);
 
       const animate = (el, keyframes, startSec, durationSec, options = {}) => {
         const animation = el.animate(keyframes, {
@@ -1443,32 +1457,37 @@
         const t0 = sceneStart(config.scene);
         const sceneDur = sceneDuration(config.scene);
         const move = config.move;
-        const readingHold = readingHoldSeconds(scene);
-        const actionDuration = sceneDur - readingHold;
+        const actionLead = actionLeadSeconds(scene);
+        const actionDuration = sceneActionDuration(config.scene);
         const cameraStops = config.cameraStops.map((stop) =>
           stop.at === "end" ? { ...stop, at: actionDuration } : stop,
         );
 
         if (move) {
           const tailDuration = move.begin + move.flight + (move.mode === "drag" ? 1 : 1.2);
-          if (readingHold + tailDuration > sceneDur) {
+          if (actionLead + tailDuration > sceneDur) {
             throw new Error(
-              `${config.scene} needs at least ${(readingHold + tailDuration).toFixed(1)}s ` +
-              `for its ${readingHold.toFixed(1)}s reading hold and card move`,
+              `${config.scene} needs at least ${(actionLead + tailDuration).toFixed(1)}s ` +
+              `for its ${actionLead.toFixed(1)}s action lead and card move`,
             );
           }
 
-          // Give the explanation undivided attention, then lift it into its
-          // caption position while the board arrives. Only after that reveal
-          // can the cursor or Symphony badge begin moving toward the card.
+          // Give the explanation undivided attention with a restrained drift,
+          // then lift it into caption position while the board arrives. Only
+          // after that reveal can the cursor or Symphony badge move.
+          const captionMotionDuration = actionLead + BOARD_REVEAL_DURATION;
           animate(
             scene.querySelector(".cap"),
             [
-              { translate: `0px ${MOVE_SCENE_LIFT_PX}px` },
+              { translate: `0px ${MOVE_SCENE_LIFT_PX + 10}px` },
+              {
+                translate: `0px ${MOVE_SCENE_LIFT_PX}px`,
+                offset: actionLead / captionMotionDuration,
+              },
               { translate: "0px 0px" },
             ],
-            t0 + readingHold,
-            BOARD_REVEAL_DURATION,
+            t0,
+            captionMotionDuration,
           );
           animate(
             scene.querySelector(".board-win"),
@@ -1476,15 +1495,15 @@
               { opacity: 0, translate: "0px 30px" },
               { opacity: 1, translate: "0px 0px" },
             ],
-            t0 + readingHold,
+            t0 + actionLead,
             BOARD_REVEAL_DURATION,
           );
         }
 
-        camera(zoomEl, BOARD_VIEW_W, t0 + readingHold, actionDuration, cameraStops);
+        camera(zoomEl, BOARD_VIEW_W, t0 + actionLead, actionDuration, cameraStops);
 
         for (const lane of config.lanes ?? []) {
-          buildLane(overlay, lane.lane, { ...lane, t0, sceneDur, timeOffset: readingHold });
+          buildLane(overlay, lane.lane, { ...lane, t0, sceneDur, timeOffset: actionLead });
         }
 
         if (config.highlight) {
@@ -1494,7 +1513,7 @@
           ring.style.width = CARD_W + 14 + "px";
           ring.style.height = CARD_H.badged + 14 + "px";
           // Fade in at its final size and stay for the rest of the scene.
-          animate(ring, [{ opacity: 0 }, { opacity: 1 }], t0 + readingHold + config.highlight.at, 0.35, {
+          animate(ring, [{ opacity: 0 }, { opacity: 1 }], t0 + actionLead + config.highlight.at, 0.35, {
             easing: "linear",
           });
         }
@@ -1503,7 +1522,7 @@
           return;
         }
 
-        const moveStart = t0 + readingHold + move.begin;
+        const moveStart = t0 + actionLead + move.begin;
 
         const card = buildFlyingCard(overlay);
         const fromX = laneLeft(move.from) + CARD_GAP;
@@ -1605,23 +1624,10 @@
 
       // ---- Scene-by-scene build. ----
 
-      // The progress line makes the reading interval explicit without starting
-      // the scene's visual action. It disappears when that action begins.
       for (const scene of document.querySelectorAll(".clip")) {
         const t0 = Number(scene.dataset.start);
-        const readingHold = readingHoldSeconds(scene);
-        const readingProgress = el("div", "reading-progress", scene);
-        animate(
-          readingProgress,
-          [
-            { opacity: 0.45, width: "0px" },
-            { opacity: 0.45, width: "120px", offset: 0.94 },
-            { opacity: 0, width: "120px" },
-          ],
-          t0,
-          readingHold,
-          { easing: "linear" },
-        );
+        const actionLead = actionLeadSeconds(scene);
+        const actionDuration = Number(scene.dataset.visualDuration);
 
         // Caption and panel entrances.
         for (const [i, entering] of scene.querySelectorAll("[data-enter]").entries()) {
@@ -1632,23 +1638,27 @@
               { opacity: 0, translate: "0px 26px" },
               { opacity: 1, translate: "0px 0px" },
             ],
-            t0 + (isReadingCopy ? 0 : readingHold) + 0.08 + i * 0.12,
+            t0 + (isReadingCopy ? 0 : actionLead) + 0.08 + i * 0.12,
             0.55,
           );
         }
         // Workpad panels enter, then drift very slowly for the rest of the
         // scene so the frame never freezes while the viewer reads the list.
         for (const panel of scene.querySelectorAll(".comment-panel")) {
-          const duration = Number(scene.dataset.duration) - readingHold;
           animate(
             panel,
             [
               { translate: "0px 40px", opacity: 0, easing: EASE },
-              { translate: "0px 10px", opacity: 1, offset: 0.6 / duration, easing: "linear" },
+              {
+                translate: "0px 10px",
+                opacity: 1,
+                offset: 0.6 / actionDuration,
+                easing: "linear",
+              },
               { translate: "0px -10px", opacity: 1 },
             ],
-            t0 + readingHold + 0.1,
-            duration - 0.1,
+            t0 + actionLead + 0.1,
+            actionDuration - 0.1,
           );
         }
         for (const list of scene.querySelectorAll("[data-stagger]")) {
@@ -1660,20 +1670,23 @@
                 { opacity: 0, translate: "0px 16px" },
                 { opacity: 1, translate: "0px 0px" },
               ],
-              t0 + readingHold + 1.0 + (offset + i) * 0.75,
+              t0 + actionLead + 1.0 + (offset + i) * 0.75,
               0.5,
             );
           }
         }
       }
 
-      // s01 has no captured UI action, so the fixed visual interval is a
-      // restrained upward drift after the intro copy has been read.
+      // The intro copy slowly pushes in for its full reading interval so the
+      // opening feels alive without competing with the message.
       animate(
         document.querySelector("#s01 .center-stack"),
-        [{ translate: "0px 0px" }, { translate: "0px -10px" }],
-        sceneActionStart("s01"),
-        sceneActionDuration("s01"),
+        [
+          { translate: "0px 0px", scale: 1 },
+          { translate: "0px -10px", scale: 1.035 },
+        ],
+        sceneStart("s01"),
+        sceneDuration("s01"),
         { easing: "linear" },
       );
 
@@ -1956,10 +1969,10 @@
         });
       }
       ghCamera("s13", [
-        { at: 0, left: 0, top: 0, width: 1600 },
-        { at: 0.5, left: 0, top: 0, width: 1600 },
-        { at: 1.8, left: 30, top: 20, width: 1240 },
-        { at: 4.5, left: 36, top: 26, width: 1210 },
+        { at: 0, left: 0, top: 0, width: 1400 },
+        { at: 0.5, left: 0, top: 0, width: 1400 },
+        { at: 1.8, left: 18, top: 18, width: 1040 },
+        { at: 4.5, left: 24, top: 22, width: 980 },
       ]);
 
       // The GitHub camera containers deliberately overflow their clipped

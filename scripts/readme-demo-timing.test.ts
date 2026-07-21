@@ -89,7 +89,30 @@ test("counts only explicitly marked authored copy", (t) => {
   assert.equal(timing.duration, 23);
 });
 
-test("doubling both rates halves the reading portion without changing visual time", (t) => {
+test("overlaps reading with visual action after a declared lead", (t) => {
+  // given
+  const demoDir = createDemoFixture(t, 60, 60);
+  const htmlPath = join(demoDir, "index.html");
+  const html = readFileSync(htmlPath, "utf8").replace(
+    'id="s02"',
+    'id="s02" data-action-lead="1.5"',
+  );
+  writeFileSync(htmlPath, html, "utf8");
+
+  // when
+  const timing = materializeReadmeDemoTiming(demoDir);
+
+  // then
+  assert.equal(timing.duration, 20);
+  assert.equal(timing.sceneStarts.get("s03"), 12);
+  const resolvedHtml = readFileSync(htmlPath, "utf8");
+  assert.match(
+    resolvedHtml,
+    /id="s02"[\s\S]*?data-duration="5"[\s\S]*?data-visual-duration="3"/,
+  );
+});
+
+test("doubling both rates halves sequential reading time without changing visual time", (t) => {
   // given
   const slowDemoDir = createDemoFixture(t, 60, 60);
   const fastDemoDir = createDemoFixture(t, 120, 120);
