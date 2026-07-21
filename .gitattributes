@@ -1,2 +1,7 @@
 src/test/resources/**/*FuzzTestInputs/** binary
 src/test/resources/**/*FuzzerInputs/** binary
+
+# README demo inputs use canonical LF bytes in the render freshness check.
+.gitattributes text eol=lf
+docs/demo/** text=auto eol=lf
+scripts/readme-demo-*.ts text eol=lf
