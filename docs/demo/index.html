@@ -1472,22 +1472,17 @@
             );
           }
 
-          // Give the explanation undivided attention with a restrained drift,
-          // then lift it into caption position while the board arrives. Only
-          // after that reveal can the cursor or Symphony badge move.
-          const captionMotionDuration = actionLead + BOARD_REVEAL_DURATION;
+          // Give the explanation undivided attention, then lift it into its
+          // caption position while the board arrives. Only after that reveal
+          // can the cursor or Symphony badge begin moving toward the card.
           animate(
             scene.querySelector(".cap"),
             [
-              { translate: `0px ${MOVE_SCENE_LIFT_PX + 10}px` },
-              {
-                translate: `0px ${MOVE_SCENE_LIFT_PX}px`,
-                offset: actionLead / captionMotionDuration,
-              },
+              { translate: `0px ${MOVE_SCENE_LIFT_PX}px` },
               { translate: "0px 0px" },
             ],
-            t0,
-            captionMotionDuration,
+            t0 + actionLead,
+            BOARD_REVEAL_DURATION,
           );
           animate(
             scene.querySelector(".board-win"),
@@ -1677,14 +1672,11 @@
         }
       }
 
-      // The intro copy slowly pushes in for its full reading interval so the
-      // opening feels alive without competing with the message.
+      // The intro copy uses one clearly visible, steady zoom so the opening
+      // feels intentional rather than almost frozen.
       animate(
         document.querySelector("#s01 .center-stack"),
-        [
-          { translate: "0px 0px", scale: 1 },
-          { translate: "0px -10px", scale: 1.035 },
-        ],
+        [{ scale: 1 }, { scale: 1.08 }],
         sceneStart("s01"),
         sceneDuration("s01"),
         { easing: "linear" },
