@@ -92,6 +92,7 @@
     {
       "matchDatasources": ["maven"],
       "matchPackageNames": [
+        "com.google.errorprone:error_prone_core",
         "org.openrewrite:*",
         "org.openrewrite.maven:*",
         "org.openrewrite.recipe:*",

@@ -2,6 +2,7 @@ import {readFileSync, writeFileSync} from "node:fs";
 import {basename} from "node:path";
 
 export const OPENREWRITE_VERSION_PROPERTIES = [
+  "error-prone.version",
   "error-prone-support.version",
   "rewrite-maven-plugin.version",
   "rewrite-maven.version",
