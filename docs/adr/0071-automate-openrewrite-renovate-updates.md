@@ -59,14 +59,17 @@ from the credential that publishes a branch.
 Chosen option: "Keep the Renovate source branch untouched and publish generated changes through a
 derived pull request with a short-lived GitHub App token".
 
-Renovate groups OpenRewrite engine, plugin, catalog, and selected Picnic recipe updates under the
-`OpenRewrite toolchain` group. It creates the pull request without dependency-dashboard approval,
-keeps it rebased on `main`, and enables Renovate-controlled automerge for non-major updates. Native
-platform auto-merge is disabled for this group, so Renovate requires every branch status to pass
-before merging rather than relying only on repository-required checks. The seven-day minimum release
-age remains. Major updates retain dependency-dashboard approval and manual merge through the
-repository-wide major-update guard. The repository retains the `openrewrite` label that Renovate
-adds to this group and the workflow uses as its candidate discriminator.
+Renovate groups OpenRewrite engine, plugin, catalog, Error Prone Core, and selected Picnic recipe
+updates under the `OpenRewrite toolchain` group. Error Prone Core remains in the same group as the
+Picnic annotation processor and Refaster runner because Picnic's serialized Refaster templates
+require the Error Prone version used to produce them. Renovate creates the pull request without
+dependency-dashboard approval, keeps it rebased on `main`, and enables Renovate-controlled
+automerge for non-major updates. Native platform auto-merge is disabled for this group, so Renovate
+requires every branch status to pass before merging rather than relying only on repository-required
+checks. The seven-day minimum release age remains. Major updates retain dependency-dashboard
+approval and manual merge through the repository-wide major-update guard. The repository retains
+the `openrewrite` label that Renovate adds to this group and the workflow uses as its candidate
+discriminator.
 
 The `OpenRewrite Renovate automation` workflow treats the Renovate pull request as an unmodified
 source:
@@ -78,9 +81,9 @@ source:
    `renovate/openrewrite-toolchain` branch, based on `main`, labelled `openrewrite`, and containing
    one Renovate-authored commit directly on the current base that changes only `pom.xml`.
 3. Trusted code from the base branch proves that the POM diff changes one or more exact
-   OpenRewrite toolchain version properties and nothing else. The allowlist includes the
-   compiler-side Picnic property because Renovate extracts its annotation-processor and Refaster
-   runner declarations without a Maven dependency type.
+   OpenRewrite toolchain version properties and nothing else. The allowlist includes the Error
+   Prone Core property and the compiler-side Picnic property that Renovate extracts from the
+   annotation-processor and Refaster runner declarations without a Maven dependency type.
 4. A read-only job checks out only the trusted base, materializes the exact validated Renovate
    `pom.xml`, and establishes that tree as a local baseline. It discovers recipes, applies
    OpenRewrite, applies Spotless, repeats the ordered pipeline, compares the two patches, and runs

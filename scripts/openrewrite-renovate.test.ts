@@ -10,6 +10,7 @@ import {
 
 const BASE_POM = `<project>
   <properties>
+    <error-prone.version>2.49.0</error-prone.version>
     <error-prone-support.version>0.29.0</error-prone-support.version>
     <rewrite-maven-plugin.version>6.44.0</rewrite-maven-plugin.version>
     <rewrite-maven.version>8.87.0</rewrite-maven.version>
@@ -23,6 +24,7 @@ const BASE_POM = `<project>
 
 test("accepts changes limited to exact OpenRewrite version properties", () => {
   const updated = BASE_POM
+    .replace(">2.49.0<", ">2.50.0<")
     .replace(">0.29.0<", ">0.30.0<")
     .replace(">6.44.0<", ">6.45.0<")
     .replace(">3.42.0<", ">3.43.1<");
@@ -30,6 +32,7 @@ test("accepts changes limited to exact OpenRewrite version properties", () => {
   const changes = validateVersionOnlyPomChange(BASE_POM, updated);
 
   assert.deepEqual(changes, [
+    {name: "error-prone.version", previous: "2.49.0", next: "2.50.0"},
     {name: "error-prone-support.version", previous: "0.29.0", next: "0.30.0"},
     {name: "rewrite-maven-plugin.version", previous: "6.44.0", next: "6.45.0"},
     {name: "rewrite-testing-frameworks.version", previous: "3.42.0", next: "3.43.1"},

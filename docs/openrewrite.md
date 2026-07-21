@@ -101,8 +101,9 @@ request:
 - contains one Renovate-authored commit directly on the current base;
 - changes only `pom.xml`; and
 - changes only the exact OpenRewrite toolchain version properties within that POM, including the
-  compiler-side Picnic property shared by the annotation processor and Refaster runner declarations
-  that Renovate extracts without a Maven dependency type.
+  Error Prone Core and compiler-side Picnic properties. Renovate groups Error Prone Core with the
+  Picnic annotation processor and Refaster runner because Picnic's serialized Refaster templates
+  require the Error Prone version used to produce them.
 
 The workflow checks out only the trusted base, materializes the exact validated Renovate `pom.xml`,
 and establishes that tree as a local baseline. It then discovers recipes, applies OpenRewrite and

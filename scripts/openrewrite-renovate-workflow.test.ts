@@ -890,9 +890,13 @@ test("the OpenRewrite rule selects exact toolchain packages across Maven depende
   );
 
   assert.equal(rule?.matchDepTypes, undefined);
-  assert.ok(
-    rule?.matchPackageNames?.includes("tech.picnic.error-prone-support:refaster-runner"),
-  );
+  for (const packageName of [
+    "com.google.errorprone:error_prone_core",
+    "tech.picnic.error-prone-support:error-prone-contrib",
+    "tech.picnic.error-prone-support:refaster-runner",
+  ]) {
+    assert.ok(rule?.matchPackageNames?.includes(packageName), `${packageName} must remain grouped`);
+  }
   assert.equal(rule?.branchTopic, "openrewrite-toolchain");
   assert.equal(rule?.platformAutomerge, false);
 });
