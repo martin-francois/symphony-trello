@@ -177,7 +177,7 @@ final class InstallerScriptFixture {
         try {
             stderr = Files.createTempFile("symphony-trello-installer-stderr-", ".log");
             stdin = Files.createTempFile("symphony-trello-installer-stdin-", ".log");
-            Files.writeString(stdin, input, StandardCharsets.UTF_8);
+            Files.writeString(stdin, input);
             processBuilder.redirectInput(stdin.toFile());
             processBuilder.redirectOutput(stdout.toFile());
             processBuilder.redirectError(stderr.toFile());
