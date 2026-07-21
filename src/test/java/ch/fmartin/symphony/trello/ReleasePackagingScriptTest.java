@@ -8,10 +8,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -490,6 +493,22 @@ final class ReleasePackagingScriptTest {
     private TestProject createProject() throws IOException {
         Path root = tempDir.resolve("project");
         Files.createDirectories(root.resolve("scripts"));
+        Path testTools = root.resolve("test-tools");
+        Files.createDirectories(testTools);
+        Path zip = testTools.resolve("zip");
+        Files.writeString(
+                zip,
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                [[ "${1:-}" == "-qr" && "$#" -eq 3 ]]
+                archive="$2"
+                source="$3"
+                exec jar --create --file "$archive" --no-manifest "$source"
+                """);
+        assertThat(zip.toFile().setExecutable(true))
+                .as("the fake zip command is executable")
+                .isTrue();
         Files.copy(Path.of("scripts/package-release-assets.sh"), root.resolve("scripts/package-release-assets.sh"));
         Files.writeString(
                 root.resolve("install.sh"),
@@ -561,6 +580,16 @@ final class ReleasePackagingScriptTest {
                         "else { \"v" + version + "\" }",
                         "$DefaultVersion = \"" + version + "\"")
                 .doesNotContain("else { \"0.0.0\" }", "else { \"v0.0.0\" }", "$DefaultVersion = \"0.0.0\"");
+        try (var archive = new ZipFile(
+                destination.resolve("symphony-trello-" + version + ".zip").toFile())) {
+            assertThat(Collections.list(archive.entries()))
+                    .extracting(ZipEntry::getName)
+                    .contains(
+                            "symphony-trello-" + version + "/",
+                            "symphony-trello-" + version + "/VERSION",
+                            "symphony-trello-" + version + "/README.md",
+                            "symphony-trello-" + version + "/target/quarkus-app/application.txt");
+        }
     }
 
     private static void assertNoPublicationAttempt(Path root) throws IOException {
@@ -623,10 +652,14 @@ final class ReleasePackagingScriptTest {
             command[0] = "bash";
             command[1] = root.resolve("scripts/package-release-assets.sh").toString();
             System.arraycopy(arguments, 0, command, 2, arguments.length);
-            Process process = new ProcessBuilder(command)
-                    .directory(root.toFile())
-                    .redirectErrorStream(true)
-                    .start();
+            var processBuilder =
+                    new ProcessBuilder(command).directory(root.toFile()).redirectErrorStream(true);
+            processBuilder
+                    .environment()
+                    .put(
+                            "PATH",
+                            root.resolve("test-tools") + System.getProperty("path.separator") + System.getenv("PATH"));
+            Process process = processBuilder.start();
             var output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             return new ProcessResult(process.waitFor(), output);
         }
