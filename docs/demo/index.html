@@ -650,7 +650,7 @@
       data-composition-id="main"
       data-no-timeline
       data-start="0"
-      data-duration="120.5"
+      data-duration="153.4"
       data-width="1920"
       data-height="1080"
     >
@@ -714,7 +714,8 @@
         id="s04"
         class="clip move-scene"
         data-start="13"
-        data-duration="10.2"
+        data-duration="13.8"
+        data-reading-wpm="120"
         data-track-index="1"
       >
         <header class="cap" data-enter>
@@ -741,8 +742,9 @@
       <section
         id="s05"
         class="clip move-scene"
-        data-start="23.2"
-        data-duration="10.3"
+        data-start="26.8"
+        data-duration="14.1"
+        data-reading-wpm="120"
         data-track-index="1"
       >
         <header class="cap" data-enter>
@@ -766,7 +768,7 @@
         </div>
       </section>
 
-      <section id="s06" class="clip" data-start="33.5" data-duration="7.5" data-track-index="1">
+      <section id="s06" class="clip" data-start="40.9" data-duration="7.5" data-track-index="1">
         <header class="cap" data-enter>
           <span class="who who-codex">Codex</span>
           <h2>Progress stays visible on the Trello card.</h2>
@@ -797,8 +799,9 @@
       <section
         id="s07"
         class="clip move-scene"
-        data-start="41"
-        data-duration="10.3"
+        data-start="48.4"
+        data-duration="14.1"
+        data-reading-wpm="120"
         data-track-index="1"
       >
         <header class="cap" data-enter>
@@ -826,7 +829,7 @@
         </div>
       </section>
 
-      <section id="s08" class="clip" data-start="51.3" data-duration="8" data-track-index="1">
+      <section id="s08" class="clip" data-start="62.5" data-duration="8" data-track-index="1">
         <header class="cap" data-enter>
           <span class="who who-you">You</span>
           <h2>Review the PR just like you normally would.</h2>
@@ -850,8 +853,9 @@
       <section
         id="s09"
         class="clip move-scene"
-        data-start="59.3"
-        data-duration="10.4"
+        data-start="70.5"
+        data-duration="14.4"
+        data-reading-wpm="120"
         data-track-index="1"
       >
         <header class="cap" data-enter>
@@ -879,7 +883,7 @@
         </div>
       </section>
 
-      <section id="s10" class="clip" data-start="69.7" data-duration="6" data-track-index="1">
+      <section id="s10" class="clip" data-start="84.9" data-duration="6" data-track-index="1">
         <header class="cap" data-enter>
           <span class="who who-codex">Codex</span>
           <h2>Codex addresses the review comment in code.</h2>
@@ -907,7 +911,7 @@
         </div>
       </section>
 
-      <section id="s11" class="clip" data-start="75.7" data-duration="7" data-track-index="1">
+      <section id="s11" class="clip" data-start="90.9" data-duration="7" data-track-index="1">
         <header class="cap" data-enter>
           <span class="who who-codex">Codex</span>
           <h2>Back in review: comment answered on the PR.</h2>
@@ -931,8 +935,9 @@
       <section
         id="s12"
         class="clip move-scene"
-        data-start="82.7"
-        data-duration="10.7"
+        data-start="97.9"
+        data-duration="25.4"
+        data-reading-wpm="60"
         data-track-index="1"
       >
         <header class="cap" data-enter>
@@ -956,7 +961,7 @@
         </div>
       </section>
 
-      <section id="s13" class="clip" data-start="93.4" data-duration="4.5" data-track-index="1">
+      <section id="s13" class="clip" data-start="123.3" data-duration="4.5" data-track-index="1">
         <header class="cap" data-enter>
           <span class="who who-symphony">Symphony</span>
           <h2>Symphony merges the pull request.</h2>
@@ -980,8 +985,9 @@
       <section
         id="s14"
         class="clip move-scene"
-        data-start="97.9"
-        data-duration="9.1"
+        data-start="127.8"
+        data-duration="12.1"
+        data-reading-wpm="120"
         data-track-index="1"
       >
         <header class="cap" data-enter>
@@ -1005,7 +1011,7 @@
         </div>
       </section>
 
-      <section id="s15" class="clip" data-start="107" data-duration="7.5" data-track-index="1">
+      <section id="s15" class="clip" data-start="139.9" data-duration="7.5" data-track-index="1">
         <header class="cap" data-enter>
           <span class="who who-you">Anywhere</span>
           <h2>Start from your phone. Review from your laptop.</h2>
@@ -1033,7 +1039,7 @@
         </div>
       </section>
 
-      <section id="s16" class="clip" data-start="114.5" data-duration="6" data-track-index="1">
+      <section id="s16" class="clip" data-start="147.4" data-duration="6" data-track-index="1">
         <h2 id="hero-head" class="hero-head" data-enter>
           You plan work in Trello. Codex implements it. Symphony keeps everything moving.
         </h2>
@@ -1132,14 +1138,18 @@
       const sceneStart = (sceneId) => Number(document.getElementById(sceneId).dataset.start);
       const sceneDuration = (sceneId) =>
         Number(document.getElementById(sceneId).dataset.duration);
-      const READING_WORDS_PER_MINUTE = 200;
+      const SUPPORTED_READING_WORDS_PER_MINUTE = new Set([60, 120]);
       const MOVE_SCENE_LIFT_PX = 380;
       const BOARD_REVEAL_DURATION = 0.7;
 
       const readingHoldSeconds = (scene) => {
+        const wordsPerMinute = Number(scene.dataset.readingWpm);
+        if (!SUPPORTED_READING_WORDS_PER_MINUTE.has(wordsPerMinute)) {
+          throw new Error(`${scene.id} must use a reading pace of 60 or 120 words per minute`);
+        }
         const caption = scene.querySelector(".cap");
         const words = caption.textContent.trim().match(/\b[\w’'-]+\b/g) ?? [];
-        return Math.ceil((words.length * 60 * 10) / READING_WORDS_PER_MINUTE) / 10;
+        return Math.ceil((words.length * 60 * 10) / wordsPerMinute) / 10;
       };
 
       const animate = (el, keyframes, startSec, durationSec, options = {}) => {
