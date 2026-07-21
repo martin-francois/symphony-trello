@@ -32,7 +32,7 @@ Which code-first video stack should render the demo, and where should the captur
 * Real Trello and GitHub UI captures are the primary visual source, not stylized mockups.
 * The result must be verifiable: automated layout/contrast/motion checks plus frame snapshots
   for visual review.
-* The render must be reproducible on a fresh machine with Node, FFmpeg, and pnpm.
+* The render must be regenerable on a fresh machine with Node, Docker, FFmpeg, and pnpm.
 
 ## Considered Options
 
@@ -73,25 +73,30 @@ documented in [docs/demo/README.md](../demo/README.md).
 
 ### Consequences
 
-* Good, because the whole regeneration path is FOSS: HyperFrames (Apache-2.0), Chromium via
-  Puppeteer, FFmpeg, and browser-native animations.
+* Good, because the whole regeneration path is FOSS: HyperFrames (Apache-2.0), its Docker renderer
+  with Chromium and FFmpeg, and browser-native animations.
 * Good, because `hyperframes check` gates layout overflows, WCAG contrast, frozen frames, and
   motion assertions (`docs/demo/index.motion.json`) on every re-render.
 * Good, because the CLI version is pinned (`hyperframes@0.7.64`) in the render script and docs,
-  so future renders reproduce this output.
+  so future renders use the same HyperFrames behavior.
 * Bad, because the composition is not TypeScript, so `pnpm run check:scripts` type-checks only
   the render script, not the scene code; the HyperFrames linter and browser checks cover the
   composition instead.
 * Bad, because board movement between still captures is reconstructed overlay code that must
   match Trello's visual behavior; the geometry constants in `docs/demo/index.html` document the
   measured capture layout, and snapshots must be re-reviewed when captures change.
+* Bad, because HyperFrames builds its versioned Docker renderer from mutable upstream system and
+  browser packages. A fresh host is not guaranteed to produce byte-identical output, so the render
+  script verifies the required format, duration, size, and representative text regions, and
+  maintainers must review extracted frames before committing a regenerated video.
 
 ### Confirmation
 
-`node scripts/render-readme-demo.ts` regenerates and verifies both assets; it fails if the MP4 is
-not a single silent H.264 stream of the expected duration. `pnpm dlx hyperframes@0.7.64 check`
-passes in `docs/demo`. The committed MP4 and poster match the composition when re-rendered at the
-pinned CLI version.
+`node scripts/render-readme-demo.ts` regenerates and verifies both assets with the Docker
+renderer; it fails if the MP4 is not a single silent H.264 stream of the expected duration, is not
+larger than 6 MiB, or lacks dark text pixels in representative text-only regions. `pnpm dlx
+hyperframes@0.7.64 check` passes in `docs/demo`. The committed MP4 and poster match the composition
+when re-rendered at the pinned CLI version.
 
 ## Pros and Cons of the Options
 

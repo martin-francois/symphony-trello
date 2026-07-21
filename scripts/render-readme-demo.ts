@@ -7,9 +7,9 @@
  *
  * Usage: node scripts/render-readme-demo.ts [--skip-check]
  *
- * Requires Node 22.18+, FFmpeg with libx264, ffprobe, and pnpm (the
- * HyperFrames CLI is fetched on demand at the exact pinned version, so
- * renders stay reproducible).
+ * Requires Node 22.18+, Docker, FFmpeg, ffprobe, and pnpm. The HyperFrames
+ * CLI is fetched on demand at the exact pinned version, and its Docker
+ * renderer supplies the production browser, fonts, and encoder.
  */
 
 import { spawnSync } from "node:child_process";
@@ -18,10 +18,21 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HYPERFRAMES = "hyperframes@0.7.64";
-/** Constant-rate factor chosen so the demo video stays README-friendly. */
-const VIDEO_CRF = "27";
+/** Target bitrate keeps text crisp while staying well below GitHub's file limit. */
+const VIDEO_BITRATE = "1M";
+const MEBIBYTE = 1024 * 1024;
+const MIN_VIDEO_BYTES = 6 * MEBIBYTE;
+const MIN_DARK_PIXEL_RATIO = 0.01;
 /** The final hero frame; keep inside the last scene of docs/demo/index.html. */
 const POSTER_TIME_SECONDS = "92.5";
+
+const TEXT_REGION_SAMPLES = [
+  { label: "intro", time: "2", crop: "crop=1620:500:150:280" },
+  { label: "board caption", time: "20", crop: "crop=1760:230:80:30" },
+  { label: "review caption", time: "50", crop: "crop=1760:230:80:30" },
+  { label: "phone caption", time: "80", crop: "crop=1150:220:60:30" },
+  { label: "closing message", time: "92", crop: "crop=1720:300:100:80" },
+] as const;
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const demoDir = join(repoRoot, "docs", "demo");
@@ -91,22 +102,55 @@ function ffprobe(path: string): { codec: string; duration: number; streamCount: 
   };
 }
 
-function requireLibx264(): void {
-  const result = spawnSync("ffmpeg", ["-hide_banner", "-encoders"], { encoding: "utf8" });
-  if (result.status !== 0) {
-    const detail = result.stderr?.trim() || result.error?.message || "no error detail";
-    throw new Error(`could not inspect FFmpeg encoders: ${detail}`);
-  }
-  if (!/^\s*V\S*\s+libx264\s/m.test(result.stdout)) {
-    throw new Error(
-      "FFmpeg must provide the libx264 encoder because HyperFrames uses libx264-specific options",
+function verifyRenderedText(path: string): void {
+  for (const sample of TEXT_REGION_SAMPLES) {
+    const result = spawnSync(
+      "ffmpeg",
+      [
+        "-v",
+        "error",
+        "-ss",
+        sample.time,
+        "-i",
+        path,
+        "-vf",
+        `${sample.crop},format=gray`,
+        "-frames:v",
+        "1",
+        "-f",
+        "rawvideo",
+        "pipe:1",
+      ],
+      { maxBuffer: 8 * MEBIBYTE },
     );
+    if (result.status !== 0 || !Buffer.isBuffer(result.stdout) || result.stdout.length === 0) {
+      const detail = Buffer.isBuffer(result.stderr)
+        ? result.stderr.toString().trim()
+        : result.error?.message;
+      throw new Error(
+        `could not inspect rendered text in the ${sample.label} frame` +
+        (detail === undefined || detail === "" ? "" : `: ${detail}`),
+      );
+    }
+
+    let darkPixels = 0;
+    for (const luminance of result.stdout) {
+      if (luminance < 100) {
+        darkPixels += 1;
+      }
+    }
+    const darkPixelRatio = darkPixels / result.stdout.length;
+    if (darkPixelRatio < MIN_DARK_PIXEL_RATIO) {
+      throw new Error(
+        `${sample.label} frame has too little rendered text: ` +
+        `${(darkPixelRatio * 100).toFixed(2)}% dark pixels`,
+      );
+    }
   }
 }
 
 const expectedDurationSeconds = readExpectedDurationSeconds();
 const skipCheck = process.argv.includes("--skip-check");
-requireLibx264();
 
 if (!skipCheck) {
   run("pnpm", ["dlx", HYPERFRAMES, "check"]);
@@ -116,10 +160,11 @@ run("pnpm", [
   "dlx",
   HYPERFRAMES,
   "render",
+  "--docker",
   "--quality",
   "high",
-  "--crf",
-  VIDEO_CRF,
+  "--video-bitrate",
+  VIDEO_BITRATE,
   "--output",
   videoPath,
 ]);
@@ -151,9 +196,15 @@ if (!Number.isFinite(probe.duration) || Math.abs(probe.duration - expectedDurati
     `expected ~${expectedDurationSeconds}s of video, ffprobe reports ${probe.duration}s`,
   );
 }
+const videoBytes = statSync(videoPath).size;
+if (videoBytes <= MIN_VIDEO_BYTES) {
+  throw new Error(
+    `expected readme-demo.mp4 to exceed 6 MiB, found ${(videoBytes / MEBIBYTE).toFixed(1)} MiB`,
+  );
+}
+verifyRenderedText(videoPath);
 
-const megabyte = 1024 * 1024;
-console.log(`\nreadme-demo.mp4: ${(statSync(videoPath).size / megabyte).toFixed(1)} MB, ` +
+console.log(`\nreadme-demo.mp4: ${(videoBytes / MEBIBYTE).toFixed(1)} MiB, ` +
   `${probe.duration.toFixed(1)}s, H.264, silent (no audio stream)`);
-console.log(`readme-demo-poster.png: ${(statSync(posterPath).size / megabyte).toFixed(1)} MB`);
+console.log(`readme-demo-poster.png: ${(statSync(posterPath).size / MEBIBYTE).toFixed(1)} MiB`);
 console.log("Done.");

@@ -13,9 +13,10 @@ chosen over Remotion and the other candidates.
 
 ## Re-rendering
 
-Requirements: Node.js 22.18+, FFmpeg with the `libx264` encoder and `ffprobe`, and pnpm. The
-HyperFrames CLI is fetched on demand at a pinned version, so no `package.json` or install step is
-needed here.
+Requirements: Node.js 22.18+, Docker, FFmpeg with `ffprobe`, and pnpm. The HyperFrames CLI is
+fetched on demand at a pinned version, and rendering uses its Docker environment so the production
+browser has the system font support needed to load the bundled fonts. No `package.json` or install
+step is needed here.
 
 Render and verify both assets in one step from the repository root:
 
@@ -24,7 +25,8 @@ node scripts/render-readme-demo.ts
 ```
 
 The script runs the composition checks, renders the MP4, extracts its poster frame, and fails if
-the MP4 is not a single silent H.264 stream of the expected length.
+the MP4 is not a single silent H.264 stream of the expected length, is not larger than 6 MiB, or
+has missing text in representative intro, board, review, phone, or closing regions.
 
 For iterating on the composition, run the CLI directly from this directory:
 
