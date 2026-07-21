@@ -2018,7 +2018,16 @@ final class TrelloBoardSetupMainTest {
         });
 
         // when
-        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint(), "--key", "key", "--token", "token");
+        CliRunResult result = runCli(
+                "list-workspaces",
+                "--endpoint",
+                endpoint(),
+                "--config-dir",
+                tempDir.resolve("malformed-workspace-config").toString(),
+                "--key",
+                "key",
+                "--token",
+                "token");
 
         // then
         result.assertFailure(SETUP_FAILURE)
