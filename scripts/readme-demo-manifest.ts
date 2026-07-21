@@ -9,6 +9,7 @@ const POSTER_RELATIVE_PATH = "docs/assets/readme-demo-poster.png";
 const RENDER_SCRIPT_PATHS = [
   ".gitattributes",
   "scripts/readme-demo-manifest.ts",
+  "scripts/readme-demo-timing.ts",
   "scripts/render-readme-demo.ts",
 ] as const;
 const NON_RENDER_INPUTS = new Set([

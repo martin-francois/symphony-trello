@@ -26,6 +26,7 @@ function writeCrossPlatformFixture(root: string, newline: "\n" | "\r\n"): void {
     ],
     ["docs/demo/index.html", ["<main>", "  Demo", "</main>"]],
     ["scripts/readme-demo-manifest.ts", ["export const manifest = true;"]],
+    ["scripts/readme-demo-timing.ts", ["export const timing = true;"]],
     ["scripts/render-readme-demo.ts", ["export const render = true;"]],
   ]);
 
@@ -67,7 +68,7 @@ test("motion assertions do not duplicate the composition duration", () => {
   assert.equal(
     motion.duration,
     undefined,
-    "index.html data-duration is the sole README demo duration source",
+    "the calculated index.html timeline is the sole README demo duration source",
   );
 });
 

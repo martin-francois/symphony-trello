@@ -14,13 +14,26 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  statSync,
+} from "node:fs";
+import {tmpdir} from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createReadmeDemoSourceSnapshot,
   writeReadmeDemoManifest,
 } from "./readme-demo-manifest.ts";
+import {
+  type CompositionTiming,
+  materializeReadmeDemoTiming,
+} from "./readme-demo-timing.ts";
 
 const HYPERFRAMES = "hyperframes@0.7.64";
 /** Target bitrate keeps text crisp while staying well below GitHub's file limit. */
@@ -28,11 +41,6 @@ const VIDEO_BITRATE = "1M";
 const MEBIBYTE = 1024 * 1024;
 const MIN_VIDEO_BYTES = 6 * MEBIBYTE;
 const MIN_DARK_PIXEL_RATIO = 0.01;
-
-interface CompositionTiming {
-  duration: number;
-  sceneStarts: ReadonlyMap<string, number>;
-}
 
 interface TextRegionSample {
   label: string;
@@ -43,33 +51,6 @@ interface TextRegionSample {
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const videoPath = join(repoRoot, "docs", "assets", "readme-demo.mp4");
 const posterPath = join(repoRoot, "docs", "assets", "readme-demo-poster.png");
-
-function readCompositionTiming(demoDir: string): CompositionTiming {
-  const html = readFileSync(join(demoDir, "index.html"), "utf8");
-  const rootTag = html.match(/<[a-z][^>]*\bid=["']root["'][^>]*>/i)?.[0];
-  const htmlDuration = Number(rootTag?.match(/\bdata-duration=["']([^"']+)["']/)?.[1]);
-  if (!Number.isFinite(htmlDuration) || htmlDuration <= 0) {
-    throw new Error("docs/demo/index.html must declare a positive data-duration on #root");
-  }
-
-  const sceneStarts = new Map<string, number>();
-  for (const match of html.matchAll(
-    /<section\b[^>]*\bid=["']([^"']+)["'][^>]*\bdata-start=["']([^"']+)["'][^>]*>/gi,
-  )) {
-    const sceneId = match[1];
-    const start = Number(match[2]);
-    if (sceneId === undefined || !Number.isFinite(start) || start < 0) {
-      throw new Error("docs/demo/index.html contains an invalid scene timing declaration");
-    }
-    sceneStarts.set(sceneId, start);
-  }
-  for (const sceneId of ["s04", "s08", "s15", "s16"]) {
-    if (!sceneStarts.has(sceneId)) {
-      throw new Error(`docs/demo/index.html is missing timing for ${sceneId}`);
-    }
-  }
-  return {duration: htmlDuration, sceneStarts};
-}
 
 function textRegionSamples(timing: CompositionTiming): TextRegionSample[] {
   const sceneTime = (sceneId: string, offset: number): string =>
@@ -95,6 +76,17 @@ function run(command: string, args: string[], demoDir: string): void {
       `${command} ${args[0] ?? ""} failed with status ${result.status}` +
       (detail === undefined ? "" : `: ${detail}`),
     );
+  }
+}
+
+function labelContainerMountForSelinux(path: string): void {
+  if (process.platform !== "linux" || !existsSync("/sys/fs/selinux/enforce")) {
+    return;
+  }
+  const result = spawnSync("chcon", ["-Rt", "container_file_t", path], {encoding: "utf8"});
+  if (result.status !== 0) {
+    const detail = result.stderr?.trim() || result.error?.message || "no error detail";
+    throw new Error(`could not label the README demo render directory for SELinux: ${detail}`);
   }
 }
 
@@ -170,15 +162,21 @@ function verifyRenderedText(path: string, samples: TextRegionSample[]): void {
   }
 }
 
-const snapshotBaseDir = join(repoRoot, "target", "readme-demo-render");
-mkdirSync(snapshotBaseDir, {recursive: true});
-const snapshotRoot = mkdtempSync(join(snapshotBaseDir, "source-"));
-const snapshotDemoDir = join(snapshotRoot, "demo");
+const renderRoot = mkdtempSync(join(tmpdir(), "symphony-trello-readme-demo-"));
+// Keep container labels and partial render output away from the Git working tree.
+chmodSync(renderRoot, 0o755);
+const snapshotDemoDir = join(renderRoot, "demo");
+const renderOutputDir = join(renderRoot, "output");
+mkdirSync(renderOutputDir, {recursive: true});
+chmodSync(renderOutputDir, 0o777);
+const renderedVideoPath = join(renderOutputDir, "readme-demo.mp4");
+const renderedPosterPath = join(renderOutputDir, "readme-demo-poster.png");
 
 try {
   // Hash and copy each composition input from the same read, then render only that immutable copy.
   const sourceBeforeRender = createReadmeDemoSourceSnapshot(repoRoot, snapshotDemoDir);
-  const timing = readCompositionTiming(snapshotDemoDir);
+  const timing = materializeReadmeDemoTiming(snapshotDemoDir);
+  labelContainerMountForSelinux(renderRoot);
   const expectedDurationSeconds = timing.duration;
   const skipCheck = process.argv.includes("--skip-check");
 
@@ -196,7 +194,7 @@ try {
     "--video-bitrate",
     VIDEO_BITRATE,
     "--output",
-    videoPath,
+    renderedVideoPath,
   ], snapshotDemoDir);
 
   // Extract the poster from the final hero so it uses the exact same font
@@ -208,15 +206,15 @@ try {
     "-loglevel",
     "error",
     "-i",
-    videoPath,
+    renderedVideoPath,
     "-ss",
     posterTimeSeconds,
     "-frames:v",
     "1",
-    posterPath,
+    renderedPosterPath,
   ], snapshotDemoDir);
 
-  const probe = ffprobe(videoPath);
+  const probe = ffprobe(renderedVideoPath);
   if (probe.streamCount !== 1 || probe.codec !== "h264") {
     throw new Error(
       `expected exactly one H.264 video stream, found ${probe.streamCount} stream(s), codec ${probe.codec}`,
@@ -227,13 +225,15 @@ try {
       `expected ~${expectedDurationSeconds}s of video, ffprobe reports ${probe.duration}s`,
     );
   }
-  const videoBytes = statSync(videoPath).size;
+  const videoBytes = statSync(renderedVideoPath).size;
   if (videoBytes <= MIN_VIDEO_BYTES) {
     throw new Error(
       `expected readme-demo.mp4 to exceed 6 MiB, found ${(videoBytes / MEBIBYTE).toFixed(1)} MiB`,
     );
   }
-  verifyRenderedText(videoPath, textRegionSamples(timing));
+  verifyRenderedText(renderedVideoPath, textRegionSamples(timing));
+  copyFileSync(renderedVideoPath, videoPath);
+  copyFileSync(renderedPosterPath, posterPath);
   writeReadmeDemoManifest(repoRoot, sourceBeforeRender);
 
   console.log(`\nreadme-demo.mp4: ${(videoBytes / MEBIBYTE).toFixed(1)} MiB, ` +
@@ -242,5 +242,5 @@ try {
   console.log("render-manifest.json: source and artifact checksums updated");
   console.log("Done.");
 } finally {
-  rmSync(snapshotRoot, {recursive: true, force: true});
+  rmSync(renderRoot, {recursive: true, force: true});
 }

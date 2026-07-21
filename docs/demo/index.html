@@ -62,6 +62,16 @@
         position: absolute;
         inset: 0;
       }
+      .reading-progress {
+        position: absolute;
+        left: 80px;
+        bottom: 38px;
+        width: 120px;
+        height: 5px;
+        border-radius: 999px;
+        background: #0a5dcf;
+        z-index: 20;
+      }
 
       /* ---- Caption block: the most important text sits near the top. ---- */
       .cap {
@@ -650,16 +660,23 @@
       data-composition-id="main"
       data-no-timeline
       data-start="0"
-      data-duration="153.4"
+      data-duration="0"
       data-width="1920"
       data-height="1080"
     >
-      <!-- Scene starts are cumulative; the script reads them back from data-start,
-           so per-scene animation offsets stay relative and there is no duplicated
-           timing table. -->
+      <!-- Scene durations below are fixed visual-action durations. The script
+           adds each scene's calculated reading hold, resolves every cumulative
+           start, and sets the root duration before animations are built. -->
 
-      <section id="s01" class="clip" data-start="0" data-duration="3.5" data-track-index="1">
-        <div class="center-stack">
+      <section
+        id="s01"
+        class="clip"
+        data-start="0"
+        data-duration="3.5"
+        data-reading-pace="normal"
+        data-track-index="1"
+      >
+        <header class="center-stack" data-reading-copy>
           <div class="brand-pill" data-enter>Symphony for Trello</div>
           <h1 id="intro-title" class="intro-title" data-enter>
             From Trello card to merged pull request
@@ -668,11 +685,18 @@
             A real run: you plan work in Trello, Codex implements it, and Symphony keeps the
             handoff moving.
           </p>
-        </div>
+        </header>
       </section>
 
-      <section id="s02" class="clip" data-start="3.5" data-duration="5" data-track-index="1">
-        <header class="cap" data-enter>
+      <section
+        id="s02"
+        class="clip"
+        data-start="s01"
+        data-duration="5"
+        data-reading-pace="normal"
+        data-track-index="1"
+      >
+        <header class="cap" data-enter data-reading-copy>
           <span class="who who-you">You</span>
           <h2>Plan work where your team already plans work.</h2>
           <p>A task starts as an ordinary card on a real Trello board.</p>
@@ -693,8 +717,15 @@
         </div>
       </section>
 
-      <section id="s03" class="clip" data-start="8.5" data-duration="4.5" data-track-index="1">
-        <header class="cap" data-enter>
+      <section
+        id="s03"
+        class="clip"
+        data-start="s02"
+        data-duration="4.5"
+        data-reading-pace="reflective"
+        data-track-index="1"
+      >
+        <header class="cap" data-enter data-reading-copy>
           <span class="who who-you">You</span>
           <h2>Describe the task like you would for a teammate.</h2>
           <p>The card title and description define the task.</p>
@@ -713,12 +744,12 @@
       <section
         id="s04"
         class="clip move-scene"
-        data-start="13"
-        data-duration="13.8"
-        data-reading-wpm="120"
+        data-start="s03"
+        data-duration="4.8"
+        data-reading-pace="normal"
         data-track-index="1"
       >
-        <header class="cap" data-enter>
+        <header class="cap" data-enter data-reading-copy>
           <span class="who who-you">You</span>
           <h2>Move the card to Ready for Codex.</h2>
           <p>One drag tells Symphony this task is ready to start.</p>
@@ -742,12 +773,12 @@
       <section
         id="s05"
         class="clip move-scene"
-        data-start="26.8"
-        data-duration="14.1"
-        data-reading-wpm="120"
+        data-start="s04"
+        data-duration="4.6"
+        data-reading-pace="normal"
         data-track-index="1"
       >
-        <header class="cap" data-enter>
+        <header class="cap" data-enter data-reading-copy>
           <span class="who who-symphony">Symphony</span>
           <h2>Symphony picks it up automatically.</h2>
           <p>No human dragged this one: the worker claims the card and starts Codex.</p>
@@ -768,13 +799,20 @@
         </div>
       </section>
 
-      <section id="s06" class="clip" data-start="40.9" data-duration="7.5" data-track-index="1">
-        <header class="cap" data-enter>
+      <section
+        id="s06"
+        class="clip"
+        data-start="s05"
+        data-duration="7.5"
+        data-reading-pace="normal"
+        data-track-index="1"
+      >
+        <header class="cap" data-enter data-reading-copy>
           <span class="who who-codex">Codex</span>
           <h2>Progress stays visible on the Trello card.</h2>
           <p>Codex keeps one workpad comment current while it implements the task.</p>
         </header>
-        <div class="comment-panel">
+        <article class="comment-panel">
           <div class="comment-author">
             <div class="comment-avatar">S</div>
             <div>
@@ -793,18 +831,18 @@
           <ul class="workpad-list" data-stagger data-stagger-offset="3">
             <li>Passed: <code>npm run typecheck</code> and <code>npm test</code>.</li>
           </ul>
-        </div>
+        </article>
       </section>
 
       <section
         id="s07"
         class="clip move-scene"
-        data-start="48.4"
-        data-duration="14.1"
-        data-reading-wpm="120"
+        data-start="s06"
+        data-duration="4.6"
+        data-reading-pace="normal"
         data-track-index="1"
       >
-        <header class="cap" data-enter>
+        <header class="cap" data-enter data-reading-copy>
           <span class="who who-symphony">Symphony</span>
           <h2>The PR is ready for review.</h2>
           <p>Symphony moves the card to Human Review and links the pull request.</p>
@@ -829,8 +867,15 @@
         </div>
       </section>
 
-      <section id="s08" class="clip" data-start="62.5" data-duration="8" data-track-index="1">
-        <header class="cap" data-enter>
+      <section
+        id="s08"
+        class="clip"
+        data-start="s07"
+        data-duration="8"
+        data-reading-pace="reflective"
+        data-track-index="1"
+      >
+        <header class="cap" data-enter data-reading-copy>
           <span class="who who-you">You</span>
           <h2>Review the PR just like you normally would.</h2>
           <p>Read the diff on GitHub and leave a comment for Codex.</p>
@@ -853,12 +898,12 @@
       <section
         id="s09"
         class="clip move-scene"
-        data-start="70.5"
-        data-duration="14.4"
-        data-reading-wpm="120"
+        data-start="s08"
+        data-duration="4.4"
+        data-reading-pace="normal"
         data-track-index="1"
       >
-        <header class="cap" data-enter>
+        <header class="cap" data-enter data-reading-copy>
           <span class="who who-you">You</span>
           <h2>Move the card back and Codex continues.</h2>
           <p>Your review comment becomes the next Codex task on the same card.</p>
@@ -883,13 +928,20 @@
         </div>
       </section>
 
-      <section id="s10" class="clip" data-start="84.9" data-duration="6" data-track-index="1">
-        <header class="cap" data-enter>
+      <section
+        id="s10"
+        class="clip"
+        data-start="s09"
+        data-duration="6"
+        data-reading-pace="normal"
+        data-track-index="1"
+      >
+        <header class="cap" data-enter data-reading-copy>
           <span class="who who-codex">Codex</span>
           <h2>Codex addresses the review comment in code.</h2>
           <p>The workpad on the Trello card records the rework.</p>
         </header>
-        <div class="comment-panel">
+        <article class="comment-panel">
           <div class="comment-author">
             <div class="comment-avatar">S</div>
             <div>
@@ -908,11 +960,18 @@
           <ul class="workpad-list" data-stagger data-stagger-offset="3">
             <li>Passed: <code>npm run typecheck</code> and <code>npm test</code>.</li>
           </ul>
-        </div>
+        </article>
       </section>
 
-      <section id="s11" class="clip" data-start="90.9" data-duration="7" data-track-index="1">
-        <header class="cap" data-enter>
+      <section
+        id="s11"
+        class="clip"
+        data-start="s10"
+        data-duration="7"
+        data-reading-pace="reflective"
+        data-track-index="1"
+      >
+        <header class="cap" data-enter data-reading-copy>
           <span class="who who-codex">Codex</span>
           <h2>Back in review: comment answered on the PR.</h2>
           <p>Codex updated the code and replied on the same GitHub review thread.</p>
@@ -935,12 +994,12 @@
       <section
         id="s12"
         class="clip move-scene"
-        data-start="97.9"
-        data-duration="25.4"
-        data-reading-wpm="60"
+        data-start="s11"
+        data-duration="4.4"
+        data-reading-pace="reflective"
         data-track-index="1"
       >
-        <header class="cap" data-enter>
+        <header class="cap" data-enter data-reading-copy>
           <span class="who who-you">You</span>
           <h2>Happy with the PR? Move the card to Merging.</h2>
           <p>Dropping the card here tells Symphony to merge the pull request.</p>
@@ -961,8 +1020,15 @@
         </div>
       </section>
 
-      <section id="s13" class="clip" data-start="123.3" data-duration="4.5" data-track-index="1">
-        <header class="cap" data-enter>
+      <section
+        id="s13"
+        class="clip"
+        data-start="s12"
+        data-duration="4.5"
+        data-reading-pace="normal"
+        data-track-index="1"
+      >
+        <header class="cap" data-enter data-reading-copy>
           <span class="who who-symphony">Symphony</span>
           <h2>Symphony merges the pull request.</h2>
           <p>No IDE, no terminal: the merge happens from the board.</p>
@@ -985,12 +1051,12 @@
       <section
         id="s14"
         class="clip move-scene"
-        data-start="127.8"
-        data-duration="12.1"
-        data-reading-wpm="120"
+        data-start="s13"
+        data-duration="4.6"
+        data-reading-pace="normal"
         data-track-index="1"
       >
-        <header class="cap" data-enter>
+        <header class="cap" data-enter data-reading-copy>
           <span class="who who-symphony">Symphony</span>
           <h2>The card lands in Done.</h2>
           <p>The board shows the task as merged and finished.</p>
@@ -1011,8 +1077,15 @@
         </div>
       </section>
 
-      <section id="s15" class="clip" data-start="139.9" data-duration="7.5" data-track-index="1">
-        <header class="cap" data-enter>
+      <section
+        id="s15"
+        class="clip"
+        data-start="s14"
+        data-duration="7.5"
+        data-reading-pace="reflective"
+        data-track-index="1"
+      >
+        <header class="cap" data-enter data-reading-copy>
           <span class="who who-you">Anywhere</span>
           <h2>Start from your phone. Review from your laptop.</h2>
         </header>
@@ -1028,7 +1101,7 @@
             </div>
           </div>
         </div>
-        <p class="anywhere-note" data-enter>
+        <p class="anywhere-note" data-enter data-reading-copy>
           It is the same Trello board everywhere, so planning a Codex task from a phone is just
           adding a card.
         </p>
@@ -1039,11 +1112,18 @@
         </div>
       </section>
 
-      <section id="s16" class="clip" data-start="147.4" data-duration="6" data-track-index="1">
-        <h2 id="hero-head" class="hero-head" data-enter>
+      <section
+        id="s16"
+        class="clip"
+        data-start="s15"
+        data-duration="6"
+        data-reading-pace="reflective"
+        data-track-index="1"
+      >
+        <h2 id="hero-head" class="hero-head" data-enter data-reading-copy>
           You plan work in Trello. Codex implements it. Symphony keeps everything moving.
         </h2>
-        <p class="hero-sub" data-enter>
+        <p class="hero-sub" data-enter data-reading-copy>
           From phone to laptop, from card to merged PR.
           <strong>No IDE required. No CLI babysitting.</strong>
         </p>
@@ -1135,22 +1215,55 @@
       const BOARD_VIEW_W = 1922;
       const GH_VIEW_W = 1600;
 
-      const sceneStart = (sceneId) => Number(document.getElementById(sceneId).dataset.start);
-      const sceneDuration = (sceneId) =>
-        Number(document.getElementById(sceneId).dataset.duration);
-      const SUPPORTED_READING_WORDS_PER_MINUTE = new Set([60, 120]);
+      const NORMAL_READING_WORDS_PER_MINUTE = 100;
+      const REFLECTIVE_READING_WORDS_PER_MINUTE = 80;
+      const READING_WORDS_PER_MINUTE = Object.freeze({
+        normal: NORMAL_READING_WORDS_PER_MINUTE,
+        reflective: REFLECTIVE_READING_WORDS_PER_MINUTE,
+      });
       const MOVE_SCENE_LIFT_PX = 380;
       const BOARD_REVEAL_DURATION = 0.7;
 
       const readingHoldSeconds = (scene) => {
-        const wordsPerMinute = Number(scene.dataset.readingWpm);
-        if (!SUPPORTED_READING_WORDS_PER_MINUTE.has(wordsPerMinute)) {
-          throw new Error(`${scene.id} must use a reading pace of 60 or 120 words per minute`);
+        const readingPace = scene.dataset.readingPace;
+        const wordsPerMinute = READING_WORDS_PER_MINUTE[readingPace];
+        if (wordsPerMinute === undefined) {
+          throw new Error(`${scene.id} must use the normal or reflective reading pace`);
         }
-        const caption = scene.querySelector(".cap");
-        const words = caption.textContent.trim().match(/\b[\w’'-]+\b/g) ?? [];
+        const readingCopy = [...scene.querySelectorAll("[data-reading-copy]")];
+        if (readingCopy.length === 0) {
+          throw new Error(`${scene.id} must declare the text used to calculate its reading hold`);
+        }
+        const words = readingCopy.flatMap(
+          (copy) => copy.textContent.trim().match(/\b[\w’'-]+\b/g) ?? [],
+        );
         return Math.ceil((words.length * 60 * 10) / wordsPerMinute) / 10;
       };
+
+      const root = document.getElementById("root");
+      if (!root.hasAttribute("data-timing-resolved")) {
+        let nextStart = 0;
+        for (const scene of root.querySelectorAll(":scope > section")) {
+          const visualDuration = Number(scene.dataset.duration);
+          if (!Number.isFinite(visualDuration) || visualDuration <= 0) {
+            throw new Error(`${scene.id} must declare a positive duration`);
+          }
+          const readingHold = readingHoldSeconds(scene);
+          const duration = Math.round((visualDuration + readingHold) * 10) / 10;
+          scene.dataset.start = nextStart.toFixed(1).replace(/\.0$/, "");
+          scene.dataset.duration = duration.toFixed(1).replace(/\.0$/, "");
+          nextStart = Math.round((nextStart + duration) * 10) / 10;
+        }
+        root.dataset.duration = nextStart.toFixed(1).replace(/\.0$/, "");
+      }
+
+      const sceneStart = (sceneId) => Number(document.getElementById(sceneId).dataset.start);
+      const sceneDuration = (sceneId) =>
+        Number(document.getElementById(sceneId).dataset.duration);
+      const sceneReadingHold = (sceneId) =>
+        readingHoldSeconds(document.getElementById(sceneId));
+      const sceneActionStart = (sceneId) => sceneStart(sceneId) + sceneReadingHold(sceneId);
+      const sceneActionDuration = (sceneId) => sceneDuration(sceneId) - sceneReadingHold(sceneId);
 
       const animate = (el, keyframes, startSec, durationSec, options = {}) => {
         const animation = el.animate(keyframes, {
@@ -1330,7 +1443,7 @@
         const t0 = sceneStart(config.scene);
         const sceneDur = sceneDuration(config.scene);
         const move = config.move;
-        const readingHold = move ? readingHoldSeconds(scene) : 0;
+        const readingHold = readingHoldSeconds(scene);
         const actionDuration = sceneDur - readingHold;
         const cameraStops = config.cameraStops.map((stop) =>
           stop.at === "end" ? { ...stop, at: actionDuration } : stop,
@@ -1348,13 +1461,6 @@
           // Give the explanation undivided attention, then lift it into its
           // caption position while the board arrives. Only after that reveal
           // can the cursor or Symphony badge begin moving toward the card.
-          animate(
-            scene.querySelector(".cap"),
-            [{ scale: 1 }, { scale: 1.012 }],
-            t0,
-            readingHold,
-            { easing: "linear" },
-          );
           animate(
             scene.querySelector(".cap"),
             [
@@ -1499,24 +1605,41 @@
 
       // ---- Scene-by-scene build. ----
 
-      // Caption and panel entrances.
+      // The progress line makes the reading interval explicit without starting
+      // the scene's visual action. It disappears when that action begins.
       for (const scene of document.querySelectorAll(".clip")) {
         const t0 = Number(scene.dataset.start);
+        const readingHold = readingHoldSeconds(scene);
+        const readingProgress = el("div", "reading-progress", scene);
+        animate(
+          readingProgress,
+          [
+            { opacity: 0.45, width: "0px" },
+            { opacity: 0.45, width: "120px", offset: 0.94 },
+            { opacity: 0, width: "120px" },
+          ],
+          t0,
+          readingHold,
+          { easing: "linear" },
+        );
+
+        // Caption and panel entrances.
         for (const [i, entering] of scene.querySelectorAll("[data-enter]").entries()) {
+          const isReadingCopy = entering.closest("[data-reading-copy]") !== null;
           animate(
             entering,
             [
               { opacity: 0, translate: "0px 26px" },
               { opacity: 1, translate: "0px 0px" },
             ],
-            t0 + 0.08 + i * 0.12,
+            t0 + (isReadingCopy ? 0 : readingHold) + 0.08 + i * 0.12,
             0.55,
           );
         }
         // Workpad panels enter, then drift very slowly for the rest of the
         // scene so the frame never freezes while the viewer reads the list.
         for (const panel of scene.querySelectorAll(".comment-panel")) {
-          const duration = Number(scene.dataset.duration);
+          const duration = Number(scene.dataset.duration) - readingHold;
           animate(
             panel,
             [
@@ -1524,7 +1647,7 @@
               { translate: "0px 10px", opacity: 1, offset: 0.6 / duration, easing: "linear" },
               { translate: "0px -10px", opacity: 1 },
             ],
-            t0 + 0.1,
+            t0 + readingHold + 0.1,
             duration - 0.1,
           );
         }
@@ -1537,12 +1660,22 @@
                 { opacity: 0, translate: "0px 16px" },
                 { opacity: 1, translate: "0px 0px" },
               ],
-              t0 + 1.0 + (offset + i) * 0.75,
+              t0 + readingHold + 1.0 + (offset + i) * 0.75,
               0.5,
             );
           }
         }
       }
+
+      // s01 has no captured UI action, so the fixed visual interval is a
+      // restrained upward drift after the intro copy has been read.
+      animate(
+        document.querySelector("#s01 .center-stack"),
+        [{ translate: "0px 0px" }, { translate: "0px -10px" }],
+        sceneActionStart("s01"),
+        sceneActionDuration("s01"),
+        { easing: "linear" },
+      );
 
       // s02 — the task waits in Inbox on the real board.
       buildBoardScene({
@@ -1566,7 +1699,7 @@
       animate(
         document.getElementById("s03-card"),
         [{ scale: 1 }, { scale: 1.05 }],
-        sceneStart("s03") + 0.2,
+        sceneActionStart("s03") + 0.2,
         4.1,
         { easing: "linear" },
       );
@@ -1779,7 +1912,7 @@
       // s11 travels down to the kept Codex reply.
       const ghCamera = (sceneId, stops) => {
         const pan = document.querySelector('[data-gh="' + sceneId + '"]');
-        camera(pan, GH_VIEW_W, sceneStart(sceneId), sceneDuration(sceneId), stops);
+        camera(pan, GH_VIEW_W, sceneActionStart(sceneId), sceneActionDuration(sceneId), stops);
       };
       ghCamera("s08", [
         { at: 0, left: 100, top: 30, width: 1350 },
@@ -1818,7 +1951,7 @@
         highlightBox.style.top = "918px";
         highlightBox.style.width = "1080px";
         highlightBox.style.height = "167px";
-        animate(highlightBox, [{ opacity: 0 }, { opacity: 1 }], sceneStart("s11") + 3.05, 0.35, {
+        animate(highlightBox, [{ opacity: 0 }, { opacity: 1 }], sceneActionStart("s11") + 3.05, 0.35, {
           easing: "linear",
         });
       }
@@ -1845,21 +1978,21 @@
           { opacity: 1, translate: "0px 0px", offset: 0.1, easing: "linear" },
           { opacity: 1, translate: "0px -14px" },
         ],
-        sceneStart("s15") + 0.5,
-        9.0,
+        sceneActionStart("s15") + 0.5,
+        sceneActionDuration("s15") - 0.5,
       );
       buildLane(document.getElementById("s15-board-overlay"), "humanReview", {
         count: "0",
         cards: [],
-        t0: sceneStart("s15"),
-        sceneDur: sceneDuration("s15"),
+        t0: sceneActionStart("s15"),
+        sceneDur: sceneActionDuration("s15"),
       });
       document.getElementById("s15-board-media").style.transformOrigin = "170px 60px";
       animate(
         document.getElementById("s15-board-media"),
         [{ scale: 1 }, { scale: 1.09 }],
-        sceneStart("s15") + 0.2,
-        9.2,
+        sceneActionStart("s15") + 0.2,
+        sceneActionDuration("s15") - 0.2,
         { easing: "linear" },
       );
 
@@ -1868,19 +2001,19 @@
       buildLane(document.getElementById("hero-board-overlay"), "humanReview", {
         count: "0",
         cards: [],
-        t0: sceneStart("s16"),
-        sceneDur: sceneDuration("s16"),
+        t0: sceneActionStart("s16"),
+        sceneDur: sceneActionDuration("s16"),
       });
       buildLane(document.getElementById("hero-board-overlay"), "done", {
         count: "3",
         cards: [...DONE_BACKGROUND_CARDS, OUR_CARD],
-        t0: sceneStart("s16"),
-        sceneDur: sceneDuration("s16"),
+        t0: sceneActionStart("s16"),
+        sceneDur: sceneActionDuration("s16"),
       });
       animate(
         document.getElementById("hero-media"),
         [{ scale: 1 }, { scale: 1.025 }],
-        sceneStart("s16") + 0.8,
+        sceneActionStart("s16") + 0.8,
         5.2,
         { easing: "linear" },
       );

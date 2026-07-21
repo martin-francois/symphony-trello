@@ -2,7 +2,6 @@
   "assertions": [
     { "kind": "appearsBy", "selector": "#s01", "bySec": 1 },
     { "kind": "before", "a": "#s01", "b": "#s16" },
-    { "kind": "appearsBy", "selector": "#s16", "bySec": 149 },
     { "kind": "staysInFrame", "selector": "#hero-head" },
     { "kind": "keepsMoving", "maxStaticSec": 3.5 }
   ]

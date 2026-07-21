@@ -33,7 +33,9 @@ check passes, it updates `render-manifest.json` with the exact render-input file
 values for the inputs, MP4, and poster. It also fails instead of writing the manifest when any input
 changes while the render is running. HyperFrames reads an immutable temporary snapshot populated
 from the same file reads used to calculate the source state, so even an edit that is restored before
-the render finishes cannot affect the artifact without affecting its recorded state.
+the render finishes cannot affect the artifact without affecting its recorded state. Container input
+and output stay in a system temporary directory until media validation passes; on SELinux hosts the
+script labels only that directory for the renderer, leaving the checkout's security labels unchanged.
 
 The normal `pnpm run verify:scripts` CI gate recomputes that manifest. It fails when a composition,
 capture, font, render configuration, render script, MP4, or poster changes without running the
@@ -42,15 +44,22 @@ excluded because they do not affect rendered pixels. The manifest also covers `.
 which requests LF checkout bytes for demo inputs and render scripts. Hashing uses Git's canonical
 blob content, so an existing Windows checkout with CRLF files produces the same digest as CI.
 
-Every scene that moves a card reserves a reading hold before showing the board. Each scene declares
-one of two supported reading paces: straightforward explanatory captions use 120 words per minute,
-while text that asks the viewer to decide, reflect, or let an idea sink in uses 60 words per minute.
-The approval scene uses the reflective pace; the other card-movement captions are explanatory. The
-composition counts the actor pill, heading, and supporting sentence, rounds the hold up to the next
-tenth of a second, rejects any other reading rate, and validates that the remaining scene time fits
-the complete move. During that hold the explanation is centered on its own. It then lifts into
-caption position while the board fades in; the cursor or Symphony badge starts only after that
-reveal.
+Every scene reserves a reading hold before its visual action. The composition defines the normal
+and reflective reading rates once as named constants in `index.html`. Scenes that ask the viewer to
+formulate a task, review or approve work, consider working from anywhere, or absorb the closing
+takeaway use the reflective pace (`s03`, `s08`, `s11`, `s12`, `s15`, and `s16`). The remaining
+workflow narration uses the normal pace. Elements marked with `data-reading-copy` supply the word
+count. This includes the authored actor pill, heading, and supporting text, but excludes decorative
+window chrome and detailed UI such as the Codex Workpad, which is visual evidence rather than text
+the viewer is expected to read in full.
+
+The composition rounds each reading hold up to the next tenth of a second and adds it to the scene's
+fixed visual-action duration. It shifts the scene's visual motion until after that hold, then derives
+every cumulative scene start and the composition duration. Changing either rate therefore adjusts
+the complete timeline without editing individual timings. A short progress line indicates the
+reading interval and disappears when the visual action starts. In card-movement scenes, the
+explanation is centered on its own during the reading hold. It then lifts into caption position while
+the board fades in; the cursor or Symphony badge starts only after that reveal.
 
 For iterating on the composition, run the CLI directly from this directory:
 
@@ -66,10 +75,10 @@ committed video.
 
 ## Structure
 
-- `index.html` — the whole composition: one `<section class="clip">` per scene with cumulative
-  `data-start` times, the composition's sole `data-duration`, plus a script that builds the board
-  overlays and every animation. The script reads scene timing back from those attributes, so the
-  HTML is the single timing table. The file stays monolithic on purpose: the scenes share the
+- `index.html` — the whole composition: one `<section class="clip">` per scene, two named reading
+  rate constants, fixed visual-action durations, plus a script that derives cumulative
+  starts and the composition duration before building the board overlays and every animation. The
+  file stays monolithic on purpose: the scenes share the
   board geometry constants and list builder, which sub-composition files would have to duplicate,
   so the `composition_file_too_large` and `timeline_track_too_dense` lint warnings are accepted.
 - `index.motion.json` — motion assertions `check` verifies against the seeked timeline. It omits
