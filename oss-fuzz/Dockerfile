@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM gcr.io/oss-fuzz-base/base-builder-jvm@sha256:6d8d75febebc2fe98d2ecb426eba503afdd9e310bdb249c37470ce4950c0d83b
+FROM gcr.io/oss-fuzz-base/base-builder-jvm@sha256:ef5c7ceab489498789c3e1d51a4c68d4a9b3f398f3cf5a67867f86eb1b49de02
 
 ARG SYMPHONY_TRELLO_REPO=https://github.com/martin-francois/symphony-trello.git
 ARG SYMPHONY_TRELLO_REF=main
