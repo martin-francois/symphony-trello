@@ -58,6 +58,10 @@ const RENOVATE = readFileSync(new URL("../renovate.json", import.meta.url), "utf
 const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
   readonly branchConcurrentLimit?: number;
   readonly dependencyDashboardApproval?: boolean;
+  readonly extends?: readonly string[];
+  readonly internalChecksFilter?: string;
+  readonly minimumReleaseAge?: string;
+  readonly minimumReleaseAgeBehaviour?: string;
   readonly packageRules: readonly {
     readonly automerge?: boolean;
     readonly branchTopic?: string;
@@ -66,6 +70,7 @@ const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
     readonly matchDepTypes?: readonly string[];
     readonly matchPackageNames?: readonly string[];
     readonly matchUpdateTypes?: readonly string[];
+    readonly minimumReleaseAge?: string;
     readonly platformAutomerge?: boolean;
   }[];
   readonly prConcurrentLimit?: number;
@@ -926,6 +931,16 @@ test("Renovate never requires dependency dashboard approval", () => {
   assert.equal(RENOVATE_CONFIG.dependencyDashboardApproval, false);
   for (const rule of RENOVATE_CONFIG.packageRules) {
     assert.equal(rule.dependencyDashboardApproval, undefined);
+  }
+});
+
+test("Renovate enforces the repository-wide seven-day dependency cooldown", () => {
+  assert.equal(RENOVATE_CONFIG.minimumReleaseAge, "7 days");
+  assert.equal(RENOVATE_CONFIG.minimumReleaseAgeBehaviour, "timestamp-required");
+  assert.equal(RENOVATE_CONFIG.internalChecksFilter, "strict");
+  assert.ok(RENOVATE_CONFIG.extends?.includes("group:all"));
+  for (const rule of RENOVATE_CONFIG.packageRules) {
+    assert.equal(rule.minimumReleaseAge, undefined);
   }
 });
 

@@ -43,6 +43,8 @@ if [[ "$git_common_dir" != "$repo_root/.git" && "$git_common_dir" != "$git_dir" 
   docker_args+=(-v "$git_common_dir:$git_common_dir:ro")
 fi
 
+# The registry rule requires minimumReleaseAge in every package rule and does not model the
+# inherited repository-level policy. The Renovate workflow test enforces one strict global value.
 exec "$container_runtime" "${docker_args[@]}" "$image" \
   semgrep scan \
   --config p/owasp-top-ten \
@@ -54,6 +56,7 @@ exec "$container_runtime" "${docker_args[@]}" "$image" \
   --config p/supply-chain \
   --config config/semgrep \
   --exclude-rule java.lang.security.audit.crypto.unencrypted-socket.unencrypted-socket \
+  --exclude-rule package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age \
   --disable-version-check \
   --error \
   --metrics=off \

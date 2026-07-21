@@ -11,8 +11,9 @@
   "rangeStrategy": "replace",
   "prConcurrentLimit": 0,
   "branchConcurrentLimit": 0,
-  "minimumReleaseAge": "3 days",
+  "minimumReleaseAge": "7 days",
   "minimumReleaseAgeBehaviour": "timestamp-required",
+  "internalChecksFilter": "strict",
   "automerge": true,
   "dependencyDashboardApproval": false,
   "vulnerabilityAlerts": {
@@ -104,7 +105,6 @@
       ],
       "groupName": "OpenRewrite toolchain",
       "branchTopic": "openrewrite-toolchain",
-      "minimumReleaseAge": "7 days",
       "rebaseWhen": "behind-base-branch",
       "automerge": true,
       "platformAutomerge": false,
@@ -120,7 +120,6 @@
       "matchDatasources": ["maven"],
       "matchPackageNames": ["io.quarkus:quarkus-update-recipes"],
       "groupName": null,
-      "minimumReleaseAge": "7 days",
       "automerge": false,
       "addLabels": ["quarkus"],
       "prBodyNotes": [
@@ -130,7 +129,6 @@
     },
     {
       "matchPackageNames": ["tessl-labs/good-oss-citizen"],
-      "minimumReleaseAge": "7 days",
       "automerge": false,
       "addLabels": ["tessl"],
       "prBodyNotes": [

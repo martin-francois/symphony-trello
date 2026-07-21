@@ -6,6 +6,7 @@ consulted:
   - "[ADR 0008](0008-renovate-and-github-actions-hardening.md)"
   - "[ADR 0071](0071-automate-openrewrite-renovate-updates.md)"
   - "[Renovate Dependency Dashboard approval documentation](https://docs.renovatebot.com/configuration-options/#dependencydashboardapproval)"
+  - "[Renovate minimum release age documentation](https://docs.renovatebot.com/key-concepts/minimum-release-age/)"
 informed: [Future maintainers, Contributors]
 ---
 
@@ -46,8 +47,12 @@ Chosen option: "Disable Dependency Dashboard approval globally and use `automerg
 merging", because the Dependency Dashboard is not the intended human-review boundary.
 
 `dependencyDashboardApproval` is `false` at the repository level. No package rule overrides it.
-Renovate therefore creates every eligible dependency pull request automatically after its other
-eligibility conditions, such as minimum release age, pass.
+Renovate therefore creates every eligible dependency pull request automatically after the
+repository-wide seven-day minimum release age passes. `internalChecksFilter: "strict"` prevents a
+version whose cooldown is pending from creating a branch or pull request. In `group:all`, that
+pending version does not prevent eligible versions from creating or updating the grouped pull
+request. Renovate's security-update cooldown bypass remains available for disclosed
+vulnerabilities.
 
 The repository-wide major-update rule keeps `automerge: false`, so any pull request containing a
 major update requires human pull-request approval and manual merge. Package-specific rules for
@@ -69,8 +74,10 @@ runtime contract, so `SPEC.md` does not need an update.
   Approval`.
 * Bad, because Renovate can open major and special-case pull requests that a maintainer may choose to
   postpone or close.
-* Neutral, because minimum release age, CI, branch protection, labels, and manual-merge rules remain
-  independent controls.
+* Good, because CI does not execute an ordinary dependency version from a Renovate branch until its
+  seven-day cooldown passes.
+* Neutral, because minimum release age, strict eligibility filtering, CI, branch protection, labels,
+  and manual-merge rules remain independent controls.
 
 ### Confirmation
 
@@ -78,6 +85,9 @@ This decision remains implemented when:
 
 * repository-level `dependencyDashboardApproval` is `false`;
 * no package rule overrides `dependencyDashboardApproval`;
+* repository-level `minimumReleaseAge` is `7 days`, `minimumReleaseAgeBehaviour` is
+  `timestamp-required`, and `internalChecksFilter` is `strict`;
+* no package rule overrides the repository-wide minimum release age;
 * the major-update package rule has `automerge: false`;
 * Quarkus update recipe and Tessl tile updates retain their existing manual-merge policy; and
 * repository tests reject any package-specific dashboard-approval setting.
