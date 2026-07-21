@@ -684,7 +684,7 @@
         data-start="s01"
         data-duration="5"
         data-reading-pace="normal"
-        data-action-lead="1.5"
+        data-action-lead="1"
         data-track-index="1"
       >
         <header class="cap" data-enter data-reading-copy>
@@ -714,7 +714,7 @@
         data-start="s02"
         data-duration="4.5"
         data-reading-pace="reflective"
-        data-action-lead="1.5"
+        data-action-lead="1"
         data-track-index="1"
       >
         <header class="cap" data-enter data-reading-copy>
@@ -797,7 +797,7 @@
         data-start="s05"
         data-duration="7.5"
         data-reading-pace="normal"
-        data-action-lead="1.5"
+        data-action-lead="1"
         data-track-index="1"
       >
         <header class="cap" data-enter data-reading-copy>
@@ -866,7 +866,7 @@
         data-start="s07"
         data-duration="8"
         data-reading-pace="reflective"
-        data-action-lead="1.5"
+        data-action-lead="1"
         data-track-index="1"
       >
         <header class="cap" data-enter data-reading-copy>
@@ -928,7 +928,7 @@
         data-start="s09"
         data-duration="6"
         data-reading-pace="normal"
-        data-action-lead="1.5"
+        data-action-lead="1"
         data-track-index="1"
       >
         <header class="cap" data-enter data-reading-copy>
@@ -964,7 +964,7 @@
         data-start="s10"
         data-duration="7"
         data-reading-pace="reflective"
-        data-action-lead="1.5"
+        data-action-lead="1"
         data-track-index="1"
       >
         <header class="cap" data-enter data-reading-copy>
@@ -1022,7 +1022,7 @@
         data-start="s12"
         data-duration="4.5"
         data-reading-pace="normal"
-        data-action-lead="1.5"
+        data-action-lead="1"
         data-track-index="1"
       >
         <header class="cap" data-enter data-reading-copy>
@@ -1080,14 +1080,14 @@
         data-start="s14"
         data-duration="6.5"
         data-reading-pace="normal"
-        data-action-lead="1.5"
+        data-action-lead="1"
         data-track-index="1"
       >
         <header class="cap" data-enter data-reading-copy>
           <span class="who who-you">Anywhere</span>
           <h2>Start from your phone. Review from your laptop.</h2>
         </header>
-        <div class="win anywhere-board" data-enter>
+        <div class="win anywhere-board" data-enter data-enter-with-action data-enter-sync>
           <div class="win-bar">
             <i></i><i></i><i></i>
             <span class="win-title">Trello — Symphony for Trello — Demo</span>
@@ -1099,7 +1099,13 @@
             </div>
           </div>
         </div>
-        <p class="anywhere-note" data-enter data-reading-copy>
+        <p
+          class="anywhere-note"
+          data-enter
+          data-reading-copy
+          data-enter-with-action
+          data-enter-sync
+        >
           It is the same Trello board everywhere, so planning a Codex task from a phone is just
           adding a card.
         </p>
@@ -1116,7 +1122,7 @@
         data-start="s15"
         data-duration="6"
         data-reading-pace="reflective"
-        data-action-lead="1.5"
+        data-action-lead="1"
         data-track-index="1"
       >
         <h2 id="hero-head" class="hero-head" data-enter data-reading-copy>
@@ -1627,13 +1633,16 @@
         // Caption and panel entrances.
         for (const [i, entering] of scene.querySelectorAll("[data-enter]").entries()) {
           const isReadingCopy = entering.closest("[data-reading-copy]") !== null;
+          const entersWithAction = entering.hasAttribute("data-enter-with-action");
+          const entranceLead = isReadingCopy && !entersWithAction ? 0 : actionLead;
+          const stagger = entering.hasAttribute("data-enter-sync") ? 0 : i * 0.12;
           animate(
             entering,
             [
               { opacity: 0, translate: "0px 26px" },
               { opacity: 1, translate: "0px 0px" },
             ],
-            t0 + (isReadingCopy ? 0 : actionLead) + 0.08 + i * 0.12,
+            t0 + entranceLead + 0.08 + stagger,
             0.55,
           );
         }
@@ -1983,8 +1992,8 @@
           { opacity: 1, translate: "0px 0px", offset: 0.1, easing: "linear" },
           { opacity: 1, translate: "0px -14px" },
         ],
-        sceneActionStart("s15") + 0.5,
-        sceneActionDuration("s15") - 0.5,
+        sceneActionStart("s15") + 0.08,
+        sceneActionDuration("s15") - 0.08,
       );
       buildLane(document.getElementById("s15-board-overlay"), "humanReview", {
         count: "0",
