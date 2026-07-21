@@ -1681,11 +1681,11 @@
         }
       }
 
-      // The intro copy uses one clearly visible, steady zoom so the opening
-      // feels intentional rather than almost frozen.
+      // The intro copy reaches its full zoom before the scene ends, making
+      // the motion clear while leaving a short hold on the final framing.
       animate(
         document.querySelector("#s01 .center-stack"),
-        [{ scale: 1 }, { scale: 1.08 }],
+        [{ scale: 1 }, { scale: 1.08, offset: 0.75 }, { scale: 1.08 }],
         sceneStart("s01"),
         sceneDuration("s01"),
         { easing: "linear" },
