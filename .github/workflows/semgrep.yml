@@ -14,6 +14,6 @@ jobs:
     if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - name: Run selected Semgrep rules
         run: ./scripts/semgrep-docker.sh
