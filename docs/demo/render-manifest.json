@@ -1,15 +1,22 @@
 {
   "schemaVersion": 1,
-  "sourceSha256": "6e90af3b9fb0a29e1e5f022ba73406745034373233dbf3dd4e7504857aa36e63",
+  "sourceSha256": "734b8733a9f5c5e5600df3a2462ac537684af780777ad05a8961858acdfed857",
   "sourceFiles": [
     ".gitattributes",
     "docs/demo/assets/captures/github-pr-merged.jpg",
+    "docs/demo/assets/captures/github-pr-merged.webp",
     "docs/demo/assets/captures/github-review-diff.jpg",
+    "docs/demo/assets/captures/github-review-diff.webp",
     "docs/demo/assets/captures/trello-board-done.jpg",
+    "docs/demo/assets/captures/trello-board-done.webp",
     "docs/demo/assets/captures/trello-board-human-review-staged.jpg",
+    "docs/demo/assets/captures/trello-board-human-review-staged.webp",
     "docs/demo/assets/captures/trello-board-in-progress.jpg",
+    "docs/demo/assets/captures/trello-board-in-progress.webp",
     "docs/demo/assets/captures/trello-board-inbox.jpg",
+    "docs/demo/assets/captures/trello-board-inbox.webp",
     "docs/demo/assets/captures/trello-board-merging.jpg",
+    "docs/demo/assets/captures/trello-board-merging.webp",
     "docs/demo/assets/captures/trello-card-task.jpg",
     "docs/demo/assets/captures/trello-mobile-card.jpg",
     "docs/demo/assets/fonts/inter/inter-latin-400-normal.woff2",
@@ -24,6 +31,6 @@
     "scripts/readme-demo-timing.ts",
     "scripts/render-readme-demo.ts"
   ],
-  "videoSha256": "7c8adac1e574a9207f03951fef71934cfc5555b1cc94d3aa762f2814efc9a500",
-  "posterSha256": "fdaef8b352f4a576de029fe2e6e0f4f46b7b019876d1ef46bbdf4338cb198150"
+  "videoSha256": "55e1277ef517e142cd35d9b5ddcd23b563217596af166aa575e747a29ad55562",
+  "posterSha256": "9180cf4a75c556d1ca4133c34fbc54ddf7887ab1ea571e5123df0e34ffc350d5"
 }
