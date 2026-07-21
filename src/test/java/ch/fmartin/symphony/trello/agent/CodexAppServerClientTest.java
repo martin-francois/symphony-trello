@@ -36,6 +36,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 final class CodexAppServerClientTest {
+    private static final int TEST_PROTOCOL_TIMEOUT_MILLIS = 5_000;
+
     private final ObjectMapper json = new ObjectMapper();
 
     @TempDir
@@ -148,8 +150,13 @@ final class CodexAppServerClientTest {
                   esac
                 done
                 """);
-        EffectiveConfig config =
-                config(Map.of("command", appServer.toString(), "read_timeout_ms", 1000, "turn_timeout_ms", 10000));
+        EffectiveConfig config = config(Map.of(
+                "command",
+                appServer.toString(),
+                "read_timeout_ms",
+                TEST_PROTOCOL_TIMEOUT_MILLIS,
+                "turn_timeout_ms",
+                10000));
         Path workspace = config.workspace().root().resolve("TRELLO-completed-exit");
         Files.createDirectories(workspace);
         var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
@@ -232,9 +239,9 @@ final class CodexAppServerClientTest {
                 "additional_writable_roots",
                 List.of(extraRoot.toString()),
                 "read_timeout_ms",
-                1000,
+                TEST_PROTOCOL_TIMEOUT_MILLIS,
                 "turn_timeout_ms",
-                1000));
+                TEST_PROTOCOL_TIMEOUT_MILLIS));
         Path workspace = config.workspace().root().resolve("TRELLO-capture");
         Files.createDirectories(workspace);
         var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
@@ -288,9 +295,9 @@ final class CodexAppServerClientTest {
                 "additional_writable_roots",
                 List.of(extraRoot.toString()),
                 "read_timeout_ms",
-                1000,
+                TEST_PROTOCOL_TIMEOUT_MILLIS,
                 "turn_timeout_ms",
-                1000));
+                TEST_PROTOCOL_TIMEOUT_MILLIS));
         Path workspace = config.workspace().root().resolve("TRELLO-capture-network");
         Files.createDirectories(workspace);
         var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
@@ -350,9 +357,9 @@ final class CodexAppServerClientTest {
                 "reasoning_effort",
                 "xhigh",
                 "read_timeout_ms",
-                1000,
+                TEST_PROTOCOL_TIMEOUT_MILLIS,
                 "turn_timeout_ms",
-                1000));
+                TEST_PROTOCOL_TIMEOUT_MILLIS));
         Path workspace = config.workspace().root().resolve("TRELLO-model");
         Files.createDirectories(workspace);
         var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
@@ -402,8 +409,13 @@ final class CodexAppServerClientTest {
                   esac
                 done
                 """);
-        EffectiveConfig config =
-                config(Map.of("command", appServer + " " + capture, "read_timeout_ms", 1000, "turn_timeout_ms", 1000));
+        EffectiveConfig config = config(Map.of(
+                "command",
+                appServer + " " + capture,
+                "read_timeout_ms",
+                TEST_PROTOCOL_TIMEOUT_MILLIS,
+                "turn_timeout_ms",
+                TEST_PROTOCOL_TIMEOUT_MILLIS));
         Path workspace = config.workspace().root().resolve("TRELLO-default-model");
         Files.createDirectories(workspace);
         var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
@@ -462,8 +474,13 @@ final class CodexAppServerClientTest {
                   esac
                 done
                 """);
-        EffectiveConfig config =
-                config(Map.of("command", appServer + " " + capture, "read_timeout_ms", 1000, "turn_timeout_ms", 1000));
+        EffectiveConfig config = config(Map.of(
+                "command",
+                appServer + " " + capture,
+                "read_timeout_ms",
+                TEST_PROTOCOL_TIMEOUT_MILLIS,
+                "turn_timeout_ms",
+                TEST_PROTOCOL_TIMEOUT_MILLIS));
         Path workspace = config.workspace().root().resolve("TRELLO-multi-turn");
         Files.createDirectories(workspace);
         var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
@@ -519,8 +536,13 @@ final class CodexAppServerClientTest {
                   esac
                 done
                 """);
-        EffectiveConfig config =
-                config(Map.of("command", appServer.toString(), "read_timeout_ms", 1000, "turn_timeout_ms", 10000));
+        EffectiveConfig config = config(Map.of(
+                "command",
+                appServer.toString(),
+                "read_timeout_ms",
+                TEST_PROTOCOL_TIMEOUT_MILLIS,
+                "turn_timeout_ms",
+                10000));
         Path workspace = config.workspace().root().resolve("TRELLO-exit");
         Files.createDirectories(workspace);
         var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
@@ -555,8 +577,13 @@ final class CodexAppServerClientTest {
                   esac
                 done
                 """);
-        EffectiveConfig config =
-                config(Map.of("command", appServer.toString(), "read_timeout_ms", 1000, "turn_timeout_ms", 10000));
+        EffectiveConfig config = config(Map.of(
+                "command",
+                appServer.toString(),
+                "read_timeout_ms",
+                TEST_PROTOCOL_TIMEOUT_MILLIS,
+                "turn_timeout_ms",
+                10000));
         Path workspace = config.workspace().root().resolve("TRELLO-exit-request");
         Files.createDirectories(workspace);
         var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
@@ -1033,8 +1060,13 @@ final class CodexAppServerClientTest {
                         .replace("__SECONDARY_OBSERVED__", secondaryObserved.toString())
                         .replace("__PRIMARY_RESET__", Long.toString(laterPrimaryReset.getEpochSecond()))
                         .replace("__SECONDARY_RESET__", Long.toString(earlierSecondaryReset.getEpochSecond())));
-        EffectiveConfig config =
-                config(Map.of("command", appServer.toString(), "read_timeout_ms", 5000, "turn_timeout_ms", 5000));
+        EffectiveConfig config = config(Map.of(
+                "command",
+                appServer.toString(),
+                "read_timeout_ms",
+                TEST_PROTOCOL_TIMEOUT_MILLIS,
+                "turn_timeout_ms",
+                TEST_PROTOCOL_TIMEOUT_MILLIS));
         var client = new CodexAppServerClient(
                 json, new TrelloHandoffToolHandler(json, new TrelloClient(json)), Clock.fixed(now, ZoneOffset.UTC));
         AgentEventListener listener = event -> {
@@ -1116,8 +1148,13 @@ final class CodexAppServerClientTest {
                 """
                         .replace("__ACCEPTANCE_ENTERED__", acceptanceEntered.toString())
                         .replace("__RESET__", Long.toString(reset.getEpochSecond())));
-        EffectiveConfig config =
-                config(Map.of("command", appServer.toString(), "read_timeout_ms", 5000, "turn_timeout_ms", 5000));
+        EffectiveConfig config = config(Map.of(
+                "command",
+                appServer.toString(),
+                "read_timeout_ms",
+                TEST_PROTOCOL_TIMEOUT_MILLIS,
+                "turn_timeout_ms",
+                TEST_PROTOCOL_TIMEOUT_MILLIS));
         var client = new CodexAppServerClient(
                 json, new TrelloHandoffToolHandler(json, new TrelloClient(json)), Clock.fixed(now, ZoneOffset.UTC));
         var releaseAcceptance = new CountDownLatch(1);
@@ -1305,7 +1342,13 @@ final class CodexAppServerClientTest {
     }
 
     private EffectiveConfig config(Path appServer) {
-        return config(Map.of("command", appServer.toString(), "read_timeout_ms", 1000, "turn_timeout_ms", 1000));
+        return config(Map.of(
+                "command",
+                appServer.toString(),
+                "read_timeout_ms",
+                TEST_PROTOCOL_TIMEOUT_MILLIS,
+                "turn_timeout_ms",
+                TEST_PROTOCOL_TIMEOUT_MILLIS));
     }
 
     private AgentRunResult runFailureTurn(Path appServer, Clock clock, String identifier) throws Exception {

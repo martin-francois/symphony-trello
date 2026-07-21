@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -11,6 +13,7 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -20,16 +23,13 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 final class InstallerScriptFixture {
+    private static final int PROCESS_DESCENDANT_DISCOVERY_MILLIS = 1_000;
+    private static final int PROCESS_TERMINATION_SECONDS = 5;
     private static final String REPOSITORY_ENVIRONMENT_PREFIX = "SYMPHONY_";
     private static final Pattern POSIX_INSTALLER_DEFAULT_VERSION =
             Pattern.compile("(?m)^DEFAULT_VERSION=\"([^\"]+)\" # x-release-please-version$");
 
     private InstallerScriptFixture() {}
-
-    static String output(Process process) throws IOException {
-        return new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8)
-                + new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
-    }
 
     static void writeExecutable(Path path, String content) throws IOException {
         Files.writeString(path, content);
@@ -170,15 +170,85 @@ final class InstallerScriptFixture {
 
     static ProcessResult run(ProcessBuilder processBuilder, String input, int timeoutSeconds)
             throws IOException, InterruptedException {
-        Process process = processBuilder.start();
-        process.getOutputStream().write(input.getBytes(StandardCharsets.UTF_8));
-        process.getOutputStream().close();
-        boolean completed = process.waitFor(Duration.ofSeconds(timeoutSeconds));
-        String output = output(process);
-        assertThat(completed)
-                .as("process timed out: %s output:%n%s", processBuilder.command(), output)
-                .isTrue();
-        return new ProcessResult(process.exitValue(), output);
+        Path stdout = Files.createTempFile("symphony-trello-installer-stdout-", ".log");
+        Path stderr = null;
+        Process process = null;
+        try {
+            stderr = Files.createTempFile("symphony-trello-installer-stderr-", ".log");
+            processBuilder.redirectOutput(stdout.toFile());
+            processBuilder.redirectError(stderr.toFile());
+            process = processBuilder.start();
+            process.getOutputStream().write(input.getBytes(StandardCharsets.UTF_8));
+            process.getOutputStream().close();
+            boolean completed = process.waitFor(Duration.ofSeconds(timeoutSeconds));
+            if (!completed) {
+                terminateProcessTree(process);
+            }
+            String output = decodeCapturedOutput(stdout) + decodeCapturedOutput(stderr);
+            assertThat(completed)
+                    .as("process timed out: %s output:%n%s", processBuilder.command(), output)
+                    .isTrue();
+            return new ProcessResult(process.exitValue(), output);
+        } finally {
+            if (process != null && process.isAlive()) {
+                terminateProcessTreeImmediately(process);
+            }
+            Files.deleteIfExists(stdout);
+            if (stderr != null) {
+                Files.deleteIfExists(stderr);
+            }
+        }
+    }
+
+    private static String decodeCapturedOutput(Path output) throws IOException {
+        return StandardCharsets.UTF_8
+                .newDecoder()
+                .onMalformedInput(CodingErrorAction.REPLACE)
+                .onUnmappableCharacter(CodingErrorAction.REPLACE)
+                .decode(ByteBuffer.wrap(Files.readAllBytes(output)))
+                .toString();
+    }
+
+    private static void terminateProcessTree(Process process) throws InterruptedException {
+        Map<Long, ProcessHandle> observedDescendants = new LinkedHashMap<>();
+        long discoveryDeadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(PROCESS_DESCENDANT_DISCOVERY_MILLIS);
+        List<ProcessHandle> currentDescendants;
+        do {
+            currentDescendants = terminateCurrentDescendants(process, observedDescendants);
+            if (currentDescendants.isEmpty()) {
+                break;
+            }
+            pollDelayForBoundedProcessWait();
+        } while (process.isAlive() && System.nanoTime() < discoveryDeadline);
+        terminateCurrentDescendants(process, observedDescendants);
+        process.destroyForcibly();
+        for (ProcessHandle descendant : observedDescendants.values()) {
+            descendant.destroyForcibly();
+        }
+        long terminationDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(PROCESS_TERMINATION_SECONDS);
+        while ((process.isAlive() || observedDescendants.values().stream().anyMatch(ProcessHandle::isAlive))
+                && System.nanoTime() < terminationDeadline) {
+            pollDelayForBoundedProcessWait();
+        }
+        assertThat(process.isAlive() || observedDescendants.values().stream().anyMatch(ProcessHandle::isAlive))
+                .as("timed-out process tree terminates: root pid %s", process.pid())
+                .isFalse();
+    }
+
+    private static List<ProcessHandle> terminateCurrentDescendants(
+            Process process, Map<Long, ProcessHandle> observedDescendants) {
+        List<ProcessHandle> currentDescendants = process.descendants().toList();
+        for (ProcessHandle descendant : currentDescendants.reversed()) {
+            observedDescendants.put(descendant.pid(), descendant);
+            descendant.destroyForcibly();
+        }
+        return currentDescendants;
+    }
+
+    private static void terminateProcessTreeImmediately(Process process) {
+        List<ProcessHandle> descendants = process.descendants().toList();
+        descendants.reversed().forEach(ProcessHandle::destroyForcibly);
+        process.destroyForcibly();
     }
 
     static Path singleFile(Path directory, String suffix) throws IOException {

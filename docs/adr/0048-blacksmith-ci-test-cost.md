@@ -55,7 +55,9 @@ parallelism viable enough to measure it on hosted Blacksmith runners.
 ## Decision Outcome
 
 Chosen option: keep the Linux verification job on `blacksmith-2vcpu-ubuntu-2404` and run hosted
-JUnit parallelism with `-Djunit.parallel.config.fixed.parallelism=2`.
+JUnit parallelism with `-Djunit.parallel.config.fixed.parallelism=2`. The Surefire and Failsafe
+configuration caps JUnit's fixed executor pool at the configured parallelism. This prevents
+blocking tests from creating compensating workers beyond the runner's measured capacity.
 
 The previous stable hosted test shape completed in 146 seconds on 2 vCPU in both benchmark runs, for
 146 normalized seconds. Successful 2-vCPU JUnit-parallel cells measured 97-103 normalized seconds,
@@ -95,6 +97,8 @@ cell.
 * Good, because the fastest wall-clock runner shape is rejected when it costs more normalized
   Blacksmith minutes.
 * Good, because developers still get local parallel test execution by default.
+* Good, because the fixed executor's maximum pool size matches the requested parallelism instead of
+  JUnit's default allowance of 256 compensating workers.
 * Bad, because hosted CI now depends on parallel-test isolation remaining durable.
 * Bad, because any future hosted flake needs to fix the isolated test or shared state rather than
   silently returning to serial execution.
@@ -108,6 +112,11 @@ Run:
 ```
 
 That command should pass with CI's hosted JUnit-parallel setting.
+
+The Surefire and Failsafe system properties MUST set
+`junit.jupiter.execution.parallel.config.fixed.max-pool-size` to the same Maven property as
+`junit.jupiter.execution.parallel.config.fixed.parallelism`. A fixed parallelism value without the
+matching maximum pool size does not bound JUnit's compensating worker threads.
 
 The hosted Linux test job should run on `blacksmith-2vcpu-ubuntu-2404` and pass:
 
