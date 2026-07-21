@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceSha256": "734b8733a9f5c5e5600df3a2462ac537684af780777ad05a8961858acdfed857",
+  "sourceSha256": "6d31e9bbebe3d29619a1fd714ce68807e001aa24015a9784aef0470ee5eb9b45",
   "sourceFiles": [
     ".gitattributes",
     "docs/demo/assets/captures/github-pr-merged.jpg",
@@ -18,6 +18,7 @@
     "docs/demo/assets/captures/trello-board-merging.jpg",
     "docs/demo/assets/captures/trello-board-merging.webp",
     "docs/demo/assets/captures/trello-card-task.jpg",
+    "docs/demo/assets/captures/trello-card-task.webp",
     "docs/demo/assets/captures/trello-mobile-card.jpg",
     "docs/demo/assets/fonts/inter/inter-latin-400-normal.woff2",
     "docs/demo/assets/fonts/inter/inter-latin-600-normal.woff2",
@@ -31,6 +32,6 @@
     "scripts/readme-demo-timing.ts",
     "scripts/render-readme-demo.ts"
   ],
-  "videoSha256": "55e1277ef517e142cd35d9b5ddcd23b563217596af166aa575e747a29ad55562",
-  "posterSha256": "9180cf4a75c556d1ca4133c34fbc54ddf7887ab1ea571e5123df0e34ffc350d5"
+  "videoSha256": "8cac28331ff29d54c34dddda3aac4d26d924a297230e48dadea5b227a74af2df",
+  "posterSha256": "5e15cbaa68256a8009f4d1caaced58b531167b1fdf5aa1962f5f60c72ed5c574"
 }

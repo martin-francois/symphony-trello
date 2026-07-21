@@ -8,8 +8,9 @@ import {materializeReadmeDemoTiming} from "./readme-demo-timing.ts";
 function createDemoFixture(t: test.TestContext, normalWpm: number, reflectiveWpm: number): string {
   const demoDir = mkdtempSync(join(tmpdir(), "readme-demo-timing-"));
   t.after(() => rmSync(demoDir, {recursive: true, force: true}));
+  // The HTML and destination are test-owned constants; neither contains external input.
   writeFileSync(
-    join(demoDir, "index.html"),
+    join(demoDir, "index.html"), // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
     `
       <div id="root" data-duration="0">
         <section

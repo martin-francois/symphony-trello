@@ -9,7 +9,7 @@ video and poster from optimized captures of a real disposable Trello-to-GitHub r
 
 The whole render stack is free and open source: HyperFrames is Apache-2.0, the composition is
 plain HTML/CSS with native Web Animations API motion (no GSAP, no CDN scripts), and encoding uses
-FFmpeg. See [ADR 0073](../adr/0073-hyperframes-readme-demo-video.md) for why HyperFrames was
+FFmpeg. See [ADR 0074](../adr/0074-hyperframes-readme-demo-video.md) for why HyperFrames was
 chosen over Remotion and the other candidates.
 
 ## Re-rendering
