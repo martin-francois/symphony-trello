@@ -8,6 +8,11 @@ consulted:
   - "[GitHub issue #359](https://github.com/martin-francois/symphony-trello/issues/359)"
   - "[Benchmark run 27079999864](https://github.com/martin-francois/symphony-trello/actions/runs/27079999864)"
   - "[Benchmark run 27080073069](https://github.com/martin-francois/symphony-trello/actions/runs/27080073069)"
+  - "[Fresh 2-vCPU baseline run 29863698502](https://github.com/martin-francois/symphony-trello/actions/runs/29863698502)"
+  - "[Fresh 4-vCPU trial run 29867224338](https://github.com/martin-francois/symphony-trello/actions/runs/29867224338)"
+  - "[Restored 2-vCPU confirmation run 29867643365](https://github.com/martin-francois/symphony-trello/actions/runs/29867643365)"
+  - "[Blacksmith runner billing](https://docs.blacksmith.sh/blacksmith-runners/overview#is-there-a-free-tier)"
+  - "[GitHub Actions 2026 pricing](https://github.blog/changelog/2025-12-16-coming-soon-simpler-pricing-and-a-better-experience-for-github-actions/)"
 informed: [Future maintainers, Contributors]
 ---
 
@@ -25,6 +30,10 @@ normalized seconds = wall-clock seconds * runner vCPU / 2
 
 A 4-vCPU runner must finish in less than half the 2-vCPU time to use fewer normalized Blacksmith
 minutes. An 8-vCPU runner must finish in less than one quarter of the 2-vCPU time.
+
+The repository is public. GitHub's 2026 Actions platform charge does not apply to public-repository
+runner usage, so it does not add a fixed per-minute cost that would change these break-even ratios.
+Blacksmith's free quota continues to charge larger x64 runners in proportion to their vCPU count.
 
 [GitHub issue #355](https://github.com/martin-francois/symphony-trello/issues/355) asked whether
 increasing the runner size, enabling Maven parallelism, enabling JUnit parallelism, or splitting CI
@@ -55,7 +64,9 @@ parallelism viable enough to measure it on hosted Blacksmith runners.
 ## Decision Outcome
 
 Chosen option: keep the Linux verification job on `blacksmith-2vcpu-ubuntu-2404` and run hosted
-JUnit parallelism with `-Djunit.parallel.config.fixed.parallelism=2`.
+JUnit parallelism with `-Djunit.parallel.config.fixed.parallelism=2`. The Surefire and Failsafe
+configuration caps JUnit's fixed executor pool at the configured parallelism. This prevents
+blocking tests from creating compensating workers beyond the runner's measured capacity.
 
 The previous stable hosted test shape completed in 146 seconds on 2 vCPU in both benchmark runs, for
 146 normalized seconds. Successful 2-vCPU JUnit-parallel cells measured 97-103 normalized seconds,
@@ -63,6 +74,17 @@ which is both faster and cheaper under the Blacksmith free-minute model.
 
 The fastest successful wall-clock cell was 8 vCPU with JUnit parallelism 2 at 73 seconds, but it
 cost 292 normalized seconds. That is materially more expensive than the 2-vCPU JUnit-parallel cells.
+
+A 2026-07-21 re-evaluation measured the complete Linux verification job after the suite and curated
+OpenRewrite lane had grown. The successful 2-vCPU/parallelism-2 baseline took 414 seconds, or 414
+normalized seconds. One successful 4-vCPU/parallelism-4 trial took 247 seconds, or 494 normalized
+seconds. The larger runner reduced wall-clock time by about 40% but increased normalized usage by
+about 19%, so 2 vCPU remains the more economical choice. An 8-vCPU trial was not justified: it would
+have needed to finish the complete job in less than 104 seconds, while the 4-vCPU trial spent 102
+seconds on OpenRewrite and another 123 seconds on verification alone. A restored
+2-vCPU/parallelism-2 confirmation then completed in 286 seconds, or 286 normalized seconds. The
+variation between the two 2-vCPU runs does not change the decision: the confirmation makes the
+4-vCPU trial about 14% faster but about 73% more expensive.
 
 The earlier 2-vCPU JUnit-parallel runs were held back because one repeated hosted JUnit 2 cell
 failed with a setup server port conflict, JUnit 8 failed, and JUnit 6 hung long enough that the
@@ -95,6 +117,8 @@ cell.
 * Good, because the fastest wall-clock runner shape is rejected when it costs more normalized
   Blacksmith minutes.
 * Good, because developers still get local parallel test execution by default.
+* Good, because the fixed executor's maximum pool size matches the requested parallelism instead of
+  JUnit's default allowance of 256 compensating workers.
 * Bad, because hosted CI now depends on parallel-test isolation remaining durable.
 * Bad, because any future hosted flake needs to fix the isolated test or shared state rather than
   silently returning to serial execution.
@@ -108,6 +132,11 @@ Run:
 ```
 
 That command should pass with CI's hosted JUnit-parallel setting.
+
+The Surefire and Failsafe system properties MUST set
+`junit.jupiter.execution.parallel.config.fixed.max-pool-size` to the same Maven property as
+`junit.jupiter.execution.parallel.config.fixed.parallelism`. A fixed parallelism value without the
+matching maximum pool size does not bound JUnit's compensating worker threads.
 
 The hosted Linux test job should run on `blacksmith-2vcpu-ubuntu-2404` and pass:
 
