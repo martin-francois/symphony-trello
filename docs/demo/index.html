@@ -1239,7 +1239,6 @@
       const MOVE_SCENE_LIFT_PX = 380;
       const BOARD_REVEAL_DURATION = 0.7;
       const INTRO_ZOOM_DELAY = 0.9;
-      const INTRO_ZOOM_DURATION = 3;
       const INTRO_ZOOM_SCALE = 1.08;
 
       const readingHoldSeconds = (scene) => {
@@ -1708,16 +1707,16 @@
         }
       }
 
-      // Let the entrance settle, then scale each block around its own center.
-      // Scaling the full stack also moves the blocks apart, which makes the
-      // text appear to wobble even though the scale itself is linear.
+      // Let the entrance settle, then scale each block around its own center
+      // at a steady rate until the scene changes. Scaling the full stack also
+      // moves the blocks apart, which makes the text appear to wobble.
       for (const introBlock of document.querySelectorAll("#s01 [data-enter]")) {
         animate(
           introBlock,
           [{ scale: 1 }, { scale: INTRO_ZOOM_SCALE }],
           sceneStart("s01") + INTRO_ZOOM_DELAY,
-          INTRO_ZOOM_DURATION,
-          { easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+          sceneDuration("s01") - INTRO_ZOOM_DELAY,
+          { easing: "linear" },
         );
       }
 
