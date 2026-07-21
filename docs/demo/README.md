@@ -42,6 +42,12 @@ excluded because they do not affect rendered pixels. The manifest also covers `.
 which requests LF checkout bytes for demo inputs and render scripts. Hashing uses Git's canonical
 blob content, so an existing Windows checkout with CRLF files produces the same digest as CI.
 
+Every scene that moves a card reserves a reading hold before showing the board. The composition
+counts the actor pill, heading, and supporting sentence at 200 words per minute, rounds the hold up
+to the next tenth of a second, and validates that the remaining scene time fits the complete move.
+During that hold the explanation is centered on its own. It then lifts into caption position while
+the board fades in; the cursor or Symphony badge starts only after that reveal.
+
 For iterating on the composition, run the CLI directly from this directory:
 
 ```bash

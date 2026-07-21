@@ -28,22 +28,23 @@ const VIDEO_BITRATE = "1M";
 const MEBIBYTE = 1024 * 1024;
 const MIN_VIDEO_BYTES = 6 * MEBIBYTE;
 const MIN_DARK_PIXEL_RATIO = 0.01;
-/** The final hero frame; keep inside the last scene of docs/demo/index.html. */
-const POSTER_TIME_SECONDS = "92.5";
 
-const TEXT_REGION_SAMPLES = [
-  { label: "intro", time: "2", crop: "crop=1620:500:150:280" },
-  { label: "board caption", time: "20", crop: "crop=1760:230:80:30" },
-  { label: "review caption", time: "50", crop: "crop=1760:230:80:30" },
-  { label: "phone caption", time: "80", crop: "crop=1150:220:60:30" },
-  { label: "closing message", time: "92", crop: "crop=1720:300:100:80" },
-] as const;
+interface CompositionTiming {
+  duration: number;
+  sceneStarts: ReadonlyMap<string, number>;
+}
+
+interface TextRegionSample {
+  label: string;
+  time: string;
+  crop: string;
+}
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const videoPath = join(repoRoot, "docs", "assets", "readme-demo.mp4");
 const posterPath = join(repoRoot, "docs", "assets", "readme-demo-poster.png");
 
-function readExpectedDurationSeconds(demoDir: string): number {
+function readCompositionTiming(demoDir: string): CompositionTiming {
   const html = readFileSync(join(demoDir, "index.html"), "utf8");
   const rootTag = html.match(/<[a-z][^>]*\bid=["']root["'][^>]*>/i)?.[0];
   const htmlDuration = Number(rootTag?.match(/\bdata-duration=["']([^"']+)["']/)?.[1]);
@@ -63,7 +64,35 @@ function readExpectedDurationSeconds(demoDir: string): number {
       `index.motion.json declares ${motion.duration}s`,
     );
   }
-  return htmlDuration;
+  const sceneStarts = new Map<string, number>();
+  for (const match of html.matchAll(
+    /<section\b[^>]*\bid=["']([^"']+)["'][^>]*\bdata-start=["']([^"']+)["'][^>]*>/gi,
+  )) {
+    const sceneId = match[1];
+    const start = Number(match[2]);
+    if (sceneId === undefined || !Number.isFinite(start) || start < 0) {
+      throw new Error("docs/demo/index.html contains an invalid scene timing declaration");
+    }
+    sceneStarts.set(sceneId, start);
+  }
+  for (const sceneId of ["s04", "s08", "s15", "s16"]) {
+    if (!sceneStarts.has(sceneId)) {
+      throw new Error(`docs/demo/index.html is missing timing for ${sceneId}`);
+    }
+  }
+  return {duration: htmlDuration, sceneStarts};
+}
+
+function textRegionSamples(timing: CompositionTiming): TextRegionSample[] {
+  const sceneTime = (sceneId: string, offset: number): string =>
+    ((timing.sceneStarts.get(sceneId) ?? 0) + offset).toFixed(1);
+  return [
+    {label: "intro", time: "2", crop: "crop=1620:500:150:280"},
+    {label: "move explanation", time: sceneTime("s04", 2), crop: "crop=1760:560:80:250"},
+    {label: "review caption", time: sceneTime("s08", 2), crop: "crop=1760:230:80:30"},
+    {label: "phone caption", time: sceneTime("s15", 1), crop: "crop=1150:220:60:30"},
+    {label: "closing message", time: sceneTime("s16", 2), crop: "crop=1720:300:100:80"},
+  ];
 }
 
 function run(command: string, args: string[], demoDir: string): void {
@@ -106,8 +135,8 @@ function ffprobe(path: string): { codec: string; duration: number; streamCount: 
   };
 }
 
-function verifyRenderedText(path: string): void {
-  for (const sample of TEXT_REGION_SAMPLES) {
+function verifyRenderedText(path: string, samples: TextRegionSample[]): void {
+  for (const sample of samples) {
     const result = spawnSync(
       "ffmpeg",
       [
@@ -161,7 +190,8 @@ const snapshotDemoDir = join(snapshotRoot, "demo");
 try {
   // Hash and copy each composition input from the same read, then render only that immutable copy.
   const sourceBeforeRender = createReadmeDemoSourceSnapshot(repoRoot, snapshotDemoDir);
-  const expectedDurationSeconds = readExpectedDurationSeconds(snapshotDemoDir);
+  const timing = readCompositionTiming(snapshotDemoDir);
+  const expectedDurationSeconds = timing.duration;
   const skipCheck = process.argv.includes("--skip-check");
 
   if (!skipCheck) {
@@ -181,9 +211,10 @@ try {
     videoPath,
   ], snapshotDemoDir);
 
-  // Extract the poster from the completed video so it uses the exact same font
+  // Extract the poster from the final hero so it uses the exact same font
   // and browser render as the MP4. HyperFrames' standalone snapshot path can
   // fail to load bundled fonts independently of the render path.
+  const posterTimeSeconds = (expectedDurationSeconds - 0.5).toFixed(1);
   run("ffmpeg", [
     "-y",
     "-loglevel",
@@ -191,7 +222,7 @@ try {
     "-i",
     videoPath,
     "-ss",
-    POSTER_TIME_SECONDS,
+    posterTimeSeconds,
     "-frames:v",
     "1",
     posterPath,
@@ -214,7 +245,7 @@ try {
       `expected readme-demo.mp4 to exceed 6 MiB, found ${(videoBytes / MEBIBYTE).toFixed(1)} MiB`,
     );
   }
-  verifyRenderedText(videoPath);
+  verifyRenderedText(videoPath, textRegionSamples(timing));
   writeReadmeDemoManifest(repoRoot, sourceBeforeRender);
 
   console.log(`\nreadme-demo.mp4: ${(videoBytes / MEBIBYTE).toFixed(1)} MiB, ` +

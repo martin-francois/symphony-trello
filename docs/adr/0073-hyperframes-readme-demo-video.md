@@ -99,7 +99,7 @@ the edit is restored before rendering finishes.
 
 CI does not re-render and compare the MP4 byte for byte. HyperFrames' Docker image uses mutable
 upstream browser and system packages, so fresh renders are not guaranteed to be byte-identical, and
-a 93-second Docker render would make the required CI path slower. Git timestamps are not preserved
+a two-minute Docker render would make the required CI path slower. Git timestamps are not preserved
 reliably across clones, and a manually maintained watch list would create the same omission risk this
 check is intended to remove.
 
@@ -201,7 +201,7 @@ MP4 and poster.
 
 * Good, because the comparison directly exercises the production render path.
 * Bad, because mutable browser and system packages can change encoded bytes without a source change.
-* Bad, because rendering the 93-second 1080p video would slow required CI substantially.
+* Bad, because rendering the two-minute 1080p video would slow required CI substantially.
 
 ### Timestamps or a manual watch list
 
