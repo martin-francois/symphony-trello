@@ -38,7 +38,7 @@ const posterPath = join(repoRoot, "docs", "assets", "readme-demo-poster.png");
 
 function readExpectedDurationSeconds(): number {
   const html = readFileSync(join(demoDir, "index.html"), "utf8");
-  const rootTag = html.match(/<main\b[^>]*\bid=["']root["'][^>]*>/)?.[0];
+  const rootTag = html.match(/<[a-z][^>]*\bid=["']root["'][^>]*>/i)?.[0];
   const htmlDuration = Number(rootTag?.match(/\bdata-duration=["']([^"']+)["']/)?.[1]);
   if (!Number.isFinite(htmlDuration) || htmlDuration <= 0) {
     throw new Error("docs/demo/index.html must declare a positive data-duration on #root");
