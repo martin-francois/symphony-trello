@@ -5,6 +5,7 @@ video and poster from optimized captures of a real disposable Trello-to-GitHub r
 
 - `docs/assets/readme-demo.mp4` (H.264, silent, no audio track)
 - `docs/assets/readme-demo-poster.png`
+- `docs/demo/render-manifest.json` (render-input and artifact checksums)
 
 The whole render stack is free and open source: HyperFrames is Apache-2.0, the composition is
 plain HTML/CSS with native Web Animations API motion (no GSAP, no CDN scripts), and encoding uses
@@ -13,10 +14,11 @@ chosen over Remotion and the other candidates.
 
 ## Re-rendering
 
-Requirements: Node.js 22.18+, Docker, FFmpeg with `ffprobe`, and pnpm. The HyperFrames CLI is
-fetched on demand at a pinned version, and rendering uses its Docker environment so the production
-browser has the system font support needed to load the bundled fonts. No `package.json` or install
-step is needed here.
+Requirements: a Git working tree, Git on `PATH`, Node.js 22.18+, Docker, FFmpeg with `ffprobe`, and
+pnpm. The HyperFrames CLI is fetched on demand at a pinned version, and rendering uses its Docker
+environment so the production browser has the system font support needed to load the bundled fonts.
+No `package.json` or install step is needed here. The script validates the Git requirement before it
+starts the Docker render.
 
 Render and verify both assets in one step from the repository root:
 
@@ -26,7 +28,19 @@ node scripts/render-readme-demo.ts
 
 The script runs the composition checks, renders the MP4, extracts its poster frame, and fails if
 the MP4 is not a single silent H.264 stream of the expected length, is not larger than 6 MiB, or
-has missing text in representative intro, board, review, phone, or closing regions.
+has missing text in representative intro, board, review, phone, or closing regions. After every
+check passes, it updates `render-manifest.json` with the exact render-input file list and SHA-256
+values for the inputs, MP4, and poster. It also fails instead of writing the manifest when any input
+changes while the render is running. HyperFrames reads an immutable temporary snapshot populated
+from the same file reads used to calculate the source state, so even an edit that is restored before
+the render finishes cannot affect the artifact without affecting its recorded state.
+
+The normal `pnpm run verify:scripts` CI gate recomputes that manifest. It fails when a composition,
+capture, font, render configuration, render script, MP4, or poster changes without running the
+render command and committing all three generated files. Documentation and font license files are
+excluded because they do not affect rendered pixels. The manifest also covers `.gitattributes`,
+which requests LF checkout bytes for demo inputs and render scripts. Hashing uses Git's canonical
+blob content, so an existing Windows checkout with CRLF files produces the same digest as CI.
 
 For iterating on the composition, run the CLI directly from this directory:
 
@@ -49,6 +63,7 @@ committed video.
   constants and list builder, which sub-composition files would have to duplicate, so the
   `composition_file_too_large` and `timeline_track_too_dense` lint warnings are accepted.
 - `index.motion.json` — motion assertions `check` verifies against the seeked timeline.
+- `render-manifest.json` — generated freshness proof checked by the script-test CI job.
 - `assets/captures/` — safe, optimized exports from the real run (see below).
 - `assets/fonts/` — pinned Inter and JetBrains Mono files from Fontsource 5.3.0, with their
   OFL-1.1 license texts, so rendering does not fetch mutable hosted fonts.

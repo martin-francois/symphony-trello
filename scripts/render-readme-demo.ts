@@ -4,18 +4,23 @@
  *
  * - docs/assets/readme-demo.mp4 (H.264, silent, no audio stream)
  * - docs/assets/readme-demo-poster.png (hero frame near the end)
+ * - docs/demo/render-manifest.json (source and artifact SHA-256 values)
  *
  * Usage: node scripts/render-readme-demo.ts [--skip-check]
  *
- * Requires Node 22.18+, Docker, FFmpeg, ffprobe, and pnpm. The HyperFrames
+ * Requires a Git working tree, Node 22.18+, Docker, FFmpeg, ffprobe, and pnpm. The HyperFrames
  * CLI is fetched on demand at the exact pinned version, and its Docker
  * renderer supplies the production browser, fonts, and encoder.
  */
 
 import { spawnSync } from "node:child_process";
-import { readFileSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  createReadmeDemoSourceSnapshot,
+  writeReadmeDemoManifest,
+} from "./readme-demo-manifest.ts";
 
 const HYPERFRAMES = "hyperframes@0.7.64";
 /** Target bitrate keeps text crisp while staying well below GitHub's file limit. */
@@ -35,11 +40,10 @@ const TEXT_REGION_SAMPLES = [
 ] as const;
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const demoDir = join(repoRoot, "docs", "demo");
 const videoPath = join(repoRoot, "docs", "assets", "readme-demo.mp4");
 const posterPath = join(repoRoot, "docs", "assets", "readme-demo-poster.png");
 
-function readExpectedDurationSeconds(): number {
+function readExpectedDurationSeconds(demoDir: string): number {
   const html = readFileSync(join(demoDir, "index.html"), "utf8");
   const rootTag = html.match(/<[a-z][^>]*\bid=["']root["'][^>]*>/i)?.[0];
   const htmlDuration = Number(rootTag?.match(/\bdata-duration=["']([^"']+)["']/)?.[1]);
@@ -62,7 +66,7 @@ function readExpectedDurationSeconds(): number {
   return htmlDuration;
 }
 
-function run(command: string, args: string[]): void {
+function run(command: string, args: string[], demoDir: string): void {
   console.log(`\n$ ${command} ${args.join(" ")}`);
   const windowsPnpm = process.platform === "win32" && command === "pnpm";
   const executable = windowsPnpm ? "cmd.exe" : command;
@@ -149,62 +153,75 @@ function verifyRenderedText(path: string): void {
   }
 }
 
-const expectedDurationSeconds = readExpectedDurationSeconds();
-const skipCheck = process.argv.includes("--skip-check");
+const snapshotBaseDir = join(repoRoot, "target", "readme-demo-render");
+mkdirSync(snapshotBaseDir, {recursive: true});
+const snapshotRoot = mkdtempSync(join(snapshotBaseDir, "source-"));
+const snapshotDemoDir = join(snapshotRoot, "demo");
 
-if (!skipCheck) {
-  run("pnpm", ["dlx", HYPERFRAMES, "check"]);
+try {
+  // Hash and copy each composition input from the same read, then render only that immutable copy.
+  const sourceBeforeRender = createReadmeDemoSourceSnapshot(repoRoot, snapshotDemoDir);
+  const expectedDurationSeconds = readExpectedDurationSeconds(snapshotDemoDir);
+  const skipCheck = process.argv.includes("--skip-check");
+
+  if (!skipCheck) {
+    run("pnpm", ["dlx", HYPERFRAMES, "check"], snapshotDemoDir);
+  }
+
+  run("pnpm", [
+    "dlx",
+    HYPERFRAMES,
+    "render",
+    "--docker",
+    "--quality",
+    "high",
+    "--video-bitrate",
+    VIDEO_BITRATE,
+    "--output",
+    videoPath,
+  ], snapshotDemoDir);
+
+  // Extract the poster from the completed video so it uses the exact same font
+  // and browser render as the MP4. HyperFrames' standalone snapshot path can
+  // fail to load bundled fonts independently of the render path.
+  run("ffmpeg", [
+    "-y",
+    "-loglevel",
+    "error",
+    "-i",
+    videoPath,
+    "-ss",
+    POSTER_TIME_SECONDS,
+    "-frames:v",
+    "1",
+    posterPath,
+  ], snapshotDemoDir);
+
+  const probe = ffprobe(videoPath);
+  if (probe.streamCount !== 1 || probe.codec !== "h264") {
+    throw new Error(
+      `expected exactly one H.264 video stream, found ${probe.streamCount} stream(s), codec ${probe.codec}`,
+    );
+  }
+  if (!Number.isFinite(probe.duration) || Math.abs(probe.duration - expectedDurationSeconds) > 1) {
+    throw new Error(
+      `expected ~${expectedDurationSeconds}s of video, ffprobe reports ${probe.duration}s`,
+    );
+  }
+  const videoBytes = statSync(videoPath).size;
+  if (videoBytes <= MIN_VIDEO_BYTES) {
+    throw new Error(
+      `expected readme-demo.mp4 to exceed 6 MiB, found ${(videoBytes / MEBIBYTE).toFixed(1)} MiB`,
+    );
+  }
+  verifyRenderedText(videoPath);
+  writeReadmeDemoManifest(repoRoot, sourceBeforeRender);
+
+  console.log(`\nreadme-demo.mp4: ${(videoBytes / MEBIBYTE).toFixed(1)} MiB, ` +
+    `${probe.duration.toFixed(1)}s, H.264, silent (no audio stream)`);
+  console.log(`readme-demo-poster.png: ${(statSync(posterPath).size / MEBIBYTE).toFixed(1)} MiB`);
+  console.log("render-manifest.json: source and artifact checksums updated");
+  console.log("Done.");
+} finally {
+  rmSync(snapshotRoot, {recursive: true, force: true});
 }
-
-run("pnpm", [
-  "dlx",
-  HYPERFRAMES,
-  "render",
-  "--docker",
-  "--quality",
-  "high",
-  "--video-bitrate",
-  VIDEO_BITRATE,
-  "--output",
-  videoPath,
-]);
-
-// Extract the poster from the completed video so it uses the exact same font
-// and browser render as the MP4. HyperFrames' standalone snapshot path can
-// fail to load bundled fonts independently of the render path.
-run("ffmpeg", [
-  "-y",
-  "-loglevel",
-  "error",
-  "-i",
-  videoPath,
-  "-ss",
-  POSTER_TIME_SECONDS,
-  "-frames:v",
-  "1",
-  posterPath,
-]);
-
-const probe = ffprobe(videoPath);
-if (probe.streamCount !== 1 || probe.codec !== "h264") {
-  throw new Error(
-    `expected exactly one H.264 video stream, found ${probe.streamCount} stream(s), codec ${probe.codec}`,
-  );
-}
-if (!Number.isFinite(probe.duration) || Math.abs(probe.duration - expectedDurationSeconds) > 1) {
-  throw new Error(
-    `expected ~${expectedDurationSeconds}s of video, ffprobe reports ${probe.duration}s`,
-  );
-}
-const videoBytes = statSync(videoPath).size;
-if (videoBytes <= MIN_VIDEO_BYTES) {
-  throw new Error(
-    `expected readme-demo.mp4 to exceed 6 MiB, found ${(videoBytes / MEBIBYTE).toFixed(1)} MiB`,
-  );
-}
-verifyRenderedText(videoPath);
-
-console.log(`\nreadme-demo.mp4: ${(videoBytes / MEBIBYTE).toFixed(1)} MiB, ` +
-  `${probe.duration.toFixed(1)}s, H.264, silent (no audio stream)`);
-console.log(`readme-demo-poster.png: ${(statSync(posterPath).size / MEBIBYTE).toFixed(1)} MiB`);
-console.log("Done.");

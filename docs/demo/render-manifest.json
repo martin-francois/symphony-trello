@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "sourceSha256": "e57f6f4ceca10db5f4f36cf8f9cb4de89e908cbc93434c3dc092bc1887dd0eae",
+  "sourceFiles": [
+    ".gitattributes",
+    "docs/demo/assets/captures/github-pr-merged.jpg",
+    "docs/demo/assets/captures/github-review-diff.jpg",
+    "docs/demo/assets/captures/trello-board-done.jpg",
+    "docs/demo/assets/captures/trello-board-human-review-staged.jpg",
+    "docs/demo/assets/captures/trello-board-in-progress.jpg",
+    "docs/demo/assets/captures/trello-board-inbox.jpg",
+    "docs/demo/assets/captures/trello-board-merging.jpg",
+    "docs/demo/assets/captures/trello-card-task.jpg",
+    "docs/demo/assets/captures/trello-mobile-card.jpg",
+    "docs/demo/assets/fonts/inter/inter-latin-400-normal.woff2",
+    "docs/demo/assets/fonts/inter/inter-latin-600-normal.woff2",
+    "docs/demo/assets/fonts/inter/inter-latin-700-normal.woff2",
+    "docs/demo/assets/fonts/jetbrains-mono/jetbrains-mono-latin-400-normal.woff2",
+    "docs/demo/hyperframes.json",
+    "docs/demo/index.html",
+    "docs/demo/index.motion.json",
+    "docs/demo/meta.json",
+    "scripts/readme-demo-manifest.ts",
+    "scripts/render-readme-demo.ts"
+  ],
+  "videoSha256": "4e7870a3bdf50108580eae0f4c60e89f6618dda364ae7ac215032658f39f16aa",
+  "posterSha256": "91f705b1c5ec27a23c3e269258da30cf96adc8ca7c6f4cd1c9e59f84d56f02a5"
+}
