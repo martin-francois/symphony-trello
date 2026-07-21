@@ -1942,7 +1942,7 @@ final class SetupDiagnosticReporter {
 
     private static List<Path> workflowFilesIfReadable(Path configDir) {
         try (Stream<Path> files = Files.list(configDir)) {
-            return files.filter(path -> path.getFileName().toString().endsWith(".md"))
+            return files.filter(path -> PathNames.fileName(path).endsWith(".md"))
                     .filter(SetupDiagnosticReporter::hasWorkflowFileName)
                     .filter(Files::isRegularFile)
                     .toList();
@@ -1952,7 +1952,7 @@ final class SetupDiagnosticReporter {
     }
 
     private static boolean hasWorkflowFileName(Path path) {
-        return path.getFileName().toString().contains("WORKFLOW");
+        return PathNames.fileName(path).contains("WORKFLOW");
     }
 
     private static Optional<Path> workflowPathOption(
@@ -2090,7 +2090,7 @@ final class SetupDiagnosticReporter {
         try (Stream<Path> files = recentLogLister.list(stateHome)) {
             logs = files.filter(SetupDiagnosticReporter::isRegularLogFile)
                     .filter(path -> {
-                        String name = path.getFileName().toString();
+                        String name = PathNames.fileName(path);
                         return name.endsWith(".log") || name.endsWith(".err");
                     })
                     .filter(SetupDiagnosticReporter::nonEmptyOrUnreadable)
@@ -2176,7 +2176,7 @@ final class SetupDiagnosticReporter {
         try (Stream<Path> files = recentLogLister.list(stateHome)) {
             return files.filter(SetupDiagnosticReporter::isRegularLogFile)
                     .filter(path -> {
-                        String name = path.getFileName().toString();
+                        String name = PathNames.fileName(path);
                         return name.endsWith(".log") || name.endsWith(".err");
                     })
                     .sorted()
