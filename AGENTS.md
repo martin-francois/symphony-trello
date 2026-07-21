@@ -23,6 +23,12 @@ and follow it.
 When a user corrects a repeatable mistake or states a generally useful working preference, make the
 durable agent-doc update proactively in the same change; do not wait for the user to explicitly ask
 for persistence. If the right persistence scope is unclear, ask before finishing.
+Unless the user explicitly requests a one-off fix, every fix MUST address the general root cause
+rather than only the immediate symptom. When the original failure can be reproduced safely and
+within scope, verify it before and after the change to prove that the root-cause fix resolves it.
+Add a regression test or another durable guardrail proportionate to the failure. If direct
+reproduction, post-fix verification, or a guardrail is infeasible, document the specific constraint
+and remaining risk in the handoff.
 When an installed skill eval issue captures bad or missing behavior, add or update the corresponding
 temporary repo-local override described in [Default workflow](docs/agents/default-workflow.md) and
 [Java style & design preferences](docs/agents/java-style.md).
