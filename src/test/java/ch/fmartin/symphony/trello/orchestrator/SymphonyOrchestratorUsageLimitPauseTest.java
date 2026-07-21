@@ -1825,7 +1825,8 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflowWithCommand(workflow, "command-a", "");
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        Instant reset = now.plusSeconds(60);
+        Instant commandAReset = now.plusSeconds(60);
+        Instant commandBReset = now.plusSeconds(120);
         var clock = new MutableClock(now);
         Card card = TestCards.card("card-1", "TRELLO-deadline", "Todo");
         var tracker = new FakeTracker(List.of(card));
@@ -1833,10 +1834,12 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
-            if (request.config().codex().command().equals("command-b")) {
+            boolean commandB = request.config().codex().command().equals("command-b");
+            if (commandB) {
                 commandBRuns.incrementAndGet();
             }
-            return AgentRunResult.codexUsageLimit("turn_failed: Exhausted.", Optional.of(reset));
+            return AgentRunResult.codexUsageLimit(
+                    "turn_failed: Exhausted.", Optional.of(commandB ? commandBReset : commandAReset));
         });
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner, clock, successfulWorkpadHandler());
 
@@ -1847,10 +1850,12 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         orchestrator.stopWorkflowWatcherForTests();
         rewriteWorkflowWithCommand(workflow, "command-b", "");
         orchestrator.tickNowForTests();
-        waitUntil(() -> commandBRuns.get() == 1 && orchestrator.snapshot().dispatchPause() != null);
+        waitUntil(() -> commandBRuns.get() == 1
+                && orchestrator.snapshot().dispatchPause() != null
+                && orchestrator.snapshot().dispatchPause().until().equals(commandBReset));
         RuntimeSnapshot currentPause = orchestrator.snapshot();
         clock.advance(Duration.ofSeconds(60));
-        orchestrator.dispatchPauseDeadlineNowForTests("command-a", reset);
+        orchestrator.dispatchPauseDeadlineNowForTests("command-a", commandAReset);
         RuntimeSnapshot afterStaleCallback = orchestrator.snapshot();
         orchestrator.stop();
 
