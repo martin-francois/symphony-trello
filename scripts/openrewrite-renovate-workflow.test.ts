@@ -57,11 +57,15 @@ const DEPENDENCY_SUBMISSION_WORKFLOW = readFileSync(
 const RENOVATE = readFileSync(new URL("../renovate.json", import.meta.url), "utf8");
 const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
   readonly branchConcurrentLimit?: number;
+  readonly dependencyDashboardApproval?: boolean;
   readonly packageRules: readonly {
+    readonly automerge?: boolean;
     readonly branchTopic?: string;
+    readonly dependencyDashboardApproval?: boolean;
     readonly groupName?: string;
     readonly matchDepTypes?: readonly string[];
     readonly matchPackageNames?: readonly string[];
+    readonly matchUpdateTypes?: readonly string[];
     readonly platformAutomerge?: boolean;
   }[];
   readonly prConcurrentLimit?: number;
@@ -903,12 +907,23 @@ test("the OpenRewrite rule selects exact toolchain packages across Maven depende
   assert.equal(rule?.platformAutomerge, false);
 });
 
-test("the repository-wide major update guard overrides OpenRewrite automerge", () => {
+test("major update pull requests require manual merge", () => {
   const openRewriteRule = RENOVATE.indexOf('"groupName": "OpenRewrite toolchain"');
   const majorRule = RENOVATE.indexOf('"matchUpdateTypes": ["major"]');
+  const majorUpdateRule = RENOVATE_CONFIG.packageRules.find(
+    ({matchUpdateTypes}) => matchUpdateTypes?.includes("major"),
+  );
 
   assert.ok(openRewriteRule > 0);
   assert.ok(majorRule > openRewriteRule);
+  assert.equal(majorUpdateRule?.automerge, false);
+});
+
+test("Renovate never requires dependency dashboard approval", () => {
+  assert.equal(RENOVATE_CONFIG.dependencyDashboardApproval, false);
+  for (const rule of RENOVATE_CONFIG.packageRules) {
+    assert.equal(rule.dependencyDashboardApproval, undefined);
+  }
 });
 
 test("Renovate permits unlimited concurrent branches and pull requests", () => {

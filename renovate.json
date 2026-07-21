@@ -14,6 +14,7 @@
   "minimumReleaseAge": "3 days",
   "minimumReleaseAgeBehaviour": "timestamp-required",
   "automerge": true,
+  "dependencyDashboardApproval": false,
   "vulnerabilityAlerts": {
     "enabled": true,
     "labels": ["security"]
@@ -107,13 +108,12 @@
       "rebaseWhen": "behind-base-branch",
       "automerge": true,
       "platformAutomerge": false,
-      "dependencyDashboardApproval": false,
       "addLabels": ["openrewrite"],
       "prBodyNotes": [
         "Automation validates this dependency-only update and runs the ordered OpenRewrite and Spotless pipeline.",
         "When an eligible non-major update produces no repository change, required CI passes and Renovate automerges this pull request.",
         "When the toolchain changes source or POM output, this pull request remains blocked and automation opens or refreshes a separate generated pull request for maintainer review.",
-        "Major updates retain dependency-dashboard approval and manual merge through the repository-wide major-update guard."
+        "Major updates are created automatically and require manual merge through the repository-wide major-update guard."
       ]
     },
     {
@@ -122,7 +122,6 @@
       "groupName": null,
       "minimumReleaseAge": "7 days",
       "automerge": false,
-      "dependencyDashboardApproval": true,
       "addLabels": ["quarkus"],
       "prBodyNotes": [
         "Quarkus updater recipe changes MUST NOT be validated as general OpenRewrite maintenance updates.",
@@ -133,7 +132,6 @@
       "matchPackageNames": ["tessl-labs/good-oss-citizen"],
       "minimumReleaseAge": "7 days",
       "automerge": false,
-      "dependencyDashboardApproval": true,
       "addLabels": ["tessl"],
       "prBodyNotes": [
         "After Renovate updates `tessl.json`, run `tessl install`, review the refreshed `.tessl/tiles` diff, and commit those vendored tile changes before merging."
@@ -142,7 +140,6 @@
     {
       "matchUpdateTypes": ["major"],
       "automerge": false,
-      "dependencyDashboardApproval": true,
       "addLabels": ["major update"]
     }
   ]

@@ -8,6 +8,12 @@ informed: [Future maintainers]
 
 # Use Minimal Renovate Configuration with SHA-Pinned GitHub Actions
 
+The major-update publication part of this decision is amended by
+[ADR 0072](0072-create-renovate-prs-without-dashboard-approval.md). Major updates still require human
+pull-request approval and manual merge, but Renovate now creates their pull requests without a
+Dependency Dashboard approval step. The action-pinning and minimal-configuration decisions remain
+accepted.
+
 ## Context and Problem Statement
 
 The project should keep dependencies current with low maintenance overhead, but GitHub Actions tags
@@ -50,7 +56,7 @@ because it hardens CI and keeps automation behavior explicit only where it diffe
   release automation and checks pull request commit messages for rebase-merge or intentionally
   multi-commit paths. The commit-message check uses a stricter config so breaking commits need both
   the visible `!` marker and the `BREAKING CHANGE:` footer that feeds generated changelog guidance.
-* Good, because major updates require dashboard approval and do not automerge.
+* Good, because major updates require human pull-request approval and do not automerge.
 * Bad, because SHA-pinned actions are less readable than tag-only action references.
 * Bad, because the regex manager must stay aligned with the workflow command text.
 

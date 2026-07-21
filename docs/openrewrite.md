@@ -91,8 +91,8 @@ generated filesystem path.
 
 Renovate groups the OpenRewrite toolchain on the explicit
 `renovate/openrewrite-toolchain` branch, waits seven days after each release, and opens an untouched
-dependency-only pull request without dashboard approval for non-major updates. Major updates retain
-repository-wide dashboard approval and manual merge. A trusted workflow validates that the pull
+dependency-only pull request without dashboard approval. Major updates are created automatically but
+retain repository-wide manual merge. A trusted workflow validates that the pull
 request:
 
 - has an `opened` or `synchronize` webhook whose actual sender is `renovate[bot]` for the exact
@@ -237,8 +237,8 @@ validation and requires the same candidate review as any other executable transf
 Recipe and engine updates change executable transformations. Renovate waits seven days, groups the
 OpenRewrite toolchain, and keeps it out of unrelated dependency updates. Updates with no generated
 repository result automerge after the ordered fixed-point and full Maven gates pass unless they are
-major updates. Major updates retain dashboard approval and manual merge. Updates with a result
-require review of the complete generated pull request.
+major updates. Major updates are created without dashboard approval and require manual merge. Updates
+with a result require review of the complete generated pull request.
 
 Newly discovered upstream leaves remain inactive by default and do not block the version update.
 Reviewing whether to add them is separate recipe-curation work. When evaluating a leaf, select it if

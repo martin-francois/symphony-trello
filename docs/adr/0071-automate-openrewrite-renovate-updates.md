@@ -14,6 +14,11 @@ informed: [Future maintainers, Contributors]
 
 # Automate OpenRewrite Renovate Updates Through Derived Pull Requests
 
+The dashboard-approval part of this decision is amended by
+[ADR 0072](0072-create-renovate-prs-without-dashboard-approval.md). Renovate now creates every
+dependency pull request without a Dependency Dashboard approval step. Major OpenRewrite updates
+still require human pull-request approval and manual merge.
+
 ## Context and Problem Statement
 
 ADR 0070 requires a maintainer to approve every OpenRewrite update in Renovate's dependency
@@ -66,8 +71,9 @@ require the Error Prone version used to produce them. Renovate creates the pull 
 dependency-dashboard approval, keeps it rebased on `main`, and enables Renovate-controlled
 automerge for non-major updates. Native platform auto-merge is disabled for this group, so Renovate
 requires every branch status to pass before merging rather than relying only on repository-required
-checks. The seven-day minimum release age remains. Major updates retain dependency-dashboard
-approval and manual merge through the repository-wide major-update guard. The repository retains
+checks. The seven-day minimum release age remains. Major updates are created without
+dependency-dashboard approval and require manual merge through the repository-wide major-update
+guard. The repository retains
 the `openrewrite` label that Renovate adds to this group and the workflow uses as its candidate
 discriminator.
 
@@ -177,7 +183,7 @@ This decision remains implemented when:
 * OpenRewrite dependencies retain exact POM properties, a seven-day minimum release age, and the
   repository-wide major-update guard;
 * the repository retains the exact `openrewrite` label used by Renovate and reconciliation;
-* Renovate creates grouped non-major OpenRewrite pull requests without dashboard approval and
+* Renovate creates grouped OpenRewrite pull requests without dashboard approval and
   uses the explicit `renovate/openrewrite-toolchain` branch while permitting Renovate-controlled
   automerge with native platform auto-merge disabled;
 * an eligible non-major no-result update passes required CI and merges without a generated pull
