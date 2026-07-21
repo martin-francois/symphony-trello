@@ -1218,7 +1218,7 @@
           stepVisibility(to, spec.t0, spec.sceneDur, spec.count.at, undefined);
         }
 
-        if (lane === "humanReview") {
+        if (lane === "humanReview" && spec.preserveTitle !== false) {
           const titlePatch = el("div", "lane-title-patch", overlay);
           titlePatch.style.left = laneLeft(lane) + "px";
           titlePatch.style.top = LANE_TOP + "px";
@@ -1654,6 +1654,7 @@
             lane: "humanReview",
             count: "0",
             cards: [],
+            preserveTitle: false,
           },
           {
             lane: "merging",
@@ -1773,6 +1774,7 @@
       buildLane(document.getElementById("hero-board-overlay"), "humanReview", {
         count: "0",
         cards: [],
+        preserveTitle: false,
         t0: sceneStart("s16"),
         sceneDur: sceneDuration("s16"),
       });
