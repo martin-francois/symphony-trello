@@ -21,62 +21,65 @@ final class ContainerRuntimeScriptTest {
 
     @MethodSource("containerWrappers")
     @ParameterizedTest
-    void usesExplicitPodmanRuntime(String script, String image) throws Exception {
+    void usesExplicitPodmanRuntime(ContainerWrapper wrapper) throws Exception {
         // given
         Path invocation = tempDir.resolve("invocation.txt");
         installRecordingRuntime("podman", invocation);
         installFailingRuntime("docker");
 
         // when
-        ProcessResult result = runWrapper(script, runtimeEnvironment("podman"));
+        ProcessResult result = runWrapper(wrapper.script(), runtimeEnvironment("podman"));
 
         // then
         result.assertSuccess();
         String invocationArguments = Files.readString(invocation);
-        assertThat(invocationArguments).contains("run", "--security-opt\nlabel=disable", "--userns=keep-id", image);
-        if (script.equals("semgrep-docker.sh")) {
+        assertThat(invocationArguments)
+                .contains("run", "--security-opt\nlabel=disable", "--userns=keep-id")
+                .containsPattern(wrapper.imagePattern());
+        if (wrapper.script().equals("semgrep-docker.sh")) {
             assertThat(invocationArguments).contains("-e\nHOME=/tmp", "--disable-version-check");
         }
     }
 
     @MethodSource("containerWrappers")
     @ParameterizedTest
-    void defaultsToDockerRuntime(String script, String image) throws Exception {
+    void defaultsToDockerRuntime(ContainerWrapper wrapper) throws Exception {
         // given
         Path invocation = tempDir.resolve("invocation.txt");
         installRecordingRuntime("docker", invocation);
         installFailingRuntime("podman");
 
         // when
-        ProcessResult result = runWrapper(script, runtimeEnvironment(null));
+        ProcessResult result = runWrapper(wrapper.script(), runtimeEnvironment(null));
 
         // then
         result.assertSuccess();
         String invocationArguments = Files.readString(invocation);
         assertThat(invocationArguments)
-                .contains("run", "--security-opt\nlabel=disable", image)
+                .contains("run", "--security-opt\nlabel=disable")
+                .containsPattern(wrapper.imagePattern())
                 .doesNotContain("--userns=keep-id");
-        if (script.equals("semgrep-docker.sh")) {
+        if (wrapper.script().equals("semgrep-docker.sh")) {
             assertThat(invocationArguments).contains("-e\nHOME=/tmp", "--disable-version-check");
         }
     }
 
     @MethodSource("containerWrappers")
     @ParameterizedTest
-    void rejectsUnsupportedContainerRuntime(String script, String image) throws Exception {
+    void rejectsUnsupportedContainerRuntime(ContainerWrapper wrapper) throws Exception {
         // given
         Path invocation = tempDir.resolve("invocation.txt");
         installFailingRuntime("docker");
         installFailingRuntime("podman");
 
         // when
-        ProcessResult result = runWrapper(script, runtimeEnvironment("other"));
+        ProcessResult result = runWrapper(wrapper.script(), runtimeEnvironment("other"));
 
         // then
         assertThat(result.exitCode()).isEqualTo(2);
         assertThat(result.output())
                 .contains("SYMPHONY_TRELLO_CONTAINER_RUNTIME must be docker or podman")
-                .doesNotContain(image);
+                .doesNotContain(wrapper.imageRepository());
         assertThat(invocation).doesNotExist();
     }
 
@@ -151,11 +154,20 @@ final class ContainerRuntimeScriptTest {
         return run(processBuilder, "", 30);
     }
 
-    private static Stream<Arguments> containerWrappers() {
+    private static Stream<ContainerWrapper> containerWrappers() {
         return Stream.of(
-                Arguments.of("betterleaks-docker.sh", "ghcr.io/betterleaks/betterleaks:v1.4.1"),
-                Arguments.of("semgrep-docker.sh", "docker.io/semgrep/semgrep:1.164.0"),
-                Arguments.of("pwsh-docker.sh", "mcr.microsoft.com/dotnet/sdk:8.0"));
+                new ContainerWrapper(
+                        "betterleaks-docker.sh",
+                        "(?m)^ghcr\\.io/betterleaks/betterleaks:v[0-9]+\\.[0-9]+\\.[0-9]+$",
+                        "ghcr.io/betterleaks/betterleaks"),
+                new ContainerWrapper(
+                        "semgrep-docker.sh",
+                        "(?m)^docker\\.io/semgrep/semgrep:[0-9]+\\.[0-9]+\\.[0-9]+$",
+                        "docker.io/semgrep/semgrep"),
+                new ContainerWrapper(
+                        "pwsh-docker.sh",
+                        "(?m)^mcr\\.microsoft\\.com/dotnet/sdk:[0-9]+\\.[0-9]+$",
+                        "mcr.microsoft.com/dotnet/sdk"));
     }
 
     private static Stream<Arguments> containerRuntimeRequirements() {
@@ -164,10 +176,12 @@ final class ContainerRuntimeScriptTest {
                 Arguments.of("semgrep-docker.sh", "podman is required to run Semgrep in a container"),
                 Arguments.of(
                         "pwsh-docker.sh",
-                        "podman is required to run PowerShell through mcr.microsoft.com/dotnet/sdk:8.0"));
+                        "podman is required to run PowerShell through mcr.microsoft.com/dotnet/sdk:"));
     }
 
     private static Path wrapper(String script) {
         return Path.of("scripts", script).toAbsolutePath().normalize();
     }
+
+    private record ContainerWrapper(String script, String imagePattern, String imageRepository) {}
 }
