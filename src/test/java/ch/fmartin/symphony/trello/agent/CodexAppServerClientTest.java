@@ -37,6 +37,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 final class CodexAppServerClientTest {
     private static final int TEST_PROTOCOL_TIMEOUT_MILLIS = 5_000;
+    private static final int TEST_EXTENDED_TURN_TIMEOUT_MILLIS = 10_000;
 
     private final ObjectMapper json = new ObjectMapper();
 
@@ -156,7 +157,7 @@ final class CodexAppServerClientTest {
                 "read_timeout_ms",
                 TEST_PROTOCOL_TIMEOUT_MILLIS,
                 "turn_timeout_ms",
-                10000));
+                TEST_EXTENDED_TURN_TIMEOUT_MILLIS));
         Path workspace = config.workspace().root().resolve("TRELLO-completed-exit");
         Files.createDirectories(workspace);
         var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
@@ -542,7 +543,7 @@ final class CodexAppServerClientTest {
                 "read_timeout_ms",
                 TEST_PROTOCOL_TIMEOUT_MILLIS,
                 "turn_timeout_ms",
-                10000));
+                TEST_EXTENDED_TURN_TIMEOUT_MILLIS));
         Path workspace = config.workspace().root().resolve("TRELLO-exit");
         Files.createDirectories(workspace);
         var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
@@ -583,7 +584,7 @@ final class CodexAppServerClientTest {
                 "read_timeout_ms",
                 TEST_PROTOCOL_TIMEOUT_MILLIS,
                 "turn_timeout_ms",
-                10000));
+                TEST_EXTENDED_TURN_TIMEOUT_MILLIS));
         Path workspace = config.workspace().root().resolve("TRELLO-exit-request");
         Files.createDirectories(workspace);
         var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
