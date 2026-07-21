@@ -25,6 +25,7 @@ import java.util.stream.Stream;
 final class InstallerScriptFixture {
     private static final int PROCESS_DESCENDANT_DISCOVERY_MILLIS = 1_000;
     private static final int PROCESS_TERMINATION_SECONDS = 5;
+    private static final int TEMP_FILE_DELETION_SECONDS = 5;
     private static final String REPOSITORY_ENVIRONMENT_PREFIX = "SYMPHONY_";
     private static final Pattern POSIX_INSTALLER_DEFAULT_VERSION =
             Pattern.compile("(?m)^DEFAULT_VERSION=\"([^\"]+)\" # x-release-please-version$");
@@ -195,14 +196,34 @@ final class InstallerScriptFixture {
             if (process != null && process.isAlive()) {
                 terminateProcessTreeImmediately(process);
             }
-            Files.deleteIfExists(stdout);
-            if (stderr != null) {
-                Files.deleteIfExists(stderr);
-            }
-            if (stdin != null) {
-                Files.deleteIfExists(stdin);
-            }
+            deleteTempFiles(stdout, stderr, stdin);
         }
+    }
+
+    private static void deleteTempFiles(Path... files) throws IOException, InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TEMP_FILE_DELETION_SECONDS);
+        Map<Path, IOException> failures = new LinkedHashMap<>();
+        do {
+            failures.clear();
+            for (Path file : files) {
+                if (file == null) {
+                    continue;
+                }
+                try {
+                    Files.deleteIfExists(file);
+                } catch (IOException exception) {
+                    failures.put(file, exception);
+                }
+            }
+            if (failures.isEmpty()) {
+                return;
+            }
+            pollDelayForBoundedProcessWait();
+        } while (System.nanoTime() < deadline);
+
+        IOException failure = new IOException("Temporary process files remain locked: " + failures.keySet());
+        failures.values().forEach(failure::addSuppressed);
+        throw failure;
     }
 
     private static String decodeCapturedOutput(Path output) throws IOException {
