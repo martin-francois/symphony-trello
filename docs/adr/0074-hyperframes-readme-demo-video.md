@@ -112,8 +112,10 @@ Constant-quality rate control spends fewer bits on the demo's long static UI hol
 more detail during motion. The render script requires the result to exceed 6 MiB and stay below
 10 MB. HyperFrames accepts integer CRF values; direct renders measured 10.4 MB at CRF 25 and
 9.2 MB at CRF 26, so CRF 26 is the highest-quality supported setting below the limit.
-GitHub limits free-plan video attachments to 10 MB and recommends H.264 for maximum compatibility,
-so the upper bound uses decimal megabytes. H.265/HEVC offers better compression, but MDN's codec
+GitHub limits free-plan video attachments to 10 MB and recommends H.264 for maximum compatibility.
+The README inline player uses the attachment URL created by dragging the MP4 into GitHub's editor,
+so an artifact at or above that upload ceiling cannot be published through this workflow. The upper
+bound therefore uses decimal megabytes. H.265/HEVC offers better compression, but MDN's codec
 guidance documents significant browser-support gaps outside Apple platforms. A README video
 provides no codec-fallback source, so HEVC is not the delivery format.
 

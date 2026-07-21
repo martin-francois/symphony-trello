@@ -41,11 +41,14 @@ script labels only that directory for the renderer, leaving the checkout's secur
 The normal `pnpm run verify:scripts` CI gate recomputes that manifest. It fails when a composition,
 capture, font, render configuration, render script, MP4, or poster changes without running the
 render command and committing all three generated files. It also fails when the committed MP4 is
-not strictly below GitHub's 10,000,000-byte (10 MB) video-attachment limit. Documentation and font
-license files are excluded because they do not affect rendered pixels. The manifest also covers
-`.gitattributes`, which requests LF checkout bytes for demo inputs and render scripts. Hashing uses
-Git's canonical blob content, so an existing Windows checkout with CRLF files produces the same
-digest as CI.
+not strictly below GitHub's 10,000,000-byte (10 MB) video-attachment limit. This ceiling exists
+because [GitHub limits video attachments to 10 MB for repositories owned by users or organizations
+on its free plan](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files),
+and uploading such an attachment supplies the URL used by the inline README player. Documentation
+and font license files are excluded because they do not affect rendered pixels. The manifest also
+covers `.gitattributes`, which requests LF checkout bytes for demo inputs and render scripts.
+Hashing uses Git's canonical blob content, so an existing Windows checkout with CRLF files produces
+the same digest as CI.
 
 ## Updating the inline README video
 
