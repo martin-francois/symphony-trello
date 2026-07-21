@@ -52,18 +52,6 @@ function readCompositionTiming(demoDir: string): CompositionTiming {
     throw new Error("docs/demo/index.html must declare a positive data-duration on #root");
   }
 
-  const motion = JSON.parse(readFileSync(join(demoDir, "index.motion.json"), "utf8")) as {
-    duration?: unknown;
-  };
-  if (typeof motion.duration !== "number" || !Number.isFinite(motion.duration) || motion.duration <= 0) {
-    throw new Error("docs/demo/index.motion.json must declare a positive numeric duration");
-  }
-  if (htmlDuration !== motion.duration) {
-    throw new Error(
-      `demo duration mismatch: index.html declares ${htmlDuration}s, ` +
-      `index.motion.json declares ${motion.duration}s`,
-    );
-  }
   const sceneStarts = new Map<string, number>();
   for (const match of html.matchAll(
     /<section\b[^>]*\bid=["']([^"']+)["'][^>]*\bdata-start=["']([^"']+)["'][^>]*>/gi,

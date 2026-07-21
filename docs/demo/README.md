@@ -67,12 +67,13 @@ committed video.
 ## Structure
 
 - `index.html` — the whole composition: one `<section class="clip">` per scene with cumulative
-  `data-start` times, plus a script that builds the board overlays and every animation. The
-  script reads scene timing back from the `data-start` attributes, so the HTML is the single
-  timing table. The file stays monolithic on purpose: the scenes share the board geometry
-  constants and list builder, which sub-composition files would have to duplicate, so the
-  `composition_file_too_large` and `timeline_track_too_dense` lint warnings are accepted.
-- `index.motion.json` — motion assertions `check` verifies against the seeked timeline.
+  `data-start` times, the composition's sole `data-duration`, plus a script that builds the board
+  overlays and every animation. The script reads scene timing back from those attributes, so the
+  HTML is the single timing table. The file stays monolithic on purpose: the scenes share the
+  board geometry constants and list builder, which sub-composition files would have to duplicate,
+  so the `composition_file_too_large` and `timeline_track_too_dense` lint warnings are accepted.
+- `index.motion.json` — motion assertions `check` verifies against the seeked timeline. It omits
+  HyperFrames' optional `duration` field so the composition duration is not duplicated.
 - `render-manifest.json` — generated freshness proof checked by the script-test CI job.
 - `assets/captures/` — safe, optimized exports from the real run (see below).
 - `assets/fonts/` — pinned Inter and JetBrains Mono files from Fontsource 5.3.0, with their

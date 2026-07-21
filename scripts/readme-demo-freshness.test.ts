@@ -59,6 +59,18 @@ test("committed README demo artifacts match every render input", () => {
   );
 });
 
+test("motion assertions do not duplicate the composition duration", () => {
+  const motion = JSON.parse(
+    readFileSync(join(repoRoot, "docs", "demo", "index.motion.json"), "utf8"),
+  ) as {duration?: unknown};
+
+  assert.equal(
+    motion.duration,
+    undefined,
+    "index.html data-duration is the sole README demo duration source",
+  );
+});
+
 test("source digest is identical for LF and CRLF checkout bytes", (t) => {
   // given
   const fixtureRoot = createManifestFixture(t);
