@@ -1,11 +1,12 @@
 import {spawnSync} from "node:child_process";
 import {createHash} from "node:crypto";
-import {existsSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
+import {existsSync, mkdirSync, readFileSync, statSync, writeFileSync} from "node:fs";
 import {dirname, resolve} from "node:path";
 
 const MANIFEST_RELATIVE_PATH = "docs/demo/render-manifest.json";
 const VIDEO_RELATIVE_PATH = "docs/assets/readme-demo.mp4";
 const POSTER_RELATIVE_PATH = "docs/assets/readme-demo-poster.png";
+export const GITHUB_VIDEO_ATTACHMENT_LIMIT_BYTES = 10_000_000;
 const RENDER_SCRIPT_PATHS = [
   ".gitattributes",
   "scripts/readme-demo-manifest.ts",
@@ -26,6 +27,16 @@ export interface ReadmeDemoSourceState {
 export interface ReadmeDemoManifest extends ReadmeDemoSourceState {
   videoSha256: string;
   posterSha256: string;
+}
+
+export function assertBelowGitHubVideoAttachmentLimit(videoPath: string): void {
+  const videoBytes = statSync(videoPath).size;
+  if (videoBytes >= GITHUB_VIDEO_ATTACHMENT_LIMIT_BYTES) {
+    throw new Error(
+      `expected readme-demo.mp4 to stay below GitHub's 10 MB attachment limit, `
+      + `found ${(videoBytes / 1_000_000).toFixed(1)} MB`,
+    );
+  }
 }
 
 function sha256File(path: string): string {

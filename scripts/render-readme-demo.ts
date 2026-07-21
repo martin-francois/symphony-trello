@@ -27,6 +27,7 @@ import {tmpdir} from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  assertBelowGitHubVideoAttachmentLimit,
   createReadmeDemoSourceSnapshot,
   writeReadmeDemoManifest,
 } from "./readme-demo-manifest.ts";
@@ -39,9 +40,7 @@ const HYPERFRAMES = "hyperframes@0.7.64";
 /** Constant quality spends fewer bits on static UI while keeping text crisp. */
 const VIDEO_CRF = "26";
 const MEBIBYTE = 1024 * 1024;
-const MEGABYTE = 1_000_000;
 const MIN_VIDEO_BYTES = 6 * MEBIBYTE;
-const MAX_VIDEO_BYTES = 10 * MEGABYTE;
 const MIN_DARK_PIXEL_RATIO = 0.01;
 
 interface TextRegionSample {
@@ -233,12 +232,7 @@ try {
       `expected readme-demo.mp4 to exceed 6 MiB, found ${(videoBytes / MEBIBYTE).toFixed(1)} MiB`,
     );
   }
-  if (videoBytes >= MAX_VIDEO_BYTES) {
-    throw new Error(
-      `expected readme-demo.mp4 to stay below GitHub's 10 MB attachment limit, `
-      + `found ${(videoBytes / MEGABYTE).toFixed(1)} MB`,
-    );
-  }
+  assertBelowGitHubVideoAttachmentLimit(renderedVideoPath);
   verifyRenderedText(renderedVideoPath, textRegionSamples(timing));
   copyFileSync(renderedVideoPath, videoPath);
   copyFileSync(renderedPosterPath, posterPath);

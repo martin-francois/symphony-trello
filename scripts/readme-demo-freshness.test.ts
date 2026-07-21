@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import {execFileSync} from "node:child_process";
-import {mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
+import {mkdirSync, mkdtempSync, readFileSync, rmSync, truncateSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
 import test from "node:test";
 import {
+  assertBelowGitHubVideoAttachmentLimit,
   buildReadmeDemoManifest,
   createReadmeDemoSourceSnapshot,
+  GITHUB_VIDEO_ATTACHMENT_LIMIT_BYTES,
   readReadmeDemoManifest,
   writeReadmeDemoManifest,
 } from "./readme-demo-manifest.ts";
@@ -57,6 +59,28 @@ test("committed README demo artifacts match every render input", () => {
     expected,
     "README demo sources or artifacts changed without a successful render; "
       + "run `node scripts/render-readme-demo.ts` and commit all generated files",
+  );
+});
+
+test("committed README demo video stays below GitHub's 10 MB attachment limit", () => {
+  assertBelowGitHubVideoAttachmentLimit(
+    join(repoRoot, "docs", "assets", "readme-demo.mp4"),
+  );
+});
+
+test("GitHub video attachment limit is strict", (t) => {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), "readme-demo-size-"));
+  t.after(() => rmSync(fixtureRoot, {recursive: true, force: true}));
+  const videoPath = join(fixtureRoot, "readme-demo.mp4");
+  writeFileSync(videoPath, "");
+
+  truncateSync(videoPath, GITHUB_VIDEO_ATTACHMENT_LIMIT_BYTES - 1);
+  assert.doesNotThrow(() => assertBelowGitHubVideoAttachmentLimit(videoPath));
+
+  truncateSync(videoPath, GITHUB_VIDEO_ATTACHMENT_LIMIT_BYTES);
+  assert.throws(
+    () => assertBelowGitHubVideoAttachmentLimit(videoPath),
+    /stay below GitHub's 10 MB attachment limit/,
   );
 });
 

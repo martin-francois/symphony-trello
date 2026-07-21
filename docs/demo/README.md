@@ -40,10 +40,28 @@ script labels only that directory for the renderer, leaving the checkout's secur
 
 The normal `pnpm run verify:scripts` CI gate recomputes that manifest. It fails when a composition,
 capture, font, render configuration, render script, MP4, or poster changes without running the
-render command and committing all three generated files. Documentation and font license files are
-excluded because they do not affect rendered pixels. The manifest also covers `.gitattributes`,
-which requests LF checkout bytes for demo inputs and render scripts. Hashing uses Git's canonical
-blob content, so an existing Windows checkout with CRLF files produces the same digest as CI.
+render command and committing all three generated files. It also fails when the committed MP4 is
+not strictly below GitHub's 10,000,000-byte (10 MB) video-attachment limit. Documentation and font
+license files are excluded because they do not affect rendered pixels. The manifest also covers
+`.gitattributes`, which requests LF checkout bytes for demo inputs and render scripts. Hashing uses
+Git's canonical blob content, so an existing Windows checkout with CRLF files produces the same
+digest as CI.
+
+## Updating the inline README video
+
+GitHub serves an inline README video from an uploaded attachment URL, not directly from the MP4 in
+the repository. After re-rendering and committing the generated assets:
+
+1. Download `docs/assets/readme-demo.mp4` from the pull-request branch to your computer.
+2. Open `README.md` in GitHub and select the pencil icon to use the inline editor.
+3. Remove the existing demo media block, then drag the downloaded MP4 from your computer into that
+   location in the editor and wait for GitHub to insert the new uploaded-attachment URL.
+4. Preview the README and confirm that GitHub displays the URL as an inline video player and that
+   playback works.
+5. Commit the README edit through GitHub.
+
+The uploaded file MUST remain strictly below 10 MB; exactly 10,000,000 bytes fails the render and CI
+checks.
 
 Every scene reserves a reading hold before its visual action. The composition defines the normal
 and reflective reading rates once as named constants in `index.html`. Scenes that ask the viewer to
