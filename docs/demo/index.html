@@ -1633,8 +1633,8 @@
       // ---- GitHub scenes. ----
       // Measured regions of github-review-diff.jpg (1600x1288): the diff
       // ends around y=660, the review thread box spans y=695..1283, the
-      // reviewer's comment ends at y=838, and the first Codex reply starts
-      // at y=868. s08 keeps every view above y=860 so only the reviewer's
+      // reviewer's comment ends around y=990, and the first Codex reply starts
+      // around y=1028. s08 keeps every view above y=1028 so only the reviewer's
       // comment is on screen; s11 travels down to the full thread with both
       // Codex replies.
       const ghCamera = (sceneId, stops) => {
@@ -1644,8 +1644,8 @@
       ghCamera("s08", [
         { at: 0, left: 100, top: 30, width: 1350 },
         { at: 2.4, left: 100, top: 30, width: 1350 },
-        { at: 3.8, left: 110, top: 350, width: 1150 },
-        { at: 8, left: 114, top: 354, width: 1130 },
+        { at: 3.8, left: 100, top: 410, width: 1180 },
+        { at: 8, left: 104, top: 420, width: 1160 },
       ]);
       ghCamera("s11", [
         { at: 0, left: 50, top: 300, width: 1500 },

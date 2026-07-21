@@ -7,7 +7,7 @@
  *
  * Usage: node scripts/render-readme-demo.ts [--skip-check]
  *
- * Requires Node 22+, FFmpeg/ffprobe, and pnpm (the HyperFrames CLI is
+ * Requires Node 22.18+, FFmpeg/ffprobe, and pnpm (the HyperFrames CLI is
  * fetched on demand at the exact pinned version, so renders stay
  * reproducible).
  */
@@ -145,7 +145,7 @@ if (probe.streamCount !== 1 || probe.codec !== "h264") {
     `expected exactly one H.264 video stream, found ${probe.streamCount} stream(s), codec ${probe.codec}`,
   );
 }
-if (Math.abs(probe.duration - expectedDurationSeconds) > 1) {
+if (!Number.isFinite(probe.duration) || Math.abs(probe.duration - expectedDurationSeconds) > 1) {
   throw new Error(
     `expected ~${expectedDurationSeconds}s of video, ffprobe reports ${probe.duration}s`,
   );
