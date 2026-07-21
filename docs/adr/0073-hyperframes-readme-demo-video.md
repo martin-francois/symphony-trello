@@ -11,7 +11,7 @@ consulted:
 informed: [Future maintainers, Contributors]
 ---
 
-# Render The README Demo Video With HyperFrames From Real UI Captures
+# Render the README Demo Video With HyperFrames From Real UI Captures
 
 ## Context and Problem Statement
 
