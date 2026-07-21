@@ -212,6 +212,14 @@
         -webkit-mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
         mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
       }
+      /* Restores the real captured Human Review title above a rebuilt lane.
+         Runtime-created text nodes are not retained by the video renderer. */
+      .lane-title-patch {
+        position: absolute;
+        width: 220px;
+        height: 43px;
+        background-repeat: no-repeat;
+      }
       .lane {
         position: absolute;
         top: 8px;
@@ -1208,6 +1216,14 @@
           to.textContent = spec.count.to;
           stepVisibility(from, spec.t0, spec.sceneDur, undefined, spec.count.at);
           stepVisibility(to, spec.t0, spec.sceneDur, spec.count.at, undefined);
+        }
+
+        if (lane === "humanReview") {
+          const titlePatch = el("div", "lane-title-patch", overlay);
+          titlePatch.style.left = laneLeft(lane) + "px";
+          titlePatch.style.top = LANE_TOP + "px";
+          titlePatch.style.backgroundImage = "url('" + capture.getAttribute("src") + "')";
+          titlePatch.style.backgroundPosition = -laneLeft(lane) + "px -" + LANE_TOP + "px";
         }
 
         for (const card of spec.cards) {
