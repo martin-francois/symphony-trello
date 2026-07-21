@@ -2,7 +2,7 @@
  * Renders the README demo video and poster from the HyperFrames composition
  * in docs/demo, then verifies the committed outputs:
  *
- * - docs/assets/readme-demo.mp4 (H.264, silent, no audio stream)
+ * - docs/assets/demo.mp4 (H.264, silent, no audio stream)
  * - docs/assets/readme-demo-poster.png (hero frame near the end)
  * - docs/demo/render-manifest.json (source and artifact SHA-256 values)
  *
@@ -50,7 +50,7 @@ interface TextRegionSample {
 }
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const videoPath = join(repoRoot, "docs", "assets", "readme-demo.mp4");
+const videoPath = join(repoRoot, "docs", "assets", "demo.mp4");
 const posterPath = join(repoRoot, "docs", "assets", "readme-demo-poster.png");
 
 function textRegionSamples(timing: CompositionTiming): TextRegionSample[] {
@@ -170,7 +170,7 @@ const snapshotDemoDir = join(renderRoot, "demo");
 const renderOutputDir = join(renderRoot, "output");
 mkdirSync(renderOutputDir, {recursive: true});
 chmodSync(renderOutputDir, 0o777);
-const renderedVideoPath = join(renderOutputDir, "readme-demo.mp4");
+const renderedVideoPath = join(renderOutputDir, "demo.mp4");
 const renderedPosterPath = join(renderOutputDir, "readme-demo-poster.png");
 
 try {
@@ -229,7 +229,7 @@ try {
   const videoBytes = statSync(renderedVideoPath).size;
   if (videoBytes <= MIN_VIDEO_BYTES) {
     throw new Error(
-      `expected readme-demo.mp4 to exceed 6 MiB, found ${(videoBytes / MEBIBYTE).toFixed(1)} MiB`,
+      `expected demo.mp4 to exceed 6 MiB, found ${(videoBytes / MEBIBYTE).toFixed(1)} MiB`,
     );
   }
   assertBelowGitHubVideoAttachmentLimit(renderedVideoPath);
@@ -238,7 +238,7 @@ try {
   copyFileSync(renderedPosterPath, posterPath);
   writeReadmeDemoManifest(repoRoot, sourceBeforeRender);
 
-  console.log(`\nreadme-demo.mp4: ${(videoBytes / MEBIBYTE).toFixed(1)} MiB, ` +
+  console.log(`\ndemo.mp4: ${(videoBytes / MEBIBYTE).toFixed(1)} MiB, ` +
     `${probe.duration.toFixed(1)}s, H.264, silent (no audio stream)`);
   console.log(`readme-demo-poster.png: ${(statSync(posterPath).size / MEBIBYTE).toFixed(1)} MiB`);
   console.log("render-manifest.json: source and artifact checksums updated");

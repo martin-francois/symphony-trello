@@ -3,7 +3,7 @@
 This [HyperFrames](https://github.com/heygen-com/hyperframes) project renders the README hero
 video and poster from optimized captures of a real disposable Trello-to-GitHub run:
 
-- `docs/assets/readme-demo.mp4` (H.264, silent, no audio track)
+- `docs/assets/demo.mp4` (H.264, silent, no audio track)
 - `docs/assets/readme-demo-poster.png`
 - `docs/demo/render-manifest.json` (render-input and artifact checksums)
 
@@ -55,14 +55,13 @@ the same digest as CI.
 GitHub serves an inline README video from an uploaded attachment URL, not directly from the MP4 in
 the repository. After re-rendering and committing the generated assets:
 
-1. Download `docs/assets/readme-demo.mp4` from the pull-request branch to your computer.
-2. Rename the downloaded file to `demo.mp4`. This rename MUST happen before uploading it.
-3. Open `README.md` in GitHub and select the pencil icon to use the inline editor.
-4. Remove the existing demo media block, then drag `demo.mp4` from your computer into that
+1. Download `docs/assets/demo.mp4` from the pull-request branch to your computer.
+2. Open `README.md` in GitHub and select the pencil icon to use the inline editor.
+3. Remove the existing demo media block, then drag `demo.mp4` from your computer into that
    location in the editor and wait for GitHub to insert the new uploaded-attachment URL.
-5. Preview the README and confirm that GitHub displays the URL as an inline video player and that
+4. Preview the README and confirm that GitHub displays the URL as an inline video player and that
    playback works.
-6. Commit the README edit through GitHub.
+5. Commit the README edit through GitHub.
 
 The uploaded file MUST remain strictly below 10 MB; exactly 10,000,000 bytes fails the render and CI
 checks.
@@ -90,7 +89,7 @@ For iterating on the composition, run the CLI directly from this directory:
 pnpm dlx hyperframes@0.7.64 lint             # fast static feedback
 pnpm dlx hyperframes@0.7.64 check            # full browser gate (layout, motion, contrast)
 pnpm dlx hyperframes@0.7.64 preview          # live preview in the browser
-ffmpeg -i ../assets/readme-demo.mp4 -ss 42.5 -frames:v 1 /tmp/demo-frame.png
+ffmpeg -i ../assets/demo.mp4 -ss 42.5 -frames:v 1 /tmp/demo-frame.png
 ```
 
 Extract review stills from the rendered MP4 so they use the same browser and font render as the

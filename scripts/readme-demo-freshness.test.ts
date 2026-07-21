@@ -44,7 +44,7 @@ function createManifestFixture(t: test.TestContext): string {
   t.after(() => rmSync(fixtureRoot, {recursive: true, force: true}));
   execFileSync("git", ["init", "--quiet"], {cwd: fixtureRoot});
   mkdirSync(join(fixtureRoot, "docs", "assets"), {recursive: true});
-  writeFileSync(join(fixtureRoot, "docs", "assets", "readme-demo.mp4"), "video");
+  writeFileSync(join(fixtureRoot, "docs", "assets", "demo.mp4"), "video");
   writeFileSync(join(fixtureRoot, "docs", "assets", "readme-demo-poster.png"), "poster");
   writeCrossPlatformFixture(fixtureRoot, "\n");
   return fixtureRoot;
@@ -64,14 +64,14 @@ test("committed README demo artifacts match every render input", () => {
 
 test("committed README demo video stays below GitHub's 10 MB attachment limit", () => {
   assertBelowGitHubVideoAttachmentLimit(
-    join(repoRoot, "docs", "assets", "readme-demo.mp4"),
+    join(repoRoot, "docs", "assets", "demo.mp4"),
   );
 });
 
 test("GitHub video attachment limit is strict", (t) => {
   const fixtureRoot = mkdtempSync(join(tmpdir(), "readme-demo-size-"));
   t.after(() => rmSync(fixtureRoot, {recursive: true, force: true}));
-  const videoPath = join(fixtureRoot, "readme-demo.mp4");
+  const videoPath = join(fixtureRoot, "demo.mp4");
   writeFileSync(videoPath, "");
 
   truncateSync(videoPath, GITHUB_VIDEO_ATTACHMENT_LIMIT_BYTES - 1);
