@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceSha256": "6d31e9bbebe3d29619a1fd714ce68807e001aa24015a9784aef0470ee5eb9b45",
+  "sourceSha256": "31752d3fa0fb2bcb4078ffbf4789c12fe32419b05853a2c40735ca00e87e8a12",
   "sourceFiles": [
     ".gitattributes",
     "docs/demo/assets/captures/github-pr-merged.jpg",
@@ -32,6 +32,6 @@
     "scripts/readme-demo-timing.ts",
     "scripts/render-readme-demo.ts"
   ],
-  "videoSha256": "8cac28331ff29d54c34dddda3aac4d26d924a297230e48dadea5b227a74af2df",
-  "posterSha256": "5e15cbaa68256a8009f4d1caaced58b531167b1fdf5aa1962f5f60c72ed5c574"
+  "videoSha256": "1286481e775ab3c0508a65d465cdd7ce3c8e554f3dc898f9ae22034e4790ee0a",
+  "posterSha256": "93e289b9a2a21bf5c3e14d4e83a4bc34caad16bd551a20900918477ef3300c3c"
 }

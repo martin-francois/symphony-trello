@@ -26,10 +26,11 @@ Render and verify both assets in one step from the repository root:
 node scripts/render-readme-demo.ts
 ```
 
-The script runs the composition checks, renders the MP4, extracts its poster frame, and fails if
-the MP4 is not a single silent H.264 stream of the expected length, is not larger than 6 MiB, or
-has missing text in representative intro, board, review, phone, or closing regions. After every
-check passes, it updates `render-manifest.json` with the exact render-input file list and SHA-256
+The script runs the composition checks, renders the MP4 at constant-quality CRF 26, and extracts its
+poster frame. It fails if the MP4 is not a single silent H.264 stream of the expected length, does
+not exceed 6 MiB, reaches GitHub's 10 MB free-plan video-attachment limit, or has missing text in
+representative intro, board, review, phone, or closing regions. After every check passes, it updates
+`render-manifest.json` with the exact render-input file list and SHA-256
 values for the inputs, MP4, and poster. It also fails instead of writing the manifest when any input
 changes while the render is running. HyperFrames reads an immutable temporary snapshot populated
 from the same file reads used to calculate the source state, so even an edit that is restored before
