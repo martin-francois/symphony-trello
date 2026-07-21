@@ -56,12 +56,13 @@ GitHub serves an inline README video from an uploaded attachment URL, not direct
 the repository. After re-rendering and committing the generated assets:
 
 1. Download `docs/assets/readme-demo.mp4` from the pull-request branch to your computer.
-2. Open `README.md` in GitHub and select the pencil icon to use the inline editor.
-3. Remove the existing demo media block, then drag the downloaded MP4 from your computer into that
+2. Rename the downloaded file to `demo.mp4`. This rename MUST happen before uploading it.
+3. Open `README.md` in GitHub and select the pencil icon to use the inline editor.
+4. Remove the existing demo media block, then drag `demo.mp4` from your computer into that
    location in the editor and wait for GitHub to insert the new uploaded-attachment URL.
-4. Preview the README and confirm that GitHub displays the URL as an inline video player and that
+5. Preview the README and confirm that GitHub displays the URL as an inline video player and that
    playback works.
-5. Commit the README edit through GitHub.
+6. Commit the README edit through GitHub.
 
 The uploaded file MUST remain strictly below 10 MB; exactly 10,000,000 bytes fails the render and CI
 checks.
