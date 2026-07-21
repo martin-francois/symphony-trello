@@ -22,7 +22,7 @@ Render and verify both assets in one step from the repository root:
 node scripts/render-readme-demo.ts
 ```
 
-The script runs the composition checks, renders the MP4, snapshots the poster frame, and fails if
+The script runs the composition checks, renders the MP4, extracts its poster frame, and fails if
 the MP4 is not a single silent H.264 stream of the expected length.
 
 For iterating on the composition, run the CLI directly from this directory:
@@ -31,8 +31,11 @@ For iterating on the composition, run the CLI directly from this directory:
 pnpm dlx hyperframes@0.7.64 lint             # fast static feedback
 pnpm dlx hyperframes@0.7.64 check            # full browser gate (layout, motion, contrast)
 pnpm dlx hyperframes@0.7.64 preview          # live preview in the browser
-pnpm dlx hyperframes@0.7.64 snapshot --at 17,29,42.5   # stills for visual review
+ffmpeg -i ../assets/readme-demo.mp4 -ss 42.5 -frames:v 1 /tmp/demo-frame.png
 ```
+
+Extract review stills from the rendered MP4 so they use the same browser and font render as the
+committed video.
 
 ## Structure
 

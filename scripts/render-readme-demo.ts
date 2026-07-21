@@ -13,15 +13,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import {
-  copyFileSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  statSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -118,26 +110,21 @@ run("pnpm", [
   videoPath,
 ]);
 
-const posterDir = mkdtempSync(join(tmpdir(), "readme-demo-poster-"));
-try {
-  run("pnpm", [
-    "dlx",
-    HYPERFRAMES,
-    "snapshot",
-    "--at",
-    POSTER_TIME_SECONDS,
-    "--no-end",
-    "--output",
-    posterDir,
-  ]);
-  const frame = readdirSync(posterDir).find((name) => name.endsWith(".png"));
-  if (frame === undefined) {
-    throw new Error(`no poster frame written to ${posterDir}`);
-  }
-  copyFileSync(join(posterDir, frame), posterPath);
-} finally {
-  rmSync(posterDir, { recursive: true, force: true });
-}
+// Extract the poster from the completed video so it uses the exact same font
+// and browser render as the MP4. HyperFrames' standalone snapshot path can
+// fail to load bundled fonts independently of the render path.
+run("ffmpeg", [
+  "-y",
+  "-loglevel",
+  "error",
+  "-i",
+  videoPath,
+  "-ss",
+  POSTER_TIME_SECONDS,
+  "-frames:v",
+  "1",
+  posterPath,
+]);
 
 const probe = ffprobe(videoPath);
 if (probe.streamCount !== 1 || probe.codec !== "h264") {
