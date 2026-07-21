@@ -350,6 +350,11 @@
         gap: 26px;
         padding: 0 160px;
       }
+      #s01 [data-enter] {
+        transform-origin: center;
+        backface-visibility: hidden;
+        will-change: transform;
+      }
       .brand-pill {
         border: 1px solid rgba(8, 40, 58, 0.18);
         border-radius: 12px;
@@ -1228,6 +1233,9 @@
       });
       const MOVE_SCENE_LIFT_PX = 380;
       const BOARD_REVEAL_DURATION = 0.7;
+      const INTRO_ZOOM_DELAY = 0.9;
+      const INTRO_ZOOM_DURATION = 3;
+      const INTRO_ZOOM_SCALE = 1.08;
 
       const readingHoldSeconds = (scene) => {
         const readingPace = scene.dataset.readingPace;
@@ -1681,15 +1689,18 @@
         }
       }
 
-      // The intro copy reaches its full zoom before the scene ends, making
-      // the motion clear while leaving a short hold on the final framing.
-      animate(
-        document.querySelector("#s01 .center-stack"),
-        [{ scale: 1 }, { scale: 1.08, offset: 0.75 }, { scale: 1.08 }],
-        sceneStart("s01"),
-        sceneDuration("s01"),
-        { easing: "linear" },
-      );
+      // Let the entrance settle, then scale each block around its own center.
+      // Scaling the full stack also moves the blocks apart, which makes the
+      // text appear to wobble even though the scale itself is linear.
+      for (const introBlock of document.querySelectorAll("#s01 [data-enter]")) {
+        animate(
+          introBlock,
+          [{ scale: 1 }, { scale: INTRO_ZOOM_SCALE }],
+          sceneStart("s01") + INTRO_ZOOM_DELAY,
+          INTRO_ZOOM_DURATION,
+          { easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+        );
+      }
 
       // s02 — the task waits in Inbox on the real board.
       buildBoardScene({
