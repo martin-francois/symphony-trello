@@ -13,8 +13,9 @@ chosen over Remotion and the other candidates.
 
 ## Re-rendering
 
-Requirements: Node.js 22.18+, FFmpeg, and pnpm. The HyperFrames CLI is fetched on demand at a pinned
-version, so no `package.json` or install step is needed here.
+Requirements: Node.js 22.18+, FFmpeg with the `libx264` encoder and `ffprobe`, and pnpm. The
+HyperFrames CLI is fetched on demand at a pinned version, so no `package.json` or install step is
+needed here.
 
 Render and verify both assets in one step from the repository root:
 

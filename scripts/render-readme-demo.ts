@@ -7,9 +7,9 @@
  *
  * Usage: node scripts/render-readme-demo.ts [--skip-check]
  *
- * Requires Node 22.18+, FFmpeg/ffprobe, and pnpm (the HyperFrames CLI is
- * fetched on demand at the exact pinned version, so renders stay
- * reproducible).
+ * Requires Node 22.18+, FFmpeg with libx264, ffprobe, and pnpm (the
+ * HyperFrames CLI is fetched on demand at the exact pinned version, so
+ * renders stay reproducible).
  */
 
 import { spawnSync } from "node:child_process";
@@ -91,8 +91,22 @@ function ffprobe(path: string): { codec: string; duration: number; streamCount: 
   };
 }
 
+function requireLibx264(): void {
+  const result = spawnSync("ffmpeg", ["-hide_banner", "-encoders"], { encoding: "utf8" });
+  if (result.status !== 0) {
+    const detail = result.stderr?.trim() || result.error?.message || "no error detail";
+    throw new Error(`could not inspect FFmpeg encoders: ${detail}`);
+  }
+  if (!/^\s*V\S*\s+libx264\s/m.test(result.stdout)) {
+    throw new Error(
+      "FFmpeg must provide the libx264 encoder because HyperFrames uses libx264-specific options",
+    );
+  }
+}
+
 const expectedDurationSeconds = readExpectedDurationSeconds();
 const skipCheck = process.argv.includes("--skip-check");
+requireLibx264();
 
 if (!skipCheck) {
   run("pnpm", ["dlx", HYPERFRAMES, "check"]);
