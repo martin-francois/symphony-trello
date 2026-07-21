@@ -9,9 +9,12 @@
   "reviewers": ["martinfrancois"],
   "labels": ["dependencies"],
   "rangeStrategy": "replace",
+  "prConcurrentLimit": 0,
+  "branchConcurrentLimit": 0,
   "minimumReleaseAge": "3 days",
   "minimumReleaseAgeBehaviour": "timestamp-required",
   "automerge": true,
+  "dependencyDashboardApproval": false,
   "vulnerabilityAlerts": {
     "enabled": true,
     "labels": ["security"]
@@ -92,20 +95,25 @@
     {
       "matchDatasources": ["maven"],
       "matchPackageNames": [
+        "com.google.errorprone:error_prone_core",
         "org.openrewrite:*",
         "org.openrewrite.maven:*",
         "org.openrewrite.recipe:*",
-        "tech.picnic.error-prone-support:error-prone-contrib"
+        "tech.picnic.error-prone-support:error-prone-contrib",
+        "tech.picnic.error-prone-support:refaster-runner"
       ],
-      "groupName": null,
+      "groupName": "OpenRewrite toolchain",
+      "branchTopic": "openrewrite-toolchain",
       "minimumReleaseAge": "7 days",
-      "automerge": false,
-      "dependencyDashboardApproval": true,
+      "rebaseWhen": "behind-base-branch",
+      "automerge": true,
+      "platformAutomerge": false,
       "addLabels": ["openrewrite"],
       "prBodyNotes": [
-        "OpenRewrite updates change executable transformations and MUST NOT be automerged.",
-        "Before merge, the required CI ordered OpenRewrite and Spotless check and the full Maven gate MUST pass.",
-        "In a clean branch or disposable worktree, a maintainer MUST run `./mvnw -Popenrewrite rewrite:run` followed by `./mvnw -q spotless:apply`, review the complete combined diff, and confirm that the same ordered pipeline leaves the committed state unchanged."
+        "Automation validates this dependency-only update and runs the ordered OpenRewrite and Spotless pipeline.",
+        "When an eligible non-major update produces no repository change, required CI passes and Renovate automerges this pull request.",
+        "When the toolchain changes source or POM output, this pull request remains blocked and automation opens or refreshes a separate generated pull request for maintainer review.",
+        "Major updates are created automatically and require manual merge through the repository-wide major-update guard."
       ]
     },
     {
@@ -114,7 +122,6 @@
       "groupName": null,
       "minimumReleaseAge": "7 days",
       "automerge": false,
-      "dependencyDashboardApproval": true,
       "addLabels": ["quarkus"],
       "prBodyNotes": [
         "Quarkus updater recipe changes MUST NOT be validated as general OpenRewrite maintenance updates.",
@@ -125,7 +132,6 @@
       "matchPackageNames": ["tessl-labs/good-oss-citizen"],
       "minimumReleaseAge": "7 days",
       "automerge": false,
-      "dependencyDashboardApproval": true,
       "addLabels": ["tessl"],
       "prBodyNotes": [
         "After Renovate updates `tessl.json`, run `tessl install`, review the refreshed `.tessl/tiles` diff, and commit those vendored tile changes before merging."
@@ -134,7 +140,6 @@
     {
       "matchUpdateTypes": ["major"],
       "automerge": false,
-      "dependencyDashboardApproval": true,
       "addLabels": ["major update"]
     }
   ]

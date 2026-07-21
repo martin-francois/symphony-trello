@@ -101,6 +101,9 @@ All Symphony for Trello features work with Trello's Free plan.
 - One local workspace per Trello card so Codex work is separated by task.
 - Optional GitHub pull request flow for repository-changing work.
 - Trello comments that show progress, blockers, validation, and handoff notes on the card.
+- Scoped Trello tools let Codex comment on, update, and move its current Trello card without access
+  to the Trello API credentials. Symphony performs permitted Trello operations on Codex's behalf
+  and enforces the configured write controls.
 - A local worker status page and JSON API for running, retrying, blocked, and finished work.
 - Configurable workflow files for board lists, workspace paths, Codex settings, concurrency, and
   safe local file access.
@@ -622,6 +625,21 @@ command's pause from gating the new command; late results and events remain attr
 that launched them. Late typed usage results and stale callbacks cannot change the new command's
 pause, while normal card lifecycle may create an ordinary retry under the new command when the
 Trello target is unchanged. Invalid workflow reloads keep the existing command scope unchanged.
+
+### Queueing Work For Later Capacity
+
+You do not have to babysit the CLI to make good use of a Codex usage window. Add clear, ready cards
+to an active list such as `Ready for Codex` whenever you have them, even if there are more queued
+cards than the current concurrency setting can run at once. Symphony works through that queue
+according to workflow state, priority labels, prerequisite checklists, and
+`agent.max_concurrent_agents`, so Symphony starts ready cards as capacity becomes available without
+you starting each one by hand.
+
+If capacity is temporarily unavailable, such as during a Codex usage-limit pause, queued cards wait
+in their active list instead of failing. Symphony resumes dispatching them automatically when
+capacity returns. A queue prepared ahead of time therefore continues across a reset period without
+requiring you to retrigger each card by hand. This queueing behavior does not bypass Codex usage
+limits or grant extra capacity.
 
 Diagnostics are safe to paste into public issues by default. They summarize local setup, connected
 boards, workflow files, health probes, and recent logs while hiding secrets and private context. Use
@@ -1493,8 +1511,9 @@ secrets outside the workflow file and does not want Trello secrets in the servic
 ## Safety Posture
 
 This implementation targets trusted automation environments by default. Workspace boundaries are
-enforced, hooks run inside the per-card workspace, and Trello credentials are injected into HTTP
-requests rather than prompts. Hooks and Codex still execute trusted local code, so production
+enforced, hooks run inside the per-card workspace, and Codex manages Trello cards through scoped
+tools without access to the Trello API credentials. Symphony injects those credentials into Trello
+HTTP requests rather than prompts. Hooks and Codex still execute trusted local code, so production
 deployments should use a dedicated OS user, a dedicated workspace volume, narrowly scoped Trello
 credentials, and Codex approval/sandbox settings appropriate to the board's trust level.
 

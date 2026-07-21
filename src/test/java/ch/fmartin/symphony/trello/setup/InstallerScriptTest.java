@@ -1201,6 +1201,8 @@ final class InstallerScriptTest {
         Path binDirectory = temporaryDirectory.resolve("legacy-context-bin");
         Path command = binDirectory.resolve("symphony-trello");
         Path xdgConfigHome = temporaryDirectory.resolve("legacy-context-xdg-config");
+        Path fakeTools = temporaryDirectory.resolve("legacy-context-tools");
+        Path fakeLog = temporaryDirectory.resolve("legacy-context-tools.log");
         Path legacyService = home.resolve(".config/systemd/user/symphony-trello.service");
         Path legacyAutostartEnv = home.resolve(".config/symphony-trello/autostart.env");
         Files.createDirectories(app);
@@ -1209,12 +1211,20 @@ final class InstallerScriptTest {
         Files.createDirectories(state);
         Files.createDirectories(cache);
         Files.createDirectories(binDirectory);
+        Files.createDirectories(fakeTools);
         Files.createDirectories(legacyService.getParent());
         Files.createDirectories(legacyAutostartEnv.getParent());
         Files.writeString(app.resolve(".symphony-trello-install"), "marker");
         Files.writeString(command, "launcher\n");
         Files.writeString(legacyService, "legacy service\n");
         Files.writeString(legacyAutostartEnv, "TRELLO_API_KEY=\"legacy\"\n");
+        writeExecutable(
+                fakeTools.resolve("systemctl"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                echo "systemctl $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                """);
         Files.writeString(
                 state.resolve("install-context.properties"),
                 """
@@ -1237,7 +1247,11 @@ final class InstallerScriptTest {
                 "SYMPHONY_TRELLO_CONFIG_DIR",
                 config.toString(),
                 "XDG_CONFIG_HOME",
-                xdgConfigHome.toString());
+                xdgConfigHome.toString(),
+                "PATH",
+                fakeTools + File.pathSeparator + System.getenv("PATH"),
+                "SYMPHONY_FAKE_LOG",
+                fakeLog.toString());
 
         // when
         ProcessResult installDryRun = run(environment, "bash", "install.sh", "--dry-run", "--no-onboard");
@@ -1258,6 +1272,9 @@ final class InstallerScriptTest {
         assertThat(command).doesNotExist();
         assertThat(legacyService).doesNotExist();
         assertThat(legacyAutostartEnv).doesNotExist();
+        assertThat(fakeLog)
+                .content(StandardCharsets.UTF_8)
+                .contains("systemctl --user disable --now symphony-trello.service", "systemctl --user daemon-reload");
     }
 
     @Test
@@ -7314,6 +7331,8 @@ final class InstallerScriptTest {
         writeCommandProxy(fakeBin, "sha256sum", "/usr/bin/sha256sum");
         writeCommandProxy(fakeBin, "awk", "/usr/bin/awk");
         writeCommandProxy(fakeBin, "grep", "/bin/grep");
+        writeCommandProxy(fakeBin, "mktemp", "/usr/bin/mktemp");
+        writeCommandProxy(fakeBin, "mv", "/bin/mv");
         writeExecutable(
                 fakeBin.resolve("npm"),
                 """
@@ -7341,7 +7360,8 @@ final class InstallerScriptTest {
                 "HOME", home.toString(),
                 "SYMPHONY_TRELLO_REPO_URL", sourceRepository.toUri().toString(),
                 "SYMPHONY_HOME", symphonyHome.toString(),
-                "SYMPHONY_FAKE_LOG", fakeLog.toString());
+                "SYMPHONY_FAKE_LOG", fakeLog.toString(),
+                "SHELL", "/bin/bash");
 
         // when
         ProcessResult install = runWithPseudoTerminal(

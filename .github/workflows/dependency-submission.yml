@@ -14,7 +14,10 @@ permissions: read-all
 
 jobs:
   dependency-submission:
-    if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}
+    if: >-
+      ${{ !startsWith(github.head_ref, 'release-please--branches--')
+      && github.head_ref != 'renovate/openrewrite-toolchain'
+      && !startsWith(github.head_ref, 'automation/openrewrite/renovate-') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
