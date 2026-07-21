@@ -221,7 +221,7 @@ final class InstallerScriptFixture {
             pollDelayForBoundedProcessWait();
         } while (System.nanoTime() < deadline);
 
-        IOException failure = new IOException("Temporary process files remain locked: " + failures.keySet());
+        var failure = new IOException("Temporary process files remain locked: " + failures.keySet());
         failures.values().forEach(failure::addSuppressed);
         throw failure;
     }
