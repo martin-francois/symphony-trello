@@ -586,11 +586,20 @@
         height: 439px;
         background: #0079bf;
       }
-      .anywhere-board img {
+      .anywhere-board-media {
         position: absolute;
         left: 0;
         top: 0;
-        width: 1560px;
+        width: 1920px;
+        height: 822px;
+        transform: scale(0.8125);
+        transform-origin: 0 0;
+      }
+      .anywhere-board-media img {
+        position: absolute;
+        inset: 0;
+        width: 1920px;
+        height: 822px;
       }
       .phone {
         position: absolute;
@@ -964,7 +973,10 @@
             <span class="win-title">Trello — Symphony for Trello — Demo</span>
           </div>
           <div class="win-body">
-            <img id="s15-board-img" src="assets/captures/trello-board-done.jpg" alt="" />
+            <div id="s15-board-media" class="anywhere-board-media">
+              <img src="assets/captures/trello-board-done.jpg" alt="" />
+              <div class="overlay" id="s15-board-overlay"></div>
+            </div>
           </div>
         </div>
         <p class="anywhere-note" data-enter>
@@ -1421,12 +1433,6 @@
         }
       }
 
-      const SUPPORT_CARD = {
-        height: "two",
-        text: "Support multiple boards per worker",
-        maxWidth: 220,
-      };
-
       // s02 — the task waits in Inbox on the real board.
       buildBoardScene({
         scene: "s02",
@@ -1507,8 +1513,7 @@
         },
       });
 
-      // s07 — Symphony hands the card to Human Review, below the card that
-      // is already waiting there.
+      // s07 — Symphony hands the card to the empty Human Review list.
       buildBoardScene({
         scene: "s07",
         cameraStops: [
@@ -1524,15 +1529,14 @@
           },
           {
             lane: "humanReview",
-            count: { from: "1", to: "2", at: 2.8 },
-            cards: [SUPPORT_CARD, { slot: "grow", at: 2.52 }],
+            count: { from: "0", to: "1", at: 2.8 },
+            cards: [{ slot: "grow", at: 2.52 }],
           },
         ],
         move: {
           mode: "auto",
           from: "inProgress",
           to: "humanReview",
-          toCardsBefore: [SUPPORT_CARD],
           begin: 1.4,
           flight: 1.4,
         },
@@ -1549,8 +1553,8 @@
         lanes: [
           {
             lane: "humanReview",
-            count: { from: "2", to: "1", at: 3.3 },
-            cards: [SUPPORT_CARD, { slot: "rest", placeholder: true, at: 2.48 }],
+            count: { from: "1", to: "0", at: 3.3 },
+            cards: [{ slot: "rest", placeholder: true, at: 2.48 }],
           },
           {
             lane: "ready",
@@ -1561,7 +1565,6 @@
         move: {
           mode: "drag",
           from: "humanReview",
-          fromCardsBefore: [SUPPORT_CARD],
           to: "ready",
           begin: 1.8,
           flight: 1.5,
@@ -1581,8 +1584,8 @@
         lanes: [
           {
             lane: "humanReview",
-            count: { from: "2", to: "1", at: 3.3 },
-            cards: [SUPPORT_CARD, { slot: "rest", placeholder: true, at: 2.48 }],
+            count: { from: "1", to: "0", at: 3.3 },
+            cards: [{ slot: "rest", placeholder: true, at: 2.48 }],
           },
           {
             lane: "merging",
@@ -1598,7 +1601,6 @@
         move: {
           mode: "drag",
           from: "humanReview",
-          fromCardsBefore: [SUPPORT_CARD],
           to: "merging",
           begin: 1.8,
           flight: 1.5,
@@ -1615,6 +1617,11 @@
           { at: 5.5, left: 1190, width: 1000 },
         ],
         lanes: [
+          {
+            lane: "humanReview",
+            count: "0",
+            cards: [],
+          },
           {
             lane: "merging",
             count: { from: "1", to: "0", at: 3.0 },
@@ -1713,9 +1720,15 @@
         sceneStart("s15") + 0.5,
         9.0,
       );
-      document.getElementById("s15-board-img").style.transformOrigin = "170px 60px";
+      buildLane(document.getElementById("s15-board-overlay"), "humanReview", {
+        count: "0",
+        cards: [],
+        t0: sceneStart("s15"),
+        sceneDur: sceneDuration("s15"),
+      });
+      document.getElementById("s15-board-media").style.transformOrigin = "170px 60px";
       animate(
-        document.getElementById("s15-board-img"),
+        document.getElementById("s15-board-media"),
         [{ scale: 1 }, { scale: 1.09 }],
         sceneStart("s15") + 0.2,
         9.2,
@@ -1724,6 +1737,12 @@
 
       // s16 — hero: the complete Done list in the Trello tile, plus a slow
       // breathing zoom that keeps the closing frame alive.
+      buildLane(document.getElementById("hero-board-overlay"), "humanReview", {
+        count: "0",
+        cards: [],
+        t0: sceneStart("s16"),
+        sceneDur: sceneDuration("s16"),
+      });
       buildLane(document.getElementById("hero-board-overlay"), "done", {
         count: "3",
         cards: [...DONE_BACKGROUND_CARDS, OUR_CARD],

@@ -71,6 +71,8 @@ What is code-rendered on top of the captures, rather than captured:
   Trello lists over the capture, so drag placeholders, list growth and shrink, and counter
   changes animate the way Trello animates them (the captures are still frames, so the movement
   between them is reconstructed in code);
+- the Human Review list in every board scene where it appears, so an unrelated background card
+  present in the source captures stays out of the focused demo;
 - the complete Done list: the capture cuts it off at the right edge, so it is code-rendered
   wherever it matters, and the two truncated background card titles ("Retry Trello polling on…",
   "Add status page for ru…") are completed as "Retry Trello polling on errors" and "Add status
