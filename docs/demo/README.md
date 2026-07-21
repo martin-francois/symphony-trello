@@ -59,10 +59,10 @@ that opened, reworked, and merged pull request `fix: clarify missing Trello toke
 raw recordings and full browser screenshots are intentionally not committed because they can
 include browser/session metadata and UI chrome that is not needed to regenerate the demo.
 
-The GitHub captures are privacy-sanitized derivatives of that run. The account name and headshot
-are replaced by the synthetic `demo-user` identity and a generic avatar. The review and checks
-chrome is reconstructed to show the resolved review and successful validation states documented
-by the run, without retaining personal account details.
+The GitHub captures intentionally retain project owner François Martin's `martinfrancois`
+account name and headshot as product branding. Capture refreshes MUST preserve that owner
+branding and MUST NOT replace it with a synthetic identity. Browser/session metadata and other
+personal details remain excluded.
 
 What is code-rendered on top of the captures, rather than captured:
 
@@ -75,7 +75,9 @@ What is code-rendered on top of the captures, rather than captured:
   wherever it matters, and the two truncated background card titles ("Retry Trello polling on…",
   "Add status page for ru…") are completed as "Retry Trello polling on errors" and "Add status
   page for runs";
-- in the answered-review scene, a green callout box around the kept Codex response;
+- in the answered-review scene, a white mask over the second, near-duplicate Codex reply in the
+  capture (the run replied twice), so the thread reads as one review comment and one response,
+  plus a green callout box around the kept response;
 - the Codex Workpad panel, restyled from the workpad content of the real run so the text stays
   readable at video size.
 
