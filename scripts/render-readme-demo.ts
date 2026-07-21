@@ -61,7 +61,10 @@ function readExpectedDurationSeconds(): number {
 
 function run(command: string, args: string[]): void {
   console.log(`\n$ ${command} ${args.join(" ")}`);
-  const result = spawnSync(command, args, { cwd: demoDir, stdio: "inherit" });
+  const windowsPnpm = process.platform === "win32" && command === "pnpm";
+  const executable = windowsPnpm ? (process.env.ComSpec ?? "cmd.exe") : command;
+  const commandArgs = windowsPnpm ? ["/d", "/s", "/c", "pnpm.cmd", ...args] : args;
+  const result = spawnSync(executable, commandArgs, { cwd: demoDir, stdio: "inherit" });
   if (result.status !== 0) {
     const detail = result.error?.message;
     throw new Error(

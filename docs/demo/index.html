@@ -1077,7 +1077,7 @@
           duration: durationSec * 1000,
           delay: startSec * 1000,
           easing: options.easing ?? EASE,
-          fill: "both",
+          fill: options.fill ?? "both",
           iterations: options.iterations ?? 1,
         });
         animation.pause();
@@ -1341,6 +1341,7 @@
             ],
             t0 + move.begin + move.flight + 0.4,
             0.6,
+            { fill: "forwards" },
           );
         } else {
           const badge = el("div", "auto-badge", card);
@@ -1362,6 +1363,7 @@
             ],
             t0 + move.begin + move.flight + 0.7,
             0.5,
+            { fill: "forwards" },
           );
         }
       };
