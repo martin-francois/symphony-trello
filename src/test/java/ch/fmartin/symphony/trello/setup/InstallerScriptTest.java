@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.setup;
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -83,10 +84,11 @@ final class InstallerScriptTest {
             processBuilder.environment().remove(launcherOption);
         }
 
-        // when / then
-        assertThatThrownBy(() -> run(processBuilder, "i".repeat(1_048_576), 1))
-                .isInstanceOf(AssertionError.class)
-                .hasMessageContaining("process timed out");
+        // when
+        Throwable failure = catchThrowable(() -> run(processBuilder, "i".repeat(1_048_576), 1));
+
+        // then
+        assertThat(failure).isInstanceOf(AssertionError.class).hasMessageContaining("process timed out");
     }
 
     @Test
