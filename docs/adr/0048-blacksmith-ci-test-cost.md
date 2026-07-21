@@ -10,6 +10,7 @@ consulted:
   - "[Benchmark run 27080073069](https://github.com/martin-francois/symphony-trello/actions/runs/27080073069)"
   - "[Fresh 2-vCPU baseline run 29863698502](https://github.com/martin-francois/symphony-trello/actions/runs/29863698502)"
   - "[Fresh 4-vCPU trial run 29867224338](https://github.com/martin-francois/symphony-trello/actions/runs/29867224338)"
+  - "[Restored 2-vCPU confirmation run 29867643365](https://github.com/martin-francois/symphony-trello/actions/runs/29867643365)"
   - "[Blacksmith runner billing](https://docs.blacksmith.sh/blacksmith-runners/overview#is-there-a-free-tier)"
   - "[GitHub Actions 2026 pricing](https://github.blog/changelog/2025-12-16-coming-soon-simpler-pricing-and-a-better-experience-for-github-actions/)"
 informed: [Future maintainers, Contributors]
@@ -80,7 +81,10 @@ normalized seconds. One successful 4-vCPU/parallelism-4 trial took 247 seconds, 
 seconds. The larger runner reduced wall-clock time by about 40% but increased normalized usage by
 about 19%, so 2 vCPU remains the more economical choice. An 8-vCPU trial was not justified: it would
 have needed to finish the complete job in less than 104 seconds, while the 4-vCPU trial spent 102
-seconds on OpenRewrite and another 123 seconds on verification alone.
+seconds on OpenRewrite and another 123 seconds on verification alone. A restored
+2-vCPU/parallelism-2 confirmation then completed in 286 seconds, or 286 normalized seconds. The
+variation between the two 2-vCPU runs does not change the decision: the confirmation makes the
+4-vCPU trial about 14% faster but about 73% more expensive.
 
 The earlier 2-vCPU JUnit-parallel runs were held back because one repeated hosted JUnit 2 cell
 failed with a setup server port conflict, JUnit 8 failed, and JUnit 6 hung long enough that the
