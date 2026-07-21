@@ -44,6 +44,8 @@ pnpm dlx hyperframes@0.7.64 snapshot --at 17,29,42.5   # stills for visual revie
   `composition_file_too_large` and `timeline_track_too_dense` lint warnings are accepted.
 - `index.motion.json` — motion assertions `check` verifies against the seeked timeline.
 - `assets/captures/` — safe, optimized exports from the real run (see below).
+- `assets/fonts/` — pinned Inter and JetBrains Mono files from Fontsource 5.3.0, with their
+  OFL-1.1 license texts, so rendering does not fetch mutable hosted fonts.
 
 ## Source captures
 
@@ -52,6 +54,11 @@ throwaway Trello board (`Symphony for Trello — Demo`), a demo repository, and 
 that opened, reworked, and merged pull request `fix: clarify missing Trello token error`. Larger
 raw recordings and full browser screenshots are intentionally not committed because they can
 include browser/session metadata and UI chrome that is not needed to regenerate the demo.
+
+The GitHub captures are privacy-sanitized derivatives of that run. The account name and headshot
+are replaced by the synthetic `demo-user` identity and a generic avatar. The review and checks
+chrome is reconstructed to show the resolved review and successful validation states documented
+by the run, without retaining personal account details.
 
 What is code-rendered on top of the captures, rather than captured:
 
@@ -64,9 +71,7 @@ What is code-rendered on top of the captures, rather than captured:
   wherever it matters, and the two truncated background card titles ("Retry Trello polling on…",
   "Add status page for ru…") are completed as "Retry Trello polling on errors" and "Add status
   page for runs";
-- in the answered-review scene, a white mask over the second, near-duplicate Codex reply in the
-  capture (the run replied twice), so the thread reads as one review comment and one response,
-  plus a green callout box around the kept response;
+- in the answered-review scene, a green callout box around the kept Codex response;
 - the Codex Workpad panel, restyled from the workpad content of the real run so the text stays
   readable at video size.
 

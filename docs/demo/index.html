@@ -5,6 +5,35 @@
     <meta name="viewport" content="width=1920, height=1080" />
     <title>Symphony for Trello README demo</title>
     <style>
+      @font-face {
+        font-family: "Inter";
+        font-style: normal;
+        font-weight: 400;
+        font-display: block;
+        src: url("assets/fonts/inter/inter-latin-400-normal.woff2") format("woff2");
+      }
+      @font-face {
+        font-family: "Inter";
+        font-style: normal;
+        font-weight: 600;
+        font-display: block;
+        src: url("assets/fonts/inter/inter-latin-600-normal.woff2") format("woff2");
+      }
+      @font-face {
+        font-family: "Inter";
+        font-style: normal;
+        font-weight: 700;
+        font-display: block;
+        src: url("assets/fonts/inter/inter-latin-700-normal.woff2") format("woff2");
+      }
+      @font-face {
+        font-family: "JetBrains Mono";
+        font-style: normal;
+        font-weight: 400;
+        font-display: block;
+        src: url("assets/fonts/jetbrains-mono/jetbrains-mono-latin-400-normal.woff2")
+          format("woff2");
+      }
       * {
         margin: 0;
         padding: 0;
@@ -531,12 +560,6 @@
       .gh-pan img {
         display: block;
         width: 1600px;
-      }
-      /* White mask over the capture's second, redundant Codex reply so the
-         answered-thread scene shows one comment and one response. */
-      .gh-mask {
-        position: absolute;
-        background: #ffffff;
       }
       /* Callout box around the Codex response. */
       .gh-highlight {
@@ -1628,22 +1651,15 @@
         { at: 3.0, left: 114, top: 675, width: 1170 },
         { at: 7, left: 118, top: 679, width: 1160 },
       ]);
-      // The capture carries two near-identical Codex replies; mask the full
-      // page width below the response (including the thread box borders) so
-      // the thread reads as one comment and one response, and draw a
-      // callout box around the response as the camera lands.
+      // Draw a callout box around the response as the camera lands. The
+      // resolved marker remains visible directly below it.
       {
         const pan = document.querySelector('[data-gh="s11"]');
-        const mask = el("div", "gh-mask", pan);
-        mask.style.left = "80px";
-        mask.style.top = "1100px";
-        mask.style.width = "1440px";
-        mask.style.height = "190px";
         const highlightBox = el("div", "gh-highlight", pan);
         highlightBox.style.left = "130px";
-        highlightBox.style.top = "918px";
+        highlightBox.style.top = "1010px";
         highlightBox.style.width = "1080px";
-        highlightBox.style.height = "167px";
+        highlightBox.style.height = "175px";
         animate(highlightBox, [{ opacity: 0 }, { opacity: 1 }], sceneStart("s11") + 3.05, 0.35, {
           easing: "linear",
         });
