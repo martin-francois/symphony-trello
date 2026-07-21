@@ -18,7 +18,7 @@ informed: [Future maintainers, Contributors]
 The README needs a polished, silent demo video and poster that show the real workflow: a Trello
 card moves through the board lists, Codex implements the task, a GitHub pull request is reviewed
 and merged, and the card reaches `Done`. The video must be regenerable from committed source with
-one command, must use only free and open source tooling, must use real Trello and GitHub UI as the
+one command, must use only free and open-source tooling, must use real Trello and GitHub UI as the
 primary visual source, and must stay small and readable enough for a README. CI must also fail when
 a render input changes without regenerated video and poster artifacts.
 
