@@ -172,14 +172,16 @@ final class InstallerScriptFixture {
             throws IOException, InterruptedException {
         Path stdout = Files.createTempFile("symphony-trello-installer-stdout-", ".log");
         Path stderr = null;
+        Path stdin = null;
         Process process = null;
         try {
             stderr = Files.createTempFile("symphony-trello-installer-stderr-", ".log");
+            stdin = Files.createTempFile("symphony-trello-installer-stdin-", ".log");
+            Files.writeString(stdin, input, StandardCharsets.UTF_8);
+            processBuilder.redirectInput(stdin.toFile());
             processBuilder.redirectOutput(stdout.toFile());
             processBuilder.redirectError(stderr.toFile());
             process = processBuilder.start();
-            process.getOutputStream().write(input.getBytes(StandardCharsets.UTF_8));
-            process.getOutputStream().close();
             boolean completed = process.waitFor(Duration.ofSeconds(timeoutSeconds));
             if (!completed) {
                 terminateProcessTree(process);
@@ -196,6 +198,9 @@ final class InstallerScriptFixture {
             Files.deleteIfExists(stdout);
             if (stderr != null) {
                 Files.deleteIfExists(stderr);
+            }
+            if (stdin != null) {
+                Files.deleteIfExists(stdin);
             }
         }
     }

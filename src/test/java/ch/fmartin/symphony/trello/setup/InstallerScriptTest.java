@@ -65,6 +65,31 @@ final class InstallerScriptTest {
     }
 
     @Test
+    void fixtureStartsTimeoutBeforeChildConsumesLargeInput() throws Exception {
+        // given
+        Path source = temporaryDirectory.resolve("DelayedInput.java");
+        Files.writeString(
+                source,
+                """
+                public class DelayedInput {
+                    public static void main(String[] arguments) throws Exception {
+                        Thread.sleep(3_000);
+                    }
+                }
+                """);
+        Path java = Path.of(System.getProperty("java.home"), "bin", isWindows() ? "java.exe" : "java");
+        var processBuilder = new ProcessBuilder(java.toString(), source.toString());
+        for (String launcherOption : List.of("JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_JAVA_OPTIONS")) {
+            processBuilder.environment().remove(launcherOption);
+        }
+
+        // when / then
+        assertThatThrownBy(() -> run(processBuilder, "i".repeat(1_048_576), 1))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("process timed out");
+    }
+
+    @Test
     void fixtureReplacesMalformedUtf8InCapturedOutput() throws Exception {
         // given
         Path source = temporaryDirectory.resolve("MalformedOutput.java");
