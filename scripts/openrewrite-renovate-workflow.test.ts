@@ -56,6 +56,7 @@ const DEPENDENCY_SUBMISSION_WORKFLOW = readFileSync(
 );
 const RENOVATE = readFileSync(new URL("../renovate.json", import.meta.url), "utf8");
 const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
+  readonly branchConcurrentLimit?: number;
   readonly packageRules: readonly {
     readonly branchTopic?: string;
     readonly groupName?: string;
@@ -63,6 +64,7 @@ const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
     readonly matchPackageNames?: readonly string[];
     readonly platformAutomerge?: boolean;
   }[];
+  readonly prConcurrentLimit?: number;
 };
 const CANDIDATE: PullRequest = {
   base: {ref: "main", repo: {full_name: "owner/repo"}},
@@ -907,4 +909,9 @@ test("the repository-wide major update guard overrides OpenRewrite automerge", (
 
   assert.ok(openRewriteRule > 0);
   assert.ok(majorRule > openRewriteRule);
+});
+
+test("Renovate permits unlimited concurrent branches and pull requests", () => {
+  assert.equal(RENOVATE_CONFIG.branchConcurrentLimit, 0);
+  assert.equal(RENOVATE_CONFIG.prConcurrentLimit, 0);
 });

@@ -9,6 +9,8 @@
   "reviewers": ["martinfrancois"],
   "labels": ["dependencies"],
   "rangeStrategy": "replace",
+  "prConcurrentLimit": 0,
+  "branchConcurrentLimit": 0,
   "minimumReleaseAge": "3 days",
   "minimumReleaseAgeBehaviour": "timestamp-required",
   "automerge": true,
