@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {readFileSync} from "node:fs";
+import {readFileSync, readdirSync} from "node:fs";
 import test from "node:test";
 import {parse} from "yaml";
 
@@ -32,6 +32,7 @@ interface WorkflowDocument {
     Record<
       string,
       {
+        readonly "runs-on"?: unknown;
         readonly steps?: readonly {
           readonly name?: unknown;
           readonly with?: {readonly script?: unknown};
@@ -900,6 +901,26 @@ test("updated OpenRewrite artifacts remain isolated in pull request CI", () => {
     DEPENDENCY_SUBMISSION_WORKFLOW,
     /!startsWith\(github\.head_ref, 'automation\/openrewrite\/renovate-'\)/,
   );
+});
+
+test("Blacksmith runners are reserved for the critical-path test jobs", () => {
+  const workflowDirectory = new URL("../.github/workflows/", import.meta.url);
+  const blacksmithJobs: string[] = [];
+
+  for (const fileName of readdirSync(workflowDirectory).filter((name) => /\.ya?ml$/u.test(name))) {
+    const workflow = parse(readFileSync(new URL(fileName, workflowDirectory), "utf8")) as
+      WorkflowDocument;
+    for (const [jobName, job] of Object.entries(workflow.jobs ?? {})) {
+      if (typeof job["runs-on"] === "string" && job["runs-on"].startsWith("blacksmith-")) {
+        blacksmithJobs.push(`${fileName}:${jobName}:${job["runs-on"]}`);
+      }
+    }
+  }
+
+  assert.deepEqual(blacksmithJobs.sort(), [
+    "ci.yml:test:blacksmith-2vcpu-ubuntu-2404",
+    "ci.yml:windows-powershell:blacksmith-2vcpu-windows-2025",
+  ]);
 });
 
 test("the OpenRewrite rule selects exact toolchain packages across Maven dependency types", () => {
