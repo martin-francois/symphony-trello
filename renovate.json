@@ -97,8 +97,8 @@
   },
   "packageRules": [
     {
-      "description": "Do not create updates that Renovate cannot age-gate",
-      "matchUpdateTypes": ["digest", "pin", "pinDigest"],
+      "description": "Do not create digest updates that Renovate cannot age-gate",
+      "matchUpdateTypes": ["digest"],
       "enabled": false
     },
     {

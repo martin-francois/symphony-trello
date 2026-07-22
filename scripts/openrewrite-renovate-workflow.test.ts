@@ -948,11 +948,20 @@ test("Renovate enforces the repository-wide seven-day dependency cooldown", () =
     assert.equal(rule.minimumReleaseAge, undefined);
   }
 
-  const unsupportedUpdateRule = RENOVATE_CONFIG.packageRules.find(({matchUpdateTypes}) =>
+  const digestOnlyUpdateRule = RENOVATE_CONFIG.packageRules.find(({matchUpdateTypes}) =>
     matchUpdateTypes?.includes("digest"),
   );
-  assert.deepEqual(unsupportedUpdateRule?.matchUpdateTypes, ["digest", "pin", "pinDigest"]);
-  assert.equal(unsupportedUpdateRule?.enabled, false);
+  assert.deepEqual(digestOnlyUpdateRule?.matchUpdateTypes, ["digest"]);
+  assert.equal(digestOnlyUpdateRule?.enabled, false);
+  for (const pinUpdateType of ["pin", "pinDigest"]) {
+    assert.ok(
+      RENOVATE_CONFIG.packageRules.every(
+        ({enabled, matchUpdateTypes}) =>
+          enabled !== false || !matchUpdateTypes?.includes(pinUpdateType),
+      ),
+      `${pinUpdateType} updates must remain enabled`,
+    );
+  }
 });
 
 test("Renovate permits unlimited concurrent branches and pull requests", () => {
