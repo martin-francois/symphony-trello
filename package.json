@@ -2,7 +2,7 @@
   "name": "symphony-trello-tooling",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@11.3.0",
+  "packageManager": "pnpm@11.11.0",
   "scripts": {
     "check:scripts": "tsc --noEmit",
     "test:scripts": "node --test \"scripts/**/*.test.{js,cjs,mjs,ts,cts,mts}\"",
@@ -10,7 +10,7 @@
   },
   "devDependencies": {
     "@types/node": "24.13.3",
-    "typescript": "5.9.3",
+    "typescript": "7.0.2",
     "yaml": "2.9.0"
   }
 }

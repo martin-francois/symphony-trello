@@ -14,18 +14,18 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha }}
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "24"
       - name: Enable pnpm
         run: |
           corepack enable
-          corepack prepare pnpm@11.3.0 --activate
+          corepack prepare pnpm@11.11.0 --activate
       - name: Prepare commitlint
         # commitlint resolves `extends` from the config file's directory. Keep a
         # runner-local config copy next to the installed packages instead of
@@ -38,8 +38,8 @@ jobs:
           cp commitlint.config.cjs "$COMMITLINT_HOME/commitlint.config.cjs"
           cp commitlint.message.config.cjs "$COMMITLINT_HOME/commitlint.message.config.cjs"
           pnpm --dir "$COMMITLINT_HOME" add --silent \
-            @commitlint/cli@21.0.1 \
-            @commitlint/config-conventional@21.0.1
+            @commitlint/cli@21.2.1 \
+            @commitlint/config-conventional@21.2.0
           echo "COMMITLINT_BIN=$COMMITLINT_HOME/node_modules/.bin/commitlint" >> "$GITHUB_ENV"
           echo "COMMITLINT_TITLE_CONFIG=$COMMITLINT_HOME/commitlint.config.cjs" >> "$GITHUB_ENV"
           echo "COMMITLINT_MESSAGE_CONFIG=$COMMITLINT_HOME/commitlint.message.config.cjs" >> "$GITHUB_ENV"

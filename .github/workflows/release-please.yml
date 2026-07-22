@@ -19,7 +19,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout release workflow source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - name: Release Please
         if: ${{ github.event_name == 'push' }}
         id: release
@@ -67,7 +67,7 @@ jobs:
             echo "upload_assets=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Checkout release source tag
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         if: ${{ steps.release-assets.outputs.upload_assets == 'true' }}
         with:
           ref: ${{ steps.release-assets.outputs.checkout_ref }}
