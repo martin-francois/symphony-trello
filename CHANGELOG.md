@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.3.0 (2026-07-23)
+
+## What's Changed
+* test(concurrency): audit production guards by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/583
+* test(orchestrator): synchronize command request publication by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/595
+* test(setup): isolate managed-port selection by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/596
+* fix(ci): rotate size-label reconciliation by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/599
+* feat(release): credit contributors in changelog by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/598
+* feat(build): add guarded OpenRewrite maintenance lane by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/592
+* feat(build): automate OpenRewrite updates by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/604
+* docs: explain queueing cards for future Codex capacity by @YashRaj0307 in https://github.com/martin-francois/symphony-trello/pull/594
+* fix(ci): keep Error Prone updates compatible by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/607
+* test(ci): isolate host-dependent fixtures by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/608
+* chore(deps): update openrewrite toolchain by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/606
+* test(ci): decouple guards from dependency pins by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/610
+* chore(deps): update dependency org.openrewrite:rewrite-maven to v8.87.1 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/611
+* fix(ci): handle SpotBugs 4.10 false positives by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/612
+* fix(ci): bound parallel test resources by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/615
+* docs: add demo video to README by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/605
+* fix(deps): update all dependencies by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/609
+* fix(deps): update all dependencies by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/617
+* chore(deps): update dependency pnpm to v11.13.1 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/621
+* chore(deps): update all dependencies by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/622
+
+## New Contributors
+* @YashRaj0307 made their first contribution in https://github.com/martin-francois/symphony-trello/pull/594
+
+**Full Changelog**: https://github.com/martin-francois/symphony-trello/compare/v1.2.0...v1.3.0
+
 ## [1.2.0](https://github.com/martin-francois/symphony-trello/compare/v1.1.1...v1.2.0) (2026-07-14)
 
 
