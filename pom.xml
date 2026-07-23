@@ -42,7 +42,7 @@
     <jazzer.version>0.30.0</jazzer.version>
     <jspecify.version>1.0.0</jspecify.version>
     <rewrite-maven-plugin.version>6.44.0</rewrite-maven-plugin.version>
-    <rewrite-maven.version>8.87.1</rewrite-maven.version>
+    <rewrite-maven.version>8.87.2</rewrite-maven.version>
     <rewrite-error-prone-support.version>0.30.0</rewrite-error-prone-support.version>
     <rewrite-migrate-java.version>3.40.0</rewrite-migrate-java.version>
     <openrewrite.recipe.group-id>org.openrewrite.recipe</openrewrite.recipe.group-id>
