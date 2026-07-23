@@ -56,7 +56,7 @@ jobs:
       - name: Enable pnpm
         run: |
           corepack enable
-          corepack prepare pnpm@11.11.0 --activate
+          corepack prepare pnpm@11.13.1 --activate
       - name: Validate Renovate config
         run: pnpm dlx --package renovate renovate-config-validator renovate.json
 
@@ -75,7 +75,7 @@ jobs:
       - name: Enable pnpm
         run: |
           corepack enable
-          corepack prepare pnpm@11.11.0 --activate
+          corepack prepare pnpm@11.13.1 --activate
       - name: Install script tooling
         run: pnpm install --frozen-lockfile
       - name: Type-check and test scripts
