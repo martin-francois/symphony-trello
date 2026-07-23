@@ -2,7 +2,7 @@
   "name": "symphony-trello-tooling",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@11.11.0",
+  "packageManager": "pnpm@11.13.1",
   "scripts": {
     "check:scripts": "tsc --noEmit",
     "test:scripts": "node --test \"scripts/**/*.test.{js,cjs,mjs,ts,cts,mts}\"",
