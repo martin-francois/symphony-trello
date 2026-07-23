@@ -20,6 +20,13 @@ itself lives in [Java style & design preferences](java-style.md).
   rerun the analyzer, rerun the relevant build or test command, and keep changes scoped to the
   current issue. New static-analysis rules should start in report-only, candidate, or otherwise
   non-blocking mode until baseline findings are understood and useful.
+- Do not classify a third-party recipe behavior as an upstream defect from source inspection,
+  generated text, or a hypothetical semantic difference alone. Reproduce the transformation with
+  an executable minimal fixture against both the pinned artifact and current upstream default
+  branch, then demonstrate a violation of the recipe's documented contract with compilation, a
+  runtime assertion, an effective build model, or another objective oracle. Remove unverified,
+  fixed, intentional, and duplicate claims from upstream handoff material; keep local rejection
+  rationales separate when a recipe remains unsuitable for this repository.
 - Apply the same triage policy to every static-analysis tool, including PMD, CPD, SpotBugs,
   FindSecBugs, Error Prone, Picnic Error Prone Support, Semgrep, CodeQL, linters, and dependency
   analyzers. Do not call a rule noisy only because it reports many findings. A finding is justified

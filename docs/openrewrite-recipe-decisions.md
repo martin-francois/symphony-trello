@@ -81,7 +81,9 @@ source change was evaluated as `OpenRewrite -> Spotless`, not as raw OpenRewrite
 Each row is an independent result-producing matcher rejection. The complete re-audit retained every
 bare recipe or configured instance below for its stated boundary. The two safe current `UseListOf`
 outputs were applied manually without accepting that broader matcher. Parent-composite names do not
-stand in for these decisions.
+stand in for these decisions. The
+[reproduced upstream bug index](openrewrite-upstream-bugs/README.md) contains only defects that pass
+the executable pinned-artifact and current-upstream verification gate.
 
 | Recipe ID or configured instance | Catalog | Evidence | Individual rejection reason |
 | --- | --- | --- | --- |

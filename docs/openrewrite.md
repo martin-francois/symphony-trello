@@ -7,8 +7,11 @@ compiler, static-analysis, and test gates; it does not replace them. The normal
 The reviewed allowlist is the `ch.fmartin.symphony.trello.OpenRewriteMaintenance` composite in
 [`rewrite.yml`](../rewrite.yml). The recipe-specific positive and zero-result decisions are in the
 [recipe decision record](openrewrite-recipe-decisions.md) and its linked audit appendix. The
-composite contains 437 exact entries: the previous 405-entry reviewed state plus 32 application
-maintenance guards selected by the issue #600 re-evaluation.
+[reproduced upstream bug index](openrewrite-upstream-bugs/README.md) contains only rejected recipe
+defects that passed the pinned-artifact and current-upstream verification gate. The composite
+contains 442 exact entries: the previous 405-entry reviewed state, 32 application maintenance
+guards selected by the issue #600 re-evaluation, and five guards accepted after their recorded
+rejection evidence was disproved.
 
 ## Accepted Ordered State
 
