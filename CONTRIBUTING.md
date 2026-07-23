@@ -394,6 +394,20 @@ Before marking a PR ready for review:
 - complete the GitHub CLA check when prompted;
 - enable maintainer edits when contributing from a fork.
 
+### Review handoff labels
+
+Maintainers apply `waiting-for-author` when their feedback requires action or a response from the
+pull-request author. The automation posts the available handoff signals when it applies that label.
+
+After addressing all maintainer feedback, the pull-request author can return the pull request for
+maintainer attention by pushing a commit, marking a draft ready for review, re-requesting review, or
+posting a top-level comment whose complete body is `/ready`. The automation then replaces
+`waiting-for-author` with `needs-maintainer-review`.
+
+Progress comments and replies in inline review threads do not change the labels. Use `/ready` as the
+explicit pull-request-wide signal after resolving inline discussion, including a false-positive
+automated review finding.
+
 ## Running a Codex live bug bash
 
 This repository has two explicit Codex skills for maintainer QA:
