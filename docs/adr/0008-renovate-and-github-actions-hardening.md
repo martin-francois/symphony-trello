@@ -2,7 +2,9 @@
 status: accepted
 date: 2026-05-05
 decision-makers: [François Martin, Codex]
-consulted: [Renovate documentation, GitHub Actions hardening guidance]
+consulted:
+  - "[Renovate minimum release age documentation](https://docs.renovatebot.com/key-concepts/minimum-release-age/)"
+  - GitHub Actions hardening guidance
 informed: [Future maintainers]
 ---
 
@@ -27,7 +29,11 @@ How should dependency automation stay secure, maintainable, and clear for a Java
 * Keep Renovate configuration minimal and avoid restating inherited defaults.
 * Pin GitHub Actions to immutable full commit SHAs.
 * Let Renovate update pinned actions and the Corepack pnpm version.
-* Allow non-major updates to automerge after the configured release-age delay.
+* Apply one seven-day release-age cooldown to every ordinary dependency update.
+* Prevent Renovate from creating a branch or pull request for a version whose cooldown is pending,
+  so repository CI does not execute that version's code during the cooldown.
+* Continue creating pull requests for eligible versions even when newer versions in `group:all`
+  remain in cooldown.
 * Require human approval for major updates.
 * Avoid adding `package.json` solely to run a JavaScript CLI in a Java project.
 * Enforce release-note-ready pull request titles and retained pull request commit messages without
@@ -46,6 +52,23 @@ Chosen option: "Minimal Renovate config with action SHA pinning and regex manage
 commitlint",
 because it hardens CI and keeps automation behavior explicit only where it differs from presets.
 
+The repository-level `minimumReleaseAge` is seven days and is the only release-age setting.
+`minimumReleaseAgeBehaviour: "timestamp-required"` treats a version without a release timestamp as
+ineligible. `internalChecksFilter: "strict"` excludes ineligible versions before Renovate creates a
+branch or pull request. With `group:all`, Renovate still creates or updates the grouped pull request
+from versions that have passed the cooldown; newer ineligible versions join only after their
+cooldown passes. Renovate security updates retain their documented cooldown bypass so a disclosed
+vulnerability does not wait seven days for remediation.
+
+Renovate does not apply `minimumReleaseAge` to `digest`, `pin`, or `pinDigest` updates. A pure
+`digest` update changes the executed code without a trustworthy release timestamp, so that update
+type is disabled. `pin` and `pinDigest` remain enabled because they freeze the version or commit
+already selected by a mutable reference; they improve reproducibility without selecting a newer
+release. A GitHub Action version update still replaces its full SHA as part of the eligible major,
+minor, or patch update. `statusCheckWhen.minimumReleaseAge: "never"` suppresses the redundant branch
+status: strict filtering is the enforcement mechanism for version updates, and unageable digest
+updates cannot enter a Renovate branch.
+
 ### Consequences
 
 * Good, because GitHub Actions references are immutable full SHAs.
@@ -57,15 +80,29 @@ because it hardens CI and keeps automation behavior explicit only where it diffe
   multi-commit paths. The commit-message check uses a stricter config so breaking commits need both
   the visible `!` marker and the `BREAKING CHANGE:` footer that feeds generated changelog guidance.
 * Good, because major updates require human pull-request approval and do not automerge.
+* Good, because ordinary dependency code does not enter repository CI through a Renovate branch
+  before its seven-day cooldown passes.
+* Good, because eligible updates continue without waiting for unrelated versions that remain in
+  cooldown.
+* Good, because a pure digest change without a release timestamp cannot bypass the cooldown and
+  execute in repository CI.
+* Good, because Renovate can convert a newly introduced mutable version or action tag to an exact
+  version or immutable digest without waiting for another release.
 * Bad, because SHA-pinned actions are less readable than tag-only action references.
+* Bad, because ordinary fixes remain unavailable to Renovate for seven days after publication.
+* Bad, because a digest-only refresh waits for an eligible version update or an explicitly reviewed
+  manual change.
 * Bad, because the regex manager must stay aligned with the workflow command text.
 
 ### Confirmation
 
 Run `pnpm dlx --package renovate renovate-config-validator renovate.json` and
-`./mvnw -q spotless:check verify`. Review should confirm `.github/workflows/*.yml` uses full action
-SHAs with version comments, commitlint package pins are Renovate-managed, and Renovate config does
-not duplicate global policy in package rules.
+`./mvnw -q spotless:check verify`. Repository tests confirm that the only release-age policy is the
+repository-wide seven-day cooldown, timestamp-less releases remain ineligible, and strict internal
+checks prevent early branch creation. Tests also confirm that Renovate does not create unageable
+digest updates, continues to permit security-improving pins, and does not publish a redundant
+minimum-release-age status. Review should also confirm `.github/workflows/*.yml` uses full action
+SHAs with version comments and commitlint package pins are Renovate-managed.
 
 ## Pros and Cons of the Options
 
@@ -82,7 +119,8 @@ and one package rule for major updates.
   The retained-commit path additionally enforces complete breaking-change notation.
 * Good, because the config remains short enough to understand.
 * Neutral, because Renovate needs custom regexes for workflow command pins.
-* Bad, because readers must know that some behavior comes from presets.
+* Bad, because readers must know that some behavior comes from presets and Renovate's documented
+  strict-filter semantics.
 
 ### Unpinned GitHub Actions tags
 
@@ -113,4 +151,12 @@ Spell out automerge, release age, grouping, and dashboard behavior in multiple p
 The workflows use pnpm only for Renovate config validation and commitlint validation of PR titles
 and PR commit ranges. PR title linting uses the base config because titles cannot contain footers;
 commit-range linting uses the stricter message config so breaking commits include both `!` and a
-`BREAKING CHANGE:` footer. Java dependencies and build verification remain Maven-based.
+`BREAKING CHANGE:` footer. Java dependencies and build verification remain Maven-based. The
+seven-day cooldown is a supply-chain observation window, not an assertion that releases become safe
+after seven days. The upstream Semgrep supply-chain rule requires a repeated release age inside every
+package rule and does not account for Renovate's inherited repository-level setting. The Semgrep
+wrapper excludes that rule; the repository test instead enforces the stronger single global policy
+and rejects package-level overrides. Renovate release-age filtering supports version updates but not
+pure digest or pin updates. Pure digest updates remain disabled unless a future implementation can
+provide and enforce trustworthy release timestamps. Pins remain enabled because they make the
+currently resolved dependency immutable without selecting newer code.

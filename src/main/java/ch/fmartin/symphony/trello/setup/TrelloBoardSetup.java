@@ -865,7 +865,7 @@ public final class TrelloBoardSetup {
             return paths.map(Path::toAbsolutePath)
                     .map(Path::normalize)
                     .filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().endsWith(".md"))
+                    .filter(path -> PathNames.fileName(path).endsWith(".md"))
                     .filter(path -> !path.equals(absolute))
                     .toList();
         } catch (IOException e) {

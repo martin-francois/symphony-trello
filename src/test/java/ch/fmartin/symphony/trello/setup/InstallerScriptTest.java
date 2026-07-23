@@ -2,6 +2,8 @@ package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.*;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -30,6 +32,152 @@ final class InstallerScriptTest {
 
     @TempDir
     Path temporaryDirectory;
+
+    @Test
+    void fixtureCapturesOutputLargerThanProcessPipesWithoutDeadlocking() throws Exception {
+        // given
+        Path source = temporaryDirectory.resolve("LargeOutput.java");
+        Files.writeString(
+                source,
+                """
+                public class LargeOutput {
+                    public static void main(String[] arguments) {
+                        System.out.print("o".repeat(262_144));
+                        System.err.print("e".repeat(262_144));
+                    }
+                }
+                """);
+        Path java = Path.of(System.getProperty("java.home"), "bin", isWindows() ? "java.exe" : "java");
+        var processBuilder = new ProcessBuilder(java.toString(), source.toString());
+        for (String launcherOption : List.of("JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_JAVA_OPTIONS")) {
+            processBuilder.environment().remove(launcherOption);
+        }
+
+        // when
+        ProcessResult result = run(processBuilder, "", 60);
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .as("captured stdout and stderr")
+                .hasSize(524_288)
+                .startsWith("o")
+                .endsWith("e");
+    }
+
+    @Test
+    void fixtureStartsTimeoutBeforeChildConsumesLargeInput() throws Exception {
+        // given
+        Path source = temporaryDirectory.resolve("DelayedInput.java");
+        Files.writeString(
+                source,
+                """
+                public class DelayedInput {
+                    public static void main(String[] arguments) throws Exception {
+                        Thread.sleep(3_000);
+                    }
+                }
+                """);
+        Path java = Path.of(System.getProperty("java.home"), "bin", isWindows() ? "java.exe" : "java");
+        var processBuilder = new ProcessBuilder(java.toString(), source.toString());
+        for (String launcherOption : List.of("JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_JAVA_OPTIONS")) {
+            processBuilder.environment().remove(launcherOption);
+        }
+
+        // when
+        Throwable failure = catchThrowable(() -> run(processBuilder, "i".repeat(1_048_576), 1));
+
+        // then
+        assertThat(failure).isInstanceOf(AssertionError.class).hasMessageContaining("process timed out");
+    }
+
+    @Test
+    void fixtureReplacesMalformedUtf8InCapturedOutput() throws Exception {
+        // given
+        Path source = temporaryDirectory.resolve("MalformedOutput.java");
+        Files.writeString(
+                source,
+                """
+                public class MalformedOutput {
+                    public static void main(String[] arguments) throws Exception {
+                        System.out.write(new byte[] {'o', 'u', 't', (byte) 0xff});
+                        System.err.write(new byte[] {'e', 'r', 'r', (byte) 0xff});
+                    }
+                }
+                """);
+        Path java = Path.of(System.getProperty("java.home"), "bin", isWindows() ? "java.exe" : "java");
+        var processBuilder = new ProcessBuilder(java.toString(), source.toString());
+        for (String launcherOption : List.of("JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_JAVA_OPTIONS")) {
+            processBuilder.environment().remove(launcherOption);
+        }
+
+        // when
+        ProcessResult result = run(processBuilder, "", 60);
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output()).isEqualTo("out\ufffderr\ufffd");
+    }
+
+    @Test
+    void fixtureTerminatesDescendantsWhenProcessTimesOut() throws Exception {
+        // given
+        assumeFalse(isWindows());
+        assumeTrue(commandExists("bash"));
+        Path descendantPid = temporaryDirectory.resolve("descendant.pid");
+        var processBuilder = new ProcessBuilder(
+                "bash",
+                "-c",
+                "sleep 60 & child=$!; printf '%s' \"$child\" > "
+                        + shellQuote(descendantPid.toString())
+                        + "; wait \"$child\"");
+
+        // when
+        assertThatThrownBy(() -> run(processBuilder, "", 1))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("process timed out");
+
+        // then
+        assertThat(descendantPid).exists();
+        long pid = Long.parseLong(Files.readString(descendantPid));
+        assertThat(ProcessHandle.of(pid).filter(ProcessHandle::isAlive))
+                .as("timed-out descendant process")
+                .isEmpty();
+    }
+
+    @Test
+    void fixtureTerminatesReplacementDescendantsSpawnedDuringTimeoutCleanup() throws Exception {
+        // given
+        assumeFalse(isWindows());
+        assumeTrue(commandExists("bash"));
+        Path originalPid = temporaryDirectory.resolve("original.pid");
+        Path replacementPid = temporaryDirectory.resolve("replacement.pid");
+        var processBuilder = new ProcessBuilder(
+                "bash",
+                "-c",
+                "trap 'trap - CHLD; sleep 60 & printf '%s' \"$!\" > \"$2\"' CHLD; "
+                        + "sleep 60 & child=$!; printf '%s' \"$child\" > \"$1\"; wait \"$child\"; wait",
+                "fixture-timeout",
+                originalPid.toString(),
+                replacementPid.toString());
+
+        // when
+        assertThatThrownBy(() -> run(processBuilder, "", 1))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("process timed out");
+
+        // then
+        assertThat(originalPid).exists();
+        assertThat(replacementPid).exists();
+        assertThat(ProcessHandle.of(Long.parseLong(Files.readString(originalPid)))
+                        .filter(ProcessHandle::isAlive))
+                .as("original timed-out descendant process")
+                .isEmpty();
+        assertThat(ProcessHandle.of(Long.parseLong(Files.readString(replacementPid)))
+                        .filter(ProcessHandle::isAlive))
+                .as("replacement timed-out descendant process")
+                .isEmpty();
+    }
 
     @ParameterizedTest(name = "{0} syntax")
     @ValueSource(strings = {"install.sh", "uninstall.sh"})

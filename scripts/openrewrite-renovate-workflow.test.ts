@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {readFileSync} from "node:fs";
+import {readFileSync, readdirSync} from "node:fs";
 import test from "node:test";
 import {parse} from "yaml";
 
@@ -32,6 +32,7 @@ interface WorkflowDocument {
     Record<
       string,
       {
+        readonly "runs-on"?: unknown;
         readonly steps?: readonly {
           readonly name?: unknown;
           readonly with?: {readonly script?: unknown};
@@ -58,17 +59,26 @@ const RENOVATE = readFileSync(new URL("../renovate.json", import.meta.url), "utf
 const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
   readonly branchConcurrentLimit?: number;
   readonly dependencyDashboardApproval?: boolean;
+  readonly extends?: readonly string[];
+  readonly internalChecksFilter?: string;
+  readonly minimumReleaseAge?: string;
+  readonly minimumReleaseAgeBehaviour?: string;
   readonly packageRules: readonly {
     readonly automerge?: boolean;
     readonly branchTopic?: string;
     readonly dependencyDashboardApproval?: boolean;
+    readonly enabled?: boolean;
     readonly groupName?: string;
     readonly matchDepTypes?: readonly string[];
     readonly matchPackageNames?: readonly string[];
     readonly matchUpdateTypes?: readonly string[];
+    readonly minimumReleaseAge?: string;
     readonly platformAutomerge?: boolean;
   }[];
   readonly prConcurrentLimit?: number;
+  readonly statusCheckWhen?: {
+    readonly minimumReleaseAge?: string;
+  };
 };
 const CANDIDATE: PullRequest = {
   base: {ref: "main", repo: {full_name: "owner/repo"}},
@@ -893,6 +903,26 @@ test("updated OpenRewrite artifacts remain isolated in pull request CI", () => {
   );
 });
 
+test("Blacksmith runners are reserved for the critical-path test jobs", () => {
+  const workflowDirectory = new URL("../.github/workflows/", import.meta.url);
+  const blacksmithJobs: string[] = [];
+
+  for (const fileName of readdirSync(workflowDirectory).filter((name) => /\.ya?ml$/u.test(name))) {
+    const workflow = parse(readFileSync(new URL(fileName, workflowDirectory), "utf8")) as
+      WorkflowDocument;
+    for (const [jobName, job] of Object.entries(workflow.jobs ?? {})) {
+      if (typeof job["runs-on"] === "string" && job["runs-on"].startsWith("blacksmith-")) {
+        blacksmithJobs.push(`${fileName}:${jobName}:${job["runs-on"]}`);
+      }
+    }
+  }
+
+  assert.deepEqual(blacksmithJobs.sort(), [
+    "ci.yml:test:blacksmith-2vcpu-ubuntu-2404",
+    "ci.yml:windows-powershell:blacksmith-2vcpu-windows-2025",
+  ]);
+});
+
 test("the OpenRewrite rule selects exact toolchain packages across Maven dependency types", () => {
   const rule = RENOVATE_CONFIG.packageRules.find(
     ({groupName}) => groupName === "OpenRewrite toolchain",
@@ -926,6 +956,32 @@ test("Renovate never requires dependency dashboard approval", () => {
   assert.equal(RENOVATE_CONFIG.dependencyDashboardApproval, false);
   for (const rule of RENOVATE_CONFIG.packageRules) {
     assert.equal(rule.dependencyDashboardApproval, undefined);
+  }
+});
+
+test("Renovate enforces the repository-wide seven-day dependency cooldown", () => {
+  assert.equal(RENOVATE_CONFIG.minimumReleaseAge, "7 days");
+  assert.equal(RENOVATE_CONFIG.minimumReleaseAgeBehaviour, "timestamp-required");
+  assert.equal(RENOVATE_CONFIG.internalChecksFilter, "strict");
+  assert.equal(RENOVATE_CONFIG.statusCheckWhen?.minimumReleaseAge, "never");
+  assert.ok(RENOVATE_CONFIG.extends?.includes("group:all"));
+  for (const rule of RENOVATE_CONFIG.packageRules) {
+    assert.equal(rule.minimumReleaseAge, undefined);
+  }
+
+  const digestOnlyUpdateRule = RENOVATE_CONFIG.packageRules.find(({matchUpdateTypes}) =>
+    matchUpdateTypes?.includes("digest"),
+  );
+  assert.deepEqual(digestOnlyUpdateRule?.matchUpdateTypes, ["digest"]);
+  assert.equal(digestOnlyUpdateRule?.enabled, false);
+  for (const pinUpdateType of ["pin", "pinDigest"]) {
+    assert.ok(
+      RENOVATE_CONFIG.packageRules.every(
+        ({enabled, matchUpdateTypes}) =>
+          enabled !== false || !matchUpdateTypes?.includes(pinUpdateType),
+      ),
+      `${pinUpdateType} updates must remain enabled`,
+    );
   }
 });
 

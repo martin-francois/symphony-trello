@@ -11,13 +11,13 @@ permissions: read-all
 jobs:
   lint:
     if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - name: Markdown lint
-        uses: DavidAnson/markdownlint-cli2-action@ded1f9488f68a970bc66ea5619e13e9b52e601cd # v23
+        uses: DavidAnson/markdownlint-cli2-action@8de2aa07cae85fd17c0b35642db70cf5495f1d25 # v24
       - name: Installer shell syntax
         run: |
           bash -n \
@@ -45,45 +45,45 @@ jobs:
 
   renovate:
     if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "24"
       - name: Enable pnpm
         run: |
           corepack enable
-          corepack prepare pnpm@11.3.0 --activate
+          corepack prepare pnpm@11.13.1 --activate
       - name: Validate Renovate config
         run: pnpm dlx --package renovate renovate-config-validator renovate.json
 
   script-tests:
     if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "24"
       - name: Enable pnpm
         run: |
           corepack enable
-          corepack prepare pnpm@11.3.0 --activate
+          corepack prepare pnpm@11.13.1 --activate
       - name: Install script tooling
         run: pnpm install --frozen-lockfile
       - name: Type-check and test scripts
         run: pnpm run verify:scripts
 
   test:
-    # ADR 0048 keeps this job on 2 vCPU and uses a lower hosted JUnit parallelism
-    # than the local Maven default to minimize normalized Blacksmith cost.
+    # ADR 0048 keeps this job on 2 vCPU and matches hosted JUnit parallelism
+    # to the runner's vCPU count to minimize normalized Blacksmith cost.
     if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     env:
@@ -94,7 +94,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
       - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5
@@ -169,7 +169,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5
         with:
           distribution: temurin

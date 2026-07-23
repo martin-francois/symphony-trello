@@ -595,7 +595,7 @@ final class TrelloBoardConnector {
             return Set.of();
         }
         try (var stream = Files.list(parent)) {
-            return stream.filter(path -> path.getFileName().toString().matches("WORKFLOW(\\..*)?\\.md"))
+            return stream.filter(path -> PathNames.fileName(path).matches("WORKFLOW(\\..*)?\\.md"))
                     .map(Path::toAbsolutePath)
                     .map(Path::normalize)
                     .filter(path -> !replacingTarget || !path.equals(absolute))

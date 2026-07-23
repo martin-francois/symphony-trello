@@ -44,4 +44,40 @@
     <Class name="ch.fmartin.symphony.trello.setup.WorkflowConfigEditor"/>
     <Method name="writeAtomically"/>
   </Match>
+
+  <!-- Repository-source records use constructor-enforced discriminated-state invariants. SpotBugs 4.10.3.0 does not infer those invariants or that repeated record accessors return the same immutable field. -->
+  <Match>
+    <Bug pattern="NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE"/>
+    <Class name="ch.fmartin.symphony.trello.repository.RepositorySourcePrompt"/>
+    <Method name="render"
+            params="ch.fmartin.symphony.trello.repository.RepositorySourceSelection,ch.fmartin.symphony.trello.config.EffectiveConfig$RepositoryConfig"
+            returns="java.lang.String"/>
+  </Match>
+  <Match>
+    <Bug pattern="NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE"/>
+    <Class name="ch.fmartin.symphony.trello.repository.RepositorySourcePrompt"/>
+    <Method name="selectedRemote"/>
+  </Match>
+  <Match>
+    <Bug pattern="NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE"/>
+    <Class name="ch.fmartin.symphony.trello.repository.RepositorySourceResolver"/>
+    <Method name="equivalent"/>
+  </Match>
+  <Match>
+    <Bug pattern="NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE"/>
+    <Class name="ch.fmartin.symphony.trello.repository.RepositorySourceResolver"/>
+    <Method name="workflowDefault"/>
+  </Match>
+
+  <!-- Terminal deliberately lends its output streams to setup and diagnostic callers. The terminal retains ownership, and callers must not close them. -->
+  <Match>
+    <Bug pattern="EI_EXPOSE_REP"/>
+    <Class name="ch.fmartin.symphony.trello.setup.StreamTerminal"/>
+    <Method name="out"/>
+  </Match>
+  <Match>
+    <Bug pattern="EI_EXPOSE_REP"/>
+    <Class name="ch.fmartin.symphony.trello.setup.StreamTerminal"/>
+    <Method name="err"/>
+  </Match>
 </FindBugsFilter>

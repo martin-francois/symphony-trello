@@ -11,8 +11,12 @@
   "rangeStrategy": "replace",
   "prConcurrentLimit": 0,
   "branchConcurrentLimit": 0,
-  "minimumReleaseAge": "3 days",
+  "minimumReleaseAge": "7 days",
   "minimumReleaseAgeBehaviour": "timestamp-required",
+  "internalChecksFilter": "strict",
+  "statusCheckWhen": {
+    "minimumReleaseAge": "never"
+  },
   "automerge": true,
   "dependencyDashboardApproval": false,
   "vulnerabilityAlerts": {
@@ -93,6 +97,11 @@
   },
   "packageRules": [
     {
+      "description": "Do not create digest updates that Renovate cannot age-gate",
+      "matchUpdateTypes": ["digest"],
+      "enabled": false
+    },
+    {
       "matchDatasources": ["maven"],
       "matchPackageNames": [
         "com.google.errorprone:error_prone_core",
@@ -104,7 +113,6 @@
       ],
       "groupName": "OpenRewrite toolchain",
       "branchTopic": "openrewrite-toolchain",
-      "minimumReleaseAge": "7 days",
       "rebaseWhen": "behind-base-branch",
       "automerge": true,
       "platformAutomerge": false,
@@ -120,7 +128,6 @@
       "matchDatasources": ["maven"],
       "matchPackageNames": ["io.quarkus:quarkus-update-recipes"],
       "groupName": null,
-      "minimumReleaseAge": "7 days",
       "automerge": false,
       "addLabels": ["quarkus"],
       "prBodyNotes": [
@@ -130,7 +137,6 @@
     },
     {
       "matchPackageNames": ["tessl-labs/good-oss-citizen"],
-      "minimumReleaseAge": "7 days",
       "automerge": false,
       "addLabels": ["tessl"],
       "prBodyNotes": [

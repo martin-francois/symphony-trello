@@ -26,7 +26,7 @@ final class ManagedProcessStore {
             return List.of();
         }
         try (var stream = Files.list(stateHome)) {
-            return stream.filter(path -> path.getFileName().toString().endsWith(".pid"))
+            return stream.filter(path -> PathNames.fileName(path).endsWith(".pid"))
                     .sorted()
                     .toList();
         }

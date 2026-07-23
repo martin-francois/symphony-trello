@@ -17,10 +17,10 @@
     <archunit.version>1.4.2</archunit.version>
     <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
     <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
-    <quarkus.platform.version>3.37.2</quarkus.platform.version>
-    <opentelemetry.version>1.62.0</opentelemetry.version>
+    <quarkus.platform.version>3.37.3</quarkus.platform.version>
+    <opentelemetry.version>1.64.0</opentelemetry.version>
     <assertj.version>3.27.7</assertj.version>
-    <pebble.version>4.1.1</pebble.version>
+    <pebble.version>4.1.2</pebble.version>
     <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
     <maven-dependency-plugin.version>3.11.0</maven-dependency-plugin.version>
     <maven-failsafe-plugin.version>${surefire.version}</maven-failsafe-plugin.version>
@@ -34,7 +34,7 @@
     <error-prone.version>2.50.0</error-prone.version>
     <error-prone-support.version>0.30.0</error-prone-support.version>
     <picnic-refaster.namePattern>(CollectionRules[$]Collection(AddAllToCollectionBlock|Contains)|NullRules[$]RequireNonNullElseGet|PreconditionsRules[$]Check(Argument|State)WithMessage|PrimitiveRules[$]MathClampInt|StreamRules[$]StreamNoneMatch|StringBuilderRules[$]StringBuilderRepeat)</picnic-refaster.namePattern>
-    <jacoco.version>0.8.14</jacoco.version>
+    <jacoco.version>0.8.15</jacoco.version>
     <mockito.version>5.23.0</mockito.version>
     <picocli.version>4.7.7</picocli.version>
     <findsecbugs.version>1.14.0</findsecbugs.version>
@@ -42,14 +42,14 @@
     <jazzer.version>0.30.0</jazzer.version>
     <jspecify.version>1.0.0</jspecify.version>
     <rewrite-maven-plugin.version>6.44.0</rewrite-maven-plugin.version>
-    <rewrite-maven.version>8.87.0</rewrite-maven.version>
+    <rewrite-maven.version>8.87.1</rewrite-maven.version>
     <rewrite-error-prone-support.version>0.30.0</rewrite-error-prone-support.version>
     <rewrite-migrate-java.version>3.40.0</rewrite-migrate-java.version>
     <openrewrite.recipe.group-id>org.openrewrite.recipe</openrewrite.recipe.group-id>
     <rewrite-static-analysis.version>2.39.0</rewrite-static-analysis.version>
     <rewrite-testing-frameworks.version>3.42.0</rewrite-testing-frameworks.version>
-    <spotbugs-maven-plugin.version>4.9.8.3</spotbugs-maven-plugin.version>
-    <spotless.version>3.5.1</spotless.version>
+    <spotbugs-maven-plugin.version>4.10.3.0</spotbugs-maven-plugin.version>
+    <spotless.version>3.8.0</spotless.version>
     <surefire.version>3.5.6</surefire.version>
     <test.jvm.instrumentation.args>-XX:+EnableDynamicAgentLoading --enable-native-access=ALL-UNNAMED</test.jvm.instrumentation.args>
   </properties>
@@ -264,6 +264,7 @@
           <systemPropertyVariables>
             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
             <junit.jupiter.execution.parallel.config.fixed.parallelism>${junit.parallel.config.fixed.parallelism}</junit.jupiter.execution.parallel.config.fixed.parallelism>
+            <junit.jupiter.execution.parallel.config.fixed.max-pool-size>${junit.parallel.config.fixed.parallelism}</junit.jupiter.execution.parallel.config.fixed.max-pool-size>
             <junit.jupiter.execution.parallel.config.strategy>fixed</junit.jupiter.execution.parallel.config.strategy>
             <junit.jupiter.execution.parallel.enabled>${junit.parallel.enabled}</junit.jupiter.execution.parallel.enabled>
             <junit.jupiter.execution.parallel.mode.classes.default>concurrent</junit.jupiter.execution.parallel.mode.classes.default>
@@ -281,6 +282,7 @@
           <systemPropertyVariables>
             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
             <junit.jupiter.execution.parallel.config.fixed.parallelism>${junit.parallel.config.fixed.parallelism}</junit.jupiter.execution.parallel.config.fixed.parallelism>
+            <junit.jupiter.execution.parallel.config.fixed.max-pool-size>${junit.parallel.config.fixed.parallelism}</junit.jupiter.execution.parallel.config.fixed.max-pool-size>
             <junit.jupiter.execution.parallel.config.strategy>fixed</junit.jupiter.execution.parallel.config.strategy>
             <junit.jupiter.execution.parallel.enabled>${junit.parallel.enabled}</junit.jupiter.execution.parallel.enabled>
             <junit.jupiter.execution.parallel.mode.classes.default>concurrent</junit.jupiter.execution.parallel.mode.classes.default>
