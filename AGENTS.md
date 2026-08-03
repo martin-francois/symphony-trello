@@ -71,12 +71,14 @@ guidance here, put it in docs/agents and add a link instead.
 - [Deployment & live verification](docs/agents/deployment-and-live-verification.md)
 - [Java style & design preferences](docs/agents/java-style.md)
 - [Static analysis policy](docs/agents/static-analysis.md)
+- [Dependency updates](docs/agents/dependency-updates.md)
 - [Documentation & README](docs/agents/documentation-and-readme.md)
 - [GitHub issue triage](docs/agents/github-issue-triage.md)
 - [Autonomy & escalation](docs/agents/autonomy-and-escalation.md) including the Codex review/fix loop
 - [Private-context redaction](docs/agents/private-context-redaction.md)
 - [Maintaining agent docs](docs/agents/maintaining-agent-docs.md)
 - [Progressive disclosure source](docs/agents/progressive-disclosure-source.md)
+- [Reference provenance](docs/agents/reference-provenance.md)
 
 # Agent Rules <!-- tessl-managed -->
 

@@ -38,6 +38,11 @@ summaries, and how to use the local diagnostics tooling for private investigatio
   investigation data: do not paste it into GitHub issues, Trello comments, PR descriptions, committed
   files, or final user summaries. Use it to decide what to inspect or fix, then report only sanitized
   conclusions unless the user explicitly asks for local private values.
+- For an error, warning, or unexpected state, inspect available sanitized diagnostics, logs, and
+  persisted state before proposing a cause. If that evidence cannot identify the failing stage, add
+  the minimum safe diagnostic context, correlation, or state needed to identify it next time and add
+  a regression proving the evidence survives redaction. Do not substitute speculation for a missing
+  observation boundary.
 
 ## References
 

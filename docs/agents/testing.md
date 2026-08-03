@@ -114,6 +114,13 @@ parallel safety. Live end-to-end and deployed-verification rules live in
   the reproduced bug, stop, explain the testability blocker, and ask the requester how to proceed.
 - After establishing the red test, fix the identified mechanism and run the focused test until it is
   green. Keep the regression test in the normal durable test suite at the narrowest useful level.
+- For every escaped defect, record why the existing suite missed it, add the regression at the
+  escaped boundary, audit adjacent instances of the same pattern, and add real-boundary coverage
+  when a mock or incomplete fixture contributed to the escape. Unit coverage does not replace a
+  missing CLI-process, generated-workflow, installer, Trello, filesystem, or deployed-runtime check.
+- Maintain a release-acceptance inventory of supported user workflows and their owning unit,
+  integration, process-boundary, and live-verification evidence. Review it before calling a release
+  ready; coverage percentages do not prove behavioral completeness.
 - Fuzz tests are regression tests in normal Maven runs. When changing parser, prompt-line safety,
   workflow loading, or Trello reference/checklist parsing logic, run the focused fuzzing and chaos
   regression command from [Fuzzing](../fuzzing.md). If the user asks for active or continuous

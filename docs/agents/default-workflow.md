@@ -24,6 +24,8 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
    tool output that should never be tracked to `.gitignore` instead of repeatedly cleaning it by
    hand. If `tessl` is not available, say so briefly and continue by following `AGENTS.md`,
    `CONTRIBUTING.md`, `AI_CONTRIBUTION_POLICY.md`, and the issue/PR templates directly.
+3. Perform the contract impact check in
+   [Specification & ADR discipline](specification-and-adr-discipline.md#contract-impact-check).
 
 ## Making the change
 
@@ -46,6 +48,8 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
   seeing that tradeoff. Do not leave unrelated committed work unpublished on a local branch; push and
   create or update the selected pull request, or push `main` only when the user chose that path.
 - Update documentation and ADRs when behavior, setup, architecture, or tradeoffs change.
+- Repeat the contract impact check whenever a product or technical decision changes and against the
+  final outgoing diff before publishing.
 - Treat the ADR check as a decision gate, not as handoff cleanup. As soon as a task selects among
   meaningful alternatives or rejects a plausible approach, stop before implementing, committing, or
   publishing the chosen path and apply
@@ -255,6 +259,7 @@ optional verification. Follow this order:
   repository wrappers default to Docker; on a Podman host, set
   `SYMPHONY_TRELLO_CONTAINER_RUNTIME=podman` so verification calls Podman directly without a
   compatibility-wrapper notice.
+
 - When required verification cannot execute reliably because a tool, dependency, host capability,
   permission, or workflow facility is unavailable, treat that as unresolved friction. An ordinary
   code or test failure is a defect to diagnose and fix, not automatically friction. An unexpected,
