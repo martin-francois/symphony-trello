@@ -47,6 +47,20 @@ label mechanics live in [GitHub issue triage](github-issue-triage.md).
   the Java scheduler/service must own behavior that may fit better in generated workflow text,
   repository-local skills, or scoped agent tools.
 
+## Contract impact check
+
+Perform this check before implementation, whenever a decision changes, and before publishing:
+
+1. Identify effects on `SPEC.md`, ADRs, tests, user and operator documentation, CLI and workflow
+   contracts, deployment behavior, release artifacts, and companion repositories.
+2. Update every affected artifact in the same cohesive change.
+3. Record explicit no-impact conclusions for relevant surfaces that do not change.
+4. Check both directions: every implemented contract belongs in the specification, and every
+   applicable specification requirement has implementation and verification evidence.
+
+Pull-request review enforces the recorded impact analysis. Existing specification, ADR, and
+documentation checks enforce the changed artifacts.
+
 ## When to write an ADR
 
 - If a decision explains why an obvious alternative was not chosen, record it in `docs/adr/` using
@@ -133,3 +147,4 @@ label mechanics live in [GitHub issue triage](github-issue-triage.md).
 - [GitHub issue triage](github-issue-triage.md)
 - [Default workflow](default-workflow.md)
 - [Documentation & README](documentation-and-readme.md)
+- [Dependency updates](dependency-updates.md)
