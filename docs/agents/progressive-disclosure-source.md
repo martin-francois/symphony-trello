@@ -2,6 +2,10 @@
 
 This file is the source of truth for the structure and maintenance approach.
 
+The structure originated in `martinfrancois/fmartin.ch`. Later improvements are exchanged with
+`martinfrancois/foodOrganizationApp`; exact inspected revisions and adopted practices are recorded in
+[Reference provenance](reference-provenance.md).
+
 ```
 I want you to refactor my AGENTS.md file to follow progressive disclosure principles.
 

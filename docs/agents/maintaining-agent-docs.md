@@ -26,6 +26,12 @@
   when observed behavior shows agents make the wrong choice without the note.
 - When fixing a documentation pattern, search the relevant file or docs set for similar instances
   before committing instead of correcting only the one sentence the user pointed out.
+- Every new or changed **MUST** or **MUST NOT** rule must name its local or CI enforcement. Add the
+  check in the same change when automation can prove the rule. When automation cannot prove it,
+  state the required review or live-verification evidence instead.
+- If a mistake occurred despite an existing rule, strengthen the wording, move the rule closer to
+  the missed workflow step, add a cross-link, or automate it. Do not leave an ineffective rule
+  unchanged merely because it already exists.
 
 ## What may be added to AGENTS.md (allowlist)
 
@@ -49,6 +55,8 @@
   [Deployment & live verification](deployment-and-live-verification.md).
 - Issue-triage labels and rules — see [GitHub issue triage](github-issue-triage.md).
 - Tool-specific instructions (Codex review/fix loop, diagnostics, private-context scanner).
+- Dependency declaration and Renovate ownership rules — see
+  [Dependency updates](dependency-updates.md).
 
 ## Where to put new guidance (decision tree)
 
