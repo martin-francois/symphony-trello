@@ -56,6 +56,7 @@ const DEPENDENCY_SUBMISSION_WORKFLOW = readFileSync(
   "utf8",
 );
 const RENOVATE = readFileSync(new URL("../renovate.json", import.meta.url), "utf8");
+const SCRIPTS = new URL("./", import.meta.url);
 const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
   readonly branchConcurrentLimit?: number;
   readonly dependencyDashboardApproval?: boolean;
@@ -63,6 +64,10 @@ const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
   readonly internalChecksFilter?: string;
   readonly minimumReleaseAge?: string;
   readonly minimumReleaseAgeBehaviour?: string;
+  readonly pinDigests?: boolean;
+  readonly customManagers: readonly {
+    readonly matchStrings?: readonly string[];
+  }[];
   readonly packageRules: readonly {
     readonly automerge?: boolean;
     readonly branchTopic?: string;
@@ -964,23 +969,38 @@ test("Renovate enforces the repository-wide seven-day dependency cooldown", () =
   assert.equal(RENOVATE_CONFIG.minimumReleaseAgeBehaviour, "timestamp-required");
   assert.equal(RENOVATE_CONFIG.internalChecksFilter, "strict");
   assert.equal(RENOVATE_CONFIG.statusCheckWhen?.minimumReleaseAge, "never");
+  assert.equal(RENOVATE_CONFIG.pinDigests, true);
   assert.ok(RENOVATE_CONFIG.extends?.includes("group:all"));
   for (const rule of RENOVATE_CONFIG.packageRules) {
     assert.equal(rule.minimumReleaseAge, undefined);
   }
 
-  const digestOnlyUpdateRule = RENOVATE_CONFIG.packageRules.find(({matchUpdateTypes}) =>
-    matchUpdateTypes?.includes("digest"),
-  );
-  assert.deepEqual(digestOnlyUpdateRule?.matchUpdateTypes, ["digest"]);
-  assert.equal(digestOnlyUpdateRule?.enabled, false);
-  for (const pinUpdateType of ["pin", "pinDigest"]) {
+  for (const immutableUpdateType of ["digest", "pin", "pinDigest"]) {
     assert.ok(
       RENOVATE_CONFIG.packageRules.every(
         ({enabled, matchUpdateTypes}) =>
-          enabled !== false || !matchUpdateTypes?.includes(pinUpdateType),
+          enabled !== false || !matchUpdateTypes?.includes(immutableUpdateType),
       ),
-      `${pinUpdateType} updates must remain enabled`,
+      `${immutableUpdateType} updates must remain enabled`,
+    );
+  }
+});
+
+test("Renovate owns immutable tool-image declarations", () => {
+  const managedImagePatterns = RENOVATE_CONFIG.customManagers.flatMap(
+    ({matchStrings}) => matchStrings ?? [],
+  );
+
+  for (const script of [
+    "betterleaks-docker.sh",
+    "pwsh-docker.sh",
+    "semgrep-docker.sh",
+  ]) {
+    const source = readFileSync(new URL(script, SCRIPTS), "utf8");
+    assert.match(source, /:[^\s"'}]+@sha256:[a-f0-9]{64}/u);
+    assert.ok(
+      managedImagePatterns.some((pattern) => new RegExp(pattern, "u").test(source)),
+      `${script} must contain a digest-pinned image owned by Renovate`,
     );
   }
 });

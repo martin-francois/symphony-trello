@@ -16,6 +16,8 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 final class ContainerRuntimeScriptTest {
+    private static final String SHA256_DIGEST_PATTERN = "@sha256:[a-f0-9]{64}$";
+
     @TempDir
     Path tempDir;
 
@@ -158,15 +160,15 @@ final class ContainerRuntimeScriptTest {
         return Stream.of(
                 new ContainerWrapper(
                         "betterleaks-docker.sh",
-                        "(?m)^ghcr\\.io/betterleaks/betterleaks:v[0-9]+\\.[0-9]+\\.[0-9]+$",
+                        "(?m)^ghcr\\.io/betterleaks/betterleaks:v[0-9]+\\.[0-9]+\\.[0-9]+" + SHA256_DIGEST_PATTERN,
                         "ghcr.io/betterleaks/betterleaks"),
                 new ContainerWrapper(
                         "semgrep-docker.sh",
-                        "(?m)^docker\\.io/semgrep/semgrep:[0-9]+\\.[0-9]+\\.[0-9]+$",
+                        "(?m)^docker\\.io/semgrep/semgrep:[0-9]+\\.[0-9]+\\.[0-9]+" + SHA256_DIGEST_PATTERN,
                         "docker.io/semgrep/semgrep"),
                 new ContainerWrapper(
                         "pwsh-docker.sh",
-                        "(?m)^mcr\\.microsoft\\.com/dotnet/sdk:[0-9]+\\.[0-9]+$",
+                        "(?m)^mcr\\.microsoft\\.com/dotnet/sdk:[0-9]+\\.[0-9]+" + SHA256_DIGEST_PATTERN,
                         "mcr.microsoft.com/dotnet/sdk"));
     }
 

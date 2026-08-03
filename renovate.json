@@ -9,6 +9,7 @@
   "reviewers": ["martinfrancois"],
   "labels": ["dependencies"],
   "rangeStrategy": "replace",
+  "pinDigests": true,
   "prConcurrentLimit": 0,
   "branchConcurrentLimit": 0,
   "minimumReleaseAge": "7 days",
@@ -64,7 +65,9 @@
         "/^\\.github/workflows/ci\\.yml$/",
         "/^scripts/pwsh-docker\\.sh$/"
       ],
-      "matchStrings": ["(?<depName>mcr\\.microsoft\\.com/dotnet/sdk):(?<currentValue>\\d+\\.\\d+)"],
+      "matchStrings": [
+        "(?<depName>mcr\\.microsoft\\.com/dotnet/sdk):(?<currentValue>\\d+\\.\\d+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
     },
@@ -73,7 +76,9 @@
       "managerFilePatterns": [
         "/^scripts/semgrep-docker\\.sh$/"
       ],
-      "matchStrings": ["docker\\.io/(?<depName>semgrep/semgrep):(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "matchStrings": [
+        "docker\\.io/(?<depName>semgrep/semgrep):(?<currentValue>\\d+\\.\\d+\\.\\d+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
     },
@@ -82,7 +87,9 @@
       "managerFilePatterns": [
         "/^scripts/betterleaks-docker\\.sh$/"
       ],
-      "matchStrings": ["(?<depName>ghcr\\.io/betterleaks/betterleaks):v(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "matchStrings": [
+        "(?<depName>ghcr\\.io/betterleaks/betterleaks):v(?<currentValue>\\d+\\.\\d+\\.\\d+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
     }
@@ -96,11 +103,6 @@
     }
   },
   "packageRules": [
-    {
-      "description": "Do not create digest updates that Renovate cannot age-gate",
-      "matchUpdateTypes": ["digest"],
-      "enabled": false
-    },
     {
       "matchDatasources": ["maven"],
       "matchPackageNames": [
