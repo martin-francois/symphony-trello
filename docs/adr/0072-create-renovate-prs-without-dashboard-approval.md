@@ -54,12 +54,12 @@ pending version does not prevent eligible versions from creating or updating the
 request. Renovate's security-update cooldown bypass remains available for disclosed
 vulnerabilities.
 
-Pure `digest` updates remain disabled because Renovate does not apply the minimum release age to
-them even though they change executed code. `pin` and `pinDigest` remain enabled because they make
-the already selected version or commit immutable without selecting a newer release.
+Digest updates remain enabled. Renovate uses the matched version's release timestamp when the
+datasource provides one, and the repository's `timestamp-required` behavior leaves an update pending
+when that evidence is unavailable. `pin` and `pinDigest` remain enabled because they make the already
+selected version or commit immutable without selecting a newer release.
 `statusCheckWhen.minimumReleaseAge: "never"` omits the branch-level status; strict filtering decides
-version eligibility before branch creation, while the disabled digest rule prevents timestamp-less
-code changes from bypassing that filter.
+eligibility before branch creation.
 
 The repository-wide major-update rule keeps `automerge: false`, so any pull request containing a
 major update requires human pull-request approval and manual merge. Package-specific rules for
