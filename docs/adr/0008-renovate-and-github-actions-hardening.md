@@ -60,14 +60,13 @@ from versions that have passed the cooldown; newer ineligible versions join only
 cooldown passes. Renovate security updates retain their documented cooldown bypass so a disclosed
 vulnerability does not wait seven days for remediation.
 
-Renovate does not apply `minimumReleaseAge` to `digest`, `pin`, or `pinDigest` updates. A pure
-`digest` update changes the executed code without a trustworthy release timestamp, so that update
-type is disabled. `pin` and `pinDigest` remain enabled because they freeze the version or commit
-already selected by a mutable reference; they improve reproducibility without selecting a newer
-release. A GitHub Action version update still replaces its full SHA as part of the eligible major,
-minor, or patch update. `statusCheckWhen.minimumReleaseAge: "never"` suppresses the redundant branch
-status: strict filtering is the enforcement mechanism for version updates, and unageable digest
-updates cannot enter a Renovate branch.
+Container images and GitHub Actions are pinned to immutable digests. Renovate keeps digest updates
+enabled and uses the matched version's release timestamp when the datasource provides one. With
+`minimumReleaseAgeBehaviour: "timestamp-required"`, a digest update whose datasource provides no
+release timestamp remains pending instead of bypassing the cooldown. Initial `pin` and `pinDigest`
+updates remain enabled because they freeze the version or commit already selected by a mutable
+reference without selecting a newer release. `statusCheckWhen.minimumReleaseAge: "never"`
+suppresses the redundant branch status; strict filtering decides eligibility before branch creation.
 
 ### Consequences
 
@@ -84,14 +83,14 @@ updates cannot enter a Renovate branch.
   before its seven-day cooldown passes.
 * Good, because eligible updates continue without waiting for unrelated versions that remain in
   cooldown.
-* Good, because a pure digest change without a release timestamp cannot bypass the cooldown and
-  execute in repository CI.
+* Good, because a digest update with a trustworthy matched-version timestamp can proceed after the
+  cooldown, while an update without one remains pending.
 * Good, because Renovate can convert a newly introduced mutable version or action tag to an exact
   version or immutable digest without waiting for another release.
 * Bad, because SHA-pinned actions are less readable than tag-only action references.
 * Bad, because ordinary fixes remain unavailable to Renovate for seven days after publication.
-* Bad, because a digest-only refresh waits for an eligible version update or an explicitly reviewed
-  manual change.
+* Bad, because registries that do not expose release timestamps leave digest-only refreshes pending
+  until a maintainer reviews another update path.
 * Bad, because the regex manager must stay aligned with the workflow command text.
 
 ### Confirmation
@@ -99,10 +98,10 @@ updates cannot enter a Renovate branch.
 Run `pnpm dlx --package renovate renovate-config-validator renovate.json` and
 `./mvnw -q spotless:check verify`. Repository tests confirm that the only release-age policy is the
 repository-wide seven-day cooldown, timestamp-less releases remain ineligible, and strict internal
-checks prevent early branch creation. Tests also confirm that Renovate does not create unageable
-digest updates, continues to permit security-improving pins, and does not publish a redundant
-minimum-release-age status. Review should also confirm `.github/workflows/*.yml` uses full action
-SHAs with version comments and commitlint package pins are Renovate-managed.
+checks prevent early branch creation. Tests also confirm that digest updates and security-improving
+pins remain enabled, executable tool images use Renovate-owned digests, and Renovate does not publish
+a redundant minimum-release-age status. Review should also confirm `.github/workflows/*.yml` uses
+full action SHAs with version comments and commitlint package pins are Renovate-managed.
 
 ## Pros and Cons of the Options
 
@@ -156,7 +155,8 @@ seven-day cooldown is a supply-chain observation window, not an assertion that r
 after seven days. The upstream Semgrep supply-chain rule requires a repeated release age inside every
 package rule and does not account for Renovate's inherited repository-level setting. The Semgrep
 wrapper excludes that rule; the repository test instead enforces the stronger single global policy
-and rejects package-level overrides. Renovate release-age filtering supports version updates but not
-pure digest or pin updates. Pure digest updates remain disabled unless a future implementation can
-provide and enforce trustworthy release timestamps. Pins remain enabled because they make the
-currently resolved dependency immutable without selecting newer code.
+and rejects package-level overrides. Renovate resolves a digest update's matched version and uses
+that version's timestamp when the datasource provides one. The `timestamp-required` behavior keeps
+updates pending for registries without that evidence. Publisher-controlled OCI creation annotations
+are not accepted as release-age evidence. Pins remain enabled because they make the currently
+resolved dependency immutable without selecting newer code.

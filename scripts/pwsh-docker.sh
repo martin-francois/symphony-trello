@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Microsoft documents the .NET SDK images as the current PowerShell-in-Docker path.
 # Keep this wrapper small so CI and local checks exercise the same PowerShell runtime.
-IMAGE="${SYMPHONY_TRELLO_PWSH_DOCKER_IMAGE:-mcr.microsoft.com/dotnet/sdk:8.0}"
+IMAGE="${SYMPHONY_TRELLO_PWSH_DOCKER_IMAGE:-mcr.microsoft.com/dotnet/sdk:8.0@sha256:3c0edbfe1549dd93fb789dc96299a40df865ad7bffefcaf38e8c05940686d641}"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd -- "$script_dir/.." && pwd -P)"
 container_runtime="${SYMPHONY_TRELLO_CONTAINER_RUNTIME:-docker}"
