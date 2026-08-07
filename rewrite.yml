@@ -297,8 +297,8 @@ recipeList:
   - org.openrewrite.java.testing.assertj.MigrateAssertionsForClassAndInterfaceTypes
   - org.openrewrite.java.testing.assertj.SimplifyArrayLengthAssertion
   - org.openrewrite.java.testing.assertj.SimplifyAssertJAssertions
+  - org.openrewrite.java.testing.assertj.SimplifyAssertJEqualityAssertion
   - org.openrewrite.java.testing.assertj.SimplifyAssertJInstanceOfAssertion
-  - org.openrewrite.java.testing.assertj.SimplifyAssertJNullRelatedAssertion
   - org.openrewrite.java.testing.assertj.SimplifyHasSizeAssertion
   - org.openrewrite.java.testing.assertj.SimplifyHasSizeFromIsEqualToAssertion
   - org.openrewrite.java.testing.assertj.SimplifyRedundantAssertJChains
