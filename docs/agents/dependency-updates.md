@@ -27,9 +27,15 @@ requirements.
   their owning rules. The `Required merge checks` ruleset on the default branch enforces the
   required checks, linear history, and thread resolution, and the script test `major update pull
   requests require manual merge` asserts the major-update policy.
-- Group dependencies only when they share a release or compatibility contract. A group MUST NOT
-  hide which dependency caused a failed check. Automation cannot prove this rule; pull-request
-  review of the failing check's attribution is the required evidence before merging a group.
+- Group dependencies by release or compatibility contract, with one deliberate exception: the
+  repository-wide non-major bundle described in
+  [ADR 0076](../adr/0076-separate-major-updates-from-the-automergeable-bundle.md). That bundle is a
+  cost decision, not a compatibility claim, and it is deliberately limited to non-major updates so
+  the blast radius of a failure stays small.
+- A group MUST NOT hide which dependency caused a failed check. Automation cannot prove this rule;
+  pull-request review of the failing check's attribution is the required evidence before merging a
+  group. When the non-major bundle fails, attribute the failure by bisecting the bundle locally
+  rather than by re-running the pull request, which is both faster and free.
 - Major updates MUST NOT share a branch with the automergeable non-major bundle, because a single
   review-required major would otherwise suppress automatic merging for every routine update
   travelling with it. A package that requires a manual merge MUST leave that bundle through

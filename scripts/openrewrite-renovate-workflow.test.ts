@@ -962,6 +962,34 @@ test("major update pull requests require manual merge", () => {
   assert.equal(majorUpdateRule?.automerge, false);
 });
 
+type PackageRule = (typeof RENOVATE_CONFIG.packageRules)[number];
+
+// Renovate applies a package rule to every update type unless matchUpdateTypes
+// restricts it. An omitted matchUpdateTypes therefore matches majors AND non-majors,
+// which is the opposite of what a naive `!rule.matchUpdateTypes?.includes("major")`
+// check concludes.
+function matchesMajor(rule: PackageRule): boolean {
+  return !rule.matchUpdateTypes || rule.matchUpdateTypes.includes("major");
+}
+
+function matchesNonMajor(rule: PackageRule): boolean {
+  return (
+    !rule.matchUpdateTypes ||
+    rule.matchUpdateTypes.some((updateType) => updateType !== "major")
+  );
+}
+
+test("update-type predicates follow Renovate's match-everything default", () => {
+  assert.equal(matchesMajor({}), true);
+  assert.equal(matchesNonMajor({}), true);
+  assert.equal(matchesMajor({matchUpdateTypes: ["major"]}), true);
+  assert.equal(matchesNonMajor({matchUpdateTypes: ["major"]}), false);
+  assert.equal(matchesMajor({matchUpdateTypes: ["minor", "patch"]}), false);
+  assert.equal(matchesNonMajor({matchUpdateTypes: ["minor", "patch"]}), true);
+  assert.equal(matchesMajor({matchUpdateTypes: ["major", "minor"]}), true);
+  assert.equal(matchesNonMajor({matchUpdateTypes: ["major", "minor"]}), true);
+});
+
 test("major updates never join the automergeable non-major bundle", () => {
   // group:all sets separateMajorMinor to false, which forces majors into the same
   // branch as every other update. A single pending major would then hold back the
@@ -976,24 +1004,33 @@ test("major updates never join the automergeable non-major bundle", () => {
 
   assert.ok(bundle, "a non-major bundle rule must exist");
   assert.equal(bundle?.automerge, true);
-  assert.ok(!bundle?.matchUpdateTypes?.includes("major"));
+  assert.ok(!matchesMajor(bundle!));
 
-  for (const rule of RENOVATE_CONFIG.packageRules) {
-    if (rule.automerge !== true) {
-      continue;
-    }
-    assert.ok(
-      !rule.matchUpdateTypes?.includes("major"),
-      "no automergeable rule may match major updates",
-    );
-  }
+  // Renovate applies package rules in order and the last match wins, so the
+  // invariant is not "no automergeable rule matches a major" but "the last rule
+  // that decides automerge for a major decides false". The OpenRewrite rule sets
+  // automerge: true with no matchUpdateTypes, which matches majors too; it is the
+  // trailing major rule that makes the effective answer false.
+  const majorAutomergeDecisions = RENOVATE_CONFIG.packageRules.filter(
+    (rule) => matchesMajor(rule) && rule.automerge !== undefined,
+  );
+
+  assert.ok(majorAutomergeDecisions.length > 0);
+  assert.equal(
+    majorAutomergeDecisions.at(-1)?.automerge,
+    false,
+    "the last rule deciding automerge for a major update must decide false",
+  );
 });
 
 test("a manual-merge package is excluded from the automergeable bundle", () => {
   // An automerge:false package that still carries the bundle's groupName would drag
   // the entire bundle out of automerge, which is the same failure mode as group:all.
+  // A rule that matches any non-major type can reach the bundle, including one that
+  // matches major AND minor, so the filter is on matchesNonMajor rather than on the
+  // absence of "major".
   for (const rule of RENOVATE_CONFIG.packageRules) {
-    if (rule.automerge !== false || rule.matchUpdateTypes?.includes("major")) {
+    if (rule.automerge !== false || !matchesNonMajor(rule)) {
       continue;
     }
     assert.equal(
