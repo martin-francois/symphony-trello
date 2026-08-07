@@ -40,7 +40,7 @@
     <findsecbugs.version>1.14.0</findsecbugs.version>
     <guava.version>33.6.0-jre</guava.version>
     <jazzer.version>0.30.0</jazzer.version>
-    <jspecify.version>1.0.0</jspecify.version>
+    <jspecify.version>1.0.1</jspecify.version>
     <rewrite-maven-plugin.version>6.45.0</rewrite-maven-plugin.version>
     <rewrite-maven.version>8.88.0</rewrite-maven.version>
     <rewrite-error-prone-support.version>0.30.0</rewrite-error-prone-support.version>
