@@ -74,10 +74,12 @@ const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
     readonly dependencyDashboardApproval?: boolean;
     readonly enabled?: boolean;
     readonly groupName?: string;
+    readonly internalChecksFilter?: string;
     readonly matchDepTypes?: readonly string[];
     readonly matchPackageNames?: readonly string[];
     readonly matchUpdateTypes?: readonly string[];
     readonly minimumReleaseAge?: string;
+    readonly minimumReleaseAgeBehaviour?: string;
     readonly platformAutomerge?: boolean;
   }[];
   readonly prConcurrentLimit?: number;
@@ -973,6 +975,8 @@ test("Renovate enforces the repository-wide seven-day dependency cooldown", () =
   assert.ok(RENOVATE_CONFIG.extends?.includes("group:all"));
   for (const rule of RENOVATE_CONFIG.packageRules) {
     assert.equal(rule.minimumReleaseAge, undefined);
+    assert.equal(rule.minimumReleaseAgeBehaviour, undefined);
+    assert.equal(rule.internalChecksFilter, undefined);
   }
 
   for (const immutableUpdateType of ["digest", "pin", "pinDigest"]) {

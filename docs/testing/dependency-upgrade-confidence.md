@@ -1,7 +1,8 @@
 # Dependency Upgrade Confidence
 
 Every direct dependency and build plugin must have a required check that exercises its main failure
-surface. The script test fails when `pom.xml` introduces an artifact that this map does not name.
+surface. The script test fails when `pom.xml` introduces an artifact that no table row names, and
+when the row naming that artifact leaves its primary failure surface or required detection empty.
 
 | Dependencies and plugins                                                                                                  | Primary failure surface                                                                 | Required detection                                                   |
 | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
