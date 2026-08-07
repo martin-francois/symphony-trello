@@ -41,13 +41,13 @@
     <guava.version>33.6.0-jre</guava.version>
     <jazzer.version>0.30.0</jazzer.version>
     <jspecify.version>1.0.0</jspecify.version>
-    <rewrite-maven-plugin.version>6.44.0</rewrite-maven-plugin.version>
-    <rewrite-maven.version>8.87.7</rewrite-maven.version>
+    <rewrite-maven-plugin.version>6.45.0</rewrite-maven-plugin.version>
+    <rewrite-maven.version>8.88.0</rewrite-maven.version>
     <rewrite-error-prone-support.version>0.30.0</rewrite-error-prone-support.version>
-    <rewrite-migrate-java.version>3.40.0</rewrite-migrate-java.version>
+    <rewrite-migrate-java.version>3.41.0</rewrite-migrate-java.version>
     <openrewrite.recipe.group-id>org.openrewrite.recipe</openrewrite.recipe.group-id>
-    <rewrite-static-analysis.version>2.39.0</rewrite-static-analysis.version>
-    <rewrite-testing-frameworks.version>3.42.1</rewrite-testing-frameworks.version>
+    <rewrite-static-analysis.version>2.40.0</rewrite-static-analysis.version>
+    <rewrite-testing-frameworks.version>3.43.0</rewrite-testing-frameworks.version>
     <spotbugs-maven-plugin.version>4.10.3.0</spotbugs-maven-plugin.version>
     <spotless.version>3.9.0</spotless.version>
     <surefire.version>3.5.6</surefire.version>
