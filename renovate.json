@@ -3,8 +3,7 @@
   "extends": [
     "config:recommended",
     "helpers:pinGitHubActionDigests",
-    ":rebaseStalePrs",
-    "group:all"
+    ":rebaseStalePrs"
   ],
   "reviewers": ["martinfrancois"],
   "labels": ["dependencies"],
@@ -20,6 +19,8 @@
   },
   "automerge": true,
   "dependencyDashboardApproval": false,
+  "separateMajorMinor": true,
+  "separateMultipleMajor": true,
   "vulnerabilityAlerts": {
     "enabled": true,
     "labels": ["security"]
@@ -104,6 +105,13 @@
   },
   "packageRules": [
     {
+      "description": "Bundle every non-major update into one automergeable pull request. Major updates are deliberately excluded so that a pending major never holds back the bundle.",
+      "matchUpdateTypes": ["minor", "patch", "pin", "pinDigest", "digest"],
+      "groupName": "all non-major dependencies",
+      "groupSlug": "all-non-major",
+      "automerge": true
+    },
+    {
       "matchDatasources": ["maven"],
       "matchPackageNames": [
         "com.google.errorprone:error_prone_core",
@@ -139,6 +147,7 @@
     },
     {
       "matchPackageNames": ["tessl-labs/good-oss-citizen"],
+      "groupName": null,
       "automerge": false,
       "addLabels": ["tessl"],
       "prBodyNotes": [
@@ -146,6 +155,7 @@
       ]
     },
     {
+      "description": "Major updates land one at a time and require a human merge after review of the migration notes. This rule deliberately sets no groupName: majors are already ungrouped because the bundle rule matches non-major types only, and forcing a groupName here would split lockstep groups whose members must move together across a major boundary.",
       "matchUpdateTypes": ["major"],
       "automerge": false,
       "addLabels": ["major update"]

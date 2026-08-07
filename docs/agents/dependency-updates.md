@@ -30,6 +30,13 @@ requirements.
 - Group dependencies only when they share a release or compatibility contract. A group MUST NOT
   hide which dependency caused a failed check. Automation cannot prove this rule; pull-request
   review of the failing check's attribution is the required evidence before merging a group.
+- Major updates MUST NOT share a branch with the automergeable non-major bundle, because a single
+  review-required major would otherwise suppress automatic merging for every routine update
+  travelling with it. A package that requires a manual merge MUST leave that bundle through
+  `groupName: null` rather than through `automerge: false` alone, for the same reason. The script
+  tests `major updates never join the automergeable non-major bundle` and `a manual-merge package is
+  excluded from the automergeable bundle` enforce both rules; see
+  [ADR 0076](../adr/0076-separate-major-updates-from-the-automergeable-bundle.md).
 - For each direct dependency and build plugin, document its failure surface and the required check
   that detects a bad update. A dependency is eligible for automatic merge only when that evidence is
   a required check. The script test enforces complete coverage in
