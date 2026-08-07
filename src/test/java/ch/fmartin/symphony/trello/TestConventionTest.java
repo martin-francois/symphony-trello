@@ -647,7 +647,7 @@ final class TestConventionTest {
                         .trim();
 
         // then
-        assertThat(pom).contains("<jspecify.version>1.0.0</jspecify.version>");
+        assertThat(pom).contains("<jspecify.version>1.0.1</jspecify.version>");
         assertThat(pom).contains(dependency);
         assertThat(pom).doesNotContain("<artifactId>jspecify</artifactId>%n      <scope>test</scope>".formatted());
     }
