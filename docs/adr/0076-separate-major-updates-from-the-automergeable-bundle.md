@@ -74,6 +74,11 @@ and suppresses automatic merging for every unrelated update travelling with it.
 * Good, because lockstep groups continue to move together across major boundaries.
 * Bad, because the repository opens more pull requests than it did under `group:all`, and each one
   consumes a CI run.
+* Bad, because the non-major bundle still carries unrelated dependencies in one pull request, so a
+  failed check does not name its cause on its own. This is the cost accepted in exchange for one CI
+  run instead of one per dependency, and it is bounded by excluding majors from the bundle. Attribute
+  such a failure by bisecting the bundle locally, which is free, rather than by re-running the pull
+  request.
 * Neutral, because the human-review boundary for major updates is unchanged.
 
 ### Confirmation
@@ -84,8 +89,11 @@ This decision remains implemented when:
 * `separateMajorMinor` and `separateMultipleMajor` are `true`;
 * one package rule groups the non-major update types with `automerge: true`;
 * that rule does not match the `major` update type;
-* no package rule both sets `automerge: true` and matches the `major` update type;
-* every package rule with `automerge: false` that is not the major-update rule sets
+* the last package rule that decides `automerge` for a major update decides `false`. Package rules
+  apply in order and the last match wins, so this, rather than the absence of any automergeable rule
+  matching a major, is the invariant. A rule that omits `matchUpdateTypes` matches every update type
+  including `major`, which the OpenRewrite toolchain rule does;
+* every package rule with `automerge: false` that can match a non-major update sets
   `groupName: null`;
 * the major-update rule sets no `groupName`; and
 * repository tests reject each of the preceding conditions.
