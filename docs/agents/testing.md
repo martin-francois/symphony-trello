@@ -118,9 +118,13 @@ parallel safety. Live end-to-end and deployed-verification rules live in
   escaped boundary, audit adjacent instances of the same pattern, and add real-boundary coverage
   when a mock or incomplete fixture contributed to the escape. Unit coverage does not replace a
   missing CLI-process, generated-workflow, installer, Trello, filesystem, or deployed-runtime check.
-- Maintain a release-acceptance inventory of supported user workflows and their owning unit,
-  integration, process-boundary, and live-verification evidence. Review it before calling a release
-  ready; coverage percentages do not prove behavioral completeness.
+- Treat the validation matrix in `SPEC.md` Section 17 as the release-acceptance inventory of
+  supported behaviors and their owning unit, integration, process-boundary, and live-verification
+  evidence, with Section 17.9 owning the live-verification profile. Do not maintain a parallel
+  inventory; the specification is the normative contract. Update Section 17 in the same change that
+  adds, removes, or re-scopes a supported behavior or the evidence that owns it, and review it
+  before calling a release ready; coverage percentages do not prove behavioral completeness.
+  Pull-request review enforces both the update and the release-readiness review.
 - Fuzz tests are regression tests in normal Maven runs. When changing parser, prompt-line safety,
   workflow loading, or Trello reference/checklist parsing logic, run the focused fuzzing and chaos
   regression command from [Fuzzing](../fuzzing.md). If the user asks for active or continuous

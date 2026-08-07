@@ -13,10 +13,10 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
 - Quality means the change is correct, maintainable, tested at the right level, documented where it
   matters, and easy for another engineer to understand without asking the original implementer.
 
-## Before changing code
+## Before making changes
 
 1. Start by reading the relevant specification, existing implementation, tests, README,
-   `CONTRIBUTING.md`, and ADRs before changing code.
+   `CONTRIBUTING.md`, and ADRs before making the change.
 2. If this checkout contains `tessl.json` and the `tessl` command is available, run `tessl install`
    from the repository root before contribution work so generated agent links and rules are fresh.
    Treat `.tessl/` and Tessl-generated `tessl__*` skill links as local generated output;

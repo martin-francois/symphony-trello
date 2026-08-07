@@ -49,7 +49,9 @@ label mechanics live in [GitHub issue triage](github-issue-triage.md).
 
 ## Contract impact check
 
-Perform this check before implementation, whenever a decision changes, and before publishing:
+Perform this check before implementation, whenever a decision changes, and before publishing. It
+applies to every change, including documentation-only work, because `SPEC.md`, ADRs, and
+`docs/agents/**` carry repository contracts:
 
 1. Identify effects on `SPEC.md`, ADRs, tests, user and operator documentation, CLI and workflow
    contracts, deployment behavior, release artifacts, and companion repositories.

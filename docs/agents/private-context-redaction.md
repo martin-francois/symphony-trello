@@ -41,8 +41,13 @@ summaries, and how to use the local diagnostics tooling for private investigatio
 - For an error, warning, or unexpected state, inspect available sanitized diagnostics, logs, and
   persisted state before proposing a cause. If that evidence cannot identify the failing stage, add
   the minimum safe diagnostic context, correlation, or state needed to identify it next time and add
-  a regression proving the evidence survives redaction. Do not substitute speculation for a missing
-  observation boundary.
+  a regression proving the evidence survives redaction. Assert both sides of the redaction boundary
+  in that regression: the sanitized evidence is present, and every value the public-safe diagnostics
+  contract in `SPEC.md` requires redacting is absent. Reference that contract rather than restating
+  it, so the regression cannot drift from the specification; the observation boundary it protects is
+  defined in [ADR 0030](../adr/0030-private-diagnostics-context-flag.md). The diagnostics redaction
+  tests in `SetupDiagnosticReporterTest` and `DiagnosticsTokenHasherTest` enforce this rule. Do not
+  substitute speculation for a missing observation boundary.
 
 ## References
 
