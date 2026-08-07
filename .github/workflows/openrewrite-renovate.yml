@@ -621,7 +621,7 @@ jobs:
 
       - name: Checkout trusted automation source
         if: ${{ steps.source.outputs.state == 'open' }}
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           path: trusted
           persist-credentials: false
@@ -629,7 +629,7 @@ jobs:
 
       - name: Checkout trusted execution source
         if: ${{ steps.source.outputs.state == 'open' }}
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           path: source
           persist-credentials: false
@@ -1041,7 +1041,7 @@ jobs:
 
       - name: Checkout trusted publication source
         if: ${{ steps.publication.outputs.required == 'true' }}
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
