@@ -96,9 +96,11 @@ This decision remains implemented when:
   `timestamp-required`, and `internalChecksFilter` is `strict`;
 * the minimum-release-age status is disabled because strict filtering enforces the cooldown before
   branch creation;
-* pure `digest` updates are disabled because Renovate cannot age-gate them;
+* `digest` updates remain enabled because `timestamp-required` behavior keeps an update without a
+  matched-version release timestamp pending;
 * `pin` and `pinDigest` remain enabled because they freeze already selected code;
-* no package rule overrides the repository-wide minimum release age;
+* no package rule overrides the repository-wide minimum release age, its `timestamp-required`
+  behavior, or the strict internal checks filter;
 * the major-update package rule has `automerge: false`;
 * Quarkus update recipe and Tessl tile updates retain their existing manual-merge policy; and
 * repository tests reject any package-specific dashboard-approval setting.

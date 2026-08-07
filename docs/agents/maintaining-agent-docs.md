@@ -26,9 +26,12 @@
   when observed behavior shows agents make the wrong choice without the note.
 - When fixing a documentation pattern, search the relevant file or docs set for similar instances
   before committing instead of correcting only the one sentence the user pointed out.
-- Every new or changed **MUST** or **MUST NOT** rule must name its local or CI enforcement. Add the
-  check in the same change when automation can prove the rule. When automation cannot prove it,
-  state the required review or live-verification evidence instead.
+- Every new or changed normative rule must name its local or CI enforcement. A normative rule is any
+  binding statement, whether written with **MUST**, **MUST NOT**, or as a plain imperative such as
+  "Maintain ..." or "Do not ...". Add the check in the same change when automation can prove the
+  rule. When automation cannot prove it, state the required review or live-verification evidence
+  instead. No automation reads this page, so pull-request review of the changed rule and its named
+  enforcement is the required evidence for this rule itself.
 - If a mistake occurred despite an existing rule, strengthen the wording, move the rule closer to
   the missed workflow step, add a cross-link, or automate it. Do not leave an ineffective rule
   unchanged merely because it already exists.
