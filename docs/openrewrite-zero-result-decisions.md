@@ -432,8 +432,8 @@ must be re-audited whenever `rewrite-migrate-java` changes.
 | `org.openrewrite.java.testing.assertj.SimplifyArrayLengthAssertion` | Activate | `global-zero:assertj` | General type-specific AssertJ modernization for existing repository APIs. |
 | `org.openrewrite.java.testing.assertj.SimplifyAssertJAssertion` | Parent/configured primitive | `global-zero:assertj` | Configured primitive; use reviewed SimplifyAssertJAssertions instances, not unconfigured leaf ID. |
 | `org.openrewrite.java.testing.assertj.SimplifyAssertJAssertions` | Activate | `global-zero:assertj` | General type-specific AssertJ modernization for existing repository APIs. |
+| `org.openrewrite.java.testing.assertj.SimplifyAssertJEqualityAssertion` | Activate | `global-zero:assertj` | General type-specific AssertJ modernization for existing repository APIs. Renamed from SimplifyAssertJNullRelatedAssertion in rewrite-testing-frameworks 3.43.0, which subsumed it and dispatches `==` and `!=` operands to isNull, isEqualTo, or isSameAs. |
 | `org.openrewrite.java.testing.assertj.SimplifyAssertJInstanceOfAssertion` | Activate | `global-zero:assertj` | General type-specific AssertJ modernization for existing repository APIs. |
-| `org.openrewrite.java.testing.assertj.SimplifyAssertJNullRelatedAssertion` | Activate | `global-zero:assertj` | General type-specific AssertJ modernization for existing repository APIs. |
 | `org.openrewrite.java.testing.assertj.SimplifyHasSizeAssertion` | Activate | `global-zero:assertj` | General type-specific AssertJ modernization for existing repository APIs. |
 | `org.openrewrite.java.testing.assertj.SimplifyHasSizeFromIsEqualToAssertion` | Activate | `global-zero:assertj` | General type-specific AssertJ modernization for existing repository APIs. |
 | `org.openrewrite.java.testing.assertj.SimplifyRedundantAssertJChains` | Activate | `global-zero:assertj` | General type-specific AssertJ modernization for existing repository APIs. |
