@@ -19,7 +19,7 @@ approval for major dependency updates. This combined two separate decisions: whe
 create a pull request and whether Renovate may merge it. The intended safeguard was human review and
 manual merge after the pull request exists, not a manual checkbox before Renovate creates it.
 
-Package-specific dashboard approval rules also interact poorly with `group:all`. One matched update
+Package-specific dashboard approval rules also interact poorly with grouping. One matched update
 can keep the complete grouped branch under `Pending Approval`, including routine updates that do not
 need that gate.
 
@@ -32,7 +32,7 @@ How should Renovate create dependency pull requests while preserving manual merg
 * Keep major dependency updates from automerging.
 * Preserve manual merge for updates that require extra generated-output review.
 * Keep the policy consistent across every package rule and dependency group.
-* Prevent one approval-gated update from blocking unrelated members of `group:all`.
+* Prevent one approval-gated update from blocking unrelated members of a dependency group.
 * Make the distinction between pull-request creation and merge authorization explicit.
 
 ## Considered Options
@@ -49,9 +49,9 @@ merging", because the Dependency Dashboard is not the intended human-review boun
 `dependencyDashboardApproval` is `false` at the repository level. No package rule overrides it.
 Renovate therefore creates every eligible dependency pull request automatically after the
 repository-wide seven-day minimum release age passes. `internalChecksFilter: "strict"` prevents a
-version whose cooldown is pending from creating a branch or pull request. In `group:all`, that
-pending version does not prevent eligible versions from creating or updating the grouped pull
-request. Renovate's security-update cooldown bypass remains available for disclosed
+version whose cooldown is pending from creating a branch or pull request. In a grouped pull request,
+that pending version does not prevent eligible versions from creating or updating the grouped
+branch. Renovate's security-update cooldown bypass remains available for disclosed
 vulnerabilities.
 
 Digest updates remain enabled. Renovate uses the matched version's release timestamp when the
@@ -77,7 +77,7 @@ runtime contract, so `SPEC.md` does not need an update.
   dashboard checkbox.
 * Good, because major updates still cannot merge without human review.
 * Good, because the same dashboard-approval policy applies to all packages and groups.
-* Good, because a special-case update cannot hold the complete `group:all` branch in `Pending
+* Good, because a special-case update cannot hold a complete grouped branch in `Pending
   Approval`.
 * Bad, because Renovate can open major and special-case pull requests that a maintainer may choose to
   postpone or close.

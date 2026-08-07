@@ -32,8 +32,8 @@ How should dependency automation stay secure, maintainable, and clear for a Java
 * Apply one seven-day release-age cooldown to every ordinary dependency update.
 * Prevent Renovate from creating a branch or pull request for a version whose cooldown is pending,
   so repository CI does not execute that version's code during the cooldown.
-* Continue creating pull requests for eligible versions even when newer versions in `group:all`
-  remain in cooldown.
+* Continue creating pull requests for eligible versions even when newer versions in the grouped
+  non-major pull request remain in cooldown.
 * Require human approval for major updates.
 * Avoid adding `package.json` solely to run a JavaScript CLI in a Java project.
 * Enforce release-note-ready pull request titles and retained pull request commit messages without
@@ -55,9 +55,11 @@ because it hardens CI and keeps automation behavior explicit only where it diffe
 The repository-level `minimumReleaseAge` is seven days and is the only release-age setting.
 `minimumReleaseAgeBehaviour: "timestamp-required"` treats a version without a release timestamp as
 ineligible. `internalChecksFilter: "strict"` excludes ineligible versions before Renovate creates a
-branch or pull request. With `group:all`, Renovate still creates or updates the grouped pull request
-from versions that have passed the cooldown; newer ineligible versions join only after their
-cooldown passes. Renovate security updates retain their documented cooldown bypass so a disclosed
+branch or pull request. In the grouped non-major pull request, Renovate still creates or updates the
+branch from versions that have passed the cooldown; newer ineligible versions join only after their
+cooldown passes. [ADR 0076](0076-separate-major-updates-from-the-automergeable-bundle.md) replaced
+the repository-wide `group:all` preset with that non-major bundle so a pending major update no
+longer holds back routine updates. Renovate security updates retain their documented cooldown bypass so a disclosed
 vulnerability does not wait seven days for remediation.
 
 Container images and GitHub Actions are pinned to immutable digests. Renovate keeps digest updates

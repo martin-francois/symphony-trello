@@ -65,6 +65,8 @@ const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
   readonly minimumReleaseAge?: string;
   readonly minimumReleaseAgeBehaviour?: string;
   readonly pinDigests?: boolean;
+  readonly separateMajorMinor?: boolean;
+  readonly separateMultipleMajor?: boolean;
   readonly customManagers: readonly {
     readonly matchStrings?: readonly string[];
   }[];
@@ -73,7 +75,8 @@ const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
     readonly branchTopic?: string;
     readonly dependencyDashboardApproval?: boolean;
     readonly enabled?: boolean;
-    readonly groupName?: string;
+    readonly groupName?: string | null;
+    readonly groupSlug?: string;
     readonly internalChecksFilter?: string;
     readonly matchDepTypes?: readonly string[];
     readonly matchPackageNames?: readonly string[];
@@ -959,6 +962,48 @@ test("major update pull requests require manual merge", () => {
   assert.equal(majorUpdateRule?.automerge, false);
 });
 
+test("major updates never join the automergeable non-major bundle", () => {
+  // group:all sets separateMajorMinor to false, which forces majors into the same
+  // branch as every other update. A single pending major would then hold back the
+  // whole automergeable bundle, so the preset must stay out of extends.
+  assert.ok(!RENOVATE_CONFIG.extends?.includes("group:all"));
+  assert.equal(RENOVATE_CONFIG.separateMajorMinor, true);
+  assert.equal(RENOVATE_CONFIG.separateMultipleMajor, true);
+
+  const bundle = RENOVATE_CONFIG.packageRules.find(
+    ({groupName}) => groupName === "all non-major dependencies",
+  );
+
+  assert.ok(bundle, "a non-major bundle rule must exist");
+  assert.equal(bundle?.automerge, true);
+  assert.ok(!bundle?.matchUpdateTypes?.includes("major"));
+
+  for (const rule of RENOVATE_CONFIG.packageRules) {
+    if (rule.automerge !== true) {
+      continue;
+    }
+    assert.ok(
+      !rule.matchUpdateTypes?.includes("major"),
+      "no automergeable rule may match major updates",
+    );
+  }
+});
+
+test("a manual-merge package is excluded from the automergeable bundle", () => {
+  // An automerge:false package that still carries the bundle's groupName would drag
+  // the entire bundle out of automerge, which is the same failure mode as group:all.
+  for (const rule of RENOVATE_CONFIG.packageRules) {
+    if (rule.automerge !== false || rule.matchUpdateTypes?.includes("major")) {
+      continue;
+    }
+    assert.equal(
+      rule.groupName,
+      null,
+      "a manual-merge package rule must leave the shared bundle via groupName: null",
+    );
+  }
+});
+
 test("Renovate never requires dependency dashboard approval", () => {
   assert.equal(RENOVATE_CONFIG.dependencyDashboardApproval, false);
   for (const rule of RENOVATE_CONFIG.packageRules) {
@@ -972,7 +1017,6 @@ test("Renovate enforces the repository-wide seven-day dependency cooldown", () =
   assert.equal(RENOVATE_CONFIG.internalChecksFilter, "strict");
   assert.equal(RENOVATE_CONFIG.statusCheckWhen?.minimumReleaseAge, "never");
   assert.equal(RENOVATE_CONFIG.pinDigests, true);
-  assert.ok(RENOVATE_CONFIG.extends?.includes("group:all"));
   for (const rule of RENOVATE_CONFIG.packageRules) {
     assert.equal(rule.minimumReleaseAge, undefined);
     assert.equal(rule.minimumReleaseAgeBehaviour, undefined);
