@@ -62,6 +62,7 @@ const PNPM_WORKSPACE = parse(
   readonly minimumReleaseAge?: number;
   // Two settings that would leave minimumReleaseAge present but inert. Typed here so the
   // test below can assert they stay unset; see "Nothing quietly exempts a package".
+  readonly minimumReleaseAgeIgnoreMissingTime?: boolean;
   readonly minimumReleaseAgeStrict?: boolean;
   readonly trustLockfile?: boolean;
 };
@@ -1196,5 +1197,17 @@ test("Nothing quietly exempts a package from the seven-day cooldown", () => {
     PNPM_WORKSPACE.trustLockfile,
     true,
     "trustLockfile: true skips verification of the committed lockfile",
+  );
+
+  // 4. minimumReleaseAgeIgnoreMissingTime: true. A version whose registry metadata carries no
+  //    publish timestamp would be accepted instead of refused, so anything able to serve
+  //    metadata without a time field would sidestep the cooldown entirely. pnpm already fails
+  //    closed when the key is absent, but the value is written out in pnpm-workspace.yaml so
+  //    the intent outlives a change to that default, and this asserts it stays false rather
+  //    than merely unset.
+  assert.equal(
+    PNPM_WORKSPACE.minimumReleaseAgeIgnoreMissingTime,
+    false,
+    "minimumReleaseAgeIgnoreMissingTime must stay false so versions of unprovable age are refused",
   );
 });
