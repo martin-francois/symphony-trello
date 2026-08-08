@@ -62,11 +62,19 @@ const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
   readonly dependencyDashboardApproval?: boolean;
   readonly extends?: readonly string[];
   readonly internalChecksFilter?: string;
+  readonly lockFileMaintenance?: {
+    readonly automerge?: boolean;
+    readonly enabled?: boolean;
+    readonly schedule?: readonly string[];
+  };
   readonly minimumReleaseAge?: string;
   readonly minimumReleaseAgeBehaviour?: string;
   readonly pinDigests?: boolean;
   readonly separateMajorMinor?: boolean;
   readonly separateMultipleMajor?: boolean;
+  readonly vulnerabilityAlerts?: {
+    readonly enabled?: boolean;
+  };
   readonly customManagers: readonly {
     readonly matchStrings?: readonly string[];
   }[];
@@ -1093,4 +1101,22 @@ test("Renovate owns immutable tool-image declarations", () => {
 test("Renovate permits unlimited concurrent branches and pull requests", () => {
   assert.equal(RENOVATE_CONFIG.branchConcurrentLimit, 0);
   assert.equal(RENOVATE_CONFIG.prConcurrentLimit, 0);
+});
+
+test("Renovate refreshes lockfiles on a schedule so transitive advisories are fixed", () => {
+  // vulnerabilityAlerts only reaches packages a manifest declares. A vulnerable transitive
+  // package named by no manifest is never proposed as an update, so its advisory stays open
+  // until the lockfile is regenerated. Lock file maintenance is the only rule that regenerates
+  // it, and it is disabled by default, so its absence is silent rather than loud.
+  assert.equal(RENOVATE_CONFIG.vulnerabilityAlerts?.enabled, true);
+  assert.equal(RENOVATE_CONFIG.lockFileMaintenance?.enabled, true);
+
+  // Renovate's own default window for this rule is Monday before 04:00. The repository moves it
+  // to Friday between 00:00 and 04:59, which is when scheduled dependency work happens here.
+  assert.deepEqual(RENOVATE_CONFIG.lockFileMaintenance?.schedule, ["* 0-4 * * 5"]);
+
+  // A refresh that no one merges leaves the advisories open, which is the state this rule
+  // exists to end. Required status checks still gate the merge, so a refresh that breaks a
+  // check stays open for review instead of merging itself.
+  assert.equal(RENOVATE_CONFIG.lockFileMaintenance?.automerge, true);
 });
