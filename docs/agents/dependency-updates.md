@@ -22,6 +22,12 @@ requirements.
   cooldown` asserts `pinDigests` and that `digest`, `pin`, and `pinDigest` remain enabled.
 - Apply a seven-day minimum release age to ordinary dependency updates. Renovate security updates
   retain their documented cooldown bypass so disclosed vulnerabilities can be fixed immediately.
+- Keep `lockFileMaintenance` enabled on a weekly off-hours schedule with automatic merge. Renovate
+  and `vulnerabilityAlerts` reach only the declarations a manifest names, so an advisory against a
+  package that exists only inside a lockfile stays open until that lockfile is regenerated. The
+  refresh is its own pull request and merges only after required checks pass; see
+  [ADR 0077](../adr/0077-refresh-lockfiles-on-a-schedule.md). The script test `Renovate refreshes
+  lockfiles on a schedule so transitive advisories are fixed` asserts the rule.
 - Automatic merge MUST occur only through a pull request after required checks pass. Major updates,
   Quarkus migrations, generated source changes, and vendored guidance remain review-required under
   their owning rules. The `Required merge checks` ruleset on the default branch enforces the

@@ -25,6 +25,12 @@
     "enabled": true,
     "labels": ["security"]
   },
+  "lockFileMaintenance": {
+    "description": "Refresh the committed lockfiles on a schedule so transitive advisories get fixed. Renovate only proposes updates for the direct declarations it manages, so a vulnerable package that no manifest names is never reached by an ordinary update or by a vulnerability alert, and its advisory stays open until the lockfile is regenerated. The Friday early-morning window matches the maintainer's preference for scheduled dependency work, and automerge matches the non-major bundle policy: required status checks still gate the merge, so a refresh that breaks a check stays open for review.",
+    "enabled": true,
+    "schedule": ["* 0-4 * * 5"],
+    "automerge": true
+  },
   "customManagers": [
     {
       "customType": "regex",
