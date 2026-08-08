@@ -7,6 +7,8 @@ consulted:
   - "[ADR 0076](0076-separate-major-updates-from-the-automergeable-bundle.md)"
   - "[Renovate lockFileMaintenance documentation](https://docs.renovatebot.com/configuration-options/#lockfilemaintenance)"
   - "[Renovate vulnerabilityAlerts documentation](https://docs.renovatebot.com/configuration-options/#vulnerabilityalerts)"
+  - "[Renovate minimum release age documentation](https://docs.renovatebot.com/key-concepts/minimum-release-age/)"
+  - "[pnpm minimumReleaseAge setting](https://pnpm.io/settings#minimumreleaseage)"
 informed: [Future maintainers, Contributors]
 ---
 
@@ -29,25 +31,38 @@ Renovate has a rule for exactly this, `lockFileMaintenance`, which regenerates t
 and lets every transitive pin move to the newest version its existing ranges already allow. It is
 disabled by default, so its absence produces no warning, no dashboard entry, and no failing check.
 
+Enabling it opens a second problem, and it is the harder one. Renovate does not resolve a lock file
+maintenance branch itself: it runs the package manager and commits whatever the package manager
+produces. `minimumReleaseAge` in `renovate.json` filters the updates Renovate computes, so it never
+reaches that resolution. The repository's seven-day release-age rule is therefore silently absent
+from exactly the path that moves the most versions at once, and with automatic merge on that path a
+package published minutes ago could reach the default branch without a human ever seeing it.
+
 ## Decision Drivers
 
 * Close the gap between what Renovate manages and what the lockfile pins.
 * Keep the refresh preventive rather than a response to an advisory that is already open.
 * Keep dependency work inside the scheduled window the maintainer set aside for it.
+* Keep the seven-day release age in force on every path that can move a version, including the ones
+  Renovate does not resolve itself.
 * Keep the human-review boundary from [ADR 0008](0008-renovate-and-github-actions-hardening.md)
   unchanged.
 
 ## Considered Options
 
-* Enable `lockFileMaintenance` on a weekly schedule with automatic merge.
+* Enable `lockFileMaintenance` on a weekly schedule with automatic merge, and enforce the seven-day
+  release age in the package manager.
+* Enable `lockFileMaintenance` on a weekly schedule with automatic merge and no package-manager
+  gate.
 * Enable `lockFileMaintenance` on a weekly schedule and require a manual merge.
 * Leave lockfile refreshes manual and act on advisories when they are reported.
 
 ## Decision Outcome
 
-Chosen option: "Enable `lockFileMaintenance` on a weekly schedule with automatic merge", because it
-is the only option that keeps transitive pins current without a maintainer having to notice that
-they are not.
+Chosen option: "Enable `lockFileMaintenance` on a weekly schedule with automatic merge, and enforce
+the seven-day release age in the package manager", because it is the only option that keeps
+transitive pins current without a maintainer having to notice that they are not, and the only one
+that does so without suspending the release-age rule on the refresh path.
 
 The rule sets `schedule: ["* 0-4 * * 5"]`, which restricts the refresh to Friday between 00:00 and
 04:59 in the bot's timezone. Renovate's own default window for this rule is Monday before 04:00.
@@ -60,6 +75,21 @@ The rule sets `automerge: true`, matching the non-major bundle policy in
 happens only through a pull request whose required checks passed, so this grants the refresh no
 privilege that a routine non-major update does not already have. A refresh that breaks a check stays
 open for review.
+
+Automatic merge is only defensible here because the cooldown is enforced where the resolution
+actually happens. `pnpm-workspace.yaml` sets `minimumReleaseAge: 10080`, the same seven days
+expressed in the minutes pnpm expects, so pnpm refuses to select any version published inside the
+cutoff no matter who invoked it. The gate therefore covers the refresh Renovate delegates, a
+maintainer's own `pnpm install`, and any future automation, rather than only the code path someone
+remembered to configure. The alternative reading, that `renovate.json`'s `minimumReleaseAge` already
+covers the refresh, is wrong: that setting filters the updates Renovate computes, and a lock file
+maintenance branch is not one of them. The two values are kept in step by a script test that derives
+the pnpm minutes from the Renovate days rather than asserting them independently.
+
+`minimumReleaseAgeExclude` is deliberately left unset. It exists for the case where a specific
+version must be admitted before its cooldown expires, typically a security fix, and it should be
+added with the version pinned and a comment naming the advisory rather than kept open as a standing
+list.
 
 The refresh does not join that bundle. Renovate defaults `lockFileMaintenance.groupName` to `null`
 and gives the rule its own `branchTopic`, so the regenerated lockfile arrives as its own pull
@@ -80,7 +110,16 @@ value of the rule is that it is in place before the first transitive advisory, n
 * Good, because a transitive package that no manifest names can now receive a fix.
 * Good, because the fix arrives on a schedule rather than after someone reads an alert.
 * Good, because the refresh consumes no maintainer attention while every check passes.
+* Good, because the seven-day release age now also covers a plain `pnpm install` and any future
+  automation, not only the updates Renovate computes.
 * Bad, because a recurring refresh adds pull requests and CI runs that nobody asked for.
+* Bad, because the cooldown is now stated twice, in two files and two units. The script test that
+  derives one from the other is what keeps that from drifting into a lie.
+* Bad, because the gate belongs to pnpm. A different package manager would need its own gate, and
+  one that has none, such as npm or bun, would leave `automerge: false` as the only safe setting.
+* Neutral, because a refresh can resolve a slightly older version than the newest published one.
+  That is the cooldown working, not the refresh failing; the newer version arrives the following
+  week.
 * Bad, because a refresh moves several transitive pins at once, so a failed check does not name its
   cause. Attribute such a failure by bisecting the regenerated lockfile locally, which is free,
   rather than by re-running the pull request. This is the same tradeoff ADR 0076 accepted for the
@@ -96,25 +135,49 @@ This decision remains implemented when:
 * `lockFileMaintenance.schedule` restricts the refresh to a weekly off-hours window;
 * `lockFileMaintenance.automerge` is `true`;
 * `vulnerabilityAlerts.enabled` is `true`, since the two rules cover different halves of the
-  dependency graph and neither substitutes for the other; and
+  dependency graph and neither substitutes for the other;
 * the script test `Renovate refreshes lockfiles on a schedule so transitive advisories are fixed`
-  rejects each of the preceding conditions.
+  rejects each of the preceding conditions;
+* `pnpm-workspace.yaml` sets `minimumReleaseAge` to the repository cooldown in minutes, currently
+  `10080`, and `package.json` keeps `packageManager` on a pnpm that enforces it, verified against
+  pnpm 11.19.0; and
+* the script test `The lockfile refresh path enforces the same seven-day cooldown` derives that
+  value from `renovate.json` and fails if either side moves alone.
 
 ## Pros and Cons of the Options
 
-### Enable `lockFileMaintenance` On A Weekly Schedule With Automatic Merge
+### Enable `lockFileMaintenance` On A Weekly Schedule With Automatic Merge, And Enforce The Seven-Day Release Age In The Package Manager
 
-Renovate regenerates the lockfile every Friday and merges the result once required checks pass.
+Renovate regenerates the lockfile every Friday and merges the result once required checks pass. pnpm
+refuses to resolve a version published inside the seven-day cutoff, so the refresh cannot introduce
+one.
 
 * Good, because transitive pins stay current without anyone tracking them.
 * Good, because the refresh reuses the merge gate that already governs non-major updates.
+* Good, because the release-age rule is enforced by whatever resolves the lockfile, so it cannot be
+  skipped by reaching the lockfile through a different caller.
 * Bad, because a recurring pull request consumes CI capacity nobody asked for.
+* Bad, because the cooldown now lives in two files that must be kept in agreement.
+
+### Enable `lockFileMaintenance` On A Weekly Schedule With Automatic Merge And No Package-Manager Gate
+
+The same refresh, resolved by pnpm with no cooldown of its own.
+
+* Good, because it is the smallest configuration change.
+* Bad, because it quietly suspends the seven-day release age on the refresh path.
+  `minimumReleaseAge` in `renovate.json` filters updates Renovate computes, and Renovate computes no
+  update here; it runs pnpm and commits the result.
+* Bad, because `automerge: true` then merges that result without review, so a package published
+  hours earlier can reach the default branch through the one path nobody is watching. This is the
+  combination the review of this decision rejected.
 
 ### Enable `lockFileMaintenance` On A Weekly Schedule And Require A Manual Merge
 
 Renovate opens the same refresh and waits for a maintainer.
 
 * Good, because a maintainer sees every transitive change before it lands.
+* Good, because it removes the automatic-merge exposure without needing a package-manager gate,
+  which is the only remedy available under a package manager that has no release-age setting.
 * Bad, because the review carries no information a required check does not already give: a
   regenerated lockfile is machine output, and reading it does not reveal what a passing test suite
   would have missed.

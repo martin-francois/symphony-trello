@@ -1,0 +1,5 @@
+# pnpm resolves this repository's lockfile, including every refresh Renovate's
+# lockFileMaintenance rule delegates to it. Renovate's own `minimumReleaseAge` does not
+# reach that path, so the seven-day cooldown is stated here as well, in minutes, where
+# pnpm enforces it at resolution time. See ADR 0077.
+minimumReleaseAge: 10080
