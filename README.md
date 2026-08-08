@@ -460,8 +460,8 @@ and checks, and normally updates the existing PR instead of starting over.
 
 ### One Workflow For One Repository
 
-When every card in a workflow belongs to the same GitHub repository, set the workflow repository
-default once. Then cards do not need to repeat the repository URL.
+When every card in a workflow belongs to the same repository, set the workflow repository
+default once. Then cards do not need to repeat the repository URL. This works whether the repository is hosted on GitHub or another Git host.
 
 Guided `setup-local` asks:
 
@@ -486,6 +486,7 @@ Use the normal clone URL for the project. Generic Git remotes supported by the w
 valid too; the repository does not have to be hosted on GitHub. Do not include credentials, query
 strings, or fragments.
 
+`repository.default_path` is a separate, advanced setting for reusing a local checkout after repository identity is established by a card or `repository.default_url`; it does not establish identity by itself. Leave it `null` for the common one-repository setup described above; see [Advanced Setup](`#advanced-setup`) for how `repository.default_path` and `repository.default_url` interact.
 With this setting, Symphony gives Codex fallback repository context for cards handled by the
 workflow. A card can override the workflow default when it clearly identifies a different
 repository. A labelled source line is the most explicit form:
