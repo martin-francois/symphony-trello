@@ -40,11 +40,13 @@ recipeList:
   - org.openrewrite.java.migrate.guava.NoGuavaImmutableMapOf
   - org.openrewrite.java.migrate.guava.NoGuavaImmutableSetCopyOf
   - org.openrewrite.java.migrate.guava.NoGuavaImmutableSetOf
+  - org.openrewrite.java.migrate.guava.NoGuavaIterablesAll
   - org.openrewrite.java.migrate.guava.NoGuavaListsNewArrayList
   - org.openrewrite.java.migrate.guava.NoGuavaListsNewCopyOnWriteArrayList
   - org.openrewrite.java.migrate.guava.NoGuavaListsNewLinkedList
   - org.openrewrite.java.migrate.guava.NoGuavaMapsNewHashMap
   - org.openrewrite.java.migrate.guava.NoGuavaMapsNewLinkedHashMap
+  - org.openrewrite.java.migrate.guava.NoGuavaMapsNewTreeMap
   - org.openrewrite.java.migrate.guava.NoGuavaRefasterRecipes$PreconditionsCheckNotNullToObjectsRequireNonNullRecipe
   - org.openrewrite.java.migrate.guava.NoGuavaSetsNewConcurrentHashSet
   - org.openrewrite.java.migrate.guava.NoGuavaSetsNewHashSet
@@ -87,6 +89,7 @@ recipeList:
   - org.openrewrite.java.migrate.lang.SwitchCaseEnumGuardToLabel
   - org.openrewrite.java.migrate.lang.SwitchCaseReturnsToSwitchExpression
   - org.openrewrite.java.migrate.lang.SwitchExpressionYieldToArrow
+  - org.openrewrite.java.migrate.logging.MigrateLoggerGlobalToGetGlobal
   - org.openrewrite.java.migrate.nio.file.PathsGetToPathOf
   - org.openrewrite.java.migrate.sql.MigrateDriverManagerSetLogStream
   - org.openrewrite.java.migrate.util.IteratorNext
@@ -127,6 +130,7 @@ recipeList:
   - org.openrewrite.staticanalysis.RedundantFileCreation
   - org.openrewrite.staticanalysis.RemoveExtraSemicolons
   - org.openrewrite.staticanalysis.RemoveRedundantTypeCast
+  - org.openrewrite.staticanalysis.RenameLocalVariablesToCamelCase
   - org.openrewrite.staticanalysis.RenamePrivateFieldsToCamelCase
   - org.openrewrite.staticanalysis.ReplaceClassIsInstanceWithInstanceof
   - org.openrewrite.staticanalysis.ReplaceWeekYearWithYear
@@ -146,6 +150,7 @@ recipeList:
   - org.openrewrite.staticanalysis.UseListSort
   - org.openrewrite.staticanalysis.UseMapContainsKey
   - org.openrewrite.staticanalysis.UseStandardCharset
+  - org.openrewrite.staticanalysis.UseStringReplace
   - org.openrewrite.staticanalysis.UseSystemLineSeparator
   - org.openrewrite.staticanalysis.WhileInsteadOfFor
   - org.openrewrite.staticanalysis.WriteOctalValuesAsDecimal
