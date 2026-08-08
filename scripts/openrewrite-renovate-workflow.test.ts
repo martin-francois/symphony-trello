@@ -56,6 +56,11 @@ const DEPENDENCY_SUBMISSION_WORKFLOW = readFileSync(
   "utf8",
 );
 const RENOVATE = readFileSync(new URL("../renovate.json", import.meta.url), "utf8");
+const PNPM_WORKSPACE = parse(
+  readFileSync(new URL("../pnpm-workspace.yaml", import.meta.url), "utf8"),
+) as {
+  readonly minimumReleaseAge?: number;
+};
 const SCRIPTS = new URL("./", import.meta.url);
 const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
   readonly branchConcurrentLimit?: number;
@@ -1117,6 +1122,22 @@ test("Renovate refreshes lockfiles on a schedule so transitive advisories are fi
 
   // A refresh that no one merges leaves the advisories open, which is the state this rule
   // exists to end. Required status checks still gate the merge, so a refresh that breaks a
-  // check stays open for review instead of merging itself.
+  // check stays open for review instead of merging itself. Automatic merge is only tolerable
+  // here because pnpm applies the seven-day cooldown itself; see the following test.
   assert.equal(RENOVATE_CONFIG.lockFileMaintenance?.automerge, true);
+});
+
+test("The lockfile refresh path enforces the same seven-day cooldown", () => {
+  // Renovate does not resolve a lock file maintenance branch itself. It runs the package
+  // manager and commits whatever that produces, so renovate.json's minimumReleaseAge never
+  // reaches this path. Without a gate pnpm would resolve a version published minutes ago, and
+  // lockFileMaintenance.automerge would then merge it without a human ever seeing it.
+  //
+  // pnpm reads minimumReleaseAge from pnpm-workspace.yaml and refuses, at resolution time, any
+  // version younger than the cutoff. It is expressed in minutes, so the two settings must be
+  // derived from one another rather than maintained side by side.
+  const cooldown = /^(\d+) days$/u.exec(RENOVATE_CONFIG.minimumReleaseAge ?? "")?.[1];
+  assert.ok(cooldown, "renovate.json must state the cooldown as a whole number of days");
+  assert.equal(PNPM_WORKSPACE.minimumReleaseAge, Number(cooldown) * 24 * 60);
+  assert.equal(PNPM_WORKSPACE.minimumReleaseAge, 10_080);
 });

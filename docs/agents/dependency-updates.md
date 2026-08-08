@@ -22,10 +22,18 @@ requirements.
   cooldown` asserts `pinDigests` and that `digest`, `pin`, and `pinDigest` remain enabled.
 - Apply a seven-day minimum release age to ordinary dependency updates. Renovate security updates
   retain their documented cooldown bypass so disclosed vulnerabilities can be fixed immediately.
+- The seven-day release age MUST hold on every path that can move a version, including the paths
+  Renovate does not resolve itself. Renovate's `minimumReleaseAge` governs the updates Renovate
+  computes; it does not govern `lockFileMaintenance`, which runs the package manager and commits
+  whatever that resolves. `pnpm-workspace.yaml` therefore sets `minimumReleaseAge: 10080`, the same
+  seven days expressed in minutes, and pnpm refuses at resolution time to select a version younger
+  than that cutoff. The script test `The lockfile refresh path enforces the same seven-day cooldown`
+  derives the pnpm value from `renovate.json` and fails if the two ever disagree.
 - Keep `lockFileMaintenance` enabled on a weekly off-hours schedule with automatic merge. Renovate
   and `vulnerabilityAlerts` reach only the declarations a manifest names, so an advisory against a
   package that exists only inside a lockfile stays open until that lockfile is regenerated. The
-  refresh is its own pull request and merges only after required checks pass; see
+  refresh is its own pull request and merges only after required checks pass, and the package
+  manager holds the release-age line the refresh would otherwise cross; see
   [ADR 0077](../adr/0077-refresh-lockfiles-on-a-schedule.md). The script test `Renovate refreshes
   lockfiles on a schedule so transitive advisories are fixed` asserts the rule.
 - Automatic merge MUST occur only through a pull request after required checks pass. Major updates,
