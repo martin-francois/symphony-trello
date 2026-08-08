@@ -60,6 +60,10 @@ const PNPM_WORKSPACE = parse(
   readFileSync(new URL("../pnpm-workspace.yaml", import.meta.url), "utf8"),
 ) as {
   readonly minimumReleaseAge?: number;
+  // Two settings that would leave minimumReleaseAge present but inert. Typed here so the
+  // test below can assert they stay unset; see "Nothing quietly exempts a package".
+  readonly minimumReleaseAgeStrict?: boolean;
+  readonly trustLockfile?: boolean;
 };
 const SCRIPTS = new URL("./", import.meta.url);
 const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
@@ -1140,4 +1144,57 @@ test("The lockfile refresh path enforces the same seven-day cooldown", () => {
   assert.ok(cooldown, "renovate.json must state the cooldown as a whole number of days");
   assert.equal(PNPM_WORKSPACE.minimumReleaseAge, Number(cooldown) * 24 * 60);
   assert.equal(PNPM_WORKSPACE.minimumReleaseAge, 10_080);
+});
+
+test("Nothing quietly exempts a package from the seven-day cooldown", () => {
+  // The test above proves the gate is configured. It does not prove the gate still bites,
+  // because three separate settings can leave it present and inert. Each is checked here.
+  //
+  // Not checked, on purpose: that minimumReleaseAgeExclude in pnpm-workspace.yaml is empty.
+  // Renovate writes the fixed version into that list as part of a security pull request, so
+  // an emptiness assertion would go red exactly when an advisory needs to land, and being a
+  // required check it would block the very path that is meant to be the fastest one in the
+  // system. The list is kept short instead by a scheduled job that drops any entry whose
+  // version has aged past the cutoff, which cannot change what installs: a version older
+  // than the cooldown clears the gate on its own merits, with or without the exemption.
+  //
+  // Also not checked: a top-level minimumReleaseAgeExclude in renovate.json. Renovate has no
+  // such option. Its schema defines only minimumReleaseAge and minimumReleaseAgeBehaviour,
+  // so the assertion would guard a key that cannot be set, and renovate-config-validator
+  // --strict already rejects unknown keys.
+
+  // 1. A packageRule that lowers or drops the cooldown for a subset of packages. This is the
+  //    Renovate-side bypass, and it is easy to miss in review because the top-level setting
+  //    still reads "7 days".
+  for (const rule of RENOVATE_CONFIG.packageRules) {
+    assert.equal(
+      rule.minimumReleaseAge,
+      undefined,
+      "no packageRule may weaken the global seven-day cooldown",
+    );
+    assert.equal(
+      rule.minimumReleaseAgeBehaviour,
+      undefined,
+      "no packageRule may relax how the cooldown treats a missing publish timestamp",
+    );
+  }
+
+  // 2. minimumReleaseAgeStrict: false. pnpm would stop failing when no version satisfies both
+  //    the range and the age, and would install the immature version anyway, appending it to
+  //    minimumReleaseAgeExclude as it went. The gate would look configured and permit
+  //    everything it was meant to stop.
+  assert.notEqual(
+    PNPM_WORKSPACE.minimumReleaseAgeStrict,
+    false,
+    "minimumReleaseAgeStrict: false makes pnpm install immature versions instead of refusing",
+  );
+
+  // 3. trustLockfile: true. pnpm would skip the pass that re-checks entries already committed
+  //    in pnpm-lock.yaml, so a lockfile carrying a package that never served its seven days
+  //    would install without complaint.
+  assert.notEqual(
+    PNPM_WORKSPACE.trustLockfile,
+    true,
+    "trustLockfile: true skips verification of the committed lockfile",
+  );
 });
