@@ -19,10 +19,18 @@ Jazzer executes only one fuzz test per Maven run when `JAZZER_FUZZ=1` is set. Us
 for separate targets. The `fuzzing` profile disables JUnit parallel execution so the selected target
 has a quiet process.
 
-CI runs the Jazzer fuzz tests in deterministic regression mode through the normal `verify` job. It
-does not run continuous coverage-guided fuzzing. That keeps pull request feedback within the
-repository's fast CI target while still failing when fixed crash inputs regress or parser, workflow,
-or Trello boundary changes break the fuzz tests.
+Pull request CI runs the Jazzer fuzz tests in deterministic regression mode through the normal
+`verify` job. It does not run continuous coverage-guided fuzzing. That keeps pull request feedback
+within the repository's fast CI target while still failing when fixed crash inputs regress or parser,
+workflow, or Trello boundary changes break the fuzz tests.
+
+The separate `Continuous Fuzzing` GitHub Actions workflow runs active Jazzer fuzzing from `main` on
+a GitHub-hosted runner. It is scheduled every six hours with a 330-minute active fuzzing budget and a
+350-minute job timeout, so it stays below the GitHub-hosted six-hour job cap while leaving time for
+artifact upload and issue reporting. It intentionally uses `ubuntu-latest`, not a Blacksmith runner.
+When a scheduled run finds a failure, it uploads the logs and any generated Jazzer crash artifact,
+then creates or updates a GitHub issue labelled `bug` and `fuzzed` with the target, commit, run URL,
+reproduction command, log tail, artifact name, and failure fingerprint.
 
 For a 15- to 30-minute active fuzzing pass, run the public parser targets one at a time with an
 explicit duration:
@@ -48,7 +56,7 @@ above runs five separate targets, so it can take roughly 20 minutes plus Maven s
 not a four-minute total suite limit.
 
 For a longer or continuous agent-requested run, choose one target and a longer duration such as
-`-Djazzer.max_duration=6h -Djazzer.max_executions=0`. The execution override lets the duration,
+`-Djazzer.max_duration=5h -Djazzer.max_executions=0`. The execution override lets the duration,
 rather than the method-level regression cap, decide when the fuzzing process stops. Stop the command
 when the requested window ends. Contributors are not expected to run this before every pull request;
 use it when touching parser, prompt-line safety, workflow loading, or Trello reference/checklist
