@@ -3,3 +3,18 @@
 # reach that path, so the seven-day cooldown is stated here as well, in minutes, where
 # pnpm enforces it at resolution time. See ADR 0077.
 minimumReleaseAge: 10080
+
+# What pnpm does when a registry serves no publish timestamp for a version, which some
+# self-hosted and mirrored registries do. false means such a version is refused rather than
+# waved through, so an entry with no provable age cannot slip past the cooldown.
+#
+# This is already pnpm's behaviour when the key is absent: the resolver fails closed and
+# treats the flag as an opt-in to be more permissive ("Without the flag we still fail
+# closed - better a false reject than silent bypass when the user hasn't opted in",
+# resolving/npm-resolver/src/createNpmResolutionVerifier.ts). It is written out anyway so
+# the intent survives a future change to that default, and so that anyone tempted to set it
+# to true to make a resolution failure go away sees what they would be giving up first.
+#
+# It is the exact counterpart of minimumReleaseAgeBehaviour: "timestamp-required" in
+# renovate.json, which makes the same decision on Renovate's side of the fence.
+minimumReleaseAgeIgnoreMissingTime: false
