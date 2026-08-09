@@ -5,8 +5,12 @@
     "helpers:pinGitHubActionDigests",
     ":rebaseStalePrs"
   ],
-  "reviewers": ["martinfrancois"],
-  "labels": ["dependencies"],
+  "reviewers": [
+    "martinfrancois"
+  ],
+  "labels": [
+    "dependencies"
+  ],
   "rangeStrategy": "pin",
   "pinDigests": true,
   "prConcurrentLimit": 0,
@@ -23,18 +27,24 @@
   "separateMultipleMajor": true,
   "vulnerabilityAlerts": {
     "enabled": true,
-    "labels": ["security"]
+    "labels": [
+      "security"
+    ]
   },
   "lockFileMaintenance": {
     "description": "Refresh the committed lockfiles on a schedule so transitive advisories get fixed. Renovate only proposes updates for the direct declarations it manages, so a vulnerable package that no manifest names is never reached by an ordinary update or by a vulnerability alert, and its advisory stays open until the lockfile is regenerated. The Friday early-morning window matches the maintainer's preference for scheduled dependency work, and automerge matches the non-major bundle policy: required status checks still gate the merge, so a refresh that breaks a check stays open for review.",
     "enabled": true,
-    "schedule": ["* 0-4 * * 5"],
+    "schedule": [
+      "* 0-4 * * 5"
+    ],
     "automerge": true
   },
   "customManagers": [
     {
       "customType": "regex",
-      "managerFilePatterns": ["/^tessl\\.json$/"],
+      "managerFilePatterns": [
+        "/^tessl\\.json$/"
+      ],
       "matchStrings": [
         "\"(?<depName>tessl-labs/good-oss-citizen)\"\\s*:\\s*\\{\\s*\"version\"\\s*:\\s*\"(?<currentValue>[^\"]+)\""
       ],
@@ -47,7 +57,9 @@
         "/^\\.github/workflows/ci\\.yml$/",
         "/^\\.github/workflows/commitlint\\.yml$/"
       ],
-      "matchStrings": ["corepack prepare pnpm@(?<currentValue>\\d+\\.\\d+\\.\\d+) --activate"],
+      "matchStrings": [
+        "corepack prepare pnpm@(?<currentValue>\\d+\\.\\d+\\.\\d+) --activate"
+      ],
       "datasourceTemplate": "npm",
       "depNameTemplate": "pnpm",
       "versioningTemplate": "semver"
@@ -56,15 +68,14 @@
       "customType": "regex",
       "managerFilePatterns": [
         "/^\\.github/workflows/commitlint\\.yml$/",
-        "/^AGENTS\\.md$/",
-        "/^CONTRIBUTING\\.md$/",
         "/^scripts/commitlint-local$/"
       ],
       "matchStrings": [
         "(?:--package\\s+|\\s+)(?<depName>@commitlint/(?:cli|config-conventional))@(?<currentValue>\\d+\\.\\d+\\.\\d+)"
       ],
       "datasourceTemplate": "npm",
-      "versioningTemplate": "semver"
+      "versioningTemplate": "semver",
+      "description": "The commitlint versions pinned inline in the commitlint workflow and in scripts/commitlint-local. No built-in manager reads a version out of a shell script or a workflow run step, and the two must move together or a local check disagrees with CI."
     },
     {
       "customType": "regex",
@@ -112,13 +123,21 @@
   "packageRules": [
     {
       "description": "Bundle every non-major update into one automergeable pull request. Major updates are deliberately excluded so that a pending major never holds back the bundle.",
-      "matchUpdateTypes": ["minor", "patch", "pin", "pinDigest", "digest"],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "pinDigest",
+        "digest"
+      ],
       "groupName": "all non-major dependencies",
       "groupSlug": "all-non-major",
       "automerge": true
     },
     {
-      "matchDatasources": ["maven"],
+      "matchDatasources": [
+        "maven"
+      ],
       "matchPackageNames": [
         "com.google.errorprone:error_prone_core",
         "org.openrewrite:*",
@@ -132,7 +151,9 @@
       "rebaseWhen": "behind-base-branch",
       "automerge": true,
       "platformAutomerge": false,
-      "addLabels": ["openrewrite"],
+      "addLabels": [
+        "openrewrite"
+      ],
       "prBodyNotes": [
         "Automation validates this dependency-only update and runs the ordered OpenRewrite and Spotless pipeline.",
         "When an eligible non-major update produces no repository change, required CI passes and Renovate automerges this pull request.",
@@ -141,30 +162,44 @@
       ]
     },
     {
-      "matchDatasources": ["maven"],
-      "matchPackageNames": ["io.quarkus:quarkus-update-recipes"],
+      "matchDatasources": [
+        "maven"
+      ],
+      "matchPackageNames": [
+        "io.quarkus:quarkus-update-recipes"
+      ],
       "groupName": null,
       "automerge": false,
-      "addLabels": ["quarkus"],
+      "addLabels": [
+        "quarkus"
+      ],
       "prBodyNotes": [
         "Quarkus updater recipe changes MUST NOT be validated as general OpenRewrite maintenance updates.",
         "Before merge, a maintainer MUST review the target Quarkus migration guide, run `quarkus:update` in the dependency-update branch, review the complete diff, and pass the full Maven gate."
       ]
     },
     {
-      "matchPackageNames": ["tessl-labs/good-oss-citizen"],
+      "matchPackageNames": [
+        "tessl-labs/good-oss-citizen"
+      ],
       "groupName": null,
       "automerge": false,
-      "addLabels": ["tessl"],
+      "addLabels": [
+        "tessl"
+      ],
       "prBodyNotes": [
         "After Renovate updates `tessl.json`, run `tessl install`, review the refreshed `.tessl/tiles` diff, and commit those vendored tile changes before merging."
       ]
     },
     {
       "description": "Major updates land one at a time and require a human merge after review of the migration notes. This rule deliberately sets no groupName: majors are already ungrouped because the bundle rule matches non-major types only, and forcing a groupName here would split lockstep groups whose members must move together across a major boundary.",
-      "matchUpdateTypes": ["major"],
+      "matchUpdateTypes": [
+        "major"
+      ],
       "automerge": false,
-      "addLabels": ["major update"]
+      "addLabels": [
+        "major update"
+      ]
     }
   ]
 }
