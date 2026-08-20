@@ -38,8 +38,8 @@ jobs:
           cp commitlint.config.cjs "$COMMITLINT_HOME/commitlint.config.cjs"
           cp commitlint.message.config.cjs "$COMMITLINT_HOME/commitlint.message.config.cjs"
           pnpm --dir "$COMMITLINT_HOME" add --silent \
-            @commitlint/cli@21.2.1 \
-            @commitlint/config-conventional@21.2.0
+            @commitlint/cli@21.2.2 \
+            @commitlint/config-conventional@21.2.2
           echo "COMMITLINT_BIN=$COMMITLINT_HOME/node_modules/.bin/commitlint" >> "$GITHUB_ENV"
           echo "COMMITLINT_TITLE_CONFIG=$COMMITLINT_HOME/commitlint.config.cjs" >> "$GITHUB_ENV"
           echo "COMMITLINT_MESSAGE_CONFIG=$COMMITLINT_HOME/commitlint.message.config.cjs" >> "$GITHUB_ENV"
