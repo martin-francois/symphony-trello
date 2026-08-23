@@ -807,7 +807,7 @@ test("write credentials are isolated from recipe execution", () => {
   assert.doesNotMatch(reportJob, /(?:rewrite:run|spotless:apply|OPENREWRITE_AUTOMATION_)/);
   assert.match(
     publishJob,
-    /^ {8}uses: actions\/create-github-app-token@[0-9a-f]{40} # v[0-9]+$/m,
+    /^ {8}uses: actions\/create-github-app-token@[0-9a-f]{40} # v[0-9]+(?:\.[0-9]+){0,2}$/m,
   );
   assert.match(publishJob, /if: \$\{\{ steps\.publication\.outputs\.required == 'true' \}\}/g);
   assert.match(publishJob, /permission-contents: write/);
@@ -969,13 +969,15 @@ test("the OpenRewrite rule selects exact toolchain packages across Maven depende
 });
 
 test("major update pull requests require manual merge", () => {
-  const openRewriteRule = RENOVATE.indexOf('"groupName": "OpenRewrite toolchain"');
-  const majorRule = RENOVATE.indexOf('"matchUpdateTypes": ["major"]');
-  const majorUpdateRule = RENOVATE_CONFIG.packageRules.find(
+  const openRewriteRule = RENOVATE_CONFIG.packageRules.findIndex(
+    ({groupName}) => groupName === "OpenRewrite toolchain",
+  );
+  const majorRule = RENOVATE_CONFIG.packageRules.findIndex(
     ({matchUpdateTypes}) => matchUpdateTypes?.includes("major"),
   );
+  const majorUpdateRule = RENOVATE_CONFIG.packageRules.at(majorRule);
 
-  assert.ok(openRewriteRule > 0);
+  assert.ok(openRewriteRule >= 0);
   assert.ok(majorRule > openRewriteRule);
   assert.equal(majorUpdateRule?.automerge, false);
 });
