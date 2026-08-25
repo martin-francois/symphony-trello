@@ -129,7 +129,7 @@ setup paths.
 ### One-Time Browser Setup: Workspace, API Key, Token
 
 Complete these browser steps once before creating the recommended board or importing an existing
-board. Symphony can create boards and write `WORKFLOW.md`, but Trello requires you to create the
+board. Symphony can set up everything for you, but Trello requires you to create the
 Workspace and authorize the API token in the browser.
 
 1. Sign in to Trello in your browser.
