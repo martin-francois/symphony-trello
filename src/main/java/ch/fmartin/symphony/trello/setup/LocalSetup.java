@@ -304,7 +304,7 @@ public final class LocalSetup {
                 Optional.empty(),
                 Optional.of(options.configDir()),
                 Optional.of(options.workspaceRoot()),
-                Optional.empty(),
+                options.stateHome(),
                 environment);
     }
 
@@ -1587,6 +1587,7 @@ public final class LocalSetup {
             Path workspaceRoot,
             boolean workspaceRootExplicit,
             Path configDir,
+            Optional<Path> stateHome,
             Path manifestPath,
             Optional<Integer> serverPort,
             int maxAgents,
@@ -1623,6 +1624,9 @@ public final class LocalSetup {
                 githubMode = true;
             }
             configDir = configDir.toAbsolutePath().normalize();
+            Optional<Path> stateHome = request.stateHome().map(path -> path.toAbsolutePath().normalize());
+            stateHome.ifPresent(
+                    path -> CliInputValidation.rejectExistingNonDirectoryPath("--state-home", path));
             envPath = resolveUserDataPath(envPath, configDir);
             manifest = resolveUserDataPath(manifest, configDir);
             validateResolvedSetupPaths(configDir, manifest, manifestPathExplicit, request.action());
@@ -1664,6 +1668,7 @@ public final class LocalSetup {
                     workspaceRoot,
                     workspaceRootExplicit,
                     configDir,
+                    stateHome,
                     manifest,
                     request.serverPort(),
                     request.maxAgents(),
@@ -1724,6 +1729,7 @@ public final class LocalSetup {
                     workspaceRoot,
                     workspaceRootExplicit,
                     configDir,
+                    stateHome,
                     manifestPath,
                     serverPort,
                     maxAgents,
@@ -1768,6 +1774,7 @@ public final class LocalSetup {
                     workspaceRoot,
                     workspaceRootExplicit,
                     configDir,
+                    stateHome,
                     manifestPath,
                     serverPort,
                     maxAgents,
@@ -1891,6 +1898,7 @@ public final class LocalSetup {
                     workspaceRoot,
                     workspaceRootExplicit,
                     configDir,
+                    stateHome,
                     manifestPath,
                     serverPort,
                     maxAgents,
@@ -1935,6 +1943,7 @@ public final class LocalSetup {
                     workspaceRoot,
                     workspaceRootExplicit,
                     configDir,
+                    stateHome,
                     manifestPath,
                     serverPort,
                     maxAgents,

@@ -77,7 +77,11 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
 
     private static Optional<Path> isolatedStateHome(
             boolean explicitConfigDir, Map<String, String> environment, Path resolvedConfigDir) {
-        if (!explicitConfigDir || InstalledCliDefaults.hasUserStateHomeOverride(environment)) {
+        // Presence of --config-dir is not enough to isolate: installer defaults inject the
+        // installed config dir, and that layout must keep XDG/installed state home.
+        if (!explicitConfigDir
+                || InstalledCliDefaults.hasUserStateHomeOverride(environment)
+                || InstalledCliDefaults.isInstalledConfigDir(resolvedConfigDir, environment)) {
             return Optional.empty();
         }
         return Optional.of(resolvedConfigDir.resolveSibling("state"));

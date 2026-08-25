@@ -103,7 +103,7 @@ final class InstalledCliDefaultsTest {
     }
 
     @Test
-    void setupLocalSetupReceivesWorkspaceRootDefault() {
+    void setupLocalSetupReceivesWorkspaceRootAndStateHomeDefaults() {
         // given
         InstalledCliDefaults.InstalledPaths paths = installedPaths();
 
@@ -118,8 +118,32 @@ final class InstalledCliDefaultsTest {
                         configDir.toString(),
                         "--workspace-root",
                         workspaceRoot.toString(),
+                        "--state-home",
+                        stateHome.toString(),
                         "--board",
                         "SYNTH001");
+    }
+
+    @Test
+    void derivesIsolatedSetupLocalDefaultsFromExplicitConfigDir() {
+        // given
+        InstalledCliDefaults.InstalledPaths paths = installedPaths();
+        Path isolatedConfigDir = Path.of("/tmp/isolated-config");
+
+        // when
+        List<String> args =
+                InstalledCliDefaults.apply(List.of("setup-local", "--config-dir", isolatedConfigDir.toString()), paths);
+
+        // then
+        assertThat(args)
+                .containsExactly(
+                        "setup-local",
+                        "--workspace-root",
+                        isolatedConfigDir.resolve("workspaces").toString(),
+                        "--state-home",
+                        isolatedConfigDir.resolveSibling("state").toString(),
+                        "--config-dir",
+                        isolatedConfigDir.toString());
     }
 
     @Test

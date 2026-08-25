@@ -590,7 +590,7 @@ final class InstallerScriptFixture {
                   }
                   setup_local_value_option() {
                     case "$1" in
-                      --key|--token|--board-name|--board|--workspace-id|--active|--terminal|--in-progress|--blocked|--workflow|--workspace-root|--config-dir|--manifest|--server-port|--max-agents|--codex-model|--codex-reasoning-effort|--env|--add-path|--endpoint)
+                      --key|--token|--board-name|--board|--workspace-id|--active|--terminal|--in-progress|--blocked|--workflow|--workspace-root|--config-dir|--state-home|--manifest|--server-port|--max-agents|--codex-model|--codex-reasoning-effort|--env|--add-path|--endpoint)
                         return 0
                         ;;
                       *)
@@ -642,6 +642,9 @@ final class InstallerScriptFixture {
                           if [[ -n "$workspace_root" ]] && ! has_option --workspace-root "${raw_cli_args[@]}"; then
                             defaults+=("--workspace-root" "$workspace_root")
                           fi
+                          if [[ -n "$state_home" ]] && ! has_option --state-home "${raw_cli_args[@]}"; then
+                            defaults+=("--state-home" "$state_home")
+                          fi
                         else
                           if [[ "$workspace_from_user_environment" == true ]]; then
                             if ! has_option --workspace-root "${raw_cli_args[@]}"; then
@@ -650,6 +653,15 @@ final class InstallerScriptFixture {
                           else
                             if ! has_option --workspace-root "${raw_cli_args[@]}"; then
                               defaults+=("--workspace-root" "$(/usr/bin/readlink -m "$explicit_config")/workspaces")
+                            fi
+                          fi
+                          if [[ "$state_from_user_environment" == true ]]; then
+                            if ! has_option --state-home "${raw_cli_args[@]}"; then
+                              defaults+=("--state-home" "$state_home")
+                            fi
+                          else
+                            if ! has_option --state-home "${raw_cli_args[@]}"; then
+                              defaults+=("--state-home" "$(dirname "$(/usr/bin/readlink -m "$explicit_config")")/state")
                             fi
                           fi
                         fi

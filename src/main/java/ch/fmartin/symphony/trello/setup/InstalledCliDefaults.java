@@ -31,6 +31,7 @@ final class InstalledCliDefaults {
             "--workflow",
             "--workspace-root",
             "--config-dir",
+            "--state-home",
             "--manifest",
             "--server-port",
             "--max-agents",
@@ -63,6 +64,10 @@ final class InstalledCliDefaults {
         return InstalledPaths.from(environment).stateHomeFromUserEnvironment();
     }
 
+    static boolean isInstalledConfigDir(Path configDir, Map<String, String> environment) {
+        return InstalledPaths.from(environment).matchesInstalledConfigDir(configDir);
+    }
+
     private static List<String> setupLocal(List<String> args, InstalledPaths paths) {
         List<String> defaults = new ArrayList<>();
         boolean explicitConfigDir = hasOption(args, "--config-dir");
@@ -73,12 +78,17 @@ final class InstalledCliDefaults {
         }
         if (!lifecycle && !explicitConfigDir) {
             addIfMissing(defaults, args, "--workspace-root", paths.workspaceRoot());
+            addIfMissing(defaults, args, "--state-home", paths.stateHome());
         } else if (!lifecycle) {
             explicitConfigDirValue.ifPresent(configDir -> {
                 Optional<String> workspaceRoot = paths.workspaceRootFromUserEnvironment()
                         ? paths.workspaceRoot()
                         : Optional.of(isolatedWorkspaceRoot(configDir));
+                Optional<String> stateHome = paths.stateHomeFromUserEnvironment()
+                        ? paths.stateHome()
+                        : Optional.of(isolatedStateHome(configDir));
                 addIfMissing(defaults, args, "--workspace-root", workspaceRoot);
+                addIfMissing(defaults, args, "--state-home", stateHome);
             });
         }
         return injectAfterCommand(args, defaults);
@@ -226,6 +236,10 @@ final class InstalledCliDefaults {
 
         boolean stateHomeFromUserEnvironment() {
             return stateHome.isPresent() && !samePath(stateHome, installedStateHome);
+        }
+
+        boolean matchesInstalledConfigDir(Path candidate) {
+            return samePath(Optional.of(candidate.toString()), configDir);
         }
 
         private static Optional<String> property(PropertyLookup properties, String name) {

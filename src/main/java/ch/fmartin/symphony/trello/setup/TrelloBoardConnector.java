@@ -564,7 +564,7 @@ final class TrelloBoardConnector {
                 Optional.empty(),
                 Optional.of(options.configDir()),
                 Optional.of(options.workspaceRoot()),
-                Optional.empty(),
+                options.stateHome(),
                 environment);
     }
 

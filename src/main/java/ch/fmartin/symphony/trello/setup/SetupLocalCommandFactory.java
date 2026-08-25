@@ -331,6 +331,9 @@ final class SetupLocalCommandFactory {
         @Option(names = "--config-dir", description = "Directory for local .env, workflows, and board manifest.")
         Optional<Path> configDir = Optional.empty();
 
+        @Option(names = "--state-home", description = "Directory for managed pid and log files.")
+        Optional<Path> stateHome = Optional.empty();
+
         @Option(names = "--manifest", description = "Connected-board manifest path.")
         Optional<Path> manifestPath = Optional.empty();
 
@@ -448,6 +451,7 @@ final class SetupLocalCommandFactory {
                     workflowPath,
                     workspaceRoot,
                     configDir,
+                    stateHome,
                     manifestPath,
                     serverPort,
                     maxAgents.orElse(TrelloBoardSetup.DEFAULT_MAX_CONCURRENT_AGENTS),
@@ -464,10 +468,13 @@ final class SetupLocalCommandFactory {
 
         private void validateLifecycleSharedOptions(Action action) {
             CliInputValidation.rejectBlankPath("--config-dir", configDir, "--config-dir must not be empty.");
+            CliInputValidation.rejectBlankPath("--state-home", stateHome, "--state-home must not be empty.");
             CliInputValidation.rejectBlankPath("--manifest", manifestPath, "--manifest must not be empty.");
             CliInputValidation.rejectControlCharacters("--config-dir", configDir);
+            CliInputValidation.rejectControlCharacters("--state-home", stateHome);
             CliInputValidation.rejectControlCharacters("--manifest", manifestPath);
             configDir.ifPresent(path -> CliInputValidation.rejectExistingNonDirectoryPath("--config-dir", path));
+            stateHome.ifPresent(path -> CliInputValidation.rejectExistingNonDirectoryPath("--state-home", path));
             if (action == Action.REPAIR_PORT || action == Action.CONFIGURE_GITHUB) {
                 CliInputValidation.rejectBlankBoardSelector(board);
                 CliInputValidation.rejectControlCharactersInText("--board", board);
@@ -592,9 +599,11 @@ final class SetupLocalCommandFactory {
             CliInputValidation.rejectControlCharacters("--workflow", workflowPath);
             CliInputValidation.rejectBlankWorkflowSelector(workflowPath);
             CliInputValidation.rejectBlankPath("--config-dir", configDir, "--config-dir must not be empty.");
+            CliInputValidation.rejectBlankPath("--state-home", stateHome, "--state-home must not be empty.");
             CliInputValidation.rejectBlankPath("--manifest", manifestPath, "--manifest must not be empty.");
             CliInputValidation.rejectControlCharacters("--workspace-root", workspaceRoot);
             CliInputValidation.rejectControlCharacters("--config-dir", configDir);
+            CliInputValidation.rejectControlCharacters("--state-home", stateHome);
             CliInputValidation.rejectControlCharacters("--manifest", manifestPath);
             CliInputValidation.rejectBlankPath(
                     "--workspace-root", workspaceRoot, "--workspace-root must not be empty.");
@@ -602,6 +611,7 @@ final class SetupLocalCommandFactory {
                     "--workspace-root", workspaceRoot, "--workspace-root must be an absolute path.");
             CliInputValidation.rejectExistingNonDirectoryPath("--workspace-root", workspaceRoot);
             configDir.ifPresent(path -> CliInputValidation.rejectExistingNonDirectoryPath("--config-dir", path));
+            stateHome.ifPresent(path -> CliInputValidation.rejectExistingNonDirectoryPath("--state-home", path));
             TrelloCredentialStore.validateEnvPathOption(envPath);
             CliInputValidation.rejectBlankPaths("--add-path", additionalWritableRoots, "--add-path must not be empty.");
             CliInputValidation.rejectControlCharactersInPaths("--add-path", additionalWritableRoots);
@@ -648,6 +658,7 @@ final class SetupLocalCommandFactory {
             merged.workflowPath = child.workflowPath.or(() -> merged.workflowPath);
             merged.workspaceRoot = child.workspaceRoot.or(() -> merged.workspaceRoot);
             merged.configDir = child.configDir.or(() -> merged.configDir);
+            merged.stateHome = child.stateHome.or(() -> merged.stateHome);
             merged.manifestPath = child.manifestPath.or(() -> merged.manifestPath);
             merged.serverPort = child.serverPort.or(() -> merged.serverPort);
             merged.maxAgents = child.maxAgents.or(() -> merged.maxAgents);
@@ -684,6 +695,7 @@ final class SetupLocalCommandFactory {
             copy.workflowPath = source.workflowPath;
             copy.workspaceRoot = source.workspaceRoot;
             copy.configDir = source.configDir;
+            copy.stateHome = source.stateHome;
             copy.manifestPath = source.manifestPath;
             copy.serverPort = source.serverPort;
             copy.maxAgents = source.maxAgents;
