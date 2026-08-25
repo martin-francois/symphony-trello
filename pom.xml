@@ -38,7 +38,7 @@
     <mockito.version>5.23.0</mockito.version>
     <picocli.version>4.7.7</picocli.version>
     <findsecbugs.version>1.14.0</findsecbugs.version>
-    <guava.version>33.6.0-jre</guava.version>
+    <guava.version>33.7.1-jre</guava.version>
     <jazzer.version>0.30.0</jazzer.version>
     <jspecify.version>1.0.1</jspecify.version>
     <rewrite-maven-plugin.version>6.46.1</rewrite-maven-plugin.version>
