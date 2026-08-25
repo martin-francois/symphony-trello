@@ -161,9 +161,9 @@ Workspace and authorize the API token in the browser.
 9. If Trello warns that generating a key replaces the API key used for Personal Data Storage and
    GDPR compliance, continue when this is the new `Symphony for Trello Automation` app/admin entry.
    For an existing app already used elsewhere, rotating the key means those uses must be updated.
-10. Copy the API key somewhere temporary. The API key identifies the app, but the token is the
+10. Copy the API key somewhere temporary. The API key identifies the app and is not sensitive.
+11. On the same API key page, click the `Token` link below the key. The token is the
     sensitive credential.
-11. On the same API key page, click the `Token` link below the key.
 12. Review the authorization screen. Confirm it shows `Symphony for Trello Automation`, your Trello
     account, and permissions to make comments and create or update cards, lists, boards, and
     Workspaces.
