@@ -162,15 +162,15 @@ Workspace and authorize the API token in the browser.
    GDPR compliance, continue when this is the new `Symphony for Trello Automation` app/admin entry.
    For an existing app already used elsewhere, rotating the key means those uses must be updated.
 10. Copy the API key somewhere temporary. The API key identifies the app and is not sensitive.
-11. On the same API key page, click the `Token` link below the key. The token is the
-    sensitive credential.
-12. Review the authorization screen. Confirm it shows `Symphony for Trello Automation`, your Trello
+11. On the same API key page, click the `Token` link. The link is just a linked word inside a paragraph
+    next to the key. The token is the sensitive credential.
+13. Review the authorization screen. Confirm it shows `Symphony for Trello Automation`, your Trello
     account, and permissions to make comments and create or update cards, lists, boards, and
     Workspaces.
-13. Click `Allow`.
-14. Copy the generated token. Treat it like a password: it grants access as your Trello account to
+14. Click `Allow`.
+15. Copy the generated token. Treat it like a password: it grants access as your Trello account to
     boards and Workspaces your account can access.
-15. Save both values in the `.env` file read by the command you will run:
+16. Save both values in the `.env` file read by the command you will run:
 
     - Fresh installed `symphony-trello` command on normal Linux, macOS, or WSL2:
       `$HOME/.config/symphony-trello/.env`.
