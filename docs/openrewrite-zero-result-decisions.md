@@ -65,19 +65,22 @@ evidence.
 | Status | Rows | Meaning |
 | --- | ---: | --- |
 | Active before review | 7 | Already selected in the 31-entry composite; another audit can also have positive evidence. |
-| Activate | 405 | Compatible improvement or useful recurrence guard for the repository's existing language, build, or dependency stack. |
+| Activate | 404 | Compatible improvement or useful recurrence guard for the repository's existing language, build, or dependency stack. |
 | Breaking-release candidate | 0 | No audited recipe currently requires a breaking application release. |
 | Contingent | 386 | Requires an absent capability or an explicit migration/version target; includes all 141 Quarkus declarations. |
-| Parent/configured primitive | 104 | Select reviewed children or a configured wrapper instead of the bare ID. |
+| Parent/configured primitive | 105 | Select reviewed children or a configured wrapper instead of the bare ID. |
 | Rejected | 201 | Has a recipe-specific safety, context, readability, diagnostics, source-defect, or ownership problem. |
 | **Total** | **1,103** | One row per distinct audited or discovered recipe ID. |
 
-The 405 `Activate` IDs map to 406 exact allowlist entries because
+The 404 `Activate` IDs map to 405 exact allowlist entries because
 `org.openrewrite.staticanalysis.SimplifyTernaryRecipes` is represented by its two reviewed
-generated leaves. Together with the original 31 entries, `rewrite.yml` therefore contains 437
+generated leaves. Together with the original 31 entries, `rewrite.yml` therefore contains 436
 active entries. `com.google.guava.InlineGuavaMethods` is the one accepted generated composite
 whose Guava-authored `@InlineMe` inventory has no stable public leaf IDs; its generated inventory
-must be re-audited whenever `rewrite-migrate-java` changes.
+must be re-audited whenever `rewrite-migrate-java` changes. The 3.42.1 audit confirmed that the
+generated composite now covers both `Atomics.newReference` overloads and both
+`Atomics.newReferenceArray` overloads, so it supersedes the retired standalone recipe without
+reducing the accepted Guava migration coverage.
 
 ## Zero-Result and Mixed-Evidence Decisions
 
@@ -151,7 +154,7 @@ must be re-audited whenever `rewrite-migrate-java` changes.
 | `org.openrewrite.java.migrate.DeprecatedJavaxSecurityCert` | Contingent | `global-zero:java25,javabest` | Requires a legacy JSSE/certificate API migration; direct ownership and exception/identity behavior must be reviewed with that security capability. |
 | `org.openrewrite.java.migrate.DeprecatedLogRecordThreadID` | Contingent | `global-zero:java25,javabest` | Requires direct java.util.logging LogRecord construction, which the repository does not use. |
 | `org.openrewrite.java.migrate.EnableLombokAnnotationProcessor` | Contingent | `global-zero:java25,javabest` | Requires the absent Lombok/MapStruct ecosystem and changes annotation-processor dependencies. |
-| `org.openrewrite.java.migrate.guava.NoGuavaAtomicsNewReference` | Activate | `global-zero:javabest` | Atomics.newReference() and Atomics.newReference(value) are direct constructor conveniences; the recipe preserves each argument in new AtomicReference<>(...) and Guava is an existing dependency. |
+| `org.openrewrite.java.migrate.guava.NoGuavaAtomicsNewReference` | Parent/configured primitive | `global-zero:javabest; superseded in rewrite-migrate-java 3.42.1` | The standalone recipe was retired after Guava 33.7 generated equivalent `InlineGuavaMethods` replacements for both `Atomics.newReference` and both `Atomics.newReferenceArray` overloads. Keep the configured wrapper rather than a removed leaf ID. |
 | `org.openrewrite.java.migrate.guava.NoGuavaCollections2Transform` | Rejected | `global-zero:javabest` | Guava Collections2.transform returns a lazy live view; the recipe eagerly materializes a separate list, changing timing, side effects, and visibility of later source-collection changes. |
 | `org.openrewrite.java.migrate.guava.NoGuavaCreateTempDir` | Rejected | `global-zero:javabest` | Guava creates owner-restricted temporary directories and reports failure as IllegalStateException; the recipe omits the POSIX rwx------ attribute and introduces IOException behavior. |
 | `org.openrewrite.java.migrate.guava.NoGuavaDirectExecutor` | Rejected | `global-zero:javabest` | `Runnable::run` is legal only in a target-typed context, but the pinned visitor rewrites every invocation without checking its parent; a valid chained call such as `MoreExecutors.directExecutor().execute(task)` can therefore become uncompilable. |
