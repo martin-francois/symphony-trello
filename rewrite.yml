@@ -33,7 +33,6 @@ recipeList:
   - org.openrewrite.java.migrate.concurrent.MigrateAtomicLongWeakCompareAndSetToWeakCompareAndSetPlain
   - org.openrewrite.java.migrate.concurrent.MigrateAtomicReferenceArrayWeakCompareAndSetToWeakCompareAndSetPlain
   - org.openrewrite.java.migrate.concurrent.MigrateAtomicReferenceWeakCompareAndSetToWeakCompareAndSetPlain
-  - org.openrewrite.java.migrate.guava.NoGuavaAtomicsNewReference
   - org.openrewrite.java.migrate.guava.NoGuavaImmutableListCopyOf
   - org.openrewrite.java.migrate.guava.NoGuavaImmutableListOf
   - org.openrewrite.java.migrate.guava.NoGuavaImmutableMapCopyOf
