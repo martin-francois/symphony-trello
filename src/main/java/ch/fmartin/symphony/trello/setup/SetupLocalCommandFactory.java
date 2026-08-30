@@ -603,20 +603,12 @@ final class SetupLocalCommandFactory {
         private void validateCliPaths() {
             CliInputValidation.rejectControlCharacters("--workflow", workflowPath);
             CliInputValidation.rejectBlankWorkflowSelector(workflowPath);
-            CliInputValidation.rejectBlankPath("--config-dir", configDir, "--config-dir must not be empty.");
-            CliInputValidation.rejectBlankPath(STATE_HOME, stateHome, STATE_HOME + " must not be empty.");
-            CliInputValidation.rejectBlankPath("--manifest", manifestPath, "--manifest must not be empty.");
             CliInputValidation.rejectControlCharacters("--workspace-root", workspaceRoot);
-            CliInputValidation.rejectControlCharacters("--config-dir", configDir);
-            CliInputValidation.rejectControlCharacters(STATE_HOME, stateHome);
-            CliInputValidation.rejectControlCharacters("--manifest", manifestPath);
             CliInputValidation.rejectBlankPath(
                     "--workspace-root", workspaceRoot, "--workspace-root must not be empty.");
             CliInputValidation.rejectRelativePath(
                     "--workspace-root", workspaceRoot, "--workspace-root must be an absolute path.");
             CliInputValidation.rejectExistingNonDirectoryPath("--workspace-root", workspaceRoot);
-            configDir.ifPresent(path -> CliInputValidation.rejectExistingNonDirectoryPath("--config-dir", path));
-            stateHome.ifPresent(path -> CliInputValidation.rejectExistingNonDirectoryPath(STATE_HOME, path));
             TrelloCredentialStore.validateEnvPathOption(envPath);
             CliInputValidation.rejectBlankPaths("--add-path", additionalWritableRoots, "--add-path must not be empty.");
             CliInputValidation.rejectControlCharactersInPaths("--add-path", additionalWritableRoots);

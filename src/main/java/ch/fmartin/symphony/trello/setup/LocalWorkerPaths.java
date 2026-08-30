@@ -56,6 +56,7 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
                 .toAbsolutePath()
                 .normalize();
         Path resolvedStateHome = stateHome
+                .or(() -> userEnvironmentStateHome(environment, installedPaths))
                 .or(() -> isolatedStateHome(explicitConfigDir, installedPaths, resolvedConfigDir))
                 .or(() -> envPath(environment, STATE_HOME_ENV))
                 .orElseGet(() -> resolvedConfigDir.resolveSibling("state"))
@@ -102,13 +103,16 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
         return value == null || value.isBlank() ? Optional.empty() : Optional.of(Path.of(value));
     }
 
+    private static Optional<Path> userEnvironmentStateHome(
+            Map<String, String> environment, InstalledCliDefaults.InstalledPaths installedPaths) {
+        return installedPaths.stateHomeFromUserEnvironment() ? envPath(environment, STATE_HOME_ENV) : Optional.empty();
+    }
+
     private static Optional<Path> isolatedStateHome(
             boolean explicitConfigDir, InstalledCliDefaults.InstalledPaths installedPaths, Path resolvedConfigDir) {
         // Presence of --config-dir is not enough to isolate: installer defaults inject the
         // installed config dir, and that layout must keep XDG/installed state home.
-        if (!explicitConfigDir
-                || installedPaths.stateHomeFromUserEnvironment()
-                || installedPaths.matchesInstalledConfigDir(resolvedConfigDir)) {
+        if (!explicitConfigDir || installedPaths.matchesInstalledConfigDir(resolvedConfigDir)) {
             return Optional.empty();
         }
         return Optional.of(resolvedConfigDir.resolveSibling("state"));
