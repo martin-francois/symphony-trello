@@ -730,9 +730,10 @@ chosen install layout, so normal users do not need to set it or remember it for 
 
 When a fresh interactive install uses explicit layout variables, setup asks whether the layout
 follows a reusable platform or organization convention. If you opt in, setup shows the complete
-sanitized feature request before offering to create it with an authenticated GitHub CLI. Otherwise,
-it prints a prefilled browser link. Paths outside your home, usernames, hostnames, credentials, and
-account details are not included, and declining does not affect setup.
+sanitized feature request before offering to create it with an authenticated GitHub CLI. If GitHub
+CLI creation is unavailable or declined, setup prints a prefilled browser link. Declining the
+feedback prompt skips issue creation entirely. Paths outside your home, usernames, hostnames,
+credentials, and account details are not included, and declining does not affect setup.
 
 Updates temporarily recognize managed workers whose PID files were written to the former
 config-sibling `state` directory. The updater stops those workers and restarts them in the configured

@@ -52,8 +52,10 @@ follows a reusable convention. A negative answer ends the flow.
 For an affirmative answer, setup prints the complete proposed issue title and body. The body includes
 the operating-system name and version, architecture, wrapper shell, approved explicit variable
 names, sanitized config and state paths, and whether those paths share a parent. Home-relative paths
-replace the home prefix with `$HOME`; other paths become `<outside-home>`. The report excludes
-credentials, usernames, hostnames, and account details.
+replace the home prefix with `$HOME`. They retain only approved structural components such as
+`.config`, `.local`, `state`, and `workspaces`; other child components become `<redacted>`. Paths
+outside the home become `<outside-home>`. The report excludes credentials, usernames, hostnames,
+and account details.
 
 When `gh auth status` succeeds, setup asks for separate consent to create the displayed issue. When
 authentication is unavailable, creation is declined, or creation fails, setup prints a prefilled

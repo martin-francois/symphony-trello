@@ -15,14 +15,33 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.StringJoiner;
 import java.util.function.Function;
 
 final class InstallerLayoutFeedback {
     static final String ENVIRONMENT_NAME = "SYMPHONY_TRELLO_LAYOUT_FEEDBACK";
 
     private static final String ISSUE_TITLE = "feat: recognize a reusable custom installer path layout";
+    private static final String GITHUB_CLI_FAILURE = "  NOTE  GitHub CLI did not create the feature request.";
     private static final Set<String> REPORTABLE_ENVIRONMENT_NAMES =
             Set.of(SYMPHONY_HOME_ENV, CONFIG_DIR_ENV, WORKSPACE_ROOT_ENV, STATE_HOME_ENV);
+    private static final Set<String> REPORTABLE_PATH_COMPONENTS = Set.of(
+            ".cache",
+            ".config",
+            ".local",
+            "AppData",
+            "Local",
+            "Roaming",
+            "SymphonyTrello",
+            "app",
+            "cache",
+            "config",
+            "data",
+            "logs",
+            "share",
+            "state",
+            "symphony-trello",
+            "workspaces");
 
     private final Map<String, String> environment;
     private final CommandRunner commands;
@@ -62,7 +81,7 @@ final class InstallerLayoutFeedback {
             try {
                 createIssueOrPrintLink(terminal, issueBody, browserUrl);
             } catch (IOException | RuntimeException e) {
-                terminal.warn("  NOTE  GitHub CLI did not create the feature request.");
+                terminal.warn(GITHUB_CLI_FAILURE);
                 printBrowserLink(terminal, browserUrl);
             }
         } catch (IOException | RuntimeException e) {
@@ -94,7 +113,7 @@ final class InstallerLayoutFeedback {
         if (result.success()) {
             terminal.info("  OK  Feature request created: " + result.output().strip());
         } else {
-            terminal.warn("  NOTE  GitHub CLI did not create the feature request.");
+            terminal.warn(GITHUB_CLI_FAILURE);
             printBrowserLink(terminal, browserUrl);
         }
     }
@@ -171,9 +190,15 @@ final class InstallerLayoutFeedback {
             return "<outside-home>";
         }
         Path relative = normalizedHome.relativize(normalizedPath);
-        return relative.getNameCount() == 0
-                ? "$HOME"
-                : "$HOME/" + relative.toString().replace('\\', '/');
+        if (relative.getNameCount() == 0) {
+            return "$HOME";
+        }
+        StringJoiner sanitized = new StringJoiner("/", "$HOME/", "");
+        for (Path component : relative) {
+            String value = component.toString();
+            sanitized.add(REPORTABLE_PATH_COMPONENTS.contains(value) ? value : "<redacted>");
+        }
+        return sanitized.toString();
     }
 
     private static boolean sameParent(Path first, Path second) {

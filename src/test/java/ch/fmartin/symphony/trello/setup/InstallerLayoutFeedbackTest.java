@@ -1,5 +1,9 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.CONFIG_DIR_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.STATE_HOME_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.SYMPHONY_HOME_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.WORKSPACE_ROOT_ENV;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.testsupport.RecordingTerminal;
@@ -10,14 +14,16 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 final class InstallerLayoutFeedbackTest {
+    private static final String EXAMPLE_HOME = "/home/example";
+
     private final Map<String, String> properties =
             Map.of("os.name", "macOS", "os.version", "15.6", "os.arch", "aarch64", "symphony.trello.shell", "posix");
 
     @Test
     void authenticatedGithubCreatesReviewedSanitizedFeatureRequest() {
         // given
-        Map<String, String> environment = feedbackEnvironment(
-                "/Users/example", "SYMPHONY_TRELLO_CONFIG_DIR,SYMPHONY_TRELLO_STATE_HOME,UNTRUSTED_NAME");
+        Map<String, String> environment =
+                feedbackEnvironment("/Users/example", CONFIG_DIR_ENV + "," + STATE_HOME_ENV + ",UNTRUSTED_NAME");
         var commands = new RecordingCommands(true);
         LocalWorkerPaths paths = paths("/Users/example/.config/symphony-trello", "/var/lib/symphony/state");
 
@@ -49,10 +55,10 @@ final class InstallerLayoutFeedbackTest {
     @Test
     void missingGithubAuthPrintsPrefilledBrowserLink() {
         // given
-        Map<String, String> environment = feedbackEnvironment("/home/example", "SYMPHONY_HOME");
+        Map<String, String> environment = feedbackEnvironment(EXAMPLE_HOME, SYMPHONY_HOME_ENV);
         var commands = new RecordingCommands(false);
         LocalWorkerPaths paths =
-                paths("/home/example/.config/symphony-trello", "/home/example/.local/state/symphony-trello");
+                paths(EXAMPLE_HOME + "/.config/symphony-trello", EXAMPLE_HOME + "/.local/state/symphony-trello");
 
         // when
         RecordingTerminal terminal = offerFeedback(environment, commands, paths, "y");
@@ -63,36 +69,56 @@ final class InstallerLayoutFeedbackTest {
                         "Open this prefilled feature request when convenient:",
                         "https://github.com/martin-francois/symphony-trello/issues/new?template=feature_request.yml",
                         "compatibility-impact=No%20visible%20impact")
-                .doesNotContain("/home/example");
+                .doesNotContain(EXAMPLE_HOME);
         assertThat(commands.commands).containsExactly(List.of("gh", "auth", "status"));
     }
 
     @Test
     void workspaceOnlyLayoutIncludesSanitizedWorkspaceContext() {
         // given
-        Map<String, String> environment = feedbackEnvironment("/home/example", "SYMPHONY_TRELLO_WORKSPACE_ROOT");
+        Map<String, String> environment = feedbackEnvironment(EXAMPLE_HOME, WORKSPACE_ROOT_ENV);
         var commands = new RecordingCommands(false);
         LocalWorkerPaths paths = new LocalWorkerPaths(
                 Path.of("/app"),
-                Path.of("/home/example/config"),
-                Path.of("/home/example/shared/workspaces"),
-                Path.of("/home/example/state"));
+                Path.of(EXAMPLE_HOME + "/config"),
+                Path.of(EXAMPLE_HOME + "/shared/workspaces"),
+                Path.of(EXAMPLE_HOME + "/state"));
 
         // when
         RecordingTerminal terminal = offerFeedback(environment, commands, paths, "y");
 
         // then
         assertThat(terminal.stdout())
-                .contains("Explicit variables: SYMPHONY_TRELLO_WORKSPACE_ROOT", "Workspaces: $HOME/shared/workspaces")
-                .doesNotContain("/home/example");
+                .contains("Explicit variables: " + WORKSPACE_ROOT_ENV, "Workspaces: $HOME/<redacted>/workspaces")
+                .doesNotContain(EXAMPLE_HOME);
+    }
+
+    @Test
+    void identifyingChildPathComponentsAreRedacted() {
+        // given
+        Map<String, String> environment = feedbackEnvironment(EXAMPLE_HOME, WORKSPACE_ROOT_ENV);
+        var commands = new RecordingCommands(false);
+        LocalWorkerPaths paths = new LocalWorkerPaths(
+                Path.of("/app"),
+                Path.of(EXAMPLE_HOME + "/.config/symphony-trello"),
+                Path.of(EXAMPLE_HOME + "/workspaces/customer-host"),
+                Path.of(EXAMPLE_HOME + "/.local/state/symphony-trello"));
+
+        // when
+        RecordingTerminal terminal = offerFeedback(environment, commands, paths, "y");
+
+        // then
+        assertThat(terminal.stdout())
+                .contains("Workspaces: $HOME/workspaces/<redacted>")
+                .doesNotContain("customer-host", EXAMPLE_HOME);
     }
 
     @Test
     void personalLayoutDeclineSkipsGithubProbe() {
         // given
-        Map<String, String> environment = feedbackEnvironment("/home/example", "SYMPHONY_HOME");
+        Map<String, String> environment = feedbackEnvironment(EXAMPLE_HOME, SYMPHONY_HOME_ENV);
         var commands = new RecordingCommands(true);
-        LocalWorkerPaths paths = paths("/home/example/config", "/home/example/state");
+        LocalWorkerPaths paths = paths(EXAMPLE_HOME + "/config", EXAMPLE_HOME + "/state");
 
         // when
         RecordingTerminal terminal = offerFeedback(environment, commands, paths, "n");
@@ -106,8 +132,8 @@ final class InstallerLayoutFeedbackTest {
     void standardLayoutDoesNotOfferFeedback() {
         // given
         var commands = new RecordingCommands(true);
-        Map<String, String> environment = Map.of("HOME", "/home/example");
-        LocalWorkerPaths paths = paths("/home/example/config", "/home/example/state");
+        Map<String, String> environment = Map.of("HOME", EXAMPLE_HOME);
+        LocalWorkerPaths paths = paths(EXAMPLE_HOME + "/config", EXAMPLE_HOME + "/state");
 
         // when
         RecordingTerminal terminal = offerFeedback(environment, commands, paths);
@@ -120,11 +146,11 @@ final class InstallerLayoutFeedbackTest {
     @Test
     void githubFailureDoesNotEscapeFeedbackFlow() {
         // given
-        Map<String, String> environment = feedbackEnvironment("/home/example", "SYMPHONY_HOME");
+        Map<String, String> environment = feedbackEnvironment(EXAMPLE_HOME, SYMPHONY_HOME_ENV);
         CommandRunner commands = ignored -> {
             throw new IllegalStateException("private failure details");
         };
-        LocalWorkerPaths paths = paths("/home/example/config", "/home/example/state");
+        LocalWorkerPaths paths = paths(EXAMPLE_HOME + "/config", EXAMPLE_HOME + "/state");
 
         // when
         RecordingTerminal terminal = offerFeedback(environment, commands, paths, "y");
