@@ -1,6 +1,8 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.SLASHES;
+import static ch.fmartin.symphony.trello.setup.GitHubIssueTarget.REPOSITORY;
+import static ch.fmartin.symphony.trello.setup.SetupCliOptionNames.STATE_HOME;
 
 import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
@@ -209,7 +211,7 @@ final class SetupDiagnosticReporter {
             "--workflow",
             "--workspace-root",
             "--config-dir",
-            "--state-home",
+            STATE_HOME,
             "--manifest",
             "--env",
             "--output",
@@ -973,7 +975,7 @@ final class SetupDiagnosticReporter {
                     pathOption(args, "--app-home"),
                     pathOption(args, "--config-dir"),
                     pathOption(args, "--workspace-root"),
-                    pathOption(args, "--state-home"),
+                    pathOption(args, STATE_HOME),
                     environment);
             Path manifestPath = pathOption(args, "--manifest")
                     .map(path -> resolveUserDataPath(path, paths.configDir()))
@@ -987,7 +989,7 @@ final class SetupDiagnosticReporter {
     private Optional<Path> write(Exception exception, LocalSetupRequest request) {
         try {
             LocalWorkerPaths paths = LocalWorkerPaths.from(
-                    Optional.empty(), request.configDir(), request.workspaceRoot(), Optional.empty(), environment);
+                    Optional.empty(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
             Path manifestPath = request.manifestPath()
                     .map(path -> resolveUserDataPath(path, paths.configDir()))
                     .orElseGet(paths::manifestPath);
@@ -2301,7 +2303,7 @@ final class SetupDiagnosticReporter {
                     "issue",
                     "create",
                     "--repo",
-                    "martin-francois/symphony-trello",
+                    REPOSITORY,
                     "--title",
                     "Local setup failed",
                     "--body-file",
@@ -2343,6 +2345,7 @@ final class SetupDiagnosticReporter {
         request.workflowPath().ifPresent(path -> addOption(args, "--workflow", path.toString()));
         request.workspaceRoot().ifPresent(path -> addOption(args, "--workspace-root", path.toString()));
         request.configDir().ifPresent(path -> addOption(args, "--config-dir", path.toString()));
+        request.stateHome().ifPresent(path -> addOption(args, STATE_HOME, path.toString()));
         request.manifestPath().ifPresent(path -> addOption(args, "--manifest", path.toString()));
         request.serverPort().ifPresent(port -> addOption(args, "--server-port", String.valueOf(port)));
         request.envPath().ifPresent(path -> addOption(args, "--env", path.toString()));
@@ -2364,7 +2367,7 @@ final class SetupDiagnosticReporter {
         request.configDir().ifPresent(path -> addOption(args, "--config-dir", path.toString()));
         request.manifestPath().ifPresent(path -> addOption(args, "--manifest", path.toString()));
         request.workspaceRoot().ifPresent(path -> addOption(args, "--workspace-root", path.toString()));
-        request.stateHome().ifPresent(path -> addOption(args, "--state-home", path.toString()));
+        request.stateHome().ifPresent(path -> addOption(args, STATE_HOME, path.toString()));
         request.workflow().ifPresent(path -> addOption(args, "--workflow", path.toString()));
         addFlag(args, request.json(), "--json");
         addFlag(args, request.deep(), "--deep");

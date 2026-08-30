@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.ISO_CONTROL_CHARACTERS;
+import static ch.fmartin.symphony.trello.setup.SetupCliOptionNames.STATE_HOME;
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
 
 import ch.fmartin.symphony.trello.CliExitCodes;
@@ -57,6 +58,7 @@ public final class LocalSetup {
     private final WorkspaceAccessFlow workspaceAccessFlow;
     private final CodexSandboxFlow codexSandboxFlow;
     private final SetupDiagnosticReporter diagnosticReporter;
+    private final InstallerLayoutFeedback layoutFeedback;
 
     public LocalSetup(TrelloBoardSetup boardSetup, CommandRunner commands) {
         this(boardSetup, commands, System.getenv());
@@ -98,6 +100,7 @@ public final class LocalSetup {
         this.workspaceAccessFlow = new WorkspaceAccessFlow();
         this.codexSandboxFlow = new CodexSandboxFlow();
         this.diagnosticReporter = new SetupDiagnosticReporter(this.environment, commands);
+        this.layoutFeedback = new InstallerLayoutFeedback(this.environment, commands);
     }
 
     public static int run(String[] args, InputStream in, PrintStream out, PrintStream err) {
@@ -177,15 +180,18 @@ public final class LocalSetup {
                         out.println();
                         out.println("Keeping connected Trello boards.");
                         startExistingBoards(options, manifest, out);
+                        offerLayoutFeedback(options, terminal);
                         printFinalHandoffUnlessDeferred(out, manifest, options.command());
                         return 0;
                     }
                     if (action == ExistingSetupAction.UPDATE_CODEX_ACCESS) {
                         updateExistingCodexAccess(options, manifest, terminal);
+                        offerLayoutFeedback(options, terminal);
                         return 0;
                     }
                     if (action == ExistingSetupAction.UPGRADE_GITHUB) {
                         upgradeExistingBoardToGithub(options, manifest, terminal);
+                        offerLayoutFeedback(options, terminal);
                         return 0;
                     }
                 }
@@ -251,6 +257,7 @@ public final class LocalSetup {
                     + result.serverPort());
             printWorkspaceAndSandboxSummary(options, out);
             startBoard(options, connectedBoard, out);
+            offerLayoutFeedback(options, terminal);
             out.println();
             out.println("Board:");
             out.println("  " + result.boardUrl());
@@ -300,12 +307,11 @@ public final class LocalSetup {
     }
 
     private LocalWorkerPaths localWorkerPaths(Options options) {
-        return LocalWorkerPaths.from(
-                Optional.empty(),
-                Optional.of(options.configDir()),
-                Optional.of(options.workspaceRoot()),
-                options.stateHome(),
-                environment);
+        return LocalWorkerPaths.from(options, environment);
+    }
+
+    private void offerLayoutFeedback(Options options, Terminal terminal) {
+        layoutFeedback.offer(localWorkerPaths(options), terminal);
     }
 
     private int runCheck(Options options, Prerequisites prerequisites, PrintStream out) throws IOException {
@@ -1624,9 +1630,9 @@ public final class LocalSetup {
                 githubMode = true;
             }
             configDir = configDir.toAbsolutePath().normalize();
-            Optional<Path> stateHome = request.stateHome().map(path -> path.toAbsolutePath().normalize());
-            stateHome.ifPresent(
-                    path -> CliInputValidation.rejectExistingNonDirectoryPath("--state-home", path));
+            Optional<Path> stateHome =
+                    request.stateHome().map(path -> path.toAbsolutePath().normalize());
+            stateHome.ifPresent(path -> CliInputValidation.rejectExistingNonDirectoryPath(STATE_HOME, path));
             envPath = resolveUserDataPath(envPath, configDir);
             manifest = resolveUserDataPath(manifest, configDir);
             validateResolvedSetupPaths(configDir, manifest, manifestPathExplicit, request.action());

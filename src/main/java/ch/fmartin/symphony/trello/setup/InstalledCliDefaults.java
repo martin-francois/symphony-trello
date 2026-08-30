@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.setup.SetupCliOptionNames.STATE_HOME;
+
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,7 +33,7 @@ final class InstalledCliDefaults {
             "--workflow",
             "--workspace-root",
             "--config-dir",
-            "--state-home",
+            STATE_HOME,
             "--manifest",
             "--server-port",
             "--max-agents",
@@ -60,14 +62,6 @@ final class InstalledCliDefaults {
         };
     }
 
-    static boolean hasUserStateHomeOverride(Map<String, String> environment) {
-        return InstalledPaths.from(environment).stateHomeFromUserEnvironment();
-    }
-
-    static boolean isInstalledConfigDir(Path configDir, Map<String, String> environment) {
-        return InstalledPaths.from(environment).matchesInstalledConfigDir(configDir);
-    }
-
     private static List<String> setupLocal(List<String> args, InstalledPaths paths) {
         List<String> defaults = new ArrayList<>();
         boolean explicitConfigDir = hasOption(args, "--config-dir");
@@ -78,18 +72,9 @@ final class InstalledCliDefaults {
         }
         if (!lifecycle && !explicitConfigDir) {
             addIfMissing(defaults, args, "--workspace-root", paths.workspaceRoot());
-            addIfMissing(defaults, args, "--state-home", paths.stateHome());
+            addIfMissing(defaults, args, STATE_HOME, paths.stateHome());
         } else if (!lifecycle) {
-            explicitConfigDirValue.ifPresent(configDir -> {
-                Optional<String> workspaceRoot = paths.workspaceRootFromUserEnvironment()
-                        ? paths.workspaceRoot()
-                        : Optional.of(isolatedWorkspaceRoot(configDir));
-                Optional<String> stateHome = paths.stateHomeFromUserEnvironment()
-                        ? paths.stateHome()
-                        : Optional.of(isolatedStateHome(configDir));
-                addIfMissing(defaults, args, "--workspace-root", workspaceRoot);
-                addIfMissing(defaults, args, "--state-home", stateHome);
-            });
+            explicitConfigDirValue.ifPresent(configDir -> addConfigRoots(defaults, args, paths, configDir));
         }
         return injectAfterCommand(args, defaults);
     }
@@ -118,21 +103,25 @@ final class InstalledCliDefaults {
         if (!explicitConfigDir) {
             paths.configDir().ifPresent(value -> add(defaults, "--config-dir", value));
             addIfMissing(defaults, args, "--workspace-root", paths.workspaceRoot());
-            addIfMissing(defaults, args, "--state-home", paths.stateHome());
+            addIfMissing(defaults, args, STATE_HOME, paths.stateHome());
         } else {
-            explicitConfigDirValue.ifPresent(configDir -> {
-                Optional<String> workspaceRoot = paths.workspaceRootFromUserEnvironment()
-                        ? paths.workspaceRoot()
-                        : Optional.of(isolatedWorkspaceRoot(configDir));
-                Optional<String> stateHome = paths.stateHomeFromUserEnvironment()
-                        ? paths.stateHome()
-                        : Optional.of(isolatedStateHome(configDir));
-                addIfMissing(defaults, args, "--workspace-root", workspaceRoot);
-                addIfMissing(defaults, args, "--state-home", stateHome);
-            });
+            explicitConfigDirValue.ifPresent(configDir -> addConfigRoots(defaults, args, paths, configDir));
         }
         addIfMissing(defaults, args, "--app-home", paths.appHome());
         return injectAfterCommand(args, defaults);
+    }
+
+    private static void addConfigRoots(
+            List<String> defaults, List<String> args, InstalledPaths paths, String explicitConfigDir) {
+        boolean installedConfigDir = paths.matchesInstalledConfigDir(Path.of(explicitConfigDir));
+        Optional<String> workspaceRoot = installedConfigDir || paths.workspaceRootFromUserEnvironment()
+                ? paths.workspaceRoot()
+                : Optional.of(isolatedWorkspaceRoot(explicitConfigDir));
+        Optional<String> stateHome = installedConfigDir || paths.stateHomeFromUserEnvironment()
+                ? paths.stateHome()
+                : Optional.of(isolatedStateHome(explicitConfigDir));
+        addIfMissing(defaults, args, "--workspace-root", workspaceRoot);
+        addIfMissing(defaults, args, STATE_HOME, stateHome);
     }
 
     private static List<String> injectAfterCommand(List<String> args, List<String> defaults) {

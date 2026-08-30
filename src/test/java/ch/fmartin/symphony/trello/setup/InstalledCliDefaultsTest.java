@@ -9,10 +9,10 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 final class InstalledCliDefaultsTest {
-    private final Path configDir = Path.of("/opt/symphony/config");
-    private final Path workspaceRoot = Path.of("/opt/symphony/workspaces");
-    private final Path stateHome = Path.of("/opt/symphony/state");
-    private final Path appHome = Path.of("/opt/symphony/app");
+    private final Path configDir = Path.of("/home/test/.config/symphony-trello");
+    private final Path workspaceRoot = Path.of("/home/test/.local/share/symphony-trello/workspaces");
+    private final Path stateHome = Path.of("/home/test/.local/state/symphony-trello");
+    private final Path appHome = Path.of("/home/test/.local/share/symphony-trello/app");
 
     @Test
     void addsInstalledDefaultsForLifecycleCommands() {
@@ -122,6 +122,27 @@ final class InstalledCliDefaultsTest {
                         stateHome.toString(),
                         "--board",
                         "SYNTH001");
+    }
+
+    @Test
+    void explicitInstalledConfigDirKeepsInstalledSetupLocalDefaults() {
+        // given
+        InstalledCliDefaults.InstalledPaths paths = installedPaths();
+
+        // when
+        List<String> args =
+                InstalledCliDefaults.apply(List.of("setup-local", "--config-dir", configDir.toString()), paths);
+
+        // then
+        assertThat(args)
+                .containsExactly(
+                        "setup-local",
+                        "--workspace-root",
+                        workspaceRoot.toString(),
+                        "--state-home",
+                        stateHome.toString(),
+                        "--config-dir",
+                        configDir.toString());
     }
 
     @Test

@@ -50,6 +50,9 @@ $StartupCommandPath = Join-Path $StartupFolder "Symphony for Trello.cmd"
 $InstallerCompletionEnvironmentName = "SYMPHONY_TRELLO_INSTALLER_COMPLETION"
 $InstallerCompletionWasSet = Test-Path -LiteralPath "Env:$InstallerCompletionEnvironmentName"
 $InstallerCompletionPreviousValue = [Environment]::GetEnvironmentVariable($InstallerCompletionEnvironmentName, "Process")
+$LayoutFeedbackEnvironmentName = "SYMPHONY_TRELLO_LAYOUT_FEEDBACK"
+$LayoutFeedbackWasSet = Test-Path -LiteralPath "Env:$LayoutFeedbackEnvironmentName"
+$LayoutFeedbackPreviousValue = [Environment]::GetEnvironmentVariable($LayoutFeedbackEnvironmentName, "Process")
 $ReleaseBaseUrl = if ($env:SYMPHONY_TRELLO_RELEASE_BASE_URL) {
   $env:SYMPHONY_TRELLO_RELEASE_BASE_URL
 } else {
@@ -632,6 +635,37 @@ function Restore-InstallerCompletionEnvironment {
   }
 }
 
+function Set-LayoutFeedbackContext {
+  [Environment]::SetEnvironmentVariable($LayoutFeedbackEnvironmentName, $null, "Process")
+  if ($UpdatingExistingApp) {
+    return
+  }
+  $configuredNames = @()
+  if ($ScriptBoundParameters.ContainsKey("SymphonyHome") -or $env:SYMPHONY_HOME) {
+    $configuredNames += "SYMPHONY_HOME"
+  }
+  if ($env:SYMPHONY_TRELLO_CONFIG_DIR) {
+    $configuredNames += "SYMPHONY_TRELLO_CONFIG_DIR"
+  }
+  if ($env:SYMPHONY_TRELLO_STATE_HOME) {
+    $configuredNames += "SYMPHONY_TRELLO_STATE_HOME"
+  }
+  if ($configuredNames.Count -gt 0) {
+    [Environment]::SetEnvironmentVariable($LayoutFeedbackEnvironmentName, ($configuredNames -join ","), "Process")
+  }
+}
+
+function Restore-LayoutFeedbackEnvironment {
+  if ($LayoutFeedbackWasSet) {
+    [Environment]::SetEnvironmentVariable(
+      $LayoutFeedbackEnvironmentName,
+      $LayoutFeedbackPreviousValue,
+      "Process")
+  } else {
+    [Environment]::SetEnvironmentVariable($LayoutFeedbackEnvironmentName, $null, "Process")
+  }
+}
+
 function Start-ManagedWorkersWithoutInstallerCompletion {
   try {
     Clear-InstallerCompletionMode
@@ -987,12 +1021,25 @@ function Enable-ManagedCodexPath {
   }
 }
 
-function Get-ManagedPidFile {
-  if (-not (Test-Path -LiteralPath $StateHome -PathType Container)) {
+function Get-ManagedPidFile([string]$StateRoot) {
+  if (-not (Test-Path -LiteralPath $StateRoot -PathType Container)) {
     return $null
   }
-  return Get-ChildItem -LiteralPath $StateHome -Filter "*.pid" -File -ErrorAction SilentlyContinue |
+  return Get-ChildItem -LiteralPath $StateRoot -Filter "*.pid" -File -ErrorAction SilentlyContinue |
     Select-Object -First 1
+}
+
+function Get-ManagedStateRootsWithPid {
+  $roots = @()
+  if (Get-ManagedPidFile $StateHome) {
+    $roots += $StateHome
+  }
+  $legacyStateHome = Join-Path (Split-Path -Parent $ConfigDir) "state"
+  if (-not $legacyStateHome.Equals($StateHome, [System.StringComparison]::OrdinalIgnoreCase) -and
+      (Get-ManagedPidFile $legacyStateHome)) {
+    $roots += $legacyStateHome
+  }
+  return $roots
 }
 
 function ConvertTo-PowerShellLiteral([string]$Value) {
@@ -1404,10 +1451,17 @@ Write-Host
 Write-Host "Installing Symphony..."
 $UpdatingExistingApp = Test-Path -LiteralPath $Prefix
 $RestartManagedWorkers = $false
-if ($UpdatingExistingApp -and (Get-ManagedPidFile)) {
+$ManagedStateRoots = if ($UpdatingExistingApp) { @(Get-ManagedStateRootsWithPid) } else { @() }
+# Temporary migration for #678: stop workers tracked in the pre-fix sibling state directory so the
+# corrected installer restarts them only in the configured state home.
+if ($UpdatingExistingApp -and $ManagedStateRoots.Count -gt 0) {
   $RestartManagedWorkers = $true
   Write-Host "Stopping managed workers before update..."
-  Invoke-Step "$BinDir\symphony-trello.ps1 stop" { & "$BinDir\symphony-trello.ps1" stop }
+  foreach ($stateRoot in $ManagedStateRoots) {
+    Invoke-Step "$BinDir\symphony-trello.ps1 stop --state-home $stateRoot" {
+      & "$BinDir\symphony-trello.ps1" stop --state-home $stateRoot
+    }
+  }
 }
 if ($InstallSource -eq "source-checkout") {
   $UpdatingExistingCheckout = Test-Path -LiteralPath (Join-Path $Prefix ".git")
@@ -1524,6 +1578,7 @@ if (-not $NoOnboard) {
   }
   Write-Host "Starting setup..."
   try {
+    Set-LayoutFeedbackContext
     Set-InstallerCompletionMode "defer"
     try {
       Invoke-Step "$BinDir\symphony-trello.ps1 setup-local" { & "$BinDir\symphony-trello.ps1" setup-local }
@@ -1535,6 +1590,7 @@ if (-not $NoOnboard) {
     Invoke-Step "$BinDir\symphony-trello.ps1 setup-local" { & "$BinDir\symphony-trello.ps1" setup-local }
   } finally {
     Restore-InstallerCompletionEnvironment
+    Restore-LayoutFeedbackEnvironment
   }
 } elseif ($RestartManagedWorkers) {
   Write-Host

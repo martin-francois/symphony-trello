@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.setup.SetupCliOptionNames.STATE_HOME;
+
 import ch.fmartin.symphony.trello.CliExitCodes;
 import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.setup.LocalSetupRequest.Action;
@@ -331,7 +333,7 @@ final class SetupLocalCommandFactory {
         @Option(names = "--config-dir", description = "Directory for local .env, workflows, and board manifest.")
         Optional<Path> configDir = Optional.empty();
 
-        @Option(names = "--state-home", description = "Directory for managed pid and log files.")
+        @Option(names = STATE_HOME, description = "Directory for managed PID and log files.")
         Optional<Path> stateHome = Optional.empty();
 
         @Option(names = "--manifest", description = "Connected-board manifest path.")
@@ -468,13 +470,13 @@ final class SetupLocalCommandFactory {
 
         private void validateLifecycleSharedOptions(Action action) {
             CliInputValidation.rejectBlankPath("--config-dir", configDir, "--config-dir must not be empty.");
-            CliInputValidation.rejectBlankPath("--state-home", stateHome, "--state-home must not be empty.");
+            CliInputValidation.rejectBlankPath(STATE_HOME, stateHome, STATE_HOME + " must not be empty.");
             CliInputValidation.rejectBlankPath("--manifest", manifestPath, "--manifest must not be empty.");
             CliInputValidation.rejectControlCharacters("--config-dir", configDir);
-            CliInputValidation.rejectControlCharacters("--state-home", stateHome);
+            CliInputValidation.rejectControlCharacters(STATE_HOME, stateHome);
             CliInputValidation.rejectControlCharacters("--manifest", manifestPath);
             configDir.ifPresent(path -> CliInputValidation.rejectExistingNonDirectoryPath("--config-dir", path));
-            stateHome.ifPresent(path -> CliInputValidation.rejectExistingNonDirectoryPath("--state-home", path));
+            stateHome.ifPresent(path -> CliInputValidation.rejectExistingNonDirectoryPath(STATE_HOME, path));
             if (action == Action.REPAIR_PORT || action == Action.CONFIGURE_GITHUB) {
                 CliInputValidation.rejectBlankBoardSelector(board);
                 CliInputValidation.rejectControlCharactersInText("--board", board);
@@ -599,11 +601,11 @@ final class SetupLocalCommandFactory {
             CliInputValidation.rejectControlCharacters("--workflow", workflowPath);
             CliInputValidation.rejectBlankWorkflowSelector(workflowPath);
             CliInputValidation.rejectBlankPath("--config-dir", configDir, "--config-dir must not be empty.");
-            CliInputValidation.rejectBlankPath("--state-home", stateHome, "--state-home must not be empty.");
+            CliInputValidation.rejectBlankPath(STATE_HOME, stateHome, STATE_HOME + " must not be empty.");
             CliInputValidation.rejectBlankPath("--manifest", manifestPath, "--manifest must not be empty.");
             CliInputValidation.rejectControlCharacters("--workspace-root", workspaceRoot);
             CliInputValidation.rejectControlCharacters("--config-dir", configDir);
-            CliInputValidation.rejectControlCharacters("--state-home", stateHome);
+            CliInputValidation.rejectControlCharacters(STATE_HOME, stateHome);
             CliInputValidation.rejectControlCharacters("--manifest", manifestPath);
             CliInputValidation.rejectBlankPath(
                     "--workspace-root", workspaceRoot, "--workspace-root must not be empty.");
@@ -611,7 +613,7 @@ final class SetupLocalCommandFactory {
                     "--workspace-root", workspaceRoot, "--workspace-root must be an absolute path.");
             CliInputValidation.rejectExistingNonDirectoryPath("--workspace-root", workspaceRoot);
             configDir.ifPresent(path -> CliInputValidation.rejectExistingNonDirectoryPath("--config-dir", path));
-            stateHome.ifPresent(path -> CliInputValidation.rejectExistingNonDirectoryPath("--state-home", path));
+            stateHome.ifPresent(path -> CliInputValidation.rejectExistingNonDirectoryPath(STATE_HOME, path));
             TrelloCredentialStore.validateEnvPathOption(envPath);
             CliInputValidation.rejectBlankPaths("--add-path", additionalWritableRoots, "--add-path must not be empty.");
             CliInputValidation.rejectControlCharactersInPaths("--add-path", additionalWritableRoots);

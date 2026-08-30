@@ -38,36 +38,28 @@ final class InstallerScriptLifecycleTest {
         Path sourceRepository = createSourceRepository(temporaryDirectory);
         Path fakeBin = createFakeToolchain(temporaryDirectory);
         Path homeDirectory = temporaryDirectory.resolve("installer-home");
-        Path symphonyHome = temporaryDirectory.resolve("home");
+        Path symphonyHome = temporaryDirectory.resolve("data-home/symphony-trello");
         Path installPrefix = symphonyHome.resolve("app");
-        Path configDirectory = symphonyHome.resolve("config");
+        Path configDirectory = temporaryDirectory.resolve("config-home/symphony-trello");
         Path workspaceRoot = symphonyHome.resolve("workspaces");
         Path binDirectory = temporaryDirectory.resolve("bin");
-        Path stateHome = symphonyHome.resolve("state");
+        Path stateHome = temporaryDirectory.resolve("state-home/symphony-trello");
         Path userService = homeDirectory.resolve(".config/systemd/user/symphony-trello.service");
         Path autostartEnvironment = configDirectory.resolve("autostart.env");
         Path fakeLog = temporaryDirectory.resolve("fake-tools.log");
-        Map<String, String> environment = new LinkedHashMap<>(Map.of(
-                "PATH",
-                fakeBin + System.getProperty("path.separator") + System.getenv("PATH"),
-                "HOME",
-                homeDirectory.toString(),
-                "USER",
-                "symphony-test",
-                "SYMPHONY_TRELLO_REPO_URL",
-                sourceRepository.toUri().toString(),
-                "SYMPHONY_TRELLO_REF",
-                "main",
-                "SYMPHONY_HOME",
-                symphonyHome.toString(),
-                "SYMPHONY_FAKE_LOG",
-                fakeLog.toString(),
-                "SYMPHONY_FAKE_SLOW_TERM",
-                "true",
-                "TRELLO_API_KEY",
-                "runtime-key-100%",
-                "TRELLO_API_TOKEN",
-                "runtime-token"));
+        Map<String, String> environment = new LinkedHashMap<>(Map.ofEntries(
+                Map.entry("PATH", fakeBin + System.getProperty("path.separator") + System.getenv("PATH")),
+                Map.entry("HOME", homeDirectory.toString()),
+                Map.entry("USER", "symphony-test"),
+                Map.entry("SYMPHONY_TRELLO_REPO_URL", sourceRepository.toUri().toString()),
+                Map.entry("SYMPHONY_TRELLO_REF", "main"),
+                Map.entry("SYMPHONY_HOME", symphonyHome.toString()),
+                Map.entry("SYMPHONY_TRELLO_CONFIG_DIR", configDirectory.toString()),
+                Map.entry("SYMPHONY_TRELLO_STATE_HOME", stateHome.toString()),
+                Map.entry("SYMPHONY_FAKE_LOG", fakeLog.toString()),
+                Map.entry("SYMPHONY_FAKE_SLOW_TERM", "true"),
+                Map.entry("TRELLO_API_KEY", "runtime-key-100%"),
+                Map.entry("TRELLO_API_TOKEN", "runtime-token")));
         environment.put("SYMPHONY_TRELLO_INSTALLER_COMPLETION", "preexisting");
 
         // when
@@ -157,8 +149,29 @@ final class InstallerScriptLifecycleTest {
                 "status",
                 "--config-dir",
                 isolatedConfigArgument.toString());
+        Path legacyStateHome = configDirectory.resolveSibling("state");
+        Files.createDirectories(legacyStateHome);
+        Path preMigrationPid = singleFile(stateHome, ".pid");
+        Path legacyPid = legacyStateHome.resolve(preMigrationPid.getFileName());
+        Files.move(preMigrationPid, legacyPid);
+        List<Path> legacyLogs = new ArrayList<>();
+        for (String suffix : List.of(".log", ".log.err")) {
+            Path currentLog = singleFile(stateHome, suffix);
+            Path legacyLog = legacyStateHome.resolve(currentLog.getFileName());
+            Files.move(currentLog, legacyLog);
+            legacyLogs.add(legacyLog);
+        }
         ProcessResult update = run(
                 environment, "bash", installScript.toString(), "--no-onboard", "--bin-dir", binDirectory.toString());
+        boolean legacyPidRemovedDuringUpdate = Files.notExists(legacyPid);
+        boolean configuredPidCreatedDuringUpdate = Files.isRegularFile(singleFile(stateHome, ".pid"));
+        boolean legacyLogsPreservedDuringUpdate = legacyLogs.stream().allMatch(Files::isRegularFile);
+        ProcessResult logsAfterMigration = run(
+                environment,
+                installedCommand.toString(),
+                "logs",
+                "--workflow",
+                configDirectory.resolve("WORKFLOW.lifecycle-board.md").toString());
         addSourceRepositoryCommit(sourceRepository, "UPGRADE_MARKER", "updated\n");
         ProcessResult secondUpdate = run(
                 environment, "bash", installScript.toString(), "--no-onboard", "--bin-dir", binDirectory.toString());
@@ -251,6 +264,18 @@ final class InstallerScriptLifecycleTest {
                 .as(isolatedStatusWithEnvironmentRoots.output())
                 .isZero();
         assertThat(update.exitCode()).isZero();
+        assertThat(legacyPidRemovedDuringUpdate)
+                .as("the update removes legacy managed-worker PID tracking")
+                .isTrue();
+        assertThat(configuredPidCreatedDuringUpdate)
+                .as("the update restarts managed-worker PID tracking in the configured state home")
+                .isTrue();
+        assertThat(legacyLogsPreservedDuringUpdate)
+                .as("the update keeps legacy worker logs as history")
+                .isTrue();
+        assertThat(logsAfterMigration.exitCode())
+                .as(logsAfterMigration.output())
+                .isZero();
         assertThat(secondUpdate.exitCode()).isZero();
         assertThat(markerContentAfterUpdate).isEqualTo("updated\n");
         assertThat(statusWhileRunning.output())
@@ -329,6 +354,7 @@ final class InstallerScriptLifecycleTest {
                         "dotenv=" + configDirectory.resolve(".env"),
                         "definitely-not-a-command",
                         "mvnw -q -f " + installPrefix.resolve("pom.xml") + " -DskipTests clean package",
+                        "completion_mode=defer layout_feedback=SYMPHONY_HOME,SYMPHONY_TRELLO_CONFIG_DIR,SYMPHONY_TRELLO_STATE_HOME",
                         "jar-start",
                         "app-present-before-exit",
                         "jar-stopped")
@@ -340,7 +366,7 @@ final class InstallerScriptLifecycleTest {
                 .filter(line -> line.contains(" --workflow ") || line.contains(" --all "))
                 .toList();
         assertThat(managedStartInvocations).isNotEmpty().allSatisfy(line -> assertThat(line)
-                .contains("completion_mode=")
+                .contains("--state-home " + stateHome, "completion_mode=")
                 .doesNotContain("completion_mode=preexisting", "completion_mode=defer", "completion_mode=print"));
         List<String> isolatedInvocations = Files.readString(fakeLog)
                 .lines()
@@ -372,7 +398,7 @@ final class InstallerScriptLifecycleTest {
                 .contains("--workspace-root " + isolatedConfigDirectory.resolve("workspaces"))
                 .doesNotContain(
                         "--workspace-root " + isolatedConfigArgument.resolve("workspaces"),
-                        "state_env=" + isolatedConfigDirectory.resolveSibling("state"),
+                        " state_env=" + isolatedConfigDirectory.resolveSibling("state") + " ",
                         "--workspace-root " + workspaceRoot));
         List<String> isolatedSetupLocalCheckInvocations = Files.readString(fakeLog)
                 .lines()
@@ -414,9 +440,9 @@ final class InstallerScriptLifecycleTest {
         Path fakeBin = createFakeWindowsToolchain(temporaryDirectory);
         Path symphonyHome = temporaryDirectory.resolve("home $value & (demo)");
         Path installPrefix = symphonyHome.resolve("app");
-        Path configDirectory = symphonyHome.resolve("config");
+        Path configDirectory = temporaryDirectory.resolve("config home $value/symphony-trello");
         Path workspaceRoot = symphonyHome.resolve("workspaces");
-        Path stateHome = symphonyHome.resolve("state");
+        Path stateHome = temporaryDirectory.resolve("state home $value/symphony-trello");
         Path binDirectory = temporaryDirectory.resolve("bin $value & (demo) é");
         Path workflow = temporaryDirectory.resolve("WORKFLOW $value & (demo).md");
         Path envFile = temporaryDirectory.resolve(".env $value & (demo)");
@@ -424,7 +450,9 @@ final class InstallerScriptLifecycleTest {
         Map<String, String> environment = Map.of(
                 "PATH", fakeBin + System.getProperty("path.separator") + System.getenv("PATH"),
                 "SYMPHONY_FAKE_LOG", fakeLog.toString(),
-                "SYMPHONY_FAKE_JAVA", fakeBin.resolve("fake-java.ps1").toString());
+                "SYMPHONY_FAKE_JAVA", fakeBin.resolve("fake-java.ps1").toString(),
+                "SYMPHONY_TRELLO_CONFIG_DIR", configDirectory.toString(),
+                "SYMPHONY_TRELLO_STATE_HOME", stateHome.toString());
 
         // when
         ProcessResult install = run(
@@ -514,6 +542,34 @@ final class InstallerScriptLifecycleTest {
                         + " logs --workflow "
                         + powerShellLiteral(workflow.toString())
                         + " | Select-Object -First 1");
+        Path legacyStateHome = configDirectory.resolveSibling("state");
+        Files.createDirectories(legacyStateHome);
+        Path preMigrationPid = singleFile(stateHome, ".pid");
+        Path legacyPid = legacyStateHome.resolve(preMigrationPid.getFileName());
+        Files.move(preMigrationPid, legacyPid);
+        Path preMigrationLog = singleFile(stateHome, ".log");
+        Path legacyLog = legacyStateHome.resolve(preMigrationLog.getFileName());
+        Files.move(preMigrationLog, legacyLog);
+        ProcessResult update = run(
+                environment,
+                "pwsh",
+                "-NoProfile",
+                "-File",
+                installScript.toString(),
+                "--no-onboard",
+                "--symphony-home",
+                symphonyHome.toString(),
+                "--prefix",
+                installPrefix.toString(),
+                "--bin-dir",
+                binDirectory.toString(),
+                "--repo",
+                sourceRepository.toUri().toString(),
+                "--ref",
+                "main");
+        boolean legacyPidRemovedDuringUpdate = Files.notExists(legacyPid);
+        boolean configuredPidCreatedDuringUpdate = Files.isRegularFile(singleFile(stateHome, ".pid"));
+        boolean legacyLogPreservedDuringUpdate = Files.isRegularFile(legacyLog);
         ProcessResult stop = run(
                 environment,
                 "pwsh",
@@ -553,15 +609,25 @@ final class InstallerScriptLifecycleTest {
         assertThat(start.exitCode()).as(start.output()).isZero();
         assertThat(status.output()).contains("running WORKFLOW $value & (demo).md");
         assertThat(logs.output()).contains("fake wrapper log");
+        assertThat(update.exitCode()).as(update.output()).isZero();
+        assertThat(legacyPidRemovedDuringUpdate)
+                .as("the PowerShell update removes legacy managed-worker PID tracking")
+                .isTrue();
+        assertThat(configuredPidCreatedDuringUpdate)
+                .as("the PowerShell update restarts managed-worker PID tracking in the configured state home")
+                .isTrue();
+        assertThat(legacyLogPreservedDuringUpdate)
+                .as("the PowerShell update keeps the legacy worker log as history")
+                .isTrue();
         assertThat(stop.output()).contains("Stopped WORKFLOW $value & (demo).md");
         String fakeLogContent = Files.readString(fakeLog);
         Map<String, Object> powerShellSetup = setupCliEvent(fakeLogContent, "new-board", "Wrapper Dispatch Board");
         assertThat(String.valueOf(powerShellSetup.get("cwd"))).contains("windows caller");
-        assertThat(String.valueOf(powerShellSetup.get("dotenv"))).contains("home $value & (demo)\\config\\.env");
+        assertThat(String.valueOf(powerShellSetup.get("dotenv"))).contains("config home $value\\symphony-trello\\.env");
         assertThat(eventArguments(powerShellSetup))
                 .contains(
                         "-Dsymphony.trello.config.dir=",
-                        "home $value & (demo)\\config",
+                        "config home $value\\symphony-trello",
                         "-Dsymphony.trello.shell=powershell",
                         "new-board --name Wrapper Dispatch Board",
                         "--workflow relative workflow.md",
@@ -569,11 +635,12 @@ final class InstallerScriptLifecycleTest {
         Map<String, Object> commandPromptSetup =
                 setupCliEvent(fakeLogContent, "new-board", "Command Prompt Wrapper Dispatch Board");
         assertThat(String.valueOf(commandPromptSetup.get("cwd"))).contains("windows caller");
-        assertThat(String.valueOf(commandPromptSetup.get("dotenv"))).contains("home $value & (demo)\\config\\.env");
+        assertThat(String.valueOf(commandPromptSetup.get("dotenv")))
+                .contains("config home $value\\symphony-trello\\.env");
         assertThat(eventArguments(commandPromptSetup))
                 .contains(
                         "-Dsymphony.trello.config.dir=",
-                        "home $value & (demo)\\config",
+                        "config home $value\\symphony-trello",
                         "-Dsymphony.trello.shell=cmd",
                         "new-board --name Command Prompt Wrapper Dispatch Board",
                         "--workflow cmd workflow.md",

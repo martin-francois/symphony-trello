@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.setup.SetupCliOptionNames.STATE_HOME;
+
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Optional;
@@ -11,12 +13,37 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
     private static final String STATE_HOME_ENV = "SYMPHONY_TRELLO_STATE_HOME";
     private static final String APP_HOME_ENV = "SYMPHONY_TRELLO_APP_HOME";
 
+    static LocalWorkerPaths from(LocalSetup.Options options, Map<String, String> environment) {
+        return from(
+                Optional.empty(),
+                Optional.of(options.configDir()),
+                Optional.of(options.workspaceRoot()),
+                options.stateHome(),
+                environment);
+    }
+
     static LocalWorkerPaths from(
             Optional<Path> appHome,
             Optional<Path> configDir,
             Optional<Path> workspaceRoot,
             Optional<Path> stateHome,
             Map<String, String> environment) {
+        return from(
+                appHome,
+                configDir,
+                workspaceRoot,
+                stateHome,
+                environment,
+                InstalledCliDefaults.InstalledPaths.from(environment));
+    }
+
+    static LocalWorkerPaths from(
+            Optional<Path> appHome,
+            Optional<Path> configDir,
+            Optional<Path> workspaceRoot,
+            Optional<Path> stateHome,
+            Map<String, String> environment,
+            InstalledCliDefaults.InstalledPaths installedPaths) {
         boolean explicitConfigDir = configDir.isPresent();
         Path resolvedConfigDir = configDir
                 .or(() -> envPath(environment, CONFIG_DIR_ENV))
@@ -29,7 +56,7 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
                 .toAbsolutePath()
                 .normalize();
         Path resolvedStateHome = stateHome
-                .or(() -> isolatedStateHome(explicitConfigDir, environment, resolvedConfigDir))
+                .or(() -> isolatedStateHome(explicitConfigDir, installedPaths, resolvedConfigDir))
                 .or(() -> envPath(environment, STATE_HOME_ENV))
                 .orElseGet(() -> resolvedConfigDir.resolveSibling("state"))
                 .toAbsolutePath()
@@ -41,7 +68,7 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
                 .normalize();
         CliInputValidation.rejectExistingNonDirectoryPath("--config-dir", resolvedConfigDir);
         CliInputValidation.rejectExistingNonDirectoryPath("--workspace-root", resolvedWorkspaceRoot);
-        CliInputValidation.rejectExistingNonDirectoryPath("--state-home", resolvedStateHome);
+        CliInputValidation.rejectExistingNonDirectoryPath(STATE_HOME, resolvedStateHome);
         CliInputValidation.rejectExistingNonDirectoryPath("--app-home", resolvedAppHome);
         return new LocalWorkerPaths(resolvedAppHome, resolvedConfigDir, resolvedWorkspaceRoot, resolvedStateHome);
     }
@@ -76,12 +103,12 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
     }
 
     private static Optional<Path> isolatedStateHome(
-            boolean explicitConfigDir, Map<String, String> environment, Path resolvedConfigDir) {
+            boolean explicitConfigDir, InstalledCliDefaults.InstalledPaths installedPaths, Path resolvedConfigDir) {
         // Presence of --config-dir is not enough to isolate: installer defaults inject the
         // installed config dir, and that layout must keep XDG/installed state home.
         if (!explicitConfigDir
-                || InstalledCliDefaults.hasUserStateHomeOverride(environment)
-                || InstalledCliDefaults.isInstalledConfigDir(resolvedConfigDir, environment)) {
+                || installedPaths.stateHomeFromUserEnvironment()
+                || installedPaths.matchesInstalledConfigDir(resolvedConfigDir)) {
             return Optional.empty();
         }
         return Optional.of(resolvedConfigDir.resolveSibling("state"));
