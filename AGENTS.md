@@ -47,7 +47,7 @@ AssertJ can express the expectation directly.
 Implement the current documented contract by default. When a change alters a user-facing contract,
 prefer an explicitly documented breaking change unless an issue, SPEC change, or ADR chooses
 compatibility; every issue and PR must record that choice. Compatibility or migration logic must
-state its removal condition and cleanup tracking. See
+state its removal condition, dated cleanup tracking, and breaking-release upgrade path. See
 [Compatibility discipline](docs/agents/default-workflow.md#compatibility-discipline).
 
 For normal code changes, run `./mvnw -q spotless:check verify` before finishing (use
