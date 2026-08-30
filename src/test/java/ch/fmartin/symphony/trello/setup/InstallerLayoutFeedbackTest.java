@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 
 final class InstallerLayoutFeedbackTest {
     private static final String EXAMPLE_HOME = "/home/example";
+    private static final String YES = "y";
 
     private final Map<String, String> properties =
             Map.of("os.name", "macOS", "os.version", "15.6", "os.arch", "aarch64", "symphony.trello.shell", "posix");
@@ -28,7 +29,7 @@ final class InstallerLayoutFeedbackTest {
         LocalWorkerPaths paths = paths("/Users/example/.config/symphony-trello", "/var/lib/symphony/state");
 
         // when
-        RecordingTerminal terminal = offerFeedback(environment, commands, paths, "y", "y");
+        RecordingTerminal terminal = offerFeedback(environment, commands, paths, YES, YES);
 
         // then
         assertThat(terminal.stdout())
@@ -61,7 +62,7 @@ final class InstallerLayoutFeedbackTest {
                 paths(EXAMPLE_HOME + "/.config/symphony-trello", EXAMPLE_HOME + "/.local/state/symphony-trello");
 
         // when
-        RecordingTerminal terminal = offerFeedback(environment, commands, paths, "y");
+        RecordingTerminal terminal = offerFeedback(environment, commands, paths, YES);
 
         // then
         assertThat(terminal.stdout())
@@ -85,7 +86,7 @@ final class InstallerLayoutFeedbackTest {
                 Path.of(EXAMPLE_HOME + "/state"));
 
         // when
-        RecordingTerminal terminal = offerFeedback(environment, commands, paths, "y");
+        RecordingTerminal terminal = offerFeedback(environment, commands, paths, YES);
 
         // then
         assertThat(terminal.stdout())
@@ -105,7 +106,7 @@ final class InstallerLayoutFeedbackTest {
                 Path.of(EXAMPLE_HOME + "/.local/state/symphony-trello"));
 
         // when
-        RecordingTerminal terminal = offerFeedback(environment, commands, paths, "y");
+        RecordingTerminal terminal = offerFeedback(environment, commands, paths, YES);
 
         // then
         assertThat(terminal.stdout())
@@ -153,7 +154,7 @@ final class InstallerLayoutFeedbackTest {
         LocalWorkerPaths paths = paths(EXAMPLE_HOME + "/config", EXAMPLE_HOME + "/state");
 
         // when
-        RecordingTerminal terminal = offerFeedback(environment, commands, paths, "y");
+        RecordingTerminal terminal = offerFeedback(environment, commands, paths, YES);
 
         // then
         assertThat(terminal.stdout())
