@@ -1704,93 +1704,13 @@ public final class LocalSetup {
         }
 
         Options withCodexAccess(List<Path> additionalWritableRoots, boolean dangerFullAccess) {
-            return new Options(
-                    check,
-                    dryRun,
-                    repairPort,
-                    nonInteractive,
-                    force,
-                    forceNewSetup,
-                    configureGithub,
-                    githubMode,
-                    apiKey,
-                    apiToken,
-                    boardName,
-                    existingBoardId,
-                    workspaceId,
-                    repositoryUrl,
-                    activeStates,
-                    terminalStates,
-                    inProgressState,
-                    detectInProgressState,
-                    blockedState,
-                    workflowPath,
-                    workflowPathExplicit,
-                    workspaceRoot,
-                    workspaceRootExplicit,
-                    configDir,
-                    stateHome,
-                    manifestPath,
-                    serverPort,
-                    maxAgents,
-                    maxAgentsExplicit,
-                    codexModel,
-                    codexReasoningEffort,
-                    codexModelCatalog,
-                    codexModelDefaults,
-                    envPath,
-                    additionalWritableRoots,
-                    allowAllPaths,
-                    dangerFullAccess,
-                    noStart,
-                    command,
-                    endpoint,
-                    callerDirectory);
+            return new OptionsCopy(this)
+                    .withCodexAccess(additionalWritableRoots, dangerFullAccess)
+                    .build();
         }
 
         Options withRepositoryUrl(Optional<String> repositoryUrl) {
-            return new Options(
-                    check,
-                    dryRun,
-                    repairPort,
-                    nonInteractive,
-                    force,
-                    forceNewSetup,
-                    configureGithub,
-                    githubMode,
-                    apiKey,
-                    apiToken,
-                    boardName,
-                    existingBoardId,
-                    workspaceId,
-                    repositoryUrl,
-                    activeStates,
-                    terminalStates,
-                    inProgressState,
-                    detectInProgressState,
-                    blockedState,
-                    workflowPath,
-                    workflowPathExplicit,
-                    workspaceRoot,
-                    workspaceRootExplicit,
-                    configDir,
-                    stateHome,
-                    manifestPath,
-                    serverPort,
-                    maxAgents,
-                    maxAgentsExplicit,
-                    codexModel,
-                    codexReasoningEffort,
-                    codexModelCatalog,
-                    codexModelDefaults,
-                    envPath,
-                    additionalWritableRoots,
-                    allowAllPaths,
-                    dangerFullAccess,
-                    noStart,
-                    command,
-                    endpoint,
-                    callerDirectory);
+            return new OptionsCopy(this).withRepositoryUrl(repositoryUrl).build();
         }
 
         private static Path resolveUserDataPath(Path path, Path configDir) {
@@ -1873,93 +1793,102 @@ public final class LocalSetup {
         }
 
         Options withCodexModelCatalog(CodexModelSelectionDefaults catalog) {
-            return new Options(
-                    check,
-                    dryRun,
-                    repairPort,
-                    nonInteractive,
-                    force,
-                    forceNewSetup,
-                    configureGithub,
-                    githubMode,
-                    apiKey,
-                    apiToken,
-                    boardName,
-                    existingBoardId,
-                    workspaceId,
-                    repositoryUrl,
-                    activeStates,
-                    terminalStates,
-                    inProgressState,
-                    detectInProgressState,
-                    blockedState,
-                    workflowPath,
-                    workflowPathExplicit,
-                    workspaceRoot,
-                    workspaceRootExplicit,
-                    configDir,
-                    stateHome,
-                    manifestPath,
-                    serverPort,
-                    maxAgents,
-                    maxAgentsExplicit,
-                    codexModel,
-                    codexReasoningEffort,
-                    Optional.of(catalog),
-                    codexModelDefaults,
-                    envPath,
-                    additionalWritableRoots,
-                    allowAllPaths,
-                    dangerFullAccess,
-                    noStart,
-                    command,
-                    endpoint,
-                    callerDirectory);
+            return new OptionsCopy(this).withCodexModelCatalog(catalog).build();
         }
 
         Options withCodexModelSelection(CodexModelSelectionFlow.Selection selected) {
-            return new Options(
-                    check,
-                    dryRun,
-                    repairPort,
-                    nonInteractive,
-                    force,
-                    forceNewSetup,
-                    configureGithub,
-                    githubMode,
-                    apiKey,
-                    apiToken,
-                    boardName,
-                    existingBoardId,
-                    workspaceId,
-                    repositoryUrl,
-                    activeStates,
-                    terminalStates,
-                    inProgressState,
-                    detectInProgressState,
-                    blockedState,
-                    workflowPath,
-                    workflowPathExplicit,
-                    workspaceRoot,
-                    workspaceRootExplicit,
-                    configDir,
-                    stateHome,
-                    manifestPath,
-                    serverPort,
-                    maxAgents,
-                    maxAgentsExplicit,
-                    codexModel.or(selected::modelOverride),
-                    codexReasoningEffort.or(selected::reasoningEffortOverride),
-                    codexModelCatalog,
-                    Optional.of(selected.defaults()),
-                    envPath,
-                    additionalWritableRoots,
-                    allowAllPaths,
-                    dangerFullAccess,
-                    noStart,
-                    command,
-                    endpoint,
-                    callerDirectory);
+            return new OptionsCopy(this).withCodexModelSelection(selected).build();
+        }
+
+        private static final class OptionsCopy {
+            private final Options source;
+            private Optional<String> repositoryUrl;
+            private Optional<String> codexModel;
+            private Optional<String> codexReasoningEffort;
+            private Optional<CodexModelSelectionDefaults> codexModelCatalog;
+            private Optional<TrelloBoardSetup.CodexModelDefaults> codexModelDefaults;
+            private List<Path> additionalWritableRoots;
+            private boolean dangerFullAccess;
+
+            private OptionsCopy(Options source) {
+                this.source = source;
+                repositoryUrl = source.repositoryUrl();
+                codexModel = source.codexModel();
+                codexReasoningEffort = source.codexReasoningEffort();
+                codexModelCatalog = source.codexModelCatalog();
+                codexModelDefaults = source.codexModelDefaults();
+                additionalWritableRoots = source.additionalWritableRoots();
+                dangerFullAccess = source.dangerFullAccess();
+            }
+
+            private OptionsCopy withCodexAccess(
+                    List<Path> replacementAdditionalWritableRoots, boolean replacementDangerFullAccess) {
+                additionalWritableRoots = replacementAdditionalWritableRoots;
+                dangerFullAccess = replacementDangerFullAccess;
+                return this;
+            }
+
+            private OptionsCopy withRepositoryUrl(Optional<String> replacementRepositoryUrl) {
+                repositoryUrl = replacementRepositoryUrl;
+                return this;
+            }
+
+            private OptionsCopy withCodexModelCatalog(CodexModelSelectionDefaults catalog) {
+                codexModelCatalog = Optional.of(catalog);
+                return this;
+            }
+
+            private OptionsCopy withCodexModelSelection(CodexModelSelectionFlow.Selection selected) {
+                codexModel = source.codexModel().or(selected::modelOverride);
+                codexReasoningEffort = source.codexReasoningEffort().or(selected::reasoningEffortOverride);
+                codexModelDefaults = Optional.of(selected.defaults());
+                return this;
+            }
+
+            private Options build() {
+                return new Options(
+                        source.check(),
+                        source.dryRun(),
+                        source.repairPort(),
+                        source.nonInteractive(),
+                        source.force(),
+                        source.forceNewSetup(),
+                        source.configureGithub(),
+                        source.githubMode(),
+                        source.apiKey(),
+                        source.apiToken(),
+                        source.boardName(),
+                        source.existingBoardId(),
+                        source.workspaceId(),
+                        repositoryUrl,
+                        source.activeStates(),
+                        source.terminalStates(),
+                        source.inProgressState(),
+                        source.detectInProgressState(),
+                        source.blockedState(),
+                        source.workflowPath(),
+                        source.workflowPathExplicit(),
+                        source.workspaceRoot(),
+                        source.workspaceRootExplicit(),
+                        source.configDir(),
+                        source.stateHome(),
+                        source.manifestPath(),
+                        source.serverPort(),
+                        source.maxAgents(),
+                        source.maxAgentsExplicit(),
+                        codexModel,
+                        codexReasoningEffort,
+                        codexModelCatalog,
+                        codexModelDefaults,
+                        source.envPath(),
+                        additionalWritableRoots,
+                        source.allowAllPaths(),
+                        dangerFullAccess,
+                        source.noStart(),
+                        source.command(),
+                        source.endpoint(),
+                        source.callerDirectory());
+            }
         }
     }
 
