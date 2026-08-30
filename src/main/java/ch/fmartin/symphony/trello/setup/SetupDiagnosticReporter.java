@@ -3,6 +3,11 @@ package ch.fmartin.symphony.trello.setup;
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.SLASHES;
 import static ch.fmartin.symphony.trello.setup.GitHubIssueTarget.REPOSITORY;
 import static ch.fmartin.symphony.trello.setup.SetupCliOptionNames.STATE_HOME;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.APP_HOME_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.CONFIG_DIR_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.STATE_HOME_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.SYMPHONY_HOME_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.WORKSPACE_ROOT_ENV;
 
 import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
@@ -54,7 +59,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 final class SetupDiagnosticReporter {
-    private static final String CONFIG_DIR_ENV = "SYMPHONY_TRELLO_CONFIG_DIR";
     private static final DateTimeFormatter FILE_TIMESTAMP =
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneOffset.UTC);
     private static final Duration PROBE_TIMEOUT = Duration.ofSeconds(2);
@@ -2817,11 +2821,11 @@ final class SetupDiagnosticReporter {
     private List<String> sensitivePaths() {
         List<String> paths = new ArrayList<>();
         addPath(paths, System.getProperty("user.home"));
-        addPath(paths, environment.get("SYMPHONY_HOME"));
-        addPath(paths, environment.get("SYMPHONY_TRELLO_APP_HOME"));
+        addPath(paths, environment.get(SYMPHONY_HOME_ENV));
+        addPath(paths, environment.get(APP_HOME_ENV));
         addPath(paths, environment.get(CONFIG_DIR_ENV));
-        addPath(paths, environment.get("SYMPHONY_TRELLO_WORKSPACE_ROOT"));
-        addPath(paths, environment.get("SYMPHONY_TRELLO_STATE_HOME"));
+        addPath(paths, environment.get(WORKSPACE_ROOT_ENV));
+        addPath(paths, environment.get(STATE_HOME_ENV));
         addPath(paths, environment.get("SYMPHONY_TRELLO_DOTENV"));
         return paths.stream()
                 .distinct()

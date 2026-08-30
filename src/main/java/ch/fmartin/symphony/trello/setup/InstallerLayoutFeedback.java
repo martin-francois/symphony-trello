@@ -1,6 +1,10 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.setup.GitHubIssueTarget.REPOSITORY;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.CONFIG_DIR_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.STATE_HOME_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.SYMPHONY_HOME_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.WORKSPACE_ROOT_ENV;
 
 import com.google.common.base.Splitter;
 import java.io.IOException;
@@ -17,11 +21,8 @@ final class InstallerLayoutFeedback {
     static final String ENVIRONMENT_NAME = "SYMPHONY_TRELLO_LAYOUT_FEEDBACK";
 
     private static final String ISSUE_TITLE = "feat: recognize a reusable custom installer path layout";
-    private static final Set<String> REPORTABLE_ENVIRONMENT_NAMES = Set.of(
-            "SYMPHONY_HOME",
-            "SYMPHONY_TRELLO_CONFIG_DIR",
-            "SYMPHONY_TRELLO_WORKSPACE_ROOT",
-            "SYMPHONY_TRELLO_STATE_HOME");
+    private static final Set<String> REPORTABLE_ENVIRONMENT_NAMES =
+            Set.of(SYMPHONY_HOME_ENV, CONFIG_DIR_ENV, WORKSPACE_ROOT_ENV, STATE_HOME_ENV);
 
     private final Map<String, String> environment;
     private final CommandRunner commands;

@@ -2,6 +2,8 @@ package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.ISO_CONTROL_CHARACTERS;
 import static ch.fmartin.symphony.trello.setup.SetupCliOptionNames.STATE_HOME;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.CONFIG_DIR_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.WORKSPACE_ROOT_ENV;
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
 
 import ch.fmartin.symphony.trello.CliExitCodes;
@@ -37,7 +39,6 @@ public final class LocalSetup {
             CharMatcher.anyOf("\"\\$`!%").or(ISO_CONTROL_CHARACTERS).precomputed();
     private static final Path DEFAULT_ENV_PATH = Path.of(".env");
     private static final String DEFAULT_COMMAND = "symphony-trello";
-    private static final String CONFIG_DIR_ENV = "SYMPHONY_TRELLO_CONFIG_DIR";
     private static final String COMMAND_ENV = "SYMPHONY_TRELLO_COMMAND";
     private static final String CALLER_DIR_ENV = "SYMPHONY_TRELLO_CALLER_DIR";
     static final String INSTALLER_COMPLETION_ENV = "SYMPHONY_TRELLO_INSTALLER_COMPLETION";
@@ -1740,8 +1741,7 @@ public final class LocalSetup {
         }
 
         private static Path defaultWorkspaceRoot(Map<String, String> environment) {
-            return configuredPath(environment, "SYMPHONY_TRELLO_WORKSPACE_ROOT")
-                    .orElse(TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT);
+            return configuredPath(environment, WORKSPACE_ROOT_ENV).orElse(TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT);
         }
 
         private static Optional<Path> configuredPath(Map<String, String> environment, String name) {

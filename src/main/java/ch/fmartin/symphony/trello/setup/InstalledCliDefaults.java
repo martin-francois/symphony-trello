@@ -1,6 +1,10 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.setup.SetupCliOptionNames.STATE_HOME;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.APP_HOME_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.CONFIG_DIR_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.STATE_HOME_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.WORKSPACE_ROOT_ENV;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -14,10 +18,6 @@ final class InstalledCliDefaults {
     static final String INSTALLED_STATE_HOME_PROPERTY = "symphony.trello.installed.state.home";
     static final String INSTALLED_APP_HOME_PROPERTY = "symphony.trello.installed.app.home";
 
-    private static final String CONFIG_DIR_ENV = "SYMPHONY_TRELLO_CONFIG_DIR";
-    private static final String WORKSPACE_ROOT_ENV = "SYMPHONY_TRELLO_WORKSPACE_ROOT";
-    private static final String STATE_HOME_ENV = "SYMPHONY_TRELLO_STATE_HOME";
-    private static final String APP_HOME_ENV = "SYMPHONY_TRELLO_APP_HOME";
     private static final List<String> SETUP_LOCAL_LIFECYCLE_COMMANDS =
             List.of("check", "repair-port", "configure-github");
     private static final List<String> SETUP_LOCAL_VALUE_OPTIONS = List.of(

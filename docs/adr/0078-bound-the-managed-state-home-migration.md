@@ -81,7 +81,8 @@ This decision is still implemented when:
 * flag-free lifecycle commands read the configured state home after the update;
 * legacy log files remain untouched;
 * no runtime lifecycle command searches the legacy root after migration; and
-* issue #678 remains linked, dated, labeled, and reviewed before removal.
+* [GitHub issue #678](https://github.com/martin-francois/symphony-trello/issues/678) remains linked,
+  dated, labeled, and reviewed before removal.
 
 ## Pros and Cons of the Options
 
