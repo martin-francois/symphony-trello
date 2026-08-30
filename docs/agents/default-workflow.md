@@ -154,8 +154,17 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
   old-template fingerprints, historical-state fallbacks, or automatic upgrade code unless an
   explicit issue, specification change, or ADR defines the supported public contract.
 - When temporary migration or compatibility behavior is accepted, define how long it stays or the
-  exact condition that removes it. Track that cleanup in the issue, PR, ADR, or a dedicated follow-up
-  issue before merging the compatibility logic.
+  exact condition that removes it. Before merging the compatibility logic, create a dedicated
+  cleanup issue with the `breaking change` label, link it from the implementation, and give it a
+  calendar review date no later than one year after introduction unless the issue records why a
+  later date is necessary. Reconsider the migration at that date and at the next breaking release,
+  whichever comes first. Pull-request review must verify the linked issue, label, date, and removal
+  condition.
+- A breaking release may remove temporary migration behavior even when users who skipped
+  intermediate releases still need it. In that case, the breaking-change release notes must name
+  the latest intermediate version that still performs the migration and recommend upgrading to it
+  before the breaking version. Release review must verify that the documented sequence takes users
+  through the automatic migration before removal.
 - Keep accepted temporary compatibility logic narrow, named, and easy to find and delete later.
   Cover it with tests that explain the old shape it preserves and, where practical, keep those tests
   grouped so the cleanup can remove the code and tests together.
