@@ -68,6 +68,26 @@ final class InstallerLayoutFeedbackTest {
     }
 
     @Test
+    void workspaceOnlyLayoutIncludesSanitizedWorkspaceContext() {
+        // given
+        Map<String, String> environment = feedbackEnvironment("/home/example", "SYMPHONY_TRELLO_WORKSPACE_ROOT");
+        var commands = new RecordingCommands(false);
+        LocalWorkerPaths paths = new LocalWorkerPaths(
+                Path.of("/app"),
+                Path.of("/home/example/config"),
+                Path.of("/home/example/shared/workspaces"),
+                Path.of("/home/example/state"));
+
+        // when
+        RecordingTerminal terminal = offerFeedback(environment, commands, paths, "y");
+
+        // then
+        assertThat(terminal.stdout())
+                .contains("Explicit variables: SYMPHONY_TRELLO_WORKSPACE_ROOT", "Workspaces: $HOME/shared/workspaces")
+                .doesNotContain("/home/example");
+    }
+
+    @Test
     void personalLayoutDeclineSkipsGithubProbe() {
         // given
         Map<String, String> environment = feedbackEnvironment("/home/example", "SYMPHONY_HOME");

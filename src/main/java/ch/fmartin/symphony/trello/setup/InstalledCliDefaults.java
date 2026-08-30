@@ -70,11 +70,10 @@ final class InstalledCliDefaults {
         if (!explicitConfigDir) {
             paths.configDir().ifPresent(value -> add(defaults, "--config-dir", value));
         }
-        if (!lifecycle && !explicitConfigDir) {
-            addIfMissing(defaults, args, "--workspace-root", paths.workspaceRoot());
-            addIfMissing(defaults, args, STATE_HOME, paths.stateHome());
-        } else if (!lifecycle) {
-            explicitConfigDirValue.ifPresent(configDir -> addConfigRoots(defaults, args, paths, configDir));
+        if (!lifecycle) {
+            explicitConfigDirValue
+                    .or(paths::configDir)
+                    .ifPresent(configDir -> addConfigRoots(defaults, args, paths, configDir));
         }
         return injectAfterCommand(args, defaults);
     }
@@ -102,11 +101,10 @@ final class InstalledCliDefaults {
         Optional<String> explicitConfigDirValue = optionValue(args, "--config-dir");
         if (!explicitConfigDir) {
             paths.configDir().ifPresent(value -> add(defaults, "--config-dir", value));
-            addIfMissing(defaults, args, "--workspace-root", paths.workspaceRoot());
-            addIfMissing(defaults, args, STATE_HOME, paths.stateHome());
-        } else {
-            explicitConfigDirValue.ifPresent(configDir -> addConfigRoots(defaults, args, paths, configDir));
         }
+        explicitConfigDirValue
+                .or(paths::configDir)
+                .ifPresent(configDir -> addConfigRoots(defaults, args, paths, configDir));
         addIfMissing(defaults, args, "--app-home", paths.appHome());
         return injectAfterCommand(args, defaults);
     }
@@ -199,6 +197,7 @@ final class InstalledCliDefaults {
             Optional<String> workspaceRoot,
             Optional<String> stateHome,
             Optional<String> appHome,
+            Optional<String> installedConfigDir,
             Optional<String> installedWorkspaceRoot,
             Optional<String> installedStateHome) {
         static InstalledPaths from(Map<String, String> environment) {
@@ -215,6 +214,7 @@ final class InstalledCliDefaults {
                     value(environment, WORKSPACE_ROOT_ENV),
                     value(environment, STATE_HOME_ENV),
                     value(environment, APP_HOME_ENV).or(() -> property(properties, INSTALLED_APP_HOME_PROPERTY)),
+                    property(properties, INSTALLED_CONFIG_DIR_PROPERTY),
                     property(properties, INSTALLED_WORKSPACE_ROOT_PROPERTY),
                     property(properties, INSTALLED_STATE_HOME_PROPERTY));
         }
@@ -228,7 +228,7 @@ final class InstalledCliDefaults {
         }
 
         boolean matchesInstalledConfigDir(Path candidate) {
-            return samePath(Optional.of(candidate.toString()), configDir);
+            return samePath(Optional.of(candidate.toString()), installedConfigDir);
         }
 
         private static Optional<String> property(PropertyLookup properties, String name) {

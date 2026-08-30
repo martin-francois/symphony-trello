@@ -13,7 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -22,7 +22,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 final class InstallerScriptLifecycleTest {
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final TypeReference<LinkedHashMap<String, Object>> JSON_OBJECT = new TypeReference<>() {};
+    private static final TypeReference<Map<String, Object>> JSON_OBJECT = new TypeReference<>() {};
 
     @TempDir
     Path temporaryDirectory;
@@ -47,7 +47,7 @@ final class InstallerScriptLifecycleTest {
         Path userService = homeDirectory.resolve(".config/systemd/user/symphony-trello.service");
         Path autostartEnvironment = configDirectory.resolve("autostart.env");
         Path fakeLog = temporaryDirectory.resolve("fake-tools.log");
-        Map<String, String> environment = new LinkedHashMap<>(Map.ofEntries(
+        Map<String, String> environment = new HashMap<>(Map.ofEntries(
                 Map.entry("PATH", fakeBin + System.getProperty("path.separator") + System.getenv("PATH")),
                 Map.entry("HOME", homeDirectory.toString()),
                 Map.entry("USER", "symphony-test"),
@@ -55,6 +55,7 @@ final class InstallerScriptLifecycleTest {
                 Map.entry("SYMPHONY_TRELLO_REF", "main"),
                 Map.entry("SYMPHONY_HOME", symphonyHome.toString()),
                 Map.entry("SYMPHONY_TRELLO_CONFIG_DIR", configDirectory.toString()),
+                Map.entry("SYMPHONY_TRELLO_WORKSPACE_ROOT", workspaceRoot.toString()),
                 Map.entry("SYMPHONY_TRELLO_STATE_HOME", stateHome.toString()),
                 Map.entry("SYMPHONY_FAKE_LOG", fakeLog.toString()),
                 Map.entry("SYMPHONY_FAKE_SLOW_TERM", "true"),
@@ -139,7 +140,7 @@ final class InstallerScriptLifecycleTest {
                 isolatedConfigArgument.toString());
         Path environmentWorkspaceRoot = temporaryDirectory.resolve("environment workspaces");
         Path environmentStateHome = temporaryDirectory.resolve("environment state");
-        Map<String, String> environmentPathOverrides = new LinkedHashMap<>(environment);
+        Map<String, String> environmentPathOverrides = new HashMap<>(environment);
         environmentPathOverrides.put("SYMPHONY_TRELLO_WORKSPACE_ROOT", environmentWorkspaceRoot.toString());
         environmentPathOverrides.put("SYMPHONY_TRELLO_STATE_HOME", environmentStateHome.toString());
         ProcessResult isolatedStatusWithEnvironmentRoots = run(
@@ -149,23 +150,11 @@ final class InstallerScriptLifecycleTest {
                 "status",
                 "--config-dir",
                 isolatedConfigArgument.toString());
-        Path legacyStateHome = configDirectory.resolveSibling("state");
-        Files.createDirectories(legacyStateHome);
-        Path preMigrationPid = singleFile(stateHome, ".pid");
-        Path legacyPid = legacyStateHome.resolve(preMigrationPid.getFileName());
-        Files.move(preMigrationPid, legacyPid);
-        List<Path> legacyLogs = new ArrayList<>();
-        for (String suffix : List.of(".log", ".log.err")) {
-            Path currentLog = singleFile(stateHome, suffix);
-            Path legacyLog = legacyStateHome.resolve(currentLog.getFileName());
-            Files.move(currentLog, legacyLog);
-            legacyLogs.add(legacyLog);
-        }
+        LegacyStateFiles legacyStateFiles =
+                moveManagedStateFilesToLegacy(configDirectory, stateHome, List.of(".log", ".log.err"));
         ProcessResult update = run(
                 environment, "bash", installScript.toString(), "--no-onboard", "--bin-dir", binDirectory.toString());
-        boolean legacyPidRemovedDuringUpdate = Files.notExists(legacyPid);
-        boolean configuredPidCreatedDuringUpdate = Files.isRegularFile(singleFile(stateHome, ".pid"));
-        boolean legacyLogsPreservedDuringUpdate = legacyLogs.stream().allMatch(Files::isRegularFile);
+        MigrationObservation migration = observeMigration(legacyStateFiles, stateHome);
         ProcessResult logsAfterMigration = run(
                 environment,
                 installedCommand.toString(),
@@ -264,15 +253,7 @@ final class InstallerScriptLifecycleTest {
                 .as(isolatedStatusWithEnvironmentRoots.output())
                 .isZero();
         assertThat(update.exitCode()).isZero();
-        assertThat(legacyPidRemovedDuringUpdate)
-                .as("the update removes legacy managed-worker PID tracking")
-                .isTrue();
-        assertThat(configuredPidCreatedDuringUpdate)
-                .as("the update restarts managed-worker PID tracking in the configured state home")
-                .isTrue();
-        assertThat(legacyLogsPreservedDuringUpdate)
-                .as("the update keeps legacy worker logs as history")
-                .isTrue();
+        assertSuccessfulMigration(migration, "POSIX");
         assertThat(logsAfterMigration.exitCode())
                 .as(logsAfterMigration.output())
                 .isZero();
@@ -354,7 +335,7 @@ final class InstallerScriptLifecycleTest {
                         "dotenv=" + configDirectory.resolve(".env"),
                         "definitely-not-a-command",
                         "mvnw -q -f " + installPrefix.resolve("pom.xml") + " -DskipTests clean package",
-                        "completion_mode=defer layout_feedback=SYMPHONY_HOME,SYMPHONY_TRELLO_CONFIG_DIR,SYMPHONY_TRELLO_STATE_HOME",
+                        "completion_mode=defer layout_feedback=SYMPHONY_HOME,SYMPHONY_TRELLO_CONFIG_DIR,SYMPHONY_TRELLO_WORKSPACE_ROOT,SYMPHONY_TRELLO_STATE_HOME",
                         "jar-start",
                         "app-present-before-exit",
                         "jar-stopped")
@@ -542,14 +523,7 @@ final class InstallerScriptLifecycleTest {
                         + " logs --workflow "
                         + powerShellLiteral(workflow.toString())
                         + " | Select-Object -First 1");
-        Path legacyStateHome = configDirectory.resolveSibling("state");
-        Files.createDirectories(legacyStateHome);
-        Path preMigrationPid = singleFile(stateHome, ".pid");
-        Path legacyPid = legacyStateHome.resolve(preMigrationPid.getFileName());
-        Files.move(preMigrationPid, legacyPid);
-        Path preMigrationLog = singleFile(stateHome, ".log");
-        Path legacyLog = legacyStateHome.resolve(preMigrationLog.getFileName());
-        Files.move(preMigrationLog, legacyLog);
+        LegacyStateFiles legacyStateFiles = moveManagedStateFilesToLegacy(configDirectory, stateHome, List.of(".log"));
         ProcessResult update = run(
                 environment,
                 "pwsh",
@@ -567,9 +541,7 @@ final class InstallerScriptLifecycleTest {
                 sourceRepository.toUri().toString(),
                 "--ref",
                 "main");
-        boolean legacyPidRemovedDuringUpdate = Files.notExists(legacyPid);
-        boolean configuredPidCreatedDuringUpdate = Files.isRegularFile(singleFile(stateHome, ".pid"));
-        boolean legacyLogPreservedDuringUpdate = Files.isRegularFile(legacyLog);
+        MigrationObservation migration = observeMigration(legacyStateFiles, stateHome);
         ProcessResult stop = run(
                 environment,
                 "pwsh",
@@ -610,15 +582,7 @@ final class InstallerScriptLifecycleTest {
         assertThat(status.output()).contains("running WORKFLOW $value & (demo).md");
         assertThat(logs.output()).contains("fake wrapper log");
         assertThat(update.exitCode()).as(update.output()).isZero();
-        assertThat(legacyPidRemovedDuringUpdate)
-                .as("the PowerShell update removes legacy managed-worker PID tracking")
-                .isTrue();
-        assertThat(configuredPidCreatedDuringUpdate)
-                .as("the PowerShell update restarts managed-worker PID tracking in the configured state home")
-                .isTrue();
-        assertThat(legacyLogPreservedDuringUpdate)
-                .as("the PowerShell update keeps the legacy worker log as history")
-                .isTrue();
+        assertSuccessfulMigration(migration, "PowerShell");
         assertThat(stop.output()).contains("Stopped WORKFLOW $value & (demo).md");
         String fakeLogContent = Files.readString(fakeLog);
         Map<String, Object> powerShellSetup = setupCliEvent(fakeLogContent, "new-board", "Wrapper Dispatch Board");
@@ -711,4 +675,50 @@ final class InstallerScriptLifecycleTest {
         assertThat(args).as("structured fake-tool event args").isInstanceOf(List.class);
         return ((List<?>) args).stream().map(String::valueOf).collect(Collectors.joining(" "));
     }
+
+    private static LegacyStateFiles moveManagedStateFilesToLegacy(
+            Path configDirectory, Path stateHome, List<String> logSuffixes) throws IOException {
+        Path legacyStateHome = configDirectory.resolveSibling("state");
+        Files.createDirectories(legacyStateHome);
+        Path currentPid = singleFile(stateHome, ".pid");
+        Path legacyPid = legacyStateHome.resolve(currentPid.getFileName());
+        Files.move(currentPid, legacyPid);
+        List<Path> legacyLogs = new ArrayList<>();
+        for (String suffix : logSuffixes) {
+            Path currentLog = singleFile(stateHome, suffix);
+            Path legacyLog = legacyStateHome.resolve(currentLog.getFileName());
+            Files.move(currentLog, legacyLog);
+            legacyLogs.add(legacyLog);
+        }
+        return new LegacyStateFiles(legacyPid, List.copyOf(legacyLogs));
+    }
+
+    private static MigrationObservation observeMigration(LegacyStateFiles legacyStateFiles, Path stateHome)
+            throws IOException {
+        boolean legacyLogsPreserved = true;
+        for (Path legacyLog : legacyStateFiles.logs()) {
+            legacyLogsPreserved &= Files.isRegularFile(legacyLog);
+        }
+        return new MigrationObservation(
+                Files.notExists(legacyStateFiles.pid()),
+                Files.isRegularFile(singleFile(stateHome, ".pid")),
+                legacyLogsPreserved);
+    }
+
+    private static void assertSuccessfulMigration(MigrationObservation migration, String platform) {
+        assertThat(migration.legacyPidRemoved())
+                .as("the %s update removes legacy managed-worker PID tracking", platform)
+                .isTrue();
+        assertThat(migration.configuredPidCreated())
+                .as("the %s update restarts managed-worker PID tracking in the configured state home", platform)
+                .isTrue();
+        assertThat(migration.legacyLogsPreserved())
+                .as("the %s update keeps legacy worker logs as history", platform)
+                .isTrue();
+    }
+
+    private record LegacyStateFiles(Path pid, List<Path> logs) {}
+
+    private record MigrationObservation(
+            boolean legacyPidRemoved, boolean configuredPidCreated, boolean legacyLogsPreserved) {}
 }

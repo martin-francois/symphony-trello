@@ -70,6 +70,7 @@ final class InstalledCliDefaultsTest {
                 Optional.of(environmentWorkspaceRoot.toString()),
                 Optional.of(environmentStateHome.toString()),
                 Optional.of(appHome.toString()),
+                Optional.of(configDir.toString()),
                 Optional.of(workspaceRoot.toString()),
                 Optional.of(stateHome.toString()));
 
@@ -168,6 +169,42 @@ final class InstalledCliDefaultsTest {
     }
 
     @Test
+    void environmentConfigOverrideDoesNotMasqueradeAsInstalledConfigDir() {
+        // given
+        Path customConfigDir = Path.of("/tmp/environment-config");
+        Map<String, String> environment = Map.of(
+                "SYMPHONY_TRELLO_CONFIG_DIR",
+                customConfigDir.toString(),
+                "SYMPHONY_TRELLO_WORKSPACE_ROOT",
+                workspaceRoot.toString(),
+                "SYMPHONY_TRELLO_STATE_HOME",
+                stateHome.toString());
+        InstalledCliDefaults.InstalledPaths paths = InstalledCliDefaults.InstalledPaths.from(
+                environment,
+                Map.of(
+                        InstalledCliDefaults.INSTALLED_CONFIG_DIR_PROPERTY,
+                        configDir.toString(),
+                        InstalledCliDefaults.INSTALLED_WORKSPACE_ROOT_PROPERTY,
+                        workspaceRoot.toString(),
+                        InstalledCliDefaults.INSTALLED_STATE_HOME_PROPERTY,
+                        stateHome.toString()));
+
+        // when
+        List<String> args = InstalledCliDefaults.apply(List.of("setup-local"), paths);
+
+        // then
+        assertThat(args)
+                .containsExactly(
+                        "setup-local",
+                        "--config-dir",
+                        customConfigDir.toString(),
+                        "--workspace-root",
+                        customConfigDir.resolve("workspaces").toString(),
+                        "--state-home",
+                        customConfigDir.resolveSibling("state").toString());
+    }
+
+    @Test
     void boardSetupReceivesWorkspaceRootAndInstalledManifestDefaults() {
         // given
         InstalledCliDefaults.InstalledPaths paths = installedPaths();
@@ -231,6 +268,7 @@ final class InstalledCliDefaultsTest {
                 Optional.of(workspaceRoot.toString()),
                 Optional.of(stateHome.toString()),
                 Optional.of(appHome.toString()),
+                Optional.of(configDir.toString()),
                 Optional.of(workspaceRoot.toString()),
                 Optional.of(stateHome.toString()));
     }

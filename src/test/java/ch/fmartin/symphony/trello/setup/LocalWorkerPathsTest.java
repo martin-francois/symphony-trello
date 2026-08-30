@@ -84,6 +84,11 @@ final class LocalWorkerPathsTest {
 
     private InstalledCliDefaults.InstalledPaths installedPaths(Map<String, String> environment) {
         return InstalledCliDefaults.InstalledPaths.from(
-                environment, Map.of(InstalledCliDefaults.INSTALLED_STATE_HOME_PROPERTY, installedStateHome.toString()));
+                environment,
+                Map.of(
+                        InstalledCliDefaults.INSTALLED_CONFIG_DIR_PROPERTY,
+                        installedConfigDir.toString(),
+                        InstalledCliDefaults.INSTALLED_STATE_HOME_PROPERTY,
+                        installedStateHome.toString()));
     }
 }

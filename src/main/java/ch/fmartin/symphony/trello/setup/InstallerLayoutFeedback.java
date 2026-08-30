@@ -17,8 +17,11 @@ final class InstallerLayoutFeedback {
     static final String ENVIRONMENT_NAME = "SYMPHONY_TRELLO_LAYOUT_FEEDBACK";
 
     private static final String ISSUE_TITLE = "feat: recognize a reusable custom installer path layout";
-    private static final Set<String> REPORTABLE_ENVIRONMENT_NAMES =
-            Set.of("SYMPHONY_HOME", "SYMPHONY_TRELLO_CONFIG_DIR", "SYMPHONY_TRELLO_STATE_HOME");
+    private static final Set<String> REPORTABLE_ENVIRONMENT_NAMES = Set.of(
+            "SYMPHONY_HOME",
+            "SYMPHONY_TRELLO_CONFIG_DIR",
+            "SYMPHONY_TRELLO_WORKSPACE_ROOT",
+            "SYMPHONY_TRELLO_STATE_HOME");
 
     private final Map<String, String> environment;
     private final CommandRunner commands;
@@ -114,6 +117,7 @@ final class InstallerLayoutFeedback {
                         "- Wrapper shell: " + property("symphony.trello.shell"),
                         "- Explicit variables: " + reportableEnvironmentNames(configuredNames),
                         "- Config: " + sanitizedPath(paths.configDir()),
+                        "- Workspaces: " + sanitizedPath(paths.workspaceRoot()),
                         "- State/logs: " + sanitizedPath(paths.stateHome()),
                         "- Config and state share a parent: "
                                 + (sameParent(paths.configDir(), paths.stateHome()) ? "yes" : "no"),

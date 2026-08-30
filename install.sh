@@ -221,6 +221,9 @@ run_setup_local_with_deferred_completion() {
     if [[ "$CONFIG_DIR_CONFIGURED" == true ]]; then
       feedback_context="${feedback_context:+$feedback_context,}SYMPHONY_TRELLO_CONFIG_DIR"
     fi
+    if [[ "$WORKSPACE_ROOT_CONFIGURED" == true ]]; then
+      feedback_context="${feedback_context:+$feedback_context,}SYMPHONY_TRELLO_WORKSPACE_ROOT"
+    fi
     if [[ "$STATE_HOME_CONFIGURED" == true ]]; then
       feedback_context="${feedback_context:+$feedback_context,}SYMPHONY_TRELLO_STATE_HOME"
     fi
@@ -2721,8 +2724,9 @@ if [[ "$UPDATING_EXISTING_APP" == true ]]; then
     [[ -n "$state_root" ]] && MANAGED_STATE_ROOTS+=("$state_root")
   done < <(managed_state_roots_with_pid)
 fi
-# Temporary migration for #678: stop workers tracked in the pre-fix sibling state directory so the
-# corrected installer restarts them only in the configured state home.
+# Temporary migration tracked by https://github.com/martin-francois/symphony-trello/issues/678:
+# stop workers tracked in the pre-fix sibling state directory so the corrected installer restarts
+# them only in the configured state home.
 if [[ "$UPDATING_EXISTING_APP" == true && "${#MANAGED_STATE_ROOTS[@]}" -gt 0 ]]; then
   if [[ -x "$BIN_DIR/symphony-trello" ]]; then
     RESTART_MANAGED_WORKERS=true

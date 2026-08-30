@@ -647,6 +647,9 @@ function Set-LayoutFeedbackContext {
   if ($env:SYMPHONY_TRELLO_CONFIG_DIR) {
     $configuredNames += "SYMPHONY_TRELLO_CONFIG_DIR"
   }
+  if ($env:SYMPHONY_TRELLO_WORKSPACE_ROOT) {
+    $configuredNames += "SYMPHONY_TRELLO_WORKSPACE_ROOT"
+  }
   if ($env:SYMPHONY_TRELLO_STATE_HOME) {
     $configuredNames += "SYMPHONY_TRELLO_STATE_HOME"
   }
@@ -1452,8 +1455,9 @@ Write-Host "Installing Symphony..."
 $UpdatingExistingApp = Test-Path -LiteralPath $Prefix
 $RestartManagedWorkers = $false
 $ManagedStateRoots = if ($UpdatingExistingApp) { @(Get-ManagedStateRootsWithPid) } else { @() }
-# Temporary migration for #678: stop workers tracked in the pre-fix sibling state directory so the
-# corrected installer restarts them only in the configured state home.
+# Temporary migration tracked by https://github.com/martin-francois/symphony-trello/issues/678:
+# stop workers tracked in the pre-fix sibling state directory so the corrected installer restarts
+# them only in the configured state home.
 if ($UpdatingExistingApp -and $ManagedStateRoots.Count -gt 0) {
   $RestartManagedWorkers = $true
   Write-Host "Stopping managed workers before update..."

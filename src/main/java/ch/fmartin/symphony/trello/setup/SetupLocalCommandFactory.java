@@ -333,7 +333,10 @@ final class SetupLocalCommandFactory {
         @Option(names = "--config-dir", description = "Directory for local .env, workflows, and board manifest.")
         Optional<Path> configDir = Optional.empty();
 
-        @Option(names = STATE_HOME, description = "Directory for managed PID and log files.")
+        @Option(
+                names = STATE_HOME,
+                description = "Directory for managed PID and log files. Installer-managed setup supplies this "
+                        + "automatically; override it only when a custom layout stores runtime state elsewhere.")
         Optional<Path> stateHome = Optional.empty();
 
         @Option(names = "--manifest", description = "Connected-board manifest path.")
