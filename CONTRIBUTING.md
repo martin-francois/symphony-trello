@@ -198,9 +198,9 @@ and runs the chaos tests so parser and boundary regressions are caught during pu
 The repository also has a maintainer-owned GitHub Actions workflow that runs ClusterFuzzLite
 code-change fuzzing and a self-continuing batch chain on GitHub-hosted runners, persists and prunes
 its corpora, retains baseline builds, generates coverage, and publishes crash artifacts and
-code-scanning results. A separate 15-minute watchdog recovers a stopped chain; successful batch
-completion is the normal handoff because GitHub can delay or drop scheduled events. Contributors do
-not need to run continuous fuzzing before every pull request,
+code-scanning results. A separate watchdog starts after changes to the chain, recovers failed long
+runs, and checks every 15 minutes. Successful batch completion is the normal handoff because GitHub
+can delay or drop scheduled events. Contributors do not need to run continuous fuzzing before every pull request,
 but should use the 15- to 30-minute active fuzzing commands in
 [Fuzzing](docs/fuzzing.md) when changing parser, prompt-line safety, workflow loading, or Trello
 reference/checklist parsing logic. The same page also documents longer agent-requested fuzzing runs,

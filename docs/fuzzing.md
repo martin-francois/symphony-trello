@@ -26,10 +26,11 @@ workflow, or Trello boundary changes break the fuzz tests.
 
 The separate `Continuous Fuzzing` GitHub Actions workflow runs ClusterFuzzLite batch fuzzing from
 `main` on GitHub-hosted runners. Each successful long batch dispatches its successor. A separate
-watchdog checks every 15 minutes and restarts cycle 0 only when the long workflow is idle. GitHub
-documents that scheduled events can be delayed or dropped, so repeated watchdog events recover a
-missed trigger without making cron the ordinary handoff. Three cycles use a 330-minute aggregate
-fuzzing budget; every fourth cycle uses 300
+watchdog starts after changes to the continuous chain, runs after a failed long batch, and checks
+every 15 minutes. It restarts cycle 0 only when the long workflow is idle. GitHub documents that
+scheduled events can be delayed or dropped, so deterministic repository events handle bootstrap
+and ordinary failure recovery while cron remains a backstop. Three cycles use a 330-minute
+aggregate fuzzing budget; every fourth cycle uses 300
 aggregate minutes so daily maintenance can follow before the next batch. A four-target matrix
 assigns 82.5 minutes to each target, or 75 minutes in the maintenance cycle, and each matrix job has
 a 100-minute timeout. Matrix jobs run one at a time because
@@ -110,7 +111,8 @@ dispatch a one-off batch while the continuous chain is active because all batch 
 concurrency group to protect corpus writes. Manually dispatched pruning uses that group as well. A
 successful continuous cycle dispatches the next index; cycle 3 runs pruning and coverage before
 dispatching cycle 0. A failed batch stops self-dispatch and lets the watchdog restart cycle 0, which
-prevents setup failures from causing a rapid retry loop.
+prevents setup failures from causing a rapid retry loop. Completion of a failed marked long run
+starts that recovery without waiting for cron.
 
 The first hosted coverage report establishes the baseline. A healthy report contains all four
 fuzzers and shows each one reaching its intended production entry point. If a target has zero or
