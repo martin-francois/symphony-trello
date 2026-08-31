@@ -17,6 +17,8 @@ final class ContinuousFuzzingWorkflowTest {
     private static final Path WORKFLOW = Path.of(".github/workflows/continuous-fuzzing.yml");
     private static final String CLUSTERFUZZLITE_COMMIT = "884713a6c30a92e5e8544c39945cd7cb630abcd1";
     private static final Pattern UNPINNED_ACTION = Pattern.compile("uses: [^\\s]+@(?![0-9a-f]{40}(?:\\s|$))");
+    private static final Pattern PINNED_TEMURIN_IMAGE =
+            Pattern.compile("FROM eclipse-temurin:25\\.\\d+\\.\\d+_\\d+-jdk@sha256:[0-9a-f]{64} AS jdk");
 
     @Test
     void batchFuzzingRunsOnlyOnMainWithPersistentCorporaAndNativeReporting() throws IOException {
@@ -31,15 +33,23 @@ final class ContinuousFuzzingWorkflowTest {
                 .contains(
                         "github.ref == 'refs/heads/main'",
                         "runs-on: ubuntu-latest",
-                        "timeout-minutes: 350",
+                        "timeout-minutes: 100",
+                        "fail-fast: false",
+                        "group: continuous-fuzzing-batch-main-${{ matrix.target }}",
+                        "RepositorySourceFuzzer",
+                        "TrelloCardReferenceParserFuzzer",
+                        "TrelloChecklistClassifierFuzzer",
+                        "WorkflowLoaderFuzzer",
+                        "scripts/select-clusterfuzzlite-target \"${{ matrix.target }}\"",
                         "google/clusterfuzzlite/actions/build_fuzzers@" + CLUSTERFUZZLITE_COMMIT,
                         "google/clusterfuzzlite/actions/run_fuzzers@" + CLUSTERFUZZLITE_COMMIT,
-                        "github.event.schedule == '17 0 * * *' && 18000 || 19800",
+                        "github.event.schedule == '17 0 * * *' && 4500 || 4950",
                         "language: jvm",
                         "minimize-crashes: true",
                         "mode: batch",
                         "output-sarif: true",
                         "github/codeql-action/upload-sarif@",
+                        "category: clusterfuzzlite-${{ matrix.target }}",
                         "sarif_file: cifuzz-sarif/results.sarif",
                         "scripts/report-clusterfuzzlite-failure",
                         "!cancelled()")
@@ -115,7 +125,7 @@ final class ContinuousFuzzingWorkflowTest {
     void longRunningOperationsHaveIndependentConcurrencyGroups() throws IOException {
         // given
         List<String> expectedGroups = List.of(
-                "group: continuous-fuzzing-batch-main",
+                "group: continuous-fuzzing-batch-main-${{ matrix.target }}",
                 "group: continuous-fuzzing-prune-main",
                 "group: continuous-fuzzing-coverage-main",
                 "group: continuous-fuzzing-build-main",
@@ -133,6 +143,7 @@ final class ContinuousFuzzingWorkflowTest {
         // given
         String workflow = workflowSource();
         String dockerfile = Files.readString(Path.of(".clusterfuzzlite/Dockerfile"));
+        String ossFuzzDockerfile = Files.readString(Path.of("oss-fuzz/Dockerfile"));
         String buildScript = Files.readString(Path.of(".clusterfuzzlite/build.sh"));
         String project = Files.readString(Path.of(".clusterfuzzlite/project.yaml"));
 
@@ -143,10 +154,16 @@ final class ContinuousFuzzingWorkflowTest {
         assertThat(unpinnedAction.find()).as("workflow has an unpinned action").isFalse();
         assertThat(dockerfile)
                 .contains(
+                        "COPY --from=jdk /opt/java/openjdk/ \"$JAVA_HOME/\"",
                         "FROM gcr.io/oss-fuzz-base/base-builder-jvm@sha256:",
                         "COPY . /src/symphony-trello",
                         "COPY .clusterfuzzlite/build.sh /src/build.sh")
-                .doesNotContain("git clone");
+                .doesNotContain("git clone", "api.adoptium.net/v3/binary/latest");
+        assertThat(dockerfile).containsPattern(PINNED_TEMURIN_IMAGE);
+        assertThat(ossFuzzDockerfile)
+                .containsPattern(PINNED_TEMURIN_IMAGE)
+                .contains("COPY --from=jdk /opt/java/openjdk/ \"$JAVA_HOME/\"")
+                .doesNotContain("api.adoptium.net/v3/binary/latest");
         assertThat(buildScript).contains("exec bash \"$SRC/symphony-trello/oss-fuzz/build.sh\"");
         assertThat(Files.readString(Path.of("oss-fuzz/build.sh")))
                 .contains("TestRepositoryUris*.class", "ch/fmartin/symphony/trello/testsupport");

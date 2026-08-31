@@ -1,0 +1,40 @@
+#!/bin/bash
+
+set -euo pipefail
+
+selected_target="${1:-}"
+build_out="${CFL_BUILD_OUT:-build-out}"
+fuzz_targets=(
+  RepositorySourceFuzzer
+  TrelloCardReferenceParserFuzzer
+  TrelloChecklistClassifierFuzzer
+  WorkflowLoaderFuzzer
+)
+
+target_is_known=false
+for fuzz_target in "${fuzz_targets[@]}"; do
+  if [[ "$fuzz_target" == "$selected_target" ]]; then
+    target_is_known=true
+    break
+  fi
+done
+
+if [[ "$target_is_known" != true ]]; then
+  echo "Unknown ClusterFuzzLite target: $selected_target" >&2
+  exit 2
+fi
+if [[ ! -x "$build_out/$selected_target" ]]; then
+  echo "ClusterFuzzLite target is not executable: $build_out/$selected_target" >&2
+  exit 1
+fi
+
+for fuzz_target in "${fuzz_targets[@]}"; do
+  if [[ "$fuzz_target" == "$selected_target" ]]; then
+    continue
+  fi
+  rm -f -- \
+    "$build_out/$fuzz_target" \
+    "$build_out/$fuzz_target.dict" \
+    "$build_out/$fuzz_target.options" \
+    "$build_out/${fuzz_target}_seed_corpus.zip"
+done

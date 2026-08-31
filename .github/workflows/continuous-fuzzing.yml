@@ -23,7 +23,7 @@ on:
           - coverage
           - build
       fuzz_seconds:
-        description: "Batch fuzzing budget in seconds; scheduled runs use 18000 or 19800."
+        description: "Per-target batch fuzzing budget in seconds; scheduled runs use 4500 or 4950."
         required: true
         type: number
         default: 300
@@ -102,18 +102,26 @@ jobs:
       github.ref == 'refs/heads/main'
       && ((github.event_name == 'workflow_dispatch' && inputs.operation == 'batch')
       || github.event_name == 'schedule')
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - RepositorySourceFuzzer
+          - TrelloCardReferenceParserFuzzer
+          - TrelloChecklistClassifierFuzzer
+          - WorkflowLoaderFuzzer
     concurrency:
-      group: continuous-fuzzing-batch-main
+      group: continuous-fuzzing-batch-main-${{ matrix.target }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 100
     permissions:
       actions: read
       contents: read
       issues: write
       security-events: write
     steps:
-      - name: Check out issue-reporting script
+      - name: Check out fuzzing scripts
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -123,13 +131,15 @@ jobs:
           language: jvm
           sanitizer: address
           github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Select one fuzz target for complete crash reporting
+        run: scripts/select-clusterfuzzlite-target "${{ matrix.target }}"
       - name: Run batch fuzzing
         id: fuzz
         continue-on-error: true
         uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          fuzz-seconds: ${{ github.event_name == 'workflow_dispatch' && inputs.fuzz_seconds || github.event.schedule == '17 0 * * *' && 18000 || 19800 }}
+          fuzz-seconds: ${{ github.event_name == 'workflow_dispatch' && inputs.fuzz_seconds || github.event.schedule == '17 0 * * *' && 4500 || 4950 }}
           language: jvm
           minimize-crashes: true
           mode: batch
@@ -145,6 +155,7 @@ jobs:
           && hashFiles('cifuzz-sarif/results.sarif') != ''
         uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
+          category: clusterfuzzlite-${{ matrix.target }}
           sarif_file: cifuzz-sarif/results.sarif
       - name: Create or update fuzz failure issue
         if: >-

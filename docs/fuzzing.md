@@ -25,14 +25,16 @@ within the repository's fast CI target while still failing when fixed crash inpu
 workflow, or Trello boundary changes break the fuzz tests.
 
 The separate `Continuous Fuzzing` GitHub Actions workflow runs ClusterFuzzLite batch fuzzing from
-`main` on a GitHub-hosted runner. It is scheduled every six hours with a 330-minute fuzzing budget
-except for the midnight run, which uses 300 minutes so daily maintenance can follow it before the
-next batch. The job timeout is 350 minutes. It intentionally uses `ubuntu-latest`, not a Blacksmith
-runner. ClusterFuzzLite runs the four standalone Jazzer targets, carries each target's corpus into
-later runs through the storage repository, and prunes redundant corpus inputs after the midnight
-batch. A reportable batch crash fails the workflow, uploads the reproducer as a crash artifact,
-publishes a SARIF result to code scanning, and creates or updates a deduplicated `bug` + `fuzzed`
-issue.
+`main` on GitHub-hosted runners. It is scheduled every six hours with a 330-minute aggregate fuzzing
+budget except for the midnight run, which uses 300 aggregate minutes so daily maintenance can follow
+it before the next batch. A four-target matrix assigns 82.5 minutes to each target, or 75 minutes at
+midnight, and each matrix job has a 100-minute timeout. It intentionally uses `ubuntu-latest`, not a
+Blacksmith runner. Each runner keeps one fuzzer wrapper before invoking ClusterFuzzLite. This works
+around ClusterFuzzLite's combined-batch SARIF limitation and guarantees that a crash in any target has
+its own report. The jobs carry each target's corpus into later runs through the storage repository and
+prune redundant corpus inputs after the midnight batch. A reportable batch crash fails its matrix job,
+uploads the reproducer as a crash artifact, publishes a SARIF result to code scanning, and creates or
+updates a deduplicated `bug` + `fuzzed` issue.
 
 ClusterFuzzLite also runs five-minute code-change fuzzing on pull requests and retains a baseline
 fuzzer build after each push to `main`. The baseline lets code-change mode distinguish crashes
@@ -68,6 +70,8 @@ gh workflow run continuous-fuzzing.yml --ref main \
   -f operation=batch \
   -f fuzz_seconds=60
 ```
+
+The manual `fuzz_seconds` value applies to each of the four batch matrix jobs.
 
 Use `operation=prune`, `operation=coverage`, or `operation=build` to test the corpus-pruning,
 coverage, or baseline-build paths. The `fuzz_seconds` input applies only to batch runs.

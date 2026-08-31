@@ -60,7 +60,10 @@ for result in "${results[@]}"; do
         };
     (.partialFingerprints // {}) as $partial
     | if ($partial | length) > 0
-      then {partialFingerprints: $partial}
+      then {
+        ruleId: (.ruleId // "unknown-rule"),
+        partialFingerprints: $partial
+      }
       else {
         ruleId: (.ruleId // "unknown-rule"),
         message: (.message.text // "ClusterFuzzLite found a crash"),

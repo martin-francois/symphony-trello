@@ -33,12 +33,14 @@ creating a second target-packaging implementation?
 * Reuse the standalone JVM fuzz targets and packaging logic prepared for OSS-Fuzz.
 * Carry useful corpus inputs into later runs through a dedicated public Git repository.
 * Preserve crash reproducers and publish findings through native GitHub surfaces.
-* Keep the scheduled workflow declarative and avoid repository-specific fuzz orchestration code.
+* Keep repository-specific fuzz orchestration small, versioned, and independently testable.
 * Stay below the GitHub-hosted job execution limit.
 
 ## Considered Options
 
 * Scheduled ClusterFuzzLite batch fuzzing.
+* One combined batch action for all fuzz targets.
+* One ClusterFuzzLite batch matrix job per fuzz target.
 * Custom scheduled Jazzer JUnit workflow.
 * Required pull request continuous fuzzing.
 * Blacksmith-hosted scheduled fuzzing.
@@ -57,10 +59,19 @@ Each target starts with a small checked-in seed corpus covering valid and malfor
 input grammar. ClusterFuzzLite then persists newly discovered corpus inputs between runs.
 
 Every fuzzing job uses `ubuntu-latest`, not a Blacksmith runner. Batch fuzzing runs on `main` every
-six hours with a 19,800-second active budget and a 350-minute job timeout. The midnight run uses an
-18,000-second budget so prune and coverage jobs can follow it before the next batch. The budget is
-shared across the available targets and each target's corpus is stored in the dedicated Git storage
-repository for later runs.
+six hours as a four-target matrix. Each non-midnight target receives a 4,950-second active budget,
+for a 19,800-second aggregate budget, and each job has a 100-minute timeout. The midnight run gives
+each target 4,500 seconds, for an 18,000-second aggregate budget, so prune and coverage jobs can
+follow before the next batch. Each target's corpus is stored in the dedicated Git storage repository
+for later runs.
+
+Each matrix runner removes the other three standalone fuzzer wrappers before starting batch mode.
+ClusterFuzzLite continues after a nonfinal batch target crashes but writes SARIF only for the final
+target it ran. Selecting one target per action invocation makes every reportable crash the final
+result for that invocation. It also gives each SARIF upload a target-specific category, so parallel
+uploads do not replace one another in code scanning. A tested repository script performs only the
+wrapper selection; ClusterFuzzLite still owns execution, minimization, corpus persistence, crash
+artifacts, and SARIF generation.
 
 Parallel fuzzing is disabled. ClusterFuzzLite issue 142 documents that libFuzzer workers can find
 crashes and then time out before ClusterFuzzLite reports them. Reliable failure reporting is more
@@ -89,6 +100,10 @@ The ClusterFuzzLite actions are pinned to the commit behind the upstream `v1` ta
 container image remains selected by its upstream `v1` image tag; that indirection is part of the
 upstream action implementation and cannot be pinned by callers.
 
+The JVM builder copies Java 25 from a versioned, digest-pinned Eclipse Temurin image instead of
+downloading the moving `latest/25/ga` archive. Dockerfile's built-in Renovate manager owns the image
+tag and digest, so Java updates follow the repository's dependency cooldown and review rules.
+
 ClusterFuzzLite persists corpora and coverage in the public
 `martin-francois/symphony-trello-fuzzing-storage` repository. Pull-request jobs read it without
 credentials. Jobs on `main` authenticate through the `CLUSTERFUZZLITE_STORAGE_TOKEN` repository
@@ -112,7 +127,10 @@ the repository-owned bridge and continues to use the same fuzz targets.
   data.
 * Good, because daily HTML coverage makes fuzz target reach visible without a separate service.
 * Good, because crash reproducers and SARIF findings use native GitHub artifacts and code scanning.
-* Good, because repository-owned shell logic is limited to tested SARIF-to-issue reporting.
+* Good, because every target gets complete crash reporting despite ClusterFuzzLite's combined-batch
+  SARIF limitation.
+* Good, because repository-owned shell logic is limited to tested target selection and
+  SARIF-to-issue reporting.
 * Neutral, because GitHub scheduled workflows do not guarantee an exact start time.
 * Good, because scheduled crash findings create or update deduplicated GitHub issues.
 * Neutral, because fork pull requests cannot publish SARIF and rely on their failed check and crash
@@ -122,7 +140,7 @@ the repository-owned bridge and continues to use the same fuzz targets.
 * Bad, because writes currently depend on a broader cross-repository token than the storage task
   itself requires.
 * Neutral, because the action's upstream container image uses the mutable `v1` tag internally.
-* Bad, because building the JVM fuzzers for each batch and prune job consumes part of the job budget.
+* Bad, because the matrix builds the JVM fuzzers four times per batch instead of once.
 * Bad, because ClusterFuzzLite issue 149 reports that a batch target can time out or exhaust memory
   without failing the overall job. Post-merge checks must inspect each target's log instead of
   treating a green job as sufficient evidence.
@@ -135,8 +153,8 @@ the repository-owned bridge and continues to use the same fuzz targets.
 Run the repository checks:
 
 ```bash
-bash -n .clusterfuzzlite/build.sh oss-fuzz/build.sh scripts/report-clusterfuzzlite-failure
-shellcheck .clusterfuzzlite/build.sh oss-fuzz/build.sh scripts/report-clusterfuzzlite-failure
+scripts/check-shell-scripts syntax
+scripts/check-shell-scripts shellcheck
 pnpm run verify:scripts
 ./mvnw -q -Dtest=ContinuousFuzzingWorkflowTest test
 ./mvnw -q spotless:check verify
@@ -175,6 +193,25 @@ code-change, continuous-build, batch, prune, and coverage operations.
 * Good, because the separate storage repository retains corpora and makes coverage browsable.
 * Bad, because cross-repository writes require a separately managed credential.
 * Bad, because the repository depends on ClusterFuzzLite's action containers and artifact protocol.
+
+### One Combined Batch Action for All Fuzz Targets
+
+Build the four targets once and let one ClusterFuzzLite batch invocation divide the budget among
+them.
+
+* Good, because one build leaves more runner time for fuzzing.
+* Bad, because ClusterFuzzLite writes SARIF only for the final target, so a crash in an earlier target
+  does not reliably reach issue reporting or code scanning.
+
+### One ClusterFuzzLite Batch Matrix Job per Fuzz Target
+
+Build the same output in four GitHub-hosted jobs, keep one target wrapper in each job, and run the
+official batch action once per target.
+
+* Good, because every target produces an independent status, crash artifact, and SARIF result.
+* Good, because separate target categories preserve all four code-scanning analyses.
+* Good, because the jobs can run concurrently without enabling libFuzzer worker parallelism.
+* Bad, because repeated image and Maven builds consume more runner minutes.
 
 ### Custom Scheduled Jazzer JUnit Workflow
 

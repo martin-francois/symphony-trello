@@ -117,7 +117,7 @@ test("reports every distinct SARIF result once", () => {
   const result = fixture("", {}, [
     {
       ruleId: "jazzer.timeout",
-      partialFingerprints: {primaryLocationLineHash: "second-stable-fingerprint"},
+      partialFingerprints: {primaryLocationLineHash: "stable-crash-fingerprint"},
       message: {text: "a second failure"},
       locations: [
         {
