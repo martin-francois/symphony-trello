@@ -1,0 +1,24 @@
+#!/bin/bash
+
+set -euo pipefail
+
+repository="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY must be set}"
+workflow="${CFL_WATCHDOG_WORKFLOW:-continuous-fuzzing-watchdog.yml}"
+: "${GH_TOKEN:?GH_TOKEN must be set}"
+
+for attempt in 1 2 3; do
+  if gh workflow run "$workflow" \
+    --repo "$repository" \
+    --ref main; then
+    echo "Queued the next continuous fuzzing watchdog run."
+    exit 0
+  fi
+
+  echo "Continuous fuzzing watchdog dispatch attempt $attempt failed." >&2
+  if ((attempt < 3)); then
+    sleep "$((attempt * 5))"
+  fi
+done
+
+echo "Continuous fuzzing watchdog could not queue its successor after 3 attempts." >&2
+exit 1

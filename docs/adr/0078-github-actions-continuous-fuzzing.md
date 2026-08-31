@@ -55,7 +55,7 @@ creating a second target-packaging implementation?
 * Wait for ClusterFuzzLite to update its runner's JaCoCo version.
 * Reimplement JVM coverage publication outside ClusterFuzzLite.
 * Depend on cron alone for successive long batches.
-* Dispatch each successor batch from the completed batch with a separate scheduled watchdog.
+* Dispatch each successor batch from the completed batch with a self-queued watchdog.
 
 ## Decision Outcome
 
@@ -83,36 +83,34 @@ coverage; cycles 0 through 2 run the normal budget. The continuation script retr
 dispatch three times before failing visibly.
 
 A failed batch does not dispatch its own successor. This prevents a checkout, build, or credential
-failure from creating an immediate loop of identical failing runs. Completion of a failed marked
-long run starts the watchdog, which restarts the chain at cycle 0 after the failed run leaves the
-workflow idle.
+failure from creating an immediate loop of identical failing runs. Completion of any marked long
+run starts or refreshes the watchdog, which restarts the chain at cycle 0 after a failed run leaves
+the workflow idle.
 
-A separate watchdog starts on default-branch changes to either workflow or its orchestration
-scripts, and on completion of a failed marked long run. A lightweight watchdog job in the
-established `Continuous Fuzzing` workflow also runs at minutes 3, 18, 33, and 48 of every hour. Both
-paths read the workflow-run API and dispatch cycle 0 only when no queued or active run has the
-`Continuous batch cycle` run-name prefix. The prefix distinguishes the long batch chain from
-pull-request, push, schedule, and manual maintenance runs in the same workflow. The failed-run
-trigger accepts only `workflow_dispatch` runs on `main` with that prefix, so a pull-request fuzz
-failure cannot start the trusted batch chain.
+The watchdog queues its successor before checking the workflow-run API every 15 minutes for 24
+iterations. Its 23 waits total 345 minutes, below the six-hour GitHub-hosted job limit. Job-level
+concurrency allows one watchdog to run and one successor to wait without cancellation. The queued
+successor starts when the current watchdog finishes or is cancelled. A later trusted trigger can
+replace the pending job, but it leaves a successor pending behind the active watchdog. Default-branch
+changes to either workflow or its orchestration scripts and completion of any marked long run are
+additional bootstrap and recovery triggers.
 
-The scheduled and event-driven watchdog paths share the repository-wide
-`continuous-fuzzing-watchdog` concurrency group and do not cancel each other. Serialization prevents
-both paths from observing an idle chain before either dispatched run becomes visible. The later
-watchdog sees the queued or active marked run and exits without dispatching another batch.
+Each check dispatches cycle 0 only when no queued or active run has the `Continuous batch cycle`
+run-name prefix. The prefix distinguishes the long batch chain from pull-request, push, and manual
+maintenance runs in the same workflow. The completion trigger accepts only `workflow_dispatch` runs
+on `main` with that prefix, so a pull-request fuzz failure cannot start the trusted batch chain.
 
 GitHub documents that scheduled events can be delayed or dropped. The first two natural six-hour
 schedule slots after rollout created no workflow run despite an active default-branch workflow. On
 2026-08-31, the first post-repair watchdog slots at 14:22 and 14:37 UTC also created no run by 14:46
 UTC. After a second repair bootstrapped the chain by push at 15:19 UTC, the separate watchdog still
-created no scheduled run for its 15:33, 15:48, or 16:03 UTC slots by 16:10 UTC. The repository's
-established `Continuous Fuzzing` workflow had created its 14:01 UTC scheduled run, so the 15-minute
-schedule moved into that workflow while push and failed-run recovery remained separate. A
-repository push provides deterministic bootstrap, and the failed-run completion event provides
-deterministic ordinary recovery. Repeating the short watchdog every 15 minutes remains a backstop
-for hard cancellations and missed event delivery while avoiding minute 0, GitHub's highest-load
-scheduling boundary. Scheduled runs execute only the watchdog job; the long batch chain still does
-not depend on cron for ordinary handoff.
+created no scheduled run for its 15:33, 15:48, or 16:03 UTC slots by 16:10 UTC. Moving the schedule
+into the established `Continuous Fuzzing` workflow did not fix delivery: its 17:03, 17:18, 17:33,
+and 17:48 UTC slots created no workflow runs. The workflow files were active and valid on the
+default branch, and the repository had created an earlier scheduled run. Because the GitHub API
+contained no run object for any missed slot, workflow conditions and concurrency did not suppress
+those runs. The project therefore removed scheduled events from the continuity path and replaced
+them with the self-queued watchdog.
 
 Manually dispatched batch runs share a
 workflow-level concurrency group, so duplicate recovery dispatches cannot run a second corpus
@@ -209,16 +207,21 @@ the repository-owned bridge and continues to use the same fuzz targets.
 * Good, because crash reproducers and SARIF findings use native GitHub artifacts and code scanning.
 * Good, because every target gets complete crash reporting despite ClusterFuzzLite's combined-batch
   SARIF limitation.
-* Good, because successful batches start their successors without depending on cron delivery.
-* Good, because the four-cycle state keeps pruning and coverage active even when cron events are
-  dropped.
-* Good, because repository-owned shell logic is limited to tested target selection,
-  Java-compatible coverage runner preparation, storage verification, and SARIF-to-issue reporting.
+* Good, because successful batches start their successors without depending on scheduled-event
+  delivery.
+* Good, because the four-cycle state keeps pruning and coverage active when GitHub drops scheduled
+  events.
+* Good, because repository-owned shell logic is limited to tested watchdog and batch orchestration,
+  target selection, Java-compatible coverage runner preparation, storage verification, and
+  SARIF-to-issue reporting.
 * Good, because changes to the continuous-workflow implementation bootstrap the chain without
   depending on scheduled-event delivery.
-* Good, because completion of a failed marked long run starts recovery without waiting for cron.
-* Neutral, because hard cancellation before a completion event still depends on a later watchdog
-  schedule or manual dispatch.
+* Good, because completion of a marked long run starts or refreshes recovery without waiting for a
+  scheduled event.
+* Good, because the watchdog queues its successor before monitoring, so hard cancellation releases
+  a pending replacement.
+* Bad, because continuous recovery consumes one lightweight GitHub-hosted runner while it waits
+  between checks.
 * Good, because continuous-batch crash findings create or update deduplicated GitHub issues.
 * Neutral, because fork pull requests cannot publish SARIF and rely on their failed check and crash
   artifact.
@@ -231,8 +234,7 @@ the repository-owned bridge and continues to use the same fuzz targets.
 * Bad, because the matrix builds the JVM fuzzers four times per batch instead of once.
 * Bad, because serializing storage writers increases batch wall time. It prevents lost corpora until
   ClusterFuzzLite provides atomic concurrent corpus updates or the workflow gains an aggregation job.
-* Bad, because a hard-cancelled run cannot execute its continuation job. A later watchdog event or a
-  maintainer dispatch must restart the chain.
+* Good, because a hard-cancelled batch is recovered by the independently queued watchdog.
 * Neutral, because failed batches restart at cycle 0 through the watchdog instead of immediately
   dispatching their next cycle. This limits setup-failure loops but resets the maintenance index.
 * Bad, because ClusterFuzzLite issue 149 reports that a batch target can time out or exhaust memory
@@ -314,20 +316,21 @@ event.
 * Bad, because GitHub documents delayed and dropped scheduled events.
 * Bad, because a dropped event leaves the fuzzing pipeline idle until a later schedule arrives.
 
-### Successor Dispatch With a Scheduled Watchdog
+### Successor Dispatch With a Self-Queued Watchdog
 
-Let every successful batch dispatch the next indexed cycle. Start a separate watchdog after changes
-to the chain, after a failed marked long run, and every 15 minutes. Dispatch cycle 0 only when the
-long workflow has no queued or active run. Failed batches leave recovery to the watchdog so setup
+Let every successful batch dispatch the next indexed cycle. Let a separate watchdog queue its
+successor before checking the chain every 15 minutes. Also start or refresh the watchdog after
+changes to the chain and after a marked long run completes. Dispatch cycle 0 only when the long
+workflow has no queued or active run. Failed batches leave recovery to the watchdog so setup
 failures cannot create an immediate retry loop.
 
 * Good, because ordinary handoff does not depend on scheduled-event delivery.
 * Good, because cycle state carries daily prune and coverage work through the same chain.
 * Good, because the repository token can create workflow-dispatch events without a broader token.
-* Good, because deterministic events cover bootstrap and failed-run recovery.
-* Good, because one dropped watchdog event can be recovered by the next event.
+* Good, because deterministic events cover bootstrap and marked-run recovery.
+* Good, because a pending successor survives cancellation of the active watchdog.
 * Bad, because workflow concurrency and cycle state add repository-owned orchestration.
-* Bad, because the public repository records frequent short watchdog runs.
+* Bad, because the public repository records consecutive long-lived watchdog runs.
 
 ### One Combined Batch Action for All Fuzz Targets
 

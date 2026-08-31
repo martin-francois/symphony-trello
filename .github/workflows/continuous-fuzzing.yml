@@ -13,9 +13,6 @@ on:
   push:
     branches:
       - main
-  schedule:
-    # Keep the watchdog on the established fuzz workflow, whose scheduled trigger has live evidence.
-    - cron: "3,18,33,48 * * * *"
   workflow_dispatch:
     inputs:
       operation:
@@ -124,26 +121,6 @@ jobs:
           sanitizer: address
           github-token: ${{ secrets.GITHUB_TOKEN }}
           upload-build: true
-
-  watchdog:
-    if: github.event_name == 'schedule'
-    concurrency:
-      group: continuous-fuzzing-watchdog
-      cancel-in-progress: false
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      actions: write
-      contents: read
-    steps:
-      - name: Check out watchdog script
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Ensure continuous fuzzing is running
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: scripts/ensure-clusterfuzzlite-running
 
   batch:
     if: >-

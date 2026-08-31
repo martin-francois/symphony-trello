@@ -1,0 +1,25 @@
+#!/bin/bash
+
+set -euo pipefail
+
+iterations="${CFL_WATCH_ITERATIONS:-24}"
+interval_seconds="${CFL_WATCH_INTERVAL_SECONDS:-900}"
+
+if [[ ! "$iterations" =~ ^[1-9][0-9]*$ ]]; then
+  echo "CFL_WATCH_ITERATIONS must be a positive integer." >&2
+  exit 2
+fi
+if [[ ! "$interval_seconds" =~ ^[1-9][0-9]*$ ]]; then
+  echo "CFL_WATCH_INTERVAL_SECONDS must be a positive integer." >&2
+  exit 2
+fi
+
+script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+for ((iteration = 1; iteration <= iterations; iteration++)); do
+  echo "Checking continuous fuzzing state ($iteration/$iterations)."
+  "$script_directory/ensure-clusterfuzzlite-running"
+  if ((iteration < iterations)); then
+    sleep "$interval_seconds"
+  fi
+done

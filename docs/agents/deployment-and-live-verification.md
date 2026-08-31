@@ -105,8 +105,9 @@ lives in [Testing](testing.md).
   every job budget, setup and persistence step, timeout, concurrency rule, and handoff trigger. Do
   not equate the presence of recurring cron entries with continuous execution.
 - Use deterministic repository events for initial bootstrap and failed-run recovery when the host
-  provides them. Keep cron as a backstop for hard cancellation or missed event delivery; do not
-  leave continuous work idle while waiting to prove that a scheduled event eventually arrives.
+  provides them. A continuity mechanism must recover from hard cancellation and missed event
+  delivery without assuming that the host will deliver a later scheduled event. Do not leave
+  continuous work idle while waiting to prove that a scheduled event eventually arrives.
 - Start a soak window only after the first unattended long run begins. Monitoring repository state,
   published artifacts, or old successful runs while no intended job is active does not count toward
   that window. Observe run creation, the active workload, every inter-job handoff, external state
