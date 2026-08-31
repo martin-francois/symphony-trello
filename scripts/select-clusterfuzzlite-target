@@ -27,6 +27,13 @@ if [[ ! -x "$build_out/$selected_target" ]]; then
   echo "ClusterFuzzLite target is not executable: $build_out/$selected_target" >&2
   exit 1
 fi
+if [[ ! -w "$build_out" ]]; then
+  if ! command -v sudo >/dev/null; then
+    echo "ClusterFuzzLite build output is not writable and sudo is unavailable: $build_out" >&2
+    exit 1
+  fi
+  sudo chown -R -- "$(id -u):$(id -g)" "$build_out"
+fi
 
 for fuzz_target in "${fuzz_targets[@]}"; do
   if [[ "$fuzz_target" == "$selected_target" ]]; then
