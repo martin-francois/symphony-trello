@@ -42,13 +42,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Queue the next watchdog
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: scripts/queue-clusterfuzzlite-watchdog
-      - name: Monitor continuous fuzzing
+      - name: Queue the next watchdog and monitor continuous fuzzing
         env:
           CFL_WATCH_INTERVAL_SECONDS: 900
-          CFL_WATCH_ITERATIONS: 24
+          CFL_WATCH_ITERATIONS: 18
+          CFL_WATCH_COMMAND_TIMEOUT_SECONDS: 120
           GH_TOKEN: ${{ github.token }}
         run: scripts/monitor-clusterfuzzlite-running

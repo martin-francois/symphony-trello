@@ -87,13 +87,21 @@ failure from creating an immediate loop of identical failing runs. Completion of
 run starts or refreshes the watchdog, which restarts the chain at cycle 0 after a failed run leaves
 the workflow idle.
 
-The watchdog queues its successor before checking the workflow-run API every 15 minutes for 24
-iterations. Its 23 waits total 345 minutes, below the six-hour GitHub-hosted job limit. Job-level
+The watchdog queues its successor before checking the workflow-run API every 15 minutes for 18
+iterations. Its 17 waits total 255 minutes. Each successor-queue and batch-state operation has a
+two-minute timeout. If both operations reach that limit in every iteration, the monitor consumes at
+most 327 minutes. This leaves 23 minutes for checkout and shell overhead before the 350-minute job
+timeout. Job-level
 concurrency allows one watchdog to run and one successor to wait without cancellation. The queued
 successor starts when the current watchdog finishes or is cancelled. A later trusted trigger can
 replace the pending job, but it leaves a successor pending behind the active watchdog. Default-branch
 changes to either workflow or its orchestration scripts and completion of any marked long run are
 additional bootstrap and recovery triggers.
+
+The monitor does not exit after a transient successor-dispatch or batch-state API failure. It
+retries the missing successor and the batch check after the next 15-minute wait. The run fails after
+its bounded monitoring window only when it never queued a successor or never completed a batch-state
+check.
 
 Each check dispatches cycle 0 only when no queued or active run has the `Continuous batch cycle`
 run-name prefix. The prefix distinguishes the long batch chain from pull-request, push, and manual

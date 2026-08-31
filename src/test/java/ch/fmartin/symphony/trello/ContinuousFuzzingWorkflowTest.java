@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 final class ContinuousFuzzingWorkflowTest {
     private static final Path WORKFLOW = of(".github/workflows/continuous-fuzzing.yml");
     private static final Path WATCHDOG = of(".github/workflows/continuous-fuzzing-watchdog.yml");
+    private static final Path WATCHDOG_MONITOR = of("scripts/monitor-clusterfuzzlite-running");
     private static final String CLUSTERFUZZLITE_COMMIT = "884713a6c30a92e5e8544c39945cd7cb630abcd1";
     private static final Pattern UNPINNED_ACTION = Pattern.compile("uses: [^\\s]+@(?![0-9a-f]{40}(?:\\s|$))");
     private static final Pattern PINNED_TEMURIN_IMAGE =
@@ -137,17 +138,22 @@ final class ContinuousFuzzingWorkflowTest {
     void watchdogQueuesItsSuccessorBeforeMonitoringTheContinuousChain() throws IOException {
         // given
         String watchdog = Files.readString(WATCHDOG);
+        String monitor = Files.readString(WATCHDOG_MONITOR);
         String source = workflowSource();
 
         // when
-        int queueStep = watchdog.indexOf("run: scripts/queue-clusterfuzzlite-watchdog");
-        int monitorStep = watchdog.indexOf("run: scripts/monitor-clusterfuzzlite-running");
+        int queueCall = monitor.indexOf("$script_directory/queue-clusterfuzzlite-watchdog");
+        int chainCheck = monitor.indexOf("$script_directory/ensure-clusterfuzzlite-running");
 
         // then
         assertThat(watchdog)
-                .contains("CFL_WATCH_ITERATIONS: 24", "CFL_WATCH_INTERVAL_SECONDS: 900")
+                .contains(
+                        "CFL_WATCH_ITERATIONS: 18",
+                        "CFL_WATCH_INTERVAL_SECONDS: 900",
+                        "CFL_WATCH_COMMAND_TIMEOUT_SECONDS: 120",
+                        "run: scripts/monitor-clusterfuzzlite-running")
                 .doesNotContain("schedule:", "blacksmith-");
-        assertThat(queueStep).isNotNegative().isLessThan(monitorStep);
+        assertThat(queueCall).isNotNegative().isLessThan(chainCheck);
         assertThat(source).doesNotContain("schedule:", "  watchdog:");
     }
 

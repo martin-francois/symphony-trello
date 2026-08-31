@@ -26,12 +26,15 @@ workflow, or Trello boundary changes break the fuzz tests.
 
 The separate `Continuous Fuzzing` GitHub Actions workflow runs ClusterFuzzLite batch fuzzing from
 `main` on GitHub-hosted runners. Each successful long batch dispatches its successor. A separate
-watchdog queues its successor before checking the batch chain every 15 minutes for 5 hours and
-45 minutes. The queued successor starts when the current watchdog finishes or is cancelled. Changes
+watchdog queues its successor before checking the batch chain every 15 minutes for 4 hours and
+15 minutes. Each queue and batch-state operation has a two-minute timeout, so slow API calls cannot
+consume the job's 350-minute budget. The queued successor starts when the current watchdog finishes
+or is cancelled. Changes
 to the continuous chain and completion of any marked long batch also start or refresh this serialized
 watchdog chain. Each check restarts cycle 0 only when the long workflow is idle. This design does not
 depend on GitHub scheduled events, which GitHub can delay or drop, and overlapping trigger events do
-not queue duplicate batch chains. Three cycles use a 330-minute
+not queue duplicate batch chains. A transient successor-dispatch or batch-state API failure is
+retried at the next check instead of ending the watchdog. Three cycles use a 330-minute
 aggregate fuzzing budget; every fourth cycle uses 300
 aggregate minutes so daily maintenance can follow before the next batch. A four-target matrix
 assigns 82.5 minutes to each target, or 75 minutes in the maintenance cycle, and each matrix job has
