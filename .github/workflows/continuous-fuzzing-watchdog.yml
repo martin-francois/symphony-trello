@@ -16,16 +16,13 @@ on:
       - completed
     branches:
       - main
-  schedule:
-    # Avoid minute 0, when GitHub Actions has its highest scheduled-event load.
-    - cron: "3,18,33,48 * * * *"
   workflow_dispatch:
 
 permissions: read-all
 
 concurrency:
   group: continuous-fuzzing-watchdog
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   ensure-running:

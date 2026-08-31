@@ -78,8 +78,7 @@ final class ContinuousFuzzingWorkflowTest {
 
         // then
         assertThat(source)
-                .contains("workflow_dispatch:", "operation:", "fuzz_seconds:", "continue_fuzzing:", "cycle_index:")
-                .doesNotContain("schedule:");
+                .contains("workflow_dispatch:", "operation:", "fuzz_seconds:", "continue_fuzzing:", "cycle_index:");
         assertThat(pruneJob)
                 .contains(
                         "github.ref == 'refs/heads/main'",
@@ -91,7 +90,7 @@ final class ContinuousFuzzingWorkflowTest {
                         "fuzz-seconds: 600",
                         "mode: prune",
                         "scripts/verify-clusterfuzzlite-storage corpus")
-                .doesNotContain("blacksmith-");
+                .doesNotContain("github.event_name == 'schedule'", "blacksmith-");
     }
 
     @Test
@@ -115,21 +114,71 @@ final class ContinuousFuzzingWorkflowTest {
                         "- Continuous Fuzzing",
                         "types:",
                         "- completed",
-                        "cron: \"3,18,33,48 * * * *\"",
                         "workflow_dispatch:",
                         "github.event_name != 'workflow_run'",
                         "github.event.workflow_run.event == 'workflow_dispatch'",
                         "github.event.workflow_run.head_branch == 'main'",
                         "startsWith(github.event.workflow_run.display_title, 'Continuous batch cycle ')",
                         "github.event.workflow_run.conclusion != 'success'",
+                        "group: continuous-fuzzing-watchdog",
+                        "cancel-in-progress: false",
+                        "runs-on: ubuntu-latest",
+                        "actions: write",
+                        "contents: read",
+                        "scripts/ensure-clusterfuzzlite-running")
+                .doesNotContain("schedule:", "blacksmith-");
+        assertThat(unpinnedAction.find())
+                .as("watchdog workflow has an unpinned action")
+                .isFalse();
+    }
+
+    @Test
+    void establishedContinuousWorkflowSchedulesTheIdleChainWatchdog() throws IOException {
+        // given
+        String source = workflowSource();
+
+        // when
+        String watchdogJob = source.substring(source.indexOf("  watchdog:"), source.indexOf("  batch:"));
+
+        // then
+        assertThat(source).contains("schedule:", "cron: \"3,18,33,48 * * * *\"");
+        assertThat(watchdogJob)
+                .contains(
+                        "github.event_name == 'schedule'",
+                        "group: continuous-fuzzing-watchdog",
+                        "cancel-in-progress: false",
                         "runs-on: ubuntu-latest",
                         "actions: write",
                         "contents: read",
                         "scripts/ensure-clusterfuzzlite-running")
                 .doesNotContain("blacksmith-");
-        assertThat(unpinnedAction.find())
-                .as("watchdog workflow has an unpinned action")
-                .isFalse();
+    }
+
+    @Test
+    void scheduledRunExecutesOnlyTheWatchdogJob() throws IOException {
+        // given
+        String source = workflowSource();
+
+        // when
+        String codeChangeJob =
+                source.substring(source.indexOf("  code-change:"), source.indexOf("  continuous-build:"));
+        String continuousBuildJob =
+                source.substring(source.indexOf("  continuous-build:"), source.indexOf("  watchdog:"));
+        String batchJob = source.substring(source.indexOf("  batch:"), source.indexOf("  prune:"));
+        String pruneJob = source.substring(source.indexOf("  prune:"), source.indexOf("  coverage:"));
+        String coverageJob = source.substring(source.indexOf("  coverage:"), source.indexOf("  continue-batch:"));
+        String continuationJob = source.substring(source.indexOf("  continue-batch:"));
+
+        // then
+        assertThat(codeChangeJob).contains("github.event_name == 'pull_request'");
+        assertThat(continuousBuildJob)
+                .contains("github.event_name == 'push'", "github.event_name == 'workflow_dispatch'");
+        assertThat(batchJob).contains("github.event_name == 'workflow_dispatch'");
+        assertThat(pruneJob).contains("github.event_name == 'workflow_dispatch'");
+        assertThat(coverageJob).contains("github.event_name == 'workflow_dispatch'");
+        assertThat(continuationJob).contains("github.event_name == 'workflow_dispatch'");
+        assertThat(List.of(codeChangeJob, continuousBuildJob, batchJob, pruneJob, coverageJob, continuationJob))
+                .allSatisfy(job -> assertThat(job).doesNotContain("github.event_name == 'schedule'"));
     }
 
     @Test
