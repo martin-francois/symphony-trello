@@ -1,0 +1,25 @@
+#!/bin/bash
+
+set -euo pipefail
+
+artifact="$RUNNER_TEMP/openrewrite-artifact"
+mkdir -p "$artifact"
+printf '%s\n' "$SOURCE_STATE" >"$artifact/source-state.txt"
+printf '%s\n' "$SOURCE_SHA" >"$artifact/source-sha.txt"
+printf '%s\n' "$SOURCE_URL" >"$artifact/source-url.txt"
+printf '%s\n' "$GENERATED_CHANGES" >"$artifact/generated-changes.txt"
+validation_passed=false
+if
+  [[ "$SOURCE_OUTCOME" == "success" ]] &&
+    [[ "$DEPENDENCY_OUTCOME" == "success" ]] &&
+    [[ "$MAINTENANCE_OUTCOME" == "success" ]] &&
+    [[ "$RESULT_OUTCOME" == "success" ]]
+then
+  validation_passed=true
+fi
+printf '%s\n' "$validation_passed" >"$artifact/validation-passed.txt"
+if [[ "$SOURCE_STATE" == "open" ]]; then
+  [[ ! -f "$RUNNER_TEMP/openrewrite-metadata.json" ]] || cp "$RUNNER_TEMP/openrewrite-metadata.json" "$artifact/metadata.json"
+  [[ ! -f "$RUNNER_TEMP/openrewrite.patch" ]] || cp "$RUNNER_TEMP/openrewrite.patch" "$artifact/generated.patch"
+  [[ ! -f "$RUNNER_TEMP/generated-files.txt" ]] || cp "$RUNNER_TEMP/generated-files.txt" "$artifact/generated-files.txt"
+fi

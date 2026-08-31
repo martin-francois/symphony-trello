@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -12,10 +13,10 @@ final class ReleaseWorkflowTest {
     @Test
     void releaseWorkflowBuildsAssetsOnlyForReleasePleaseCreatedTags() throws IOException {
         // given
-        Path workflow = Path.of(".github/workflows/release-please.yml");
+        String workflow = releaseWorkflowSource();
 
         // when
-        String source = Files.readString(workflow);
+        String source = releaseImplementation();
 
         // then
         assertThat(source)
@@ -38,17 +39,17 @@ final class ReleaseWorkflowTest {
                         "asset_dir=$GITHUB_WORKSPACE/target/release-source/dist/release-assets",
                         "Checkout release source tag",
                         "path: target/release-source",
-                        "release_script=\"${{ steps.release-assets.outputs.source_root }}/scripts/package-release-assets.sh\"",
+                        "release_script=\"$RELEASE_SOURCE_ROOT/scripts/package-release-assets.sh\"",
                         "release tag does not contain scripts/package-release-assets.sh",
                         "bash \"$release_script\"",
-                        "\"${{ steps.release-assets.outputs.asset_dir }}\"",
+                        "\"$ASSET_DIR\"",
                         "Attest release assets",
                         "subject-path: ${{ steps.release-assets.outputs.asset_dir }}/*",
                         "create-storage-record: false",
                         "Add release provenance asset",
-                        "${{ steps.attest-release-assets.outputs.bundle-path }}",
+                        "PROVENANCE_BUNDLE: ${{ steps.attest-release-assets.outputs.bundle-path }}",
                         "release provenance bundle was not created",
-                        "symphony-trello-${{ steps.release-assets.outputs.version }}.intoto.jsonl",
+                        "symphony-trello-$RELEASE_VERSION.intoto.jsonl",
                         "existing_assets=\"$(gh release view \"$RELEASE_TAG\" --json assets --jq '.assets[].name')\"",
                         "grep -Fx -- \"$asset\" <<<\"$existing_assets\"",
                         "release already contains expected public assets; refusing same-tag asset reuse",
@@ -65,17 +66,12 @@ final class ReleaseWorkflowTest {
                         "git ls-remote --exit-code origin",
                         "gh release upload \"$RELEASE_TAG\" dist/release-assets/*",
                         "--clobber");
-        assertAppearsBefore(
-                source,
-                "gh release view \"$RELEASE_TAG\" --repo \"$GITHUB_REPOSITORY\"",
-                "path: target/release-source");
-        assertAppearsBefore(
-                source, "gh release view \"$RELEASE_TAG\" --repo \"$GITHUB_REPOSITORY\"", "Build release assets");
-        assertAppearsBefore(source, "Build release assets", "Attest release assets");
-        assertAppearsBefore(source, "Attest release assets", "Add release provenance asset");
-        assertAppearsBefore(source, "Add release provenance asset", "Upload release assets");
-        assertAppearsBefore(source, "Upload release assets", "Verify release assets");
-        assertAppearsBefore(source, "Verify release assets", "Publish release");
+        assertAppearsBefore(workflow, "Resolve release asset upload target", "Checkout release source tag");
+        assertAppearsBefore(workflow, "Build release assets", "Attest release assets");
+        assertAppearsBefore(workflow, "Attest release assets", "Add release provenance asset");
+        assertAppearsBefore(workflow, "Add release provenance asset", "Upload release assets");
+        assertAppearsBefore(workflow, "Upload release assets", "Verify release assets");
+        assertAppearsBefore(workflow, "Verify release assets", "Publish release");
     }
 
     @Test
@@ -164,45 +160,45 @@ final class ReleaseWorkflowTest {
     @Test
     void releaseWorkflowUploadsAndVerifiesEveryPublicDownloadAsset() throws IOException {
         // given
-        Path workflow = Path.of(".github/workflows/release-please.yml");
+        List<String> expectedAssetsAndChecks = List.of(
+                "\"install.sh\"",
+                "\"install.ps1\"",
+                "\"uninstall.sh\"",
+                "\"uninstall.ps1\"",
+                "\"checksums.txt\"",
+                "\"symphony-trello-$RELEASE_VERSION.intoto.jsonl\"",
+                "\"symphony-trello-$RELEASE_VERSION.tar.gz\"",
+                "\"symphony-trello-$RELEASE_VERSION.zip\"",
+                "release asset was not built: $asset",
+                "release already contains expected public assets; refusing same-tag asset reuse",
+                "release asset is missing after upload: $asset");
 
         // when
-        String source = Files.readString(workflow);
+        String source = releaseImplementation();
 
         // then
-        assertThat(source)
-                .contains(
-                        "\"install.sh\"",
-                        "\"install.ps1\"",
-                        "\"uninstall.sh\"",
-                        "\"uninstall.ps1\"",
-                        "\"checksums.txt\"",
-                        "\"symphony-trello-$RELEASE_VERSION.intoto.jsonl\"",
-                        "\"symphony-trello-$RELEASE_VERSION.tar.gz\"",
-                        "\"symphony-trello-$RELEASE_VERSION.zip\"",
-                        "release asset was not built: $asset",
-                        "release already contains expected public assets; refusing same-tag asset reuse",
-                        "release asset is missing after upload: $asset")
-                .doesNotContain("--clobber");
+        assertThat(expectedAssetsAndChecks)
+                .allSatisfy(expected ->
+                        assertThat(source).as("release implementation").contains(expected));
+        assertThat(source).doesNotContain("--clobber");
     }
 
     @Test
     void releaseWorkflowSkipsAssetsWhenReleasePleaseDoesNotCreateRelease() throws IOException {
         // given
-        Path workflow = Path.of(".github/workflows/release-please.yml");
+        String workflow = releaseWorkflowSource();
 
         // when
-        String source = Files.readString(workflow);
+        String source = releaseImplementation();
 
         // then
         assertThat(source)
                 .contains(
-                        "if [ \"$RELEASE_CREATED\" = \"true\" ]; then",
-                        "echo \"upload_assets=false\" >> \"$GITHUB_OUTPUT\"",
+                        "if [[ \"$RELEASE_CREATED\" != \"true\" ]]; then",
+                        "echo \"upload_assets=false\" >>\"$GITHUB_OUTPUT\"",
                         "if: ${{ steps.release-assets.outputs.upload_assets == 'true' }}")
                 .doesNotContain("workflow_dispatch:", "DISPATCH_VERSION", "DISPATCH_TAG");
-        assertAppearsBefore(
-                source, "echo \"upload_assets=false\" >> \"$GITHUB_OUTPUT\"", "Checkout release source tag");
+        assertAppearsBefore(workflow, "run: scripts/resolve-release-asset-target", "Checkout release source tag");
     }
 
     @Test
@@ -238,5 +234,20 @@ final class ReleaseWorkflowTest {
         assertThat(source.indexOf(earlier))
                 .as("expected `%s` before `%s`", earlier, later)
                 .isLessThan(source.indexOf(later));
+    }
+
+    private static String releaseWorkflowSource() throws IOException {
+        return Files.readString(Path.of(".github/workflows/release-please.yml"));
+    }
+
+    private static String releaseImplementation() throws IOException {
+        return String.join(
+                System.lineSeparator(),
+                releaseWorkflowSource(),
+                Files.readString(Path.of("scripts/resolve-release-asset-target")),
+                Files.readString(Path.of("scripts/build-release-assets")),
+                Files.readString(Path.of("scripts/add-release-provenance")),
+                Files.readString(Path.of("scripts/upload-release-assets")),
+                Files.readString(Path.of("scripts/verify-release-assets")));
     }
 }

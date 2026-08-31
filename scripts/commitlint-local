@@ -39,7 +39,8 @@ fi
 if [[ -e "$cache_root" && ! -O "$cache_root" ]]; then
   die "Cache directory is not owned by the current user: $cache_root"
 fi
-mkdir -p -m 700 "$commitlint_home"
+mkdir -p "$commitlint_home"
+chmod 700 "$commitlint_home"
 
 cat >"$commitlint_home/package.json" <<EOF
 {"private":true,"dependencies":{"@commitlint/cli":"$commitlint_cli_version","@commitlint/config-conventional":"$commitlint_config_version"}}

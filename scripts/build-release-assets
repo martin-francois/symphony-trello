@@ -1,0 +1,10 @@
+#!/bin/bash
+
+set -euo pipefail
+
+release_script="$RELEASE_SOURCE_ROOT/scripts/package-release-assets.sh"
+if [[ ! -f "$release_script" ]]; then
+  echo "release tag does not contain scripts/package-release-assets.sh; cannot build immutable release assets." >&2
+  exit 2
+fi
+bash "$release_script" "$RELEASE_VERSION" "$ASSET_DIR"

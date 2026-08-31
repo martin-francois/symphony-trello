@@ -21,38 +21,13 @@ jobs:
       - name: Markdown lint
         uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff # v24.2.0
       - name: Shell syntax
-        run: |
-          bash -n \
-            install.sh \
-            uninstall.sh \
-            .clusterfuzzlite/build.sh \
-            oss-fuzz/build.sh \
-            scripts/betterleaks-docker.sh \
-            scripts/package-release-assets.sh \
-            scripts/report-clusterfuzzlite-failure \
-            scripts/check-private-context
+        run: scripts/check-shell-scripts syntax
       - name: Install shell lint tooling
         run: sudo apt-get update && sudo apt-get install -y shellcheck shfmt
       - name: Shell lint
         run: |
-          shellcheck \
-            install.sh \
-            uninstall.sh \
-            .clusterfuzzlite/build.sh \
-            oss-fuzz/build.sh \
-            scripts/betterleaks-docker.sh \
-            scripts/package-release-assets.sh \
-            scripts/report-clusterfuzzlite-failure \
-            scripts/check-private-context
-          shfmt -d \
-            install.sh \
-            uninstall.sh \
-            .clusterfuzzlite/build.sh \
-            oss-fuzz/build.sh \
-            scripts/betterleaks-docker.sh \
-            scripts/package-release-assets.sh \
-            scripts/report-clusterfuzzlite-failure \
-            scripts/check-private-context
+          scripts/check-shell-scripts shellcheck
+          scripts/check-shell-scripts shfmt
 
   renovate:
     if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}
@@ -124,12 +99,7 @@ jobs:
         run: ./mvnw spotless:apply
       - name: Verify the generated maintenance state is committed
         if: ${{ env.ISOLATE_OPENREWRITE != 'true' }}
-        run: |
-          if [[ -n "$(git status --porcelain=v1 --untracked-files=all)" ]]; then
-            git status --short
-            git diff HEAD
-            exit 1
-          fi
+        run: scripts/check-clean-worktree
       - name: Test and coverage, including fuzz, chaos, and installer lifecycle
         if: ${{ env.ISOLATE_OPENREWRITE != 'true' }}
         run: ./mvnw -Djunit.parallel.enabled=true -Djunit.parallel.config.fixed.parallelism=2 spotless:check verify
@@ -138,38 +108,7 @@ jobs:
         env:
           OPENREWRITE_IMAGE: >-
             docker.io/library/maven:3.9.11-eclipse-temurin-25@sha256:407c4423cec0cf2981055bc2c6c0dc211d9605b6669279b95997f2d1c7e91e2c
-        run: |
-          set -euo pipefail
-          container_cache="$RUNNER_TEMP/openrewrite-ci-container-cache"
-          mkdir -p "$container_cache/home/.m2" "$container_cache/m2"
-          docker run --rm \
-            --user "$(id -u):$(id -g)" \
-            --cap-drop ALL \
-            --security-opt no-new-privileges \
-            --env HOME=/cache/home \
-            --env GIT_OPTIONAL_LOCKS=0 \
-            --env MAVEN_CONFIG=/cache/home/.m2 \
-            --env "MAVEN_OPTS=-Duser.home=/cache/home -Dmaven.repo.local=/cache/m2" \
-            --volume "$PWD:/workspace" \
-            --volume "$PWD/.git:/workspace/.git:ro" \
-            --volume "$container_cache:/cache" \
-            --workdir /workspace \
-            --entrypoint bash \
-            "$OPENREWRITE_IMAGE" \
-            -euo pipefail -c '
-              ./mvnw -Popenrewrite rewrite:run
-              ./mvnw spotless:apply
-              if [[ -n "$(git status --porcelain=v1 --untracked-files=all)" ]]; then
-                git status --short
-                git diff HEAD
-                exit 1
-              fi
-              ./mvnw \
-                -Djunit.parallel.enabled=true \
-                -Djunit.parallel.config.fixed.parallelism=2 \
-                spotless:check \
-                verify
-            '
+        run: scripts/run-openrewrite-ci
 
   windows-powershell:
     if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}

@@ -1,0 +1,172 @@
+#!/bin/bash
+
+set -euo pipefail
+
+artifact="$RUNNER_TEMP/openrewrite-artifact"
+branch="${GENERATED_BRANCH_PREFIX}${SOURCE_PULL_REQUEST}"
+state="$(<"$artifact/source-state.txt")"
+validation_passed="$(<"$artifact/validation-passed.txt")"
+existing_pr="$(
+  gh api \
+    --method GET \
+    "repos/$GITHUB_REPOSITORY/pulls" \
+    -f base=main \
+    -f head="$GITHUB_REPOSITORY_OWNER:$branch" \
+    -f state=open |
+    jq -r \
+      --arg branch "$branch" \
+      --arg repository "$GITHUB_REPOSITORY" \
+      '[
+        .[]
+        | select(
+          .base.repo.full_name == $repository
+          and .base.ref == "main"
+          and .head.repo.full_name == $repository
+          and .head.ref == $branch
+        )
+      ][0].number // empty'
+)"
+
+case "$state" in
+open)
+  if [[ "$validation_passed" != "true" ]]; then
+    echo "Generation did not validate; preserving any previous derived pull request."
+    exit 0
+  fi
+  ;;
+closed | ineligible) ;;
+*)
+  echo "Source state is unknown; preserving any previous derived pull request."
+  exit 0
+  ;;
+esac
+
+if [[ "$state" != "open" ]] || [[ ! -s "$artifact/generated.patch" ]]; then
+  if [[ -n "$existing_pr" ]]; then
+    gh pr close "$existing_pr" \
+      --repo "$GITHUB_REPOSITORY" \
+      --delete-branch
+  elif git ls-remote --exit-code --heads origin "refs/heads/$branch" >/dev/null 2>&1; then
+    git push origin --delete "$branch"
+  fi
+  exit 0
+fi
+
+node scripts/openrewrite-renovate.ts validate-metadata \
+  "$artifact/metadata.json" \
+  "$SOURCE_PULL_REQUEST"
+source_sha="$(jq -r '.sourceSha' "$artifact/metadata.json")"
+git fetch origin "$source_sha"
+git switch --force-create "$branch" "$source_sha"
+git apply --index --whitespace=error "$artifact/generated.patch"
+git diff --cached --name-only >"$RUNNER_TEMP/published-files.txt"
+while IFS= read -r -d '' path; do
+  case "$path" in
+  pom.xml | src/main/java/*.java | src/test/java/*.java) ;;
+  *)
+    echo "The staged patch contains a path outside the publisher allowlist: $path" >&2
+    exit 1
+    ;;
+  esac
+
+  mode="$(git ls-files --stage -- "$path" | cut -d' ' -f1)"
+  if [[ -n "$mode" ]] && [[ "$mode" != "100644" ]]; then
+    echo "The staged patch contains a non-regular file: $path" >&2
+    exit 1
+  fi
+done < <(git diff --cached --name-only -z)
+if ! cmp -s "$artifact/generated-files.txt" "$RUNNER_TEMP/published-files.txt"; then
+  echo "The applied patch file list does not match the verified generation result" >&2
+  exit 1
+fi
+
+source_is_current() {
+  gh api "repos/$GITHUB_REPOSITORY/pulls/$SOURCE_PULL_REQUEST" |
+    jq -e \
+      --arg repository "$GITHUB_REPOSITORY" \
+      --arg source_sha "$source_sha" \
+      '
+        .state == "open"
+        and .base.repo.full_name == $repository
+        and .base.ref == "main"
+        and .head.repo.full_name == $repository
+        and .head.ref == "renovate/openrewrite-toolchain"
+        and .head.sha == $source_sha
+        and .user.login == "renovate[bot]"
+        and any(.labels[]?; .name == "openrewrite")
+      ' >/dev/null
+}
+
+fail_stale_generated() {
+  if [[ -n "$existing_pr" ]]; then
+    generated="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$existing_pr")"
+    generated_sha="$(jq -r '.head.sha' <<<"$generated")"
+    generated_url="$(jq -r '.html_url' <<<"$generated")"
+    GH_TOKEN="$STATUS_TOKEN" gh api \
+      --method POST \
+      "repos/$GITHUB_REPOSITORY/statuses/$generated_sha" \
+      -f state=failure \
+      -f context="OpenRewrite source freshness" \
+      -f description="Renovate source changed during generation" \
+      -f target_url="$generated_url" >/dev/null
+  fi
+}
+
+if ! source_is_current; then
+  fail_stale_generated
+  echo "The Renovate source became ineligible while generation was running; a newer event will reconcile it."
+  exit 0
+fi
+
+remote_sha="$(git ls-remote --heads origin "refs/heads/$branch" | cut -f1)"
+generated_tree="$(git write-tree)"
+if [[ -n "$remote_sha" ]]; then
+  git fetch --no-tags origin "$remote_sha"
+  remote_parent="$(git show -s --format=%P "$remote_sha")"
+  remote_tree="$(git show -s --format=%T "$remote_sha")"
+  if
+    [[ -n "$existing_pr" ]] &&
+      [[ "$remote_parent" == "$source_sha" ]] &&
+      [[ "$remote_tree" == "$generated_tree" ]]
+  then
+    echo "The generated branch already contains the current fixed-point result."
+    exit 0
+  fi
+fi
+
+git config user.name "openrewrite-automation[bot]"
+git config user.email "openrewrite-automation[bot]@users.noreply.github.com"
+git commit -m "refactor(build): apply OpenRewrite toolchain update"
+
+if ! source_is_current; then
+  fail_stale_generated
+  echo "The Renovate source became ineligible while generation was running; a newer event will reconcile it."
+  exit 0
+fi
+
+git push origin "HEAD:refs/heads/$branch" \
+  "--force-with-lease=refs/heads/$branch:$remote_sha"
+
+source_url="$(<"$artifact/source-url.txt")"
+node scripts/openrewrite-renovate.ts render-body \
+  "$artifact/metadata.json" \
+  "$source_url" \
+  "$artifact/generated-files.txt" \
+  "$RUNNER_TEMP/generated-pr-body.md"
+title="refactor(build): apply OpenRewrite toolchain update"
+
+if [[ -z "$existing_pr" ]]; then
+  gh pr create \
+    --repo "$GITHUB_REPOSITORY" \
+    --base main \
+    --head "$branch" \
+    --title "$title" \
+    --body-file "$RUNNER_TEMP/generated-pr-body.md" \
+    --reviewer "martinfrancois"
+else
+  gh pr edit "$existing_pr" \
+    --repo "$GITHUB_REPOSITORY" \
+    --title "$title" \
+    --body-file "$RUNNER_TEMP/generated-pr-body.md" \
+    --add-reviewer "martinfrancois"
+fi

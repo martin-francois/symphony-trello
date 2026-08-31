@@ -1,0 +1,9 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if [[ -n "$(git status --porcelain=v1 --untracked-files=all)" ]]; then
+  git status --short
+  git diff HEAD
+  exit 1
+fi

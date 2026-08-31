@@ -90,21 +90,7 @@ jobs:
       # Scorecard uses an invalid placeholder URI for repository-wide findings. Associate only those
       # findings with this workflow, which owns the scan, while preserving every result and message.
       - name: "Normalize repository-wide SARIF locations"
-        run: |
-          temporary_file="$(mktemp)"
-          jq '
-            .runs |= map(
-              .results |= map(
-                if .locations[0].physicalLocation.artifactLocation.uri
-                    == "no file associated with this alert"
-                then .locations[0].physicalLocation.artifactLocation.uri
-                    = ".github/workflows/scorecard.yml"
-                else .
-                end
-              )
-            )
-          ' results.sarif > "$temporary_file"
-          mv "$temporary_file" results.sarif
+        run: scripts/normalize-scorecard-sarif
 
       # Upload the results to GitHub's code scanning dashboard (optional).
       # Commenting out will disable upload of results to your repo's Code Scanning dashboard.

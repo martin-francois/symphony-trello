@@ -1,0 +1,33 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if [[ "$RELEASE_CREATED" != "true" ]]; then
+  echo "upload_assets=false" >>"$GITHUB_OUTPUT"
+  exit 0
+fi
+if ! [[ "$RELEASE_VERSION" =~ ^[0-9]+[.][0-9]+[.][0-9]+([-+][A-Za-z0-9._-]+)?$ ]]; then
+  echo "release version is not a semantic version: $RELEASE_VERSION" >&2
+  exit 2
+fi
+if [[ "$RELEASE_TAG" != "v$RELEASE_VERSION" ]]; then
+  echo "release tag does not match release version." >&2
+  exit 2
+fi
+if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null; then
+  echo "release does not exist: $RELEASE_TAG" >&2
+  exit 2
+fi
+release_draft="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')"
+if [[ "$release_draft" != "true" ]]; then
+  echo "release must be draft before asset upload so immutable releases publish with complete assets." >&2
+  exit 2
+fi
+{
+  echo "upload_assets=true"
+  echo "version=$RELEASE_VERSION"
+  echo "tag_name=$RELEASE_TAG"
+  echo "checkout_ref=refs/tags/$RELEASE_TAG"
+  echo "source_root=$GITHUB_WORKSPACE/target/release-source"
+  echo "asset_dir=$GITHUB_WORKSPACE/target/release-source/dist/release-assets"
+} >>"$GITHUB_OUTPUT"

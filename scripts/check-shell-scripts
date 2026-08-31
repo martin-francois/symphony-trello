@@ -1,0 +1,25 @@
+#!/bin/bash
+
+set -euo pipefail
+
+mapfile -t shell_scripts < <(git grep -IlE '^#!(/bin/bash|/usr/bin/env bash)$')
+if ((${#shell_scripts[@]} == 0)); then
+  echo "No tracked Bash scripts found." >&2
+  exit 1
+fi
+
+case "${1:-}" in
+syntax)
+  bash -n "${shell_scripts[@]}"
+  ;;
+shellcheck)
+  shellcheck "${shell_scripts[@]}"
+  ;;
+shfmt)
+  shfmt -d "${shell_scripts[@]}"
+  ;;
+*)
+  echo "Usage: scripts/check-shell-scripts <syntax|shellcheck|shfmt>" >&2
+  exit 2
+  ;;
+esac

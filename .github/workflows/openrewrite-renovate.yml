@@ -701,110 +701,12 @@ jobs:
         env:
           OPENREWRITE_IMAGE: >-
             docker.io/library/maven:3.9.11-eclipse-temurin-25@sha256:407c4423cec0cf2981055bc2c6c0dc211d9605b6669279b95997f2d1c7e91e2c
-        run: |
-          set -euo pipefail
-          container_cache="$RUNNER_TEMP/openrewrite-container-cache"
-          container_output="$RUNNER_TEMP/openrewrite-container-output"
-          mkdir -p \
-            "$container_cache/home/.m2" \
-            "$container_cache/m2" \
-            "$container_output"
-          docker run --rm \
-            --user "$(id -u):$(id -g)" \
-            --cap-drop ALL \
-            --security-opt no-new-privileges \
-            --env HOME=/cache/home \
-            --env GIT_OPTIONAL_LOCKS=0 \
-            --env MAVEN_CONFIG=/cache/home/.m2 \
-            --env "MAVEN_OPTS=-Duser.home=/cache/home -Dmaven.repo.local=/cache/m2" \
-            --env RUNNER_TEMP=/output \
-            --volume "$PWD:/workspace" \
-            --volume "$PWD/.git:/workspace/.git:ro" \
-            --volume "$container_cache:/cache" \
-            --volume "$container_output:/output" \
-            --workdir /workspace \
-            --entrypoint bash \
-            "$OPENREWRITE_IMAGE" \
-            -euo pipefail -c '
-              check_untracked_output() {
-                local untracked
-                untracked="$(git ls-files --others --exclude-standard)"
-                if [ -n "$untracked" ]; then
-                  echo "OpenRewrite generated nonignored untracked files" >&2
-                  printf "%s\n" "$untracked" >&2
-                  exit 1
-                fi
-              }
-
-              ./mvnw -Popenrewrite rewrite:discover
-              ./mvnw -Popenrewrite rewrite:run
-              ./mvnw -q spotless:apply
-
-              git diff --binary HEAD > "$RUNNER_TEMP/openrewrite.patch"
-              git diff --name-only HEAD > "$RUNNER_TEMP/generated-files.txt"
-              if [ -s "$RUNNER_TEMP/generated-files.txt" ]; then
-                while IFS= read -r path; do
-                  case "$path" in
-                    pom.xml|src/main/java/*.java|src/test/java/*.java) ;;
-                    *)
-                      echo "OpenRewrite generated a change outside the allowed source and POM paths: $path" >&2
-                      exit 1
-                      ;;
-                  esac
-                done < "$RUNNER_TEMP/generated-files.txt"
-              fi
-              check_untracked_output
-
-              cp "$RUNNER_TEMP/openrewrite.patch" "$RUNNER_TEMP/first-openrewrite.patch"
-              ./mvnw -Popenrewrite rewrite:run
-              ./mvnw -q spotless:apply
-              check_untracked_output
-              git diff --binary HEAD > "$RUNNER_TEMP/openrewrite.patch"
-              if ! cmp -s "$RUNNER_TEMP/first-openrewrite.patch" "$RUNNER_TEMP/openrewrite.patch"; then
-                echo "OpenRewrite followed by Spotless did not reach a fixed point" >&2
-                diff -u "$RUNNER_TEMP/first-openrewrite.patch" "$RUNNER_TEMP/openrewrite.patch" || true
-                exit 1
-              fi
-              ./mvnw -q spotless:check verify
-              check_untracked_output
-              git diff --binary HEAD > "$RUNNER_TEMP/openrewrite.patch"
-              git diff --name-only HEAD > "$RUNNER_TEMP/generated-files.txt"
-              if ! cmp -s "$RUNNER_TEMP/first-openrewrite.patch" "$RUNNER_TEMP/openrewrite.patch"; then
-                echo "The full Maven gate changed the verified fixed-point result" >&2
-                diff -u "$RUNNER_TEMP/first-openrewrite.patch" "$RUNNER_TEMP/openrewrite.patch" || true
-                exit 1
-              fi
-              rm "$RUNNER_TEMP/first-openrewrite.patch"
-            '
-
-          mapfile -d '' -t output_names < <(
-            find "$container_output" -mindepth 1 -maxdepth 1 -printf '%f\0' |
-              sort -z
-          )
-          if
-            [ "${#output_names[@]}" -ne 2 ] \
-              || [ "${output_names[0]:-}" != "generated-files.txt" ] \
-              || [ "${output_names[1]:-}" != "openrewrite.patch" ] \
-              || [ ! -f "$container_output/generated-files.txt" ] \
-              || [ -L "$container_output/generated-files.txt" ] \
-              || [ ! -f "$container_output/openrewrite.patch" ] \
-              || [ -L "$container_output/openrewrite.patch" ]
-          then
-            echo "The isolated Maven container produced an invalid output manifest" >&2
-            exit 1
-          fi
-          cp -- "$container_output/generated-files.txt" "$RUNNER_TEMP/generated-files.txt"
-          cp -- "$container_output/openrewrite.patch" "$RUNNER_TEMP/openrewrite.patch"
+        run: ../trusted/scripts/run-openrewrite-maintenance
 
       - name: Classify the verified result
         id: result
         if: ${{ steps.source.outputs.state == 'open' }}
-        run: |
-          if [ -s "$RUNNER_TEMP/openrewrite.patch" ]; then
-            echo "generated_changes=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "generated_changes=false" >> "$GITHUB_OUTPUT"
-          fi
+        run: trusted/scripts/classify-openrewrite-result
 
       - name: Write reconciliation state
         if: ${{ always() }}
@@ -817,35 +719,7 @@ jobs:
           SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
           SOURCE_STATE: ${{ steps.source.outputs.state }}
           SOURCE_URL: ${{ steps.source.outputs.source_url }}
-        run: |
-          mkdir -p "$RUNNER_TEMP/openrewrite-artifact"
-          printf '%s\n' "$SOURCE_STATE" > "$RUNNER_TEMP/openrewrite-artifact/source-state.txt"
-          printf '%s\n' "$SOURCE_SHA" > "$RUNNER_TEMP/openrewrite-artifact/source-sha.txt"
-          printf '%s\n' "$SOURCE_URL" > "$RUNNER_TEMP/openrewrite-artifact/source-url.txt"
-          printf '%s\n' "$GENERATED_CHANGES" > "$RUNNER_TEMP/openrewrite-artifact/generated-changes.txt"
-          validation_passed=false
-          if
-            [ "$SOURCE_OUTCOME" = "success" ] \
-              && [ "$DEPENDENCY_OUTCOME" = "success" ] \
-              && [ "$MAINTENANCE_OUTCOME" = "success" ] \
-              && [ "$RESULT_OUTCOME" = "success" ]
-          then
-            validation_passed=true
-          fi
-          printf '%s\n' "$validation_passed" \
-            > "$RUNNER_TEMP/openrewrite-artifact/validation-passed.txt"
-          if [ "$SOURCE_STATE" = "open" ]; then
-            if [ -f "$RUNNER_TEMP/openrewrite-metadata.json" ]; then
-              cp "$RUNNER_TEMP/openrewrite-metadata.json" "$RUNNER_TEMP/openrewrite-artifact/metadata.json"
-            fi
-            if [ -f "$RUNNER_TEMP/openrewrite.patch" ]; then
-              cp "$RUNNER_TEMP/openrewrite.patch" "$RUNNER_TEMP/openrewrite-artifact/generated.patch"
-            fi
-            if [ -f "$RUNNER_TEMP/generated-files.txt" ]; then
-              cp "$RUNNER_TEMP/generated-files.txt" \
-                "$RUNNER_TEMP/openrewrite-artifact/generated-files.txt"
-            fi
-          fi
+        run: trusted/scripts/write-openrewrite-reconciliation-state
 
       - name: Upload verified reconciliation state
         if: ${{ always() }}
@@ -874,6 +748,10 @@ jobs:
       pull-requests: read
       statuses: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: openrewrite-renovate-${{ matrix.pull_request_number }}
@@ -881,27 +759,7 @@ jobs:
 
       - name: Validate the status-report artifact
         id: artifact
-        run: |
-          set -euo pipefail
-          artifact="$RUNNER_TEMP/openrewrite-artifact"
-          source_sha="$(<"$artifact/source-sha.txt")"
-          validation_passed="$(<"$artifact/validation-passed.txt")"
-          generated_changes="$(<"$artifact/generated-changes.txt")"
-          if [[ ! "$source_sha" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "The generation artifact does not contain a valid source SHA" >&2
-            exit 1
-          fi
-          case "$validation_passed" in
-            true|false) ;;
-            *) echo "The generation artifact contains an invalid validation result" >&2; exit 1 ;;
-          esac
-          case "$generated_changes" in
-            true|false|"") ;;
-            *) echo "The generation artifact contains an invalid change result" >&2; exit 1 ;;
-          esac
-          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
-          echo "validation_passed=$validation_passed" >> "$GITHUB_OUTPUT"
-          echo "generated_changes=$generated_changes" >> "$GITHUB_OUTPUT"
+        run: scripts/validate-openrewrite-status-artifact
 
       - name: Report source validation
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -969,6 +827,10 @@ jobs:
       pull-requests: read
       statuses: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: openrewrite-renovate-${{ matrix.pull_request_number }}
@@ -979,50 +841,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_PULL_REQUEST: ${{ matrix.pull_request_number }}
-        run: |
-          set -euo pipefail
-          artifact="$RUNNER_TEMP/openrewrite-artifact"
-          branch="${GENERATED_BRANCH_PREFIX}${SOURCE_PULL_REQUEST}"
-          existing_pr="$(
-            gh api \
-              --method GET \
-              "repos/$GITHUB_REPOSITORY/pulls" \
-              -f base=main \
-              -f head="$GITHUB_REPOSITORY_OWNER:$branch" \
-              -f state=open |
-              jq -r \
-                --arg branch "$branch" \
-                --arg repository "$GITHUB_REPOSITORY" \
-                '[
-                  .[]
-                  | select(
-                    .base.repo.full_name == $repository
-                    and .base.ref == "main"
-                    and .head.repo.full_name == $repository
-                    and .head.ref == $branch
-                  )
-                ][0].number // empty'
-          )"
-          branch_count="$(
-            gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/heads/$branch" |
-              jq \
-                --arg ref "refs/heads/$branch" \
-                '[.[] | select(.ref == $ref)] | length'
-          )"
-          state="$(<"$artifact/source-state.txt")"
-          validation_passed="$(<"$artifact/validation-passed.txt")"
-          if
-            {
-              [ "$validation_passed" = "true" ] \
-                || [ "$state" = "closed" ] \
-                || [ "$state" = "ineligible" ]
-            } \
-              && { [ -s "$artifact/generated.patch" ] || [ -n "$existing_pr" ] || [ "$branch_count" -gt 0 ]; }
-          then
-            echo "required=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "required=false" >> "$GITHUB_OUTPUT"
-          fi
+        run: scripts/require-openrewrite-publication
 
       - name: Create short-lived automation token
         if: ${{ steps.publication.outputs.required == 'true' }}
@@ -1052,173 +871,4 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           SOURCE_PULL_REQUEST: ${{ matrix.pull_request_number }}
           STATUS_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          artifact="$RUNNER_TEMP/openrewrite-artifact"
-          branch="${GENERATED_BRANCH_PREFIX}${SOURCE_PULL_REQUEST}"
-          state="$(<"$artifact/source-state.txt")"
-          validation_passed="$(<"$artifact/validation-passed.txt")"
-          existing_pr="$(
-            gh api \
-              --method GET \
-              "repos/$GITHUB_REPOSITORY/pulls" \
-              -f base=main \
-              -f head="$GITHUB_REPOSITORY_OWNER:$branch" \
-              -f state=open |
-              jq -r \
-                --arg branch "$branch" \
-                --arg repository "$GITHUB_REPOSITORY" \
-                '[
-                  .[]
-                  | select(
-                    .base.repo.full_name == $repository
-                    and .base.ref == "main"
-                    and .head.repo.full_name == $repository
-                    and .head.ref == $branch
-                  )
-                ][0].number // empty'
-          )"
-
-          case "$state" in
-            open)
-              if [ "$validation_passed" != "true" ]; then
-                echo "Generation did not validate; preserving any previous derived pull request."
-                exit 0
-              fi
-              ;;
-            closed|ineligible) ;;
-            *)
-              echo "Source state is unknown; preserving any previous derived pull request."
-              exit 0
-              ;;
-          esac
-
-          if [ "$state" != "open" ] || [ ! -s "$artifact/generated.patch" ]; then
-            if [ -n "$existing_pr" ]; then
-              gh pr close "$existing_pr" \
-                --repo "$GITHUB_REPOSITORY" \
-                --delete-branch
-            elif git ls-remote --exit-code --heads origin "refs/heads/$branch" >/dev/null 2>&1; then
-              git push origin --delete "$branch"
-            fi
-            exit 0
-          fi
-
-          node scripts/openrewrite-renovate.ts validate-metadata \
-            "$artifact/metadata.json" \
-            "$SOURCE_PULL_REQUEST"
-          source_sha="$(jq -r '.sourceSha' "$artifact/metadata.json")"
-          git fetch origin "$source_sha"
-          git switch --force-create "$branch" "$source_sha"
-          git apply --index --whitespace=error "$artifact/generated.patch"
-          git diff --cached --name-only > "$RUNNER_TEMP/published-files.txt"
-          while IFS= read -r -d '' path; do
-            case "$path" in
-              pom.xml|src/main/java/*.java|src/test/java/*.java) ;;
-              *)
-                echo "The staged patch contains a path outside the publisher allowlist: $path" >&2
-                exit 1
-                ;;
-            esac
-
-            mode="$(git ls-files --stage -- "$path" | cut -d' ' -f1)"
-            if [ -n "$mode" ] && [ "$mode" != "100644" ]; then
-              echo "The staged patch contains a non-regular file: $path" >&2
-              exit 1
-            fi
-          done < <(git diff --cached --name-only -z)
-          if ! cmp -s "$artifact/generated-files.txt" "$RUNNER_TEMP/published-files.txt"; then
-            echo "The applied patch file list does not match the verified generation result" >&2
-            exit 1
-          fi
-
-          source_is_current() {
-            gh api "repos/$GITHUB_REPOSITORY/pulls/$SOURCE_PULL_REQUEST" |
-              jq -e \
-                --arg repository "$GITHUB_REPOSITORY" \
-                --arg source_sha "$source_sha" \
-                '
-                  .state == "open"
-                  and .base.repo.full_name == $repository
-                  and .base.ref == "main"
-                  and .head.repo.full_name == $repository
-                  and .head.ref == "renovate/openrewrite-toolchain"
-                  and .head.sha == $source_sha
-                  and .user.login == "renovate[bot]"
-                  and any(.labels[]?; .name == "openrewrite")
-                ' >/dev/null
-          }
-
-          fail_stale_generated() {
-            if [ -n "$existing_pr" ]; then
-              generated="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$existing_pr")"
-              generated_sha="$(jq -r '.head.sha' <<< "$generated")"
-              generated_url="$(jq -r '.html_url' <<< "$generated")"
-              GH_TOKEN="$STATUS_TOKEN" gh api \
-                --method POST \
-                "repos/$GITHUB_REPOSITORY/statuses/$generated_sha" \
-                -f state=failure \
-                -f context="OpenRewrite source freshness" \
-                -f description="Renovate source changed during generation" \
-                -f target_url="$generated_url" >/dev/null
-            fi
-          }
-
-          if ! source_is_current; then
-            fail_stale_generated
-            echo "The Renovate source became ineligible while generation was running; a newer event will reconcile it."
-            exit 0
-          fi
-
-          remote_sha="$(git ls-remote --heads origin "refs/heads/$branch" | cut -f1)"
-          generated_tree="$(git write-tree)"
-          if [ -n "$remote_sha" ]; then
-            git fetch --no-tags origin "$remote_sha"
-            remote_parent="$(git show -s --format=%P "$remote_sha")"
-            remote_tree="$(git show -s --format=%T "$remote_sha")"
-            if
-              [ -n "$existing_pr" ] \
-                && [ "$remote_parent" = "$source_sha" ] \
-                && [ "$remote_tree" = "$generated_tree" ]
-            then
-              echo "The generated branch already contains the current fixed-point result."
-              exit 0
-            fi
-          fi
-
-          git config user.name "openrewrite-automation[bot]"
-          git config user.email "openrewrite-automation[bot]@users.noreply.github.com"
-          git commit -m "refactor(build): apply OpenRewrite toolchain update"
-
-          if ! source_is_current; then
-            fail_stale_generated
-            echo "The Renovate source became ineligible while generation was running; a newer event will reconcile it."
-            exit 0
-          fi
-
-          git push origin "HEAD:refs/heads/$branch" \
-            "--force-with-lease=refs/heads/$branch:$remote_sha"
-
-          source_url="$(<"$artifact/source-url.txt")"
-          node scripts/openrewrite-renovate.ts render-body \
-            "$artifact/metadata.json" \
-            "$source_url" \
-            "$artifact/generated-files.txt" \
-            "$RUNNER_TEMP/generated-pr-body.md"
-          title="refactor(build): apply OpenRewrite toolchain update"
-
-          if [ -z "$existing_pr" ]; then
-            gh pr create \
-              --repo "$GITHUB_REPOSITORY" \
-              --base main \
-              --head "$branch" \
-              --title "$title" \
-              --body-file "$RUNNER_TEMP/generated-pr-body.md" \
-              --reviewer "martinfrancois"
-          else
-            gh pr edit "$existing_pr" \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "$title" \
-              --body-file "$RUNNER_TEMP/generated-pr-body.md" \
-              --add-reviewer "martinfrancois"
-          fi
+        run: scripts/publish-openrewrite-result

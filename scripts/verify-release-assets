@@ -1,0 +1,21 @@
+#!/bin/bash
+
+set -euo pipefail
+
+expected_assets=(
+  "install.sh"
+  "install.ps1"
+  "uninstall.sh"
+  "uninstall.ps1"
+  "checksums.txt"
+  "symphony-trello-$RELEASE_VERSION.intoto.jsonl"
+  "symphony-trello-$RELEASE_VERSION.tar.gz"
+  "symphony-trello-$RELEASE_VERSION.zip"
+)
+release_assets="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
+for asset in "${expected_assets[@]}"; do
+  if ! grep -Fx -- "$asset" <<<"$release_assets" >/dev/null; then
+    echo "release asset is missing after upload: $asset" >&2
+    exit 2
+  fi
+done

@@ -54,7 +54,8 @@ fi
 if [ -e "$cache_root" ] && [ ! -O "$cache_root" ]; then
   die "Cache directory is not owned by the current user: $cache_root"
 fi
-mkdir -p -m 700 "$cache_root"
+mkdir -p "$cache_root"
+chmod 700 "$cache_root"
 
 venv="${CODEX_SKILL_VALIDATE_VENV:-$cache_root/skill-validate-venv}"
 
@@ -67,7 +68,7 @@ if [ ! -x "$venv/bin/python" ]; then
   chmod 700 "$venv"
 fi
 
-if ! "$venv/bin/python" - "$pyyaml_version" <<'PY' >/dev/null 2>&1
+if ! "$venv/bin/python" - "$pyyaml_version" <<'PY' >/dev/null 2>&1; then
 import sys
 try:
     import yaml
@@ -75,7 +76,6 @@ except ImportError:
     raise SystemExit(1)
 raise SystemExit(0 if yaml.__version__ == sys.argv[1] else 1)
 PY
-then
   "$venv/bin/python" -m pip install --disable-pip-version-check --quiet "PyYAML==$pyyaml_version"
 fi
 

@@ -1,0 +1,53 @@
+#!/bin/bash
+
+set -euo pipefail
+
+check_untracked_output() {
+  local untracked
+  untracked="$(git ls-files --others --exclude-standard)"
+  if [[ -n "$untracked" ]]; then
+    echo "OpenRewrite generated nonignored untracked files" >&2
+    printf '%s\n' "$untracked" >&2
+    exit 1
+  fi
+}
+
+./mvnw -Popenrewrite rewrite:discover
+./mvnw -Popenrewrite rewrite:run
+./mvnw -q spotless:apply
+
+git diff --binary HEAD >"$RUNNER_TEMP/openrewrite.patch"
+git diff --name-only HEAD >"$RUNNER_TEMP/generated-files.txt"
+if [[ -s "$RUNNER_TEMP/generated-files.txt" ]]; then
+  while IFS= read -r path; do
+    case "$path" in
+    pom.xml | src/main/java/*.java | src/test/java/*.java) ;;
+    *)
+      echo "OpenRewrite generated a change outside the allowed source and POM paths: $path" >&2
+      exit 1
+      ;;
+    esac
+  done <"$RUNNER_TEMP/generated-files.txt"
+fi
+check_untracked_output
+
+cp "$RUNNER_TEMP/openrewrite.patch" "$RUNNER_TEMP/first-openrewrite.patch"
+./mvnw -Popenrewrite rewrite:run
+./mvnw -q spotless:apply
+check_untracked_output
+git diff --binary HEAD >"$RUNNER_TEMP/openrewrite.patch"
+if ! cmp -s "$RUNNER_TEMP/first-openrewrite.patch" "$RUNNER_TEMP/openrewrite.patch"; then
+  echo "OpenRewrite followed by Spotless did not reach a fixed point" >&2
+  diff -u "$RUNNER_TEMP/first-openrewrite.patch" "$RUNNER_TEMP/openrewrite.patch" || true
+  exit 1
+fi
+./mvnw -q spotless:check verify
+check_untracked_output
+git diff --binary HEAD >"$RUNNER_TEMP/openrewrite.patch"
+git diff --name-only HEAD >"$RUNNER_TEMP/generated-files.txt"
+if ! cmp -s "$RUNNER_TEMP/first-openrewrite.patch" "$RUNNER_TEMP/openrewrite.patch"; then
+  echo "The full Maven gate changed the verified fixed-point result" >&2
+  diff -u "$RUNNER_TEMP/first-openrewrite.patch" "$RUNNER_TEMP/openrewrite.patch" || true
+  exit 1
+fi
+rm "$RUNNER_TEMP/first-openrewrite.patch"

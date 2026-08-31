@@ -1,0 +1,17 @@
+#!/bin/bash
+
+set -euo pipefail
+
+commitlint_home="$RUNNER_TEMP/commitlint"
+mkdir -p "$commitlint_home"
+printf '{"private":true}\n' >"$commitlint_home/package.json"
+cp commitlint.config.cjs "$commitlint_home/commitlint.config.cjs"
+cp commitlint.message.config.cjs "$commitlint_home/commitlint.message.config.cjs"
+pnpm --dir "$commitlint_home" add --silent \
+  @commitlint/cli@21.2.2 \
+  @commitlint/config-conventional@21.2.2
+{
+  echo "COMMITLINT_BIN=$commitlint_home/node_modules/.bin/commitlint"
+  echo "COMMITLINT_TITLE_CONFIG=$commitlint_home/commitlint.config.cjs"
+  echo "COMMITLINT_MESSAGE_CONFIG=$commitlint_home/commitlint.message.config.cjs"
+} >>"$GITHUB_ENV"

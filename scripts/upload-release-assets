@@ -1,0 +1,29 @@
+#!/bin/bash
+
+set -euo pipefail
+
+expected_assets=(
+  "install.sh"
+  "install.ps1"
+  "uninstall.sh"
+  "uninstall.ps1"
+  "checksums.txt"
+  "symphony-trello-$RELEASE_VERSION.intoto.jsonl"
+  "symphony-trello-$RELEASE_VERSION.tar.gz"
+  "symphony-trello-$RELEASE_VERSION.zip"
+)
+existing_assets="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
+upload_assets=()
+for asset in "${expected_assets[@]}"; do
+  path="$ASSET_DIR/$asset"
+  if [[ ! -f "$path" ]]; then
+    echo "release asset was not built: $asset" >&2
+    exit 2
+  fi
+  if grep -Fx -- "$asset" <<<"$existing_assets" >/dev/null; then
+    echo "release already contains expected public assets; refusing same-tag asset reuse" >&2
+    exit 2
+  fi
+  upload_assets+=("$path")
+done
+gh release upload "$RELEASE_TAG" "${upload_assets[@]}"

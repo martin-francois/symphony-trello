@@ -1,0 +1,18 @@
+#!/bin/bash
+
+set -euo pipefail
+
+temporary_file="$(mktemp)"
+jq '
+  .runs |= map(
+    .results |= map(
+      if .locations[0].physicalLocation.artifactLocation.uri
+          == "no file associated with this alert"
+      then .locations[0].physicalLocation.artifactLocation.uri
+          = ".github/workflows/scorecard.yml"
+      else .
+      end
+    )
+  )
+' results.sarif >"$temporary_file"
+mv "$temporary_file" results.sarif

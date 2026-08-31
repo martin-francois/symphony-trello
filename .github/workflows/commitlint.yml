@@ -30,19 +30,7 @@ jobs:
         # commitlint resolves `extends` from the config file's directory. Keep a
         # runner-local config copy next to the installed packages instead of
         # adding a package.json to this Java repository.
-        run: |
-          set -euo pipefail
-          COMMITLINT_HOME="$RUNNER_TEMP/commitlint"
-          mkdir -p "$COMMITLINT_HOME"
-          printf '{"private":true}\n' > "$COMMITLINT_HOME/package.json"
-          cp commitlint.config.cjs "$COMMITLINT_HOME/commitlint.config.cjs"
-          cp commitlint.message.config.cjs "$COMMITLINT_HOME/commitlint.message.config.cjs"
-          pnpm --dir "$COMMITLINT_HOME" add --silent \
-            @commitlint/cli@21.2.2 \
-            @commitlint/config-conventional@21.2.2
-          echo "COMMITLINT_BIN=$COMMITLINT_HOME/node_modules/.bin/commitlint" >> "$GITHUB_ENV"
-          echo "COMMITLINT_TITLE_CONFIG=$COMMITLINT_HOME/commitlint.config.cjs" >> "$GITHUB_ENV"
-          echo "COMMITLINT_MESSAGE_CONFIG=$COMMITLINT_HOME/commitlint.message.config.cjs" >> "$GITHUB_ENV"
+        run: scripts/prepare-commitlint
       - name: Lint pull request title
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
