@@ -151,6 +151,33 @@ final class ContinuousFuzzingWorkflowTest {
     }
 
     @Test
+    void scheduledRunExecutesOnlyTheWatchdogJob() throws IOException {
+        // given
+        String source = workflowSource();
+
+        // when
+        String codeChangeJob =
+                source.substring(source.indexOf("  code-change:"), source.indexOf("  continuous-build:"));
+        String continuousBuildJob =
+                source.substring(source.indexOf("  continuous-build:"), source.indexOf("  watchdog:"));
+        String batchJob = source.substring(source.indexOf("  batch:"), source.indexOf("  prune:"));
+        String pruneJob = source.substring(source.indexOf("  prune:"), source.indexOf("  coverage:"));
+        String coverageJob = source.substring(source.indexOf("  coverage:"), source.indexOf("  continue-batch:"));
+        String continuationJob = source.substring(source.indexOf("  continue-batch:"));
+
+        // then
+        assertThat(codeChangeJob).contains("github.event_name == 'pull_request'");
+        assertThat(continuousBuildJob)
+                .contains("github.event_name == 'push'", "github.event_name == 'workflow_dispatch'");
+        assertThat(batchJob).contains("github.event_name == 'workflow_dispatch'");
+        assertThat(pruneJob).contains("github.event_name == 'workflow_dispatch'");
+        assertThat(coverageJob).contains("github.event_name == 'workflow_dispatch'");
+        assertThat(continuationJob).contains("github.event_name == 'workflow_dispatch'");
+        assertThat(List.of(codeChangeJob, continuousBuildJob, batchJob, pruneJob, coverageJob, continuationJob))
+                .allSatisfy(job -> assertThat(job).doesNotContain("github.event_name == 'schedule'"));
+    }
+
+    @Test
     void completedLongBatchDispatchesItsSuccessorAndCarriesDailyMaintenance() throws IOException {
         // given
         String source = workflowSource();
