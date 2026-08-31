@@ -10,13 +10,13 @@ fi
 
 case "${1:-}" in
 syntax)
-  bash -n "${shell_scripts[@]}"
+  bash -n -- "${shell_scripts[@]}"
   ;;
 shellcheck)
-  shellcheck "${shell_scripts[@]}"
+  shellcheck -- "${shell_scripts[@]}"
   ;;
 shfmt)
-  shfmt -d "${shell_scripts[@]}"
+  shfmt -d -- "${shell_scripts[@]}"
   ;;
 *)
   echo "Usage: scripts/check-shell-scripts <syntax|shellcheck|shfmt>" >&2

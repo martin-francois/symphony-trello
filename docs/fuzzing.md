@@ -54,15 +54,13 @@ a checked-in seed corpus under `oss-fuzz/corpora/`. These seeds cover representa
 declarations, Trello references and checklist forms, and valid and invalid workflow front matter so
 coverage-guided mutation starts inside useful parser paths.
 
-ClusterFuzzLite stores corpora and coverage in the public
-[`symphony-trello-fuzzing-storage`](https://github.com/martin-francois/symphony-trello-fuzzing-storage)
-repository. Pull-request jobs use unauthenticated read access. Jobs on `main` use the
-`CLUSTERFUZZLITE_STORAGE_TOKEN` repository secret to update the `main` corpus branch and the
-`gh-pages` coverage branch. Baseline builds and crash reproducers remain GitHub Actions artifacts in
-this repository. The secret MUST retain write access to the storage repository. Replace the current
-token with a repository-scoped GitHub App or fine-grained token when one is available.
+ClusterFuzzLite stores corpora and coverage on the dedicated `clusterfuzzlite-corpus` and
+`clusterfuzzlite-coverage` branches in this repository. Pull-request jobs receive read-only access.
+Jobs on `main` use the job-scoped `GITHUB_TOKEN` with `contents: write` to update only this
+repository. Baseline builds and crash reproducers remain GitHub Actions artifacts. This layout keeps
+all automated credentials repository-scoped while retaining corpus pruning and browsable coverage.
 After the first coverage run and GitHub Pages activation, the latest report is available at
-`https://martin-francois.github.io/symphony-trello-fuzzing-storage/coverage/latest/report/linux/report.html`.
+`https://martin-francois.github.io/symphony-trello/coverage/latest/report/linux/report.html`.
 
 After the workflow is present on `main`, maintainers can smoke-test the complete hosted path with a
 short manual batch run:
@@ -84,8 +82,8 @@ visibly shallow reach, add a representative seed or a focused standalone target 
 the hosted setup. Do not use whole-application line coverage as the threshold: these fuzzers cover
 untrusted parsing boundaries, while network and orchestration behavior belongs in deterministic
 tests. During post-merge verification, inspect every target's batch log for timeout or out-of-memory
-exits even when the job is green, and confirm that the `gh-pages` branch contains and serves the HTML
-report. These checks cover open ClusterFuzzLite issues
+exits even when the job is green, and confirm that the `clusterfuzzlite-coverage` branch contains and
+serves the HTML report. These checks cover open ClusterFuzzLite issues
 [#149](https://github.com/google/clusterfuzzlite/issues/149) and
 [#150](https://github.com/google/clusterfuzzlite/issues/150).
 

@@ -49,9 +49,9 @@ jobs:
           language: jvm
           sanitizer: address
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          storage-repo: https://github.com/martin-francois/symphony-trello-fuzzing-storage.git
-          storage-repo-branch: main
-          storage-repo-branch-coverage: gh-pages
+          storage-repo: https://github.com/${{ github.repository }}.git
+          storage-repo-branch: clusterfuzzlite-corpus
+          storage-repo-branch-coverage: clusterfuzzlite-coverage
       - name: Fuzz the code change
         id: fuzz
         continue-on-error: true
@@ -64,7 +64,9 @@ jobs:
           mode: code-change
           output-sarif: true
           sanitizer: address
-          storage-repo: https://github.com/martin-francois/symphony-trello-fuzzing-storage.git
+          storage-repo: https://github.com/${{ github.repository }}.git
+          storage-repo-branch: clusterfuzzlite-corpus
+          storage-repo-branch-coverage: clusterfuzzlite-coverage
       - name: Upload fuzzing result to code scanning
         if: >-
           !cancelled()
@@ -117,7 +119,7 @@ jobs:
     timeout-minutes: 100
     permissions:
       actions: read
-      contents: read
+      contents: write
       issues: write
       security-events: write
     steps:
@@ -145,9 +147,9 @@ jobs:
           mode: batch
           output-sarif: true
           sanitizer: address
-          storage-repo: https://x-access-token:${{ secrets.CLUSTERFUZZLITE_STORAGE_TOKEN }}@github.com/martin-francois/symphony-trello-fuzzing-storage.git
-          storage-repo-branch: main
-          storage-repo-branch-coverage: gh-pages
+          storage-repo: https://github.com/${{ github.repository }}.git
+          storage-repo-branch: clusterfuzzlite-corpus
+          storage-repo-branch-coverage: clusterfuzzlite-coverage
       - name: Upload fuzzing result to code scanning
         if: >-
           !cancelled()
@@ -183,6 +185,8 @@ jobs:
       cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: write
     steps:
       - name: Build fuzzers
         uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
@@ -198,9 +202,9 @@ jobs:
           language: jvm
           mode: prune
           sanitizer: address
-          storage-repo: https://x-access-token:${{ secrets.CLUSTERFUZZLITE_STORAGE_TOKEN }}@github.com/martin-francois/symphony-trello-fuzzing-storage.git
-          storage-repo-branch: main
-          storage-repo-branch-coverage: gh-pages
+          storage-repo: https://github.com/${{ github.repository }}.git
+          storage-repo-branch: clusterfuzzlite-corpus
+          storage-repo-branch-coverage: clusterfuzzlite-coverage
 
   coverage:
     if: >-
@@ -214,6 +218,8 @@ jobs:
       cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: write
     steps:
       - name: Build fuzzers for coverage
         uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
@@ -229,6 +235,6 @@ jobs:
           language: jvm
           mode: coverage
           sanitizer: coverage
-          storage-repo: https://x-access-token:${{ secrets.CLUSTERFUZZLITE_STORAGE_TOKEN }}@github.com/martin-francois/symphony-trello-fuzzing-storage.git
-          storage-repo-branch: main
-          storage-repo-branch-coverage: gh-pages
+          storage-repo: https://github.com/${{ github.repository }}.git
+          storage-repo-branch: clusterfuzzlite-corpus
+          storage-repo-branch-coverage: clusterfuzzlite-coverage

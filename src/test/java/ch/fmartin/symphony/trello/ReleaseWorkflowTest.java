@@ -50,10 +50,10 @@ final class ReleaseWorkflowTest {
                         "PROVENANCE_BUNDLE: ${{ steps.attest-release-assets.outputs.bundle-path }}",
                         "release provenance bundle was not created",
                         "symphony-trello-$RELEASE_VERSION.intoto.jsonl",
-                        "existing_assets=\"$(gh release view \"$RELEASE_TAG\" --json assets --jq '.assets[].name')\"",
+                        "existing_assets=\"$(gh release view --repo \"$GITHUB_REPOSITORY\" \"$RELEASE_TAG\" --json assets --jq '.assets[].name')\"",
                         "grep -Fx -- \"$asset\" <<<\"$existing_assets\"",
-                        "release already contains expected public assets; refusing same-tag asset reuse",
-                        "gh release upload \"$RELEASE_TAG\" \"${upload_assets[@]}\"",
+                        "release already contains every expected public asset; refusing same-tag asset reuse",
+                        "gh release upload --repo \"$GITHUB_REPOSITORY\" \"$RELEASE_TAG\" \"${upload_assets[@]}\"",
                         "Verify release assets",
                         "Publish release",
                         "gh release edit \"$RELEASE_TAG\" --repo \"$GITHUB_REPOSITORY\" --draft=false --latest")
@@ -170,16 +170,14 @@ final class ReleaseWorkflowTest {
                 "\"symphony-trello-$version.tar.gz\"",
                 "\"symphony-trello-$version.zip\"",
                 "release asset was not built: $asset",
-                "release already contains expected public assets; refusing same-tag asset reuse",
+                "release already contains every expected public asset; refusing same-tag asset reuse",
                 "release asset is missing after upload: $asset");
 
         // when
         String source = releaseImplementation();
 
         // then
-        assertThat(expectedAssetsAndChecks)
-                .allSatisfy(expected ->
-                        assertThat(source).as("release implementation").contains(expected));
+        assertThat(source).as("release implementation").contains(expectedAssetsAndChecks.toArray(String[]::new));
         assertThat(source).doesNotContain("--clobber");
     }
 

@@ -4,7 +4,7 @@ set -euo pipefail
 
 release_asset_list="$(scripts/list-release-assets "$RELEASE_VERSION")"
 mapfile -t expected_assets <<<"$release_asset_list"
-release_assets="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
+release_assets="$(gh release view --repo "$GITHUB_REPOSITORY" "$RELEASE_TAG" --json assets --jq '.assets[].name')"
 for asset in "${expected_assets[@]}"; do
   if ! grep -Fx -- "$asset" <<<"$release_assets" >/dev/null; then
     echo "release asset is missing after upload: $asset" >&2

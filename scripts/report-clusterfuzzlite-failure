@@ -52,10 +52,10 @@ sanitize_line() {
 
 labels="$(gh label list --limit 200 --json name --jq '.[].name')"
 if ! grep -Fxq "bug" <<<"$labels"; then
-  gh label create bug --color d73a4a --description "Something is not working"
+  gh label create bug --force --color d73a4a --description "Something is not working"
 fi
 if ! grep -Fxq "fuzzed" <<<"$labels"; then
-  gh label create fuzzed --color c5def5 --description "Found by fuzzing"
+  gh label create fuzzed --force --color c5def5 --description "Found by fuzzing"
 fi
 
 body_file="$(mktemp)"

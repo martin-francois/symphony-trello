@@ -110,9 +110,9 @@ final class ContinuousFuzzingWorkflowTest {
                         "mode: code-change",
                         "minimize-crashes: true",
                         "output-sarif: true",
-                        "storage-repo: https://github.com/martin-francois/symphony-trello-fuzzing-storage.git",
-                        "storage-repo-branch: main",
-                        "storage-repo-branch-coverage: gh-pages",
+                        "storage-repo: https://github.com/${{ github.repository }}.git",
+                        "storage-repo-branch: clusterfuzzlite-corpus",
+                        "storage-repo-branch-coverage: clusterfuzzlite-coverage",
                         "github.event.pull_request.head.repo.full_name == github.repository")
                 .doesNotContain("CLUSTERFUZZLITE_STORAGE_TOKEN", "parallel-fuzzing: true");
         assertThat(continuousBuildJob).contains("github.event_name == 'push'", "upload-build: true");
@@ -124,8 +124,11 @@ final class ContinuousFuzzingWorkflowTest {
                         "mode: coverage",
                         "sanitizer: coverage");
         assertThat(source)
-                .contains("storage-repo:", "secrets.CLUSTERFUZZLITE_STORAGE_TOKEN")
-                .doesNotContain("blacksmith-", "PERSONAL_ACCESS_TOKEN");
+                .contains(
+                        "storage-repo-branch: clusterfuzzlite-corpus",
+                        "storage-repo-branch-coverage: clusterfuzzlite-coverage",
+                        "contents: write")
+                .doesNotContain("blacksmith-", "PERSONAL_ACCESS_TOKEN", "CLUSTERFUZZLITE_STORAGE_TOKEN");
     }
 
     @Test
@@ -208,9 +211,7 @@ final class ContinuousFuzzingWorkflowTest {
         }
 
         // then
-        assertThat(seedCounts).hasSameSizeAs(fuzzerNames).allSatisfy((name, count) -> assertThat(count)
-                .as("seed corpus %s contains an input", name)
-                .isPositive());
+        assertThat(seedCounts).hasSameSizeAs(fuzzerNames).doesNotContainValue(0);
         assertThat(seedCounts.keySet())
                 .as("every standalone fuzzer has exactly one corpus directory")
                 .containsExactlyElementsOf(fuzzerNames);

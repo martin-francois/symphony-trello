@@ -4,7 +4,7 @@ set -euo pipefail
 
 release_asset_list="$(scripts/list-release-assets "$RELEASE_VERSION")"
 mapfile -t expected_assets <<<"$release_asset_list"
-existing_assets="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
+existing_assets="$(gh release view --repo "$GITHUB_REPOSITORY" "$RELEASE_TAG" --json assets --jq '.assets[].name')"
 upload_assets=()
 for asset in "${expected_assets[@]}"; do
   path="$ASSET_DIR/$asset"
@@ -13,9 +13,12 @@ for asset in "${expected_assets[@]}"; do
     exit 2
   fi
   if grep -Fx -- "$asset" <<<"$existing_assets" >/dev/null; then
-    echo "release already contains expected public assets; refusing same-tag asset reuse" >&2
-    exit 2
+    continue
   fi
   upload_assets+=("$path")
 done
-gh release upload "$RELEASE_TAG" "${upload_assets[@]}"
+if ((${#upload_assets[@]} == 0)); then
+  echo "release already contains every expected public asset; refusing same-tag asset reuse" >&2
+  exit 2
+fi
+gh release upload --repo "$GITHUB_REPOSITORY" "$RELEASE_TAG" "${upload_assets[@]}"

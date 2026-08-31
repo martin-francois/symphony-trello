@@ -4,7 +4,7 @@ set -euo pipefail
 
 container_cache="$RUNNER_TEMP/openrewrite-container-cache"
 container_output="$RUNNER_TEMP/openrewrite-container-output"
-container_script="$(realpath ../trusted/scripts/run-openrewrite-maintenance-container)"
+container_script="$(realpath "$(dirname -- "${BASH_SOURCE[0]}")/run-openrewrite-maintenance-container")"
 mkdir -p \
   "$container_cache/home/.m2" \
   "$container_cache/m2" \

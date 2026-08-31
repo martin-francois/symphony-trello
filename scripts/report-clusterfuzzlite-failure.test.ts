@@ -16,6 +16,7 @@ function fixture(
   additionalResults: readonly SarifResult[] = [],
   sarifState: SarifState = "results",
   target = "TrelloCardReferenceParserFuzzer",
+  labels = "bug\nfuzzed",
 ) {
   const directory = mkdtempSync(join(tmpdir(), "clusterfuzzlite-report-"));
   const sarif = join(directory, "results.sarif");
@@ -64,7 +65,7 @@ function fixture(
 set -euo pipefail
 printf '%s\\n' "$*" >> "$FAKE_GH_LOG"
 if [[ "$1 $2" == "label list" ]]; then
-  printf 'bug\\nfuzzed\\n'
+  printf '%b\\n' "$FAKE_LABELS"
 elif [[ "$1 $2" == "issue list" ]]; then
   printf '%s\\n' "$FAKE_EXISTING_ISSUE"
 fi
@@ -88,6 +89,7 @@ done
       FAKE_BODY_FILE: body,
       FAKE_EXISTING_ISSUE: existingIssue,
       FAKE_GH_LOG: log,
+      FAKE_LABELS: labels,
       GITHUB_REPOSITORY: "martin-francois/symphony-trello",
       GITHUB_RUN_ID: "1234",
       GITHUB_SERVER_URL: "https://github.com",
@@ -130,6 +132,13 @@ test("comments on the matching open issue instead of creating a duplicate", () =
 
   assert.match(result.log, /issue comment 42 --body-file/);
   assert.doesNotMatch(result.log, /issue create/);
+});
+
+test("provisions labels idempotently when concurrent jobs observe them as absent", () => {
+  const result = fixture("", {}, [], "results", "TrelloCardReferenceParserFuzzer", "");
+
+  assert.match(result.log, /label create bug --force/);
+  assert.match(result.log, /label create fuzzed --force/);
 });
 
 test("reports every distinct SARIF result once", () => {

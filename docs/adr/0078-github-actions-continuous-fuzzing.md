@@ -106,14 +106,11 @@ The JVM builder copies Java 25 from a versioned, digest-pinned Eclipse Temurin i
 downloading the moving `latest/25/ga` archive. Dockerfile's built-in Renovate manager owns the image
 tag and digest, so Java updates follow the repository's dependency cooldown and review rules.
 
-ClusterFuzzLite persists corpora and coverage in the public
-`martin-francois/symphony-trello-fuzzing-storage` repository. Pull-request jobs read it without
-credentials. Jobs on `main` authenticate through the `CLUSTERFUZZLITE_STORAGE_TOKEN` repository
-secret and write corpus state to `main` and coverage to `gh-pages`. Baseline builds and crash
-reproducers use GitHub Actions artifacts in the source repository. The storage repository makes
-coverage browsable through GitHub Pages after the first coverage run. The current token is the
-maintainer's authenticated GitHub CLI token; it should be replaced with a repository-scoped GitHub
-App or fine-grained token when one is available.
+ClusterFuzzLite persists corpora and coverage on the dedicated `clusterfuzzlite-corpus` and
+`clusterfuzzlite-coverage` branches in this repository. Pull-request jobs receive read-only access.
+Jobs on `main` receive only the repository-scoped `contents: write` permission needed to update the
+storage branches. This avoids a long-lived cross-repository credential while keeping corpus pruning
+and browsable coverage available. Baseline builds and crash reproducers use GitHub Actions artifacts.
 
 This workflow does not replace hosted OSS-Fuzz. Hosted OSS-Fuzz remains the long-term service because
 it provides dedicated infrastructure, triage, and broader continuous operation. ClusterFuzzLite is
@@ -147,8 +144,8 @@ the repository-owned bridge and continues to use the same fuzz targets.
   without failing the overall job. Post-merge checks must inspect each target's log instead of
   treating a green job as sufficient evidence.
 * Bad, because ClusterFuzzLite issue 150 reports regressions where coverage mode does not retain the
-  generated HTML. Post-merge checks must confirm that `gh-pages` contains the expected report and
-  that GitHub Pages serves it.
+  generated HTML. Post-merge checks must confirm that `clusterfuzzlite-coverage` contains the
+  expected report and that GitHub Pages serves it.
 
 ### Confirmation
 
@@ -179,7 +176,7 @@ setup counts as healthy. Whole-application line coverage is not the target becau
 deliberately cover untrusted parsing boundaries, not network and orchestration code.
 
 Inspect the per-target batch logs for timeouts and out-of-memory exits even when the batch job is
-green. Confirm that the storage repository's `gh-pages` branch contains
+green. Confirm that the `clusterfuzzlite-coverage` branch contains
 `coverage/latest/report/linux/report.html` and that GitHub Pages serves that file.
 
 ## Pros and Cons of the Options
