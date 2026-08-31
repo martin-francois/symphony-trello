@@ -11,6 +11,8 @@ consulted:
   - "[ClusterFuzzLite coverage-output issue](https://github.com/google/clusterfuzzlite/issues/150)"
   - "[JaCoCo change history](https://www.jacoco.org/jacoco/trunk/doc/changes.html)"
   - "[GitHub Actions billing and usage](https://docs.github.com/en/actions/concepts/billing-and-usage)"
+  - "[GitHub Actions schedule event](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)"
+  - "[GitHub Actions token-triggered workflow exceptions](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow#triggering-a-workflow-from-a-workflow)"
   - "[ADR 0061](0061-jazzer-and-oss-fuzz-readiness.md)"
 informed: [Future maintainers, Contributors]
 ---
@@ -36,6 +38,7 @@ creating a second target-packaging implementation?
 * Preserve crash reproducers and publish findings through native GitHub surfaces.
 * Keep repository-specific fuzz orchestration small, versioned, and independently testable.
 * Stay below the GitHub-hosted job execution limit.
+* Continue fuzzing when GitHub delays or drops a scheduled workflow event.
 
 ## Considered Options
 
@@ -51,6 +54,8 @@ creating a second target-packaging implementation?
 * Bind-mount replacement JaCoCo JARs into the official runner.
 * Wait for ClusterFuzzLite to update its runner's JaCoCo version.
 * Reimplement JVM coverage publication outside ClusterFuzzLite.
+* Depend on cron alone for successive long batches.
+* Dispatch each successor batch from the completed batch with a separate scheduled watchdog.
 
 ## Decision Outcome
 
@@ -63,12 +68,36 @@ scheduled and future hosted fuzzing package the same four standalone `fuzzerTest
 Each target starts with a small checked-in seed corpus covering valid and malformed forms from its
 input grammar. ClusterFuzzLite then persists newly discovered corpus inputs between runs.
 
-Every fuzzing job uses `ubuntu-latest`, not a Blacksmith runner. Batch fuzzing runs on `main` every
-six hours as a four-target matrix. Each non-midnight target receives a 4,950-second active budget,
-for a 19,800-second aggregate budget, and each job has a 100-minute timeout. The midnight run gives
-each target 4,500 seconds, for an 18,000-second aggregate budget, so prune and coverage jobs can
-follow before the next batch. Each target's corpus is stored in the dedicated Git storage repository
-for later runs.
+Every fuzzing job uses `ubuntu-latest`, not a Blacksmith runner. Batch fuzzing runs on `main` as a
+four-target matrix. Each normal target receives a 4,950-second active budget, for a 19,800-second
+aggregate budget, and each job has a 100-minute timeout. Every fourth continuous cycle gives each
+target 4,500 seconds, for an 18,000-second aggregate budget, so prune and coverage jobs can follow
+before the next batch. Each target's corpus is stored in the dedicated Git storage repository for
+later runs.
+
+Each successful continuous batch dispatches its successor through the workflow-dispatch API. GitHub
+allows `workflow_dispatch` events created with `GITHUB_TOKEN` to start another workflow, so the
+continuation job needs only repository-scoped `actions: write` permission. A zero-based cycle index
+travels with the dispatch and wraps after cycle 3. Cycle 3 runs the shorter batch plus prune and
+coverage; cycles 0 through 2 run the normal budget. The continuation script retries a failed
+dispatch three times before failing visibly.
+
+A failed batch does not dispatch its own successor. This prevents a checkout, build, or credential
+failure from creating an immediate loop of identical failing runs. The watchdog restarts the chain
+at cycle 0 after the failed run leaves the workflow idle.
+
+A separate watchdog runs at minutes 7, 22, 37, and 52 of every hour. It reads the workflow-run API
+and dispatches cycle 0 only when no queued or active run has the `Continuous batch cycle` run-name
+prefix. The prefix distinguishes the long batch chain from pull-request, push, and manual
+maintenance runs in the same workflow. GitHub documents that scheduled events can be delayed or
+dropped, and the first two natural six-hour schedule slots after rollout created no workflow run
+despite an active default-branch workflow. Repeating the short watchdog every 15 minutes makes one
+missed event nonfatal while avoiding minute 0, GitHub's highest-load scheduling boundary. The long
+workflow no longer depends on its own cron event. Manually dispatched batch runs share a
+workflow-level concurrency group, so duplicate recovery dispatches cannot run a second corpus
+writer beside the active chain. Manual pruning uses the same concurrency group because it writes the
+same corpus branch. Manual smoke batches leave continuation disabled by default; maintainers should
+not dispatch a one-off batch while the continuous chain is active.
 
 Each matrix runner removes the other three standalone fuzzer wrappers before starting batch mode.
 ClusterFuzzLite continues after a nonfinal batch target crashes but writes SARIF only for the final
@@ -111,9 +140,10 @@ the repository-wide Docker or Podman runtime selection, so maintainers can run t
 path locally.
 
 ClusterFuzzLite requires corpus pruning when batch fuzzing is enabled. A separate job therefore runs
-daily in `prune` mode with a ten-minute budget. Batch, prune, coverage, and baseline-build jobs can
-be dispatched manually. Manual batch runs default to five minutes so maintainers can verify the
-hosted integration without waiting for a scheduled run.
+after cycle 3 in `prune` mode with a ten-minute budget. Coverage runs in parallel after the same
+cycle. Batch, prune, coverage, and baseline-build jobs can be dispatched manually. Manual batch runs
+default to five minutes so maintainers can verify the hosted integration without waiting for a long
+batch.
 
 When a fuzzer finds a reportable crash, ClusterFuzzLite minimizes it, uploads the reproducer as a
 GitHub Actions crash artifact, and returns a failing status. The workflow uploads the generated SARIF
@@ -158,10 +188,14 @@ the repository-owned bridge and continues to use the same fuzz targets.
 * Good, because crash reproducers and SARIF findings use native GitHub artifacts and code scanning.
 * Good, because every target gets complete crash reporting despite ClusterFuzzLite's combined-batch
   SARIF limitation.
+* Good, because successful batches start their successors without depending on cron delivery.
+* Good, because the four-cycle state keeps pruning and coverage active even when cron events are
+  dropped.
 * Good, because repository-owned shell logic is limited to tested target selection,
   Java-compatible coverage runner preparation, storage verification, and SARIF-to-issue reporting.
-* Neutral, because GitHub scheduled workflows do not guarantee an exact start time.
-* Good, because scheduled crash findings create or update deduplicated GitHub issues.
+* Neutral, because the watchdog uses a GitHub scheduled workflow and does not guarantee an exact
+  start time. A later watchdog event or manual dispatch recovers a dropped event.
+* Good, because continuous-batch crash findings create or update deduplicated GitHub issues.
 * Neutral, because fork pull requests cannot publish SARIF and rely on their failed check and crash
   artifact.
 * Good, because the separate storage repository retains corpus history and serves the latest
@@ -173,6 +207,10 @@ the repository-owned bridge and continues to use the same fuzz targets.
 * Bad, because the matrix builds the JVM fuzzers four times per batch instead of once.
 * Bad, because serializing storage writers increases batch wall time. It prevents lost corpora until
   ClusterFuzzLite provides atomic concurrent corpus updates or the workflow gains an aggregation job.
+* Bad, because a hard-cancelled run cannot execute its continuation job. A later watchdog event or a
+  maintainer dispatch must restart the chain.
+* Neutral, because failed batches restart at cycle 0 through the watchdog instead of immediately
+  dispatching their next cycle. This limits setup-failure loops but resets the maintenance index.
 * Bad, because ClusterFuzzLite issue 149 reports that a batch target can time out or exhaust memory
   without failing the overall job. Post-merge checks must inspect each target's log instead of
   treating a green job as sufficient evidence.
@@ -203,6 +241,21 @@ gh workflow run continuous-fuzzing.yml --ref main \
   -f fuzz_seconds=60
 ```
 
+Do not run that one-off smoke test while the continuous chain is active. Bootstrap or restart the
+continuous chain with a normal cycle:
+
+```bash
+gh workflow run continuous-fuzzing.yml --ref main \
+  -f operation=batch \
+  -f fuzz_seconds=4950 \
+  -f continue_fuzzing=true \
+  -f cycle_index=0
+```
+
+Confirm that successful completion of this run creates a queued or in-progress successor with cycle
+index 1. Observe at least one cycle-3 completion and verify that prune and coverage finish before the
+cycle-0 successor starts.
+
 Then dispatch coverage and inspect the published report. The initial acceptance criterion is that
 all four fuzzer reports exist and each reaches the production parser, classifier, resolver, or
 loader it targets. Record the first report as the baseline. A target that has zero or visibly
@@ -227,6 +280,28 @@ code-change, continuous-build, batch, prune, and coverage operations.
 * Good, because the separate storage repository retains corpora and makes coverage browsable.
 * Bad, because cross-repository writes require a separately managed credential.
 * Bad, because the repository depends on ClusterFuzzLite's action containers and artifact protocol.
+
+### Cron-Only Batch Succession
+
+Start one long batch at each six-hour cron slot and depend on GitHub to deliver every scheduled
+event.
+
+* Good, because the workflow has no self-dispatch state.
+* Bad, because GitHub documents delayed and dropped scheduled events.
+* Bad, because a dropped event leaves the fuzzing pipeline idle until a later schedule arrives.
+
+### Successor Dispatch With a Scheduled Watchdog
+
+Let every successful batch dispatch the next indexed cycle. Run a separate short watchdog every 15
+minutes and dispatch cycle 0 only when the long workflow has no queued or active run. Failed batches
+leave recovery to the watchdog so setup failures cannot create an immediate retry loop.
+
+* Good, because ordinary handoff does not depend on scheduled-event delivery.
+* Good, because cycle state carries daily prune and coverage work through the same chain.
+* Good, because the repository token can create workflow-dispatch events without a broader token.
+* Good, because one dropped watchdog event can be recovered by the next event.
+* Bad, because workflow concurrency and cycle state add repository-owned orchestration.
+* Bad, because the public repository records frequent short watchdog runs.
 
 ### One Combined Batch Action for All Fuzz Targets
 
@@ -333,5 +408,5 @@ repository without the ClusterFuzzLite runner.
 ## More Information
 
 Keep required CI deterministic and short. If hosted OSS-Fuzz becomes active and provides equivalent
-coverage, reassess whether the ClusterFuzzLite schedule still justifies its runner use. Prefer
-reducing or removing duplicate scheduled work over adding continuous fuzzing to pull request CI.
+coverage, reassess whether the ClusterFuzzLite chain still justifies its runner use. Prefer reducing
+or removing duplicate hosted work over adding continuous fuzzing to pull request CI.

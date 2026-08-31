@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 
 final class ContinuousFuzzingWorkflowTest {
     private static final Path WORKFLOW = of(".github/workflows/continuous-fuzzing.yml");
+    private static final Path WATCHDOG = of(".github/workflows/continuous-fuzzing-watchdog.yml");
     private static final String CLUSTERFUZZLITE_COMMIT = "884713a6c30a92e5e8544c39945cd7cb630abcd1";
     private static final Pattern UNPINNED_ACTION = Pattern.compile("uses: [^\\s]+@(?![0-9a-f]{40}(?:\\s|$))");
     private static final Pattern PINNED_TEMURIN_IMAGE =
@@ -46,7 +47,7 @@ final class ContinuousFuzzingWorkflowTest {
                         "scripts/select-clusterfuzzlite-target \"${{ matrix.target }}\"",
                         "google/clusterfuzzlite/actions/build_fuzzers@" + CLUSTERFUZZLITE_COMMIT,
                         "google/clusterfuzzlite/actions/run_fuzzers@" + CLUSTERFUZZLITE_COMMIT,
-                        "github.event.schedule == '17 0 * * *' && 4500 || 4950",
+                        "fuzz-seconds: ${{ inputs.fuzz_seconds }}",
                         "language: jvm",
                         "minimize-crashes: true",
                         "mode: batch",
@@ -68,7 +69,7 @@ final class ContinuousFuzzingWorkflowTest {
     }
 
     @Test
-    void corpusPruningRunsDailyAndCanBeDispatchedManually() throws IOException {
+    void corpusPruningRunsEveryFourthCycleAndCanBeDispatchedManually() throws IOException {
         // given
         String source = workflowSource();
 
@@ -77,22 +78,82 @@ final class ContinuousFuzzingWorkflowTest {
 
         // then
         assertThat(source)
-                .contains(
-                        "cron: \"17 0 * * *\"",
-                        "cron: \"17 6,12,18 * * *\"",
-                        "workflow_dispatch:",
-                        "operation:",
-                        "fuzz_seconds:");
+                .contains("workflow_dispatch:", "operation:", "fuzz_seconds:", "continue_fuzzing:", "cycle_index:")
+                .doesNotContain("schedule:");
         assertThat(pruneJob)
                 .contains(
                         "github.ref == 'refs/heads/main'",
                         "inputs.operation == 'prune'",
-                        "github.event.schedule == '17 0 * * *'",
+                        "inputs.continue_fuzzing",
+                        "inputs.cycle_index == 3",
                         "always()",
                         "needs: batch",
                         "fuzz-seconds: 600",
                         "mode: prune",
                         "scripts/verify-clusterfuzzlite-storage corpus")
+                .doesNotContain("blacksmith-");
+    }
+
+    @Test
+    void frequentWatchdogRestartsOnlyAnIdleContinuousChain() throws IOException {
+        // given
+        String watchdog = Files.readString(WATCHDOG);
+
+        // when
+        var unpinnedAction = UNPINNED_ACTION.matcher(watchdog);
+
+        // then
+        assertThat(watchdog)
+                .contains(
+                        "cron: \"7,22,37,52 * * * *\"",
+                        "workflow_dispatch:",
+                        "runs-on: ubuntu-latest",
+                        "actions: write",
+                        "contents: read",
+                        "scripts/ensure-clusterfuzzlite-running")
+                .doesNotContain("blacksmith-");
+        assertThat(unpinnedAction.find())
+                .as("watchdog workflow has an unpinned action")
+                .isFalse();
+    }
+
+    @Test
+    void completedLongBatchDispatchesItsSuccessorAndCarriesDailyMaintenance() throws IOException {
+        // given
+        String source = workflowSource();
+
+        // when
+        String continuationJob = source.substring(source.indexOf("  continue-batch:"));
+        String pruneJob = source.substring(source.indexOf("  prune:"), source.indexOf("  coverage:"));
+        String coverageJob = coverageJobSource(source);
+
+        // then
+        assertThat(source)
+                .contains(
+                        "format('Continuous batch cycle {0}', inputs.cycle_index)",
+                        "continue_fuzzing:",
+                        "cycle_index:",
+                        "group: >-",
+                        "continuous-fuzzing-${{",
+                        "inputs.operation == 'batch'",
+                        "inputs.operation == 'prune'",
+                        "&& 'corpus-main'",
+                        "cancel-in-progress: false");
+        assertThat(pruneJob)
+                .contains("inputs.continue_fuzzing", "inputs.cycle_index == 3")
+                .doesNotContain("blacksmith-");
+        assertThat(coverageJob)
+                .contains("inputs.continue_fuzzing", "inputs.cycle_index == 3")
+                .doesNotContain("blacksmith-");
+        assertThat(continuationJob)
+                .contains(
+                        "always()",
+                        "!cancelled()",
+                        "needs: [batch, prune, coverage]",
+                        "needs.batch.result == 'success'",
+                        "actions: write",
+                        "runs-on: ubuntu-latest",
+                        "scripts/continue-clusterfuzzlite-batch")
                 .doesNotContain("blacksmith-");
     }
 
@@ -124,7 +185,6 @@ final class ContinuousFuzzingWorkflowTest {
         assertThat(continuousBuildJob).doesNotContain("CLUSTERFUZZLITE_STORAGE_TOKEN", "storage-repo:");
         assertThat(coverageJob)
                 .contains(
-                        "github.event.schedule == '17 0 * * *'",
                         "Generate and publish Java 25 fuzzing coverage",
                         "sanitizer: coverage",
                         "CLUSTERFUZZLITE_STORAGE_TOKEN",
