@@ -57,6 +57,15 @@ a checked-in seed corpus under `oss-fuzz/corpora/`. These seeds cover representa
 declarations, Trello references and checklist forms, and valid and invalid workflow front matter so
 coverage-guided mutation starts inside useful parser paths.
 
+ClusterFuzzLite's `v1` runner image bundles JaCoCo 0.8.7, which rejects Java 25 class files after
+the fuzzers run and then uploads an incomplete coverage directory. The coverage job therefore uses
+the same digest-pinned ClusterFuzzLite runner with its JaCoCo agent and CLI replaced by the version
+declared in `pom.xml`. The repository-owned wrapper still delegates corpus download, coverage
+execution, and publication to ClusterFuzzLite. Its post-run verifier requires the HTML report,
+well-formed JaCoCo XML, aggregate summary, and all four per-target summaries. It downloads and
+checks every published file, rejects empty aggregate coverage, and rejects any target report that
+does not cover lines in that target's production resolver, parser, classifier, or loader.
+
 ClusterFuzzLite stores corpora on `main` and coverage on `gh-pages` in the dedicated public
 [`symphony-trello-fuzzing-storage`](https://github.com/martin-francois/symphony-trello-fuzzing-storage)
 repository. Pull-request jobs read this public data without receiving its write credential. Trusted
@@ -65,7 +74,7 @@ storage-verification steps. Baseline builds and crash reproducers remain GitHub 
 Explicit post-run API checks fail the workflow if ClusterFuzzLite logs an upload error but returns
 success.
 After the first coverage run and GitHub Pages activation, the latest report is available at
-`https://martin-francois.github.io/symphony-trello-fuzzing-storage/coverage/latest/report/linux/report.html`.
+`https://martin-francois.github.io/symphony-trello-fuzzing-storage/coverage/latest/report/linux/index.html`.
 
 After the workflow is present on `main`, maintainers can smoke-test the complete hosted path with a
 short manual batch run:

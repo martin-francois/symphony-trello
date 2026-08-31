@@ -249,17 +249,11 @@ jobs:
           language: jvm
           sanitizer: coverage
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Generate fuzzing coverage
-        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          fuzz-seconds: 600
-          language: jvm
-          mode: coverage
-          sanitizer: coverage
-          storage-repo: https://${{ secrets.CLUSTERFUZZLITE_STORAGE_TOKEN }}@github.com/martin-francois/symphony-trello-fuzzing-storage.git
-          storage-repo-branch: main
-          storage-repo-branch-coverage: gh-pages
+      - name: Generate and publish Java 25 fuzzing coverage
+        env:
+          GIT_STORE_REPO: https://${{ secrets.CLUSTERFUZZLITE_STORAGE_TOKEN }}@github.com/martin-francois/symphony-trello-fuzzing-storage.git
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/run-clusterfuzzlite-coverage
       - name: Verify coverage persistence
         env:
           CFL_STORAGE_REPOSITORY: martin-francois/symphony-trello-fuzzing-storage

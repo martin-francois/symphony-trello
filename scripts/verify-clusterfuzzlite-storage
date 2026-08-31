@@ -2,6 +2,8 @@
 set -euo pipefail
 
 storage_repository="${CFL_STORAGE_REPOSITORY:?CFL_STORAGE_REPOSITORY is required}"
+script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+coverage_verifier="$script_directory/verify-clusterfuzzlite-coverage"
 mode="${1:-}"
 shift || true
 
@@ -14,6 +16,22 @@ verify_path() {
     "repos/$storage_repository/contents/$path" \
     -f "ref=$branch" \
     >/dev/null; then
+    echo "ClusterFuzzLite did not persist $path on $storage_repository:$branch" >&2
+    return 1
+  fi
+}
+
+download_path() {
+  local branch="$1"
+  local path="$2"
+  local destination="$3"
+
+  mkdir -p -- "$(dirname -- "$destination")"
+  if ! gh api --method GET \
+    -H "Accept: application/vnd.github.raw+json" \
+    "repos/$storage_repository/contents/$path" \
+    -f "ref=$branch" \
+    >"$destination"; then
     echo "ClusterFuzzLite did not persist $path on $storage_repository:$branch" >&2
     return 1
   fi
@@ -34,7 +52,16 @@ coverage)
     echo "Coverage verification does not accept fuzz targets." >&2
     exit 2
   fi
-  verify_path gh-pages coverage/latest/report/linux/report.html
+  coverage_root=coverage/latest
+  reports_directory="$(mktemp -d "${TMPDIR:-/tmp}/clusterfuzzlite-coverage-reports.XXXXXX")"
+  trap 'rm -rf -- "$reports_directory"' EXIT
+  while IFS= read -r required_file; do
+    download_path \
+      gh-pages \
+      "$coverage_root/$required_file" \
+      "$reports_directory/$required_file"
+  done < <("$coverage_verifier" list-required-files)
+  "$coverage_verifier" verify-directory "$reports_directory"
   ;;
 *)
   echo "Usage: $0 corpus <target>... | coverage" >&2

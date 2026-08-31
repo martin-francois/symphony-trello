@@ -125,10 +125,10 @@ final class ContinuousFuzzingWorkflowTest {
         assertThat(coverageJob)
                 .contains(
                         "github.event.schedule == '17 0 * * *'",
-                        "fuzz-seconds: 600",
-                        "mode: coverage",
+                        "Generate and publish Java 25 fuzzing coverage",
                         "sanitizer: coverage",
                         "CLUSTERFUZZLITE_STORAGE_TOKEN",
+                        "scripts/run-clusterfuzzlite-coverage",
                         "scripts/verify-clusterfuzzlite-storage coverage");
         assertThat(source)
                 .contains(
@@ -160,6 +160,7 @@ final class ContinuousFuzzingWorkflowTest {
         // given
         String workflow = workflowSource();
         String dockerfile = Files.readString(of(".clusterfuzzlite/Dockerfile"));
+        String coverageDockerfile = Files.readString(of(".clusterfuzzlite/coverage-runner.Dockerfile"));
         String ossFuzzDockerfile = Files.readString(of("oss-fuzz/Dockerfile"));
         String buildScript = Files.readString(of(".clusterfuzzlite/build.sh"));
         String project = Files.readString(of(".clusterfuzzlite/project.yaml"));
@@ -177,6 +178,12 @@ final class ContinuousFuzzingWorkflowTest {
                         "COPY .clusterfuzzlite/build.sh /src/build.sh")
                 .doesNotContain("git clone", "api.adoptium.net/v3/binary/latest");
         assertThat(dockerfile).containsPattern(PINNED_TEMURIN_IMAGE);
+        assertThat(coverageDockerfile)
+                .contains(
+                        "FROM gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers:v1@sha256:",
+                        "COPY org.jacoco.agent-*-runtime.jar /opt/jacoco-agent.jar",
+                        "COPY org.jacoco.cli-*-nodeps.jar /opt/jacoco-cli.jar")
+                .doesNotContain("clusterfuzzlite-run-fuzzers:v1\n");
         assertThat(ossFuzzDockerfile)
                 .containsPattern(PINNED_TEMURIN_IMAGE)
                 .contains("COPY --from=jdk /opt/java/openjdk/ \"$JAVA_HOME/\"")

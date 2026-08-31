@@ -1,0 +1,129 @@
+#!/bin/bash
+set -euo pipefail
+
+aggregate_report=report/linux/summary.json
+coverage_files=(
+  report/linux/index.html
+  report/linux/jacoco.xml
+  "$aggregate_report"
+)
+target_contracts=(
+  "RepositorySourceFuzzer|src/main/java/ch/fmartin/symphony/trello/repository/RepositorySourceResolver.java"
+  "TrelloCardReferenceParserFuzzer|src/main/java/ch/fmartin/symphony/trello/tracker/TrelloCardReferenceParser.java"
+  "TrelloChecklistClassifierFuzzer|src/main/java/ch/fmartin/symphony/trello/tracker/TrelloChecklistClassifier.java"
+  "WorkflowLoaderFuzzer|src/main/java/ch/fmartin/symphony/trello/workflow/WorkflowLoader.java"
+)
+
+list_target_report_files() {
+  local contract target
+
+  for contract in "${target_contracts[@]}"; do
+    target="${contract%%|*}"
+    printf 'fuzzer_stats/%s.json\n' "$target"
+  done
+}
+
+list_json_files() {
+  printf '%s\n' "$aggregate_report"
+  list_target_report_files
+}
+
+list_required_files() {
+  printf '%s\n' "${coverage_files[@]}"
+  list_target_report_files
+}
+
+verify_json_reports() {
+  local coverage_root="$1"
+  local contract expected_source target target_report
+
+  if ! jq -e '
+      .type == "oss-fuzz.java.coverage.json.export"
+      and .version == "1.0.0"
+      and .data[0].totals.lines.covered > 0
+      and (.data[0].files | length) > 0
+    ' "$coverage_root/$aggregate_report" >/dev/null; then
+    echo "ClusterFuzzLite generated an empty or malformed Java coverage summary." >&2
+    return 1
+  fi
+
+  for contract in "${target_contracts[@]}"; do
+    target="${contract%%|*}"
+    expected_source="${contract#*|}"
+    target_report="$coverage_root/fuzzer_stats/$target.json"
+    if ! jq -e --arg expected_source "$expected_source" '
+        .type == "oss-fuzz.java.coverage.json.export"
+        and .version == "1.0.0"
+        and any(
+          .data[0].files[]?;
+          (.filename | endswith($expected_source))
+          and .summary.lines.covered > 0
+        )
+      ' "$target_report" >/dev/null; then
+      echo "$target coverage is malformed or does not reach $expected_source." >&2
+      return 1
+    fi
+  done
+}
+
+verify_jacoco_xml() {
+  local coverage_root="$1"
+  local jacoco_report="$coverage_root/report/linux/jacoco.xml"
+
+  if ! python3 - "$jacoco_report" <<'PY'; then
+import sys
+import xml.etree.ElementTree as ElementTree
+
+try:
+    root = ElementTree.parse(sys.argv[1]).getroot()
+except (ElementTree.ParseError, OSError) as error:
+    print(f"ClusterFuzzLite generated malformed JaCoCo XML: {error}", file=sys.stderr)
+    raise SystemExit(1) from error
+
+if root.tag != "report":
+    print("ClusterFuzzLite generated JaCoCo XML without a report root.", file=sys.stderr)
+    raise SystemExit(1)
+PY
+    return 1
+  fi
+}
+
+verify_directory() {
+  local coverage_root="$1"
+  local failure_verb="$2"
+  local file_list_function="$3"
+  local required_file
+
+  while IFS= read -r required_file; do
+    if [[ ! -s "$coverage_root/$required_file" ]]; then
+      echo "ClusterFuzzLite did not $failure_verb $required_file" >&2
+      return 1
+    fi
+  done < <("$file_list_function")
+  if [[ "$file_list_function" == list_required_files ]]; then
+    verify_jacoco_xml "$coverage_root"
+  fi
+  verify_json_reports "$coverage_root"
+}
+
+mode="${1:-}"
+case "$mode" in
+list-json-files)
+  list_json_files
+  ;;
+list-required-files)
+  list_required_files
+  ;;
+verify-directory)
+  coverage_root="${2:?coverage directory is required}"
+  verify_directory "$coverage_root" generate list_required_files
+  ;;
+verify-json-directory)
+  coverage_root="${2:?coverage directory is required}"
+  verify_directory "$coverage_root" persist list_json_files
+  ;;
+*)
+  echo "Usage: $0 list-required-files | list-json-files | verify-directory <path> | verify-json-directory <path>" >&2
+  exit 2
+  ;;
+esac
