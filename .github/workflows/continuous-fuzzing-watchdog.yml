@@ -1,9 +1,24 @@
 name: Continuous Fuzzing Watchdog
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/continuous-fuzzing-watchdog.yml
+      - .github/workflows/continuous-fuzzing.yml
+      - scripts/continue-clusterfuzzlite-batch
+      - scripts/ensure-clusterfuzzlite-running
+  workflow_run:
+    workflows:
+      - Continuous Fuzzing
+    types:
+      - completed
+    branches:
+      - main
   schedule:
     # Avoid minute 0, when GitHub Actions has its highest scheduled-event load.
-    - cron: "7,22,37,52 * * * *"
+    - cron: "3,18,33,48 * * * *"
   workflow_dispatch:
 
 permissions: read-all
@@ -14,6 +29,12 @@ concurrency:
 
 jobs:
   ensure-running:
+    if: >-
+      github.event_name != 'workflow_run'
+      || (github.event.workflow_run.event == 'workflow_dispatch'
+      && github.event.workflow_run.head_branch == 'main'
+      && startsWith(github.event.workflow_run.display_title, 'Continuous batch cycle ')
+      && github.event.workflow_run.conclusion != 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

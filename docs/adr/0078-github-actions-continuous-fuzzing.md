@@ -83,17 +83,26 @@ coverage; cycles 0 through 2 run the normal budget. The continuation script retr
 dispatch three times before failing visibly.
 
 A failed batch does not dispatch its own successor. This prevents a checkout, build, or credential
-failure from creating an immediate loop of identical failing runs. The watchdog restarts the chain
-at cycle 0 after the failed run leaves the workflow idle.
+failure from creating an immediate loop of identical failing runs. Completion of a failed marked
+long run starts the watchdog, which restarts the chain at cycle 0 after the failed run leaves the
+workflow idle.
 
-A separate watchdog runs at minutes 7, 22, 37, and 52 of every hour. It reads the workflow-run API
-and dispatches cycle 0 only when no queued or active run has the `Continuous batch cycle` run-name
-prefix. The prefix distinguishes the long batch chain from pull-request, push, and manual
-maintenance runs in the same workflow. GitHub documents that scheduled events can be delayed or
-dropped, and the first two natural six-hour schedule slots after rollout created no workflow run
-despite an active default-branch workflow. Repeating the short watchdog every 15 minutes makes one
-missed event nonfatal while avoiding minute 0, GitHub's highest-load scheduling boundary. The long
-workflow no longer depends on its own cron event. Manually dispatched batch runs share a
+A separate watchdog starts on default-branch changes to either workflow or its orchestration
+scripts, and on completion of a failed marked long run. It also runs at minutes 3, 18, 33, and 48 of
+every hour. It reads the workflow-run API and dispatches cycle 0 only when no queued or active run
+has the `Continuous batch cycle` run-name prefix. The prefix distinguishes the long batch chain from
+pull-request, push, and manual maintenance runs in the same workflow. The failed-run trigger accepts
+only `workflow_dispatch` runs on `main` with that prefix, so a pull-request fuzz failure cannot start
+the trusted batch chain.
+
+GitHub documents that scheduled events can be delayed or dropped. The first two natural six-hour
+schedule slots after rollout created no workflow run despite an active default-branch workflow. On
+2026-08-31, the first post-repair watchdog slots at 14:22 and 14:37 UTC also created no run by 14:46
+UTC. A repository push now provides deterministic bootstrap, and the failed-run completion event
+provides deterministic ordinary recovery. Repeating the short watchdog every 15 minutes remains a
+backstop for hard cancellations and missed event delivery while avoiding minute 0, GitHub's
+highest-load scheduling boundary. The long workflow no longer depends on its own cron event.
+Manually dispatched batch runs share a
 workflow-level concurrency group, so duplicate recovery dispatches cannot run a second corpus
 writer beside the active chain. Manual pruning uses the same concurrency group because it writes the
 same corpus branch. Manual smoke batches leave continuation disabled by default; maintainers should
@@ -193,8 +202,11 @@ the repository-owned bridge and continues to use the same fuzz targets.
   dropped.
 * Good, because repository-owned shell logic is limited to tested target selection,
   Java-compatible coverage runner preparation, storage verification, and SARIF-to-issue reporting.
-* Neutral, because the watchdog uses a GitHub scheduled workflow and does not guarantee an exact
-  start time. A later watchdog event or manual dispatch recovers a dropped event.
+* Good, because changes to the continuous-workflow implementation bootstrap the chain without
+  depending on scheduled-event delivery.
+* Good, because completion of a failed marked long run starts recovery without waiting for cron.
+* Neutral, because hard cancellation before a completion event still depends on a later watchdog
+  schedule or manual dispatch.
 * Good, because continuous-batch crash findings create or update deduplicated GitHub issues.
 * Neutral, because fork pull requests cannot publish SARIF and rely on their failed check and crash
   artifact.
@@ -292,13 +304,15 @@ event.
 
 ### Successor Dispatch With a Scheduled Watchdog
 
-Let every successful batch dispatch the next indexed cycle. Run a separate short watchdog every 15
-minutes and dispatch cycle 0 only when the long workflow has no queued or active run. Failed batches
-leave recovery to the watchdog so setup failures cannot create an immediate retry loop.
+Let every successful batch dispatch the next indexed cycle. Start a separate watchdog after changes
+to the chain, after a failed marked long run, and every 15 minutes. Dispatch cycle 0 only when the
+long workflow has no queued or active run. Failed batches leave recovery to the watchdog so setup
+failures cannot create an immediate retry loop.
 
 * Good, because ordinary handoff does not depend on scheduled-event delivery.
 * Good, because cycle state carries daily prune and coverage work through the same chain.
 * Good, because the repository token can create workflow-dispatch events without a broader token.
+* Good, because deterministic events cover bootstrap and failed-run recovery.
 * Good, because one dropped watchdog event can be recovered by the next event.
 * Bad, because workflow concurrency and cycle state add repository-owned orchestration.
 * Bad, because the public repository records frequent short watchdog runs.
