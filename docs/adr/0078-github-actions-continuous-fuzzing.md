@@ -9,6 +9,7 @@ consulted:
   - "[ClusterFuzzLite parallel crash-reporting issue](https://github.com/google/clusterfuzzlite/issues/142)"
   - "[ClusterFuzzLite silent batch-failure issue](https://github.com/google/clusterfuzzlite/issues/149)"
   - "[ClusterFuzzLite coverage-output issue](https://github.com/google/clusterfuzzlite/issues/150)"
+  - "[JaCoCo change history](https://www.jacoco.org/jacoco/trunk/doc/changes.html)"
   - "[GitHub Actions billing and usage](https://docs.github.com/en/actions/concepts/billing-and-usage)"
   - "[ADR 0061](0061-jazzer-and-oss-fuzz-readiness.md)"
 informed: [Future maintainers, Contributors]
@@ -46,6 +47,10 @@ creating a second target-packaging implementation?
 * Blacksmith-hosted scheduled fuzzing.
 * Wait for OSS-Fuzz before running continuous fuzzing.
 * Self-hosted runner.
+* Derive the pinned ClusterFuzzLite runner with the project's JaCoCo version.
+* Bind-mount replacement JaCoCo JARs into the official runner.
+* Wait for ClusterFuzzLite to update its runner's JaCoCo version.
+* Reimplement JVM coverage publication outside ClusterFuzzLite.
 
 ## Decision Outcome
 
@@ -82,6 +87,25 @@ push to `main`, allowing code-change mode to suppress crashes that reproduce aga
 Coverage mode runs daily, publishes HTML coverage to the storage repository, and provides the data ClusterFuzzLite
 uses to select fuzzers affected by a change. These extra jobs are advisory fuzzing checks and do not
 replace the repository's short required verification gate.
+
+The ClusterFuzzLite `v1` runner image bundles JaCoCo 0.8.7. That version rejects the project's Java
+25 class files, while ClusterFuzzLite ignores the internal coverage command's nonzero exit and
+uploads the partial directory. Coverage therefore runs in a digest-pinned derivative of the same
+ClusterFuzzLite runner image. The derivative replaces only the JaCoCo agent and CLI with the version
+declared by `jacoco.version` in `pom.xml`; Maven resolves both artifacts before the image is built.
+ClusterFuzzLite continues to own corpus retrieval, coverage execution, and storage publication. The
+repository verifier requires the JVM HTML report, JaCoCo XML, aggregate summary, and every target's
+summary. It confirms that the aggregate contains covered source files and that each target covers
+lines in its intended production resolver, parser, classifier, or loader. The wrapper preserves
+the useful part of ClusterFuzzLite's low-disk cleanup without mounting the host's privileged
+container-runtime socket. Coverage mode bypasses ClusterFuzzLite's per-target cleanup, and the
+host-launched runner cannot delete host images. On GitHub Actions, the wrapper therefore enumerates
+images by repository, digest, and ID. It removes only the digest-pinned JVM builder used by this
+checkout and ClusterFuzzLite's per-build `external-cfl-project-*` image. It does not prune the generic
+builder cache or remove other language images. Local Docker and Podman runs still build and tag the
+derivative coverage image, but they do not delete existing images or prune cache. The wrapper honors
+the repository-wide Docker or Podman runtime selection, so maintainers can run the same coverage
+path locally.
 
 ClusterFuzzLite requires corpus pruning when batch fuzzing is enabled. A separate job therefore runs
 daily in `prune` mode with a ten-minute budget. Batch, prune, coverage, and baseline-build jobs can
@@ -131,8 +155,8 @@ the repository-owned bridge and continues to use the same fuzz targets.
 * Good, because crash reproducers and SARIF findings use native GitHub artifacts and code scanning.
 * Good, because every target gets complete crash reporting despite ClusterFuzzLite's combined-batch
   SARIF limitation.
-* Good, because repository-owned shell logic is limited to tested target selection and
-  SARIF-to-issue reporting.
+* Good, because repository-owned shell logic is limited to tested target selection,
+  Java-compatible coverage runner preparation, storage verification, and SARIF-to-issue reporting.
 * Neutral, because GitHub scheduled workflows do not guarantee an exact start time.
 * Good, because scheduled crash findings create or update deduplicated GitHub issues.
 * Neutral, because fork pull requests cannot publish SARIF and rely on their failed check and crash
@@ -152,6 +176,8 @@ the repository-owned bridge and continues to use the same fuzz targets.
 * Bad, because ClusterFuzzLite issue 150 reports regressions where coverage mode does not retain the
   generated HTML. Post-merge checks must confirm that `gh-pages` contains the expected report and
   that GitHub Pages serves it.
+* Bad, because coverage builds a small derivative runner image before each run. Resolving two JARs
+  and adding one image layer costs time but keeps the runtime contents explicit and reproducible.
 
 ### Confirmation
 
@@ -183,7 +209,7 @@ deliberately cover untrusted parsing boundaries, not network and orchestration c
 
 Inspect the per-target batch logs for timeouts and out-of-memory exits even when the batch job is
 green. Confirm that the storage repository's `gh-pages` branch contains
-`coverage/latest/report/linux/report.html` and that GitHub Pages serves that file.
+`coverage/latest/report/linux/index.html` and that GitHub Pages serves that file.
 
 ## Pros and Cons of the Options
 
@@ -257,6 +283,49 @@ Run fuzzing continuously on a maintainer-owned host.
 
 * Good, because it can run beyond GitHub-hosted job limits.
 * Bad, because it adds host security, credentials, patching, and operational ownership.
+
+### Derive the Pinned ClusterFuzzLite Runner With the Project's JaCoCo Version
+
+Build a local image from the pinned official runner digest and replace only `/opt/jacoco-agent.jar`
+and `/opt/jacoco-cli.jar` with Maven-resolved artifacts at the version declared in `pom.xml`.
+
+* Good, because ClusterFuzzLite still owns corpus retrieval, coverage execution, and publication.
+* Good, because the image build validates the JaCoCo version before coverage starts.
+* Good, because the project and fuzzing coverage use one JaCoCo version selected by Renovate.
+* Good, because GitHub-hosted cleanup frees this JVM build's images without exposing the privileged
+  runtime socket or changing a local developer's image cache.
+* Bad, because the workflow must reproduce the official action's container environment.
+* Bad, because each coverage run spends time resolving the artifacts and building one image layer.
+
+### Bind-Mount Replacement JaCoCo JARs Into the Official Runner
+
+Run the pinned official image directly and mount the current JaCoCo agent and CLI over its bundled
+files.
+
+* Good, because it avoids building a derivative image.
+* Bad, because individual file mounts add host-path and Podman labeling differences to the coverage
+  runtime.
+* Bad, because the effective image contents are less obvious from an image inspection or build log.
+
+### Wait for ClusterFuzzLite to Update Its Runner's JaCoCo Version
+
+Keep the official action unchanged and accept missing Java coverage until upstream publishes a
+runner that supports Java 25.
+
+* Good, because the repository would not own a coverage wrapper.
+* Bad, because the current workflow remains green while publishing an unusable partial report.
+* Bad, because the project has no release date or compatibility commitment from upstream.
+
+### Reimplement JVM Coverage Publication Outside ClusterFuzzLite
+
+Run Jazzer and JaCoCo directly in repository scripts, generate the report, and push it to the storage
+repository without the ClusterFuzzLite runner.
+
+* Good, because the repository controls every coverage command and failure status.
+* Bad, because it duplicates ClusterFuzzLite's corpus download, target execution, report generation,
+  and storage protocol.
+* Bad, because a second coverage path can drift from code-change target selection and hosted
+  OSS-Fuzz packaging.
 
 ## More Information
 

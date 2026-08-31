@@ -1,0 +1,141 @@
+#!/bin/bash
+set -euo pipefail
+
+maven_wrapper="${CFL_MAVEN_WRAPPER:-./mvnw}"
+container_runtime="${SYMPHONY_TRELLO_CONTAINER_RUNTIME:-docker}"
+coverage_image="${CFL_COVERAGE_RUNNER_IMAGE:-symphony-trello-cfl-coverage-runner:local}"
+workspace="${GITHUB_WORKSPACE:-$(pwd)}"
+dockerfile="$workspace/.clusterfuzzlite/coverage-runner.Dockerfile"
+builder_dockerfile="$workspace/.clusterfuzzlite/Dockerfile"
+coverage_verifier="$workspace/scripts/verify-clusterfuzzlite-coverage"
+github_event_path="${GITHUB_EVENT_PATH:?GITHUB_EVENT_PATH is required}"
+
+: "${GITHUB_TOKEN:?GITHUB_TOKEN is required}"
+: "${GIT_STORE_REPO:?GIT_STORE_REPO is required}"
+
+case "$container_runtime" in
+docker | podman) ;;
+*)
+  echo "SYMPHONY_TRELLO_CONTAINER_RUNTIME must be docker or podman" >&2
+  exit 2
+  ;;
+esac
+if ! command -v "$container_runtime" >/dev/null 2>&1; then
+  echo "$container_runtime is required to run ClusterFuzzLite coverage" >&2
+  exit 127
+fi
+if [[ ! -f "$github_event_path" ]]; then
+  echo "GitHub event data is missing from $github_event_path" >&2
+  exit 1
+fi
+if [[ ! -d "$workspace/build-out" ]]; then
+  echo "ClusterFuzzLite build output is missing from $workspace/build-out" >&2
+  exit 1
+fi
+if [[ ! -f "$dockerfile" ]]; then
+  echo "ClusterFuzzLite coverage runner Dockerfile is missing from $dockerfile" >&2
+  exit 1
+fi
+
+cleanup_github_builder_images() {
+  if [[ "${GITHUB_ACTIONS:-false}" != true ]]; then
+    return
+  fi
+
+  local builder_digest digest image_id repository
+  local -a image_ids=()
+  local -A seen_image_ids=()
+
+  if [[ ! -f "$builder_dockerfile" ]]; then
+    echo "ClusterFuzzLite JVM builder Dockerfile is missing from $builder_dockerfile" >&2
+    return 1
+  fi
+  builder_digest="$({
+    sed -nE \
+      's|^FROM[[:space:]]+gcr\.io/oss-fuzz-base/base-builder-jvm@([^[:space:]]+).*|\1|p' \
+      "$builder_dockerfile"
+  })"
+  if [[ ! "$builder_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    echo "ClusterFuzzLite JVM builder Dockerfile must contain one digest-pinned base-builder-jvm image" >&2
+    return 1
+  fi
+
+  while IFS='|' read -r repository digest image_id; do
+    if [[ "$repository" == gcr.io/oss-fuzz-base/base-builder-jvm && "$digest" == "$builder_digest" ]] ||
+      [[ "$repository" == external-cfl-project-* || "$repository" == */external-cfl-project-* ]]; then
+      if [[ -n "$image_id" && -z "${seen_image_ids[$image_id]:-}" ]]; then
+        image_ids+=("$image_id")
+        seen_image_ids["$image_id"]=true
+      fi
+    fi
+  done < <("$container_runtime" image ls --digests --no-trunc --format '{{.Repository}}|{{.Digest}}|{{.ID}}')
+
+  if ((${#image_ids[@]} > 0)); then
+    "$container_runtime" image rm --force "${image_ids[@]}"
+  fi
+}
+
+jacoco_version="$("$maven_wrapper" -q help:evaluate -Dexpression=jacoco.version -DforceStdout)"
+if [[ ! "$jacoco_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "Maven returned an invalid JaCoCo version: $jacoco_version" >&2
+  exit 1
+fi
+
+temporary_root="${TMPDIR:-/tmp}"
+coverage_context="$(mktemp -d "$temporary_root/clusterfuzzlite-coverage-runner.XXXXXX")"
+trap 'rm -rf -- "$coverage_context"' EXIT
+
+"$maven_wrapper" -q dependency:copy \
+  "-Dartifact=org.jacoco:org.jacoco.agent:$jacoco_version:jar:runtime" \
+  "-DoutputDirectory=$coverage_context"
+"$maven_wrapper" -q dependency:copy \
+  "-Dartifact=org.jacoco:org.jacoco.cli:$jacoco_version:jar:nodeps" \
+  "-DoutputDirectory=$coverage_context"
+
+"$container_runtime" build \
+  --build-arg "JACOCO_VERSION=$jacoco_version" \
+  --file "$dockerfile" \
+  --tag "$coverage_image" \
+  "$coverage_context"
+
+# A host-launched container does not receive GitHub's Docker socket. On an ephemeral hosted runner,
+# remove only the digest-pinned JVM builder and ClusterFuzzLite's per-build project image by ID.
+cleanup_github_builder_images
+
+container_run_arguments=(run --rm --security-opt label=disable)
+if [[ "$container_runtime" == podman ]]; then
+  container_run_arguments+=(--userns=keep-id)
+fi
+
+"$container_runtime" "${container_run_arguments[@]}" \
+  --workdir /github/workspace \
+  --env CFL_PLATFORM=github \
+  --env DRY_RUN=false \
+  --env FUZZ_SECONDS=600 \
+  --env GITHUB_ACTIONS=true \
+  --env GITHUB_ACTOR \
+  --env GITHUB_BASE_REF \
+  --env GITHUB_EVENT_NAME \
+  --env GITHUB_EVENT_PATH=/github/workflow/event.json \
+  --env GITHUB_REPOSITORY \
+  --env GITHUB_SERVER_URL \
+  --env GITHUB_SHA \
+  --env GITHUB_TOKEN \
+  --env GITHUB_WORKSPACE=/github/workspace \
+  --env GIT_STORE_BRANCH=main \
+  --env GIT_STORE_BRANCH_COVERAGE=gh-pages \
+  --env GIT_STORE_REPO \
+  --env LANGUAGE=jvm \
+  --env MINIMIZE_CRASHES=false \
+  --env MODE=coverage \
+  --env OUTPUT_SARIF=false \
+  --env PARALLEL_FUZZING=false \
+  --env PROJECT_SRC_PATH=/github/workspace \
+  --env REPORT_UNREPRODUCIBLE_CRASHES=false \
+  --env SANITIZER=coverage \
+  --volume "$github_event_path:/github/workflow/event.json:ro" \
+  --volume "$workspace:/github/workspace" \
+  "$coverage_image"
+
+coverage_output="$workspace/cifuzz-coverage"
+"$coverage_verifier" verify-directory "$coverage_output"

@@ -2,6 +2,8 @@
 set -euo pipefail
 
 storage_repository="${CFL_STORAGE_REPOSITORY:?CFL_STORAGE_REPOSITORY is required}"
+script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+coverage_verifier="$script_directory/verify-clusterfuzzlite-coverage"
 mode="${1:-}"
 shift || true
 
@@ -34,7 +36,25 @@ coverage)
     echo "Coverage verification does not accept fuzz targets." >&2
     exit 2
   fi
-  verify_path gh-pages coverage/latest/report/linux/report.html
+  coverage_root=coverage/latest
+  while IFS= read -r required_file; do
+    verify_path gh-pages "$coverage_root/$required_file"
+  done < <("$coverage_verifier" list-required-files)
+
+  reports_directory="$(mktemp -d "${TMPDIR:-/tmp}/clusterfuzzlite-coverage-reports.XXXXXX")"
+  trap 'rm -rf -- "$reports_directory"' EXIT
+  while IFS= read -r report_file; do
+    mkdir -p -- "$reports_directory/$(dirname -- "$report_file")"
+    gh api --method GET \
+      -H "Accept: application/vnd.github+json" \
+      "repos/$storage_repository/contents/$coverage_root/$report_file" \
+      -f ref=gh-pages \
+      --jq .content |
+      tr -d '\n' |
+      base64 --decode \
+        >"$reports_directory/$report_file"
+  done < <("$coverage_verifier" list-json-files)
+  "$coverage_verifier" verify-json-directory "$reports_directory"
   ;;
 *)
   echo "Usage: $0 corpus <target>... | coverage" >&2

@@ -7,7 +7,28 @@ import test from "node:test";
 
 const script = resolve("scripts/verify-clusterfuzzlite-storage");
 
-function run(args: string[], failingPath?: string) {
+function validCoverageReport() {
+  return {
+    type: "oss-fuzz.java.coverage.json.export",
+    version: "1.0.0",
+    data: [
+      {
+        files: [
+          "repository/RepositorySourceResolver.java",
+          "tracker/TrelloCardReferenceParser.java",
+          "tracker/TrelloChecklistClassifier.java",
+          "workflow/WorkflowLoader.java",
+        ].map((filename) => ({
+          filename: `src/main/java/ch/fmartin/symphony/trello/${filename}`,
+          summary: {lines: {covered: 42}},
+        })),
+        totals: {lines: {covered: 42}},
+      },
+    ],
+  };
+}
+
+function run(args: string[], failingPath = "", coverageReport = validCoverageReport()) {
   const fakeBin = mkdtempSync(join(tmpdir(), "clusterfuzzlite-storage-bin-"));
   const log = join(fakeBin, "gh.log");
   const gh = join(fakeBin, "gh");
@@ -20,6 +41,9 @@ printf '%s\\n' "$*" >>"$GH_LOG"
 if [[ -n "\${FAILING_PATH:-}" && "$*" == *"$FAILING_PATH"* ]]; then
   exit 1
 fi
+if [[ "$*" == *"--jq .content"* ]]; then
+  printf '%s\\n' "$COVERAGE_REPORT"
+fi
 `,
   );
   chmodSync(gh, 0o755);
@@ -29,6 +53,7 @@ fi
     env: {
       ...process.env,
       CFL_STORAGE_REPOSITORY: "owner/fuzz-storage",
+      COVERAGE_REPORT: Buffer.from(JSON.stringify(coverageReport)).toString("base64"),
       FAILING_PATH: failingPath,
       GH_LOG: log,
       PATH: `${fakeBin}:${process.env.PATH}`,
@@ -53,14 +78,27 @@ test("fails when a requested target was not persisted", () => {
   assert.match(result.stderr, /did not persist corpus\/MissingFuzzer/);
 });
 
-test("verifies the browsable coverage report on the Pages branch", () => {
+test("verifies complete nonempty Java coverage on the Pages branch", () => {
   const {log, result} = run(["coverage"]);
 
   assert.equal(result.status, 0, result.stderr);
-  assert.match(
-    log,
-    /contents\/coverage\/latest\/report\/linux\/report\.html -f ref=gh-pages/,
-  );
+  assert.match(log, /contents\/coverage\/latest\/report\/linux\/index\.html -f ref=gh-pages/);
+  assert.match(log, /contents\/coverage\/latest\/report\/linux\/jacoco\.xml -f ref=gh-pages/);
+  assert.match(log, /contents\/coverage\/latest\/report\/linux\/summary\.json -f ref=gh-pages/);
+  assert.match(log, /contents\/coverage\/latest\/fuzzer_stats\/RepositorySourceFuzzer\.json/);
+  assert.match(log, /contents\/coverage\/latest\/fuzzer_stats\/WorkflowLoaderFuzzer\.json/);
+});
+
+test("rejects a coverage upload without covered production files", () => {
+  const emptyReport = {
+    type: "oss-fuzz.java.coverage.json.export",
+    version: "1.0.0",
+    data: [{files: [], totals: {lines: {covered: 0}}}],
+  };
+  const {result} = run(["coverage"], "", emptyReport);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /empty or malformed Java coverage summary/);
 });
 
 test("rejects incomplete verification requests", () => {
