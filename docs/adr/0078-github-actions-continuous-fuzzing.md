@@ -88,20 +88,27 @@ long run starts the watchdog, which restarts the chain at cycle 0 after the fail
 workflow idle.
 
 A separate watchdog starts on default-branch changes to either workflow or its orchestration
-scripts, and on completion of a failed marked long run. It also runs at minutes 3, 18, 33, and 48 of
-every hour. It reads the workflow-run API and dispatches cycle 0 only when no queued or active run
-has the `Continuous batch cycle` run-name prefix. The prefix distinguishes the long batch chain from
-pull-request, push, and manual maintenance runs in the same workflow. The failed-run trigger accepts
-only `workflow_dispatch` runs on `main` with that prefix, so a pull-request fuzz failure cannot start
-the trusted batch chain.
+scripts, and on completion of a failed marked long run. A lightweight watchdog job in the
+established `Continuous Fuzzing` workflow also runs at minutes 3, 18, 33, and 48 of every hour. Both
+paths read the workflow-run API and dispatch cycle 0 only when no queued or active run has the
+`Continuous batch cycle` run-name prefix. The prefix distinguishes the long batch chain from
+pull-request, push, schedule, and manual maintenance runs in the same workflow. The failed-run
+trigger accepts only `workflow_dispatch` runs on `main` with that prefix, so a pull-request fuzz
+failure cannot start the trusted batch chain.
 
 GitHub documents that scheduled events can be delayed or dropped. The first two natural six-hour
 schedule slots after rollout created no workflow run despite an active default-branch workflow. On
 2026-08-31, the first post-repair watchdog slots at 14:22 and 14:37 UTC also created no run by 14:46
-UTC. A repository push now provides deterministic bootstrap, and the failed-run completion event
-provides deterministic ordinary recovery. Repeating the short watchdog every 15 minutes remains a
-backstop for hard cancellations and missed event delivery while avoiding minute 0, GitHub's
-highest-load scheduling boundary. The long workflow no longer depends on its own cron event.
+UTC. After a second repair bootstrapped the chain by push at 15:19 UTC, the separate watchdog still
+created no scheduled run for its 15:33, 15:48, or 16:03 UTC slots by 16:10 UTC. The repository's
+established `Continuous Fuzzing` workflow had created its 14:01 UTC scheduled run, so the 15-minute
+schedule moved into that workflow while push and failed-run recovery remained separate. A
+repository push provides deterministic bootstrap, and the failed-run completion event provides
+deterministic ordinary recovery. Repeating the short watchdog every 15 minutes remains a backstop
+for hard cancellations and missed event delivery while avoiding minute 0, GitHub's highest-load
+scheduling boundary. Scheduled runs execute only the watchdog job; the long batch chain still does
+not depend on cron for ordinary handoff.
+
 Manually dispatched batch runs share a
 workflow-level concurrency group, so duplicate recovery dispatches cannot run a second corpus
 writer beside the active chain. Manual pruning uses the same concurrency group because it writes the

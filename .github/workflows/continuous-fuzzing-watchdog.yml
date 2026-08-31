@@ -16,9 +16,6 @@ on:
       - completed
     branches:
       - main
-  schedule:
-    # Avoid minute 0, when GitHub Actions has its highest scheduled-event load.
-    - cron: "3,18,33,48 * * * *"
   workflow_dispatch:
 
 permissions: read-all

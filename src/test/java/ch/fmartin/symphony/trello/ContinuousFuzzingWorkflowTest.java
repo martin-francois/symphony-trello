@@ -78,8 +78,7 @@ final class ContinuousFuzzingWorkflowTest {
 
         // then
         assertThat(source)
-                .contains("workflow_dispatch:", "operation:", "fuzz_seconds:", "continue_fuzzing:", "cycle_index:")
-                .doesNotContain("schedule:");
+                .contains("workflow_dispatch:", "operation:", "fuzz_seconds:", "continue_fuzzing:", "cycle_index:");
         assertThat(pruneJob)
                 .contains(
                         "github.ref == 'refs/heads/main'",
@@ -91,7 +90,7 @@ final class ContinuousFuzzingWorkflowTest {
                         "fuzz-seconds: 600",
                         "mode: prune",
                         "scripts/verify-clusterfuzzlite-storage corpus")
-                .doesNotContain("blacksmith-");
+                .doesNotContain("github.event_name == 'schedule'", "blacksmith-");
     }
 
     @Test
@@ -115,7 +114,6 @@ final class ContinuousFuzzingWorkflowTest {
                         "- Continuous Fuzzing",
                         "types:",
                         "- completed",
-                        "cron: \"3,18,33,48 * * * *\"",
                         "workflow_dispatch:",
                         "github.event_name != 'workflow_run'",
                         "github.event.workflow_run.event == 'workflow_dispatch'",
@@ -126,10 +124,30 @@ final class ContinuousFuzzingWorkflowTest {
                         "actions: write",
                         "contents: read",
                         "scripts/ensure-clusterfuzzlite-running")
-                .doesNotContain("blacksmith-");
+                .doesNotContain("schedule:", "blacksmith-");
         assertThat(unpinnedAction.find())
                 .as("watchdog workflow has an unpinned action")
                 .isFalse();
+    }
+
+    @Test
+    void establishedContinuousWorkflowSchedulesTheIdleChainWatchdog() throws IOException {
+        // given
+        String source = workflowSource();
+
+        // when
+        String watchdogJob = source.substring(source.indexOf("  watchdog:"), source.indexOf("  batch:"));
+
+        // then
+        assertThat(source).contains("schedule:", "cron: \"3,18,33,48 * * * *\"");
+        assertThat(watchdogJob)
+                .contains(
+                        "github.event_name == 'schedule'",
+                        "runs-on: ubuntu-latest",
+                        "actions: write",
+                        "contents: read",
+                        "scripts/ensure-clusterfuzzlite-running")
+                .doesNotContain("blacksmith-");
     }
 
     @Test
