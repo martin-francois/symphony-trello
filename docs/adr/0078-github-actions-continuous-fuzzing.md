@@ -96,6 +96,11 @@ pull-request, push, schedule, and manual maintenance runs in the same workflow. 
 trigger accepts only `workflow_dispatch` runs on `main` with that prefix, so a pull-request fuzz
 failure cannot start the trusted batch chain.
 
+The scheduled and event-driven watchdog paths share the repository-wide
+`continuous-fuzzing-watchdog` concurrency group and do not cancel each other. Serialization prevents
+both paths from observing an idle chain before either dispatched run becomes visible. The later
+watchdog sees the queued or active marked run and exits without dispatching another batch.
+
 GitHub documents that scheduled events can be delayed or dropped. The first two natural six-hour
 schedule slots after rollout created no workflow run despite an active default-branch workflow. On
 2026-08-31, the first post-repair watchdog slots at 14:22 and 14:37 UTC also created no run by 14:46

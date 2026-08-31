@@ -22,7 +22,7 @@ permissions: read-all
 
 concurrency:
   group: continuous-fuzzing-watchdog
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   ensure-running:

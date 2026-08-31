@@ -127,6 +127,9 @@ jobs:
 
   watchdog:
     if: github.event_name == 'schedule'
+    concurrency:
+      group: continuous-fuzzing-watchdog
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

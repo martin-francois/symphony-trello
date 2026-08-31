@@ -120,6 +120,8 @@ final class ContinuousFuzzingWorkflowTest {
                         "github.event.workflow_run.head_branch == 'main'",
                         "startsWith(github.event.workflow_run.display_title, 'Continuous batch cycle ')",
                         "github.event.workflow_run.conclusion != 'success'",
+                        "group: continuous-fuzzing-watchdog",
+                        "cancel-in-progress: false",
                         "runs-on: ubuntu-latest",
                         "actions: write",
                         "contents: read",
@@ -143,6 +145,8 @@ final class ContinuousFuzzingWorkflowTest {
         assertThat(watchdogJob)
                 .contains(
                         "github.event_name == 'schedule'",
+                        "group: continuous-fuzzing-watchdog",
+                        "cancel-in-progress: false",
                         "runs-on: ubuntu-latest",
                         "actions: write",
                         "contents: read",

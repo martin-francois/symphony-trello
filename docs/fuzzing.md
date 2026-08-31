@@ -30,7 +30,8 @@ watchdog starts after changes to the continuous chain and after a failed long ba
 in the established fuzz workflow also checks every 15 minutes. Each path restarts cycle 0 only when
 the long workflow is idle. GitHub documents that scheduled events can be delayed or dropped, so
 deterministic repository events handle bootstrap and ordinary failure recovery while cron remains a
-backstop. Three cycles use a 330-minute
+backstop. All watchdog paths are serialized so overlapping trigger events do not queue duplicate
+batch chains. Three cycles use a 330-minute
 aggregate fuzzing budget; every fourth cycle uses 300
 aggregate minutes so daily maintenance can follow before the next batch. A four-target matrix
 assigns 82.5 minutes to each target, or 75 minutes in the maintenance cycle, and each matrix job has
