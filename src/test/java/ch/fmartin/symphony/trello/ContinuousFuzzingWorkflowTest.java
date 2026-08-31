@@ -105,7 +105,7 @@ final class ContinuousFuzzingWorkflowTest {
         String codeChangeJob =
                 source.substring(source.indexOf("  code-change:"), source.indexOf("  continuous-build:"));
         String continuousBuildJob = source.substring(source.indexOf("  continuous-build:"), source.indexOf("  batch:"));
-        String coverageJob = source.substring(source.indexOf("  coverage:"));
+        String coverageJob = coverageJobSource(source);
 
         // then
         assertThat(codeChangeJob)
@@ -136,6 +136,27 @@ final class ContinuousFuzzingWorkflowTest {
                         "storage-repo-branch-coverage: gh-pages",
                         "CLUSTERFUZZLITE_STORAGE_TOKEN")
                 .doesNotContain("blacksmith-", "PERSONAL_ACCESS_TOKEN", "contents: write");
+    }
+
+    @Test
+    void coverageInstallsJava25BeforeRunningTheHostMavenWrapper() throws IOException {
+        // given
+        String source = workflowSource();
+
+        // when
+        String coverageJob = coverageJobSource(source);
+
+        // then
+        assertThat(coverageJob)
+                .containsSubsequence(
+                        "uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961",
+                        "distribution: temurin",
+                        "java-version: \"25\"",
+                        "scripts/run-clusterfuzzlite-coverage");
+    }
+
+    private static String coverageJobSource(String source) {
+        return source.substring(source.indexOf("  coverage:"));
     }
 
     @Test

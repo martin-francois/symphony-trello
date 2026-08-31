@@ -249,6 +249,12 @@ jobs:
           language: jvm
           sanitizer: coverage
           github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Java 25 for the coverage wrapper
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
       - name: Generate and publish Java 25 fuzzing coverage
         env:
           GIT_STORE_REPO: https://${{ secrets.CLUSTERFUZZLITE_STORAGE_TOKEN }}@github.com/martin-francois/symphony-trello-fuzzing-storage.git
