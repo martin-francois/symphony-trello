@@ -55,7 +55,7 @@ creating a second target-packaging implementation?
 * Wait for ClusterFuzzLite to update its runner's JaCoCo version.
 * Reimplement JVM coverage publication outside ClusterFuzzLite.
 * Depend on cron alone for successive long batches.
-* Dispatch each successor batch from the completed batch with a self-queued watchdog.
+* Self-dispatch successful batches and run a self-queued idle-chain watchdog.
 
 ## Decision Outcome
 

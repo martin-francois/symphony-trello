@@ -1,44 +1,14 @@
 import assert from "node:assert/strict";
-import {spawnSync} from "node:child_process";
-import {readFileSync, writeFileSync} from "node:fs";
-import {join, resolve} from "node:path";
+import {resolve} from "node:path";
 import test from "node:test";
-import {createFakeCommandEnvironment} from "./test-support/fake-command-environment.ts";
+import {runWithRetryingGh} from "./test-support/fake-command-environment.ts";
 
 const script = resolve("scripts/continue-clusterfuzzlite-batch");
 
 function run(cycleIndex: string, failures = 0) {
-  const fakeCommands = createFakeCommandEnvironment("clusterfuzzlite-continuation-bin-", {
-    gh: `#!/bin/bash
-set -euo pipefail
-attempt="$(( $(cat "$ATTEMPTS_FILE") + 1 ))"
-printf '%s' "$attempt" >"$ATTEMPTS_FILE"
-printf '%s\\n' "$*" >>"$FAKE_COMMAND_LOG"
-if ((attempt <= FAILURES)); then
-  exit 1
-fi
-`,
-    sleep: "#!/bin/bash\nexit 0\n",
+  return runWithRetryingGh(script, "clusterfuzzlite-continuation-bin-", failures, {
+    CFL_CYCLE_INDEX: cycleIndex,
   });
-  const attempts = join(fakeCommands.directory, "attempts");
-  writeFileSync(attempts, "0");
-
-  const result = spawnSync("bash", [script], {
-    encoding: "utf8",
-    env: fakeCommands.environment({
-      ATTEMPTS_FILE: attempts,
-      CFL_CYCLE_INDEX: cycleIndex,
-      FAILURES: String(failures),
-      GH_TOKEN: "test-token",
-      GITHUB_REPOSITORY: "owner/project",
-    }),
-  });
-
-  return {
-    attempts: Number.parseInt(readFileSync(attempts, "utf8"), 10),
-    log: fakeCommands.readLog(),
-    result,
-  };
 }
 
 test("dispatches the next normal continuous batch", () => {
