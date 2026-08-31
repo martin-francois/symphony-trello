@@ -1,0 +1,40 @@
+#!/bin/bash
+set -euo pipefail
+
+repository="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
+workflow="${CFL_WORKFLOW:-continuous-fuzzing.yml}"
+: "${GH_TOKEN:?GH_TOKEN is required}"
+current_cycle="${CFL_CYCLE_INDEX:-}"
+
+if ! [[ "$current_cycle" =~ ^[0-3]$ ]]; then
+  echo "CFL_CYCLE_INDEX must be an integer from 0 through 3: $current_cycle" >&2
+  exit 2
+fi
+
+next_cycle="$(((current_cycle + 1) % 4))"
+if ((next_cycle == 3)); then
+  next_fuzz_seconds=4500
+else
+  next_fuzz_seconds=4950
+fi
+
+for attempt in 1 2 3; do
+  if gh workflow run "$workflow" \
+    --repo "$repository" \
+    --ref main \
+    -f operation=batch \
+    -f "fuzz_seconds=$next_fuzz_seconds" \
+    -f continue_fuzzing=true \
+    -f "cycle_index=$next_cycle"; then
+    echo "Dispatched continuous-fuzzing cycle $next_cycle with $next_fuzz_seconds seconds per target."
+    exit 0
+  fi
+
+  echo "Continuous-fuzzing dispatch attempt $attempt failed." >&2
+  if ((attempt < 3)); then
+    sleep "$((attempt * 5))"
+  fi
+done
+
+echo "Continuous fuzzing could not dispatch the successor after 3 attempts." >&2
+exit 1

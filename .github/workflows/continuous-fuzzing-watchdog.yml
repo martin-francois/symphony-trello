@@ -1,0 +1,30 @@
+name: Continuous Fuzzing Watchdog
+
+on:
+  schedule:
+    # Avoid minute 0, when GitHub Actions has its highest scheduled-event load.
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+
+permissions: read-all
+
+concurrency:
+  group: continuous-fuzzing-watchdog
+  cancel-in-progress: true
+
+jobs:
+  ensure-running:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Check out watchdog script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Ensure continuous fuzzing is running
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ensure-clusterfuzzlite-running

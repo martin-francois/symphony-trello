@@ -1,0 +1,30 @@
+#!/bin/bash
+set -euo pipefail
+
+repository="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
+workflow="${CFL_WORKFLOW:-continuous-fuzzing.yml}"
+: "${GH_TOKEN:?GH_TOKEN is required}"
+script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+active_runs="$(
+  gh api --method GET \
+    "repos/$repository/actions/workflows/$workflow/runs" \
+    -f per_page=100 \
+    --jq '[.workflow_runs[]
+      | select(.status != "completed")
+      | select(.display_title | startswith("Continuous batch cycle "))] | length'
+)"
+
+if ! [[ "$active_runs" =~ ^[0-9]+$ ]]; then
+  echo "GitHub returned an invalid active workflow count: $active_runs" >&2
+  exit 1
+fi
+
+if ((active_runs > 0)); then
+  echo "Continuous fuzzing is already queued or running."
+  exit 0
+fi
+
+last_cycle_index=3
+CFL_CYCLE_INDEX="$last_cycle_index" CFL_WORKFLOW="$workflow" \
+  exec "$script_directory/continue-clusterfuzzlite-batch"

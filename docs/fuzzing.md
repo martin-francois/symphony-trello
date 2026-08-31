@@ -25,17 +25,21 @@ within the repository's fast CI target while still failing when fixed crash inpu
 workflow, or Trello boundary changes break the fuzz tests.
 
 The separate `Continuous Fuzzing` GitHub Actions workflow runs ClusterFuzzLite batch fuzzing from
-`main` on GitHub-hosted runners. It is scheduled every six hours with a 330-minute aggregate fuzzing
-budget except for the midnight run, which uses 300 aggregate minutes so daily maintenance can follow
-it before the next batch. A four-target matrix assigns 82.5 minutes to each target, or 75 minutes at
-midnight, and each matrix job has a 100-minute timeout. Matrix jobs run one at a time because
+`main` on GitHub-hosted runners. Each successful long batch dispatches its successor. A separate
+watchdog checks every 15 minutes and restarts cycle 0 only when the long workflow is idle. GitHub
+documents that scheduled events can be delayed or dropped, so repeated watchdog events recover a
+missed trigger without making cron the ordinary handoff. Three cycles use a 330-minute aggregate
+fuzzing budget; every fourth cycle uses 300
+aggregate minutes so daily maintenance can follow before the next batch. A four-target matrix
+assigns 82.5 minutes to each target, or 75 minutes in the maintenance cycle, and each matrix job has
+a 100-minute timeout. Matrix jobs run one at a time because
 ClusterFuzzLite pushes every corpus to the same Git branch; serialization prevents non-fast-forward
 races without changing the aggregate fuzzing budget. The workflow intentionally uses `ubuntu-latest`,
 not a Blacksmith runner. Each runner keeps one fuzzer wrapper before invoking ClusterFuzzLite. This
 works around ClusterFuzzLite's combined-batch SARIF limitation and guarantees that a crash in any
 target has its own report. The jobs carry each target's corpus into later runs through the storage
 repository, verify that each successful run persisted its corpus, and prune redundant corpus inputs
-after the midnight batch. A reportable batch crash fails its matrix job,
+after every fourth batch. A reportable batch crash fails its matrix job,
 uploads the reproducer as a crash artifact, publishes a SARIF result to code scanning, and creates or
 updates a deduplicated `bug` + `fuzzed` issue. Jazzer failures without a source-located SARIF result,
 including timeouts and out-of-memory exits, use the matrix target and crash artifact as the fallback
@@ -90,6 +94,23 @@ are serialized, a one-minute smoke run takes roughly four build-and-fuzz cycles.
 
 Use `operation=prune`, `operation=coverage`, or `operation=build` to test the corpus-pruning,
 coverage, or baseline-build paths. The `fuzz_seconds` input applies only to batch runs.
+
+Bootstrap or restart the continuous chain with cycle 0:
+
+```bash
+gh workflow run continuous-fuzzing.yml --ref main \
+  -f operation=batch \
+  -f fuzz_seconds=4950 \
+  -f continue_fuzzing=true \
+  -f cycle_index=0
+```
+
+The `continue_fuzzing` input defaults to `false` so a short manual smoke run remains one-off. Do not
+dispatch a one-off batch while the continuous chain is active because all batch runs share one
+concurrency group to protect corpus writes. Manually dispatched pruning uses that group as well. A
+successful continuous cycle dispatches the next index; cycle 3 runs pruning and coverage before
+dispatching cycle 0. A failed batch stops self-dispatch and lets the watchdog restart cycle 0, which
+prevents setup failures from causing a rapid retry loop.
 
 The first hosted coverage report establishes the baseline. A healthy report contains all four
 fuzzers and shows each one reaching its intended production entry point. If a target has zero or

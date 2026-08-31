@@ -99,6 +99,22 @@ lives in [Testing](testing.md).
   both the user-visible symptoms and the underlying cause when they are distinct. Keep the broken
   live state available when the user asks to reproduce it before a fix.
 
+## Hosted continuous-workflow verification
+
+- When the user requests a hosted workflow to run continuously, derive its intended duty cycle from
+  every job budget, setup and persistence step, timeout, concurrency rule, and handoff trigger. Do
+  not equate the presence of recurring cron entries with continuous execution.
+- Start a soak window only after the first unattended long run begins. Monitoring repository state,
+  published artifacts, or old successful runs while no intended job is active does not count toward
+  that window. Observe run creation, the active workload, every inter-job handoff, external state
+  persistence, failure reporting, and the next workflow-run handoff.
+- Keep the soak open long enough to exercise every distinct daily path. Restart or extend the
+  relevant evidence window after a repair. For ClusterFuzzLite, live review must cover a successor
+  dispatch, all four target jobs, a maintenance cycle, corpus persistence, pruning, coverage Pages,
+  SARIF state, and fuzz-created issues. `ContinuousFuzzingWorkflowTest` enforces the static handoff
+  and maintenance contract; the pull-request validation record must identify the hosted runs that
+  provide live evidence.
+
 ## Deployment auth and filesystem access
 
 - For deployment auth, prefer reusing the existing Codex CLI auth file from `codex login`. Do not
