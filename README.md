@@ -460,7 +460,7 @@ and checks, and normally updates the existing PR instead of starting over.
 
 ### One Workflow For One Repository
 
-When every card in a workflow belongs to the same GitHub repository, set the workflow repository
+When every card in a workflow belongs to the same repository, set the workflow repository
 default once. Then cards do not need to repeat the repository URL.
 
 Guided `setup-local` asks:
@@ -485,6 +485,9 @@ repository:
 Use the normal clone URL for the project. Generic Git remotes supported by the workflow contract are
 valid too; the repository does not have to be hosted on GitHub. Do not include credentials, query
 strings, or fragments.
+
+`repository.default_path` is an advanced setting for reusing a local checkout. Leave it `null` for
+the common one-repository setup described above; see [Advanced Setup](#advanced-setup) for details.
 
 With this setting, Symphony gives Codex fallback repository context for cards handled by the
 workflow. A card can override the workflow default when it clearly identifies a different
@@ -854,10 +857,12 @@ repository:
   default_path: null
 ```
 
-Use `repository.default_url` when every card in this workflow belongs to the same GitHub repository.
-Use `repository.default_path` when every card should use the same local repository checkout. You may
-set both for the same repository: the URL remains the fallback identity and clone source, while the
-path is the first checkout candidate and is used only when its Git remote matches that identity.
+Use `repository.default_url` when every card in this workflow belongs to the same Git repository.
+Use `repository.default_path` when every card should use the same local repository checkout. When no
+higher-priority source is present, the path is selected directly. One explicit, unambiguous compatible
+Git remote found by read-only inspection supplies repository identity. When a remote selected from a
+card or `repository.default_url` already supplies identity, the path is only a checkout candidate and
+is reused only when its Git remote matches that identity.
 
 Operationally, use the board like this:
 
@@ -927,7 +932,7 @@ The setup commands normally write the current full `WORKFLOW.md` prompt for you.
 board manually, copy [`WORKFLOW.example.md`](WORKFLOW.example.md), set `tracker.board_id`, and adjust
 the list names to match the board.
 
-If all cards on this board belong to one GitHub repository, also set `repository.default_url` in that
+If all cards on this board belong to one Git repository, also set `repository.default_url` in that
 workflow file. See [One Workflow For One Repository](#one-workflow-for-one-repository).
 
 Start with `max_concurrent_agents: 1`. If two cards are in an active list such as `Ready for Codex`,
