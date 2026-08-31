@@ -1,0 +1,14 @@
+#!/bin/bash
+
+set -euo pipefail
+
+version="${1:?Usage: scripts/list-release-assets VERSION}"
+printf '%s\n' \
+  "install.sh" \
+  "install.ps1" \
+  "uninstall.sh" \
+  "uninstall.ps1" \
+  "checksums.txt" \
+  "symphony-trello-$version.intoto.jsonl" \
+  "symphony-trello-$version.tar.gz" \
+  "symphony-trello-$version.zip"

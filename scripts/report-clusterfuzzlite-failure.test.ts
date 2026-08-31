@@ -7,7 +7,13 @@ import test from "node:test";
 
 const script = resolve("scripts/report-clusterfuzzlite-failure");
 
-function fixture(existingIssue = "", resultMetadata = {}) {
+type SarifResult = Readonly<Record<string, unknown>>;
+
+function fixture(
+  existingIssue = "",
+  resultMetadata: SarifResult = {},
+  additionalResults: readonly SarifResult[] = [],
+) {
   const directory = mkdtempSync(join(tmpdir(), "clusterfuzzlite-report-"));
   const sarif = join(directory, "results.sarif");
   const log = join(directory, "gh.log");
@@ -36,6 +42,7 @@ function fixture(existingIssue = "", resultMetadata = {}) {
               ],
               ...resultMetadata,
             },
+            ...additionalResults,
           ],
         },
       ],
@@ -104,4 +111,32 @@ test("comments on the matching open issue instead of creating a duplicate", () =
 
   assert.match(result.log, /issue comment 42 --body-file/);
   assert.doesNotMatch(result.log, /issue create/);
+});
+
+test("reports every distinct SARIF result once", () => {
+  const result = fixture("", {}, [
+    {
+      ruleId: "jazzer.timeout",
+      partialFingerprints: {primaryLocationLineHash: "second-stable-fingerprint"},
+      message: {text: "a second failure"},
+      locations: [
+        {
+          physicalLocation: {
+            artifactLocation: {uri: "src/main/java/SecondParser.java"},
+            region: {startLine: 7},
+          },
+        },
+      ],
+    },
+    {
+      ruleId: "jazzer.crash",
+      partialFingerprints: {primaryLocationLineHash: "stable-crash-fingerprint"},
+      message: {text: "the first failure repeated"},
+    },
+  ]);
+
+  assert.equal(result.log.match(/^issue create /gm)?.length, 2);
+  assert.equal(result.log.match(/^issue list /gm)?.length, 2);
+  assert.match(result.log, /issue create --title Fuzz failure: jazzer\.crash/);
+  assert.match(result.log, /issue create --title Fuzz failure: jazzer\.timeout/);
 });

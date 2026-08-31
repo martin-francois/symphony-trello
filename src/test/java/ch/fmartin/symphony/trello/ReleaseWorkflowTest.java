@@ -166,9 +166,9 @@ final class ReleaseWorkflowTest {
                 "\"uninstall.sh\"",
                 "\"uninstall.ps1\"",
                 "\"checksums.txt\"",
-                "\"symphony-trello-$RELEASE_VERSION.intoto.jsonl\"",
-                "\"symphony-trello-$RELEASE_VERSION.tar.gz\"",
-                "\"symphony-trello-$RELEASE_VERSION.zip\"",
+                "\"symphony-trello-$version.intoto.jsonl\"",
+                "\"symphony-trello-$version.tar.gz\"",
+                "\"symphony-trello-$version.zip\"",
                 "release asset was not built: $asset",
                 "release already contains expected public assets; refusing same-tag asset reuse",
                 "release asset is missing after upload: $asset");
@@ -244,6 +244,7 @@ final class ReleaseWorkflowTest {
         return String.join(
                 System.lineSeparator(),
                 releaseWorkflowSource(),
+                Files.readString(Path.of("scripts/list-release-assets")),
                 Files.readString(Path.of("scripts/resolve-release-asset-target")),
                 Files.readString(Path.of("scripts/build-release-assets")),
                 Files.readString(Path.of("scripts/add-release-provenance")),

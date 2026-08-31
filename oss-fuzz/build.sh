@@ -22,6 +22,7 @@ rm -rf target/oss-fuzz-deps
 
 fuzzer_class_dir=target/test-classes/ch/fmartin/symphony/trello/fuzz
 fuzzer_helper_dir=target/test-classes/ch/fmartin/symphony/trello/tracker
+repository_helper_dir=target/test-classes/ch/fmartin/symphony/trello/testsupport
 
 mapfile -t fuzzer_class_files < <(find "$fuzzer_class_dir" -name '*Fuzzer.class' ! -name '*$*' -print | sort)
 if ((${#fuzzer_class_files[@]} == 0)); then
@@ -43,6 +44,14 @@ if ((${#fuzzer_helper_classes[@]} == 0)); then
 fi
 mkdir -p "$OUT/test-classes/ch/fmartin/symphony/trello/tracker"
 cp "${fuzzer_helper_classes[@]}" "$OUT/test-classes/ch/fmartin/symphony/trello/tracker/"
+
+repository_helper_classes=("$repository_helper_dir"/TestRepositoryUris*.class)
+if ((${#repository_helper_classes[@]} == 0)); then
+  echo "No TestRepositoryUris helper classes found under $repository_helper_dir" >&2
+  exit 1
+fi
+mkdir -p "$OUT/test-classes/ch/fmartin/symphony/trello/testsupport"
+cp "${repository_helper_classes[@]}" "$OUT/test-classes/ch/fmartin/symphony/trello/testsupport/"
 
 runtime_jars=(target/oss-fuzz-deps/*.jar)
 if ((${#runtime_jars[@]} > 0)); then

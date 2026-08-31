@@ -6,26 +6,7 @@ artifact="$RUNNER_TEMP/openrewrite-artifact"
 branch="${GENERATED_BRANCH_PREFIX}${SOURCE_PULL_REQUEST}"
 state="$(<"$artifact/source-state.txt")"
 validation_passed="$(<"$artifact/validation-passed.txt")"
-existing_pr="$(
-  gh api \
-    --method GET \
-    "repos/$GITHUB_REPOSITORY/pulls" \
-    -f base=main \
-    -f head="$GITHUB_REPOSITORY_OWNER:$branch" \
-    -f state=open |
-    jq -r \
-      --arg branch "$branch" \
-      --arg repository "$GITHUB_REPOSITORY" \
-      '[
-        .[]
-        | select(
-          .base.repo.full_name == $repository
-          and .base.ref == "main"
-          and .head.repo.full_name == $repository
-          and .head.ref == $branch
-        )
-      ][0].number // empty'
-)"
+existing_pr="$(scripts/find-openrewrite-derived-pr "$branch")"
 
 case "$state" in
 open)

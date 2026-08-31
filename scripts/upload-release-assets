@@ -2,16 +2,8 @@
 
 set -euo pipefail
 
-expected_assets=(
-  "install.sh"
-  "install.ps1"
-  "uninstall.sh"
-  "uninstall.ps1"
-  "checksums.txt"
-  "symphony-trello-$RELEASE_VERSION.intoto.jsonl"
-  "symphony-trello-$RELEASE_VERSION.tar.gz"
-  "symphony-trello-$RELEASE_VERSION.zip"
-)
+release_asset_list="$(scripts/list-release-assets "$RELEASE_VERSION")"
+mapfile -t expected_assets <<<"$release_asset_list"
 existing_assets="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
 upload_assets=()
 for asset in "${expected_assets[@]}"; do

@@ -50,6 +50,8 @@ jobs:
           sanitizer: address
           github-token: ${{ secrets.GITHUB_TOKEN }}
           storage-repo: https://github.com/martin-francois/symphony-trello-fuzzing-storage.git
+          storage-repo-branch: main
+          storage-repo-branch-coverage: gh-pages
       - name: Fuzz the code change
         id: fuzz
         continue-on-error: true

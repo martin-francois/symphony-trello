@@ -4,26 +4,7 @@ set -euo pipefail
 
 artifact="$RUNNER_TEMP/openrewrite-artifact"
 branch="${GENERATED_BRANCH_PREFIX}${SOURCE_PULL_REQUEST}"
-existing_pr="$(
-  gh api \
-    --method GET \
-    "repos/$GITHUB_REPOSITORY/pulls" \
-    -f base=main \
-    -f head="$GITHUB_REPOSITORY_OWNER:$branch" \
-    -f state=open |
-    jq -r \
-      --arg branch "$branch" \
-      --arg repository "$GITHUB_REPOSITORY" \
-      '[
-        .[]
-        | select(
-          .base.repo.full_name == $repository
-          and .base.ref == "main"
-          and .head.repo.full_name == $repository
-          and .head.ref == $branch
-        )
-      ][0].number // empty'
-)"
+existing_pr="$(scripts/find-openrewrite-derived-pr "$branch")"
 branch_count="$(
   gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/heads/$branch" |
     jq \

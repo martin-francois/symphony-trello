@@ -94,6 +94,8 @@ final class ContinuousFuzzingWorkflowTest {
                         "minimize-crashes: true",
                         "output-sarif: true",
                         "storage-repo: https://github.com/martin-francois/symphony-trello-fuzzing-storage.git",
+                        "storage-repo-branch: main",
+                        "storage-repo-branch-coverage: gh-pages",
                         "github.event.pull_request.head.repo.full_name == github.repository")
                 .doesNotContain("CLUSTERFUZZLITE_STORAGE_TOKEN", "parallel-fuzzing: true");
         assertThat(continuousBuildJob).contains("github.event_name == 'push'", "upload-build: true");
@@ -146,6 +148,8 @@ final class ContinuousFuzzingWorkflowTest {
                         "COPY .clusterfuzzlite/build.sh /src/build.sh")
                 .doesNotContain("git clone");
         assertThat(buildScript).contains("exec bash \"$SRC/symphony-trello/oss-fuzz/build.sh\"");
+        assertThat(Files.readString(Path.of("oss-fuzz/build.sh")))
+                .contains("TestRepositoryUris*.class", "ch/fmartin/symphony/trello/testsupport");
         assertThat(project).contains("language: jvm");
     }
 

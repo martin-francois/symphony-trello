@@ -74,6 +74,7 @@ const OPENREWRITE_GENERATION = [
   .map((name) => readFileSync(new URL(name, SCRIPTS), "utf8"))
   .join("\n");
 const OPENREWRITE_PUBLICATION = [
+  "find-openrewrite-derived-pr",
   "require-openrewrite-publication",
   "publish-openrewrite-result",
 ]
@@ -845,11 +846,11 @@ test("write credentials are isolated from recipe execution", () => {
   assert.doesNotMatch(publishJob, /gh pr list/);
   assert.equal(
     publishJob.match(/-f head="\$GITHUB_REPOSITORY_OWNER:\$branch"/g)?.length,
-    2,
+    1,
   );
   assert.equal(
     publishJob.match(/\.head\.repo\.full_name == \$repository/g)?.length,
-    3,
+    2,
   );
   assert.match(
     publishJob,

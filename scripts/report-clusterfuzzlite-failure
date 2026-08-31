@@ -8,8 +8,12 @@ if [[ ! -f "$sarif_file" ]]; then
   exit 1
 fi
 
-result="$(jq -cS '.runs | map(.results // []) | add | .[0] // empty' "$sarif_file")"
-if [[ -z "$result" ]]; then
+results_json="$(jq -cS '.runs[]?.results[]?' "$sarif_file")"
+results=()
+if [[ -n "$results_json" ]]; then
+  mapfile -t results <<<"$results_json"
+fi
+if ((${#results[@]} == 0)); then
   echo "ClusterFuzzLite failed without a reportable SARIF result; no issue was created."
   exit 0
 fi
@@ -23,41 +27,57 @@ sanitize_line() {
   printf '%s' "${value:0:500}"
 }
 
-rule="$(sanitize_line "$(jq -r '.ruleId // "unknown-rule"' <<<"$result")")"
-message="$(sanitize_line "$(jq -r '.message.text // "ClusterFuzzLite found a crash"' <<<"$result")")"
-location="$(sanitize_line "$(jq -r '
-  .locations[0].physicalLocation
-  | if . == null then "unknown location"
-    else (.artifactLocation.uri // "unknown file")
-      + (if .region.startLine then ":" + (.region.startLine | tostring) else "" end)
-    end
-' <<<"$result")")"
-fingerprint_source="$(jq -cS '
-  def location:
-    .locations[0].physicalLocation
-    | {
-        uri: (.artifactLocation.uri // "unknown file"),
-        startLine: (.region.startLine // null),
-        startColumn: (.region.startColumn // null)
-      };
-  (.partialFingerprints // {}) as $partial
-  | if ($partial | length) > 0
-    then {partialFingerprints: $partial}
-    else {
-      ruleId: (.ruleId // "unknown-rule"),
-      message: (.message.text // "ClusterFuzzLite found a crash"),
-      location: location
-    }
-    end
-' <<<"$result")"
-fingerprint="$(printf '%s' "$fingerprint_source" | sha256sum | cut -d ' ' -f 1)"
-short_fingerprint="${fingerprint:0:12}"
-run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-title="Fuzz failure: ${rule} (${short_fingerprint})"
+labels="$(gh label list --limit 200 --json name --jq '.[].name')"
+if ! grep -Fxq "bug" <<<"$labels"; then
+  gh label create bug --color d73a4a --description "Something is not working"
+fi
+if ! grep -Fxq "fuzzed" <<<"$labels"; then
+  gh label create fuzzed --color c5def5 --description "Found by fuzzing"
+fi
+
 body_file="$(mktemp)"
 trap 'rm -f "$body_file"' EXIT
+declare -A reported_fingerprints=()
+run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
 
-cat >"$body_file" <<EOF
+for result in "${results[@]}"; do
+  rule="$(sanitize_line "$(jq -r '.ruleId // "unknown-rule"' <<<"$result")")"
+  message="$(sanitize_line "$(jq -r '.message.text // "ClusterFuzzLite found a crash"' <<<"$result")")"
+  location="$(sanitize_line "$(jq -r '
+    .locations[0].physicalLocation
+    | if . == null then "unknown location"
+      else (.artifactLocation.uri // "unknown file")
+        + (if .region.startLine then ":" + (.region.startLine | tostring) else "" end)
+      end
+  ' <<<"$result")")"
+  fingerprint_source="$(jq -cS '
+    def location:
+      .locations[0].physicalLocation
+      | {
+          uri: (.artifactLocation.uri // "unknown file"),
+          startLine: (.region.startLine // null),
+          startColumn: (.region.startColumn // null)
+        };
+    (.partialFingerprints // {}) as $partial
+    | if ($partial | length) > 0
+      then {partialFingerprints: $partial}
+      else {
+        ruleId: (.ruleId // "unknown-rule"),
+        message: (.message.text // "ClusterFuzzLite found a crash"),
+        location: location
+      }
+      end
+  ' <<<"$result")"
+  fingerprint="$(printf '%s' "$fingerprint_source" | sha256sum | cut -d ' ' -f 1)"
+  if [[ -n "${reported_fingerprints[$fingerprint]:-}" ]]; then
+    continue
+  fi
+  reported_fingerprints[$fingerprint]=true
+
+  short_fingerprint="${fingerprint:0:12}"
+  title="Fuzz failure: ${rule} (${short_fingerprint})"
+
+  cat >"$body_file" <<EOF
 A ClusterFuzzLite batch run found a reportable crash on \`main\`.
 
 ## Finding
@@ -78,25 +98,18 @@ Download the \`crashes-*\` artifact from the linked workflow run. The artifact c
 minimized reproducer and ClusterFuzzLite crash summary for the affected target.
 EOF
 
-labels="$(gh label list --limit 200 --json name --jq '.[].name')"
-if ! grep -Fxq "bug" <<<"$labels"; then
-  gh label create bug --color d73a4a --description "Something is not working"
-fi
-if ! grep -Fxq "fuzzed" <<<"$labels"; then
-  gh label create fuzzed --color c5def5 --description "Found by fuzzing"
-fi
+  existing_issue="$(
+    gh issue list \
+      --state open \
+      --label fuzzed \
+      --search "$fingerprint in:body" \
+      --json number \
+      --jq '.[0].number // ""'
+  )"
 
-existing_issue="$(
-  gh issue list \
-    --state open \
-    --label fuzzed \
-    --search "$fingerprint in:body" \
-    --json number \
-    --jq '.[0].number // ""'
-)"
-
-if [[ -n "$existing_issue" ]]; then
-  gh issue comment "$existing_issue" --body-file "$body_file"
-else
-  gh issue create --title "$title" --body-file "$body_file" --label bug --label fuzzed
-fi
+  if [[ -n "$existing_issue" ]]; then
+    gh issue comment "$existing_issue" --body-file "$body_file"
+  else
+    gh issue create --title "$title" --body-file "$body_file" --label bug --label fuzzed
+  fi
+done
