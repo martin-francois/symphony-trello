@@ -200,11 +200,9 @@ final class ContinuousFuzzingWorkflowTest {
                 if (!Files.isDirectory(directory)) {
                     continue;
                 }
-                int count = 0;
-                try (var seeds = Files.newDirectoryStream(directory)) {
-                    for (Path ignored : seeds) {
-                        count++;
-                    }
+                int count;
+                try (var seeds = Files.list(directory)) {
+                    count = Math.toIntExact(seeds.count());
                 }
                 seedCounts.put(directory.getFileName().toString(), count);
             }
