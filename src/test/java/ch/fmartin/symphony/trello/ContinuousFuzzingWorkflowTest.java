@@ -37,6 +37,7 @@ final class ContinuousFuzzingWorkflowTest {
                         "runs-on: ubuntu-latest",
                         "timeout-minutes: 100",
                         "fail-fast: false",
+                        "max-parallel: 1",
                         "group: continuous-fuzzing-batch-main-${{ matrix.target }}",
                         "RepositorySourceFuzzer",
                         "TrelloCardReferenceParserFuzzer",
@@ -50,6 +51,9 @@ final class ContinuousFuzzingWorkflowTest {
                         "minimize-crashes: true",
                         "mode: batch",
                         "output-sarif: true",
+                        "storage-repo: https://${{ secrets.CLUSTERFUZZLITE_STORAGE_TOKEN }}@github.com/"
+                                + "martin-francois/symphony-trello-fuzzing-storage.git",
+                        "scripts/verify-clusterfuzzlite-storage corpus \"${{ matrix.target }}\"",
                         "github/codeql-action/upload-sarif@",
                         "category: clusterfuzzlite-${{ matrix.target }}",
                         "sarif_file: cifuzz-sarif/results.sarif",
@@ -87,12 +91,13 @@ final class ContinuousFuzzingWorkflowTest {
                         "always()",
                         "needs: batch",
                         "fuzz-seconds: 600",
-                        "mode: prune")
+                        "mode: prune",
+                        "scripts/verify-clusterfuzzlite-storage corpus")
                 .doesNotContain("blacksmith-");
     }
 
     @Test
-    void usefulClusterFuzzLiteModesRunWithNativeArtifactStorage() throws IOException {
+    void usefulClusterFuzzLiteModesUseDedicatedVerifiedStorage() throws IOException {
         // given
         String source = workflowSource();
 
@@ -110,9 +115,9 @@ final class ContinuousFuzzingWorkflowTest {
                         "mode: code-change",
                         "minimize-crashes: true",
                         "output-sarif: true",
-                        "storage-repo: https://github.com/${{ github.repository }}.git",
-                        "storage-repo-branch: clusterfuzzlite-corpus",
-                        "storage-repo-branch-coverage: clusterfuzzlite-coverage",
+                        "storage-repo: https://github.com/martin-francois/symphony-trello-fuzzing-storage.git",
+                        "storage-repo-branch: main",
+                        "storage-repo-branch-coverage: gh-pages",
                         "github.event.pull_request.head.repo.full_name == github.repository")
                 .doesNotContain("CLUSTERFUZZLITE_STORAGE_TOKEN", "parallel-fuzzing: true");
         assertThat(continuousBuildJob).contains("github.event_name == 'push'", "upload-build: true");
@@ -122,13 +127,15 @@ final class ContinuousFuzzingWorkflowTest {
                         "github.event.schedule == '17 0 * * *'",
                         "fuzz-seconds: 600",
                         "mode: coverage",
-                        "sanitizer: coverage");
+                        "sanitizer: coverage",
+                        "CLUSTERFUZZLITE_STORAGE_TOKEN",
+                        "scripts/verify-clusterfuzzlite-storage coverage");
         assertThat(source)
                 .contains(
-                        "storage-repo-branch: clusterfuzzlite-corpus",
-                        "storage-repo-branch-coverage: clusterfuzzlite-coverage",
-                        "contents: write")
-                .doesNotContain("blacksmith-", "PERSONAL_ACCESS_TOKEN", "CLUSTERFUZZLITE_STORAGE_TOKEN");
+                        "storage-repo-branch: main",
+                        "storage-repo-branch-coverage: gh-pages",
+                        "CLUSTERFUZZLITE_STORAGE_TOKEN")
+                .doesNotContain("blacksmith-", "PERSONAL_ACCESS_TOKEN", "contents: write");
     }
 
     @Test

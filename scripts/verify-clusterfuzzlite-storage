@@ -1,0 +1,43 @@
+#!/bin/bash
+set -euo pipefail
+
+storage_repository="${CFL_STORAGE_REPOSITORY:?CFL_STORAGE_REPOSITORY is required}"
+mode="${1:-}"
+shift || true
+
+verify_path() {
+	local branch="$1"
+	local path="$2"
+
+	if ! gh api --method GET \
+		-H "Accept: application/vnd.github+json" \
+		"repos/$storage_repository/contents/$path" \
+		-f "ref=$branch" \
+		>/dev/null; then
+		echo "ClusterFuzzLite did not persist $path on $storage_repository:$branch" >&2
+		return 1
+	fi
+}
+
+case "$mode" in
+corpus)
+	if (($# == 0)); then
+		echo "At least one fuzz target is required for corpus verification." >&2
+		exit 2
+	fi
+	for target in "$@"; do
+		verify_path main "corpus/$target"
+	done
+	;;
+coverage)
+	if (($# != 0)); then
+		echo "Coverage verification does not accept fuzz targets." >&2
+		exit 2
+	fi
+	verify_path gh-pages coverage/latest/report/linux/report.html
+	;;
+*)
+	echo "Usage: $0 corpus <target>... | coverage" >&2
+	exit 2
+	;;
+esac
