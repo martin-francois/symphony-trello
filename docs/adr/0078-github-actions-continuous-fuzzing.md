@@ -92,7 +92,9 @@ When a fuzzer finds a reportable crash, ClusterFuzzLite minimizes it, uploads th
 GitHub Actions crash artifact, and returns a failing status. The workflow uploads the generated SARIF
 result to GitHub code scanning. Scheduled batch failures also run the repository-owned reporting
 script, which fingerprints the normalized SARIF result and creates or updates a `bug` + `fuzzed`
-issue. Pull-request failures remain checks: same-repository pull requests also publish SARIF, while
+issue. If Jazzer fails without a source-located SARIF result, the script fingerprints the matrix
+target and records the exact crash artifact so Java exceptions, timeouts, and out-of-memory exits
+still create or update an issue. Pull-request failures remain checks: same-repository pull requests also publish SARIF, while
 fork pull requests retain the failed check and crash artifact without attempting an unauthorized
 code-scanning upload.
 

@@ -8,11 +8,14 @@ import test from "node:test";
 const script = resolve("scripts/report-clusterfuzzlite-failure");
 
 type SarifResult = Readonly<Record<string, unknown>>;
+type SarifState = "results" | "empty" | "missing" | "invalid";
 
 function fixture(
   existingIssue = "",
   resultMetadata: SarifResult = {},
   additionalResults: readonly SarifResult[] = [],
+  sarifState: SarifState = "results",
+  target = "TrelloCardReferenceParserFuzzer",
 ) {
   const directory = mkdtempSync(join(tmpdir(), "clusterfuzzlite-report-"));
   const sarif = join(directory, "results.sarif");
@@ -20,12 +23,18 @@ function fixture(
   const body = join(directory, "body.md");
   const gh = join(directory, "gh");
 
-  writeFileSync(
-    sarif,
-    JSON.stringify({
-      runs: [
-        {
-          results: [
+  if (sarifState !== "missing") {
+    writeFileSync(
+      sarif,
+      sarifState === "invalid"
+        ? "not JSON"
+        : JSON.stringify({
+            runs: [
+              {
+                results:
+                  sarifState === "empty"
+                    ? []
+                    : [
             {
               ruleId: "jazzer.crash",
               partialFingerprints: {
@@ -43,11 +52,12 @@ function fixture(
               ...resultMetadata,
             },
             ...additionalResults,
-          ],
-        },
-      ],
-    }),
-  );
+                      ],
+              },
+            ],
+          }),
+    );
+  }
   writeFileSync(
     gh,
     `#!/bin/bash
@@ -72,7 +82,9 @@ done
     encoding: "utf8",
     env: {
       ...process.env,
+      CFL_CRASH_ARTIFACT: `crashes-${target}`,
       CFL_SARIF_FILE: sarif,
+      CFL_TARGET: target,
       FAKE_BODY_FILE: body,
       FAKE_EXISTING_ISSUE: existingIssue,
       FAKE_GH_LOG: log,
@@ -85,7 +97,12 @@ done
   });
 
   assert.equal(result.status, 0, result.stderr);
-  return { body: readFileSync(body, "utf8"), log: readFileSync(log, "utf8") };
+  return {
+    body: readFileSync(body, "utf8"),
+    log: readFileSync(log, "utf8"),
+    stderr: result.stderr,
+    stdout: result.stdout,
+  };
 }
 
 test("creates a labelled issue with a fingerprint based on the SARIF partial fingerprint", () => {
@@ -100,6 +117,8 @@ test("creates a labelled issue with a fingerprint based on the SARIF partial fin
   assert.match(first.log, new RegExp(`issue create --title Fuzz failure: jazzer\\.crash \\(${fingerprint.slice(0, 12)}\\)`));
   assert.match(first.log, /--label bug --label fuzzed/);
   assert.match(first.body, /src\/main\/java\/Parser\.java:42/);
+  assert.match(first.body, /Target: `TrelloCardReferenceParserFuzzer`/);
+  assert.match(first.body, /Crash artifact name: `crashes-TrelloCardReferenceParserFuzzer`/);
   assert.match(first.body, /parser crashed for ＠maintainer with malformed input/);
   assert.match(first.body, /https:\/\/github\.com\/martin-francois\/symphony-trello\/actions\/runs\/1234/);
   assert.match(second.log, new RegExp(`${fingerprint} in:body`));
@@ -140,3 +159,27 @@ test("reports every distinct SARIF result once", () => {
   assert.match(result.log, /issue create --title Fuzz failure: jazzer\.crash/);
   assert.match(result.log, /issue create --title Fuzz failure: jazzer\.timeout/);
 });
+
+for (const sarifState of ["empty", "missing", "invalid"] as const) {
+  test(`reports the target when SARIF is ${sarifState}`, () => {
+    const first = fixture("", {}, [], sarifState, "WorkflowLoaderFuzzer");
+    const second = fixture("42", {}, [], sarifState, "WorkflowLoaderFuzzer");
+    const fingerprint = first.body.match(/Fingerprint: `([0-9a-f]{64})`/)?.[1];
+
+    assert.ok(fingerprint);
+    assert.match(
+      first.log,
+      new RegExp(`issue create --title Fuzz failure: WorkflowLoaderFuzzer \\(${fingerprint.slice(0, 12)}\\)`),
+    );
+    assert.match(first.body, /Rule: `clusterfuzzlite\.unlocated-failure`/);
+    assert.match(first.body, /Target: `WorkflowLoaderFuzzer`/);
+    assert.match(first.body, /Crash artifact name: `crashes-WorkflowLoaderFuzzer`/);
+    assert.match(first.body, /failed without a source-located SARIF result/);
+    assert.match(first.stdout, /reporting the target failure/);
+    assert.match(second.log, new RegExp(`${fingerprint} in:body`));
+    assert.match(second.log, /issue comment 42 --body-file/);
+    if (sarifState !== "empty") {
+      assert.match(first.stderr, /reporting the target failure without a source location/);
+    }
+  });
+}

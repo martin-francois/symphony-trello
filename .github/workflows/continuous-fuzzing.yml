@@ -161,9 +161,10 @@ jobs:
         if: >-
           !cancelled()
           && steps.fuzz.outcome == 'failure'
-          && hashFiles('cifuzz-sarif/results.sarif') != ''
         env:
+          CFL_CRASH_ARTIFACT: crashes-${{ matrix.target }}
           CFL_SARIF_FILE: cifuzz-sarif/results.sarif
+          CFL_TARGET: ${{ matrix.target }}
           GH_TOKEN: ${{ github.token }}
         run: scripts/report-clusterfuzzlite-failure
       - name: Fail after publishing the fuzzing result

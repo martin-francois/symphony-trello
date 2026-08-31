@@ -51,9 +51,14 @@ final class ContinuousFuzzingWorkflowTest {
                         "github/codeql-action/upload-sarif@",
                         "category: clusterfuzzlite-${{ matrix.target }}",
                         "sarif_file: cifuzz-sarif/results.sarif",
+                        "CFL_CRASH_ARTIFACT: crashes-${{ matrix.target }}",
+                        "CFL_TARGET: ${{ matrix.target }}",
                         "scripts/report-clusterfuzzlite-failure",
                         "!cancelled()")
                 .doesNotContain("blacksmith-", "parallel-fuzzing: true");
+        String issueStep = batchJob.substring(batchJob.indexOf("      - name: Create or update fuzz failure issue"));
+        assertThat(issueStep.substring(0, issueStep.indexOf("      - name: Fail after publishing")))
+                .doesNotContain("hashFiles('cifuzz-sarif/results.sarif')");
     }
 
     @Test

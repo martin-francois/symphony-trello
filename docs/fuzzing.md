@@ -34,7 +34,9 @@ around ClusterFuzzLite's combined-batch SARIF limitation and guarantees that a c
 its own report. The jobs carry each target's corpus into later runs through the storage repository and
 prune redundant corpus inputs after the midnight batch. A reportable batch crash fails its matrix job,
 uploads the reproducer as a crash artifact, publishes a SARIF result to code scanning, and creates or
-updates a deduplicated `bug` + `fuzzed` issue.
+updates a deduplicated `bug` + `fuzzed` issue. Jazzer failures without a source-located SARIF result,
+including timeouts and out-of-memory exits, use the matrix target and crash artifact as the fallback
+issue identity instead of skipping issue creation.
 
 ClusterFuzzLite also runs five-minute code-change fuzzing on pull requests and retains a baseline
 fuzzer build after each push to `main`. The baseline lets code-change mode distinguish crashes
