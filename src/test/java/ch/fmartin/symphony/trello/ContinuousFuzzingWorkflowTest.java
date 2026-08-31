@@ -1,8 +1,10 @@
 package ch.fmartin.symphony.trello;
 
+import static java.nio.file.Path.of;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -14,7 +16,7 @@ import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 
 final class ContinuousFuzzingWorkflowTest {
-    private static final Path WORKFLOW = Path.of(".github/workflows/continuous-fuzzing.yml");
+    private static final Path WORKFLOW = of(".github/workflows/continuous-fuzzing.yml");
     private static final String CLUSTERFUZZLITE_COMMIT = "884713a6c30a92e5e8544c39945cd7cb630abcd1";
     private static final Pattern UNPINNED_ACTION = Pattern.compile("uses: [^\\s]+@(?![0-9a-f]{40}(?:\\s|$))");
     private static final Pattern PINNED_TEMURIN_IMAGE =
@@ -147,10 +149,10 @@ final class ContinuousFuzzingWorkflowTest {
     void workflowActionsArePinnedAndBuildIntegrationReusesOssFuzzPackaging() throws IOException {
         // given
         String workflow = workflowSource();
-        String dockerfile = Files.readString(Path.of(".clusterfuzzlite/Dockerfile"));
-        String ossFuzzDockerfile = Files.readString(Path.of("oss-fuzz/Dockerfile"));
-        String buildScript = Files.readString(Path.of(".clusterfuzzlite/build.sh"));
-        String project = Files.readString(Path.of(".clusterfuzzlite/project.yaml"));
+        String dockerfile = Files.readString(of(".clusterfuzzlite/Dockerfile"));
+        String ossFuzzDockerfile = Files.readString(of("oss-fuzz/Dockerfile"));
+        String buildScript = Files.readString(of(".clusterfuzzlite/build.sh"));
+        String project = Files.readString(of(".clusterfuzzlite/project.yaml"));
 
         // when
         var unpinnedAction = UNPINNED_ACTION.matcher(workflow);
@@ -170,7 +172,8 @@ final class ContinuousFuzzingWorkflowTest {
                 .contains("COPY --from=jdk /opt/java/openjdk/ \"$JAVA_HOME/\"")
                 .doesNotContain("api.adoptium.net/v3/binary/latest");
         assertThat(buildScript).contains("exec bash \"$SRC/symphony-trello/oss-fuzz/build.sh\"");
-        assertThat(Files.readString(Path.of("oss-fuzz/build.sh")))
+        assertThat(of("oss-fuzz/build.sh"))
+                .content(StandardCharsets.UTF_8)
                 .contains("TestRepositoryUris*.class", "ch/fmartin/symphony/trello/testsupport");
         assertThat(project).contains("language: jvm");
     }
@@ -178,8 +181,8 @@ final class ContinuousFuzzingWorkflowTest {
     @Test
     void everyStandaloneFuzzerHasASeedCorpus() throws IOException {
         // given
-        Path corpora = Path.of("oss-fuzz/corpora");
-        Path fuzzers = Path.of("src/test/java/ch/fmartin/symphony/trello/fuzz");
+        Path corpora = of("oss-fuzz/corpora");
+        Path fuzzers = of("src/test/java/ch/fmartin/symphony/trello/fuzz");
 
         // when
         Set<String> fuzzerNames = new TreeSet<>();
@@ -207,7 +210,7 @@ final class ContinuousFuzzingWorkflowTest {
         // then
         assertThat(seedCounts).hasSameSizeAs(fuzzerNames).allSatisfy((name, count) -> assertThat(count)
                 .as("seed corpus %s contains an input", name)
-                .isGreaterThan(0));
+                .isPositive());
         assertThat(seedCounts.keySet())
                 .as("every standalone fuzzer has exactly one corpus directory")
                 .containsExactlyElementsOf(fuzzerNames);
