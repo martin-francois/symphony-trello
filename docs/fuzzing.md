@@ -19,10 +19,73 @@ Jazzer executes only one fuzz test per Maven run when `JAZZER_FUZZ=1` is set. Us
 for separate targets. The `fuzzing` profile disables JUnit parallel execution so the selected target
 has a quiet process.
 
-CI runs the Jazzer fuzz tests in deterministic regression mode through the normal `verify` job. It
-does not run continuous coverage-guided fuzzing. That keeps pull request feedback within the
-repository's fast CI target while still failing when fixed crash inputs regress or parser, workflow,
-or Trello boundary changes break the fuzz tests.
+Pull request CI runs the Jazzer fuzz tests in deterministic regression mode through the normal
+`verify` job. It does not run continuous coverage-guided fuzzing. That keeps pull request feedback
+within the repository's fast CI target while still failing when fixed crash inputs regress or parser,
+workflow, or Trello boundary changes break the fuzz tests.
+
+The separate `Continuous Fuzzing` GitHub Actions workflow runs ClusterFuzzLite batch fuzzing from
+`main` on GitHub-hosted runners. It is scheduled every six hours with a 330-minute aggregate fuzzing
+budget except for the midnight run, which uses 300 aggregate minutes so daily maintenance can follow
+it before the next batch. A four-target matrix assigns 82.5 minutes to each target, or 75 minutes at
+midnight, and each matrix job has a 100-minute timeout. It intentionally uses `ubuntu-latest`, not a
+Blacksmith runner. Each runner keeps one fuzzer wrapper before invoking ClusterFuzzLite. This works
+around ClusterFuzzLite's combined-batch SARIF limitation and guarantees that a crash in any target has
+its own report. The jobs carry each target's corpus into later runs through the storage repository and
+prune redundant corpus inputs after the midnight batch. A reportable batch crash fails its matrix job,
+uploads the reproducer as a crash artifact, publishes a SARIF result to code scanning, and creates or
+updates a deduplicated `bug` + `fuzzed` issue. Jazzer failures without a source-located SARIF result,
+including timeouts and out-of-memory exits, use the matrix target and crash artifact as the fallback
+issue identity instead of skipping issue creation.
+
+ClusterFuzzLite also runs five-minute code-change fuzzing on pull requests and retains a baseline
+fuzzer build after each push to `main`. The baseline lets code-change mode distinguish crashes
+introduced by a pull request from crashes already present on `main`. Daily coverage generation uses
+the accumulated corpora both to publish HTML coverage and to identify which fuzzers a pull request
+affects. Same-repository pull requests publish crash SARIF to code scanning. Fork pull requests do
+not have the required code-scanning permission, so their failures remain visible through the failed
+check and ClusterFuzzLite crash artifact. These jobs also use `ubuntu-latest`; continuous fuzzing
+never consumes a Blacksmith runner.
+
+The `.clusterfuzzlite/` build integration copies the checked-out source into the JVM builder and
+delegates to `oss-fuzz/build.sh`. The shared build script keeps local OSS-Fuzz, future hosted
+OSS-Fuzz, and scheduled ClusterFuzzLite runs on the same target packaging path. Each target also has
+a checked-in seed corpus under `oss-fuzz/corpora/`. These seeds cover representative repository
+declarations, Trello references and checklist forms, and valid and invalid workflow front matter so
+coverage-guided mutation starts inside useful parser paths.
+
+ClusterFuzzLite stores corpora and coverage on the dedicated `clusterfuzzlite-corpus` and
+`clusterfuzzlite-coverage` branches in this repository. Pull-request jobs receive read-only access.
+Jobs on `main` use the job-scoped `GITHUB_TOKEN` with `contents: write` to update only this
+repository. Baseline builds and crash reproducers remain GitHub Actions artifacts. This layout keeps
+all automated credentials repository-scoped while retaining corpus pruning and browsable coverage.
+After the first coverage run and GitHub Pages activation, the latest report is available at
+`https://martin-francois.github.io/symphony-trello/coverage/latest/report/linux/report.html`.
+
+After the workflow is present on `main`, maintainers can smoke-test the complete hosted path with a
+short manual batch run:
+
+```bash
+gh workflow run continuous-fuzzing.yml --ref main \
+  -f operation=batch \
+  -f fuzz_seconds=60
+```
+
+The manual `fuzz_seconds` value applies to each of the four batch matrix jobs.
+
+Use `operation=prune`, `operation=coverage`, or `operation=build` to test the corpus-pruning,
+coverage, or baseline-build paths. The `fuzz_seconds` input applies only to batch runs.
+
+The first hosted coverage report establishes the baseline. A healthy report contains all four
+fuzzers and shows each one reaching its intended production entry point. If a target has zero or
+visibly shallow reach, add a representative seed or a focused standalone target before accepting
+the hosted setup. Do not use whole-application line coverage as the threshold: these fuzzers cover
+untrusted parsing boundaries, while network and orchestration behavior belongs in deterministic
+tests. During post-merge verification, inspect every target's batch log for timeout or out-of-memory
+exits even when the job is green, and confirm that the `clusterfuzzlite-coverage` branch contains and
+serves the HTML report. These checks cover open ClusterFuzzLite issues
+[#149](https://github.com/google/clusterfuzzlite/issues/149) and
+[#150](https://github.com/google/clusterfuzzlite/issues/150).
 
 For a 15- to 30-minute active fuzzing pass, run the public parser targets one at a time with an
 explicit duration:
@@ -48,7 +111,7 @@ above runs five separate targets, so it can take roughly 20 minutes plus Maven s
 not a four-minute total suite limit.
 
 For a longer or continuous agent-requested run, choose one target and a longer duration such as
-`-Djazzer.max_duration=6h -Djazzer.max_executions=0`. The execution override lets the duration,
+`-Djazzer.max_duration=5h -Djazzer.max_executions=0`. The execution override lets the duration,
 rather than the method-level regression cap, decide when the fuzzing process stops. Stop the command
 when the requested window ends. Contributors are not expected to run this before every pull request;
 use it when touching parser, prompt-line safety, workflow loading, or Trello reference/checklist

@@ -1,0 +1,23 @@
+#!/bin/bash
+
+set -euo pipefail
+
+branch="${1:?Usage: scripts/find-openrewrite-derived-pr BRANCH}"
+gh api \
+  --method GET \
+  "repos/$GITHUB_REPOSITORY/pulls" \
+  -f base=main \
+  -f head="$GITHUB_REPOSITORY_OWNER:$branch" \
+  -f state=open |
+  jq -r \
+    --arg branch "$branch" \
+    --arg repository "$GITHUB_REPOSITORY" \
+    '[
+      .[]
+      | select(
+        .base.repo.full_name == $repository
+        and .base.ref == "main"
+        and .head.repo.full_name == $repository
+        and .head.ref == $branch
+      )
+    ][0].number // empty'

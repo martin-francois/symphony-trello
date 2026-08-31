@@ -1,0 +1,150 @@
+#!/bin/bash
+
+set -euo pipefail
+
+sarif_file="${CFL_SARIF_FILE:-cifuzz-sarif/results.sarif}"
+target="${CFL_TARGET:-unknown-target}"
+crash_artifact="${CFL_CRASH_ARTIFACT:-crashes-$target}"
+results_json=""
+if [[ -f "$sarif_file" ]]; then
+  if ! results_json="$(jq -cS '.runs[]?.results[]?' "$sarif_file")"; then
+    echo "ClusterFuzzLite SARIF is invalid; reporting the target failure without a source location: $sarif_file" >&2
+    results_json=""
+  fi
+else
+  echo "ClusterFuzzLite SARIF file not found; reporting the target failure without a source location: $sarif_file" >&2
+fi
+
+results=()
+if [[ -n "$results_json" ]]; then
+  mapfile -t results <<<"$results_json"
+fi
+if ((${#results[@]} == 0)); then
+  echo "ClusterFuzzLite failed without a source-located SARIF result; reporting the target failure."
+  fallback_result="$(
+    jq -ncS \
+      --arg target "$target" \
+      --arg artifact "$crash_artifact" \
+      '{
+        ruleId: "clusterfuzzlite.unlocated-failure",
+        message: {
+          text: ("ClusterFuzzLite target " + $target
+            + " failed without a source-located SARIF result; inspect the crash artifact and run log.")
+        },
+        properties: {
+          crashArtifact: $artifact,
+          fuzzTarget: $target,
+          reportKind: "fallback"
+        }
+      }'
+  )"
+  results+=("$fallback_result")
+fi
+
+sanitize_line() {
+  local value="$1"
+  value="${value//$'\r'/ }"
+  value="${value//$'\n'/ }"
+  value="${value//\`/\'}"
+  value="${value//@/＠}"
+  printf '%s' "${value:0:500}"
+}
+
+labels="$(gh label list --limit 200 --json name --jq '.[].name')"
+if ! grep -Fxq "bug" <<<"$labels"; then
+  gh label create bug --force --color d73a4a --description "Something is not working"
+fi
+if ! grep -Fxq "fuzzed" <<<"$labels"; then
+  gh label create fuzzed --force --color c5def5 --description "Found by fuzzing"
+fi
+
+body_file="$(mktemp)"
+trap 'rm -f "$body_file"' EXIT
+declare -A reported_fingerprints=()
+run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+safe_target="$(sanitize_line "$target")"
+safe_crash_artifact="$(sanitize_line "$crash_artifact")"
+
+for result in "${results[@]}"; do
+  rule="$(sanitize_line "$(jq -r '.ruleId // "unknown-rule"' <<<"$result")")"
+  message="$(sanitize_line "$(jq -r '.message.text // "ClusterFuzzLite found a crash"' <<<"$result")")"
+  location="$(sanitize_line "$(jq -r '
+    .locations[0].physicalLocation
+    | if . == null then "unknown location"
+      else (.artifactLocation.uri // "unknown file")
+        + (if .region.startLine then ":" + (.region.startLine | tostring) else "" end)
+      end
+  ' <<<"$result")")"
+  fingerprint_source="$(jq -cS '
+    def location:
+      .locations[0].physicalLocation
+      | {
+          uri: (.artifactLocation.uri // "unknown file"),
+          startLine: (.region.startLine // null),
+          startColumn: (.region.startColumn // null)
+        };
+    (.partialFingerprints // {}) as $partial
+    | if ($partial | length) > 0
+      then {
+        ruleId: (.ruleId // "unknown-rule"),
+        partialFingerprints: $partial
+      }
+      else {
+        ruleId: (.ruleId // "unknown-rule"),
+        message: (.message.text // "ClusterFuzzLite found a crash"),
+        location: location,
+        fuzzTarget: (.properties.fuzzTarget // null)
+      }
+      end
+  ' <<<"$result")"
+  fingerprint="$(printf '%s' "$fingerprint_source" | sha256sum | cut -d ' ' -f 1)"
+  if [[ -n "${reported_fingerprints[$fingerprint]:-}" ]]; then
+    continue
+  fi
+  reported_fingerprints[$fingerprint]=true
+
+  short_fingerprint="${fingerprint:0:12}"
+  title_subject="$rule"
+  if [[ "$(jq -r '.properties.reportKind // ""' <<<"$result")" == "fallback" ]]; then
+    title_subject="$safe_target"
+  fi
+  title="Fuzz failure: ${title_subject} (${short_fingerprint})"
+
+  cat >"$body_file" <<EOF
+A ClusterFuzzLite batch target failed on \`main\`.
+
+## Finding
+
+- Rule: \`$rule\`
+- Target: \`$safe_target\`
+- Location: \`$location\`
+- Commit: \`$GITHUB_SHA\`
+- Run: $run_url
+- Crash artifact name: \`$safe_crash_artifact\`
+- Fingerprint: \`$fingerprint\`
+
+## Summary
+
+\`$message\`
+
+## Reproduce
+
+Download the \`$safe_crash_artifact\` artifact from the linked workflow run. The artifact contains the
+minimized reproducer and ClusterFuzzLite crash summary for the affected target.
+EOF
+
+  existing_issue="$(
+    gh issue list \
+      --state open \
+      --label fuzzed \
+      --search "$fingerprint in:body" \
+      --json number \
+      --jq '.[0].number // ""'
+  )"
+
+  if [[ -n "$existing_issue" ]]; then
+    gh issue comment "$existing_issue" --body-file "$body_file"
+  else
+    gh issue create --title "$title" --body-file "$body_file" --label bug --label fuzzed
+  fi
+done

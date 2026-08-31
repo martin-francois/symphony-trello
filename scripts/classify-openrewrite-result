@@ -1,0 +1,9 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if [[ -s "$RUNNER_TEMP/openrewrite.patch" ]]; then
+  echo "generated_changes=true" >>"$GITHUB_OUTPUT"
+else
+  echo "generated_changes=false" >>"$GITHUB_OUTPUT"
+fi

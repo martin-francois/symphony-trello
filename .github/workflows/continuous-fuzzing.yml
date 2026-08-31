@@ -1,0 +1,240 @@
+name: Continuous Fuzzing
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    # Scheduled workflows run from the default branch. Avoid minute 0, when GitHub Actions
+    # experiences the highest scheduled-job load.
+    - cron: "17 0 * * *"
+    - cron: "17 6,12,18 * * *"
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "ClusterFuzzLite operation to run."
+        required: true
+        type: choice
+        default: batch
+        options:
+          - batch
+          - prune
+          - coverage
+          - build
+      fuzz_seconds:
+        description: "Per-target batch fuzzing budget in seconds; scheduled runs use 4500 or 4950."
+        required: true
+        type: number
+        default: 300
+
+permissions: read-all
+
+jobs:
+  code-change:
+    if: github.event_name == 'pull_request'
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    concurrency:
+      group: continuous-fuzzing-code-change-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Build affected fuzzers
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: jvm
+          sanitizer: address
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          storage-repo: https://github.com/${{ github.repository }}.git
+          storage-repo-branch: clusterfuzzlite-corpus
+          storage-repo-branch-coverage: clusterfuzzlite-coverage
+      - name: Fuzz the code change
+        id: fuzz
+        continue-on-error: true
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 300
+          language: jvm
+          minimize-crashes: true
+          mode: code-change
+          output-sarif: true
+          sanitizer: address
+          storage-repo: https://github.com/${{ github.repository }}.git
+          storage-repo-branch: clusterfuzzlite-corpus
+          storage-repo-branch-coverage: clusterfuzzlite-coverage
+      - name: Upload fuzzing result to code scanning
+        if: >-
+          !cancelled()
+          && steps.fuzz.outcome == 'failure'
+          && github.event.pull_request.head.repo.full_name == github.repository
+          && hashFiles('cifuzz-sarif/results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        with:
+          sarif_file: cifuzz-sarif/results.sarif
+      - name: Fail after publishing the fuzzing result
+        if: ${{ !cancelled() && steps.fuzz.outcome == 'failure' }}
+        run: exit 1
+
+  continuous-build:
+    if: >-
+      github.ref == 'refs/heads/main'
+      && (github.event_name == 'push'
+      || (github.event_name == 'workflow_dispatch' && inputs.operation == 'build'))
+    concurrency:
+      group: continuous-fuzzing-build-main
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Build and retain fuzzers
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: jvm
+          sanitizer: address
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          upload-build: true
+
+  batch:
+    if: >-
+      github.ref == 'refs/heads/main'
+      && ((github.event_name == 'workflow_dispatch' && inputs.operation == 'batch')
+      || github.event_name == 'schedule')
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - RepositorySourceFuzzer
+          - TrelloCardReferenceParserFuzzer
+          - TrelloChecklistClassifierFuzzer
+          - WorkflowLoaderFuzzer
+    concurrency:
+      group: continuous-fuzzing-batch-main-${{ matrix.target }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    permissions:
+      actions: read
+      contents: write
+      issues: write
+      security-events: write
+    steps:
+      - name: Check out fuzzing scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build fuzzers
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: jvm
+          sanitizer: address
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Select one fuzz target for complete crash reporting
+        run: scripts/select-clusterfuzzlite-target "${{ matrix.target }}"
+      - name: Run batch fuzzing
+        id: fuzz
+        continue-on-error: true
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: ${{ github.event_name == 'workflow_dispatch' && inputs.fuzz_seconds || github.event.schedule == '17 0 * * *' && 4500 || 4950 }}
+          language: jvm
+          minimize-crashes: true
+          mode: batch
+          output-sarif: true
+          sanitizer: address
+          storage-repo: https://github.com/${{ github.repository }}.git
+          storage-repo-branch: clusterfuzzlite-corpus
+          storage-repo-branch-coverage: clusterfuzzlite-coverage
+      - name: Upload fuzzing result to code scanning
+        if: >-
+          !cancelled()
+          && steps.fuzz.outcome == 'failure'
+          && hashFiles('cifuzz-sarif/results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        with:
+          category: clusterfuzzlite-${{ matrix.target }}
+          sarif_file: cifuzz-sarif/results.sarif
+      - name: Create or update fuzz failure issue
+        if: >-
+          !cancelled()
+          && steps.fuzz.outcome == 'failure'
+        env:
+          CFL_CRASH_ARTIFACT: crashes-${{ matrix.target }}
+          CFL_SARIF_FILE: cifuzz-sarif/results.sarif
+          CFL_TARGET: ${{ matrix.target }}
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/report-clusterfuzzlite-failure
+      - name: Fail after publishing the fuzzing result
+        if: ${{ !cancelled() && steps.fuzz.outcome == 'failure' }}
+        run: exit 1
+
+  prune:
+    if: >-
+      always()
+      && github.ref == 'refs/heads/main'
+      && ((github.event_name == 'workflow_dispatch' && inputs.operation == 'prune')
+      || github.event.schedule == '17 0 * * *')
+    needs: batch
+    concurrency:
+      group: continuous-fuzzing-prune-main
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - name: Build fuzzers
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: jvm
+          sanitizer: address
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Prune fuzzing corpora
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 600
+          language: jvm
+          mode: prune
+          sanitizer: address
+          storage-repo: https://github.com/${{ github.repository }}.git
+          storage-repo-branch: clusterfuzzlite-corpus
+          storage-repo-branch-coverage: clusterfuzzlite-coverage
+
+  coverage:
+    if: >-
+      always()
+      && github.ref == 'refs/heads/main'
+      && ((github.event_name == 'workflow_dispatch' && inputs.operation == 'coverage')
+      || github.event.schedule == '17 0 * * *')
+    needs: batch
+    concurrency:
+      group: continuous-fuzzing-coverage-main
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - name: Build fuzzers for coverage
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: jvm
+          sanitizer: coverage
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Generate fuzzing coverage
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 600
+          language: jvm
+          mode: coverage
+          sanitizer: coverage
+          storage-repo: https://github.com/${{ github.repository }}.git
+          storage-repo-branch: clusterfuzzlite-corpus
+          storage-repo-branch-coverage: clusterfuzzlite-coverage

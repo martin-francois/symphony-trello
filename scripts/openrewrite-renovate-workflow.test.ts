@@ -67,6 +67,20 @@ const PNPM_WORKSPACE = parse(
   readonly trustLockfile?: boolean;
 };
 const SCRIPTS = new URL("./", import.meta.url);
+const OPENREWRITE_GENERATION = [
+  "run-openrewrite-maintenance",
+  "run-openrewrite-maintenance-container",
+]
+  .map((name) => readFileSync(new URL(name, SCRIPTS), "utf8"))
+  .join("\n");
+const OPENREWRITE_PUBLICATION = [
+  "find-openrewrite-derived-pr",
+  "require-openrewrite-publication",
+  "publish-openrewrite-result",
+]
+  .map((name) => readFileSync(new URL(name, SCRIPTS), "utf8"))
+  .join("\n");
+const CI_OPENREWRITE = `${CI_WORKFLOW}\n${readFileSync(new URL("run-openrewrite-ci", SCRIPTS), "utf8")}`;
 const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
   readonly branchConcurrentLimit?: number;
   readonly dependencyDashboardApproval?: boolean;
@@ -742,9 +756,9 @@ test("write credentials are isolated from recipe execution", () => {
       && publishStart > reportStart,
   );
   const invalidationJob = WORKFLOW.slice(invalidationStart, verificationStart);
-  const generateJob = WORKFLOW.slice(generateStart, reportStart);
+  const generateJob = `${WORKFLOW.slice(generateStart, reportStart)}\n${OPENREWRITE_GENERATION}`;
   const reportJob = WORKFLOW.slice(reportStart, publishStart);
-  const publishJob = WORKFLOW.slice(publishStart);
+  const publishJob = `${WORKFLOW.slice(publishStart)}\n${OPENREWRITE_PUBLICATION}`;
 
   assert.match(invalidationJob, /contents: read/);
   assert.match(invalidationJob, /pull-requests: read/);
@@ -789,15 +803,15 @@ test("write credentials are isolated from recipe execution", () => {
   assert.doesNotMatch(generateJob, /\/var\/run\/docker\.sock/);
   assert.doesNotMatch(generateJob, /github\.token|GITHUB_TOKEN/);
   assert.match(generateJob, /find "\$container_output" -mindepth 1 -maxdepth 1 -printf '%f\\0'/);
-  assert.match(generateJob, /\[ -L "\$container_output\/generated-files\.txt" \]/);
-  assert.match(generateJob, /\[ -L "\$container_output\/openrewrite\.patch" \]/);
+  assert.match(generateJob, /\[\[ -L "\$container_output\/generated-files\.txt" \]\]/);
+  assert.match(generateJob, /\[\[ -L "\$container_output\/openrewrite\.patch" \]\]/);
   assert.match(
     generateJob,
     /group: openrewrite-renovate-generate-\$\{\{ matrix\.pull_request_number \}\}/,
   );
   assert.equal(generateJob.match(/check_untracked_output/g)?.length, 4);
   assert.equal(
-    generateJob.match(/git diff --name-only HEAD > "\$RUNNER_TEMP\/generated-files\.txt"/g)
+    generateJob.match(/git diff --name-only HEAD > ?"\$RUNNER_TEMP\/generated-files\.txt"/g)
       ?.length,
     2,
   );
@@ -820,7 +834,7 @@ test("write credentials are isolated from recipe execution", () => {
     publishJob,
     /matching-refs\/heads\/\$branch" \|[\s\S]*--arg ref "refs\/heads\/\$branch"[\s\S]*select\(\.ref == \$ref\)/,
   );
-  assert.match(publishJob, /closed\|ineligible\) ;;/);
+  assert.match(publishJob, /closed \| ineligible\) ;;/);
   assert.match(
     publishJob,
     /Source state is unknown; preserving any previous derived pull request/,
@@ -832,15 +846,15 @@ test("write credentials are isolated from recipe execution", () => {
   assert.doesNotMatch(publishJob, /gh pr list/);
   assert.equal(
     publishJob.match(/-f head="\$GITHUB_REPOSITORY_OWNER:\$branch"/g)?.length,
-    2,
+    1,
   );
   assert.equal(
     publishJob.match(/\.head\.repo\.full_name == \$repository/g)?.length,
-    3,
+    2,
   );
   assert.match(
     publishJob,
-    /pom\.xml\|src\/main\/java\/\*\.java\|src\/test\/java\/\*\.java/,
+    /pom\.xml \| src\/main\/java\/\*\.java \| src\/test\/java\/\*\.java/,
   );
   assert.match(publishJob, /git ls-files --stage/);
   const metadataValidation = publishJob.indexOf("validate-metadata");
@@ -869,7 +883,7 @@ test("write credentials are isolated from recipe execution", () => {
   );
   assert.match(
     publishJob.slice(idempotenceCheck, generatedCommit),
-    /remote_parent[\s\S]*remote_tree[\s\S]*-n "\$existing_pr"[\s\S]*"\$remote_parent" = "\$source_sha"[\s\S]*"\$remote_tree" = "\$generated_tree"[\s\S]*exit 0/,
+    /remote_parent[\s\S]*remote_tree[\s\S]*-n "\$existing_pr"[\s\S]*"\$remote_parent" == "\$source_sha"[\s\S]*"\$remote_tree" == "\$generated_tree"[\s\S]*exit 0/,
   );
   assert.match(
     publishJob.slice(finalEligibilityCheck, publicationPush),
@@ -895,7 +909,7 @@ test("the generated branch prefix has one workflow source of truth", () => {
     /const branch = `\$\{process\.env\.GENERATED_BRANCH_PREFIX\}\$\{source\.number\}`/,
   );
   assert.match(
-    WORKFLOW,
+    OPENREWRITE_PUBLICATION,
     /branch="\$\{GENERATED_BRANCH_PREFIX\}\$\{SOURCE_PULL_REQUEST\}"/,
   );
 });
@@ -915,12 +929,12 @@ test("updated OpenRewrite artifacts remain isolated in pull request CI", () => {
     CI_WORKFLOW,
     /docker\.io\/library\/maven:3\.9\.11-eclipse-temurin-25@sha256:407c4423cec0cf2981055bc2c6c0dc211d9605b6669279b95997f2d1c7e91e2c/,
   );
-  assert.match(CI_WORKFLOW, /--cap-drop ALL/);
-  assert.match(CI_WORKFLOW, /--security-opt no-new-privileges/);
-  assert.match(CI_WORKFLOW, /--env GIT_OPTIONAL_LOCKS=0/);
-  assert.match(CI_WORKFLOW, /--volume "\$PWD\/\.git:\/workspace\/\.git:ro"/);
-  assert.doesNotMatch(CI_WORKFLOW, /--volume "\$RUNNER_TEMP:/);
-  assert.doesNotMatch(CI_WORKFLOW, /\/var\/run\/docker\.sock/);
+  assert.match(CI_OPENREWRITE, /--cap-drop ALL/);
+  assert.match(CI_OPENREWRITE, /--security-opt no-new-privileges/);
+  assert.match(CI_OPENREWRITE, /--env GIT_OPTIONAL_LOCKS=0/);
+  assert.match(CI_OPENREWRITE, /--volume "\$PWD\/\.git:\/workspace\/\.git:ro"/);
+  assert.doesNotMatch(CI_OPENREWRITE, /--volume "\$RUNNER_TEMP:/);
+  assert.doesNotMatch(CI_OPENREWRITE, /\/var\/run\/docker\.sock/);
   assert.match(
     DEPENDENCY_SUBMISSION_WORKFLOW,
     /github\.head_ref != 'renovate\/openrewrite-toolchain'/,

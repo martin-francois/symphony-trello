@@ -1,0 +1,31 @@
+#!/bin/bash
+
+set -euo pipefail
+
+artifact="$RUNNER_TEMP/openrewrite-artifact"
+source_sha="$(<"$artifact/source-sha.txt")"
+validation_passed="$(<"$artifact/validation-passed.txt")"
+generated_changes="$(<"$artifact/generated-changes.txt")"
+if [[ ! "$source_sha" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "The generation artifact does not contain a valid source SHA" >&2
+  exit 1
+fi
+case "$validation_passed" in
+true | false) ;;
+*)
+  echo "The generation artifact contains an invalid validation result" >&2
+  exit 1
+  ;;
+esac
+case "$generated_changes" in
+true | false | "") ;;
+*)
+  echo "The generation artifact contains an invalid change result" >&2
+  exit 1
+  ;;
+esac
+{
+  echo "source_sha=$source_sha"
+  echo "validation_passed=$validation_passed"
+  echo "generated_changes=$generated_changes"
+} >>"$GITHUB_OUTPUT"

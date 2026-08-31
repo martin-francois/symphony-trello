@@ -22,6 +22,7 @@ rm -rf target/oss-fuzz-deps
 
 fuzzer_class_dir=target/test-classes/ch/fmartin/symphony/trello/fuzz
 fuzzer_helper_dir=target/test-classes/ch/fmartin/symphony/trello/tracker
+repository_helper_dir=target/test-classes/ch/fmartin/symphony/trello/testsupport
 
 mapfile -t fuzzer_class_files < <(find "$fuzzer_class_dir" -name '*Fuzzer.class' ! -name '*$*' -print | sort)
 if ((${#fuzzer_class_files[@]} == 0)); then
@@ -44,6 +45,14 @@ fi
 mkdir -p "$OUT/test-classes/ch/fmartin/symphony/trello/tracker"
 cp "${fuzzer_helper_classes[@]}" "$OUT/test-classes/ch/fmartin/symphony/trello/tracker/"
 
+repository_helper_classes=("$repository_helper_dir"/TestRepositoryUris*.class)
+if ((${#repository_helper_classes[@]} == 0)); then
+  echo "No TestRepositoryUris helper classes found under $repository_helper_dir" >&2
+  exit 1
+fi
+mkdir -p "$OUT/test-classes/ch/fmartin/symphony/trello/testsupport"
+cp "${repository_helper_classes[@]}" "$OUT/test-classes/ch/fmartin/symphony/trello/testsupport/"
+
 runtime_jars=(target/oss-fuzz-deps/*.jar)
 if ((${#runtime_jars[@]} > 0)); then
   cp "${runtime_jars[@]}" "$OUT/lib/"
@@ -55,11 +64,11 @@ for jar in "$OUT"/lib/*.jar; do
   [[ -e "$jar" ]] || continue
   jar_name="$(basename "$jar")"
   case "$jar_name" in
-    *jazzer*.jar|*junit*.jar|*mockito*.jar|*assertj*.jar|*surefire*.jar|*hamcrest*.jar|\
-      *byte-buddy*.jar|*objenesis*.jar|*opentest4j*.jar|*apiguardian*.jar|*archunit*.jar|\
-      *rest-assured*.jar)
-      disallowed_runtime_jars+=("$jar_name")
-      ;;
+  *jazzer*.jar | *junit*.jar | *mockito*.jar | *assertj*.jar | *surefire*.jar | *hamcrest*.jar | \
+    *byte-buddy*.jar | *objenesis*.jar | *opentest4j*.jar | *apiguardian*.jar | *archunit*.jar | \
+    *rest-assured*.jar)
+    disallowed_runtime_jars+=("$jar_name")
+    ;;
   esac
 done
 if ((${#disallowed_runtime_jars[@]} > 0)); then
@@ -119,6 +128,14 @@ LD_LIBRARY_PATH="\$runtime_ld_library_path" \\
   "\$@"
 EOF
   chmod +x "$OUT/$fuzzer_name"
+
+  seed_corpus_dir="oss-fuzz/corpora/$fuzzer_name"
+  if [[ -d "$seed_corpus_dir" ]]; then
+    mapfile -t seed_corpus_files < <(find "$seed_corpus_dir" -type f -print | sort)
+    if ((${#seed_corpus_files[@]} > 0)); then
+      zip -q -j "$OUT/${fuzzer_name}_seed_corpus.zip" "${seed_corpus_files[@]}"
+    fi
+  fi
 done
 
 echo "Generated OSS-Fuzz wrappers:"
