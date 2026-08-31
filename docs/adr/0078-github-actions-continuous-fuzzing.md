@@ -95,7 +95,8 @@ ClusterFuzzLite runner image. The derivative replaces only the JaCoCo agent and 
 declared by `jacoco.version` in `pom.xml`; Maven resolves both artifacts before the image is built.
 ClusterFuzzLite continues to own corpus retrieval, coverage execution, and storage publication. The
 repository verifier requires the JVM HTML report, JaCoCo XML, aggregate summary, and every target's
-summary. It confirms that the aggregate contains covered source files and that each target covers
+summary. It downloads every published artifact, rejects empty files or malformed JaCoCo XML,
+confirms that the aggregate contains covered source files, and confirms that each target covers
 lines in its intended production resolver, parser, classifier, or loader. The wrapper preserves
 the useful part of ClusterFuzzLite's low-disk cleanup without mounting the host's privileged
 container-runtime socket. Coverage mode bypasses ClusterFuzzLite's per-target cleanup, and the

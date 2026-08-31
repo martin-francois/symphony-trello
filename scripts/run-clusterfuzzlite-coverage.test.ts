@@ -78,7 +78,7 @@ if [[ "$1" == run ]]; then
   coverage="$FAKE_WORKSPACE/cifuzz-coverage"
   mkdir -p "$coverage/report/linux" "$coverage/fuzzer_stats"
   printf 'report\n' >"$coverage/report/linux/index.html"
-  printf 'xml\n' >"$coverage/report/linux/jacoco.xml"
+  printf '<report/>\n' >"$coverage/report/linux/jacoco.xml"
   write_report() {
     target_file="$1"
     source_file="$2"

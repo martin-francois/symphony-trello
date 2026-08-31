@@ -62,9 +62,9 @@ the fuzzers run and then uploads an incomplete coverage directory. The coverage 
 the same digest-pinned ClusterFuzzLite runner with its JaCoCo agent and CLI replaced by the version
 declared in `pom.xml`. The repository-owned wrapper still delegates corpus download, coverage
 execution, and publication to ClusterFuzzLite. Its post-run verifier requires the HTML report,
-JaCoCo XML, aggregate summary, and all four per-target summaries. It rejects empty aggregate
-coverage and any target report that does not cover lines in that target's production resolver,
-parser, classifier, or loader.
+well-formed JaCoCo XML, aggregate summary, and all four per-target summaries. It downloads and
+checks every published file, rejects empty aggregate coverage, and rejects any target report that
+does not cover lines in that target's production resolver, parser, classifier, or loader.
 
 ClusterFuzzLite stores corpora on `main` and coverage on `gh-pages` in the dedicated public
 [`symphony-trello-fuzzing-storage`](https://github.com/martin-francois/symphony-trello-fuzzing-storage)

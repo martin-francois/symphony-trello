@@ -28,7 +28,13 @@ function validCoverageReport() {
   };
 }
 
-function run(args: string[], failingPath = "", coverageReport = validCoverageReport()) {
+function run(
+  args: string[],
+  failingPath = "",
+  coverageReport = validCoverageReport(),
+  emptyPath = "",
+  malformedXml = false,
+) {
   const fakeBin = mkdtempSync(join(tmpdir(), "clusterfuzzlite-storage-bin-"));
   const log = join(fakeBin, "gh.log");
   const gh = join(fakeBin, "gh");
@@ -41,8 +47,16 @@ printf '%s\\n' "$*" >>"$GH_LOG"
 if [[ -n "\${FAILING_PATH:-}" && "$*" == *"$FAILING_PATH"* ]]; then
   exit 1
 fi
-if [[ "$*" == *"--jq .content"* ]]; then
-  printf '%s\\n' "$COVERAGE_REPORT"
+if [[ "$*" == *"application/vnd.github.raw+json"* ]]; then
+  if [[ -n "\${EMPTY_PATH:-}" && "$*" == *"$EMPTY_PATH"* ]]; then
+    exit 0
+  elif [[ "$*" == *"/index.html"* ]]; then
+    printf '%s\\n' "$HTML_REPORT"
+  elif [[ "$*" == *"/jacoco.xml"* ]]; then
+    printf '%s\\n' "$XML_REPORT"
+  else
+    printf '%s\\n' "$COVERAGE_REPORT"
+  fi
 fi
 `,
   );
@@ -53,10 +67,13 @@ fi
     env: {
       ...process.env,
       CFL_STORAGE_REPOSITORY: "owner/fuzz-storage",
-      COVERAGE_REPORT: Buffer.from(JSON.stringify(coverageReport)).toString("base64"),
+      COVERAGE_REPORT: JSON.stringify(coverageReport),
+      EMPTY_PATH: emptyPath,
       FAILING_PATH: failingPath,
       GH_LOG: log,
+      HTML_REPORT: "<html><body>coverage</body></html>",
       PATH: `${fakeBin}:${process.env.PATH}`,
+      XML_REPORT: malformedXml ? "<report>" : "<report/>",
     },
   });
 
@@ -87,6 +104,9 @@ test("verifies complete nonempty Java coverage on the Pages branch", () => {
   assert.match(log, /contents\/coverage\/latest\/report\/linux\/summary\.json -f ref=gh-pages/);
   assert.match(log, /contents\/coverage\/latest\/fuzzer_stats\/RepositorySourceFuzzer\.json/);
   assert.match(log, /contents\/coverage\/latest\/fuzzer_stats\/WorkflowLoaderFuzzer\.json/);
+  assert.match(log, /application\/vnd\.github\.raw\+json.*index\.html -f ref=gh-pages/);
+  assert.match(log, /application\/vnd\.github\.raw\+json.*jacoco\.xml -f ref=gh-pages/);
+  assert.doesNotMatch(log, /--jq \.content/);
 });
 
 test("rejects a coverage upload without covered production files", () => {
@@ -99,6 +119,20 @@ test("rejects a coverage upload without covered production files", () => {
 
   assert.equal(result.status, 1);
   assert.match(result.stderr, /empty or malformed Java coverage summary/);
+});
+
+test("rejects an empty stored HTML report", () => {
+  const {result} = run(["coverage"], "", validCoverageReport(), "index.html");
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /did not generate report\/linux\/index\.html/);
+});
+
+test("rejects malformed stored JaCoCo XML", () => {
+  const {result} = run(["coverage"], "", validCoverageReport(), "", true);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /generated malformed JaCoCo XML/);
 });
 
 test("rejects incomplete verification requests", () => {

@@ -69,6 +69,26 @@ test("rejects an aggregate report without covered files", () => {
   assert.match(result.stderr, /empty or malformed Java coverage summary/);
 });
 
+test("rejects malformed JaCoCo XML", () => {
+  const coverage = fixture();
+  writeFileSync(join(coverage, "report", "linux", "jacoco.xml"), "<report>");
+
+  const result = verify(coverage);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /generated malformed JaCoCo XML/);
+});
+
+test("rejects XML without a JaCoCo report root", () => {
+  const coverage = fixture();
+  writeFileSync(join(coverage, "report", "linux", "jacoco.xml"), "<coverage/>");
+
+  const result = verify(coverage);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /JaCoCo XML without a report root/);
+});
+
 for (const scenario of [
   {description: "a malformed", report: "{"},
   {

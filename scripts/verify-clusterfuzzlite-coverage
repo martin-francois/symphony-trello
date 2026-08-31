@@ -66,6 +66,28 @@ verify_json_reports() {
   done
 }
 
+verify_jacoco_xml() {
+  local coverage_root="$1"
+  local jacoco_report="$coverage_root/report/linux/jacoco.xml"
+
+  if ! python3 - "$jacoco_report" <<'PY'; then
+import sys
+import xml.etree.ElementTree as ElementTree
+
+try:
+    root = ElementTree.parse(sys.argv[1]).getroot()
+except (ElementTree.ParseError, OSError) as error:
+    print(f"ClusterFuzzLite generated malformed JaCoCo XML: {error}", file=sys.stderr)
+    raise SystemExit(1) from error
+
+if root.tag != "report":
+    print("ClusterFuzzLite generated JaCoCo XML without a report root.", file=sys.stderr)
+    raise SystemExit(1)
+PY
+    return 1
+  fi
+}
+
 verify_directory() {
   local coverage_root="$1"
   local failure_verb="$2"
@@ -78,6 +100,9 @@ verify_directory() {
       return 1
     fi
   done < <("$file_list_function")
+  if [[ "$file_list_function" == list_required_files ]]; then
+    verify_jacoco_xml "$coverage_root"
+  fi
   verify_json_reports "$coverage_root"
 }
 
