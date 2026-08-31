@@ -106,11 +106,14 @@ The JVM builder copies Java 25 from a versioned, digest-pinned Eclipse Temurin i
 downloading the moving `latest/25/ga` archive. Dockerfile's built-in Renovate manager owns the image
 tag and digest, so Java updates follow the repository's dependency cooldown and review rules.
 
-ClusterFuzzLite persists corpora and coverage on the dedicated `clusterfuzzlite-corpus` and
-`clusterfuzzlite-coverage` branches in this repository. Pull-request jobs receive read-only access.
-Jobs on `main` receive only the repository-scoped `contents: write` permission needed to update the
-storage branches. This avoids a long-lived cross-repository credential while keeping corpus pruning
-and browsable coverage available. Baseline builds and crash reproducers use GitHub Actions artifacts.
+ClusterFuzzLite persists corpora on `main` and coverage on `gh-pages` in the dedicated public
+`martin-francois/symphony-trello-fuzzing-storage` repository. Pull-request jobs read that public data
+without receiving its write credential. Trusted batch, prune, and coverage jobs receive the
+`CLUSTERFUZZLITE_STORAGE_TOKEN` repository secret only in storage-write and storage-verification
+steps. The batch matrix runs one writer at a time because ClusterFuzzLite pushes every target corpus
+to one branch. Repository-owned verification steps check the expected corpus or report path after
+each successful storage operation so an upload error cannot leave the workflow green. Baseline builds
+and crash reproducers use GitHub Actions artifacts.
 
 This workflow does not replace hosted OSS-Fuzz. Hosted OSS-Fuzz remains the long-term service because
 it provides dedicated infrastructure, triage, and broader continuous operation. ClusterFuzzLite is
@@ -136,16 +139,19 @@ the repository-owned bridge and continues to use the same fuzz targets.
   artifact.
 * Good, because the separate storage repository retains corpus history and serves the latest
   coverage report through GitHub Pages.
-* Bad, because writes currently depend on a broader cross-repository token than the storage task
-  itself requires.
+* Bad, because the external storage write depends on a long-lived cross-repository token. The token
+  should be replaced with a repository-scoped credential when GitHub provides one that the upstream
+  Docker action can use non-interactively.
 * Neutral, because the action's upstream container image uses the mutable `v1` tag internally.
 * Bad, because the matrix builds the JVM fuzzers four times per batch instead of once.
+* Bad, because serializing storage writers increases batch wall time. It prevents lost corpora until
+  ClusterFuzzLite provides atomic concurrent corpus updates or the workflow gains an aggregation job.
 * Bad, because ClusterFuzzLite issue 149 reports that a batch target can time out or exhaust memory
   without failing the overall job. Post-merge checks must inspect each target's log instead of
   treating a green job as sufficient evidence.
 * Bad, because ClusterFuzzLite issue 150 reports regressions where coverage mode does not retain the
-  generated HTML. Post-merge checks must confirm that `clusterfuzzlite-coverage` contains the
-  expected report and that GitHub Pages serves it.
+  generated HTML. Post-merge checks must confirm that `gh-pages` contains the expected report and
+  that GitHub Pages serves it.
 
 ### Confirmation
 
@@ -176,7 +182,7 @@ setup counts as healthy. Whole-application line coverage is not the target becau
 deliberately cover untrusted parsing boundaries, not network and orchestration code.
 
 Inspect the per-target batch logs for timeouts and out-of-memory exits even when the batch job is
-green. Confirm that the `clusterfuzzlite-coverage` branch contains
+green. Confirm that the storage repository's `gh-pages` branch contains
 `coverage/latest/report/linux/report.html` and that GitHub Pages serves that file.
 
 ## Pros and Cons of the Options
