@@ -24,13 +24,64 @@ Pull request CI runs the Jazzer fuzz tests in deterministic regression mode thro
 within the repository's fast CI target while still failing when fixed crash inputs regress or parser,
 workflow, or Trello boundary changes break the fuzz tests.
 
-The separate `Continuous Fuzzing` GitHub Actions workflow runs active Jazzer fuzzing from `main` on
-a GitHub-hosted runner. It is scheduled every six hours with a 330-minute active fuzzing budget and a
-350-minute job timeout, so it stays below the GitHub-hosted six-hour job cap while leaving time for
-artifact upload and issue reporting. It intentionally uses `ubuntu-latest`, not a Blacksmith runner.
-When a scheduled run finds a failure, it uploads the logs and any generated Jazzer crash artifact,
-then creates or updates a GitHub issue labelled `bug` and `fuzzed` with the target, commit, run URL,
-reproduction command, log tail, artifact name, and failure fingerprint.
+The separate `Continuous Fuzzing` GitHub Actions workflow runs ClusterFuzzLite batch fuzzing from
+`main` on a GitHub-hosted runner. It is scheduled every six hours with a 330-minute fuzzing budget
+except for the midnight run, which uses 300 minutes so daily maintenance can follow it before the
+next batch. The job timeout is 350 minutes. It intentionally uses `ubuntu-latest`, not a Blacksmith
+runner. ClusterFuzzLite runs the four standalone Jazzer targets, carries each target's corpus into
+later runs through the storage repository, and prunes redundant corpus inputs after the midnight
+batch. A reportable batch crash fails the workflow, uploads the reproducer as a crash artifact,
+publishes a SARIF result to code scanning, and creates or updates a deduplicated `bug` + `fuzzed`
+issue.
+
+ClusterFuzzLite also runs five-minute code-change fuzzing on pull requests and retains a baseline
+fuzzer build after each push to `main`. The baseline lets code-change mode distinguish crashes
+introduced by a pull request from crashes already present on `main`. Daily coverage generation uses
+the accumulated corpora both to publish HTML coverage and to identify which fuzzers a pull request
+affects. Same-repository pull requests publish crash SARIF to code scanning. Fork pull requests do
+not have the required code-scanning permission, so their failures remain visible through the failed
+check and ClusterFuzzLite crash artifact. These jobs also use `ubuntu-latest`; continuous fuzzing
+never consumes a Blacksmith runner.
+
+The `.clusterfuzzlite/` build integration copies the checked-out source into the JVM builder and
+delegates to `oss-fuzz/build.sh`. The shared build script keeps local OSS-Fuzz, future hosted
+OSS-Fuzz, and scheduled ClusterFuzzLite runs on the same target packaging path. Each target also has
+a checked-in seed corpus under `oss-fuzz/corpora/`. These seeds cover representative repository
+declarations, Trello references and checklist forms, and valid and invalid workflow front matter so
+coverage-guided mutation starts inside useful parser paths.
+
+ClusterFuzzLite stores corpora and coverage in the public
+[`symphony-trello-fuzzing-storage`](https://github.com/martin-francois/symphony-trello-fuzzing-storage)
+repository. Pull-request jobs use unauthenticated read access. Jobs on `main` use the
+`CLUSTERFUZZLITE_STORAGE_TOKEN` repository secret to update the `main` corpus branch and the
+`gh-pages` coverage branch. Baseline builds and crash reproducers remain GitHub Actions artifacts in
+this repository. The secret MUST retain write access to the storage repository. Replace the current
+token with a repository-scoped GitHub App or fine-grained token when one is available.
+After the first coverage run and GitHub Pages activation, the latest report is available at
+`https://martin-francois.github.io/symphony-trello-fuzzing-storage/coverage/latest/report/linux/report.html`.
+
+After the workflow is present on `main`, maintainers can smoke-test the complete hosted path with a
+short manual batch run:
+
+```bash
+gh workflow run continuous-fuzzing.yml --ref main \
+  -f operation=batch \
+  -f fuzz_seconds=60
+```
+
+Use `operation=prune`, `operation=coverage`, or `operation=build` to test the corpus-pruning,
+coverage, or baseline-build paths. The `fuzz_seconds` input applies only to batch runs.
+
+The first hosted coverage report establishes the baseline. A healthy report contains all four
+fuzzers and shows each one reaching its intended production entry point. If a target has zero or
+visibly shallow reach, add a representative seed or a focused standalone target before accepting
+the hosted setup. Do not use whole-application line coverage as the threshold: these fuzzers cover
+untrusted parsing boundaries, while network and orchestration behavior belongs in deterministic
+tests. During post-merge verification, inspect every target's batch log for timeout or out-of-memory
+exits even when the job is green, and confirm that the `gh-pages` branch contains and serves the HTML
+report. These checks cover open ClusterFuzzLite issues
+[#149](https://github.com/google/clusterfuzzlite/issues/149) and
+[#150](https://github.com/google/clusterfuzzlite/issues/150).
 
 For a 15- to 30-minute active fuzzing pass, run the public parser targets one at a time with an
 explicit duration:

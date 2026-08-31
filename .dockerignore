@@ -1,0 +1,17 @@
+.git
+.agents
+.cifuzz-corpus
+.claude
+.codex
+.cursor
+.tessl
+.env
+.env.*
+.secrets
+.symphony-trello-diagnostics-key
+WORKFLOW*.md
+connected-boards.json
+logs
+node_modules
+target
+workspaces

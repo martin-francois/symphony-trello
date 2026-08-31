@@ -55,11 +55,11 @@ for jar in "$OUT"/lib/*.jar; do
   [[ -e "$jar" ]] || continue
   jar_name="$(basename "$jar")"
   case "$jar_name" in
-    *jazzer*.jar|*junit*.jar|*mockito*.jar|*assertj*.jar|*surefire*.jar|*hamcrest*.jar|\
-      *byte-buddy*.jar|*objenesis*.jar|*opentest4j*.jar|*apiguardian*.jar|*archunit*.jar|\
-      *rest-assured*.jar)
-      disallowed_runtime_jars+=("$jar_name")
-      ;;
+  *jazzer*.jar | *junit*.jar | *mockito*.jar | *assertj*.jar | *surefire*.jar | *hamcrest*.jar | \
+    *byte-buddy*.jar | *objenesis*.jar | *opentest4j*.jar | *apiguardian*.jar | *archunit*.jar | \
+    *rest-assured*.jar)
+    disallowed_runtime_jars+=("$jar_name")
+    ;;
   esac
 done
 if ((${#disallowed_runtime_jars[@]} > 0)); then
@@ -119,6 +119,14 @@ LD_LIBRARY_PATH="\$runtime_ld_library_path" \\
   "\$@"
 EOF
   chmod +x "$OUT/$fuzzer_name"
+
+  seed_corpus_dir="oss-fuzz/corpora/$fuzzer_name"
+  if [[ -d "$seed_corpus_dir" ]]; then
+    mapfile -t seed_corpus_files < <(find "$seed_corpus_dir" -type f -print | sort)
+    if ((${#seed_corpus_files[@]} > 0)); then
+      zip -q -j "$OUT/${fuzzer_name}_seed_corpus.zip" "${seed_corpus_files[@]}"
+    fi
+  fi
 done
 
 echo "Generated OSS-Fuzz wrappers:"

@@ -1,239 +1,220 @@
 name: Continuous Fuzzing
 
 on:
+  pull_request:
+  push:
+    branches:
+      - main
   schedule:
-    # GitHub schedules run from the default branch. Avoid minute 0, where scheduled jobs are more
-    # likely to be delayed or dropped under GitHub Actions load.
-    - cron: "17 */6 * * *"
+    # Scheduled workflows run from the default branch. Avoid minute 0, when GitHub Actions
+    # experiences the highest scheduled-job load.
+    - cron: "17 0 * * *"
+    - cron: "17 6,12,18 * * *"
   workflow_dispatch:
     inputs:
-      duration_minutes:
-        description: "Total active fuzzing minutes across all targets, max 330."
-        required: false
-        default: "330"
+      operation:
+        description: "ClusterFuzzLite operation to run."
+        required: true
+        type: choice
+        default: batch
+        options:
+          - batch
+          - prune
+          - coverage
+          - build
+      fuzz_seconds:
+        description: "Batch fuzzing budget in seconds; scheduled runs use 18000 or 19800."
+        required: true
+        type: number
+        default: 300
 
-permissions:
-  contents: read
-  issues: write
-
-concurrency:
-  group: continuous-fuzzing-main
-  cancel-in-progress: false
+permissions: read-all
 
 jobs:
-  fuzz:
-    if: github.ref == 'refs/heads/main'
+  code-change:
+    if: github.event_name == 'pull_request'
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    concurrency:
+      group: continuous-fuzzing-code-change-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
-    timeout-minutes: 350
-    env:
-      DEFAULT_FUZZ_MINUTES: "330"
-      MAX_FUZZ_MINUTES: "330"
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5
+      - name: Build affected fuzzers
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
         with:
-          distribution: temurin
-          java-version: "25"
-          cache: maven
-
-      - name: Run scheduled Jazzer fuzzing
+          language: jvm
+          sanitizer: address
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          storage-repo: https://github.com/martin-francois/symphony-trello-fuzzing-storage.git
+      - name: Fuzz the code change
         id: fuzz
         continue-on-error: true
-        env:
-          REQUESTED_FUZZ_MINUTES: ${{ inputs.duration_minutes }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          mkdir -p target/continuous-fuzzing/logs target/continuous-fuzzing/findings
-
-          duration_minutes="${REQUESTED_FUZZ_MINUTES:-$DEFAULT_FUZZ_MINUTES}"
-          if ! [[ "$duration_minutes" =~ ^[0-9]+$ ]]; then
-            echo "duration_minutes must be a positive integer: $duration_minutes" >&2
-            exit 1
-          fi
-          if ((duration_minutes < 5 || duration_minutes > MAX_FUZZ_MINUTES)); then
-            echo "duration_minutes must be between 5 and $MAX_FUZZ_MINUTES." >&2
-            exit 1
-          fi
-
-          targets=(
-            'RepositorySourceResolverFuzzTest#labelledRepositorySourceValueCannotBreakSelectionInvariants'
-            'RepositorySourceResolverFuzzTest#cardTextDeclarationScanCannotBreakSelectionInvariants'
-            'TrelloCardReferenceParserFuzzTest#trelloReferenceParsingKeepsLookupIdsAndUrlsStable'
-            'TrelloCardReferenceParserFuzzTest#checklistClassificationNeverEmitsPrerequisitesWithProblems'
-            'WorkflowLoaderFuzzTest#workflowLoaderHandlesArbitraryWorkflowBytes'
-          )
-
-          target_count="${#targets[@]}"
-          per_target_minutes="$((duration_minutes / target_count))"
-          if ((per_target_minutes < 1)); then
-            per_target_minutes=1
-          fi
-
-          {
-            echo "duration_minutes=$duration_minutes"
-            echo "per_target_minutes=$per_target_minutes"
-            echo "target_count=$target_count"
-          } >> "$GITHUB_OUTPUT"
-
-          for target in "${targets[@]}"; do
-            safe_name="${target//#/-}"
-            safe_name="${safe_name//./-}"
-            log="target/continuous-fuzzing/logs/${safe_name}.log"
-            command=(
-              env
-              JAZZER_FUZZ=1
-              ./mvnw
-              -q
-              -Pfuzzing
-              -Djacoco.skip=true
-              "-Djazzer.max_duration=${per_target_minutes}m"
-              -Djazzer.max_executions=0
-              "-Dtest=$target"
-              test
-            )
-
-            {
-              printf 'Running target %s for %s minutes\n' "$target" "$per_target_minutes"
-              printf 'Command:'
-              printf ' %q' "${command[@]}"
-              printf '\n'
-            } | tee "$log"
-
-            set +e
-            "${command[@]}" >> "$log" 2>&1
-            status="$?"
-            set -e
-
-            if ((status != 0)); then
-              printf '%s\n' "$target" > target/continuous-fuzzing/findings/failed-target.txt
-              printf '%s\n' "$status" > target/continuous-fuzzing/findings/exit-status.txt
-              {
-                printf '%q ' "${command[@]}"
-                printf '\n'
-              } > target/continuous-fuzzing/findings/reproduction-command.txt
-              tail -n 250 "$log" > target/continuous-fuzzing/findings/log-tail.txt
-              find . -maxdepth 5 \
-                \( -name 'crash-*' -o -name 'timeout-*' -o -name 'oom-*' -o -name 'leak-*' \) \
-                -type f -print | sort > target/continuous-fuzzing/findings/generated-artifacts.txt
-
-              {
-                echo "failed=true"
-                echo "target=$target"
-                echo "status=$status"
-              } >> "$GITHUB_OUTPUT"
-
-              exit "$status"
-            fi
-          done
-
-          echo "failed=false" >> "$GITHUB_OUTPUT"
-
-      - name: Upload fuzz failure artifact
-        if: steps.fuzz.outputs.failed == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
         with:
-          name: continuous-fuzzing-failure-${{ github.run_id }}
-          path: target/continuous-fuzzing/
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Create or update fuzz failure issue
-        if: steps.fuzz.outputs.failed == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          FAILED_TARGET: ${{ steps.fuzz.outputs.target }}
-          EXIT_STATUS: ${{ steps.fuzz.outputs.status }}
-          DURATION_MINUTES: ${{ steps.fuzz.outputs.duration_minutes }}
-          PER_TARGET_MINUTES: ${{ steps.fuzz.outputs.per_target_minutes }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          labels="$(gh label list --limit 200 --json name --jq '.[].name')"
-          if ! grep -Fxq "bug" <<< "$labels"; then
-            gh label create bug --color d73a4a --description "Something is not working"
-          fi
-          if ! grep -Fxq "fuzzed" <<< "$labels"; then
-            gh label create fuzzed --color c5def5 --description "Found by fuzzing"
-          fi
-
-          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          artifact_name="continuous-fuzzing-failure-$GITHUB_RUN_ID"
-          reproduction_command="$(cat target/continuous-fuzzing/findings/reproduction-command.txt)"
-          log_tail="$(cat target/continuous-fuzzing/findings/log-tail.txt)"
-          generated_artifacts="$(cat target/continuous-fuzzing/findings/generated-artifacts.txt)"
-          fingerprint_source="$FAILED_TARGET
-          $reproduction_command
-          $log_tail"
-          fingerprint="$(
-            printf '%s' "$fingerprint_source" \
-              | openssl dgst -sha3-256 -r \
-              | awk '{print $1}'
-          )"
-          short_fingerprint="${fingerprint:0:12}"
-          issue_title="Fuzz failure: ${FAILED_TARGET:-unknown target} (${short_fingerprint})"
-          body_file="target/continuous-fuzzing/findings/github-issue.md"
-
-          {
-            echo "A scheduled Jazzer fuzzing run failed on main."
-            echo
-            echo "## Failure"
-            echo
-            echo "- Target: \`${FAILED_TARGET:-unknown target}\`"
-            echo "- Exit status: \`${EXIT_STATUS:-unknown}\`"
-            echo "- Commit: \`$GITHUB_SHA\`"
-            echo "- Run: $run_url"
-            echo "- Active fuzzing budget: ${DURATION_MINUTES:-unknown} minutes total,"
-            echo "  ${PER_TARGET_MINUTES:-unknown} minutes per target"
-            echo "- Artifact: \`$artifact_name\`"
-            echo "- Fuzz fingerprint: \`$fingerprint\`"
-            echo
-            echo "## Reproduce"
-            echo
-            echo '```bash'
-            echo "$reproduction_command"
-            echo '```'
-            echo
-            echo "Download the failure artifact for logs and any generated Jazzer crash input:"
-            echo
-            echo '```bash'
-            echo "gh run download $GITHUB_RUN_ID --name $artifact_name"
-            echo '```'
-            echo
-            echo "## Generated Artifacts"
-            echo
-            if [ -n "$generated_artifacts" ]; then
-              echo '```text'
-              echo "$generated_artifacts"
-              echo '```'
-            else
-              echo "No Jazzer crash, timeout, OOM, or leak artifact was found in the workspace scan."
-            fi
-            echo
-            echo "## Log Tail"
-            echo
-            echo '```text'
-            echo "$log_tail"
-            echo '```'
-          } > "$body_file"
-
-          existing_issue="$(
-            gh issue list \
-              --state open \
-              --label fuzzed \
-              --search "$fingerprint in:body" \
-              --json number \
-              --jq '.[0].number // ""'
-          )"
-
-          if [ -n "$existing_issue" ]; then
-            gh issue comment "$existing_issue" --body-file "$body_file"
-          else
-            gh issue create --title "$issue_title" --body-file "$body_file" --label bug --label fuzzed
-          fi
-
-      - name: Fail after reporting fuzz failure
-        if: steps.fuzz.outcome == 'failure'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 300
+          language: jvm
+          minimize-crashes: true
+          mode: code-change
+          output-sarif: true
+          sanitizer: address
+          storage-repo: https://github.com/martin-francois/symphony-trello-fuzzing-storage.git
+      - name: Upload fuzzing result to code scanning
+        if: >-
+          !cancelled()
+          && steps.fuzz.outcome == 'failure'
+          && github.event.pull_request.head.repo.full_name == github.repository
+          && hashFiles('cifuzz-sarif/results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        with:
+          sarif_file: cifuzz-sarif/results.sarif
+      - name: Fail after publishing the fuzzing result
+        if: ${{ !cancelled() && steps.fuzz.outcome == 'failure' }}
         run: exit 1
+
+  continuous-build:
+    if: >-
+      github.ref == 'refs/heads/main'
+      && (github.event_name == 'push'
+      || (github.event_name == 'workflow_dispatch' && inputs.operation == 'build'))
+    concurrency:
+      group: continuous-fuzzing-build-main
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Build and retain fuzzers
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: jvm
+          sanitizer: address
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          upload-build: true
+
+  batch:
+    if: >-
+      github.ref == 'refs/heads/main'
+      && ((github.event_name == 'workflow_dispatch' && inputs.operation == 'batch')
+      || github.event_name == 'schedule')
+    concurrency:
+      group: continuous-fuzzing-batch-main
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+      security-events: write
+    steps:
+      - name: Check out issue-reporting script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build fuzzers
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: jvm
+          sanitizer: address
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run batch fuzzing
+        id: fuzz
+        continue-on-error: true
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: ${{ github.event_name == 'workflow_dispatch' && inputs.fuzz_seconds || github.event.schedule == '17 0 * * *' && 18000 || 19800 }}
+          language: jvm
+          minimize-crashes: true
+          mode: batch
+          output-sarif: true
+          sanitizer: address
+          storage-repo: https://x-access-token:${{ secrets.CLUSTERFUZZLITE_STORAGE_TOKEN }}@github.com/martin-francois/symphony-trello-fuzzing-storage.git
+          storage-repo-branch: main
+          storage-repo-branch-coverage: gh-pages
+      - name: Upload fuzzing result to code scanning
+        if: >-
+          !cancelled()
+          && steps.fuzz.outcome == 'failure'
+          && hashFiles('cifuzz-sarif/results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        with:
+          sarif_file: cifuzz-sarif/results.sarif
+      - name: Create or update fuzz failure issue
+        if: >-
+          !cancelled()
+          && steps.fuzz.outcome == 'failure'
+          && hashFiles('cifuzz-sarif/results.sarif') != ''
+        env:
+          CFL_SARIF_FILE: cifuzz-sarif/results.sarif
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/report-clusterfuzzlite-failure
+      - name: Fail after publishing the fuzzing result
+        if: ${{ !cancelled() && steps.fuzz.outcome == 'failure' }}
+        run: exit 1
+
+  prune:
+    if: >-
+      always()
+      && github.ref == 'refs/heads/main'
+      && ((github.event_name == 'workflow_dispatch' && inputs.operation == 'prune')
+      || github.event.schedule == '17 0 * * *')
+    needs: batch
+    concurrency:
+      group: continuous-fuzzing-prune-main
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Build fuzzers
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: jvm
+          sanitizer: address
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Prune fuzzing corpora
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 600
+          language: jvm
+          mode: prune
+          sanitizer: address
+          storage-repo: https://x-access-token:${{ secrets.CLUSTERFUZZLITE_STORAGE_TOKEN }}@github.com/martin-francois/symphony-trello-fuzzing-storage.git
+          storage-repo-branch: main
+          storage-repo-branch-coverage: gh-pages
+
+  coverage:
+    if: >-
+      always()
+      && github.ref == 'refs/heads/main'
+      && ((github.event_name == 'workflow_dispatch' && inputs.operation == 'coverage')
+      || github.event.schedule == '17 0 * * *')
+    needs: batch
+    concurrency:
+      group: continuous-fuzzing-coverage-main
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Build fuzzers for coverage
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: jvm
+          sanitizer: coverage
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Generate fuzzing coverage
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 600
+          language: jvm
+          mode: coverage
+          sanitizer: coverage
+          storage-repo: https://x-access-token:${{ secrets.CLUSTERFUZZLITE_STORAGE_TOKEN }}@github.com/martin-francois/symphony-trello-fuzzing-storage.git
+          storage-repo-branch: main
+          storage-repo-branch-coverage: gh-pages

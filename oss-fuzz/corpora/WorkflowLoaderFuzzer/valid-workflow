@@ -1,0 +1,12 @@
+---
+tracker:
+  kind: trello
+  board_id: board-1
+server:
+  port: 18080
+codex:
+  command: codex app-server
+---
+# Trello card
+
+Work on {{ card.identifier }}.

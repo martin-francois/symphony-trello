@@ -29,6 +29,11 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
 
 ## Making the change
 
+- Keep CI workflow `run` blocks to one or two simple commands. Move longer shell logic into a
+  versioned script so it can be linted with ShellCheck, tested independently, and run locally while
+  troubleshooting. Add each new shell script to the repository's `bash -n`, ShellCheck, and shfmt
+  checks.
+
 - Prefer TDD when the behavior can be isolated. If TDD is impractical, make sure the final tests
   would have failed for the bug or missing behavior.
 - When starting implementation work for a specific GitHub issue, assign that issue to the

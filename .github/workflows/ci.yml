@@ -20,29 +20,38 @@ jobs:
           persist-credentials: false
       - name: Markdown lint
         uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff # v24.2.0
-      - name: Installer shell syntax
+      - name: Shell syntax
         run: |
           bash -n \
             install.sh \
             uninstall.sh \
+            .clusterfuzzlite/build.sh \
+            oss-fuzz/build.sh \
             scripts/betterleaks-docker.sh \
             scripts/package-release-assets.sh \
+            scripts/report-clusterfuzzlite-failure \
             scripts/check-private-context
       - name: Install shell lint tooling
         run: sudo apt-get update && sudo apt-get install -y shellcheck shfmt
-      - name: Installer shell lint
+      - name: Shell lint
         run: |
           shellcheck \
             install.sh \
             uninstall.sh \
+            .clusterfuzzlite/build.sh \
+            oss-fuzz/build.sh \
             scripts/betterleaks-docker.sh \
             scripts/package-release-assets.sh \
+            scripts/report-clusterfuzzlite-failure \
             scripts/check-private-context
           shfmt -d \
             install.sh \
             uninstall.sh \
+            .clusterfuzzlite/build.sh \
+            oss-fuzz/build.sh \
             scripts/betterleaks-docker.sh \
             scripts/package-release-assets.sh \
+            scripts/report-clusterfuzzlite-failure \
             scripts/check-private-context
 
   renovate:
