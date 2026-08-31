@@ -198,14 +198,15 @@ and runs the chaos tests so parser and boundary regressions are caught during pu
 The repository also has a maintainer-owned GitHub Actions workflow that runs ClusterFuzzLite
 code-change fuzzing and a self-continuing batch chain on GitHub-hosted runners, persists and prunes
 its corpora, retains baseline builds, generates coverage, and publishes crash artifacts and
-code-scanning results. A separate watchdog starts after changes to the chain and recovers failed
-long runs; the established fuzz workflow also checks for an idle chain every 15 minutes. Successful
-batch completion is the normal handoff because GitHub can delay or drop scheduled events.
+code-scanning results. A separate self-queued watchdog checks for an idle chain every 15 minutes.
+It also starts after changes to the chain and after marked long batches finish, so bootstrap and
+recovery do not depend on GitHub's scheduled-event delivery. Successful batch completion remains
+the normal handoff.
 Contributors do not need to run continuous fuzzing before every pull request,
 but should use the 15- to 30-minute active fuzzing commands in
 [Fuzzing](docs/fuzzing.md) when changing parser, prompt-line safety, workflow loading, or Trello
 reference/checklist parsing logic. The same page also documents longer agent-requested fuzzing runs,
-scheduled fuzzing behavior, and the OSS-Fuzz project files.
+hosted continuous fuzzing behavior, and the OSS-Fuzz project files.
 
 GitHub Secret Scanning is the hosted safety net for repository history, pull requests, issues,
 reviews, and comments. Maintainers should keep built-in secret scanning and push protection enabled.

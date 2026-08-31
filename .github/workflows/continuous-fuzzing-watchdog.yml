@@ -9,6 +9,8 @@ on:
       - .github/workflows/continuous-fuzzing.yml
       - scripts/continue-clusterfuzzlite-batch
       - scripts/ensure-clusterfuzzlite-running
+      - scripts/monitor-clusterfuzzlite-running
+      - scripts/queue-clusterfuzzlite-watchdog
   workflow_run:
     workflows:
       - Continuous Fuzzing
@@ -20,20 +22,18 @@ on:
 
 permissions: read-all
 
-concurrency:
-  group: continuous-fuzzing-watchdog
-  cancel-in-progress: false
-
 jobs:
   ensure-running:
     if: >-
       github.event_name != 'workflow_run'
       || (github.event.workflow_run.event == 'workflow_dispatch'
       && github.event.workflow_run.head_branch == 'main'
-      && startsWith(github.event.workflow_run.display_title, 'Continuous batch cycle ')
-      && github.event.workflow_run.conclusion != 'success')
+      && startsWith(github.event.workflow_run.display_title, 'Continuous batch cycle '))
+    concurrency:
+      group: continuous-fuzzing-watchdog
+      cancel-in-progress: false
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 350
     permissions:
       actions: write
       contents: read
@@ -42,7 +42,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Ensure continuous fuzzing is running
+      - name: Queue the next watchdog and monitor continuous fuzzing
         env:
+          CFL_WATCH_INTERVAL_SECONDS: 900
+          CFL_WATCH_ITERATIONS: 18
+          CFL_WATCH_COMMAND_TIMEOUT_SECONDS: 120
           GH_TOKEN: ${{ github.token }}
-        run: scripts/ensure-clusterfuzzlite-running
+        run: scripts/monitor-clusterfuzzlite-running

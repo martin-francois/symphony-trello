@@ -1,0 +1,53 @@
+#!/bin/bash
+
+set -euo pipefail
+
+iterations="${CFL_WATCH_ITERATIONS:-18}"
+interval_seconds="${CFL_WATCH_INTERVAL_SECONDS:-900}"
+command_timeout_seconds="${CFL_WATCH_COMMAND_TIMEOUT_SECONDS:-120}"
+
+if [[ ! "$iterations" =~ ^[1-9][0-9]*$ ]]; then
+  echo "CFL_WATCH_ITERATIONS must be a positive integer." >&2
+  exit 2
+fi
+if [[ ! "$interval_seconds" =~ ^[1-9][0-9]*$ ]]; then
+  echo "CFL_WATCH_INTERVAL_SECONDS must be a positive integer." >&2
+  exit 2
+fi
+if [[ ! "$command_timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then
+  echo "CFL_WATCH_COMMAND_TIMEOUT_SECONDS must be a positive integer." >&2
+  exit 2
+fi
+
+script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+successor_queued=false
+successful_chain_check=false
+
+for ((iteration = 1; iteration <= iterations; iteration++)); do
+  if [[ "$successor_queued" == false ]]; then
+    if timeout "$command_timeout_seconds" "$script_directory/queue-clusterfuzzlite-watchdog"; then
+      successor_queued=true
+    else
+      echo "Continuous fuzzing watchdog successor dispatch failed; retrying on the next check." >&2
+    fi
+  fi
+
+  echo "Checking continuous fuzzing state ($iteration/$iterations)."
+  if timeout "$command_timeout_seconds" "$script_directory/ensure-clusterfuzzlite-running"; then
+    successful_chain_check=true
+  else
+    echo "Continuous fuzzing chain check $iteration failed; retrying on the next check." >&2
+  fi
+  if ((iteration < iterations)); then
+    sleep "$interval_seconds"
+  fi
+done
+
+if [[ "$successor_queued" == false ]]; then
+  echo "Continuous fuzzing watchdog did not queue a successor during its monitoring window." >&2
+  exit 1
+fi
+if [[ "$successful_chain_check" == false ]]; then
+  echo "Continuous fuzzing watchdog did not complete a chain check during its monitoring window." >&2
+  exit 1
+fi

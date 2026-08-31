@@ -26,12 +26,15 @@ workflow, or Trello boundary changes break the fuzz tests.
 
 The separate `Continuous Fuzzing` GitHub Actions workflow runs ClusterFuzzLite batch fuzzing from
 `main` on GitHub-hosted runners. Each successful long batch dispatches its successor. A separate
-watchdog starts after changes to the continuous chain and after a failed long batch. A scheduled job
-in the established fuzz workflow also checks every 15 minutes. Each path restarts cycle 0 only when
-the long workflow is idle. GitHub documents that scheduled events can be delayed or dropped, so
-deterministic repository events handle bootstrap and ordinary failure recovery while cron remains a
-backstop. All watchdog paths are serialized so overlapping trigger events do not queue duplicate
-batch chains. Three cycles use a 330-minute
+watchdog queues its successor before checking the batch chain every 15 minutes for 4 hours and
+15 minutes. Each queue and batch-state operation has a two-minute timeout, so slow API calls cannot
+consume the job's 350-minute budget. The queued successor starts when the current watchdog finishes
+or is cancelled. Changes
+to the continuous chain and completion of any marked long batch also start or refresh this serialized
+watchdog chain. Each check restarts cycle 0 only when the long workflow is idle. This design does not
+depend on GitHub scheduled events, which GitHub can delay or drop, and overlapping trigger events do
+not queue duplicate batch chains. A transient successor-dispatch or batch-state API failure is
+retried at the next check instead of ending the watchdog. Three cycles use a 330-minute
 aggregate fuzzing budget; every fourth cycle uses 300
 aggregate minutes so daily maintenance can follow before the next batch. A four-target matrix
 assigns 82.5 minutes to each target, or 75 minutes in the maintenance cycle, and each matrix job has
@@ -112,9 +115,9 @@ The `continue_fuzzing` input defaults to `false` so a short manual smoke run rem
 dispatch a one-off batch while the continuous chain is active because all batch runs share one
 concurrency group to protect corpus writes. Manually dispatched pruning uses that group as well. A
 successful continuous cycle dispatches the next index; cycle 3 runs pruning and coverage before
-dispatching cycle 0. A failed batch stops self-dispatch and lets the watchdog restart cycle 0, which
-prevents setup failures from causing a rapid retry loop. Completion of a failed marked long run
-starts that recovery without waiting for cron.
+dispatching cycle 0. A failed batch stops self-dispatch and lets the watchdog restart cycle 0 on its
+next check, which prevents setup failures from causing a rapid retry loop. Completion of the marked
+long run refreshes that recovery without waiting for a scheduled event.
 
 The first hosted coverage report establishes the baseline. A healthy report contains all four
 fuzzers and shows each one reaching its intended production entry point. If a target has zero or
