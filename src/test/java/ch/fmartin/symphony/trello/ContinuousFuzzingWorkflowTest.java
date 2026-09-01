@@ -267,7 +267,7 @@ final class ContinuousFuzzingWorkflowTest {
         // then
         assertThat(coverageJob)
                 .containsSubsequence(
-                        "uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c",
+                        "uses: actions/setup-java@",
                         "distribution: temurin",
                         "java-version: \"25\"",
                         "scripts/run-clusterfuzzlite-coverage");
