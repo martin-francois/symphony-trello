@@ -93,13 +93,16 @@ auditing that may create issues lives in
 
 ## Triage labels
 
-- When creating or editing an issue, apply the full useful label set before finishing rather than
-  adding only the minimum template label. Explicitly evaluate type labels, priority, `blocked`,
-  `breaking change`, `not ready`, `help wanted`, and `good first issue` as applicable. Every open
-  issue should have exactly one priority label: `priority high`, `priority medium`, or
-  `priority low`. Every issue MUST have exactly one size label as defined below. Do not defer
-  `good first issue` to a later sweep: apply it immediately when the issue satisfies the 80%
-  one-shot implementation bar.
+- When creating or editing an issue, inspect its current labels and apply every applicable label
+  from the repository's existing label set before finishing when the authenticated account has
+  permission to manage labels. Do not stop after adding only the minimum template label, and do not
+  create a new label when an existing label has the intended meaning. Explicitly evaluate type
+  labels, priority, `blocked`, `breaking change`, `not ready`, `help wanted`, and `good first issue`
+  as applicable. Every open issue should have exactly one priority label: `priority high`,
+  `priority medium`, or `priority low`. Every issue MUST have exactly one size label as defined
+  below. Do not defer `good first issue` to a later sweep: apply it immediately when the issue
+  satisfies the 80% one-shot implementation bar. If the authenticated account cannot manage labels,
+  finish creating or editing the issue and report the labels that still need to be applied.
 
 ### Size labels
 
