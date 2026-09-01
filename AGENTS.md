@@ -70,7 +70,7 @@ guidance here, put it in docs/agents and add a link instead.
 - [Static analysis policy](docs/agents/static-analysis.md)
 - [Dependency updates](docs/agents/dependency-updates.md)
 - [Documentation & README](docs/agents/documentation-and-readme.md)
-- [GitHub issue triage](docs/agents/github-issue-triage.md)
+- Creating or triaging GitHub issues: [GitHub issue triage](docs/agents/github-issue-triage.md)
 - [Autonomy & escalation](docs/agents/autonomy-and-escalation.md) including the Codex review/fix loop
 - [Private-context redaction](docs/agents/private-context-redaction.md)
 - [Maintaining agent docs](docs/agents/maintaining-agent-docs.md)
