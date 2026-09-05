@@ -2,14 +2,8 @@ package ch.fmartin.symphony.trello.orchestrator;
 
 import static ch.fmartin.symphony.trello.orchestrator.SymphonyOrchestratorTestSupport.*;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.nullable;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 import ch.fmartin.symphony.trello.TestCards;
 import ch.fmartin.symphony.trello.agent.AgentEvent;
@@ -143,7 +137,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
-            return request.card().id().equals("card-usage")
+            return "card-usage".equals(request.card().id())
                     ? AgentRunResult.codexUsageLimit("turn_failed: Usage is unavailable.", Optional.empty())
                     : AgentRunResult.fail("generic failure");
         });
@@ -164,7 +158,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         // then
         assertThat(tracker.stateFetches).hasValue(stateFetchesBeforeDeferredTimer);
         assertThat(snapshot.retrying())
-                .filteredOn(retry -> retry.cardIdentifier().equals("TRELLO-generic"))
+                .filteredOn(retry -> "TRELLO-generic".equals(retry.cardIdentifier()))
                 .singleElement()
                 .satisfies(retry -> {
                     assertThat(retry.attempt()).isEqualTo(1);
@@ -197,7 +191,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             workersStarted.countDown();
-            if (request.card().id().equals("card-generic")) {
+            if ("card-generic".equals(request.card().id())) {
                 genericRuns.incrementAndGet();
                 assertThat(releaseGeneric.await(5, TimeUnit.SECONDS))
                         .as("the test should release the generic-failure worker within 5 seconds")
@@ -564,7 +558,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             workersStarted.countDown();
-            if (request.card().id().equals("card-usage")) {
+            if ("card-usage".equals(request.card().id())) {
                 assertThat(releaseUsage.await(5, TimeUnit.SECONDS))
                         .as("the test should release the usage-limited worker within 5 seconds")
                         .isTrue();
@@ -592,7 +586,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
 
         // then
         assertThat(snapshot.retrying())
-                .filteredOn(retry -> retry.cardIdentifier().equals("TRELLO-generic"))
+                .filteredOn(retry -> "TRELLO-generic".equals(retry.cardIdentifier()))
                 .singleElement()
                 .satisfies(retry -> assertThat(retry.dueAt()).isEqualTo(now.plusSeconds(120)));
     }
@@ -721,7 +715,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
-            if (request.card().id().equals("card-running")) {
+            if ("card-running".equals(request.card().id())) {
                 runningWorkerStarted.countDown();
                 assertThat(releaseRunningWorker.await(5, TimeUnit.SECONDS))
                         .as("the already-running worker should be released within 5 seconds")
@@ -1145,7 +1139,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             workersStarted.countDown();
-            if (request.card().id().equals("card-long")) {
+            if ("card-long".equals(request.card().id())) {
                 assertThat(releaseLong.await(5, TimeUnit.SECONDS))
                         .as("the worker returning the longer usage pause should be released within 5 seconds")
                         .isTrue();
@@ -1203,13 +1197,13 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
-            if (request.card().id().equals("card-retry")) {
+            if ("card-retry".equals(request.card().id())) {
                 retryCardRuns.incrementAndGet();
                 return AgentRunResult.fail("temporary failure");
             }
             tracker.setCardState(
                     TestCards.card(request.card().id(), request.card().identifier(), "Human Review"));
-            return request.card().id().equals("card-limiter")
+            return "card-limiter".equals(request.card().id())
                     ? AgentRunResult.codexUsageLimit(
                             "turn_failed: Usage is unavailable.", Optional.of(now.plusSeconds(5)))
                     : AgentRunResult.ok();
@@ -1283,7 +1277,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             runs.incrementAndGet();
-            if (request.card().id().equals("card-late")) {
+            if ("card-late".equals(request.card().id())) {
                 initialWorkersStarted.countDown();
                 assertThat(releaseLateWorker.await(5, TimeUnit.SECONDS))
                         .as("the late concurrent usage worker should be released within 5 seconds")
@@ -1460,7 +1454,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             requests.add(request);
-            if (request.config().codex().command().equals("command-a")) {
+            if ("command-a".equals(request.config().codex().command())) {
                 return AgentRunResult.codexUsageLimit(
                         "turn_failed: Command A is exhausted.", Optional.of(now.plusSeconds(60)));
             }
@@ -1533,15 +1527,15 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
-            if (request.config().codex().command().equals("command-b")) {
-                if (request.card().id().equals("card-usage")) {
+            if ("command-b".equals(request.config().codex().command())) {
+                if ("card-usage".equals(request.card().id())) {
                     commandBUsageStarted.countDown();
                     tracker.setCardState(TestCards.card("card-usage", "TRELLO-usage", "Human Review"));
                 }
                 return AgentRunResult.ok();
             }
             firstWorkersStarted.countDown();
-            if (request.card().id().equals("card-generic")) {
+            if ("card-generic".equals(request.card().id())) {
                 genericRuns.incrementAndGet();
                 assertThat(releaseGeneric.await(5, TimeUnit.SECONDS))
                         .as("the command A generic-failure worker should be released within 5 seconds")
@@ -1584,7 +1578,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         // then
         assertThat(afterReload.dispatchPause()).isNull();
         assertThat(afterReload.retrying())
-                .filteredOn(retry -> retry.cardIdentifier().equals("TRELLO-generic"))
+                .filteredOn(retry -> "TRELLO-generic".equals(retry.cardIdentifier()))
                 .singleElement()
                 .satisfies(retry -> assertThat(retry.dueAt()).isEqualTo(now.plusSeconds(10)));
         assertThat(genericRuns).hasValue(1);
@@ -1689,7 +1683,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
-            if (request.config().codex().command().equals("command-a")) {
+            if ("command-a".equals(request.config().codex().command())) {
                 commandAStarted.countDown();
                 assertThat(releaseCommandA.await(5, TimeUnit.SECONDS))
                         .as("the previous-command worker should be released within 5 seconds")
@@ -1833,7 +1827,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
-            if (request.config().codex().command().equals("command-b")) {
+            if ("command-b".equals(request.config().codex().command())) {
                 commandBRuns.incrementAndGet();
             }
             return AgentRunResult.codexUsageLimit("turn_failed: Exhausted.", Optional.of(reset));
@@ -1877,7 +1871,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                     String section = invocation.getArgument(2);
                     String command = updateConfig.codex().command();
                     workpadEvents.add(command + (section == null ? ":clear" : ":set"));
-                    return section != null || !command.equals("command-a");
+                    return section != null || !"command-a".equals(command);
                 });
         CountDownLatch commandBReturnedUsage = new CountDownLatch(1);
         AgentRunner runner = commandScopedUsageLimitRunner(now, commandBReturnedUsage);
@@ -1921,7 +1915,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                     workpadEvents.add(
                             owner.codex().command() + "/" + owner.tracker().resolvedBoardId() + "/"
                                     + owner.tracker().apiToken() + (section == null ? ":clear" : ":set"));
-                    return section != null || !owner.codex().command().equals("command-a");
+                    return section != null || !"command-a".equals(owner.codex().command());
                 });
         CountDownLatch commandBReturnedUsage = new CountDownLatch(1);
         AgentRunner runner = commandScopedUsageLimitRunner(now, commandBReturnedUsage);
@@ -2023,7 +2017,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             requests.add(request);
-            if (request.config().tracker().resolvedBoardId().equals("board-a")) {
+            if ("board-a".equals(request.config().tracker().resolvedBoardId())) {
                 oldTargetStarted.countDown();
                 assertThat(releaseOldTarget.await(5, TimeUnit.SECONDS))
                         .as("the old-target worker should be released within 5 seconds")
@@ -2226,7 +2220,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
-            if (request.config().tracker().apiToken().equals("token-a-old")) {
+            if ("token-a-old".equals(request.config().tracker().apiToken())) {
                 oldTargetStarted.countDown();
                 assertThat(releaseOldTarget.await(5, TimeUnit.SECONDS))
                         .as("the old-owner target worker should be released within 5 seconds")
@@ -2304,7 +2298,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             requests.add(request);
-            if (request.config().tracker().resolvedBoardId().equals("board-a")) {
+            if ("board-a".equals(request.config().tracker().resolvedBoardId())) {
                 return AgentRunResult.codexUsageLimit(
                         "turn_failed: Board A usage limit.", Optional.of(now.plusSeconds(60)));
             }
@@ -2380,7 +2374,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             requests.add(request);
-            if (request.config().tracker().resolvedBoardId().equals("board-a")) {
+            if ("board-a".equals(request.config().tracker().resolvedBoardId())) {
                 return AgentRunResult.fail("generic command A failure");
             }
             tracker.setCardState(

@@ -104,7 +104,7 @@ final class AdrConformanceTest {
     }
 
     private static void assertAdrMetadata(Path file, List<String> lines, List<String> violations) {
-        if (!lines.getFirst().equals("---")) {
+        if (!"---".equals(lines.getFirst())) {
             violations.add("%s:1: expected YAML front matter start".formatted(file));
             return;
         }

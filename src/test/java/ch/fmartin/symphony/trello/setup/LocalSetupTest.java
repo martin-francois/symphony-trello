@@ -4,17 +4,12 @@ import static ch.fmartin.symphony.trello.CliExitCodes.SETUP_FAILURE;
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_NEXT_LINE;
 import static ch.fmartin.symphony.trello.testsupport.ManifestAssertions.assertThatManifest;
 import static ch.fmartin.symphony.trello.testsupport.TerminalTranscriptAssertions.assertThatTranscript;
-import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.HTTP;
-import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.HTTPS;
-import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.SCP;
-import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.SSH;
+import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.*;
 import static ch.fmartin.symphony.trello.testsupport.WorkflowAssertions.assertThatWorkflow;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.abort;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.*;
 
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.ReasoningEffortOption;
@@ -6046,7 +6041,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                     {
                       "boardId": "board-1",
                       "boardKey": "abc123",
-                      "boardName": "Plan \\"B\\"\\nQueue",
+                      "boardName": "Plan \\"B\\"\%nQueue",
                       "boardUrl": "https://trello.example/abc123",
                       "workflowPath": "%s",
                       "envPath": "%s",

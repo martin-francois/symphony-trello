@@ -142,7 +142,7 @@ final class InstallerScriptFixture {
     }
 
     private static boolean isLinux() {
-        return System.getProperty("os.name", "").equalsIgnoreCase("Linux");
+        return "Linux".equalsIgnoreCase(System.getProperty("os.name", ""));
     }
 
     private static void deleteRecursively(Path root) throws IOException {

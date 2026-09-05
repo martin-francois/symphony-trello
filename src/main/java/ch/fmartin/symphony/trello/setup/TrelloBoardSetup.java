@@ -460,7 +460,7 @@ public final class TrelloBoardSetup {
         boolean canCreateMergingList = request.githubIntegration().enabled()
                 && request.createMissingGithubLists()
                 && !terminalStates.isEmpty()
-                && openListNames.stream().noneMatch(name -> name.equalsIgnoreCase(RECOMMENDED_MERGING_STATE));
+                && openListNames.stream().noneMatch(RECOMMENDED_MERGING_STATE::equalsIgnoreCase);
         List<String> validationListNames =
                 canCreateMergingList ? withOptionalListName(openListNames, RECOMMENDED_MERGING_STATE) : openListNames;
         String blockedState = "-".equals(request.blockedState())
@@ -2253,7 +2253,7 @@ public final class TrelloBoardSetup {
 
     private static List<String> defaultActiveStates(List<String> openListNames) {
         return openListNames.stream()
-                .filter(name -> name.equalsIgnoreCase(RECOMMENDED_ACTIVE_STATE))
+                .filter(RECOMMENDED_ACTIVE_STATE::equalsIgnoreCase)
                 .findAny()
                 .map(List::of)
                 .orElseGet(List::of);
@@ -2261,7 +2261,7 @@ public final class TrelloBoardSetup {
 
     private static List<String> defaultTerminalStates(List<String> openListNames) {
         return openListNames.stream()
-                .filter(name -> name.equalsIgnoreCase("Done"))
+                .filter("Done"::equalsIgnoreCase)
                 .findAny()
                 .map(List::of)
                 .orElseGet(List::of);
@@ -2269,17 +2269,17 @@ public final class TrelloBoardSetup {
 
     private static String defaultReviewState(List<String> openListNames) {
         return openListNames.stream()
-                .filter(name -> name.equalsIgnoreCase(RECOMMENDED_REVIEW_STATE))
+                .filter(RECOMMENDED_REVIEW_STATE::equalsIgnoreCase)
                 .findAny()
                 .orElseGet(() -> openListNames.stream()
-                        .filter(name -> name.equalsIgnoreCase(FALLBACK_REVIEW_STATE))
+                        .filter(FALLBACK_REVIEW_STATE::equalsIgnoreCase)
                         .findAny()
                         .orElse(null));
     }
 
     private static String defaultInProgressState(List<String> openListNames) {
         return openListNames.stream()
-                .filter(name -> name.equalsIgnoreCase(RECOMMENDED_IN_PROGRESS_STATE))
+                .filter(RECOMMENDED_IN_PROGRESS_STATE::equalsIgnoreCase)
                 .findAny()
                 .orElse(null);
     }
@@ -2289,21 +2289,21 @@ public final class TrelloBoardSetup {
             return null;
         }
         return openListNames.stream()
-                .filter(name -> name.equalsIgnoreCase(RECOMMENDED_MERGING_STATE))
+                .filter(RECOMMENDED_MERGING_STATE::equalsIgnoreCase)
                 .findAny()
                 .orElse(null);
     }
 
     private static String defaultBlockedState(List<String> openListNames) {
         return openListNames.stream()
-                .filter(name -> name.equalsIgnoreCase(RECOMMENDED_BLOCKED_STATE))
+                .filter(RECOMMENDED_BLOCKED_STATE::equalsIgnoreCase)
                 .findAny()
                 .orElse(null);
     }
 
     private static String landingDoneState(List<String> terminalStates) {
         return terminalStates.stream()
-                .filter(state -> state.equalsIgnoreCase("Done"))
+                .filter("Done"::equalsIgnoreCase)
                 .findAny()
                 .orElseGet(() -> terminalStates.stream().findFirst().orElse(null));
     }

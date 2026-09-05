@@ -1,9 +1,6 @@
 package ch.fmartin.symphony.trello.tracker;
 
-import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.boardJson;
-import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.listsJson;
-import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.respond;
-import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.trelloList;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 

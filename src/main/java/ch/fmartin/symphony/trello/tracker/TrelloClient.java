@@ -246,7 +246,7 @@ public class TrelloClient implements TrackerClient {
                 Optional<Card> card = normalize(payload, context, config);
                 results.put(
                         cardId,
-                        card.<CardLookupResult>map(CardLookupResult.Found::new)
+                        card.map(CardLookupResult.Found::new)
                                 .orElseGet(() -> new CardLookupResult.Failed(
                                         cardId, "trello_unknown_payload", "Card payload could not be normalized")));
             } catch (TrelloException e) {
@@ -265,7 +265,7 @@ public class TrelloClient implements TrackerClient {
         try {
             Map<String, Object> payload = cardWithComments(config, cardId, WORKPAD_COMMENT_ACTION_LIMIT);
             Optional<Card> card = normalize(payload, context, config);
-            return card.<CardLookupResult>map(CardLookupResult.Found::new)
+            return card.map(CardLookupResult.Found::new)
                     .orElseGet(() -> new CardLookupResult.Failed(
                             cardId, "trello_unknown_payload", "Card payload could not be normalized"));
         } catch (TrelloException e) {

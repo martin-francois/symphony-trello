@@ -447,7 +447,7 @@ public class TrelloHandoffToolHandler {
     private static boolean isExactBlockerHandoff(String text) {
         String firstLine = firstNonBlankLine(text).toLowerCase(Locale.ROOT);
         return firstLine.startsWith("blocked:")
-                || firstLine.equals("blocked by")
+                || "blocked by".equals(firstLine)
                 || firstLine.startsWith("blocked by ")
                 || firstLine.startsWith("blocked by:");
     }

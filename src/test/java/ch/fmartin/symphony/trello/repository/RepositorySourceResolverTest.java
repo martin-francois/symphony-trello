@@ -1,8 +1,6 @@
 package ch.fmartin.symphony.trello.repository;
 
-import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_LINE_SEPARATOR;
-import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_NEXT_LINE;
-import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_PARAGRAPH_SEPARATOR;
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.TestCards;

@@ -3,19 +3,8 @@ package ch.fmartin.symphony.trello.setup;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.nullable;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.mockConstruction;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import java.io.IOException;
@@ -970,7 +959,7 @@ final class LocalWorkerManagerTest {
 
         // then
         result.assertSuccess().stdoutContains("stopped \"Line1\\nLine2\"");
-        assertThat(result.stdout().lines().filter(line -> line.equals("Line2")).count())
+        assertThat(result.stdout().lines().filter("Line2"::equals).count())
                 .as("a newline in a Trello board name must not split the status line")
                 .isZero();
     }

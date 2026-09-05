@@ -3,11 +3,7 @@ package ch.fmartin.symphony.trello.agent;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 import ch.fmartin.symphony.trello.TestCards;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
@@ -834,7 +830,7 @@ final class LocalAgentRunnerTest {
         AtomicBoolean secondInterrupted = new AtomicBoolean();
         when(codex.runSession(any(), any(), any(), any(), any(), any(), any())).thenAnswer(invocation -> {
             Card card = invocation.getArgument(1);
-            if (card.id().equals("card-first")) {
+            if ("card-first".equals(card.id())) {
                 firstEntered.countDown();
                 assertThat(releaseFirst.await(5, TimeUnit.SECONDS))
                         .as("the test releases the first duplicate-identity worker within 5 seconds")

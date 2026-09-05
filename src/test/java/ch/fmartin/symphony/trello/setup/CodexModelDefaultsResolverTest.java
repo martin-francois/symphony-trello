@@ -127,10 +127,10 @@ final class CodexModelDefaultsResolverTest {
                 while IFS= read -r line; do
                   case "$line" in
                     *'"method":"initialize"'*)
-                      printf '%%s\\n' '{"jsonrpc":"2.0","id":1,"result":{}}'
+                      printf '%%s\%n' '{"jsonrpc":"2.0","id":1,"result":{}}'
                       ;;
                     *'"method":"model/list"'*)
-                      printf '%%s\\n' '%s'
+                      printf '%%s\%n' '%s'
                       ;;
                   esac
                 done

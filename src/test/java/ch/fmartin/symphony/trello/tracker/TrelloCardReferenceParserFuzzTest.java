@@ -1,10 +1,6 @@
 package ch.fmartin.symphony.trello.tracker;
 
-import static ch.fmartin.symphony.trello.tracker.TrelloReferenceFuzzInvariants.analyzeChecklist;
-import static ch.fmartin.symphony.trello.tracker.TrelloReferenceFuzzInvariants.assertChecklistClassificationNeverEmitsPrerequisitesWithProblems;
-import static ch.fmartin.symphony.trello.tracker.TrelloReferenceFuzzInvariants.assertReferenceParsingKeepsLookupIdsAndUrlsStable;
-import static ch.fmartin.symphony.trello.tracker.TrelloReferenceFuzzInvariants.checklist;
-import static ch.fmartin.symphony.trello.tracker.TrelloReferenceFuzzInvariants.parseReferences;
+import static ch.fmartin.symphony.trello.tracker.TrelloReferenceFuzzInvariants.*;
 
 import ch.fmartin.symphony.trello.domain.Card;
 import com.code_intelligence.jazzer.junit.FuzzTest;

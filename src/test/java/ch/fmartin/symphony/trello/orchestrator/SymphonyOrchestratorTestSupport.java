@@ -2,12 +2,8 @@ package ch.fmartin.symphony.trello.orchestrator;
 
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.nullable;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 import ch.fmartin.symphony.trello.TestCards;
 import ch.fmartin.symphony.trello.agent.AgentEvent;
@@ -136,7 +132,7 @@ final class SymphonyOrchestratorTestSupport {
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
-            if (request.config().codex().command().equals("command-b")) {
+            if ("command-b".equals(request.config().codex().command())) {
                 commandBReturnedUsage.countDown();
                 return AgentRunResult.codexUsageLimit(
                         "turn_failed: Command B is exhausted.", Optional.of(now.plusSeconds(120)));

@@ -1,9 +1,6 @@
 package ch.fmartin.symphony.trello.tracker;
 
-import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.boardJson;
-import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.listsJson;
-import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.respond;
-import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.trelloList;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.Mockito.mock;
@@ -909,7 +906,7 @@ final class TrelloClientTest {
             respond(
                     exchange,
                     """
-                    {"id":"no-prereq-card","name":"Ready","desc":"","idList":"list-todo","idBoard":"board-1","closed":false,"shortLink":"ready","labels":[],"actions":[{"id":"waiting-comment","date":"2026-02-25T20:11:12.000Z","data":{"text":"%s\\n\\nOld waiting text"},"memberCreator":{"username":"codex"}}],"badges":{"checkItems":0,"comments":1},"pos":1}
+                    {"id":"no-prereq-card","name":"Ready","desc":"","idList":"list-todo","idBoard":"board-1","closed":false,"shortLink":"ready","labels":[],"actions":[{"id":"waiting-comment","date":"2026-02-25T20:11:12.000Z","data":{"text":"%s\%n\%nOld waiting text"},"memberCreator":{"username":"codex"}}],"badges":{"checkItems":0,"comments":1},"pos":1}
                     """
                             .formatted(TrelloClient.WAITING_COMMENT_MARKER));
         });
@@ -962,8 +959,8 @@ final class TrelloClientTest {
                     exchange,
                     """
                     {"id":"no-prereq-card","name":"Ready","desc":"","idList":"list-todo","idBoard":"board-1","closed":false,"shortLink":"ready","labels":[],"actions":[
-                      {"id":"waiting-comment-newest","date":"2026-02-25T20:12:12.000Z","data":{"text":"%s\\n\\nNewest waiting text"},"memberCreator":{"username":"codex"}},
-                      {"id":"waiting-comment-older","date":"2026-02-25T20:11:12.000Z","data":{"text":"%s\\n\\nOlder waiting text"},"memberCreator":{"username":"codex"}}
+                      {"id":"waiting-comment-newest","date":"2026-02-25T20:12:12.000Z","data":{"text":"%s\%n\%nNewest waiting text"},"memberCreator":{"username":"codex"}},
+                      {"id":"waiting-comment-older","date":"2026-02-25T20:11:12.000Z","data":{"text":"%s\%n\%nOlder waiting text"},"memberCreator":{"username":"codex"}}
                     ],"badges":{"checkItems":0,"comments":2},"pos":1}
                     """
                             .formatted(
@@ -1377,7 +1374,7 @@ final class TrelloClientTest {
         tracker.putAll(trackerOverrides);
         return new ConfigResolver()
                 .resolve(new WorkflowDefinition(tempDir.resolve("WORKFLOW.md"), Map.of("tracker", tracker), ""))
-                .withResolvedBoardId(boardId.equals("input") ? "board-1" : boardId);
+                .withResolvedBoardId("input".equals(boardId) ? "board-1" : boardId);
     }
 
     private void configureMultiQueueBoard() {

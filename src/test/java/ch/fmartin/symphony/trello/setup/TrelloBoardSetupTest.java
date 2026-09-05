@@ -1,17 +1,8 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.TestHttpExchange.query;
-import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.boardJson;
-import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.createdListJson;
-import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.listsJson;
-import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.memberJson;
-import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.respond;
-import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.trelloList;
-import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.workspaceJson;
-import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.workspacesJson;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.catchThrowable;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.*;
+import static org.assertj.core.api.Assertions.*;
 
 import ch.fmartin.symphony.trello.TestCards;
 import ch.fmartin.symphony.trello.config.ConfigDefaults;

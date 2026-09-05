@@ -7,11 +7,7 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 import ch.fmartin.symphony.trello.Sha3;
 import ch.fmartin.symphony.trello.TestCards;
@@ -1691,9 +1687,9 @@ final class SymphonyOrchestratorTest {
             request.listener()
                     .onEvent(agentEvent(
                             request,
-                            boardId.equals("board-a") ? "a/running" : "b/running",
-                            boardId.equals("board-a") ? "from A" : "from B"));
-            if (boardId.equals("board-a")) {
+                            "board-a".equals(boardId) ? "a/running" : "b/running",
+                            "board-a".equals(boardId) ? "from A" : "from B"));
+            if ("board-a".equals(boardId)) {
                 workerAStarted.countDown();
                 assertThat(releaseWorkerA.await(5, TimeUnit.SECONDS))
                         .as("the test should release target A's worker within 5 seconds")
@@ -1717,7 +1713,7 @@ final class SymphonyOrchestratorTest {
                 .as("target B's same-ID worker should start within 5 seconds after reload")
                 .isTrue();
         AgentRunner.AgentRunRequest requestA = requests.stream()
-                .filter(request -> request.config().tracker().resolvedBoardId().equals("board-a"))
+                .filter(request -> "board-a".equals(request.config().tracker().resolvedBoardId()))
                 .findFirst()
                 .orElseThrow();
         requestA.listener().onEvent(agentEvent(requestA, "a/late-after-reload", "late from A"));
@@ -1768,7 +1764,7 @@ final class SymphonyOrchestratorTest {
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             requests.add(request);
-            if (request.config().tracker().resolvedBoardId().equals("board-a")) {
+            if ("board-a".equals(request.config().tracker().resolvedBoardId())) {
                 return AgentRunResult.fail("queue old-target retry");
             }
             return finishBoardBRun(tracker, endpoint, workerBStarted, releaseWorkerB, request);
@@ -1843,9 +1839,9 @@ final class SymphonyOrchestratorTest {
             request.listener()
                     .onEvent(agentEvent(
                             request,
-                            boardId.equals("board-a") ? "a/history" : "b/history",
-                            boardId.equals("board-a") ? "from A" : "from B"));
-            if (boardId.equals("board-a")) {
+                            "board-a".equals(boardId) ? "a/history" : "b/history",
+                            "board-a".equals(boardId) ? "from A" : "from B"));
+            if ("board-a".equals(boardId)) {
                 tracker.setCardState(
                         endpoint,
                         "board-a",

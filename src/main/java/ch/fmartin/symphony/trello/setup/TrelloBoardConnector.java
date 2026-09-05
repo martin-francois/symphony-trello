@@ -345,8 +345,7 @@ final class TrelloBoardConnector {
                 blockedState = promptOptionalList(terminal, "Blocked list name", blockedState, "-");
             }
             if (githubIntegration.enabled()
-                    && openListNames.stream()
-                            .noneMatch(name -> name.equalsIgnoreCase(TrelloBoardSetup.RECOMMENDED_MERGING_STATE))) {
+                    && openListNames.stream().noneMatch(TrelloBoardSetup.RECOMMENDED_MERGING_STATE::equalsIgnoreCase)) {
                 terminal.info(
                         "GitHub mode will create this missing list: " + TrelloBoardSetup.RECOMMENDED_MERGING_STATE);
                 createMissingGithubLists = PromptSupport.yesDefaultTrue(terminal, "Create missing GitHub list? [Y/n] ");

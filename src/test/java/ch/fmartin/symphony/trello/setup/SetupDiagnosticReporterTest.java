@@ -3978,7 +3978,7 @@ final class SetupDiagnosticReporterTest {
                         "invalid server.port",
                         " | 20999 | ")
                 .doesNotContain(tempDir.toString(), "custom-board-id");
-        if (invalidPortValue.equals("-1") || invalidPortValue.equals("70000")) {
+        if ("-1".equals(invalidPortValue) || "70000".equals(invalidPortValue)) {
             assertThat(report)
                     .contains("Configured port " + invalidPortValue
                             + " is outside the valid TCP port range; health probes skipped.");

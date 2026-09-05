@@ -384,13 +384,13 @@ final class LiveTrelloE2eIT {
 
     private static boolean liveE2eEnabled() {
         return LocalEnvironment.get("SYMPHONY_RUN_LIVE_E2E")
-                .map(value -> value.equals("1") || Boolean.parseBoolean(value))
+                .map(value -> "1".equals(value) || Boolean.parseBoolean(value))
                 .orElse(false);
     }
 
     private static boolean realCodexDockerE2eEnabled() {
         return LocalEnvironment.get("SYMPHONY_RUN_REAL_CODEX_DOCKER_E2E")
-                .map(value -> value.equals("1") || Boolean.parseBoolean(value))
+                .map(value -> "1".equals(value) || Boolean.parseBoolean(value))
                 .orElse(false);
     }
 

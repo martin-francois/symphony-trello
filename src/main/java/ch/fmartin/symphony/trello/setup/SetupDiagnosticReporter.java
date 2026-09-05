@@ -1945,7 +1945,7 @@ final class SetupDiagnosticReporter {
     }
 
     private static boolean hasBoardOption(List<String> args) {
-        return args.stream().anyMatch(arg -> arg.equals("--board") || arg.startsWith("--board="));
+        return args.stream().anyMatch(arg -> "--board".equals(arg) || arg.startsWith("--board="));
     }
 
     private static List<Path> workflowFilesIfReadable(Path configDir) {

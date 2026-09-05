@@ -159,8 +159,8 @@ class ArchitectureTest {
             public boolean test(JavaClass input) {
                 String name = input.getSimpleName();
                 return input.getPackageName().contains(".setup")
-                        && !name.equals("WorkflowConfigEditor")
-                        && !name.equals("TrelloBoardSetup");
+                        && !"WorkflowConfigEditor".equals(name)
+                        && !"TrelloBoardSetup".equals(name);
             }
         };
     }
@@ -170,10 +170,10 @@ class ArchitectureTest {
             @Override
             public boolean test(JavaClass input) {
                 String name = input.getSimpleName();
-                return name.equals("ManagedProcessStore")
-                        || name.equals("ManagedProcessPlatform")
-                        || name.equals("ProcessHandleManagedProcessPlatform")
-                        || name.equals("WindowsManagedProcessPlatform");
+                return "ManagedProcessStore".equals(name)
+                        || "ManagedProcessPlatform".equals(name)
+                        || "ProcessHandleManagedProcessPlatform".equals(name)
+                        || "WindowsManagedProcessPlatform".equals(name);
             }
         };
     }

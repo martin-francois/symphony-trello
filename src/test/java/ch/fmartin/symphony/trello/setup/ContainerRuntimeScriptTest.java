@@ -1,8 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
-import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.run;
-import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.shellQuote;
-import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.writeExecutable;
+import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
@@ -35,7 +33,7 @@ final class ContainerRuntimeScriptTest {
         result.assertSuccess();
         String invocationArguments = Files.readString(invocation, StandardCharsets.UTF_8);
         assertThat(invocationArguments).contains("run", "--security-opt\nlabel=disable", "--userns=keep-id", image);
-        if (script.equals("semgrep-docker.sh")) {
+        if ("semgrep-docker.sh".equals(script)) {
             assertThat(invocationArguments).contains("-e\nHOME=/tmp", "--disable-version-check");
         }
     }
@@ -57,7 +55,7 @@ final class ContainerRuntimeScriptTest {
         assertThat(invocationArguments)
                 .contains("run", "--security-opt\nlabel=disable", image)
                 .doesNotContain("--userns=keep-id");
-        if (script.equals("semgrep-docker.sh")) {
+        if ("semgrep-docker.sh".equals(script)) {
             assertThat(invocationArguments).contains("-e\nHOME=/tmp", "--disable-version-check");
         }
     }
@@ -106,7 +104,7 @@ final class ContainerRuntimeScriptTest {
                 """
                 #!/usr/bin/env bash
                 set -euo pipefail
-                printf '%%s\n' "$@" > "%s"
+                printf '%%s%n' "$@" > "%s"
                 """
                         .formatted(invocation));
     }

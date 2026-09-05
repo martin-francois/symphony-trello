@@ -1136,7 +1136,7 @@ public final class LocalSetup {
                 new TrelloBoardSetup.BoardInfoRequest(options.endpoint(), credentials, board.boardId()));
         WorkflowListConfiguration existingLists =
                 workflowConfig.listConfiguration(board.workflowPath()).onlyOpenLists(openLists);
-        if (openLists.stream().noneMatch(name -> name.equalsIgnoreCase(TrelloBoardSetup.RECOMMENDED_MERGING_STATE))) {
+        if (openLists.stream().noneMatch(TrelloBoardSetup.RECOMMENDED_MERGING_STATE::equalsIgnoreCase)) {
             out.println();
             out.println("GitHub mode needs one more Trello list:");
             out.println("  " + TrelloBoardSetup.RECOMMENDED_MERGING_STATE);

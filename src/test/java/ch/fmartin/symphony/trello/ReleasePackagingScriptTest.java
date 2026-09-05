@@ -535,7 +535,7 @@ final class ReleasePackagingScriptTest {
     private static void assertExpectedAssets(Path destination, String version) throws IOException {
         try (Stream<Path> files = Files.list(destination)) {
             assertThat(files.map(path -> path.getFileName().toString())
-                            .filter(name -> !name.equals(".symphony-trello-release-assets"))
+                            .filter(name -> !".symphony-trello-release-assets".equals(name))
                             .sorted()
                             .toList())
                     .containsExactlyElementsOf(expectedAssets(version));

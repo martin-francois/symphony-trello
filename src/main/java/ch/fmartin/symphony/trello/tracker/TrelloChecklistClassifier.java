@@ -56,7 +56,7 @@ final class TrelloChecklistClassifier {
 
     private static ItemClassification classifyItem(String text) {
         return TrelloCardReferenceParser.exactReference(text)
-                .<ItemClassification>map(ItemClassification.Exact::new)
+                .map(ItemClassification.Exact::new)
                 .orElseGet(
                         () -> isAmbiguousReference(text) ? ItemClassification.AMBIGUOUS : ItemClassification.ORDINARY);
     }

@@ -4,15 +4,9 @@ import static ch.fmartin.symphony.trello.CommaSeparatedValues.preservingEmptyFie
 import static ch.fmartin.symphony.trello.TestHttpExchange.query;
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_LINE_SEPARATOR;
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_PARAGRAPH_SEPARATOR;
-import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.boardJson;
-import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.jsonEscaped;
-import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.listsJson;
-import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.respond;
-import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.trelloList;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.*;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 

@@ -848,15 +848,13 @@ final class WorkflowConfigEditor {
         if (!(serverValue instanceof Map<?, ?> server)) {
             return;
         }
-        environmentReferenceName(server.get("port")).ifPresent(name -> {
-            environmentResolver
-                    .apply(name)
-                    .map(String::trim)
-                    .filter(value -> !value.isBlank())
-                    .ifPresentOrElse(value -> validateResolvedServerPort(value, name), () -> {
-                        throw unresolvedEnvironmentReference("server.port", name);
-                    });
-        });
+        environmentReferenceName(server.get("port")).ifPresent(name -> environmentResolver
+                .apply(name)
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .ifPresentOrElse(value -> validateResolvedServerPort(value, name), () -> {
+                    throw unresolvedEnvironmentReference("server.port", name);
+                }));
     }
 
     private static void validateResolvedServerPort(String value, String environmentName) {

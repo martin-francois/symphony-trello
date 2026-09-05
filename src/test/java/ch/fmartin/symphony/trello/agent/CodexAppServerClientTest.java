@@ -1,8 +1,6 @@
 package ch.fmartin.symphony.trello.agent;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatObject;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.*;
 
 import ch.fmartin.symphony.trello.TestCards;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
@@ -718,7 +716,7 @@ final class CodexAppServerClientTest {
         assertThat(result.reason()).doesNotContain("private account payload", "additionalDetails", "rateLimits");
         assertThat(result.retryNotBefore()).contains(secondaryReset);
         assertThat(events.stream()
-                        .filter(event -> event.event().equals("turn/completed"))
+                        .filter(event -> "turn/completed".equals(event.event()))
                         .map(AgentEvent::message))
                 .containsExactly("Usage is unavailable.")
                 .allSatisfy(message -> assertThat(message)
@@ -746,7 +744,7 @@ final class CodexAppServerClientTest {
 
             @Override
             public boolean onEventAndReportAccepted(AgentEvent event) {
-                if (event.event().equals("account/rateLimits/updated")) {
+                if ("account/rateLimits/updated".equals(event.event())) {
                     return false;
                 }
                 onEvent(event);
@@ -761,7 +759,7 @@ final class CodexAppServerClientTest {
         // then
         assertThat(result.failureCategory()).isEqualTo(AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT);
         assertThat(result.retryNotBefore()).isEmpty();
-        assertThat(acceptedEvents).noneMatch(event -> event.event().equals("account/rateLimits/updated"));
+        assertThat(acceptedEvents).noneMatch(event -> "account/rateLimits/updated".equals(event.event()));
     }
 
     @Test
@@ -1146,7 +1144,7 @@ final class CodexAppServerClientTest {
 
             @Override
             public boolean onEventAndReportAccepted(AgentEvent event) {
-                if (event.event().equals("account/rateLimits/updated")) {
+                if ("account/rateLimits/updated".equals(event.event())) {
                     markObserved(acceptanceEntered);
                     try {
                         assertThat(releaseAcceptance.await(5, TimeUnit.SECONDS))
@@ -1218,7 +1216,7 @@ final class CodexAppServerClientTest {
         assertThat(result.reason()).doesNotContain("private provider payload", "additionalDetails");
         assertThat(result.retryNotBefore()).isEmpty();
         assertThat(events.stream()
-                        .filter(event -> event.event().equals("error"))
+                        .filter(event -> "error".equals(event.event()))
                         .map(AgentEvent::message))
                 .containsExactly("Try again tomorrow at a localized time.")
                 .allSatisfy(message -> assertThat(message)
@@ -1361,9 +1359,10 @@ final class CodexAppServerClientTest {
     }
 
     private static boolean isTypedUsageFailure(AgentEvent event) {
-        return event.event().equals("turn/completed")
+        return "turn/completed".equals(event.event())
                 && event.payload() != null
-                && event.payload().at("/turn/error/codexErrorInfo").asText().equals("usageLimitExceeded");
+                && "usageLimitExceeded"
+                        .equals(event.payload().at("/turn/error/codexErrorInfo").asText());
     }
 
     private Path writeRateLimitNotificationScript(String fileName, String notifications) throws Exception {

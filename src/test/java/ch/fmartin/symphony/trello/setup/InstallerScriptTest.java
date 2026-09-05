@@ -110,7 +110,7 @@ final class InstallerScriptTest {
         result.assertSuccess();
         assertThat(result.output()).doesNotContain(inheritedControls.values().toArray(String[]::new));
         assertThat(result.output()).contains("unrelated=unrelated-host-sentinel");
-        if (System.getProperty("os.name", "").equalsIgnoreCase("Linux")) {
+        if ("Linux".equalsIgnoreCase(System.getProperty("os.name", ""))) {
             assertThat(result.output()).contains("fixture-os=Linux");
         }
     }
@@ -274,14 +274,14 @@ final class InstallerScriptTest {
                 .doesNotMatch(
                         path -> path.startsWith(repositoryRoot),
                         "path under repository working tree <%s>".formatted(repositoryRoot));
-        if (System.getProperty("os.name", "").equalsIgnoreCase("Linux")) {
+        if ("Linux".equalsIgnoreCase(System.getProperty("os.name", ""))) {
             assertThat(environment.get(1)).isEqualTo("Linux");
             assertThat(environment.get(2)).isEqualTo("debian");
         }
         assertThat(Path.of(environment.get(3)).toRealPath())
                 .isEqualTo(
                         Path.of(System.getProperty("java.home"), "bin", "java").toRealPath());
-        if (System.getProperty("os.name", "").equalsIgnoreCase("Linux")) {
+        if ("Linux".equalsIgnoreCase(System.getProperty("os.name", ""))) {
             assertThat(environment.subList(4, 7)).containsExactly("fixture-root", "fixture-root", "fixture-root");
             assertThat(environment.subList(7, 9)).containsExactly("1048576", "1048576");
         }

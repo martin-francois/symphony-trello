@@ -355,7 +355,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         writeWorkflow(workflow, "synthetic-board", 20455);
         fixture.givenManifest(
                 """
-                {"boards":[{"boardId":"synthetic-board","boardKey":"synthetic","boardName":"Sneaky \\"Q\\"\\nBoard","boardUrl":"https://trello.example/synthetic","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":20455,"githubEnabled":"false","dangerFullAccess":false,"additionalWritableRoots":[]}]}
+                {"boards":[{"boardId":"synthetic-board","boardKey":"synthetic","boardName":"Sneaky \\"Q\\"\%nBoard","boardUrl":"https://trello.example/synthetic","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":20455,"githubEnabled":"false","dangerFullAccess":false,"additionalWritableRoots":[]}]}
                 """
                         .formatted(json(workflow), json(configDir.resolve(".env")), json(fixture.workspaceRoot())));
 
