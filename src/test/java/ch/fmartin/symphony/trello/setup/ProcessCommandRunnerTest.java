@@ -26,7 +26,7 @@ final class ProcessCommandRunnerTest {
     @Test
     void runCapturesLargeOutputWithoutBlockingOnProcessPipe() {
         // given
-        ProcessCommandRunner runner = new ProcessCommandRunner(Duration.ofSeconds(2));
+        var runner = new ProcessCommandRunner(Duration.ofSeconds(2));
 
         // when
         CommandResult result = runner.run(BASH, "-lc", "yes output | head -c 200000");
@@ -39,7 +39,7 @@ final class ProcessCommandRunnerTest {
     @Test
     void runTimesOutHungCommands() {
         // given
-        ProcessCommandRunner runner = new ProcessCommandRunner(Duration.ofMillis(50));
+        var runner = new ProcessCommandRunner(Duration.ofMillis(50));
 
         // when
         CommandResult result = runner.run(BASH, "-lc", "while :; do :; done");
@@ -54,9 +54,9 @@ final class ProcessCommandRunnerTest {
         Path pidFile = Files.createTempFile("symphony-trello-command-pid-", ".txt");
         Files.deleteIfExists(pidFile);
         try {
-            ProcessCommandRunner runner = new ProcessCommandRunner(Duration.ofSeconds(30));
-            AtomicReference<CommandResult> result = new AtomicReference<>();
-            Thread runThread = new Thread(
+            var runner = new ProcessCommandRunner(Duration.ofSeconds(30));
+            var result = new AtomicReference<CommandResult>();
+            var runThread = new Thread(
                     () -> result.set(runner.run(
                             BASH, "-lc", "echo $$ > " + shellQuote(pidFile) + "; while :; do sleep 1; done")),
                     "process-command-runner-interrupt-test");

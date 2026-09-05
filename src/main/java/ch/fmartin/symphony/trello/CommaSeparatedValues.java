@@ -4,7 +4,7 @@ import com.google.common.base.Splitter;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
-/** Shared comma-delimited parsing with explicit empty-field and Java-trim contracts. */
+/// Shared comma-delimited parsing with explicit empty-field and Java-trim contracts.
 public final class CommaSeparatedValues {
     private static final Splitter PRESERVING_EMPTY_FIELDS = Splitter.on(',');
     private static final Splitter JAVA_TRIMMED_NON_EMPTY_FIELDS = PRESERVING_EMPTY_FIELDS

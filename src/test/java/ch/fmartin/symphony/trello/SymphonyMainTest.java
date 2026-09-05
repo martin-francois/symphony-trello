@@ -34,7 +34,7 @@ final class SymphonyMainTest {
         var port = SymphonyMain.configuredServerPort(workflow);
 
         // then
-        assertThat(port).contains("9090");
+        assertThat(port).hasValue("9090");
     }
 
     @Test
@@ -55,7 +55,7 @@ final class SymphonyMainTest {
         var port = SymphonyMain.configuredServerPort(workflow);
 
         // then
-        assertThat(port).contains("9090");
+        assertThat(port).hasValue("9090");
     }
 
     @Test
@@ -79,8 +79,8 @@ final class SymphonyMainTest {
         // then
         assertThat(literal)
                 .as("Quarkus cannot parse 18080.0 as an integer port, so whole floats normalize")
-                .contains("18080");
-        assertThat(envBacked).contains("18080");
+                .hasValue("18080");
+        assertThat(envBacked).hasValue("18080");
     }
 
     @Test
@@ -145,7 +145,7 @@ final class SymphonyMainTest {
                 frontMatter, name -> "SYMPHONY_TEST_PORT".equals(name) ? Optional.of("19092") : Optional.empty());
 
         // then
-        assertThat(port).contains("19092");
+        assertThat(port).hasValue("19092");
     }
 
     @Test
@@ -174,8 +174,8 @@ final class SymphonyMainTest {
         var options = SymphonyMain.CliOptions.parse(args);
 
         // then
-        assertThat(options.workflowPath()).contains("WORKFLOW.md");
-        assertThat(options.port()).contains("8081");
+        assertThat(options.workflowPath()).hasValue("WORKFLOW.md");
+        assertThat(options.port()).hasValue("8081");
     }
 
     @Test
@@ -219,7 +219,7 @@ final class SymphonyMainTest {
                 SymphonyMain.CliOptions.parse("WORKFLOW.md", "--port=8282"), workflow, "8181", Optional.empty());
 
         // then
-        assertThat(port).contains("8282");
+        assertThat(port).hasValue("8282");
     }
 
     @Test

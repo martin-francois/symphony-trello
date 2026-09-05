@@ -69,7 +69,7 @@ final class SetupLocalCommandFactory {
             "--no-github");
 
     int execute(String[] args, LocalSetup setup, BufferedReader input, PrintStream out, PrintStream err) {
-        CommandLine commandLine = new CommandLine(new SetupLocalCommand(setup, input, out, err));
+        var commandLine = new CommandLine(new SetupLocalCommand(setup, input, out, err));
         hideUnsupportedSubcommandOptions(commandLine);
         commandLine
                 .setOut(new PrintWriter(out, true, StandardCharsets.UTF_8))
@@ -135,10 +135,8 @@ final class SetupLocalCommandFactory {
         return stripInternalArgumentIndex(exception.getMessage());
     }
 
-    /**
-     * The installed wrapper injects default options, so picocli's argument indexes do not match
-     * the command line the user typed. The index adds nothing once the offending value is shown.
-     */
+    /// The installed wrapper injects default options, so picocli's argument indexes do not match
+    /// the command line the user typed. The index adds nothing once the offending value is shown.
     private static String stripInternalArgumentIndex(String message) {
         return message == null ? null : message.replaceFirst("^(Unmatched arguments?) (at|from) index \\d+", "$1");
     }
@@ -668,7 +666,7 @@ final class SetupLocalCommandFactory {
         }
 
         private static CommonOptions copy(CommonOptions source) {
-            CommonOptions copy = new CommonOptions();
+            var copy = new CommonOptions();
             copy.dryRun = source.dryRun;
             copy.nonInteractive = source.nonInteractive;
             copy.force = source.force;

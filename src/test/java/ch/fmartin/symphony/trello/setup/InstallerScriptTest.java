@@ -94,7 +94,7 @@ final class InstallerScriptTest {
                 Map.entry("SYMPHONY_TRELLO_TEST_INHERITED", "inherited-test-sentinel"),
                 Map.entry("sYmPhOnY_FUTURE_CONTROL", "inherited-mixed-case-sentinel"));
         String inheritedNames = String.join(" ", inheritedControls.keySet());
-        ProcessBuilder processBuilder = new ProcessBuilder(
+        var processBuilder = new ProcessBuilder(
                 "bash",
                 "-c",
                 "for name in " + inheritedNames + "; do printf '%s\\n' \"${!name}\"; done; "
@@ -126,11 +126,13 @@ final class InstallerScriptTest {
                 "SYMPHONY_HOME", explicitSymphonyHome.toString(),
                 "SYMPHONY_TRELLO_CONFIG_DIR", explicitConfigDirectory.toString(),
                 "SYMPHONY_TRELLO_INSTALL_SOURCE", "release-archive");
-        ProcessBuilder processBuilder = new ProcessBuilder(
+        var processBuilder = new ProcessBuilder(
                 "bash",
                 "-c",
-                "printf '%s\\n%s\\n%s' \"$SYMPHONY_HOME\" \"$SYMPHONY_TRELLO_CONFIG_DIR\" "
-                        + "\"$SYMPHONY_TRELLO_INSTALL_SOURCE\"");
+                """
+                printf '%s\\n%s\\n%s' "$SYMPHONY_HOME" "$SYMPHONY_TRELLO_CONFIG_DIR" \
+                "$SYMPHONY_TRELLO_INSTALL_SOURCE"\
+                """);
         processBuilder.environment().put("SYMPHONY_HOME", "inherited-home-sentinel");
         processBuilder.environment().put("SYMPHONY_TRELLO_CONFIG_DIR", "inherited-config-sentinel");
         processBuilder.environment().put("SYMPHONY_TRELLO_INSTALL_SOURCE", "inherited-source-sentinel");
@@ -152,7 +154,7 @@ final class InstallerScriptTest {
         assumeFalse(isWindows());
         assumeTrue(commandExists("bash"));
         Path inheritedHome = temporaryDirectory.resolve("inherited-home-sentinel");
-        ProcessBuilder processBuilder = new ProcessBuilder("bash", "install.sh", "--dry-run", "--no-onboard");
+        var processBuilder = new ProcessBuilder("bash", "install.sh", "--dry-run", "--no-onboard");
         processBuilder.environment().put("SYMPHONY_HOME", inheritedHome.toString());
         processBuilder.environment().put("SYMPHONY_TRELLO_INSTALL_SOURCE", "inherited-source-sentinel");
         processBuilder
@@ -188,12 +190,13 @@ final class InstallerScriptTest {
         // given
         assumeFalse(isWindows());
         assumeTrue(commandExists("bash"));
-        ProcessBuilder processBuilder = new ProcessBuilder(
+        var processBuilder = new ProcessBuilder(
                 "bash",
                 "-c",
-                "if [[ -n ${SYMPHONY_TRELLO_REPO_URL:-} || -n ${SYMPHONY_TRELLO_REF:-} ]]; then "
-                        + "printf 'inherited fallback reached child'; exit 91; fi; "
-                        + "exec bash install.sh --dry-run --no-onboard");
+                """
+                if [[ -n ${SYMPHONY_TRELLO_REPO_URL:-} || -n ${SYMPHONY_TRELLO_REF:-} ]]; then \
+                printf 'inherited fallback reached child'; exit 91; fi; \
+                exec bash install.sh --dry-run --no-onboard""");
         processBuilder.environment().put("SYMPHONY_TRELLO_INSTALL_SOURCE", "inherited-source-sentinel");
         processBuilder.environment().put("SYMPHONY_TRELLO_REPO_URL", "not-a-valid-repository");
         processBuilder.environment().put("SYMPHONY_TRELLO_REF", "refs/heads/not-a-valid-ref");
@@ -255,17 +258,19 @@ final class InstallerScriptTest {
                 Map.of("SYMPHONY_FAKE_LOG", capturedEnvironment.toString()),
                 "bash",
                 "-c",
-                "printf '%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n' "
-                        + "\"$HOME\" \"${SYMPHONY_TRELLO_TEST_OS:-}\" \"${SYMPHONY_TRELLO_TEST_OS_ID:-}\" "
-                        + "\"$(command -v java)\" \"${SYMPHONY_TRELLO_TEST_HOME_FS_SOURCE:-}\" "
-                        + "\"${SYMPHONY_TRELLO_TEST_ROOT_FS_SOURCE:-}\" "
-                        + "\"${SYMPHONY_TRELLO_TEST_VAR_FS_SOURCE:-}\" "
-                        + "\"${SYMPHONY_TRELLO_TEST_HOME_SIZE_KB:-}\" "
-                        + "\"${SYMPHONY_TRELLO_TEST_VAR_SIZE_KB:-}\" > \"$SYMPHONY_FAKE_LOG\"");
+                """
+                printf '%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n' \
+                "$HOME" "${SYMPHONY_TRELLO_TEST_OS:-}" "${SYMPHONY_TRELLO_TEST_OS_ID:-}" \
+                "$(command -v java)" "${SYMPHONY_TRELLO_TEST_HOME_FS_SOURCE:-}" \
+                "${SYMPHONY_TRELLO_TEST_ROOT_FS_SOURCE:-}" \
+                "${SYMPHONY_TRELLO_TEST_VAR_FS_SOURCE:-}" \
+                "${SYMPHONY_TRELLO_TEST_HOME_SIZE_KB:-}" \
+                "${SYMPHONY_TRELLO_TEST_VAR_SIZE_KB:-}" > "$SYMPHONY_FAKE_LOG"\
+                """);
 
         // then
         result.assertSuccess();
-        List<String> environment = Files.readAllLines(capturedEnvironment, StandardCharsets.UTF_8);
+        List<String> environment = Files.readAllLines(capturedEnvironment);
         Path isolatedHome = Path.of(environment.getFirst());
         Path repositoryRoot = Path.of("").toAbsolutePath();
         assertThat(isolatedHome)
@@ -309,12 +314,11 @@ final class InstallerScriptTest {
         repeatedFirst.assertSuccess();
         Path firstHome = Path.of(first.output());
         Path secondHome = Path.of(second.output());
-        assertThat(firstHome.getParent()).isEqualTo(temporaryDirectory);
-        assertThat(firstHome).isDirectory();
-        assertThat(firstHome.getFileName().toString()).isEqualTo("first-symphony-home-user-home");
-        assertThat(secondHome.getParent()).isEqualTo(temporaryDirectory);
+        assertThat(firstHome).hasParentRaw(temporaryDirectory).isDirectory();
+        assertThat(firstHome).hasFileName("first-symphony-home-user-home");
+        assertThat(secondHome).hasParentRaw(temporaryDirectory);
         assertThat(secondHome).isDirectory().isNotEqualTo(firstHome);
-        assertThat(secondHome.getFileName().toString()).isEqualTo("second-symphony-home-user-home");
+        assertThat(secondHome).hasFileName("second-symphony-home-user-home");
         assertThat(Path.of(repeatedFirst.output())).isEqualTo(firstHome);
     }
 
@@ -689,8 +693,7 @@ final class InstallerScriptTest {
                 app_dir=%s
                 config_dir=/tmp/ignored-config
                 """
-                        .formatted(partialApp),
-                StandardCharsets.UTF_8);
+                        .formatted(partialApp));
         Map<String, String> environment = new LinkedHashMap<>(microOsLayoutEnvironment(home, varPath, usersRoot));
         environment.put("SYMPHONY_TRELLO_TEST_OS_ID", "debian");
         environment.put("SYMPHONY_TRELLO_TEST_OS_PRETTY_NAME", "Debian GNU/Linux");
@@ -751,8 +754,7 @@ final class InstallerScriptTest {
                                 temporaryDirectory.resolve("unsafe-legacy-context-replayed-config"),
                                 temporaryDirectory.resolve("unsafe-legacy-context-replayed-workspaces"),
                                 temporaryDirectory.resolve("unsafe-legacy-context-replayed-state"),
-                                temporaryDirectory.resolve("unsafe-legacy-context-replayed-bin")),
-                StandardCharsets.UTF_8);
+                                temporaryDirectory.resolve("unsafe-legacy-context-replayed-bin")));
         Map<String, String> environment = new LinkedHashMap<>(microOsLayoutEnvironment(home, varPath, usersRoot));
         environment.put("SYMPHONY_TRELLO_TEST_OS_ID", "debian");
         environment.put("SYMPHONY_TRELLO_TEST_OS_PRETTY_NAME", "Debian GNU/Linux");
@@ -1215,10 +1217,10 @@ final class InstallerScriptTest {
         Files.createDirectories(binDirectory);
         Files.createDirectories(legacyService.getParent());
         Files.createDirectories(legacyAutostartEnv.getParent());
-        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
-        Files.writeString(command, "launcher\n", StandardCharsets.UTF_8);
-        Files.writeString(legacyService, "legacy service\n", StandardCharsets.UTF_8);
-        Files.writeString(legacyAutostartEnv, "TRELLO_API_KEY=\"legacy\"\n", StandardCharsets.UTF_8);
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker");
+        Files.writeString(command, "launcher\n");
+        Files.writeString(legacyService, "legacy service\n");
+        Files.writeString(legacyAutostartEnv, "TRELLO_API_KEY=\"legacy\"\n");
         Files.writeString(
                 state.resolve("install-context.properties"),
                 """
@@ -1232,8 +1234,7 @@ final class InstallerScriptTest {
                 bin_dir=%s
                 codex_npm_prefix=%s
                 """
-                        .formatted(app, config, workspaces, state, cache, binDirectory, cache.resolve("npm")),
-                StandardCharsets.UTF_8);
+                        .formatted(app, config, workspaces, state, cache, binDirectory, cache.resolve("npm")));
         Map<String, String> environment = Map.of(
                 "HOME",
                 home.toString(),
@@ -1286,8 +1287,8 @@ final class InstallerScriptTest {
         Files.createDirectories(state);
         Files.createDirectories(cache);
         Files.createDirectories(binDirectory);
-        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
-        Files.writeString(recordedAutostartEnv, "TRELLO_API_KEY=\"recorded\"\n", StandardCharsets.UTF_8);
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker");
+        Files.writeString(recordedAutostartEnv, "TRELLO_API_KEY=\"recorded\"\n");
         Files.writeString(
                 state.resolve("install-context.properties"),
                 """
@@ -1312,8 +1313,7 @@ final class InstallerScriptTest {
                                 cache,
                                 binDirectory,
                                 recordedAutostartEnv,
-                                cache.resolve("npm")),
-                StandardCharsets.UTF_8);
+                                cache.resolve("npm")));
         Map<String, String> environment =
                 Map.of("HOME", home.toString(), "SYMPHONY_TRELLO_CONFIG_DIR", newConfig.toString());
 
@@ -1351,7 +1351,7 @@ final class InstallerScriptTest {
         Files.createDirectories(state);
         Files.createDirectories(cache);
         Files.createDirectories(binDirectory);
-        Files.writeString(recordedAutostartEnv, "TRELLO_API_KEY=\"recorded\"\n", StandardCharsets.UTF_8);
+        Files.writeString(recordedAutostartEnv, "TRELLO_API_KEY=\"recorded\"\n");
         Files.writeString(
                 state.resolve(INSTALL_CONTEXT_PROPERTIES),
                 """
@@ -1376,8 +1376,7 @@ final class InstallerScriptTest {
                                 cache,
                                 binDirectory,
                                 recordedAutostartEnv,
-                                cache.resolve("npm")),
-                StandardCharsets.UTF_8);
+                                cache.resolve("npm")));
         Map<String, String> environment = Map.of(
                 "PATH",
                 fakeBin + File.pathSeparator + System.getenv("PATH"),
@@ -1475,8 +1474,7 @@ final class InstallerScriptTest {
                                 dataHome.resolve("workspaces"),
                                 dataHome.resolve("state"),
                                 home.resolve(".local/bin"),
-                                dataHome.resolve("npm")),
-                StandardCharsets.UTF_8);
+                                dataHome.resolve("npm")));
 
         // when
         ProcessResult install = run(Map.of("HOME", home.toString()), "bash", "install.sh", "--dry-run", "--no-onboard");
@@ -1512,7 +1510,7 @@ final class InstallerScriptTest {
         Files.createDirectories(config);
         Files.createDirectories(workspaces);
         Files.createDirectories(cache);
-        Files.writeString(outside.resolve("app/.symphony-trello-install"), "marker", StandardCharsets.UTF_8);
+        Files.writeString(outside.resolve("app/.symphony-trello-install"), "marker");
         Files.createSymbolicLink(symlink, outside);
         Files.writeString(
                 state.resolve("install-context.properties"),
@@ -1529,8 +1527,7 @@ final class InstallerScriptTest {
                 codex_npm_prefix=%s
                 created_microos_var_root=false
                 """
-                        .formatted(app, config, workspaces, state, cache, commandDirectory, cache.resolve("npm")),
-                StandardCharsets.UTF_8);
+                        .formatted(app, config, workspaces, state, cache, commandDirectory, cache.resolve("npm")));
 
         // when
         ProcessResult install = run(Map.of("HOME", home.toString()), "bash", "install.sh", "--dry-run", "--no-onboard");
@@ -1617,8 +1614,7 @@ final class InstallerScriptTest {
                                 dataHome.resolve("workspaces"),
                                 dataHome.resolve("state"),
                                 binDirectory,
-                                dataHome.resolve("npm")),
-                StandardCharsets.UTF_8);
+                                dataHome.resolve("npm")));
 
         // when
         ProcessResult result = run(
@@ -1663,7 +1659,7 @@ final class InstallerScriptTest {
         Files.createDirectories(state);
         Files.createDirectories(cache.resolve("npm"));
         Files.createDirectories(bin);
-        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n", StandardCharsets.UTF_8);
+        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n");
         Files.writeString(
                 home.resolve(".config/symphony-trello/install-context.properties"),
                 """
@@ -1679,8 +1675,7 @@ final class InstallerScriptTest {
                 codex_npm_prefix=%s
                 created_microos_var_root=false
                 """
-                        .formatted(app, config, workspaces, state, cache, bin, cache.resolve("npm")),
-                StandardCharsets.UTF_8);
+                        .formatted(app, config, workspaces, state, cache, bin, cache.resolve("npm")));
         Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
 
         // when
@@ -1723,7 +1718,7 @@ final class InstallerScriptTest {
         Files.createDirectories(workspaces);
         Files.createDirectories(state);
         Files.createDirectories(cache.resolve("npm"));
-        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n", StandardCharsets.UTF_8);
+        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n");
         Files.writeString(
                 state.resolve("install-context.properties"),
                 """
@@ -1746,8 +1741,7 @@ final class InstallerScriptTest {
                                 state,
                                 cache,
                                 home.resolve(".local/bin"),
-                                cache.resolve("npm")),
-                StandardCharsets.UTF_8);
+                                cache.resolve("npm")));
 
         // when
         ProcessResult result = run(
@@ -1792,11 +1786,10 @@ final class InstallerScriptTest {
         Files.createDirectories(state);
         Files.createDirectories(cache.resolve("npm"));
         Files.createDirectories(bin);
-        Files.writeString(
-                explicitApp.resolve(".symphony-trello-install"), "installer-managed\n", StandardCharsets.UTF_8);
-        Files.writeString(config.resolve(".env"), "TRELLO_API_KEY=secret\n", StandardCharsets.UTF_8);
-        Files.writeString(workspaces.resolve("card.txt"), "work\n", StandardCharsets.UTF_8);
-        Files.writeString(state.resolve("worker.pid"), "123\n", StandardCharsets.UTF_8);
+        Files.writeString(explicitApp.resolve(".symphony-trello-install"), "installer-managed\n");
+        Files.writeString(config.resolve(".env"), "TRELLO_API_KEY=secret\n");
+        Files.writeString(workspaces.resolve("card.txt"), "work\n");
+        Files.writeString(state.resolve("worker.pid"), "123\n");
         Files.writeString(
                 state.resolve("install-context.properties"),
                 """
@@ -1819,8 +1812,7 @@ final class InstallerScriptTest {
                                 state,
                                 cache,
                                 home.resolve(".local/bin"),
-                                cache.resolve("npm")),
-                StandardCharsets.UTF_8);
+                                cache.resolve("npm")));
 
         // when
         ProcessResult result = run(
@@ -1903,7 +1895,7 @@ final class InstallerScriptTest {
         Files.createDirectories(home);
         Files.createDirectories(app);
         Files.createDirectories(bin);
-        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker");
         Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_TRELLO_CONFIG_DIR", "/bin");
 
         // when
@@ -1952,8 +1944,8 @@ final class InstallerScriptTest {
         Files.createDirectories(home.resolve(".local/state/symphony-trello"));
         Files.createDirectories(outside.resolve("symphony-trello"));
         Files.createDirectories(app);
-        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
-        Files.writeString(outside.resolve("symphony-trello/.env"), "TRELLO_TOKEN=test\n", StandardCharsets.UTF_8);
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker");
+        Files.writeString(outside.resolve("symphony-trello/.env"), "TRELLO_TOKEN=test\n");
         Files.createSymbolicLink(home.resolve(".config"), outside);
         Map<String, String> environment = Map.of("HOME", home.toString());
 
@@ -1990,8 +1982,8 @@ final class InstallerScriptTest {
         Files.createDirectories(home.resolve(".local/bin"));
         Files.createDirectories(app);
         Files.createDirectories(outsideNpmPrefix.resolve("bin"));
-        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
-        Files.writeString(outsideNpmPrefix.resolve("package.json"), "{\"private\":true}\n", StandardCharsets.UTF_8);
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker");
+        Files.writeString(outsideNpmPrefix.resolve("package.json"), "{\"private\":true}\n");
         Files.createSymbolicLink(home.resolve(".cache"), outside);
         Files.createSymbolicLink(
                 home.resolve(".local/bin/codex"), home.resolve(".cache/symphony-trello/npm/bin/codex"));
@@ -2027,8 +2019,8 @@ final class InstallerScriptTest {
         Files.createDirectories(home.resolve(".config/symphony-trello"));
         Files.createDirectories(home.resolve(".local/state/symphony-trello"));
         Files.createDirectories(managedNpm);
-        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
-        Files.writeString(managedNpm.resolve("package.json"), "{\"private\":true}\n", StandardCharsets.UTF_8);
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker");
+        Files.writeString(managedNpm.resolve("package.json"), "{\"private\":true}\n");
         Map<String, String> environment = Map.of("HOME", home.toString(), "XDG_CACHE_HOME", workspaceRoot.toString());
 
         // when
@@ -2050,8 +2042,8 @@ final class InstallerScriptTest {
         Files.createDirectories(home.resolve(".config/symphony-trello"));
         Files.createDirectories(home.resolve(".local/state/symphony-trello"));
         Files.createDirectories(managedNpm);
-        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
-        Files.writeString(managedNpm.resolve("package.json"), "{\"private\":true}\n", StandardCharsets.UTF_8);
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker");
+        Files.writeString(managedNpm.resolve("package.json"), "{\"private\":true}\n");
         Map<String, String> environment = Map.of("HOME", home.toString(), "XDG_CACHE_HOME", app.toString());
 
         // when
@@ -2095,8 +2087,8 @@ final class InstallerScriptTest {
         Files.createDirectories(workspaceRoot);
         Files.createDirectories(stateHome);
         Files.createDirectories(binDirectory);
-        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
-        Files.writeString(outsideConfig.resolve(".env"), "TRELLO_TOKEN=test\n", StandardCharsets.UTF_8);
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker");
+        Files.writeString(outsideConfig.resolve(".env"), "TRELLO_TOKEN=test\n");
         Files.createSymbolicLink(configSymlink, outsideConfig);
         Map<String, String> environment = Map.of(
                 "HOME",
@@ -2143,8 +2135,8 @@ final class InstallerScriptTest {
         Files.createDirectories(workspaces);
         Files.createDirectories(state);
         Files.createDirectories(binDirectory);
-        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
-        Files.writeString(outsideContext, "installer=install.sh\n", StandardCharsets.UTF_8);
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker");
+        Files.writeString(outsideContext, "installer=install.sh\n");
         Files.createSymbolicLink(home.resolve(".config"), outside);
         Map<String, String> environment = Map.of(
                 "HOME",
@@ -2237,7 +2229,7 @@ final class InstallerScriptTest {
         Files.createDirectories(cache);
         Files.createDirectories(contextBin);
         Files.createDirectories(overrideBin);
-        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker");
         Files.writeString(
                 home.resolve(".config/symphony-trello/install-context.properties"),
                 """
@@ -2253,8 +2245,7 @@ final class InstallerScriptTest {
                 codex_npm_prefix=%s
                 created_microos_var_root=false
                 """
-                        .formatted(app, config, workspaces, state, cache, contextBin, cache.resolve("npm")),
-                StandardCharsets.UTF_8);
+                        .formatted(app, config, workspaces, state, cache, contextBin, cache.resolve("npm")));
 
         // when
         ProcessResult result = run(
@@ -2300,7 +2291,7 @@ final class InstallerScriptTest {
         Files.createDirectories(workspaces);
         Files.createDirectories(state);
         Files.createDirectories(cache.resolve("npm"));
-        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n", StandardCharsets.UTF_8);
+        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n");
         Files.writeString(
                 state.resolve("install-context.properties"),
                 """
@@ -2323,8 +2314,7 @@ final class InstallerScriptTest {
                                 state,
                                 cache,
                                 home.resolve(".local/bin"),
-                                cache.resolve("npm")),
-                StandardCharsets.UTF_8);
+                                cache.resolve("npm")));
 
         // when
         ProcessResult result = run(
@@ -2383,8 +2373,7 @@ final class InstallerScriptTest {
                                 state,
                                 cache,
                                 home.resolve(".local/bin"),
-                                cache.resolve("npm")),
-                StandardCharsets.UTF_8);
+                                cache.resolve("npm")));
 
         // when
         ProcessResult result = run(
@@ -2417,7 +2406,7 @@ final class InstallerScriptTest {
         Path btrfsLog = temporaryDirectory.resolve("btrfs.log");
         Files.createDirectories(fakeBin);
         Files.createDirectories(app);
-        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n", StandardCharsets.UTF_8);
+        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n");
         writeExecutable(
                 fakeBin.resolve("btrfs"),
                 """
@@ -2456,7 +2445,7 @@ final class InstallerScriptTest {
         Path btrfsLog = temporaryDirectory.resolve("btrfs-target-root.log");
         Files.createDirectories(fakeBin);
         Files.createDirectories(app.resolve("nested/deeper"));
-        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n", StandardCharsets.UTF_8);
+        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n");
         writeExecutable(
                 fakeBin.resolve("findmnt"),
                 """
@@ -2522,7 +2511,7 @@ final class InstallerScriptTest {
         Path btrfsLog = temporaryDirectory.resolve("btrfs-ordinary.log");
         Files.createDirectories(fakeBin);
         Files.createDirectories(app.resolve("nested/deeper"));
-        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n", StandardCharsets.UTF_8);
+        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n");
         writeExecutable(
                 fakeBin.resolve("btrfs"),
                 """
@@ -2560,7 +2549,8 @@ final class InstallerScriptTest {
 
         // then
         result.assertSuccess();
-        assertThat(Files.readString(btrfsLog, StandardCharsets.UTF_8))
+        assertThat(btrfsLog)
+                .content(StandardCharsets.UTF_8)
                 .containsSubsequence(
                         "delete " + app.resolve("nested/deeper"),
                         "delete " + app.resolve("nested"),
@@ -2579,7 +2569,7 @@ final class InstallerScriptTest {
         Path btrfsLog = temporaryDirectory.resolve("btrfs-list-fails.log");
         Files.createDirectories(fakeBin);
         Files.createDirectories(app);
-        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n", StandardCharsets.UTF_8);
+        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n");
         writeExecutable(
                 fakeBin.resolve("btrfs"),
                 """
@@ -2615,7 +2605,8 @@ final class InstallerScriptTest {
 
         // then
         result.assertSuccess();
-        assertThat(Files.readString(btrfsLog, StandardCharsets.UTF_8))
+        assertThat(btrfsLog)
+                .content(StandardCharsets.UTF_8)
                 .contains("rm -rf --one-file-system " + app)
                 .doesNotContain("delete ");
         assertThat(app).doesNotExist();
@@ -2692,7 +2683,7 @@ final class InstallerScriptTest {
         Path btrfsLog = temporaryDirectory.resolve("btrfs-top-level.log");
         Files.createDirectories(fakeBin);
         Files.createDirectories(app.resolve("nested/deeper"));
-        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n", StandardCharsets.UTF_8);
+        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n");
         writeExecutable(
                 fakeBin.resolve("btrfs"),
                 """
@@ -2744,7 +2735,7 @@ final class InstallerScriptTest {
         Path btrfsLog = temporaryDirectory.resolve("btrfs-path-token.log");
         Files.createDirectories(fakeBin);
         Files.createDirectories(app.resolve("nested/deeper"));
-        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n", StandardCharsets.UTF_8);
+        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n");
         writeExecutable(
                 fakeBin.resolve("btrfs"),
                 """
@@ -2791,7 +2782,7 @@ final class InstallerScriptTest {
         Path rmLog = temporaryDirectory.resolve("bsd-rm.log");
         Files.createDirectories(fakeBin);
         Files.createDirectories(app);
-        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n", StandardCharsets.UTF_8);
+        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n");
         writeExecutable(
                 fakeBin.resolve("rm"),
                 """
@@ -3129,7 +3120,7 @@ final class InstallerScriptTest {
         Path symlink = temporaryDirectory.resolve(scenario.symlinkName());
         Files.createDirectories(home);
         Files.createDirectories(symphonyHome.resolve(scenario.overlapDirectory()));
-        Files.writeString(file, "not a directory", StandardCharsets.UTF_8);
+        Files.writeString(file, "not a directory");
         Files.createSymbolicLink(symlink, symphonyHome.resolve(scenario.overlapDirectory()));
         Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
 
@@ -3208,7 +3199,7 @@ final class InstallerScriptTest {
         Files.createDirectories(home);
         Files.createDirectories(stateHome);
         Files.createDirectories(app.resolve("target").resolve("quarkus-app"));
-        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker");
         String markerArgument =
                 "-Dsymphony.trello.managed.app_home=" + app.toAbsolutePath().normalize();
         String jarArgument = app.toAbsolutePath()
@@ -3222,9 +3213,7 @@ final class InstallerScriptTest {
                 .start();
         try {
             Files.writeString(
-                    stateHome.resolve("WORKFLOW.would-stop.md.abcdef123456.pid"),
-                    Long.toString(worker.pid()),
-                    StandardCharsets.UTF_8);
+                    stateHome.resolve("WORKFLOW.would-stop.md.abcdef123456.pid"), Long.toString(worker.pid()));
             Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
 
             // when
@@ -3254,13 +3243,11 @@ final class InstallerScriptTest {
         Files.createDirectories(home);
         Files.createDirectories(stateHome);
         Files.createDirectories(app.resolve("target").resolve("quarkus-app"));
-        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker");
         Process unmanaged = new ProcessBuilder("bash", "-c", "while :; do sleep 1; done").start();
         try {
             Files.writeString(
-                    stateHome.resolve("WORKFLOW.stale-skip.md.abcdef123456.pid"),
-                    Long.toString(unmanaged.pid()),
-                    StandardCharsets.UTF_8);
+                    stateHome.resolve("WORKFLOW.stale-skip.md.abcdef123456.pid"), Long.toString(unmanaged.pid()));
             Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
 
             // when
@@ -3324,7 +3311,7 @@ final class InstallerScriptTest {
         Files.createDirectories(home);
         Files.createDirectories(targetApp);
         Files.createDirectories(bin);
-        Files.writeString(targetApp.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
+        Files.writeString(targetApp.resolve(".symphony-trello-install"), "marker");
         Files.createSymbolicLink(symlinkApp, targetApp);
 
         // when
@@ -3358,8 +3345,8 @@ final class InstallerScriptTest {
         Files.createDirectories(home);
         Files.createDirectories(config);
         Files.createDirectories(bin);
-        Files.writeString(realRoot.resolve("app/.symphony-trello-install"), "marker", StandardCharsets.UTF_8);
-        Files.writeString(config.resolve(".env"), "TRELLO_TOKEN=test\n", StandardCharsets.UTF_8);
+        Files.writeString(realRoot.resolve("app/.symphony-trello-install"), "marker");
+        Files.writeString(config.resolve(".env"), "TRELLO_TOKEN=test\n");
         Files.createSymbolicLink(symlinkRoot, realRoot);
 
         // when
@@ -3393,7 +3380,7 @@ final class InstallerScriptTest {
         Path symlink = temporaryDirectory.resolve(scenario.symlinkName());
         Path safeBin = temporaryDirectory.resolve(scenario.slug() + "-bin");
         Files.createDirectories(home);
-        Files.writeString(file, "not a directory", StandardCharsets.UTF_8);
+        Files.writeString(file, "not a directory");
         Files.createSymbolicLink(symlink, temporaryDirectory.resolve(scenario.slug() + "-target"));
         Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
 
@@ -4150,10 +4137,12 @@ final class InstallerScriptTest {
                         "Added " + binDirectory + " to PATH in " + profile,
                         "Added " + binDirectory + " to PATH in " + loginProfile);
         assertThat(secondInstall.output()).contains("PATH setup already exists in " + profile);
-        assertThat(Files.readString(profile, StandardCharsets.UTF_8))
+        assertThat(profile)
+                .content(StandardCharsets.UTF_8)
                 .contains("# >>> Symphony for Trello PATH >>>", expectedLine, "# <<< Symphony for Trello PATH <<<")
                 .containsOnlyOnce(expectedLine);
-        assertThat(Files.readString(loginProfile, StandardCharsets.UTF_8))
+        assertThat(loginProfile)
+                .content(StandardCharsets.UTF_8)
                 .contains("# >>> Symphony for Trello PATH >>>", expectedLine, "# <<< Symphony for Trello PATH <<<")
                 .containsOnlyOnce(expectedLine);
     }
@@ -4458,7 +4447,7 @@ final class InstallerScriptTest {
         // Runtime coverage for the missing-java branch is POSIX-only: the PowerShell wrapper only
         // exists after a full install.ps1 run, and pwsh is not available in every verification
         // environment. This pins the generated wrapper text so the guard cannot silently drop.
-        String installer = Files.readString(Path.of("install.ps1"), StandardCharsets.UTF_8);
+        String installer = Files.readString(Path.of("install.ps1"));
 
         // when
         int javaGuard = installer.indexOf("if (-not (Get-Command java -ErrorAction SilentlyContinue))");
@@ -4480,11 +4469,9 @@ final class InstallerScriptTest {
                         "Install a Java 25+ JDK or rerun the installer, then try again:");
     }
 
-    /**
-     * A runtime PATH for negative wrapper tests holding only the commands the installed POSIX
-     * wrapper needs before its java lookup. Hosts commonly have /usr/bin/java or /bin/java, so a
-     * host-directory PATH cannot prove the missing-java branch runs.
-     */
+    /// A runtime PATH for negative wrapper tests holding only the commands the installed POSIX
+    /// wrapper needs before its java lookup. Hosts commonly have /usr/bin/java or /bin/java, so a
+    /// host-directory PATH cannot prove the missing-java branch runs.
     private static Path createWrapperRuntimePathWithoutJava(Path temporaryDirectory) throws IOException {
         Path runtimeBin = temporaryDirectory.resolve("runtime-bin-without-java");
         Files.createDirectories(runtimeBin);
@@ -4567,8 +4554,8 @@ final class InstallerScriptTest {
                 after
                 """
                         .formatted(pathLine);
-        Files.writeString(home.resolve(".bashrc"), managedBlock, StandardCharsets.UTF_8);
-        Files.writeString(home.resolve(".profile"), managedBlock, StandardCharsets.UTF_8);
+        Files.writeString(home.resolve(".bashrc"), managedBlock);
+        Files.writeString(home.resolve(".profile"), managedBlock);
         Map<String, String> environment = Map.of(
                 "HOME", home.toString(),
                 "SHELL", "/bin/bash",
@@ -4604,7 +4591,7 @@ final class InstallerScriptTest {
                 alias kept='still here'
                 """
                         .formatted(binDirectory);
-        Files.writeString(home.resolve(".bashrc"), profile, StandardCharsets.UTF_8);
+        Files.writeString(home.resolve(".bashrc"), profile);
         Map<String, String> environment = Map.of(
                 "HOME", home.toString(),
                 "SHELL", "/bin/bash",
@@ -4644,7 +4631,7 @@ final class InstallerScriptTest {
                 after
                 """
                         .formatted(otherPathLine, currentPathLine);
-        Files.writeString(home.resolve(".bashrc"), profile, StandardCharsets.UTF_8);
+        Files.writeString(home.resolve(".bashrc"), profile);
 
         // when
         ProcessResult result = runPosixUninstall(home, symphonyHome, binDirectory);
@@ -4685,7 +4672,7 @@ final class InstallerScriptTest {
                 """
                         .formatted(pathLine);
         Path shellProfile = home.resolve(".bashrc");
-        Files.writeString(shellProfile, profile, StandardCharsets.UTF_8);
+        Files.writeString(shellProfile, profile);
         assertThat(shellProfile.toFile().setWritable(false, false))
                 .as("the profile is made non-writable for the cleanup-failure scenario")
                 .isTrue();
@@ -4731,7 +4718,7 @@ final class InstallerScriptTest {
                 """
                         .formatted(pathLine);
         Path shellProfile = home.resolve(".bashrc");
-        Files.writeString(shellProfile, profile, StandardCharsets.UTF_8);
+        Files.writeString(shellProfile, profile);
         assertThat(shellProfile.toFile().setReadable(false, false))
                 .as("the profile is made unreadable for the cleanup-failure scenario")
                 .isTrue();
@@ -4797,7 +4784,7 @@ final class InstallerScriptTest {
         Path symphonyHome = temporaryDirectory.resolve("path-unwritable-symphony-home");
         Path binDirectory = temporaryDirectory.resolve("path-unwritable-bin");
         Path fakeLog = temporaryDirectory.resolve("path-unwritable.log");
-        Files.writeString(homeFile, "not a directory\n", StandardCharsets.UTF_8);
+        Files.writeString(homeFile, "not a directory\n");
         Map<String, String> environment = Map.of(
                 "PATH", fakeBin + File.pathSeparator + System.getenv("PATH"),
                 "HOME", homeFile.toString(),
@@ -5108,7 +5095,8 @@ final class InstallerScriptTest {
         assertThat(result.output())
                 .contains("  apt-get update && apt-get install -y git", "  apt-get install -y openjdk-25-jdk")
                 .doesNotContain("  apt-get update && apt-get install -y openjdk-25-jdk");
-        assertThat(Files.readString(aptLog, StandardCharsets.UTF_8))
+        assertThat(aptLog)
+                .content(StandardCharsets.UTF_8)
                 .contains("update", "install -y git")
                 .doesNotContain("openjdk-25-jdk");
     }
@@ -5183,10 +5171,13 @@ final class InstallerScriptTest {
                         "Open a new terminal with Java 25+ on PATH",
                         "Open a new terminal with npm on PATH");
         assertThat(userRoot).doesNotExist();
-        assertThat(Files.readString(commandLog, StandardCharsets.UTF_8))
+        assertThat(commandLog)
+                .content(StandardCharsets.UTF_8)
                 .isEqualTo(
-                        "sudo transactional-update --non-interactive pkg install git java-25-openjdk-devel nodejs npm\n"
-                                + "transactional-update --non-interactive pkg install git java-25-openjdk-devel nodejs npm\n");
+                        """
+                        sudo transactional-update --non-interactive pkg install git java-25-openjdk-devel nodejs npm
+                        transactional-update --non-interactive pkg install git java-25-openjdk-devel nodejs npm
+                        """);
     }
 
     @Test
@@ -5665,8 +5656,9 @@ final class InstallerScriptTest {
                                 pwsh,
                                 "-NoProfile",
                                 "-Command",
-                                "& ([scriptblock]::Create((Get-Content -Raw './install.ps1'))) "
-                                        + "--dry-run --no-onboard --prefix '' --bin-dir ''")
+                                """
+                                & ([scriptblock]::Create((Get-Content -Raw './install.ps1'))) \
+                                --dry-run --no-onboard --prefix '' --bin-dir ''""")
                         .toArray(String[]::new));
 
         // then
@@ -5687,7 +5679,7 @@ final class InstallerScriptTest {
         Path symlink = temporaryDirectory.resolve("ps-install-app-link");
         Path safeBin = temporaryDirectory.resolve("ps-install-app-bin");
         Files.createDirectories(home);
-        Files.writeString(file, "not a directory", StandardCharsets.UTF_8);
+        Files.writeString(file, "not a directory");
         Files.createSymbolicLink(symlink, temporaryDirectory.resolve("ps-install-app-target"));
         Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
         environment.put("USERPROFILE", home.toString());
@@ -5809,7 +5801,7 @@ final class InstallerScriptTest {
         Path symlink = temporaryDirectory.resolve("ps-install-bin-workspaces-link");
         Files.createDirectories(home);
         Files.createDirectories(symphonyHome.resolve("workspaces"));
-        Files.writeString(file, "not a directory", StandardCharsets.UTF_8);
+        Files.writeString(file, "not a directory");
         Files.createSymbolicLink(symlink, symphonyHome.resolve("workspaces"));
         Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
         environment.put("USERPROFILE", home.toString());
@@ -6221,7 +6213,7 @@ final class InstallerScriptTest {
                         .toArray(String[]::new));
 
         // then
-        assertThat(result.exitCode()).as(result.output()).isEqualTo(1);
+        assertThat(result.exitCode()).as(result.output()).isOne();
         assertThat(result.output()).contains("install.ps1 supports Windows PowerShell setup only");
     }
 
@@ -6306,8 +6298,9 @@ final class InstallerScriptTest {
                                 pwsh,
                                 "-NoProfile",
                                 "-Command",
-                                "& ([scriptblock]::Create((Get-Content -Raw './uninstall.ps1'))) "
-                                        + "--dry-run --yes --yes-local-data --remove-config --remove-workspaces --remove-state")
+                                """
+                                & ([scriptblock]::Create((Get-Content -Raw './uninstall.ps1'))) \
+                                --dry-run --yes --yes-local-data --remove-config --remove-workspaces --remove-state""")
                         .toArray(String[]::new));
 
         // then
@@ -6420,8 +6413,9 @@ final class InstallerScriptTest {
                                 pwsh,
                                 "-NoProfile",
                                 "-Command",
-                                "& ([scriptblock]::Create((Get-Content -Raw './uninstall.ps1'))) "
-                                        + "--dry-run --yes --prefix '' --bin-dir ''")
+                                """
+                                & ([scriptblock]::Create((Get-Content -Raw './uninstall.ps1'))) \
+                                --dry-run --yes --prefix '' --bin-dir ''""")
                         .toArray(String[]::new));
 
         // then
@@ -6461,7 +6455,7 @@ final class InstallerScriptTest {
         Path symlink = temporaryDirectory.resolve("ps-uninstall-app-link");
         Path safeBin = temporaryDirectory.resolve("ps-uninstall-app-bin");
         Files.createDirectories(home);
-        Files.writeString(file, "not a directory", StandardCharsets.UTF_8);
+        Files.writeString(file, "not a directory");
         Files.createSymbolicLink(symlink, temporaryDirectory.resolve("ps-uninstall-app-target"));
         Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
         environment.put("USERPROFILE", home.toString());
@@ -6522,7 +6516,7 @@ final class InstallerScriptTest {
         Path symlink = temporaryDirectory.resolve("ps-uninstall-bin-state-link");
         Files.createDirectories(home);
         Files.createDirectories(symphonyHome.resolve("state"));
-        Files.writeString(file, "not a directory", StandardCharsets.UTF_8);
+        Files.writeString(file, "not a directory");
         Files.createSymbolicLink(symlink, symphonyHome.resolve("state"));
         Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
         environment.put("USERPROFILE", home.toString());
@@ -6675,7 +6669,7 @@ final class InstallerScriptTest {
         Files.createDirectories(stateHome);
         Files.createFile(prefix.resolve(".symphony-trello-install"));
         Path pidFile = stateHome.resolve("broken.pid");
-        Files.writeString(pidFile, "not-a-pid\n", StandardCharsets.UTF_8);
+        Files.writeString(pidFile, "not-a-pid\n");
 
         // when
         ProcessResult result = run(
@@ -6711,7 +6705,7 @@ final class InstallerScriptTest {
         assumeTrue(commandExists("bash"));
         Path symphonyHome = temporaryDirectory.resolve("protected-user-data-home");
         Files.createDirectories(symphonyHome.resolve("config"));
-        Files.writeString(symphonyHome.resolve("config/.env"), "TRELLO_API_KEY=secret\n", StandardCharsets.UTF_8);
+        Files.writeString(symphonyHome.resolve("config/.env"), "TRELLO_API_KEY=secret\n");
         Map<String, String> environment = Map.of("SYMPHONY_HOME", symphonyHome.toString());
 
         // when
@@ -6766,7 +6760,7 @@ final class InstallerScriptTest {
         Files.createDirectories(symphonyHome.resolve("workspaces"));
         Files.createDirectories(symphonyHome.resolve("state"));
         Files.createFile(symphonyHome.resolve(".symphony-trello-install"));
-        Files.writeString(symphonyHome.resolve("config/.env"), "TRELLO_API_KEY=secret\n", StandardCharsets.UTF_8);
+        Files.writeString(symphonyHome.resolve("config/.env"), "TRELLO_API_KEY=secret\n");
         Map<String, String> environment = Map.of("SYMPHONY_HOME", symphonyHome.toString());
 
         // when
@@ -6798,7 +6792,7 @@ final class InstallerScriptTest {
         Path symphonyHome = temporaryDirectory.resolve("embedded-empty-home");
         Files.createDirectories(symphonyHome);
         Files.createFile(symphonyHome.resolve(".symphony-trello-install"));
-        Files.writeString(symphonyHome.resolve("app.txt"), "managed app file\n", StandardCharsets.UTF_8);
+        Files.writeString(symphonyHome.resolve("app.txt"), "managed app file\n");
         Map<String, String> environment = Map.of("SYMPHONY_HOME", symphonyHome.toString());
 
         // when
@@ -6831,7 +6825,7 @@ final class InstallerScriptTest {
         Path configDirectory = symphonyHome.resolve("config");
         Files.createDirectories(appHome);
         Files.createDirectories(configDirectory);
-        Files.writeString(configDirectory.resolve(".env"), "TRELLO_API_KEY=secret\n", StandardCharsets.UTF_8);
+        Files.writeString(configDirectory.resolve(".env"), "TRELLO_API_KEY=secret\n");
         Map<String, String> environment = Map.of("SYMPHONY_HOME", symphonyHome.toString());
 
         // when
@@ -6884,8 +6878,8 @@ final class InstallerScriptTest {
                 created_microos_var_root=false
                 """
                         .formatted(appHome, configDirectory, workspaceRoot, stateHome, binDirectory);
-        Files.writeString(defaultStateContext, context, StandardCharsets.UTF_8);
-        Files.writeString(defaultConfigContext, context, StandardCharsets.UTF_8);
+        Files.writeString(defaultStateContext, context);
+        Files.writeString(defaultConfigContext, context);
         Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
 
         // when
@@ -6918,7 +6912,7 @@ final class InstallerScriptTest {
         Files.createDirectories(symphonyHome.resolve("workspaces"));
         Files.createDirectories(symphonyHome.resolve("state"));
         Files.createFile(symphonyHome.resolve(".symphony-trello-install"));
-        Files.writeString(symphonyHome.resolve("config/.env"), "TRELLO_API_KEY=secret\n", StandardCharsets.UTF_8);
+        Files.writeString(symphonyHome.resolve("config/.env"), "TRELLO_API_KEY=secret\n");
         Map<String, String> environment = Map.of("SYMPHONY_HOME", symphonyHome.toString());
 
         // when
@@ -6953,7 +6947,7 @@ final class InstallerScriptTest {
         Files.createDirectories(symphonyHome.resolve("workspaces"));
         Files.createDirectories(symphonyHome.resolve("state"));
         Files.createFile(symphonyHome.resolve(".symphony-trello-install"));
-        Files.writeString(symphonyHome.resolve("config/.env"), "TRELLO_API_KEY=secret\n", StandardCharsets.UTF_8);
+        Files.writeString(symphonyHome.resolve("config/.env"), "TRELLO_API_KEY=secret\n");
         Map<String, String> environment = Map.of("SYMPHONY_HOME", symphonyHome.toString());
 
         // when
@@ -7003,10 +6997,10 @@ final class InstallerScriptTest {
     @Test
     void installersDeclareExpectedManagedRuntimeCapabilities() throws Exception {
         // given
-        String posixInstaller = Files.readString(Path.of("install.sh"), StandardCharsets.UTF_8);
-        String powershellInstaller = Files.readString(Path.of("install.ps1"), StandardCharsets.UTF_8);
-        String posixUninstaller = Files.readString(Path.of("uninstall.sh"), StandardCharsets.UTF_8);
-        String powershellUninstaller = Files.readString(Path.of("uninstall.ps1"), StandardCharsets.UTF_8);
+        String posixInstaller = Files.readString(Path.of("install.sh"));
+        String powershellInstaller = Files.readString(Path.of("install.ps1"));
+        String posixUninstaller = Files.readString(Path.of("uninstall.sh"));
+        String powershellUninstaller = Files.readString(Path.of("uninstall.ps1"));
 
         // when
         var commandNames = List.of("setup-local", "start", "stop", "status", "logs");
@@ -7169,8 +7163,8 @@ final class InstallerScriptTest {
                         "--remove-state",
                         "--yes-local-data",
                         ".symphony-trello-install",
-                        "Trello boards were not deleted or archived.");
-        assertThat(posixUninstaller).doesNotContain(",,}");
+                        "Trello boards were not deleted or archived.")
+                .doesNotContain(",,}");
         assertThat(powershellUninstaller)
                 .contains(
                         "WOULD STOP",
@@ -7219,8 +7213,8 @@ final class InstallerScriptTest {
     @Test
     void installersOrderFinalHandoffAfterManagedWorkerSetupInSource() throws Exception {
         // given
-        String posixInstaller = Files.readString(Path.of("install.sh"), StandardCharsets.UTF_8);
-        String powershellInstaller = Files.readString(Path.of("install.ps1"), StandardCharsets.UTF_8);
+        String posixInstaller = Files.readString(Path.of("install.sh"));
+        String powershellInstaller = Files.readString(Path.of("install.ps1"));
         String posixOnboarding =
                 posixInstaller.substring(posixInstaller.lastIndexOf("if [[ \"$NO_ONBOARD\" == false ]]"));
         String powershellOnboarding =
@@ -7279,8 +7273,8 @@ final class InstallerScriptTest {
     @Test
     void installersOfferPathSetupBeforeGuidedSetupCanAbort() throws Exception {
         // given
-        String posixInstaller = Files.readString(Path.of("install.sh"), StandardCharsets.UTF_8);
-        String powershellInstaller = Files.readString(Path.of("install.ps1"), StandardCharsets.UTF_8);
+        String posixInstaller = Files.readString(Path.of("install.sh"));
+        String powershellInstaller = Files.readString(Path.of("install.ps1"));
 
         // when
         int posixPathSetup = posixInstaller.indexOf("\noffer_path_setup\n\nif [[ \"$NO_ONBOARD\" == false ]]");
@@ -7436,9 +7430,8 @@ final class InstallerScriptTest {
                 "bash " + shellQuote(installScript.toString()) + " --no-update-path --bin-dir "
                         + shellQuote(binDirectory.toString()));
         install.assertSuccess();
-        String serviceContent = Files.readString(servicePath, StandardCharsets.UTF_8);
-        String installContext = Files.readString(
-                xdgStateHome.resolve("symphony-trello/install-context.properties"), StandardCharsets.UTF_8);
+        String serviceContent = Files.readString(servicePath);
+        String installContext = Files.readString(xdgStateHome.resolve("symphony-trello/install-context.properties"));
         Map<String, String> uninstallEnvironment = Map.of(
                 "PATH",
                 fakeBin + File.pathSeparator + System.getenv("PATH"),
@@ -7467,7 +7460,8 @@ final class InstallerScriptTest {
                         "systemd_user_dir=" + xdgConfigHome.resolve("systemd/user"),
                         "systemd_service_path=" + servicePath,
                         "autostart_env_path=" + autostartEnvPath);
-        assertThat(Files.readString(fakeLog, StandardCharsets.UTF_8))
+        assertThat(fakeLog)
+                .content(StandardCharsets.UTF_8)
                 .contains(
                         "systemctl --user enable symphony-trello.service",
                         "systemctl --user restart symphony-trello.service",
@@ -7670,7 +7664,8 @@ final class InstallerScriptTest {
                             "Restarting managed workers after update...",
                             "Stopped WORKFLOW.docs-queue.md",
                             "Starting setup...");
-            assertThat(Files.readString(fakeLog, StandardCharsets.UTF_8))
+            assertThat(fakeLog)
+                    .content(StandardCharsets.UTF_8)
                     .contains("mvnw -q -f " + symphonyHome.resolve("app/pom.xml") + " -DskipTests clean package")
                     .containsSubsequence(
                             "TrelloBoardSetupMain stop",
@@ -7727,7 +7722,8 @@ final class InstallerScriptTest {
             assertThat(update.output())
                     .contains(
                             "Stopping managed workers before update...", "Restarting managed workers after update...");
-            assertThat(Files.readString(fakeLog, StandardCharsets.UTF_8))
+            assertThat(fakeLog)
+                    .content(StandardCharsets.UTF_8)
                     .containsSubsequence("TrelloBoardSetupMain stop", "TrelloBoardSetupMain start", "--all");
         } finally {
             if (Files.exists(binDirectory.resolve("symphony-trello"))) {
@@ -7761,14 +7757,14 @@ final class InstallerScriptTest {
         Path stalePid = symphonyHome.resolve("state/WORKFLOW.stale.pid");
         Path zeroPid = symphonyHome.resolve("state/WORKFLOW.zero.pid");
         Path reusedPid = symphonyHome.resolve("state/WORKFLOW.reused.pid");
-        Files.writeString(stalePid, "999999\n", StandardCharsets.UTF_8);
-        Files.writeString(zeroPid, "0\n", StandardCharsets.UTF_8);
+        Files.writeString(stalePid, "999999\n");
+        Files.writeString(zeroPid, "0\n");
         Files.delete(command);
         addSourceRepositoryCommit(sourceRepository, "UPDATED", "updated\n");
         Process unrelated = new ProcessBuilder("sleep", "60").start();
 
         try {
-            Files.writeString(reusedPid, unrelated.pid() + "\n", StandardCharsets.UTF_8);
+            Files.writeString(reusedPid, unrelated.pid() + "\n");
 
             // when
             ProcessResult update = run(
@@ -7790,7 +7786,7 @@ final class InstallerScriptTest {
             assertThat(stalePid).doesNotExist();
             assertThat(zeroPid).doesNotExist();
             assertThat(reusedPid).doesNotExist();
-            assertThat(Files.readString(fakeLog, StandardCharsets.UTF_8)).doesNotContain("TrelloBoardSetupMain stop");
+            assertThat(fakeLog).content(StandardCharsets.UTF_8).doesNotContain("TrelloBoardSetupMain stop");
         } finally {
             unrelated.destroyForcibly();
         }
@@ -8004,9 +8000,8 @@ final class InstallerScriptTest {
         Path binDirectory = temporaryDirectory.resolve("archive-to-source-bin");
         Path fakeLog = temporaryDirectory.resolve("archive-to-source.log");
         Files.createDirectories(appHome);
-        Files.writeString(
-                appHome.resolve(".symphony-trello-install"), "installer-managed archive\n", StandardCharsets.UTF_8);
-        Files.writeString(appHome.resolve("old-archive-file.txt"), "old archive content\n", StandardCharsets.UTF_8);
+        Files.writeString(appHome.resolve(".symphony-trello-install"), "installer-managed archive\n");
+        Files.writeString(appHome.resolve("old-archive-file.txt"), "old archive content\n");
         Map<String, String> environment = Map.of(
                 "PATH", fakeBin + File.pathSeparator + System.getenv("PATH"),
                 "SYMPHONY_HOME", symphonyHome.toString(),
@@ -8068,7 +8063,7 @@ final class InstallerScriptTest {
                         .toArray(String[]::new));
 
         // then
-        assertThat(result.exitCode()).as(result.output()).isEqualTo(1);
+        assertThat(result.exitCode()).as(result.output()).isOne();
         assertThat(normalizedWhitespace(result.output()))
                 .contains(
                         "Refusing to update existing Git checkout without Symphony installer",
@@ -8092,9 +8087,8 @@ final class InstallerScriptTest {
         Path binDirectory = temporaryDirectory.resolve("ps-archive-to-source-bin");
         Path fakeLog = temporaryDirectory.resolve("ps-archive-to-source.log");
         Files.createDirectories(appHome);
-        Files.writeString(
-                appHome.resolve(".symphony-trello-install"), "installer-managed archive\n", StandardCharsets.UTF_8);
-        Files.writeString(appHome.resolve("old-archive-file.txt"), "old archive content\n", StandardCharsets.UTF_8);
+        Files.writeString(appHome.resolve(".symphony-trello-install"), "installer-managed archive\n");
+        Files.writeString(appHome.resolve("old-archive-file.txt"), "old archive content\n");
 
         // when
         ProcessResult result = runPowerShellSourceCheckoutInstall(
@@ -8270,8 +8264,8 @@ final class InstallerScriptTest {
         Path callerDirectory = temporaryDirectory.resolve("caller");
         Path fakeLog = temporaryDirectory.resolve("relative-fake-tools.log");
         Files.createDirectories(callerDirectory);
-        Files.writeString(callerDirectory.resolve(".env.relative"), "TRELLO_API_KEY=key\n", StandardCharsets.UTF_8);
-        Files.writeString(callerDirectory.resolve("WORKFLOW.relative.md"), "# Relative\n", StandardCharsets.UTF_8);
+        Files.writeString(callerDirectory.resolve(".env.relative"), "TRELLO_API_KEY=key\n");
+        Files.writeString(callerDirectory.resolve("WORKFLOW.relative.md"), "# Relative\n");
         Map<String, String> environment = Map.of(
                 "PATH", fakeBin + System.getProperty("path.separator") + System.getenv("PATH"),
                 "SYMPHONY_TRELLO_REPO_URL", sourceRepository.toUri().toString(),
@@ -8289,8 +8283,7 @@ final class InstallerScriptTest {
                 """
                         .formatted(
                                 callerDirectory.resolve("WORKFLOW.relative.md"),
-                                callerDirectory.resolve(".env.relative")),
-                StandardCharsets.UTF_8);
+                                callerDirectory.resolve(".env.relative")));
         ProcessResult start = run(
                 environment,
                 callerDirectory,
@@ -8316,8 +8309,7 @@ final class InstallerScriptTest {
                 callerDirectory.resolve("WORKFLOW.relative.md").toString(),
                 "--follow");
         Path pidFile = singleFile(symphonyHome.resolve("state"), ".pid");
-        long managedPid =
-                Long.parseLong(Files.readString(pidFile, StandardCharsets.UTF_8).trim());
+        long managedPid = Long.parseLong(Files.readString(pidFile).trim());
         ProcessResult stop = run(
                 environment,
                 callerDirectory,
@@ -8349,7 +8341,7 @@ final class InstallerScriptTest {
     private Path createUnmarkedCheckout(String name) throws Exception {
         Path checkout = temporaryDirectory.resolve(name);
         Files.createDirectories(checkout);
-        Files.writeString(checkout.resolve("README.md"), "unrelated\n", StandardCharsets.UTF_8);
+        Files.writeString(checkout.resolve("README.md"), "unrelated\n");
         run(Map.of(), "git", "-C", checkout.toString(), "init", "-b", "main").assertSuccess();
         run(Map.of(), "git", "-C", checkout.toString(), "config", "user.name", "Test User")
                 .assertSuccess();
@@ -8372,7 +8364,7 @@ final class InstallerScriptTest {
     }
 
     private static ProcessResult runWithoutHome(String... command) throws Exception {
-        ProcessBuilder processBuilder = new ProcessBuilder(command);
+        var processBuilder = new ProcessBuilder(command);
         processBuilder.environment().remove("HOME");
         return run(processBuilder, "", 60);
     }
@@ -8404,11 +8396,11 @@ final class InstallerScriptTest {
     }
 
     private static String assertBtrfsSubvolumeDeletes(Path btrfsLog, Path app) throws IOException {
-        String log = Files.readString(btrfsLog, StandardCharsets.UTF_8);
-        assertThat(log)
+        String log = Files.readString(btrfsLog);
+        return assertThat(log)
                 .containsSubsequence(
-                        "delete " + app.resolve("nested/deeper"), "delete " + app.resolve("nested"), "delete " + app);
-        return log;
+                        "delete " + app.resolve("nested/deeper"), "delete " + app.resolve("nested"), "delete " + app)
+                .actual();
     }
 
     private static String normalizedWhitespace(String text) {
@@ -8425,11 +8417,10 @@ final class InstallerScriptTest {
         Files.createDirectories(app);
         Files.createDirectories(bin);
         Files.createFile(app.resolve(".symphony-trello-install"));
-        Files.writeString(
-                defaultSymphonyHome.resolve("config/.env"), "TRELLO_API_KEY=secret\n", StandardCharsets.UTF_8);
-        Files.writeString(defaultSymphonyHome.resolve("workspaces/card.txt"), "work\n", StandardCharsets.UTF_8);
-        Files.writeString(defaultSymphonyHome.resolve("state/worker.pid"), "123\n", StandardCharsets.UTF_8);
-        Files.writeString(bin.resolve(commandName), "launcher\n", StandardCharsets.UTF_8);
+        Files.writeString(defaultSymphonyHome.resolve("config/.env"), "TRELLO_API_KEY=secret\n");
+        Files.writeString(defaultSymphonyHome.resolve("workspaces/card.txt"), "work\n");
+        Files.writeString(defaultSymphonyHome.resolve("state/worker.pid"), "123\n");
+        Files.writeString(bin.resolve(commandName), "launcher\n");
         return new CustomPrefixUninstallFixture(defaultSymphonyHome, app, bin);
     }
 

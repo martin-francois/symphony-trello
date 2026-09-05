@@ -102,10 +102,14 @@ final class TestConventionTest {
                 "            value = \"fixture }\")",
                 "    void fuzz(",
                 "            @NotNull String input) {",
-                "        // " + "when",
+                """
+                        // \
+                when""",
                 "        input.length();",
                 "",
-                "        // " + "then",
+                """
+                        // \
+                then""",
                 "        input.isBlank();",
                 "    }",
                 "}");
@@ -612,10 +616,11 @@ final class TestConventionTest {
                         .stripIndent()
                         .trim();
 
-        // then
-        assertThat(pom).contains("<jspecify.version>1.0.0</jspecify.version>");
-        assertThat(pom).contains(dependency);
-        assertThat(pom).doesNotContain("<artifactId>jspecify</artifactId>%n      <scope>test</scope>".formatted());
+        assertThat(pom)
+                // then
+                .contains("<jspecify.version>1.0.0</jspecify.version>")
+                .contains(dependency)
+                .doesNotContain("<artifactId>jspecify</artifactId>%n      <scope>test</scope>".formatted());
     }
 
     @Test
@@ -988,11 +993,11 @@ final class TestConventionTest {
     private static ParsedJavaFile compileJava(Path file, String source, boolean analyze) throws IOException {
         JavaCompiler compiler =
                 Objects.requireNonNull(ToolProvider.getSystemJavaCompiler(), "Test convention checks require a JDK");
-        DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+        var diagnostics = new DiagnosticCollector<JavaFileObject>();
         try (StandardJavaFileManager fileManager =
                 compiler.getStandardFileManager(diagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
             JavaFileObject sourceFile = sourceFile(file, source);
-            JavacTask task = (JavacTask)
+            var task = (JavacTask)
                     compiler.getTask(null, fileManager, diagnostics, List.of("-proc:none"), null, List.of(sourceFile));
             List<CompilationUnitTree> units = parseCompilationUnits(task);
             rejectParseErrors(file, diagnostics);
@@ -1008,7 +1013,7 @@ final class TestConventionTest {
     private static List<ParsedJavaFile> analyzeJava(List<Path> files) throws IOException {
         JavaCompiler compiler =
                 Objects.requireNonNull(ToolProvider.getSystemJavaCompiler(), "Test convention checks require a JDK");
-        DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+        var diagnostics = new DiagnosticCollector<JavaFileObject>();
         Map<Path, Path> sourcePaths = new HashMap<>();
         for (Path file : files) {
             sourcePaths.put(file.toAbsolutePath().normalize(), file);
@@ -1016,7 +1021,7 @@ final class TestConventionTest {
         try (StandardJavaFileManager fileManager =
                 compiler.getStandardFileManager(diagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
             Iterable<? extends JavaFileObject> sourceFiles = fileManager.getJavaFileObjectsFromPaths(files);
-            JavacTask task = (JavacTask)
+            var task = (JavacTask)
                     compiler.getTask(null, fileManager, diagnostics, List.of("-proc:none"), null, sourceFiles);
             List<CompilationUnitTree> units = parseCompilationUnits(task);
             rejectParseErrors(diagnostics);

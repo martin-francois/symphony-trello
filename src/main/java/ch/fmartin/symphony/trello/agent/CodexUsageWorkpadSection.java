@@ -121,7 +121,7 @@ public final class CodexUsageWorkpadSection {
     }
 
     private static String normalizeSingleLine(String value) {
-        StringBuilder normalized = new StringBuilder(value.length());
+        var normalized = new StringBuilder(value.length());
         boolean pendingSpace = false;
         var codePoints = value.codePoints().iterator();
         while (codePoints.hasNext()) {
@@ -157,7 +157,7 @@ public final class CodexUsageWorkpadSection {
         boolean truncated = escapedLength > MAX_MESSAGE_CODE_POINTS;
         int budget = truncated ? MAX_MESSAGE_CODE_POINTS - 3 : MAX_MESSAGE_CODE_POINTS;
         int used = 0;
-        StringBuilder escaped = new StringBuilder(Math.min(value.length(), MAX_MESSAGE_CODE_POINTS));
+        var escaped = new StringBuilder(Math.min(value.length(), MAX_MESSAGE_CODE_POINTS));
         var codePoints = value.codePoints().iterator();
         while (codePoints.hasNext()) {
             int codePoint = codePoints.nextInt();

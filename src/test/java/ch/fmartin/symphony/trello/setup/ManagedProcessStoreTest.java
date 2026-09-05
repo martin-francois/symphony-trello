@@ -3,7 +3,6 @@ package ch.fmartin.symphony.trello.setup;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.Sha3;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
@@ -18,7 +17,7 @@ final class ManagedProcessStoreTest {
         // given
         Path stateHome = tempDir.resolve("state");
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(workflow, "---\n---\n", StandardCharsets.UTF_8);
+        Files.writeString(workflow, "---\n---\n");
         String expectedHash = Sha3.sha3_256(workflow.toRealPath().toString()).substring(0, 12);
 
         // when

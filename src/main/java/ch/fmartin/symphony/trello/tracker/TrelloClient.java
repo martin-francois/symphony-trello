@@ -545,7 +545,7 @@ public class TrelloClient implements TrackerClient {
     }
 
     private static Map<String, ReferencedText> promptReferenceTexts(Card card, PrerequisitePlan plan) {
-        ReferenceAccumulator references = new ReferenceAccumulator();
+        var references = new ReferenceAccumulator();
         references.add("title", card.title());
         references.add("description", card.description());
         for (Card.Checklist checklist : card.checklists()) {

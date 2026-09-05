@@ -75,10 +75,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
                         "Wrong Workflow Queue",
                         (test, workflow, env) -> {
                             Path wrongWorkflow = test.tempDir.resolve("WORKFLOW.actual.md");
-                            Files.writeString(
-                                    wrongWorkflow,
-                                    Files.readString(workflow, StandardCharsets.UTF_8),
-                                    StandardCharsets.UTF_8);
+                            Files.writeString(wrongWorkflow, Files.readString(workflow));
                             test.commands.stopHealthServer(workflow.toString());
                             test.commands.startHealthServer(wrongWorkflow, "board-1");
                             return () -> {};
@@ -196,8 +193,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
                 TRELLO_API_TOKEN=token
                 SYMPHONY_HTTP_PORT=%d
                 """
-                        .formatted(dotenvPort),
-                StandardCharsets.UTF_8);
+                        .formatted(dotenvPort));
 
         // when
         SetupRunResult setupResult = runSetup(
@@ -245,10 +241,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
                 env.toString(),
                 "--no-github");
         Files.writeString(
-                workflow,
-                Files.readString(workflow, StandardCharsets.UTF_8)
-                        .replace("board_id: \"abc123\"", "board_id: \"other-board\""),
-                StandardCharsets.UTF_8);
+                workflow, Files.readString(workflow).replace("board_id: \"abc123\"", "board_id: \"other-board\""));
 
         // when
         SetupRunResult result = runSetup("check", "--endpoint", endpoint());
@@ -285,10 +278,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
                 "--server-port",
                 String.valueOf(port),
                 "--no-github");
-        Files.writeString(
-                workflow,
-                Files.readString(workflow, StandardCharsets.UTF_8).replace("port: " + port, "port: " + (port + 1)),
-                StandardCharsets.UTF_8);
+        Files.writeString(workflow, Files.readString(workflow).replace("port: " + port, "port: " + (port + 1)));
 
         // when
         SetupRunResult result = runSetup("check", "--endpoint", endpoint());
@@ -312,7 +302,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         Files.createDirectories(configDir);
         Files.createDirectories(envDirectory);
         Files.createDirectories(fixture.workspaceRoot());
-        Files.writeString(workspaceFile, "not a directory", StandardCharsets.UTF_8);
+        Files.writeString(workspaceFile, "not a directory");
         writeWorkflow(workflow, "synthetic-board", 20451);
         fixture.givenManifest(
                 """
@@ -461,7 +451,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         Path env = configDir.resolve(".env.valid");
         Files.createDirectories(configDir);
         Files.createDirectories(fixture.workspaceRoot());
-        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials());
         writeWorkflow(workflow, "valid-board-id", 20457);
         commands.startHealthServer(workflow, "other-board");
         fixture.givenManifest(
@@ -500,7 +490,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         Path env = configDir.resolve(".env.valid");
         Files.createDirectories(configDir);
         Files.createDirectories(fixture.workspaceRoot());
-        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials());
         writeWorkflow(workflow, "valid-board-id", 20457);
         fixture.givenManifest(
                 """

@@ -31,7 +31,7 @@ final class InstallerScriptFixture {
     }
 
     static void writeExecutable(Path path, String content) throws IOException {
-        Files.writeString(path, content, StandardCharsets.UTF_8);
+        Files.writeString(path, content);
         path.toFile().setExecutable(true);
     }
 
@@ -46,7 +46,7 @@ final class InstallerScriptFixture {
 
     static ProcessResult runWithPseudoTerminal(Map<String, String> environment, String input, String command)
             throws IOException, InterruptedException {
-        ProcessBuilder processBuilder = new ProcessBuilder("script", "-q", "-e", "-c", command, "/dev/null");
+        var processBuilder = new ProcessBuilder("script", "-q", "-e", "-c", command, "/dev/null");
         return runWithTestEnvironment(environment, processBuilder, input);
     }
 
@@ -57,7 +57,7 @@ final class InstallerScriptFixture {
 
     static ProcessResult run(Map<String, String> environment, Path workingDirectory, String... command)
             throws IOException, InterruptedException {
-        ProcessBuilder processBuilder = new ProcessBuilder(command);
+        var processBuilder = new ProcessBuilder(command);
         processBuilder.directory(workingDirectory.toFile());
         return run(environment, processBuilder);
     }
@@ -290,7 +290,7 @@ final class InstallerScriptFixture {
     }
 
     static String installerDefaultRef() throws IOException {
-        String installScript = Files.readString(Path.of("install.sh"), StandardCharsets.UTF_8);
+        String installScript = Files.readString(Path.of("install.sh"));
         return POSIX_INSTALLER_DEFAULT_VERSION
                 .matcher(installScript)
                 .results()
@@ -302,8 +302,8 @@ final class InstallerScriptFixture {
     static Path createSourceRepository(Path temporaryDirectory) throws Exception {
         Path repository = temporaryDirectory.resolve("source");
         Files.createDirectories(repository);
-        Files.writeString(repository.resolve("pom.xml"), "<project />\n", StandardCharsets.UTF_8);
-        Files.writeString(repository.resolve("WORKFLOW.example.md"), "# Example workflow\n", StandardCharsets.UTF_8);
+        Files.writeString(repository.resolve("pom.xml"), "<project />\n");
+        Files.writeString(repository.resolve("WORKFLOW.example.md"), "# Example workflow\n");
         Files.writeString(
                 repository.resolve("mvnw"),
                 """
@@ -313,8 +313,7 @@ final class InstallerScriptFixture {
                 app_home="$(cd "$(dirname "$0")" && pwd -P)"
                 mkdir -p "$app_home/target/quarkus-app/app" "$app_home/target/quarkus-app/lib/main" "$app_home/target/quarkus-app/quarkus"
                 : > "$app_home/target/quarkus-app/quarkus-run.jar"
-                """,
-                StandardCharsets.UTF_8);
+                """);
         repository.resolve("mvnw").toFile().setExecutable(true);
         initializeSourceRepository(repository);
         return repository;
@@ -323,8 +322,8 @@ final class InstallerScriptFixture {
     static Path createWindowsSourceRepository(Path temporaryDirectory) throws Exception {
         Path repository = temporaryDirectory.resolve("windows source");
         Files.createDirectories(repository);
-        Files.writeString(repository.resolve("pom.xml"), "<project />\n", StandardCharsets.UTF_8);
-        Files.writeString(repository.resolve("WORKFLOW.example.md"), "# Example workflow\n", StandardCharsets.UTF_8);
+        Files.writeString(repository.resolve("pom.xml"), "<project />\n");
+        Files.writeString(repository.resolve("WORKFLOW.example.md"), "# Example workflow\n");
         Files.writeString(
                 repository.resolve("mvnw.cmd"),
                 """
@@ -334,8 +333,7 @@ final class InstallerScriptFixture {
                 mkdir target\\quarkus-app\\lib\\main 2>nul
                 mkdir target\\quarkus-app\\quarkus 2>nul
                 type nul > target\\quarkus-app\\quarkus-run.jar
-                """,
-                StandardCharsets.UTF_8);
+                """);
         initializeSourceRepository(repository);
         return repository;
     }
@@ -354,7 +352,7 @@ final class InstallerScriptFixture {
     }
 
     static void addSourceRepositoryCommit(Path repository, String relativePath, String content) throws Exception {
-        Files.writeString(repository.resolve(relativePath), content, StandardCharsets.UTF_8);
+        Files.writeString(repository.resolve(relativePath), content);
         run(Map.of(), "git", "-C", repository.toString(), "add", relativePath).assertSuccess();
         run(Map.of(), "git", "-C", repository.toString(), "commit", "-m", "Update test source")
                 .assertSuccess();
@@ -789,15 +787,13 @@ final class InstallerScriptFixture {
                 """
                 @echo off
                 pwsh -NoProfile -File "%SYMPHONY_FAKE_JAVA%" %*
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.writeString(
                 fakeBin.resolve("javac.cmd"),
                 """
                 @echo off
                 echo javac 25.0.1
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.writeString(
                 fakeBin.resolve("codex.cmd"),
                 """
@@ -805,8 +801,7 @@ final class InstallerScriptFixture {
                 if "%1"=="login" if "%2"=="status" exit /b 0
                 echo codex %* >> "%SYMPHONY_FAKE_LOG%"
                 exit /b 0
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.writeString(
                 fakeBin.resolve("fake-java.ps1"),
                 """
@@ -901,8 +896,7 @@ final class InstallerScriptFixture {
 	                }
                 "java $($args -join ' ')" | Add-Content -Path $env:SYMPHONY_FAKE_LOG
                 exit 0
-                """,
-                StandardCharsets.UTF_8);
+                """);
         return fakeBin;
     }
 

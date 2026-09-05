@@ -40,7 +40,7 @@ public final class WorkflowConfigIngestion {
             Function<String, Optional<String>> environmentResolver,
             UnresolvedEnvironmentPolicy unresolvedEnvironmentPolicy) {
         try {
-            LinkedHashMap<String, Object> parsed = YAML.readValue(frontMatter, YAML_MAP_TYPE);
+            Map<String, Object> parsed = YAML.readValue(frontMatter, YAML_MAP_TYPE);
             return Optional.of(
                     collect(parsed == null ? Map.of() : parsed, environmentResolver, unresolvedEnvironmentPolicy));
         } catch (JsonProcessingException e) {

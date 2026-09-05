@@ -75,8 +75,8 @@ final class InstallerScriptLifecycleTest {
                 environment,
                 "n\napi-key\napi-token\nLifecycle Board\n",
                 "bash " + shellQuote(installScript.toString()) + " --bin-dir " + shellQuote(binDirectory.toString()));
-        String userServiceContentAfterInstall = Files.readString(userService, StandardCharsets.UTF_8);
-        String autostartEnvironmentAfterInstall = Files.readString(autostartEnvironment, StandardCharsets.UTF_8);
+        String userServiceContentAfterInstall = Files.readString(userService);
+        String autostartEnvironmentAfterInstall = Files.readString(autostartEnvironment);
         Path installedCommand = binDirectory.resolve("symphony-trello");
         Path callerDirectory = temporaryDirectory.resolve("posix caller");
         Files.createDirectories(callerDirectory);
@@ -113,8 +113,7 @@ final class InstallerScriptLifecycleTest {
                 """
                         .formatted(
                                 configDirectory.resolve("WORKFLOW.lifecycle-board.md"),
-                                configDirectory.resolve(".env")),
-                StandardCharsets.UTF_8);
+                                configDirectory.resolve(".env")));
         Path isolatedConfigArgument = isolatedConfigDirectory.resolve(".");
         ProcessResult isolatedSetupLocalHelp = run(
                 environment,
@@ -163,12 +162,10 @@ final class InstallerScriptLifecycleTest {
         addSourceRepositoryCommit(sourceRepository, "UPGRADE_MARKER", "updated\n");
         ProcessResult secondUpdate = run(
                 environment, "bash", installScript.toString(), "--no-onboard", "--bin-dir", binDirectory.toString());
-        String markerContentAfterUpdate =
-                Files.readString(installPrefix.resolve("UPGRADE_MARKER"), StandardCharsets.UTF_8);
+        String markerContentAfterUpdate = Files.readString(installPrefix.resolve("UPGRADE_MARKER"));
         ProcessResult statusWhileRunning = run(environment, installedCommand.toString(), "status");
         Path pidFile = singleFile(stateHome, ".pid");
-        long managedPid =
-                Long.parseLong(Files.readString(pidFile, StandardCharsets.UTF_8).trim());
+        long managedPid = Long.parseLong(Files.readString(pidFile).trim());
         ProcessResult stop = run(
                 environment,
                 installedCommand.toString(),
@@ -176,11 +173,10 @@ final class InstallerScriptLifecycleTest {
                 "--workflow",
                 configDirectory.resolve("WORKFLOW.lifecycle-board.md").toString());
         ProcessResult restart = run(environment, installedCommand.toString(), "start");
-        int fakeLogLengthBeforeUninstall =
-                Files.readString(fakeLog, StandardCharsets.UTF_8).length();
+        int fakeLogLengthBeforeUninstall = Files.readString(fakeLog).length();
         Path restartedPidFile = singleFile(stateHome, ".pid");
-        long restartedManagedPid = Long.parseLong(
-                Files.readString(restartedPidFile, StandardCharsets.UTF_8).trim());
+        long restartedManagedPid =
+                Long.parseLong(Files.readString(restartedPidFile).trim());
         ProcessResult uninstall =
                 run(environment, "bash", uninstallScript.toString(), "--yes", "--bin-dir", binDirectory.toString());
 
@@ -272,7 +268,7 @@ final class InstallerScriptLifecycleTest {
         assertThat(uninstall.exitCode()).isZero();
         assertThat(uninstall.output())
                 .contains("STOP", "REMOVE  " + binDirectory.resolve("symphony-trello"), "REMOVE  " + userService);
-        String fakeLogAfterUninstall = Files.readString(fakeLog, StandardCharsets.UTF_8);
+        String fakeLogAfterUninstall = Files.readString(fakeLog);
         String fakeLogDuringUninstall = fakeLogAfterUninstall.substring(fakeLogLengthBeforeUninstall);
         assertThat(fakeLogDuringUninstall)
                 .contains("jar-stopped", "systemctl --user disable --now symphony-trello.service");
@@ -338,7 +334,7 @@ final class InstallerScriptLifecycleTest {
                         "jar-stopped")
                 .doesNotContain("new-board --workflow");
         assertThat(fakeLog).content().containsSubsequence("completion_mode=defer", "completion_mode=print");
-        List<String> managedStartInvocations = Files.readString(fakeLog, StandardCharsets.UTF_8)
+        List<String> managedStartInvocations = Files.readString(fakeLog)
                 .lines()
                 .filter(line -> line.contains("TrelloBoardSetupMain start"))
                 .filter(line -> line.contains(" --workflow ") || line.contains(" --all "))
@@ -346,7 +342,7 @@ final class InstallerScriptLifecycleTest {
         assertThat(managedStartInvocations).isNotEmpty().allSatisfy(line -> assertThat(line)
                 .contains("completion_mode=")
                 .doesNotContain("completion_mode=preexisting", "completion_mode=defer", "completion_mode=print"));
-        List<String> isolatedInvocations = Files.readString(fakeLog, StandardCharsets.UTF_8)
+        List<String> isolatedInvocations = Files.readString(fakeLog)
                 .lines()
                 .filter(line -> line.startsWith("setup-cli "))
                 .filter(line -> line.contains("TrelloBoardSetupMain status")
@@ -365,7 +361,7 @@ final class InstallerScriptLifecycleTest {
                                 "--workspace-root " + workspaceRoot,
                                 "--state-home " + stateHome))
                 .hasSize(2);
-        List<String> isolatedSetupLocalInvocations = Files.readString(fakeLog, StandardCharsets.UTF_8)
+        List<String> isolatedSetupLocalInvocations = Files.readString(fakeLog)
                 .lines()
                 .filter(line -> line.startsWith("setup-cli "))
                 .filter(line -> line.contains("TrelloBoardSetupMain setup-local"))
@@ -378,7 +374,7 @@ final class InstallerScriptLifecycleTest {
                         "--workspace-root " + isolatedConfigArgument.resolve("workspaces"),
                         "state_env=" + isolatedConfigDirectory.resolveSibling("state"),
                         "--workspace-root " + workspaceRoot));
-        List<String> isolatedSetupLocalCheckInvocations = Files.readString(fakeLog, StandardCharsets.UTF_8)
+        List<String> isolatedSetupLocalCheckInvocations = Files.readString(fakeLog)
                 .lines()
                 .filter(line -> line.startsWith("setup-cli "))
                 .filter(line -> line.contains("TrelloBoardSetupMain setup-local"))
@@ -390,7 +386,7 @@ final class InstallerScriptLifecycleTest {
                         "--workspace-root " + isolatedConfigDirectory.resolve("workspaces"),
                         "--workspace-root " + isolatedConfigArgument.resolve("workspaces"),
                         "--workspace-root " + workspaceRoot));
-        List<String> environmentRootInvocations = Files.readString(fakeLog, StandardCharsets.UTF_8)
+        List<String> environmentRootInvocations = Files.readString(fakeLog)
                 .lines()
                 .filter(line -> line.startsWith("setup-cli "))
                 .filter(line -> line.contains("TrelloBoardSetupMain status"))
@@ -486,8 +482,8 @@ final class InstallerScriptLifecycleTest {
                 }));
         ProcessResult unknownCommand =
                 run(environment, "pwsh", "-NoProfile", "-File", installedScript.toString(), "definitely-not-a-command");
-        Files.writeString(workflow, "# Windows workflow\n", StandardCharsets.UTF_8);
-        Files.writeString(envFile, "TRELLO_API_KEY=key\n", StandardCharsets.UTF_8);
+        Files.writeString(workflow, "# Windows workflow\n");
+        Files.writeString(envFile, "TRELLO_API_KEY=key\n");
         ProcessResult start = run(
                 environment,
                 "pwsh",
@@ -558,7 +554,7 @@ final class InstallerScriptLifecycleTest {
         assertThat(status.output()).contains("running WORKFLOW $value & (demo).md");
         assertThat(logs.output()).contains("fake wrapper log");
         assertThat(stop.output()).contains("Stopped WORKFLOW $value & (demo).md");
-        String fakeLogContent = Files.readString(fakeLog, StandardCharsets.UTF_8);
+        String fakeLogContent = Files.readString(fakeLog);
         Map<String, Object> powerShellSetup = setupCliEvent(fakeLogContent, "new-board", "Wrapper Dispatch Board");
         assertThat(String.valueOf(powerShellSetup.get("cwd"))).contains("windows caller");
         assertThat(String.valueOf(powerShellSetup.get("dotenv"))).contains("home $value & (demo)\\config\\.env");

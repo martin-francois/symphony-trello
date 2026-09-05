@@ -48,9 +48,8 @@ final class WorkflowConfigEditorTest {
                   command: codex app-server\r
                 ---\r
                 # Body\r
-                """,
-                StandardCharsets.UTF_8);
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+                """);
+        var editor = new WorkflowConfigEditor();
 
         // when
         WorkflowListConfiguration lists = editor.listConfiguration(workflow);
@@ -58,7 +57,7 @@ final class WorkflowConfigEditorTest {
 
         // then
         assertThat(lists.activeStates()).containsExactly("Ready for Codex");
-        assertThat(editor.serverPort(workflow)).contains(18081);
+        assertThat(editor.serverPort(workflow)).hasValue(18081);
         assertThat(workflow).content(StandardCharsets.UTF_8).contains("# Body");
     }
 
@@ -83,15 +82,14 @@ final class WorkflowConfigEditorTest {
                   command: codex app-server
                 ---
                 # Body
-                """,
-                StandardCharsets.UTF_8);
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+                """);
+        var editor = new WorkflowConfigEditor();
 
         // when
         editor.updateServerPort(workflow, 18081);
 
         // then
-        assertThat(editor.serverPort(workflow)).contains(18081);
+        assertThat(editor.serverPort(workflow)).hasValue(18081);
         assertThat(workflow).content(StandardCharsets.UTF_8).contains("# Body");
     }
 
@@ -100,21 +98,21 @@ final class WorkflowConfigEditorTest {
         // given
         Path target = tempDir.resolve("WORKFLOW.target.md");
         Path link = tempDir.resolve("WORKFLOW.link.md");
-        Files.writeString(target, workflowWithBody("# Body"), StandardCharsets.UTF_8);
+        Files.writeString(target, workflowWithBody("# Body"));
         try {
             Files.createSymbolicLink(link, target.getFileName());
         } catch (IOException | UnsupportedOperationException e) {
             assumeTrue(false, "symbolic links are not available: " + e.getMessage());
         }
         assertThat(link).isSymbolicLink();
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        var editor = new WorkflowConfigEditor();
 
         // when
         editor.updateServerPort(link, 18081);
 
         // then
         assertThat(link).isSymbolicLink();
-        assertThat(editor.serverPort(target)).contains(18081);
+        assertThat(editor.serverPort(target)).hasValue(18081);
         assertThat(link).content(StandardCharsets.UTF_8).contains("port: 18081", "# Body");
         assertThat(target).content(StandardCharsets.UTF_8).contains("port: 18081", "# Body");
     }
@@ -123,19 +121,19 @@ final class WorkflowConfigEditorTest {
     void updateServerPortPreservesPosixPermissionsWhenSupported() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.permissions.md");
-        Files.writeString(workflow, workflowWithBody("# Body"), StandardCharsets.UTF_8);
+        Files.writeString(workflow, workflowWithBody("# Body"));
         assumeTrue(Files.getFileStore(workflow).supportsFileAttributeView("posix"));
         Set<PosixFilePermission> permissions = Set.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE);
         Files.setPosixFilePermissions(workflow, permissions);
-        assertThat(Files.getPosixFilePermissions(workflow)).containsExactlyInAnyOrderElementsOf(permissions);
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        assertThat(Files.getPosixFilePermissions(workflow)).hasSameElementsAs(permissions);
+        var editor = new WorkflowConfigEditor();
 
         // when
         editor.updateServerPort(workflow, 18081);
 
         // then
-        assertThat(editor.serverPort(workflow)).contains(18081);
-        assertThat(Files.getPosixFilePermissions(workflow)).containsExactlyInAnyOrderElementsOf(permissions);
+        assertThat(editor.serverPort(workflow)).hasValue(18081);
+        assertThat(Files.getPosixFilePermissions(workflow)).hasSameElementsAs(permissions);
     }
 
     @Test
@@ -143,12 +141,12 @@ final class WorkflowConfigEditorTest {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.read-only-update.md");
         String original = workflowWithBody("# Body");
-        Files.writeString(workflow, original, StandardCharsets.UTF_8);
+        Files.writeString(workflow, original);
         assumeTrue(Files.getFileStore(workflow).supportsFileAttributeView("posix"));
         Set<PosixFilePermission> readOnlyPermissions = Set.of(PosixFilePermission.OWNER_READ);
         Files.setPosixFilePermissions(workflow, readOnlyPermissions);
-        assertThat(Files.getPosixFilePermissions(workflow)).containsExactlyInAnyOrderElementsOf(readOnlyPermissions);
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        assertThat(Files.getPosixFilePermissions(workflow)).hasSameElementsAs(readOnlyPermissions);
+        var editor = new WorkflowConfigEditor();
 
         // when
         Throwable thrown = catchThrowable(() -> editor.updateServerPort(workflow, 18081));
@@ -177,9 +175,8 @@ final class WorkflowConfigEditorTest {
                 ---
                 Body
                 """
-                        .formatted(portLine),
-                StandardCharsets.UTF_8);
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+                        .formatted(portLine));
+        var editor = new WorkflowConfigEditor();
 
         // when
         WorkflowServerPortClassification classification = editor.classifyServerPortForDiagnostics(workflow);
@@ -241,9 +238,8 @@ final class WorkflowConfigEditorTest {
                   port: $STATUS_PORT
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+                """);
+        var editor = new WorkflowConfigEditor();
         Function<String, Optional<String>> resolver =
                 variable -> "STATUS_PORT".equals(variable) ? Optional.ofNullable(resolvedValue) : Optional.empty();
 
@@ -276,7 +272,7 @@ final class WorkflowConfigEditorTest {
     void classifiesMissingWorkflowFileAsUnreadableForDiagnostics() {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.does-not-exist.md");
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        var editor = new WorkflowConfigEditor();
 
         // when
         WorkflowServerPortClassification classification = editor.classifyServerPortForDiagnostics(workflow);
@@ -297,9 +293,8 @@ final class WorkflowConfigEditorTest {
                 null
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+                """);
+        var editor = new WorkflowConfigEditor();
 
         // when
         var maxAgents = editor.maxAgents(workflow);
@@ -333,9 +328,8 @@ final class WorkflowConfigEditorTest {
                   command: codex app-server
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+                """);
+        var editor = new WorkflowConfigEditor();
 
         // when
         WorkflowValidation validation = editor.diagnosticsValidation(workflow);
@@ -365,8 +359,7 @@ final class WorkflowConfigEditorTest {
                   command: codex app-server
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         ConnectedBoard board = ConnectedBoardBuilder.connectedBoard(workflow)
                 .withBoardId("board-1")
                 .withBoardKey("abc123")
@@ -375,7 +368,7 @@ final class WorkflowConfigEditorTest {
                 .withEnvPath(tempDir.resolve(".env"))
                 .withWorkspaceRoot(tempDir.resolve("workspaces"))
                 .build();
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        var editor = new WorkflowConfigEditor();
 
         // when
         WorkflowValidation validation = editor.validate(board, ignored -> Optional.empty());
@@ -412,9 +405,8 @@ final class WorkflowConfigEditorTest {
                   command: codex app-server
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+                """);
+        var editor = new WorkflowConfigEditor();
 
         // when
         WorkflowValidation validation = editor.diagnosticsValidation(workflow);
@@ -448,9 +440,8 @@ final class WorkflowConfigEditorTest {
                   command: codex app-server
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+                """);
+        var editor = new WorkflowConfigEditor();
 
         // when
         WorkflowValidation validation = editor.diagnosticsValidation(workflow);
@@ -473,8 +464,8 @@ final class WorkflowConfigEditorTest {
                     type: readOnly
                 """,
                 currentWorkflowBody());
-        Files.writeString(workflow, original, StandardCharsets.UTF_8);
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        Files.writeString(workflow, original);
+        var editor = new WorkflowConfigEditor();
 
         // when
         Throwable thrown =
@@ -504,8 +495,8 @@ final class WorkflowConfigEditorTest {
                   turn_sandbox_policy:
                 """,
                 currentWorkflowBody());
-        Files.writeString(workflow, original, StandardCharsets.UTF_8);
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        Files.writeString(workflow, original);
+        var editor = new WorkflowConfigEditor();
 
         // when
         Throwable thrown =
@@ -542,8 +533,8 @@ final class WorkflowConfigEditorTest {
                 %s
                 """
                         .formatted(currentWorkflowBody());
-        Files.writeString(workflow, original, StandardCharsets.UTF_8);
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        Files.writeString(workflow, original);
+        var editor = new WorkflowConfigEditor();
 
         // when
         EffectiveConfig config = editor.prepareLaunchWorkflow(workflow, trelloCredentialsAndForcedDanger(), true);
@@ -584,8 +575,8 @@ final class WorkflowConfigEditorTest {
                 This is an existing private workflow. It may mention that operators should record the branch,
                 commit, and validation evidence.
                 """;
-        Files.writeString(workflow, original, StandardCharsets.UTF_8);
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        Files.writeString(workflow, original);
+        var editor = new WorkflowConfigEditor();
 
         // when
         EffectiveConfig config = editor.prepareLaunchWorkflow(workflow, ignored -> Optional.empty(), true);
@@ -610,8 +601,8 @@ final class WorkflowConfigEditorTest {
                 ---
                 Body
                 """;
-        Files.writeString(workflow, original, StandardCharsets.UTF_8);
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        Files.writeString(workflow, original);
+        var editor = new WorkflowConfigEditor();
 
         // when
         Throwable thrown = catchThrowable(() -> editor.prepareLaunchWorkflow(workflow, trelloCredentials(), true));
@@ -645,8 +636,8 @@ final class WorkflowConfigEditorTest {
                 ---
                 Body
                 """;
-        Files.writeString(workflow, original, StandardCharsets.UTF_8);
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        Files.writeString(workflow, original);
+        var editor = new WorkflowConfigEditor();
 
         // when
         Throwable thrown = catchThrowable(() -> editor.prepareLaunchWorkflow(workflow, trelloCredentials(), true));
@@ -682,9 +673,8 @@ final class WorkflowConfigEditorTest {
                   command: codex app-server
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+                """);
+        var editor = new WorkflowConfigEditor();
 
         // when
         WorkflowValidation validation = editor.diagnosticsValidation(workflow);

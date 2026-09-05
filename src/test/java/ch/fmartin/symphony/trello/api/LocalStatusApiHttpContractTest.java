@@ -16,12 +16,10 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-/**
- * Drives the real HTTP routing stack instead of calling the exception mapper directly, so the
- * public local API contract for unsupported methods is proven end to end. The Quarkus test
- * extension boots one shared application and its scope manager does not support concurrent test
- * methods, so this class opts out of parallel execution.
- */
+/// Drives the real HTTP routing stack instead of calling the exception mapper directly, so the
+/// public local API contract for unsupported methods is proven end to end. The Quarkus test
+/// extension boots one shared application and its scope manager does not support concurrent test
+/// methods, so this class opts out of parallel execution.
 @Execution(ExecutionMode.SAME_THREAD)
 @QuarkusTest
 final class LocalStatusApiHttpContractTest {

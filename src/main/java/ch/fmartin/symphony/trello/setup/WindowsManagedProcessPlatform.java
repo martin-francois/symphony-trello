@@ -30,7 +30,7 @@ final class WindowsManagedProcessPlatform extends ProcessHandleManagedProcessPla
                 .redirectErrorStream(true);
         configureWorkerEnvironment(builder.environment(), Map.of());
         Process launcher = builder.start();
-        String output = new String(launcher.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        var output = new String(launcher.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         try {
             int exitCode = launcher.waitFor();
             if (exitCode != 0) {
@@ -51,7 +51,7 @@ final class WindowsManagedProcessPlatform extends ProcessHandleManagedProcessPla
     static String encodedStartProcessScript(
             List<String> command, Path workingDirectory, Map<String, String> environment, Path stdout, Path stderr) {
         checkArgument(!command.isEmpty(), "command must not be empty");
-        StringBuilder script = new StringBuilder();
+        var script = new StringBuilder();
         script.append("$ErrorActionPreference = 'Stop'\n");
         script.append("[System.Environment]::SetEnvironmentVariable(")
                 .append(powerShellString(LocalSetup.INSTALLER_COMPLETION_ENV))
@@ -117,7 +117,7 @@ final class WindowsManagedProcessPlatform extends ProcessHandleManagedProcessPla
         if (!needsQuoting) {
             return argument;
         }
-        StringBuilder quoted = new StringBuilder("\"");
+        var quoted = new StringBuilder("\"");
         int backslashes = 0;
         for (int i = 0; i < argument.length(); i++) {
             char character = argument.charAt(i);

@@ -4,7 +4,7 @@ final class TrelloMarkdown {
     private TrelloMarkdown() {}
 
     static String escapeLeadingHashtags(String markdown) {
-        StringBuilder escaped = new StringBuilder(markdown.length());
+        var escaped = new StringBuilder(markdown.length());
         int lineStart = 0;
         Fence fence = Fence.none();
         int listContentIndent = -1;

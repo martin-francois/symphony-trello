@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.Queue;
+import org.jspecify.annotations.Nullable;
 
 public final class RecordingTerminal implements Terminal {
     private final Queue<String> input = new ArrayDeque<>();
@@ -21,13 +22,13 @@ public final class RecordingTerminal implements Terminal {
     }
 
     @Override
-    public String readLine(String prompt) {
+    public @Nullable String readLine(String prompt) {
         out.print(prompt);
         return input.poll();
     }
 
     @Override
-    public char[] readSecret(String prompt) throws IOException {
+    public char @Nullable [] readSecret(String prompt) throws IOException {
         String value = readLine(prompt);
         return value == null ? null : value.toCharArray();
     }

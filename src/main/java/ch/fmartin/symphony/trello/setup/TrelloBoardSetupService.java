@@ -61,7 +61,7 @@ final class TrelloBoardSetupService {
     }
 
     void preflightConnectedBoardManifest(Path manifestPath) {
-        ConnectedBoardRepository boards = new ConnectedBoardRepository(manifestPath);
+        var boards = new ConnectedBoardRepository(manifestPath);
         try {
             boards.loadForLifecycle();
             boards.validateWritable();
@@ -165,7 +165,7 @@ final class TrelloBoardSetupService {
 
     private void persistConnectedBoard(ConnectedBoard board, Path manifestPath, PrintStream out) throws IOException {
         boolean restartReplacedWorker;
-        ConnectedBoardRepository boards = new ConnectedBoardRepository(manifestPath);
+        var boards = new ConnectedBoardRepository(manifestPath);
         try {
             ConnectedBoardManifest manifest = boards.loadForLifecycle();
             List<ConnectedBoard> replacedBoards = manifest.boardsReplacedBy(board);

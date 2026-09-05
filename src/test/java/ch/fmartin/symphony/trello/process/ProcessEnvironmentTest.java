@@ -98,7 +98,7 @@ final class ProcessEnvironmentTest {
                 new ProcessBuilder(command).directory(cwd.toFile()).redirectErrorStream(true);
         builder.environment().putAll(extraEnvironment);
         Process process = builder.start();
-        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        var output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         int exitCode = process.waitFor();
         return new ProcessResult(exitCode, output);
     }

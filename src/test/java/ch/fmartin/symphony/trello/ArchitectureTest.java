@@ -97,8 +97,10 @@ class ArchitectureTest {
             .should()
             .dependOnClassesThat()
             .haveFullyQualifiedName("ch.fmartin.symphony.trello.setup.CommandRunner")
-            .because("normal worker status must use managed process identity and the local-status endpoint, not "
-                    + "platform service-manager commands");
+            .because(
+                    """
+                    normal worker status must use managed process identity and the local-status endpoint, not \
+                    platform service-manager commands""");
 
     @ArchTest
     static final ArchRule EXTRACTED_SETUP_FLOWS_DO_NOT_WRITE_TO_RAW_PRINT_STREAMS = noClasses()

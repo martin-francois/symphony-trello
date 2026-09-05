@@ -19,11 +19,9 @@ public final class ProcessEnvironment {
         DEFAULT_SECRET_ENVIRONMENT_VARIABLES.forEach(environment::remove);
     }
 
-    /**
-     * Stops Git repository discovery from ascending above the given boundary directory, so
-     * per-card workspaces without a task repository do not inherit an unrelated parent Git
-     * repository such as the operator's home directory.
-     */
+    /// Stops Git repository discovery from ascending above the given boundary directory, so
+    /// per-card workspaces without a task repository do not inherit an unrelated parent Git
+    /// repository such as the operator's home directory.
     public static void limitGitDiscovery(ProcessBuilder processBuilder, Path boundary) {
         limitGitDiscovery(processBuilder.environment(), boundary);
     }

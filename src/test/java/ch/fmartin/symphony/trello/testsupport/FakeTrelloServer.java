@@ -241,7 +241,7 @@ public final class FakeTrelloServer implements AutoCloseable {
         return "\"" + jsonEscaped(value) + "\"";
     }
 
-    /** Trello returns valid JSON for any reflected value, so canned responses escape echoes. */
+    /// Trello returns valid JSON for any reflected value, so canned responses escape echoes.
     public static String jsonEscaped(String value) {
         return value.replace("\\", "\\\\")
                 .replace("\"", "\\\"")

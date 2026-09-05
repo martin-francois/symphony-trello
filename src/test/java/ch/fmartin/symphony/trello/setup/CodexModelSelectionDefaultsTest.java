@@ -3,7 +3,7 @@ package ch.fmartin.symphony.trello.setup;
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_LINE_SEPARATOR;
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_PARAGRAPH_SEPARATOR;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.ReasoningEffortOption;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.CodexModelDefaults;
@@ -27,13 +27,12 @@ final class CodexModelSelectionDefaultsTest {
         choicesByModel.put("duplicate", List.of("high"));
 
         // when
-        CodexModelSelectionDefaults defaults =
-                new CodexModelSelectionDefaults(CodexModelDefaults.fallback(), Map.of(), choicesByModel);
+        var defaults = new CodexModelSelectionDefaults(CodexModelDefaults.fallback(), Map.of(), choicesByModel);
 
         // then
-        assertThat(defaults.reasoningEffortChoicesForModel("gpt-5.6-sol")).contains(List.of("low", "medium"));
+        assertThat(defaults.reasoningEffortChoicesForModel("gpt-5.6-sol")).hasValue(List.of("low", "medium"));
         assertThat(defaults.reasoningEffortChoicesForModel("empty")).isEmpty();
-        assertThat(defaults.reasoningEffortChoicesForModel("duplicate")).contains(List.of("high"));
+        assertThat(defaults.reasoningEffortChoicesForModel("duplicate")).hasValue(List.of("high"));
     }
 
     @Test
@@ -56,11 +55,11 @@ final class CodexModelSelectionDefaultsTest {
 
         // then
         assertThat(defaults.reasoningEffortOptionsForModel("gpt-5.6-sol"))
-                .contains(List.of(
+                .hasValue(List.of(
                         new ReasoningEffortOption("low", "First description"),
                         new ReasoningEffortOption("high", "Deep reasoning")));
         assertThat(defaults.reasoningEffortOptionsForModel("empty")).isEmpty();
-        assertThat(defaults.reasoningEffortChoicesForModel("duplicate")).contains(List.of("medium"));
+        assertThat(defaults.reasoningEffortChoicesForModel("duplicate")).hasValue(List.of("medium"));
     }
 
     @MethodSource("isoControlCharacters")
@@ -73,9 +72,9 @@ final class CodexModelSelectionDefaultsTest {
         ThrowingCallable createOption = () -> new ReasoningEffortOption(reasoningEffort, "Balanced reasoning");
 
         // then
-        assertThatIllegalArgumentException()
-                .isThrownBy(createOption)
-                .withMessage("reasoningEffort must not contain control characters");
+        assertThatThrownBy(createOption)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("reasoningEffort must not contain control characters");
     }
 
     @MethodSource("isoControlCharacters")
@@ -88,9 +87,9 @@ final class CodexModelSelectionDefaultsTest {
         ThrowingCallable createOption = () -> new ReasoningEffortOption("medium", description);
 
         // then
-        assertThatIllegalArgumentException()
-                .isThrownBy(createOption)
-                .withMessage("description must not contain control characters");
+        assertThatThrownBy(createOption)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("description must not contain control characters");
     }
 
     @MethodSource("unicodeLineSeparators")
@@ -100,7 +99,7 @@ final class CodexModelSelectionDefaultsTest {
         String reasoningEffort = "high" + Character.toString(separator) + "effort";
 
         // when
-        ReasoningEffortOption option = new ReasoningEffortOption(reasoningEffort, "Deep reasoning");
+        var option = new ReasoningEffortOption(reasoningEffort, "Deep reasoning");
 
         // then
         assertThat(option.reasoningEffort()).isEqualTo(reasoningEffort);
@@ -113,7 +112,7 @@ final class CodexModelSelectionDefaultsTest {
         String description = "Deep" + Character.toString(separator) + "reasoning";
 
         // when
-        ReasoningEffortOption option = new ReasoningEffortOption("high", description);
+        var option = new ReasoningEffortOption("high", description);
 
         // then
         assertThat(option.description()).isEqualTo(description);

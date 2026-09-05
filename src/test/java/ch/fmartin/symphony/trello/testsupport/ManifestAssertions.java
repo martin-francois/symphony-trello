@@ -12,6 +12,7 @@ import java.io.UncheckedIOException;
 import java.net.URI;
 import java.nio.file.Path;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 public final class ManifestAssertions {
     private static final ObjectMapper JSON = manifestMapper();
@@ -134,7 +135,7 @@ public final class ManifestAssertions {
 
     private static final class PathDeserializer extends JsonDeserializer<Path> {
         @Override
-        public Path deserialize(JsonParser parser, DeserializationContext context) throws IOException {
+        public @Nullable Path deserialize(JsonParser parser, DeserializationContext context) throws IOException {
             String value = parser.getValueAsString();
             if (value == null) {
                 return null;
