@@ -78,6 +78,37 @@
       "matchStrings": ["(?<depName>ghcr\\.io/betterleaks/betterleaks):v(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^config/nil/Dockerfile$/"],
+      "matchStrings": [
+        "# renovate: NIL ref=(?<currentValue>\\S+)\\s+ARG NIL_COMMIT=(?<currentDigest>[a-f0-9]{40})"
+      ],
+      "datasourceTemplate": "git-refs",
+      "depNameTemplate": "https://github.com/kusumotolab/NIL",
+      "autoReplaceStringTemplate": "# renovate: NIL ref={{newValue}}\nARG NIL_COMMIT={{newDigest}}"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^config/nil/nil-jls25\\.patch$/"],
+      "matchStrings": [
+        "\\+\\s+implementation\\(\"org\\.eclipse\\.jdt:org\\.eclipse\\.jdt\\.core:(?<currentValue>\\d+\\.\\d+\\.\\d+)\"\\)"
+      ],
+      "datasourceTemplate": "maven",
+      "depNameTemplate": "org.eclipse.jdt:org.eclipse.jdt.core",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^config/nil/nil-jls25\\.patch$/"],
+      "matchStrings": [
+        "id\\(\\\"com\\.gradleup\\.shadow\\\"\\) version \\\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\\\""
+      ],
+      "datasourceTemplate": "maven",
+      "depNameTemplate": "com.gradleup.shadow:com.gradleup.shadow.gradle.plugin",
+      "registryUrlTemplate": "https://plugins.gradle.org/m2",
+      "versioningTemplate": "semver"
     }
   ],
   "customDatasources": {

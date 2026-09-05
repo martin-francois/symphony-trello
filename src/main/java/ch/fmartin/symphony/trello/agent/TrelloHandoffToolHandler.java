@@ -686,20 +686,23 @@ public class TrelloHandoffToolHandler {
         if (invalid != null) {
             return invalid;
         }
-        Card.Comment primary = primaryWorkpad(workpads);
-        if (blank(primary.id())) {
-            return failure("trello_workpad_missing_action_id", "Existing workpad comment has no Trello action id.");
+        WorkpadUpdateTargetResult targetResult = workpadUpdateTarget(
+                config,
+                workpads,
+                managed,
+                "Cannot safely update the authoritative workpad while an older duplicate owns the Codex usage section and destructive duplicate cleanup is disabled.");
+        if (targetResult instanceof WorkpadUpdateTargetFailure failed) {
+            return failed.response();
         }
-        boolean destructiveAllowed = config.trelloTools().allowDestructiveOperations();
-        Card.Comment nonPrimaryOwner = nonPrimaryManagedOwner(managed, primary);
-        if (nonPrimaryOwner != null && !destructiveAllowed) {
-            return failure(
-                    "trello_workpad_managed_section_non_primary",
-                    "Cannot safely update the authoritative workpad while an older duplicate owns the Codex usage section and destructive duplicate cleanup is disabled.");
-        }
+        WorkpadUpdateTarget target = (WorkpadUpdateTarget) targetResult;
         String ownedText = managed.section() == null ? text : CodexUsageWorkpadSection.upsert(text, managed.section());
         return updateExistingWorkpad(
-                config, cardId, workpads, primary, stripManualCleanupNotes(ownedText), nonPrimaryOwner);
+                config,
+                cardId,
+                workpads,
+                target.primary(),
+                stripManualCleanupNotes(ownedText),
+                target.nonPrimaryManagedOwner());
     }
 
     private ObjectNode upsertCodexUsageWorkpadComment(
@@ -728,18 +731,19 @@ public class TrelloHandoffToolHandler {
             LOG.warnf("card_id=%s codex_usage_workpad=comment_window_incomplete", cardId);
             return incompleteWorkpadWindowFailure();
         }
-        Card.Comment primary = primaryWorkpad(workpads);
-        if (blank(primary.id())) {
-            return failure("trello_workpad_missing_action_id", "Existing workpad comment has no Trello action id.");
+        WorkpadUpdateTargetResult targetResult = workpadUpdateTarget(
+                config,
+                workpads,
+                managed,
+                "Cannot safely change the Codex usage section while an older duplicate owns it and destructive duplicate cleanup is disabled.");
+        if (targetResult instanceof WorkpadUpdateTargetFailure failed) {
+            if (failed.logValue() != null) {
+                LOG.warnf("card_id=%s codex_usage_workpad=%s", cardId, failed.logValue());
+            }
+            return failed.response();
         }
-        boolean destructiveAllowed = config.trelloTools().allowDestructiveOperations();
-        Card.Comment nonPrimaryOwner = nonPrimaryManagedOwner(managed, primary);
-        if (nonPrimaryOwner != null && !destructiveAllowed) {
-            LOG.warnf("card_id=%s codex_usage_workpad=managed_section_non_primary", cardId);
-            return failure(
-                    "trello_workpad_managed_section_non_primary",
-                    "Cannot safely change the Codex usage section while an older duplicate owns it and destructive duplicate cleanup is disabled.");
-        }
+        WorkpadUpdateTarget target = (WorkpadUpdateTarget) targetResult;
+        Card.Comment primary = target.primary();
         String text = section == null
                 ? CodexUsageWorkpadSection.remove(primary.text())
                 : CodexUsageWorkpadSection.upsert(primary.text(), section);
@@ -747,7 +751,7 @@ public class TrelloHandoffToolHandler {
         if (workpads.size() == 1 && canonicalText.equals(primary.text())) {
             return success(Map.of("status", "workpad_unchanged", "card_id", cardId));
         }
-        return updateExistingWorkpad(config, cardId, workpads, primary, canonicalText, nonPrimaryOwner);
+        return updateExistingWorkpad(config, cardId, workpads, primary, canonicalText, target.nonPrimaryManagedOwner());
     }
 
     private ObjectNode updateExistingWorkpad(
@@ -838,6 +842,26 @@ public class TrelloHandoffToolHandler {
         return new ManagedWorkpadState(owner, section, ManagedSectionProblem.NONE);
     }
 
+    private WorkpadUpdateTargetResult workpadUpdateTarget(
+            EffectiveConfig config,
+            List<Card.Comment> workpads,
+            ManagedWorkpadState managed,
+            String nonPrimaryOwnerMessage) {
+        Card.Comment primary = primaryWorkpad(workpads);
+        if (blank(primary.id())) {
+            return new WorkpadUpdateTargetFailure(
+                    failure("trello_workpad_missing_action_id", "Existing workpad comment has no Trello action id."),
+                    null);
+        }
+        Card.Comment nonPrimaryOwner = nonPrimaryManagedOwner(managed, primary);
+        if (nonPrimaryOwner != null && !config.trelloTools().allowDestructiveOperations()) {
+            return new WorkpadUpdateTargetFailure(
+                    failure("trello_workpad_managed_section_non_primary", nonPrimaryOwnerMessage),
+                    "managed_section_non_primary");
+        }
+        return new WorkpadUpdateTarget(primary, nonPrimaryOwner);
+    }
+
     private ObjectNode invalidManagedWorkpadState(ManagedWorkpadState managed) {
         return switch (managed.problem()) {
             case NONE -> null;
@@ -857,6 +881,14 @@ public class TrelloHandoffToolHandler {
     }
 
     private record ManagedWorkpadState(Card.Comment owner, String section, ManagedSectionProblem problem) {}
+
+    private sealed interface WorkpadUpdateTargetResult permits WorkpadUpdateTarget, WorkpadUpdateTargetFailure {}
+
+    private record WorkpadUpdateTarget(Card.Comment primary, Card.@Nullable Comment nonPrimaryManagedOwner)
+            implements WorkpadUpdateTargetResult {}
+
+    private record WorkpadUpdateTargetFailure(ObjectNode response, @Nullable String logValue)
+            implements WorkpadUpdateTargetResult {}
 
     private enum ManagedSectionProblem {
         NONE("valid"),

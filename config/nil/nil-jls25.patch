@@ -1,0 +1,81 @@
+diff --git a/build.gradle.kts b/build.gradle.kts
+index 54c78ff..1434762 100644
+--- a/build.gradle.kts
++++ b/build.gradle.kts
+@@ -1,6 +1,8 @@
++import org.gradle.api.tasks.bundling.AbstractArchiveTask
++
+ plugins {
+     kotlin("jvm") version "2.0.0"
+-    id("com.github.johnrengelman.shadow") version "8.1.1"
++    id("com.gradleup.shadow") version "9.2.2"
+ 
+     antlr
+ 
+@@ -24,7 +26,7 @@ dependencies {
+     implementation("ch.qos.logback:logback-classic:1.4.12")
+ 
+     // Use JDT
+-    implementation("org.eclipse.jdt:org.eclipse.jdt.core:3.37.0")
++    implementation("org.eclipse.jdt:org.eclipse.jdt.core:3.44.0")
+ 
+     // Use the Kotlin test library.
+     testImplementation("org.jetbrains.kotlin:kotlin-test")
+@@ -49,3 +51,8 @@ tasks.generateGrammarSource {
+ tasks.generateTestGrammarSource {
+     enabled = false
+ }
++
++tasks.withType<AbstractArchiveTask>().configureEach {
++    isPreserveFileTimestamps = false
++    isReproducibleFileOrder = true
++}
+diff --git a/gradle/wrapper/gradle-wrapper.properties b/gradle/wrapper/gradle-wrapper.properties
+index cea7a79..c43ecd6 100644
+--- a/gradle/wrapper/gradle-wrapper.properties
++++ b/gradle/wrapper/gradle-wrapper.properties
+@@ -1,6 +1,7 @@
+ distributionBase=GRADLE_USER_HOME
+ distributionPath=wrapper/dists
+ distributionUrl=https\://services.gradle.org/distributions/gradle-8.12-bin.zip
++distributionSha256Sum=7a00d51fb93147819aab76024feece20b6b84e420694101f276be952e08bef03
+ networkTimeout=10000
+ validateDistributionUrl=true
+ zipStoreBase=GRADLE_USER_HOME
+diff --git a/src/main/kotlin/jp/ac/osaka_u/sdl/nil/usecase/preprocess/java/JavaTransformer.kt b/src/main/kotlin/jp/ac/osaka_u/sdl/nil/usecase/preprocess/java/JavaTransformer.kt
+index acd9d59..23b0127 100644
+--- a/src/main/kotlin/jp/ac/osaka_u/sdl/nil/usecase/preprocess/java/JavaTransformer.kt
++++ b/src/main/kotlin/jp/ac/osaka_u/sdl/nil/usecase/preprocess/java/JavaTransformer.kt
+@@ -8,7 +8,7 @@ import jp.ac.osaka_u.sdl.nil.entity.CodeBlock
+ import jp.ac.osaka_u.sdl.nil.usecase.preprocess.SymbolSeparator
+ import org.eclipse.core.runtime.NullProgressMonitor
+ import org.eclipse.jdt.core.JavaCore
+-import org.eclipse.jdt.core.dom.AST.JLS21
++import org.eclipse.jdt.core.dom.AST.JLS25
+ import org.eclipse.jdt.core.dom.ASTNode
+ import org.eclipse.jdt.core.dom.ASTParser
+ import org.eclipse.jdt.core.dom.ASTVisitor
+@@ -23,15 +23,21 @@ class JavaTransformer(private val config: NILConfig) {
+ 
+     fun extractBlocks(sourceFile: File): Flowable<CodeBlock> =
+         Observable.create<CodeBlock> { emitter ->
+-            val compilationUnit: CompilationUnit = ASTParser.newParser(JLS21)
++            val compilationUnit: CompilationUnit = ASTParser.newParser(JLS25)
+                 .apply { setSource(sourceFile.readText().toCharArray()) }
+                 .apply {
+                     setCompilerOptions(
+-                        JavaCore.getOptions().apply { put(JavaCore.COMPILER_SOURCE, "21") })
++                        JavaCore.getOptions().apply { put(JavaCore.COMPILER_SOURCE, "25") })
+                 }
+                 .let { it.createAST(NullProgressMonitor()) as CompilationUnit }
+ 
++            val parseErrors = compilationUnit.problems.filter { it.isError }
++            check(parseErrors.isEmpty()) {
++                "Java parse failed: " + parseErrors.joinToString("; ") { it.message }
++            }
++
+             val fileName = sourceFile.canonicalPath
++            System.err.println("NIL_PARSED_FILE\t$fileName")
+             object : ASTVisitor() {
+                 override fun visit(node: MethodDeclaration): Boolean {
+                     val startLine: Int = compilationUnit.getStartLineNumber(node)

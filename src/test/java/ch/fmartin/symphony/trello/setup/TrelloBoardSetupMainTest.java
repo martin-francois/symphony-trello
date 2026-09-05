@@ -427,8 +427,9 @@ final class TrelloBoardSetupMainTest {
                         tempDir.toString());
     }
 
-    @Test
-    void statusRejectsNonTrelloBoardUrlSelectors() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {"https://not-trello.com/b/abc123/anything", "https://trello.com/c/abc123/not-a-board"})
+    void statusRejectsUrlsThatAreNotTrelloBoardSelectors(String selector) throws Exception {
         // given
         Path configDir = tempDir.resolve("status-config");
         Path workspaceRoot = tempDir.resolve("status-workspaces");
@@ -461,52 +462,7 @@ final class TrelloBoardSetupMainTest {
                 "--state-home",
                 stateHome.toString(),
                 "--board",
-                "https://not-trello.com/b/abc123/anything");
-
-        // then
-        result.assertFailure(SETUP_FAILURE)
-                .stderrContains(
-                        "setup_failed code=setup_invalid_arguments",
-                        "Invalid --board value. Use a Trello board URL, short link, board id, or a connected board name.")
-                .stderrDoesNotContain("Queue", "abc123", "Troubleshooting report written")
-                .stdoutDoesNotContain("running", "stopped", "Queue", "abc123");
-    }
-
-    @Test
-    void statusRejectsTrelloCardUrlSelectors() throws Exception {
-        // given
-        Path configDir = tempDir.resolve("status-card-url-config");
-        Path workspaceRoot = tempDir.resolve("status-card-url-workspaces");
-        Path stateHome = tempDir.resolve("status-card-url-state");
-        Path workflow = configDir.resolve("WORKFLOW.queue.md");
-        Path env = configDir.resolve(".env");
-        Files.createDirectories(configDir);
-        Files.writeString(workflow, TestWorkflows.workflowWithBoardAndPort("board-id", 19192), StandardCharsets.UTF_8);
-        new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "board-id",
-                        "abc123",
-                        "Queue",
-                        "https://trello.com/b/abc123/queue",
-                        workflow,
-                        env,
-                        workspaceRoot,
-                        19192,
-                        false,
-                        List.of(),
-                        false))));
-
-        // when
-        CliRunResult result = runCli(
-                "status",
-                "--config-dir",
-                configDir.toString(),
-                "--workspace-root",
-                workspaceRoot.toString(),
-                "--state-home",
-                stateHome.toString(),
-                "--board",
-                "https://trello.com/c/abc123/not-a-board");
+                selector);
 
         // then
         result.assertFailure(SETUP_FAILURE)

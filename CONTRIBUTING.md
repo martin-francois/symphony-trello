@@ -146,6 +146,24 @@ left as candidate-only before any rule moves into the blocking `verify` gate. PM
 checks are part of `./mvnw -q spotless:check verify`; run `./mvnw -q pmd:cpd` when you need the
 standalone duplication report.
 
+NIL complements CPD with a stricter, reviewed near-miss-clone boundary. Run the same pinned,
+containerized analysis used by CI with:
+
+```bash
+node scripts/nil-clone-detection.mjs
+```
+
+The command analyzes every tracked Java production and test file, fails when any file cannot be
+parsed, and compares the normalized result with `config/nil/baseline.json`. Review the complete
+methods and callers before changing the baseline. Fix justified duplication first; retain an entry
+only when its `decision` and `rationale` explain why keeping the behavior separate is clearer than a
+shared abstraction. CPD remains the faster blocking detector for exact and token-level clones.
+
+Renovate tracks the pinned NIL commit, JDT parser, Shadow plugin, and container images. A detector
+update is not complete until a maintainer reviews the upstream change and license, updates the source
+archive checksum and compatibility patch, regenerates strict Gradle verification metadata, records
+the new reproducible JAR checksum from two clean builds, and reclassifies the complete report.
+
 An optional jPinpoint PMD pass is available for measuring third-party PMD 7 XPath rules for
 performance, logging, concurrency, data-mixup, and sustainability concerns:
 

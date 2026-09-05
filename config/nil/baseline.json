@@ -1,0 +1,265 @@
+{
+  "schemaVersion": 1,
+  "configuration": {
+    "minimumLines": 25,
+    "minimumTokens": 200,
+    "verificationThresholdPercent": 90
+  },
+  "clones": [
+    {
+      "left": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/agent/CodexAppServerClientTest.java",
+        "start": 207,
+        "end": 260
+      },
+      "right": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/agent/CodexAppServerClientTest.java",
+        "start": 262,
+        "end": 318
+      },
+      "category": "test-test",
+      "decision": "accepted",
+      "rationale": "Accepted: the scenarios protect distinct sandbox-policy fields, and keeping each complete app-server exchange visible is clearer than a parameterized shell transcript."
+    },
+    {
+      "left": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/orchestrator/SymphonyOrchestratorTest.java",
+        "start": 1044,
+        "end": 1095
+      },
+      "right": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/orchestrator/SymphonyOrchestratorTest.java",
+        "start": 1188,
+        "end": 1216
+      },
+      "category": "test-test",
+      "decision": "accepted",
+      "rationale": "Accepted: lifecycle setup is similar, but the assertions cover independent snapshot contracts and sharing the synchronization would hide scenario ownership."
+    },
+    {
+      "left": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/orchestrator/SymphonyOrchestratorUsageLimitPauseTest.java",
+        "start": 306,
+        "end": 348
+      },
+      "right": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/orchestrator/SymphonyOrchestratorUsageLimitPauseTest.java",
+        "start": 350,
+        "end": 433
+      },
+      "category": "test-test",
+      "decision": "accepted",
+      "rationale": "Accepted: the scenarios exercise different concurrent retry histories; keeping complete event order visible is safer than a shared concurrency script."
+    },
+    {
+      "left": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/InstallerScriptTest.java",
+        "start": 3895,
+        "end": 3925
+      },
+      "right": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/InstallerScriptTest.java",
+        "start": 3927,
+        "end": 3960
+      },
+      "category": "test-test",
+      "decision": "accepted",
+      "rationale": "Accepted: public installer lifecycle scenarios intentionally retain complete platform command and cleanup evidence; generic fixtures would weaken readability."
+    },
+    {
+      "left": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/InstallerScriptTest.java",
+        "start": 4150,
+        "end": 4188
+      },
+      "right": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/InstallerScriptTest.java",
+        "start": 4190,
+        "end": 4250
+      },
+      "category": "test-test",
+      "decision": "accepted",
+      "rationale": "Accepted: public installer lifecycle scenarios intentionally retain complete platform command and cleanup evidence; generic fixtures would weaken readability."
+    },
+    {
+      "left": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/InstallerScriptTest.java",
+        "start": 4190,
+        "end": 4250
+      },
+      "right": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/InstallerScriptTest.java",
+        "start": 4503,
+        "end": 4539
+      },
+      "category": "test-test",
+      "decision": "accepted",
+      "rationale": "Accepted: public installer lifecycle scenarios intentionally retain complete platform command and cleanup evidence; generic fixtures would weaken readability."
+    },
+    {
+      "left": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/InstallerScriptTest.java",
+        "start": 7615,
+        "end": 7671
+      },
+      "right": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/InstallerScriptTest.java",
+        "start": 7673,
+        "end": 7722
+      },
+      "category": "test-test",
+      "decision": "accepted",
+      "rationale": "Accepted: public installer lifecycle scenarios intentionally retain complete platform command and cleanup evidence; generic fixtures would weaken readability."
+    },
+    {
+      "left": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/LocalSetupGithubConfigurationTest.java",
+        "start": 179,
+        "end": 218
+      },
+      "right": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/LocalSetupRerunAccessTest.java",
+        "start": 15,
+        "end": 50
+      },
+      "category": "test-test",
+      "decision": "accepted",
+      "rationale": "Accepted: cross-class setup scenarios exercise different access outcomes; the shared shape is public CLI evidence rather than a reusable domain contract."
+    },
+    {
+      "left": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/LocalSetupGithubConfigurationTest.java",
+        "start": 179,
+        "end": 218
+      },
+      "right": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/LocalSetupRerunAccessTest.java",
+        "start": 52,
+        "end": 89
+      },
+      "category": "test-test",
+      "decision": "accepted",
+      "rationale": "Accepted: cross-class setup scenarios exercise different access outcomes; the shared shape is public CLI evidence rather than a reusable domain contract."
+    },
+    {
+      "left": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/LocalSetupTest.java",
+        "start": 5091,
+        "end": 5131
+      },
+      "right": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/LocalSetupTest.java",
+        "start": 5133,
+        "end": 5172
+      },
+      "category": "test-test",
+      "decision": "accepted",
+      "rationale": "Accepted: guided-setup paths repeat full user interaction transcripts for distinct decisions; extracting them would obscure the prompts and outputs under test."
+    },
+    {
+      "left": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/LocalSetupTest.java",
+        "start": 6564,
+        "end": 6633
+      },
+      "right": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/LocalSetupTest.java",
+        "start": 6635,
+        "end": 6681
+      },
+      "category": "test-test",
+      "decision": "accepted",
+      "rationale": "Accepted: guided-setup paths repeat full user interaction transcripts for distinct decisions; extracting them would obscure the prompts and outputs under test."
+    },
+    {
+      "left": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/LocalSetupTest.java",
+        "start": 6635,
+        "end": 6681
+      },
+      "right": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/LocalSetupTest.java",
+        "start": 6683,
+        "end": 6724
+      },
+      "category": "test-test",
+      "decision": "accepted",
+      "rationale": "Accepted: guided-setup paths repeat full user interaction transcripts for distinct decisions; extracting them would obscure the prompts and outputs under test."
+    },
+    {
+      "left": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/LocalSetupTest.java",
+        "start": 6635,
+        "end": 6681
+      },
+      "right": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/LocalSetupTest.java",
+        "start": 6776,
+        "end": 6823
+      },
+      "category": "test-test",
+      "decision": "accepted",
+      "rationale": "Accepted: guided-setup paths repeat full user interaction transcripts for distinct decisions; extracting them would obscure the prompts and outputs under test."
+    },
+    {
+      "left": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/LocalWorkerManagerTest.java",
+        "start": 1444,
+        "end": 1468
+      },
+      "right": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/LocalWorkerManagerTest.java",
+        "start": 1487,
+        "end": 1517
+      },
+      "category": "test-test",
+      "decision": "accepted",
+      "rationale": "Accepted: worker lifecycle scenarios share setup but prove distinct ownership and health branches; existing fixture helpers already centralize safe common behavior."
+    },
+    {
+      "left": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/LocalWorkerManagerTest.java",
+        "start": 3190,
+        "end": 3236
+      },
+      "right": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/LocalWorkerManagerTest.java",
+        "start": 3238,
+        "end": 3292
+      },
+      "category": "test-test",
+      "decision": "accepted",
+      "rationale": "Accepted: worker lifecycle scenarios share setup but prove distinct ownership and health branches; existing fixture helpers already centralize safe common behavior."
+    },
+    {
+      "left": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/TrelloBoardSetupMainTest.java",
+        "start": 2828,
+        "end": 2868
+      },
+      "right": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/TrelloBoardSetupMainTest.java",
+        "start": 2870,
+        "end": 2907
+      },
+      "category": "test-test",
+      "decision": "accepted",
+      "rationale": "Accepted: new-board and import-board persistence are separate public commands whose complete manifest and no-stray-file assertions should remain independently readable."
+    },
+    {
+      "left": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/TrelloBoardSetupTest.java",
+        "start": 2002,
+        "end": 2040
+      },
+      "right": {
+        "file": "src/test/java/ch/fmartin/symphony/trello/setup/TrelloBoardSetupTest.java",
+        "start": 2042,
+        "end": 2085
+      },
+      "category": "test-test",
+      "decision": "accepted",
+      "rationale": "Accepted: new-board and import-board paths are separate public commands whose complete no-side-effect assertions are intentionally explicit."
+    }
+  ]
+}

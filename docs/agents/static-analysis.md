@@ -79,6 +79,13 @@ itself lives in [Java style & design preferences](java-style.md).
   and document any rejected rule in the relevant issue or ADR.
 - Treat CodeQL as a hosted repository code-scanning layer. Keep local Maven-based checks as the
   primary agent feedback loop, and do not require CodeQL as part of normal local `verify`.
+- Use `node scripts/nil-clone-detection.mjs` for the blocking near-miss clone boundary after changing
+  tracked Java sources. The wrapper builds the pinned, fail-closed NIL compatibility image, analyzes
+  production and test sources without network access, verifies one parser-success record per input,
+  normalizes pair direction and paths, and checks the reviewed `config/nil/baseline.json`. Fix
+  justified duplication before changing that baseline. An accepted entry needs a narrow rationale;
+  do not hide a new clone by broad path exclusion. PMD CPD remains enabled because it is faster and
+  catches exact/token-level clones that form a complementary boundary.
 
 ## Automation config
 
