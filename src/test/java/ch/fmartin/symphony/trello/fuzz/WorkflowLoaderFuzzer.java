@@ -27,7 +27,7 @@ public final class WorkflowLoaderFuzzer {
     private static void load(Path workflow) {
         try {
             LOADER.load(workflow);
-        } catch (WorkflowException expected) {
+        } catch (WorkflowException _) {
             // Invalid front matter is ordinary fuzzer input; crashes are anything outside the
             // loader's expected parse-failure contract.
         }

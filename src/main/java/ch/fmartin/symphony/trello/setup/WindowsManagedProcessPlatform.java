@@ -18,7 +18,7 @@ final class WindowsManagedProcessPlatform extends ProcessHandleManagedProcessPla
             throws IOException {
         createParentDirectories(stdout);
         createParentDirectories(stderr);
-        Map<String, String> workerEnvironment = withoutInstallerCompletionEnvironment(environment);
+        var workerEnvironment = withoutInstallerCompletionEnvironment(environment);
         ProcessBuilder builder = new ProcessBuilder(
                         powershellExecutable(),
                         "-NoProfile",
@@ -30,9 +30,9 @@ final class WindowsManagedProcessPlatform extends ProcessHandleManagedProcessPla
                 .redirectErrorStream(true);
         configureWorkerEnvironment(builder.environment(), Map.of());
         Process launcher = builder.start();
-        String output = new String(launcher.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        var output = new String(launcher.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         try {
-            int exitCode = launcher.waitFor();
+            var exitCode = launcher.waitFor();
             if (exitCode != 0) {
                 throw new IOException("Windows worker launcher failed with exit code " + exitCode + ": " + output);
             }
@@ -51,7 +51,7 @@ final class WindowsManagedProcessPlatform extends ProcessHandleManagedProcessPla
     static String encodedStartProcessScript(
             List<String> command, Path workingDirectory, Map<String, String> environment, Path stdout, Path stderr) {
         checkArgument(!command.isEmpty(), "command must not be empty");
-        StringBuilder script = new StringBuilder();
+        var script = new StringBuilder();
         script.append("$ErrorActionPreference = 'Stop'\n");
         script.append("[System.Environment]::SetEnvironmentVariable(")
                 .append(powerShellString(LocalSetup.INSTALLER_COMPLETION_ENV))
@@ -112,15 +112,15 @@ final class WindowsManagedProcessPlatform extends ProcessHandleManagedProcessPla
         if (argument.isEmpty()) {
             return "\"\"";
         }
-        boolean needsQuoting =
+        var needsQuoting =
                 argument.chars().anyMatch(character -> Character.isWhitespace(character) || character == '"');
         if (!needsQuoting) {
             return argument;
         }
-        StringBuilder quoted = new StringBuilder("\"");
-        int backslashes = 0;
-        for (int i = 0; i < argument.length(); i++) {
-            char character = argument.charAt(i);
+        var quoted = new StringBuilder("\"");
+        var backslashes = 0;
+        for (var i = 0; i < argument.length(); i++) {
+            var character = argument.charAt(i);
             if (character == '\\') {
                 backslashes++;
             } else if (character == '"') {

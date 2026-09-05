@@ -40,10 +40,10 @@ public final class WorkflowConfigIngestion {
             Function<String, Optional<String>> environmentResolver,
             UnresolvedEnvironmentPolicy unresolvedEnvironmentPolicy) {
         try {
-            LinkedHashMap<String, Object> parsed = YAML.readValue(frontMatter, YAML_MAP_TYPE);
+            var parsed = YAML.readValue(frontMatter, YAML_MAP_TYPE);
             return Optional.of(
                     collect(parsed == null ? Map.of() : parsed, environmentResolver, unresolvedEnvironmentPolicy));
-        } catch (JsonProcessingException e) {
+        } catch (JsonProcessingException _) {
             return Optional.empty();
         }
     }
@@ -62,20 +62,20 @@ public final class WorkflowConfigIngestion {
             Map<String, Object> root,
             Function<String, Optional<String>> environmentResolver,
             UnresolvedEnvironmentPolicy unresolvedEnvironmentPolicy) {
-        List<WorkflowConfigFinding> findings = new ArrayList<>();
-        Map<String, Object> tracker = object(root, "tracker");
-        Map<String, Object> polling = object(root, "polling");
-        Map<String, Object> hooks = object(root, "hooks");
-        Map<String, Object> agent = object(root, "agent");
-        Map<String, Object> codex = object(root, "codex");
-        Map<String, Object> server = object(root, "server");
+        var findings = new ArrayList<WorkflowConfigFinding>();
+        var tracker = object(root, "tracker");
+        var polling = object(root, "polling");
+        var hooks = object(root, "hooks");
+        var agent = object(root, "agent");
+        var codex = object(root, "codex");
+        var server = object(root, "server");
 
         WorkflowIntegerSetting serverPort = serverPort(server, environmentResolver, unresolvedEnvironmentPolicy);
         add(findings, serverPort);
 
-        Map<String, Integer> priorityLabels = positiveNormalizedIntegerMap(
+        var priorityLabels = positiveNormalizedIntegerMap(
                 object(tracker, "priority_labels"), DEFAULT_PRIORITIES, "tracker.priority_labels", findings);
-        Map<String, Integer> maxConcurrentAgentsByState = positiveNormalizedIntegerMap(
+        var maxConcurrentAgentsByState = positiveNormalizedIntegerMap(
                 object(agent, "max_concurrent_agents_by_state"),
                 Map.of(),
                 "agent.max_concurrent_agents_by_state",
@@ -152,7 +152,7 @@ public final class WorkflowConfigIngestion {
             return WorkflowIntegerSetting.omitted();
         }
         Object configured = server.get("port");
-        Optional<String> reference = environmentReferenceName(configured);
+        var reference = environmentReferenceName(configured);
         return reference
                 .map(environmentName -> environmentResolver
                         .apply(environmentName)
@@ -240,10 +240,10 @@ public final class WorkflowConfigIngestion {
             Map<String, Integer> defaultValues,
             String path,
             List<WorkflowConfigFinding> findings) {
-        Map<String, Integer> values = new LinkedHashMap<>(defaultValues);
+        var values = new LinkedHashMap<String, Integer>(defaultValues);
         configured.forEach((key, value) -> {
             WorkflowIntegerSetting parsed = parseInteger(path + "." + key, value);
-            Optional<Integer> positive = parsed.value().filter(integer -> integer > 0);
+            var positive = parsed.value().filter(integer -> integer > 0);
             positive.ifPresentOrElse(
                     integer -> values.put(StateNames.normalize(key), integer),
                     () -> findings.add(WorkflowConfigFinding.ignored(path + "." + key, String.valueOf(value))));

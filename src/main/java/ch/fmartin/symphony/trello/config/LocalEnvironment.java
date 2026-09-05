@@ -7,7 +7,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -56,22 +55,20 @@ public final class LocalEnvironment {
             return Map.of();
         }
         try {
-            Map<String, String> values = new LinkedHashMap<>();
-            List<String> lines = Files.readAllLines(dotenv);
-            for (int index = 0; index < lines.size(); index++) {
+            var values = new LinkedHashMap<String, String>();
+            var lines = Files.readAllLines(dotenv);
+            for (var index = 0; index < lines.size(); index++) {
                 String rawLine = index == 0 ? stripLeadingByteOrderMark(lines.get(index)) : lines.get(index);
                 parseLine(rawLine).ifPresent(entry -> values.put(entry.key(), entry.value()));
             }
             return Map.copyOf(values);
-        } catch (IOException ignored) {
+        } catch (IOException _) {
             return Map.of();
         }
     }
 
-    /**
-     * UTF-8 editors, notably on Windows, commonly write a byte order mark at the start of the
-     * file. Exactly one leading mark is ignorable so the first key is not silently dropped.
-     */
+    /// UTF-8 editors, notably on Windows, commonly write a byte order mark at the start of the
+    /// file. Exactly one leading mark is ignorable so the first key is not silently dropped.
     private static String stripLeadingByteOrderMark(String firstLine) {
         return firstLine.startsWith(UNICODE_BYTE_ORDER_MARK) ? firstLine.substring(1) : firstLine;
     }
@@ -98,7 +95,7 @@ public final class LocalEnvironment {
         if (line.startsWith("export ")) {
             line = line.substring("export ".length()).stripLeading();
         }
-        int separator = line.indexOf('=');
+        var separator = line.indexOf('=');
         if (separator <= 0) {
             return Optional.empty();
         }
@@ -114,8 +111,8 @@ public final class LocalEnvironment {
         if (key.isEmpty() || (!Character.isLetter(key.charAt(0)) && key.charAt(0) != '_')) {
             return false;
         }
-        for (int i = 1; i < key.length(); i++) {
-            char c = key.charAt(i);
+        for (var i = 1; i < key.length(); i++) {
+            var c = key.charAt(i);
             if (!Character.isLetterOrDigit(c) && c != '_') {
                 return false;
             }
@@ -133,13 +130,11 @@ public final class LocalEnvironment {
         return stripUnquotedTrailingComment(raw);
     }
 
-    /**
-     * Parses a quoted value and tolerates a trailing {@code # comment} after the closing quote.
-     * Returns empty when the text after the closing quote is not a comment, so ambiguous
-     * hand-written lines keep the whole-line interpretation instead of silently losing text.
-     */
+    /// Parses a quoted value and tolerates a trailing `# comment` after the closing quote.
+    /// Returns empty when the text after the closing quote is not a comment, so ambiguous
+    /// hand-written lines keep the whole-line interpretation instead of silently losing text.
     private static Optional<String> parseQuoted(String raw, char quote, boolean unescape) {
-        int closing = closingQuoteIndex(raw, quote, unescape);
+        var closing = closingQuoteIndex(raw, quote, unescape);
         if (closing < 0) {
             return Optional.empty();
         }
@@ -152,9 +147,9 @@ public final class LocalEnvironment {
     }
 
     private static int closingQuoteIndex(String raw, char quote, boolean honorEscapes) {
-        int index = 1;
+        var index = 1;
         while (index < raw.length()) {
-            char current = raw.charAt(index);
+            var current = raw.charAt(index);
             if (honorEscapes && current == '\\' && index < raw.length() - 1) {
                 index += 2;
                 continue;
@@ -168,7 +163,7 @@ public final class LocalEnvironment {
     }
 
     private static String stripUnquotedTrailingComment(String value) {
-        for (int index = 1; index < value.length(); index++) {
+        for (var index = 1; index < value.length(); index++) {
             if (value.charAt(index) == '#' && Character.isWhitespace(value.charAt(index - 1))) {
                 return value.substring(0, index).strip();
             }
@@ -178,8 +173,8 @@ public final class LocalEnvironment {
 
     private static String unquote(String value) {
         if (value.length() >= 2) {
-            char first = value.charAt(0);
-            char last = value.charAt(value.length() - 1);
+            var first = value.charAt(0);
+            var last = value.charAt(value.length() - 1);
             if (first == '"' && last == '"') {
                 return unescapeDoubleQuoted(value.substring(1, value.length() - 1));
             }
@@ -191,16 +186,16 @@ public final class LocalEnvironment {
     }
 
     private static String unescapeDoubleQuoted(String value) {
-        StringBuilder unescaped = new StringBuilder(value.length());
-        int index = 0;
+        var unescaped = new StringBuilder(value.length());
+        var index = 0;
         while (index < value.length()) {
-            char current = value.charAt(index);
+            var current = value.charAt(index);
             if (current != '\\' || index == value.length() - 1) {
                 unescaped.append(current);
                 index++;
                 continue;
             }
-            char escaped = value.charAt(index + 1);
+            var escaped = value.charAt(index + 1);
             switch (escaped) {
                 case '"' -> unescaped.append('"');
                 case '\\' -> unescaped.append('\\');

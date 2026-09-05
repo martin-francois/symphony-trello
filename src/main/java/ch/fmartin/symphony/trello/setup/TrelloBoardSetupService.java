@@ -61,7 +61,7 @@ final class TrelloBoardSetupService {
     }
 
     void preflightConnectedBoardManifest(Path manifestPath) {
-        ConnectedBoardRepository boards = new ConnectedBoardRepository(manifestPath);
+        var boards = new ConnectedBoardRepository(manifestPath);
         try {
             boards.loadForLifecycle();
             boards.validateWritable();
@@ -93,7 +93,7 @@ final class TrelloBoardSetupService {
                         .filter(board -> PathsEqual.samePath(board.workflowPath(), workflowPath))
                         .findAny()
                 : Optional.empty();
-        boolean reservedByAnotherWorkflow = manifest.boards().stream()
+        var reservedByAnotherWorkflow = manifest.boards().stream()
                 .filter(board -> board.serverPort() == requestedPort)
                 .anyMatch(board -> !sameConnectedBoard(replaceableBoard, board));
         if (reservedByAnotherWorkflow) {
@@ -126,7 +126,7 @@ final class TrelloBoardSetupService {
     private boolean canStopRunningWorker(Path manifestPath, ConnectedBoard board) {
         try {
             return workerManager.canStopRunningWorker(localWorkerPaths(manifestPath, board.workspaceRoot()), board);
-        } catch (IOException exception) {
+        } catch (IOException _) {
             return false;
         }
     }
@@ -165,10 +165,10 @@ final class TrelloBoardSetupService {
 
     private void persistConnectedBoard(ConnectedBoard board, Path manifestPath, PrintStream out) throws IOException {
         boolean restartReplacedWorker;
-        ConnectedBoardRepository boards = new ConnectedBoardRepository(manifestPath);
+        var boards = new ConnectedBoardRepository(manifestPath);
         try {
             ConnectedBoardManifest manifest = boards.loadForLifecycle();
-            List<ConnectedBoard> replacedBoards = manifest.boardsReplacedBy(board);
+            var replacedBoards = manifest.boardsReplacedBy(board);
             restartReplacedWorker = replacedBoards.stream()
                     .anyMatch(replacedBoard -> canStopRunningWorker(manifestPath, replacedBoard));
             stopReplacedBoards(manifestPath, board.workspaceRoot(), replacedBoards);
@@ -206,7 +206,7 @@ final class TrelloBoardSetupService {
         if (replacedBoards.isEmpty()) {
             return;
         }
-        List<Path> stoppedWorkflowPaths = new ArrayList<>();
+        var stoppedWorkflowPaths = new ArrayList<Path>();
         LocalWorkerPaths paths = localWorkerPaths(manifestPath, workspaceRoot);
         for (ConnectedBoard board : replacedBoards) {
             if (stoppedWorkflowPaths.stream().anyMatch(stopped -> PathsEqual.samePath(stopped, board.workflowPath()))) {

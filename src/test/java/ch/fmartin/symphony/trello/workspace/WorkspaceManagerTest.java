@@ -58,8 +58,9 @@ final class WorkspaceManagerTest {
                                 "hooks",
                                 Map.of(
                                         "after_create",
-                                        "test -z \"$(find . -mindepth 1 -maxdepth 1 -print -quit)\""
-                                                + " && echo cloned > checkout.txt")),
+                                        """
+                                        test -z "$(find . -mindepth 1 -maxdepth 1 -print -quit)"\
+                                         && echo cloned > checkout.txt""")),
                         ""));
 
         // when
@@ -142,7 +143,7 @@ final class WorkspaceManagerTest {
     @Test
     void rejectsMissingWorkspaceIdentifierBeforeTouchingFilesystem() {
         // given
-        String blankIdentifier = " ";
+        var blankIdentifier = " ";
 
         // when
         Throwable thrown = catchThrowable(() -> WorkspaceManager.sanitize(blankIdentifier));

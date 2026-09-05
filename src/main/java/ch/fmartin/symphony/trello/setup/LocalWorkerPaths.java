@@ -17,7 +17,7 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
             Optional<Path> workspaceRoot,
             Optional<Path> stateHome,
             Map<String, String> environment) {
-        boolean explicitConfigDir = configDir.isPresent();
+        var explicitConfigDir = configDir.isPresent();
         Path resolvedConfigDir = configDir
                 .or(() -> envPath(environment, CONFIG_DIR_ENV))
                 .orElseGet(() -> Path.of("."))
@@ -50,11 +50,9 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
         return configDir.resolve(ConnectedBoardManifest.FILE_NAME);
     }
 
-    /**
-     * Default connected-board manifest location for setup commands: the same configured or
-     * installed config directory that lifecycle commands resolve, never a path derived from a
-     * workflow file's parent directory.
-     */
+    /// Default connected-board manifest location for setup commands: the same configured or
+    /// installed config directory that lifecycle commands resolve, never a path derived from a
+    /// workflow file's parent directory.
     static Path defaultManifestPath(Map<String, String> environment) {
         return envPath(environment, CONFIG_DIR_ENV)
                 .orElseGet(() -> Path.of("."))

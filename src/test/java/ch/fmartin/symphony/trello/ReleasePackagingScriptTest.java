@@ -97,7 +97,7 @@ final class ReleasePackagingScriptTest {
         Path destination = project.root().resolve("dist/release-assets");
         ProcessResult first = project.run(VERSION);
         assertThat(first.exitCode()).as(first.output()).isZero();
-        Files.writeString(destination.resolve("install.sh"), "stale", StandardCharsets.UTF_8);
+        Files.writeString(destination.resolve("install.sh"), "stale");
 
         // when
         ProcessResult second = project.run(VERSION);
@@ -140,7 +140,7 @@ final class ReleasePackagingScriptTest {
                 "checksums.txt",
                 "symphony-trello-1.2.2.tar.gz",
                 "symphony-trello-1.2.2.zip")) {
-            Files.writeString(destination.resolve(asset), "unowned", StandardCharsets.UTF_8);
+            Files.writeString(destination.resolve(asset), "unowned");
         }
 
         // when
@@ -253,7 +253,7 @@ final class ReleasePackagingScriptTest {
                             return PreparedDestination.withSentinel(root.resolve("../victim"), victim);
                         }),
                 new InvalidDestinationCase(
-                        "absolute unrelated directory", "Release asset destination must be inside", (temp, root) -> {
+                        "absolute unrelated directory", "Release asset destination must be inside", (temp, _) -> {
                             Path destination = temp.resolve("outside");
                             Files.createDirectories(destination);
                             return PreparedDestination.withSentinel(destination, destination);
@@ -261,17 +261,17 @@ final class ReleasePackagingScriptTest {
                 new InvalidDestinationCase(
                         "repository root",
                         "must not be the source checkout",
-                        (temp, root) -> PreparedDestination.withSentinel(root, root)),
+                        (_, root) -> PreparedDestination.withSentinel(root, root)),
                 new InvalidDestinationCase(
                         "repository parent",
                         "Release asset destination must be inside",
-                        (temp, root) -> PreparedDestination.withSentinel(root.getParent(), root.getParent())),
+                        (_, root) -> PreparedDestination.withSentinel(root.getParent(), root.getParent())),
                 new InvalidDestinationCase(
                         "filesystem root",
                         "must not be the filesystem root",
-                        (temp, root) -> PreparedDestination.withoutSentinel(Path.of("/"))),
+                        (_, _) -> PreparedDestination.withoutSentinel(Path.of("/"))),
                 new InvalidDestinationCase(
-                        "inside Maven target", "must not be inside Maven build output", (temp, root) -> {
+                        "inside Maven target", "must not be inside Maven build output", (_, root) -> {
                             Path destination = root.resolve("target/release-assets");
                             Files.createDirectories(destination);
                             return PreparedDestination.withSentinel(destination, destination);
@@ -279,30 +279,30 @@ final class ReleasePackagingScriptTest {
                 new InvalidDestinationCase(
                         "destination contains Maven target",
                         "must not be the source checkout",
-                        (temp, root) -> PreparedDestination.withSentinel(root.resolve("target/.."), root)),
-                new InvalidDestinationCase("destination is a file", "must be a directory", (temp, root) -> {
+                        (_, root) -> PreparedDestination.withSentinel(root.resolve("target/.."), root)),
+                new InvalidDestinationCase("destination is a file", "must be a directory", (_, root) -> {
                     Path destination = root.resolve("dist-file");
-                    Files.writeString(destination, "sentinel", StandardCharsets.UTF_8);
+                    Files.writeString(destination, "sentinel");
                     return PreparedDestination.withoutSentinel(destination);
                 }),
                 new InvalidDestinationCase(
-                        "existing non-empty unowned destination", "contains files not managed", (temp, root) -> {
+                        "existing non-empty unowned destination", "contains files not managed", (_, root) -> {
                             Path destination = root.resolve("dist/unowned");
                             Files.createDirectories(destination);
-                            Files.writeString(destination.resolve("keep.txt"), "sentinel", StandardCharsets.UTF_8);
+                            Files.writeString(destination.resolve("keep.txt"), "sentinel");
                             return PreparedDestination.withSentinel(destination, destination);
                         }),
                 new InvalidDestinationCase(
                         "existing custom destination with asset-like file",
                         "contains files not managed",
-                        (temp, root) -> {
+                        (_, root) -> {
                             Path destination = root.resolve("custom");
                             Files.createDirectories(destination);
-                            Files.writeString(destination.resolve("install.sh"), "sentinel", StandardCharsets.UTF_8);
+                            Files.writeString(destination.resolve("install.sh"), "sentinel");
                             return PreparedDestination.withSentinel(destination, destination);
                         }),
                 new InvalidDestinationCase(
-                        "invalid ownership marker directory", "ownership marker is invalid", (temp, root) -> {
+                        "invalid ownership marker directory", "ownership marker is invalid", (_, root) -> {
                             Path destination = root.resolve("dist/invalid-marker");
                             Files.createDirectories(destination.resolve(".symphony-trello-release-assets"));
                             return PreparedDestination.withSentinel(destination, destination);
@@ -330,7 +330,7 @@ final class ReleasePackagingScriptTest {
                 new InvalidDestinationCase(
                         "inside-checkout destination symlink",
                         "Release asset destination must not be a symlink",
-                        (temp, root) -> {
+                        (_, root) -> {
                             assumeSymlinks();
                             Path target = root.resolve("dist/inside-link-target");
                             Files.createDirectories(target);
@@ -341,7 +341,7 @@ final class ReleasePackagingScriptTest {
                 new InvalidDestinationCase(
                         "inside-checkout destination symlink with trailing slash",
                         "Release asset destination must not be a symlink",
-                        (temp, root) -> {
+                        (_, root) -> {
                             assumeSymlinks();
                             Path target = root.resolve("dist/inside-link-target-slash");
                             Files.createDirectories(target);
@@ -352,7 +352,7 @@ final class ReleasePackagingScriptTest {
                 new InvalidDestinationCase(
                         "inside-checkout destination symlink with dot alias",
                         "Release asset destination must not be a symlink",
-                        (temp, root) -> {
+                        (_, root) -> {
                             assumeSymlinks();
                             Path target = root.resolve("dist/inside-link-target-dot");
                             Files.createDirectories(target);
@@ -363,7 +363,7 @@ final class ReleasePackagingScriptTest {
                 new InvalidDestinationCase(
                         "relative destination symlink",
                         "Release asset destination must not be a symlink",
-                        (temp, root) -> {
+                        (_, root) -> {
                             assumeSymlinks();
                             Path target = root.resolve("dist/relative-link-target");
                             Files.createDirectories(target);
@@ -374,7 +374,7 @@ final class ReleasePackagingScriptTest {
                 new InvalidDestinationCase(
                         "absolute destination symlink",
                         "Release asset destination must not be a symlink",
-                        (temp, root) -> {
+                        (_, root) -> {
                             assumeSymlinks();
                             Path target = root.resolve("dist/absolute-link-target");
                             Files.createDirectories(target);
@@ -385,7 +385,7 @@ final class ReleasePackagingScriptTest {
                 new InvalidDestinationCase(
                         "empty target through destination symlink",
                         "Release asset destination must not be a symlink",
-                        (temp, root) -> {
+                        (_, root) -> {
                             assumeSymlinks();
                             Path target = root.resolve("dist/empty-link-target");
                             Files.createDirectories(target);
@@ -396,7 +396,7 @@ final class ReleasePackagingScriptTest {
                 new InvalidDestinationCase(
                         "owned-looking target through destination symlink",
                         "Release asset destination must not be a symlink",
-                        (temp, root) -> {
+                        (_, root) -> {
                             assumeSymlinks();
                             Path target = root.resolve("dist/owned-looking-link-target");
                             Files.createDirectories(target);
@@ -495,8 +495,7 @@ final class ReleasePackagingScriptTest {
                 #!/usr/bin/env bash
                 DEFAULT_VERSION="0.0.0" # x-release-please-version
                 echo install
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.writeString(
                 root.resolve("install.ps1"),
                 """
@@ -506,13 +505,12 @@ final class ReleasePackagingScriptTest {
                   [switch]$Help
                 )
                 $DefaultVersion = "0.0.0" # x-release-please-version
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.writeString(
-                root.resolve("uninstall.sh"), "#!/usr/bin/env bash\necho uninstall\n", StandardCharsets.UTF_8);
-        Files.writeString(root.resolve("uninstall.ps1"), "Write-Output uninstall\n", StandardCharsets.UTF_8);
-        Files.writeString(root.resolve("README.md"), "readme\n", StandardCharsets.UTF_8);
-        TestProject project = new TestProject(root);
+                root.resolve("uninstall.sh"), "#!/usr/bin/env bash\necho uninstall\n");
+        Files.writeString(root.resolve("uninstall.ps1"), "Write-Output uninstall\n");
+        Files.writeString(root.resolve("README.md"), "readme\n");
+        var project = new TestProject(root);
         project.writeSuccessfulMavenWrapper();
         return project;
     }
@@ -525,7 +523,7 @@ final class ReleasePackagingScriptTest {
     }
 
     private static void rewrite(Path file, UnaryOperator<String> replacement) throws IOException {
-        Files.writeString(file, replacement.apply(Files.readString(file)), StandardCharsets.UTF_8);
+        Files.writeString(file, replacement.apply(Files.readString(file)));
     }
 
     private static void assertExpectedAssets(Path destination) throws IOException {
@@ -533,9 +531,9 @@ final class ReleasePackagingScriptTest {
     }
 
     private static void assertExpectedAssets(Path destination, String version) throws IOException {
-        try (Stream<Path> files = Files.list(destination)) {
+        try (var files = Files.list(destination)) {
             assertThat(files.map(path -> path.getFileName().toString())
-                            .filter(name -> !name.equals(".symphony-trello-release-assets"))
+                            .filter(name -> !".symphony-trello-release-assets".equals(name))
                             .sorted()
                             .toList())
                     .containsExactlyElementsOf(expectedAssets(version));
@@ -562,7 +560,7 @@ final class ReleasePackagingScriptTest {
     }
 
     private static void assertNoPublicationAttempt(Path root) throws IOException {
-        try (Stream<Path> paths = Files.walk(root)) {
+        try (var paths = Files.walk(root)) {
             assertThat(paths.map(path -> path.getFileName().toString())
                             .filter(name -> name.startsWith(".release-assets"))
                             .toList())
@@ -573,8 +571,7 @@ final class ReleasePackagingScriptTest {
     private static void writeOwnershipMarker(Path destination) throws IOException {
         Files.writeString(
                 destination.resolve(".symphony-trello-release-assets"),
-                String.join("\n", expectedAssets(VERSION)) + "\n",
-                StandardCharsets.UTF_8);
+                String.join("\n", expectedAssets(VERSION)) + "\n");
     }
 
     private static List<String> expectedAssets(String version) {
@@ -613,7 +610,7 @@ final class ReleasePackagingScriptTest {
 
         void writeMavenWrapper(String content) throws IOException {
             Path mvnw = root.resolve("mvnw");
-            Files.writeString(mvnw, content, StandardCharsets.UTF_8);
+            Files.writeString(mvnw, content);
             mvnw.toFile().setExecutable(true);
         }
 
@@ -626,7 +623,7 @@ final class ReleasePackagingScriptTest {
                     .directory(root.toFile())
                     .redirectErrorStream(true)
                     .start();
-            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            var output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             return new ProcessResult(process.waitFor(), output);
         }
 
@@ -673,7 +670,7 @@ final class ReleasePackagingScriptTest {
         static PreparedDestination withSentinel(Path requestedPath, Path actualDirectory) throws IOException {
             Files.createDirectories(actualDirectory);
             Path sentinel = actualDirectory.resolve("sentinel.txt");
-            Files.writeString(sentinel, "sentinel", StandardCharsets.UTF_8);
+            Files.writeString(sentinel, "sentinel");
             return new PreparedDestination(requestedPath, sentinel, null, null);
         }
 
@@ -689,7 +686,7 @@ final class ReleasePackagingScriptTest {
                 throws IOException {
             Files.createDirectories(target);
             Path sentinel = target.resolve("sentinel.txt");
-            Files.writeString(sentinel, "sentinel", StandardCharsets.UTF_8);
+            Files.writeString(sentinel, "sentinel");
             return new PreparedDestination(requestedPath, sentinel, symlink, target);
         }
 

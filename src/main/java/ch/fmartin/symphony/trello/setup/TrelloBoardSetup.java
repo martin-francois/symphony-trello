@@ -111,11 +111,11 @@ public final class TrelloBoardSetup {
     private final IntPredicate portInUse;
 
     public TrelloBoardSetup(ObjectMapper json) {
-        this(json, CodexModelDefaults.fallback());
+        this(json, codexModelDefaults);
     }
 
     public TrelloBoardSetup(ObjectMapper json, CodexModelDefaults codexModelDefaults) {
-        this(json, CodexModelSelectionDefaults.of(codexModelDefaults));
+        this(json, codexModelSelectionDefaults1);
     }
 
     TrelloBoardSetup(ObjectMapper json, CodexModelSelectionDefaults codexModelSelectionDefaults) {
@@ -159,11 +159,9 @@ public final class TrelloBoardSetup {
         this.portInUse = Objects.requireNonNull(portInUse, "portInUse");
     }
 
-    /**
-     * Returns a copy whose port-availability checks use the given probe. Port-selection behavior
-     * depends on which loopback ports already accept connections, so tests inject a deterministic
-     * probe instead of inheriting the host's real port occupancy.
-     */
+    /// Returns a copy whose port-availability checks use the given probe. Port-selection behavior
+    /// depends on which loopback ports already accept connections, so tests inject a deterministic
+    /// probe instead of inheriting the host's real port occupancy.
     TrelloBoardSetup withPortProbe(IntPredicate probe) {
         return new TrelloBoardSetup(
                 json,
@@ -174,7 +172,7 @@ public final class TrelloBoardSetup {
                 probe);
     }
 
-    /** Whether something on the loopback interface already accepts connections on the port. */
+    /// Whether something on the loopback interface already accepts connections on the port.
     boolean portInUse(int port) {
         return portInUse.test(port);
     }
@@ -216,16 +214,16 @@ public final class TrelloBoardSetup {
         Path workflowPath = resolveNewBoardWorkflowPath(request);
         ensureWorkflowWritable(workflowPath, request.force());
         CodexModelDefaults selectedCodexModelDefaults = codexModelDefaultsForWorkflow(workflowPath);
-        int serverPort = resolveServerPort(workflowPath, request.serverPort(), request.force(), request.envPath());
+        var serverPort = resolveServerPort(workflowPath, request.serverPort(), request.force(), request.envPath());
         String workspaceId = resolveWorkspaceId(request);
-        Map<String, Object> board = createBoard(request, workspaceId);
+        var board = createBoard(request, workspaceId);
         String boardId = requiredString(board, "id");
         String boardKey = boardKey(board);
         String boardUrl = string(board.get("url"));
 
-        boolean githubEnabled = request.githubIntegration().enabled();
-        List<String> createdLists = new ArrayList<>();
-        List<String> recommendedLists = recommendedLists(githubEnabled, request.detectInProgressState());
+        var githubEnabled = request.githubIntegration().enabled();
+        var createdLists = new ArrayList<String>();
+        var recommendedLists = recommendedLists(githubEnabled, request.detectInProgressState());
         for (String listName : recommendedLists) {
             postMap(
                     request.endpoint(),
@@ -269,7 +267,7 @@ public final class TrelloBoardSetup {
     }
 
     private static List<String> withoutRecommendedInProgress(List<String> values) {
-        List<String> filtered = new ArrayList<>(values);
+        var filtered = new ArrayList<String>(values);
         filtered.removeIf(RECOMMENDED_IN_PROGRESS_STATE::equals);
         return List.copyOf(filtered);
     }
@@ -310,16 +308,14 @@ public final class TrelloBoardSetup {
         return "trello_auth_failed".equals(e.code()) || "trello_permission_denied".equals(e.code());
     }
 
-    /**
-     * Distinguishes an invalid workspace id from genuinely bad credentials: when the same
-     * credentials can read the member profile, the earlier authorization failure was about the
-     * requested Workspace, not the API key or token.
-     */
+    /// Distinguishes an invalid workspace id from genuinely bad credentials: when the same
+    /// credentials can read the member profile, the earlier authorization failure was about the
+    /// requested Workspace, not the API key or token.
     private boolean credentialsUsable(NewBoardRequest request) {
         try {
             getMemberInfo(new MemberInfoRequest(request.endpoint(), request.credentials()));
             return true;
-        } catch (TrelloBoardSetupException ignored) {
+        } catch (TrelloBoardSetupException _) {
             return false;
         }
     }
@@ -329,7 +325,7 @@ public final class TrelloBoardSetup {
             return request.workspaceId();
         }
 
-        List<WorkspaceInfo> workspaces =
+        var workspaces =
                 listWorkspaces(new WorkspaceListRequest(request.endpoint(), request.credentials()));
         if (workspaces.size() == 1) {
             return workspaces.getFirst().id();
@@ -367,7 +363,7 @@ public final class TrelloBoardSetup {
 
     public MemberInfo getMemberInfo(MemberInfoRequest request) {
         request.validate();
-        Map<String, Object> member = getMap(
+        var member = getMap(
                 request.endpoint(), "members/me", Map.of("fields", "id,username,fullName"), request.credentials());
         String username = requiredString(member, "username");
         return new MemberInfo(
@@ -376,7 +372,7 @@ public final class TrelloBoardSetup {
 
     public BoardInfo getBoardInfo(BoardInfoRequest request) {
         request.validate();
-        Map<String, Object> board = getMap(
+        var board = getMap(
                 request.endpoint(),
                 "boards/" + encodeSegment(request.boardId()),
                 Map.of("fields", "id,name,shortLink,url,closed"),
@@ -425,7 +421,7 @@ public final class TrelloBoardSetup {
         request.validate();
         preflightRequestedServerPort(request.workflowPath(), request.serverPort(), request.force(), request.envPath());
         CodexModelDefaults selectedCodexModelDefaults = codexModelDefaultsForWorkflow(request.workflowPath());
-        Map<String, Object> board = importBoardInfo(request);
+        var board = importBoardInfo(request);
         if (bool(board.get("closed"))) {
             throw new TrelloBoardSetupException(
                     "trello_board_closed",
@@ -442,7 +438,7 @@ public final class TrelloBoardSetup {
                 .map(TrelloBoardSetup::toBoardList)
                 .toList();
 
-        List<String> openListNames = new ArrayList<>(lists.stream()
+        var openListNames = new ArrayList<String>(lists.stream()
                 .filter(list -> !list.closed())
                 .map(BoardList::name)
                 .toList());
@@ -457,10 +453,10 @@ public final class TrelloBoardSetup {
 
         List<String> terminalStates =
                 request.terminalStates().isEmpty() ? defaultTerminalStates(openListNames) : request.terminalStates();
-        boolean canCreateMergingList = request.githubIntegration().enabled()
+        var canCreateMergingList = request.githubIntegration().enabled()
                 && request.createMissingGithubLists()
                 && !terminalStates.isEmpty()
-                && openListNames.stream().noneMatch(name -> name.equalsIgnoreCase(RECOMMENDED_MERGING_STATE));
+                && openListNames.stream().noneMatch(RECOMMENDED_MERGING_STATE::equalsIgnoreCase);
         List<String> validationListNames =
                 canCreateMergingList ? withOptionalListName(openListNames, RECOMMENDED_MERGING_STATE) : openListNames;
         String blockedState = "-".equals(request.blockedState())
@@ -470,7 +466,7 @@ public final class TrelloBoardSetup {
                 request.detectInProgressState() ? defaultInProgressState(openListNames) : request.inProgressState();
         String mergingState =
                 request.githubIntegration().enabled() ? defaultMergingState(validationListNames, terminalStates) : null;
-        boolean shouldCreateMergingList = canCreateMergingList && !blank(mergingState);
+        var shouldCreateMergingList = canCreateMergingList && !blank(mergingState);
         String reviewState = defaultReviewState(openListNames);
         validateConfiguredList("in-progress", "in_progress", inProgressState, openListNames);
         validateConfiguredList("merging", "merging", mergingState, validationListNames);
@@ -486,7 +482,7 @@ public final class TrelloBoardSetup {
         activeStates = withOptionalActiveState(activeStates, inProgressState);
         activeStates = withOptionalActiveState(activeStates, mergingState);
         ensureWorkflowWritable(request.workflowPath(), request.force());
-        int serverPort =
+        var serverPort =
                 resolveServerPort(request.workflowPath(), request.serverPort(), request.force(), request.envPath());
         if (shouldCreateMergingList) {
             postMap(
@@ -552,10 +548,8 @@ public final class TrelloBoardSetup {
         return codexModelSelectionDefaults();
     }
 
-    /**
-     * Returns a catalog only when it was already materialized without process startup. Dynamic
-     * suppliers are intentionally absent because resolving one can initialize Codex-owned files.
-     */
+    /// Returns a catalog only when it was already materialized without process startup. Dynamic
+    /// suppliers are intentionally absent because resolving one can initialize Codex-owned files.
     Optional<CodexModelSelectionDefaults> resolvedCodexModelSelectionDefaultsForDryRun() {
         return codexModelSelectionDefaultsForDryRun;
     }
@@ -568,13 +562,13 @@ public final class TrelloBoardSetup {
     private WorkflowCodexModelDefaults workflowCodexModelDefaults(
             Path workflowPath, CodexModelSelectionDefaults selectionDefaults) {
         CodexModelDefaults defaults = selectionDefaults.defaults();
-        boolean hasOverrides = codexModelOverride.isPresent() || codexReasoningEffortOverride.isPresent();
+        var hasOverrides = codexModelOverride.isPresent() || codexReasoningEffortOverride.isPresent();
         WorkflowCodexModelDefaults effective;
         try {
             effective = readWorkflowFrontMatter(workflowPath)
                     .map(frontMatter -> preserveExistingCodexModelDefaults(frontMatter, defaults))
                     .orElseGet(() -> new WorkflowCodexModelDefaults(defaults, false, false));
-        } catch (TrelloBoardSetupException e) {
+        } catch (TrelloBoardSetupException _) {
             effective = new WorkflowCodexModelDefaults(defaults, false, false);
         }
         if (!hasOverrides) {
@@ -605,7 +599,7 @@ public final class TrelloBoardSetup {
             CodexModelSelectionDefaults selectionDefaults,
             boolean preserveConfiguredReasoningEffort) {
         String model = codexModelOverride.orElseGet(defaults::model);
-        Optional<String> selectedModelReasoningEffort = codexModelOverride
+        var selectedModelReasoningEffort = codexModelOverride
                 .map(modelOverride -> selectionDefaults.reasoningEffortForSelectedModel(
                         modelOverride, defaults, preserveConfiguredReasoningEffort))
                 .orElseGet(() -> Optional.ofNullable(defaults.reasoningEffort()));
@@ -613,7 +607,7 @@ public final class TrelloBoardSetup {
                 .or(() -> selectedModelReasoningEffort)
                 .orElse(null);
         codexReasoningEffortOverride.ifPresent(
-                ignored -> selectionDefaults.validateReasoningEffortForModel(model, reasoningEffort));
+                _ -> selectionDefaults.validateReasoningEffortForModel(model, reasoningEffort));
         return CodexModelDefaults.partial(model, reasoningEffort);
     }
 
@@ -654,7 +648,7 @@ public final class TrelloBoardSetup {
             Map<String, String> query,
             TrelloCredentials credentials,
             String... requiredKeys) {
-        Map<String, Object> payload = request(TrelloRequestKind.WRITE, endpoint, path, query, credentials, MAP_TYPE);
+        var payload = request(TrelloRequestKind.WRITE, endpoint, path, query, credentials, MAP_TYPE);
         if (payload == null) {
             throw unknownTrelloWriteOutcome(
                     new TrelloBoardSetupException("trello_unknown_payload", "Trello payload is empty"));
@@ -686,7 +680,7 @@ public final class TrelloBoardSetup {
                         case WRITE ->
                             builder.POST(HttpRequest.BodyPublishers.noBody()).build();
                     };
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (isSuccessfulStatus(response.statusCode())) {
                 try {
                     return json.readValue(response.body(), type);
@@ -756,11 +750,10 @@ public final class TrelloBoardSetup {
                 Files.writeString(
                         absolute,
                         workflow,
-                        StandardCharsets.UTF_8,
                         StandardOpenOption.CREATE,
                         StandardOpenOption.TRUNCATE_EXISTING);
             } else {
-                Files.writeString(absolute, workflow, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
+                Files.writeString(absolute, workflow, StandardOpenOption.CREATE_NEW);
             }
         } catch (IOException e) {
             throw new TrelloBoardSetupException(
@@ -778,7 +771,7 @@ public final class TrelloBoardSetup {
 
         Path parent = requested.getParent();
         Path candidate = resolveSibling(parent, WorkflowFileNames.generatedFileName(request.boardName(), "board", 1));
-        for (int suffix = 2; Files.exists(candidate.toAbsolutePath().normalize()); suffix++) {
+        for (var suffix = 2; Files.exists(candidate.toAbsolutePath().normalize()); suffix++) {
             candidate =
                     resolveSibling(parent, WorkflowFileNames.generatedFileName(request.boardName(), "board", suffix));
         }
@@ -851,12 +844,12 @@ public final class TrelloBoardSetup {
     }
 
     private int nextAvailableWorkflowServerPort(Path workflowPath, Path envPath) {
-        Set<Integer> reservedPorts = new HashSet<>();
+        var reservedPorts = new HashSet<Integer>();
         for (Path candidate : siblingWorkflowFiles(workflowPath)) {
             workflowServerPortReservation(candidate, envPath).ifPresent(reservedPorts::add);
         }
 
-        for (int port = DEFAULT_SERVER_PORT; port <= LocalPort.MAX; port++) {
+        for (var port = DEFAULT_SERVER_PORT; port <= LocalPort.MAX; port++) {
             if (!reservedPorts.contains(port) && !portInUse(port)) {
                 return port;
             }
@@ -915,7 +908,7 @@ public final class TrelloBoardSetup {
     private Optional<Integer> replaceableWorkflowServerPortReservation(Path workflowPath, Path envPath) {
         try {
             return workflowServerPortReservation(workflowPath, envPath);
-        } catch (TrelloBoardSetupException e) {
+        } catch (TrelloBoardSetupException _) {
             return Optional.empty();
         }
     }
@@ -925,7 +918,7 @@ public final class TrelloBoardSetup {
             return Optional.empty();
         }
         try {
-            String text = Files.readString(workflowPath, StandardCharsets.UTF_8);
+            String text = Files.readString(workflowPath);
             return readYamlFrontMatter(text);
         } catch (IOException e) {
             throw new TrelloBoardSetupException(
@@ -937,11 +930,11 @@ public final class TrelloBoardSetup {
         if (!text.startsWith("---")) {
             return Optional.empty();
         }
-        int firstLineEnd = text.indexOf('\n');
+        var firstLineEnd = text.indexOf('\n');
         if (firstLineEnd < 0) {
             return Optional.empty();
         }
-        int end = text.indexOf("\n---", firstLineEnd + 1);
+        var end = text.indexOf("\n---", firstLineEnd + 1);
         if (end < 0) {
             return Optional.empty();
         }
@@ -1041,7 +1034,7 @@ public final class TrelloBoardSetup {
             CodexModelDefaults codexModelDefaults,
             RepositoryDefaults repositoryDefaults) {
         String doneState = landingDoneState(terminalStates);
-        List<String> handoffStates = allowedMoveStates(inProgressState, reviewState, blockedState, doneState);
+        var handoffStates = allowedMoveStates(inProgressState, reviewState, blockedState, doneState);
         return """
                 ---
                 tracker:
@@ -1405,7 +1398,7 @@ public final class TrelloBoardSetup {
         if (!codexModelDefaults.firstClassFieldsSupported()) {
             return "";
         }
-        StringBuilder yaml = new StringBuilder();
+        var yaml = new StringBuilder();
         if (!blank(codexModelDefaults.model())) {
             yaml.append("  model: ")
                     .append(yamlScalar(codexModelDefaults.model()))
@@ -1794,7 +1787,7 @@ public final class TrelloBoardSetup {
             boolean workpadToolEnabled,
             boolean githubEnabled) {
         String reviewHandoff = blank(reviewState) ? "human review" : quote(reviewState);
-        List<String> implementationStates = implementationActiveStates(activeStates, mergingState);
+        var implementationStates = implementationActiveStates(activeStates, mergingState);
         String activeText =
                 implementationStates.isEmpty() ? "an active implementation list" : quotedList(implementationStates);
         if (!githubEnabled) {
@@ -1804,8 +1797,9 @@ public final class TrelloBoardSetup {
                     ? "update the workpad with a short rework plan"
                     : "record a short rework plan for the final response";
             String reworkEvidence = workpadToolEnabled
-                    ? "update the existing workpad with the rework evidence, and add one concise handoff comment. Do not create\n"
-                            + "duplicate progress summary comments when the workpad already contains the details."
+                    ? """
+                            update the existing workpad with the rework evidence, and add one concise handoff comment. Do not create
+                            duplicate progress summary comments when the workpad already contains the details."""
                     : "include the rework evidence in the final response.";
             return """
                     ## Rework From Human Review
@@ -1829,8 +1823,9 @@ public final class TrelloBoardSetup {
                 ? "update the workpad with a short rework plan"
                 : "record a short rework plan for the final response";
         String reworkEvidence = workpadToolEnabled
-                ? "update the existing workpad with the rework evidence, and add one concise handoff comment. Do not create\n"
-                        + "duplicate progress summary comments when the workpad already contains the details."
+                ? """
+                        update the existing workpad with the rework evidence, and add one concise handoff comment. Do not create
+                        duplicate progress summary comments when the workpad already contains the details."""
                 : "include the rework evidence in the final response.";
         String resetRestrictions = workpadToolEnabled
                 ? "close the existing PR, delete the workpad, or create a new branch"
@@ -2137,7 +2132,7 @@ public final class TrelloBoardSetup {
         }
         String blockedText =
                 blank(blockedDestination) ? "block in the final response" : "move to " + quote(blockedDestination);
-        String pullRequestLine = "";
+        var pullRequestLine = "";
         if (githubEnabled) {
             pullRequestLine = workpadToolEnabled
                     ? """
@@ -2172,7 +2167,7 @@ public final class TrelloBoardSetup {
 
     private static List<String> allowedMoveStates(
             String inProgressState, String reviewState, String blockedState, String doneState) {
-        List<String> states = new ArrayList<>();
+        var states = new ArrayList<String>();
         if (!blank(inProgressState)) {
             states.add(inProgressState);
         }
@@ -2197,7 +2192,7 @@ public final class TrelloBoardSetup {
     }
 
     private static List<String> withSystemTerminalStates(List<String> terminalStates) {
-        List<String> combined = new ArrayList<>(terminalStates);
+        var combined = new ArrayList<String>(terminalStates);
         for (String state : SYSTEM_TERMINAL_STATES) {
             if (combined.stream().noneMatch(existing -> existing.equalsIgnoreCase(state))) {
                 combined.add(state);
@@ -2212,15 +2207,13 @@ public final class TrelloBoardSetup {
                 .collect(Collectors.joining(System.lineSeparator()));
     }
 
-    /**
-     * Double-quoted YAML scalar whose parsed value round-trips the input exactly. Raw control
-     * characters such as newlines would fold or break the scalar (and make the generated file
-     * unreadable), so they are emitted as YAML escape sequences instead.
-     */
+    /// Double-quoted YAML scalar whose parsed value round-trips the input exactly. Raw control
+    /// characters such as newlines would fold or break the scalar (and make the generated file
+    /// unreadable), so they are emitted as YAML escape sequences instead.
     private static String yamlScalar(String value) {
-        StringBuilder safe = new StringBuilder(value.length());
-        for (int index = 0; index < value.length(); index++) {
-            char current = value.charAt(index);
+        var safe = new StringBuilder(value.length());
+        for (var index = 0; index < value.length(); index++) {
+            var current = value.charAt(index);
             switch (current) {
                 case '\\' -> safe.append("\\\\");
                 case '"' -> safe.append("\\\"");
@@ -2253,7 +2246,7 @@ public final class TrelloBoardSetup {
 
     private static List<String> defaultActiveStates(List<String> openListNames) {
         return openListNames.stream()
-                .filter(name -> name.equalsIgnoreCase(RECOMMENDED_ACTIVE_STATE))
+                .filter(RECOMMENDED_ACTIVE_STATE::equalsIgnoreCase)
                 .findAny()
                 .map(List::of)
                 .orElseGet(List::of);
@@ -2261,7 +2254,7 @@ public final class TrelloBoardSetup {
 
     private static List<String> defaultTerminalStates(List<String> openListNames) {
         return openListNames.stream()
-                .filter(name -> name.equalsIgnoreCase("Done"))
+                .filter("Done"::equalsIgnoreCase)
                 .findAny()
                 .map(List::of)
                 .orElseGet(List::of);
@@ -2269,17 +2262,17 @@ public final class TrelloBoardSetup {
 
     private static String defaultReviewState(List<String> openListNames) {
         return openListNames.stream()
-                .filter(name -> name.equalsIgnoreCase(RECOMMENDED_REVIEW_STATE))
+                .filter(RECOMMENDED_REVIEW_STATE::equalsIgnoreCase)
                 .findAny()
                 .orElseGet(() -> openListNames.stream()
-                        .filter(name -> name.equalsIgnoreCase(FALLBACK_REVIEW_STATE))
+                        .filter(FALLBACK_REVIEW_STATE::equalsIgnoreCase)
                         .findAny()
                         .orElse(null));
     }
 
     private static String defaultInProgressState(List<String> openListNames) {
         return openListNames.stream()
-                .filter(name -> name.equalsIgnoreCase(RECOMMENDED_IN_PROGRESS_STATE))
+                .filter(RECOMMENDED_IN_PROGRESS_STATE::equalsIgnoreCase)
                 .findAny()
                 .orElse(null);
     }
@@ -2289,21 +2282,21 @@ public final class TrelloBoardSetup {
             return null;
         }
         return openListNames.stream()
-                .filter(name -> name.equalsIgnoreCase(RECOMMENDED_MERGING_STATE))
+                .filter(RECOMMENDED_MERGING_STATE::equalsIgnoreCase)
                 .findAny()
                 .orElse(null);
     }
 
     private static String defaultBlockedState(List<String> openListNames) {
         return openListNames.stream()
-                .filter(name -> name.equalsIgnoreCase(RECOMMENDED_BLOCKED_STATE))
+                .filter(RECOMMENDED_BLOCKED_STATE::equalsIgnoreCase)
                 .findAny()
                 .orElse(null);
     }
 
     private static String landingDoneState(List<String> terminalStates) {
         return terminalStates.stream()
-                .filter(state -> state.equalsIgnoreCase("Done"))
+                .filter("Done"::equalsIgnoreCase)
                 .findAny()
                 .orElseGet(() -> terminalStates.stream().findFirst().orElse(null));
     }
@@ -2321,7 +2314,7 @@ public final class TrelloBoardSetup {
         if (blank(extraState) || activeStates.stream().anyMatch(existing -> existing.equalsIgnoreCase(extraState))) {
             return activeStates;
         }
-        List<String> combined = new ArrayList<>(activeStates);
+        var combined = new ArrayList<String>(activeStates);
         combined.add(extraState);
         return List.copyOf(combined);
     }
@@ -2330,14 +2323,14 @@ public final class TrelloBoardSetup {
         if (blank(extraName) || names.stream().anyMatch(existing -> existing.equalsIgnoreCase(extraName))) {
             return names;
         }
-        List<String> combined = new ArrayList<>(names);
+        var combined = new ArrayList<String>(names);
         combined.add(extraName);
         return List.copyOf(combined);
     }
 
     private static void validateConfiguredLists(
             String label, String errorCodeSegment, List<String> configured, List<String> openListNames) {
-        List<String> duplicates = duplicatedConfiguredListNames(configured);
+        var duplicates = duplicatedConfiguredListNames(configured);
         if (!duplicates.isEmpty()) {
             throw new TrelloBoardSetupException(
                     "setup_duplicate_" + errorCodeSegment + "_state",
@@ -2366,8 +2359,8 @@ public final class TrelloBoardSetup {
     }
 
     private static List<String> duplicatedConfiguredListNames(List<String> configured) {
-        Map<String, String> firstByNormalizedName = new LinkedHashMap<>();
-        Set<String> duplicateNormalizedNames = new HashSet<>();
+        var firstByNormalizedName = new LinkedHashMap<String, String>();
+        var duplicateNormalizedNames = new HashSet<String>();
         for (String name : configured) {
             String normalizedName = StateNames.normalize(name);
             if (firstByNormalizedName.putIfAbsent(normalizedName, name) != null) {
@@ -2465,7 +2458,7 @@ public final class TrelloBoardSetup {
     }
 
     private static Map<String, String> createBoardQuery(String boardName, String workspaceId) {
-        Map<String, String> query = orderedMap("name", boardName, "defaultLists", "false", "defaultLabels", "false");
+        var query = orderedMap("name", boardName, "defaultLists", "false", "defaultLabels", "false");
         if (!blank(workspaceId)) {
             query.put("idOrganization", workspaceId);
         }
@@ -2480,8 +2473,8 @@ public final class TrelloBoardSetup {
 
     private static Map<String, String> orderedMap(String... entries) {
         checkArgument(entries.length % 2 == 0, "Entries must contain key-value pairs");
-        Map<String, String> map = new LinkedHashMap<>();
-        for (int i = 0; i < entries.length; i += 2) {
+        var map = new LinkedHashMap<String, String>();
+        for (var i = 0; i < entries.length; i += 2) {
             map.put(entries[i], entries[i + 1]);
         }
         return map;
@@ -2579,22 +2572,7 @@ public final class TrelloBoardSetup {
                 Path envPath,
                 boolean detectInProgressState,
                 boolean preserveConfiguredMaxConcurrentAgents) {
-            this(
-                    endpoint,
-                    credentials,
-                    boardName,
-                    workspaceId,
-                    workflowPath,
-                    workspaceRoot,
-                    serverPort,
-                    maxConcurrentAgents,
-                    force,
-                    useBoardNameWorkflowFallback,
-                    githubIntegration,
-                    envPath,
-                    detectInProgressState,
-                    preserveConfiguredMaxConcurrentAgents,
-                    RepositoryDefaults.empty());
+            this(endpoint, credentials, boardName, workspaceId, workflowPath, workspaceRoot, serverPort, maxConcurrentAgents, force, useBoardNameWorkflowFallback, githubIntegration, envPath, detectInProgressState, preserveConfiguredMaxConcurrentAgents, repositoryDefaults1);
         }
 
         public NewBoardRequest(
@@ -2821,25 +2799,7 @@ public final class TrelloBoardSetup {
                 boolean createMissingGithubLists,
                 Path envPath,
                 boolean preserveConfiguredMaxConcurrentAgents) {
-            this(
-                    endpoint,
-                    credentials,
-                    boardId,
-                    activeStates,
-                    terminalStates,
-                    inProgressState,
-                    detectInProgressState,
-                    blockedState,
-                    workflowPath,
-                    workspaceRoot,
-                    serverPort,
-                    maxConcurrentAgents,
-                    force,
-                    githubIntegration,
-                    createMissingGithubLists,
-                    envPath,
-                    preserveConfiguredMaxConcurrentAgents,
-                    RepositoryDefaults.empty());
+            this(endpoint, credentials, boardId, activeStates, terminalStates, inProgressState, detectInProgressState, blockedState, workflowPath, workspaceRoot, serverPort, maxConcurrentAgents, force, githubIntegration, createMissingGithubLists, envPath, preserveConfiguredMaxConcurrentAgents, repositoryDefaults1);
         }
 
         public ImportBoardRequest(
@@ -3123,7 +3083,7 @@ public final class TrelloBoardSetup {
         }
 
         public CodexModelDefaults(String model, String reasoningEffort) {
-            this(requireNonBlank(model, "model"), requireNonBlank(reasoningEffort, "reasoningEffort"), true);
+            this(model1, reasoningEffort1, true);
         }
 
         public static CodexModelDefaults fallback() {

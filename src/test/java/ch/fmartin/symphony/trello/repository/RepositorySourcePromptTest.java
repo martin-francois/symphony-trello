@@ -173,7 +173,7 @@ final class RepositorySourcePromptTest {
     @Test
     void explicitRemoteKeepsConfiguredPathAsAMatchGuardedCheckoutCandidate() {
         // given
-        String repositoryUrl = "https://example.invalid/team/project.git";
+        var repositoryUrl = "https://example.invalid/team/project.git";
         Path configuredPath = configuredCheckoutPath();
         var repository = new EffectiveConfig.RepositoryConfig(repositoryUrl, configuredPath);
         var selection = resolver.select(

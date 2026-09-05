@@ -4,16 +4,16 @@ final class TrelloMarkdown {
     private TrelloMarkdown() {}
 
     static String escapeLeadingHashtags(String markdown) {
-        StringBuilder escaped = new StringBuilder(markdown.length());
-        int lineStart = 0;
+        var escaped = new StringBuilder(markdown.length());
+        var lineStart = 0;
         Fence fence = Fence.none();
-        int listContentIndent = -1;
+        var listContentIndent = -1;
         while (lineStart < markdown.length()) {
-            int contentEnd = lineEnd(markdown, lineStart);
+            var contentEnd = lineEnd(markdown, lineStart);
             String line = markdown.substring(lineStart, contentEnd);
             Fence lineFence = fenceMarker(line, listContentIndent);
             if (fence.active() || lineFence.active()) {
-                boolean insideFence = fence.active();
+                var insideFence = fence.active();
                 escaped.append(line);
                 fence = fence.next(lineFence);
                 if (!insideFence || lineFence.closingMarker()) {
@@ -24,7 +24,7 @@ final class TrelloMarkdown {
                 listContentIndent = nextListContentIndent(line, listContentIndent);
             }
             if (contentEnd < markdown.length()) {
-                int lineBreakEnd = lineBreakEnd(markdown, contentEnd);
+                var lineBreakEnd = lineBreakEnd(markdown, contentEnd);
                 escaped.append(markdown, contentEnd, lineBreakEnd);
                 lineStart = lineBreakEnd;
             } else {
@@ -35,7 +35,7 @@ final class TrelloMarkdown {
     }
 
     private static Fence fenceMarker(String line, int listContentIndent) {
-        int firstVisible = 0;
+        var firstVisible = 0;
         while (firstVisible < line.length() && line.charAt(firstVisible) == ' ') {
             firstVisible++;
         }
@@ -46,15 +46,15 @@ final class TrelloMarkdown {
         if (firstVisible >= line.length()) {
             return Fence.none();
         }
-        char marker = line.charAt(firstVisible);
+        var marker = line.charAt(firstVisible);
         if (marker != '`' && marker != '~') {
             return Fence.none();
         }
-        int markerEnd = firstVisible;
+        var markerEnd = firstVisible;
         while (markerEnd < line.length() && line.charAt(markerEnd) == marker) {
             markerEnd++;
         }
-        int length = markerEnd - firstVisible;
+        var length = markerEnd - firstVisible;
         if (length < 3) {
             return Fence.none();
         }
@@ -62,9 +62,9 @@ final class TrelloMarkdown {
     }
 
     private static int lineEnd(String markdown, int lineStart) {
-        int lineEnd = lineStart;
+        var lineEnd = lineStart;
         while (lineEnd < markdown.length()) {
-            char current = markdown.charAt(lineEnd);
+            var current = markdown.charAt(lineEnd);
             if (current == '\n' || current == '\r') {
                 return lineEnd;
             }
@@ -86,13 +86,13 @@ final class TrelloMarkdown {
         if (line.startsWith("\t")) {
             return line;
         }
-        int firstVisible = skipWhitespace(line, 0);
+        var firstVisible = skipWhitespace(line, 0);
         if (firstVisible >= line.length()) {
             return line;
         }
-        boolean inListContext = listContentIndent >= 0;
-        boolean indentedCodeBlock = startsIndentedCodeBlock(line, listContentIndent);
-        int bulletTextStart = unorderedBulletTextStart(line, firstVisible);
+        var inListContext = listContentIndent >= 0;
+        var indentedCodeBlock = startsIndentedCodeBlock(line, listContentIndent);
+        var bulletTextStart = unorderedBulletTextStart(line, firstVisible);
         if (bulletTextStart >= 0
                 && (!indentedCodeBlock || inListContext)
                 && startsIssueReference(line, bulletTextStart)) {
@@ -120,9 +120,9 @@ final class TrelloMarkdown {
         if (line.startsWith("\t")) {
             return -1;
         }
-        int firstVisible = skipWhitespace(line, 0);
-        boolean inListContext = listContentIndent >= 0;
-        boolean listItem = firstVisible < line.length()
+        var firstVisible = skipWhitespace(line, 0);
+        var inListContext = listContentIndent >= 0;
+        var listItem = firstVisible < line.length()
                 && unorderedBulletTextStart(line, firstVisible) >= 0
                 && (!startsIndentedCodeBlock(line, listContentIndent) || inListContext);
         if (listItem) {
@@ -138,7 +138,7 @@ final class TrelloMarkdown {
         if (line.startsWith("\t")) {
             return true;
         }
-        int spaces = 0;
+        var spaces = 0;
         while (spaces < line.length() && line.charAt(spaces) == ' ') {
             spaces++;
         }
@@ -151,11 +151,11 @@ final class TrelloMarkdown {
     }
 
     private static int unorderedBulletTextStart(String line, int markerStart) {
-        char marker = line.charAt(markerStart);
+        var marker = line.charAt(markerStart);
         if (marker != '-' && marker != '*' && marker != '+') {
             return -1;
         }
-        int afterMarker = markerStart + 1;
+        var afterMarker = markerStart + 1;
         if (afterMarker >= line.length() || !Character.isWhitespace(line.charAt(afterMarker))) {
             return -1;
         }
@@ -163,7 +163,7 @@ final class TrelloMarkdown {
     }
 
     private static int skipWhitespace(String line, int start) {
-        int index = start;
+        var index = start;
         while (index < line.length() && Character.isWhitespace(line.charAt(index))) {
             index++;
         }

@@ -17,7 +17,7 @@ final class ProcessEnvironmentTest {
     @Test
     void removesDefaultTrelloSecretsWithoutChangingOtherEnvironment() {
         // given
-        Map<String, String> environment = new HashMap<>();
+        var environment = new HashMap<String, String>();
         environment.put("PATH", "/usr/bin");
         environment.put("TRELLO_API_KEY", "key");
         environment.put("TRELLO_API_TOKEN", "token");
@@ -37,7 +37,7 @@ final class ProcessEnvironmentTest {
     @Test
     void limitGitDiscoverySetsCeilingDirectory() {
         // given
-        Map<String, String> environment = new HashMap<>();
+        var environment = new HashMap<String, String>();
 
         // when
         ProcessEnvironment.limitGitDiscovery(environment, tempDir.resolve("workspaces"));
@@ -98,8 +98,8 @@ final class ProcessEnvironmentTest {
                 new ProcessBuilder(command).directory(cwd.toFile()).redirectErrorStream(true);
         builder.environment().putAll(extraEnvironment);
         Process process = builder.start();
-        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        int exitCode = process.waitFor();
+        var output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        var exitCode = process.waitFor();
         return new ProcessResult(exitCode, output);
     }
 }

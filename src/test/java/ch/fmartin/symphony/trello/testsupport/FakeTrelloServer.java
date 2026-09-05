@@ -136,8 +136,8 @@ public final class FakeTrelloServer implements AutoCloseable {
     }
 
     public FakeTrelloServer givenBoardLists(String... listNames) {
-        List<TrelloListJson> jsonLists = new ArrayList<>();
-        for (int i = 0; i < listNames.length; i++) {
+        var jsonLists = new ArrayList<TrelloListJson>();
+        for (var i = 0; i < listNames.length; i++) {
             jsonLists.add(trelloList("list-" + (i + 1), listNames[i], i + 1));
         }
         boardListsResponse.set(listsJson(jsonLists.toArray(TrelloListJson[]::new)));
@@ -225,7 +225,7 @@ public final class FakeTrelloServer implements AutoCloseable {
     }
 
     public static String listsJson(TrelloListJson... lists) {
-        List<String> jsonLists = new ArrayList<>();
+        var jsonLists = new ArrayList<String>();
         for (TrelloListJson list : lists) {
             jsonLists.add("""
                     {"id":%s,"name":%s,"closed":%s,"pos":%d}
@@ -241,7 +241,7 @@ public final class FakeTrelloServer implements AutoCloseable {
         return "\"" + jsonEscaped(value) + "\"";
     }
 
-    /** Trello returns valid JSON for any reflected value, so canned responses escape echoes. */
+    /// Trello returns valid JSON for any reflected value, so canned responses escape echoes.
     public static String jsonEscaped(String value) {
         return value.replace("\\", "\\\\")
                 .replace("\"", "\\\"")

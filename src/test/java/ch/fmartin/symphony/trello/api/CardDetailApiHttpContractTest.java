@@ -37,7 +37,7 @@ final class CardDetailApiHttpContractTest {
 
         // then
         assertThat(response.statusCode()).isEqualTo(200);
-        Map<String, Object> payload = response.as(new TypeRef<>() {});
+        var payload = response.as(new TypeRef<String, Object>() {});
         assertThat(payload)
                 .containsKeys(
                         "card_identifier",
@@ -57,16 +57,16 @@ final class CardDetailApiHttpContractTest {
                 .containsEntry("card_id", "000000000000000000000101")
                 .containsEntry("last_error", "latest failure");
 
-        Map<String, Object> workspace = map(payload.get("workspace"));
+        var workspace = map(payload.get("workspace"));
         assertThat(workspace).containsEntry("path", "workspaces/TRELLO-aBcDeFgH");
 
-        Map<String, Object> attempts = map(payload.get("attempts"));
+        var attempts = map(payload.get("attempts"));
         assertThat(attempts)
                 .containsEntry("restart_count", 2)
                 .containsEntry("current_retry_attempt", 3)
                 .doesNotContainKeys("restartCount", "currentRetryAttempt");
 
-        Map<String, Object> running = map(payload.get("running"));
+        var running = map(payload.get("running"));
         assertThat(running)
                 .containsKeys(
                         "card_id",
@@ -90,15 +90,15 @@ final class CardDetailApiHttpContractTest {
                         "startedAt",
                         "lastEventAt");
 
-        Map<String, Object> retry = map(payload.get("retry"));
+        var retry = map(payload.get("retry"));
         assertThat(retry)
                 .containsKeys("card_id", "card_identifier", "card_url", "due_at")
                 .doesNotContainKeys("cardId", "cardIdentifier", "cardUrl", "dueAt");
 
-        Map<String, Object> logs = map(payload.get("logs"));
+        var logs = map(payload.get("logs"));
         assertThat(logs).containsKey("codex_session_logs").doesNotContainKeys("codexSessionLogs");
 
-        Map<String, Object> event = firstMap(payload.get("recent_events"));
+        var event = firstMap(payload.get("recent_events"));
         assertThat(event)
                 .containsEntry("event", "turn_completed")
                 .containsEntry("message", "done")
@@ -119,7 +119,7 @@ final class CardDetailApiHttpContractTest {
 
         // then
         assertThat(response.statusCode()).isEqualTo(200);
-        Map<String, Object> payload = response.as(new TypeRef<>() {});
+        var payload = response.as(new TypeRef<String, Object>() {});
         assertThat(payload).containsEntry("status", "running").containsEntry("retry", null);
         assertThat(map(payload.get("running")))
                 .containsKeys("card_id", "card_identifier", "last_event_at")
@@ -140,7 +140,7 @@ final class CardDetailApiHttpContractTest {
 
         // then
         assertThat(response.statusCode()).isEqualTo(200);
-        Map<String, Object> payload = response.as(new TypeRef<>() {});
+        var payload = response.as(new TypeRef<String, Object>() {});
         assertThat(payload).containsEntry("status", "retrying").containsEntry("running", null);
         assertThat(map(payload.get("retry")))
                 .containsKeys("card_id", "card_identifier", "due_at")

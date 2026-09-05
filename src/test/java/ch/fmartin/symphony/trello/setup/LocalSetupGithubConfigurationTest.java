@@ -47,7 +47,7 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.url-like-name.md");
         Path env = tempDir.resolve(".env");
-        String boardName = "https://not-trello.com/b/team";
+        var boardName = "https://not-trello.com/b/team";
         SetupRunResult firstResult = connectLocalBoardWithoutGithub(workflow, env, boardName);
         prepareNextSetupRunWithGithubAuth();
 
@@ -303,8 +303,8 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
         Path workflow = config.resolve("WORKFLOW.custom.md");
         Path env = config.resolve(".env.custom");
         Path manifest = config.resolve(ConnectedBoardManifest.FILE_NAME);
-        int port = availablePort();
-        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        var port = availablePort();
+        Files.writeString(env, TestEnv.trelloCredentials());
         Files.writeString(
                 workflow,
                 """
@@ -331,8 +331,7 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
 
                 - "Custom Blocked": blocked work. Symphony does not dispatch it while this list is not configured as active.
                 """
-                        .formatted(tempDir.resolve("workspaces"), port),
-                StandardCharsets.UTF_8);
+                        .formatted(tempDir.resolve("workspaces"), port));
         Files.writeString(
                 manifest,
                 """
@@ -354,8 +353,7 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
                   ]
                 }
                 """
-                        .formatted(workflow, env, tempDir.resolve("workspaces"), port),
-                StandardCharsets.UTF_8);
+                        .formatted(workflow, env, tempDir.resolve("workspaces"), port));
         trello.givenRawBoardListsJson(
                 """
                 [
@@ -396,8 +394,8 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
         Path workflow = config.resolve("WORKFLOW.no-progress.md");
         Path env = config.resolve(".env.no-progress");
         Path manifest = config.resolve(ConnectedBoardManifest.FILE_NAME);
-        int port = availablePort();
-        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        var port = availablePort();
+        Files.writeString(env, TestEnv.trelloCredentials());
         Files.writeString(
                 workflow,
                 """
@@ -420,8 +418,7 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
                 ---
                 # Workflow without in-progress routing
                 """
-                        .formatted(tempDir.resolve("workspaces"), port),
-                StandardCharsets.UTF_8);
+                        .formatted(tempDir.resolve("workspaces"), port));
         Files.writeString(
                 manifest,
                 """
@@ -443,8 +440,7 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
                   ]
                 }
                 """
-                        .formatted(workflow, env, tempDir.resolve("workspaces"), port),
-                StandardCharsets.UTF_8);
+                        .formatted(workflow, env, tempDir.resolve("workspaces"), port));
         trello.givenRawBoardListsJson(
                 """
                 [

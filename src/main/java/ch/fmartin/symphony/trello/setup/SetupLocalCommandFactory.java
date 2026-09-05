@@ -69,12 +69,12 @@ final class SetupLocalCommandFactory {
             "--no-github");
 
     int execute(String[] args, LocalSetup setup, BufferedReader input, PrintStream out, PrintStream err) {
-        CommandLine commandLine = new CommandLine(new SetupLocalCommand(setup, input, out, err));
+        var commandLine = new CommandLine(new SetupLocalCommand(setup, input, out, err));
         hideUnsupportedSubcommandOptions(commandLine);
         commandLine
                 .setOut(new PrintWriter(out, true, StandardCharsets.UTF_8))
                 .setErr(new PrintWriter(err, true, StandardCharsets.UTF_8))
-                .setExecutionExceptionHandler((exception, ignored, parseResult) -> {
+                .setExecutionExceptionHandler((exception, _, _) -> {
                     printExecutionFailure(err, exception, errorCode(exception));
                     if (!(exception instanceof ParameterException)) {
                         SetupDiagnosticReporter.reportSetupLocalFailure(exception, args, input, out, err);
@@ -116,7 +116,7 @@ final class SetupLocalCommandFactory {
     }
 
     static IParameterExceptionHandler usageErrors() {
-        return (ParameterException exception, String[] ignored) -> {
+        return (ParameterException exception, String[] _) -> {
             CommandLine commandLine = exception.getCommandLine();
             commandLine
                     .getErr()
@@ -135,10 +135,8 @@ final class SetupLocalCommandFactory {
         return stripInternalArgumentIndex(exception.getMessage());
     }
 
-    /**
-     * The installed wrapper injects default options, so picocli's argument indexes do not match
-     * the command line the user typed. The index adds nothing once the offending value is shown.
-     */
+    /// The installed wrapper injects default options, so picocli's argument indexes do not match
+    /// the command line the user typed. The index adds nothing once the offending value is shown.
     private static String stripInternalArgumentIndex(String message) {
         return message == null ? null : message.replaceFirst("^(Unmatched arguments?) (at|from) index \\d+", "$1");
     }
@@ -403,8 +401,8 @@ final class SetupLocalCommandFactory {
             repositoryUrl = RepositoryUrlInput.validateExplicit(repositoryUrl);
             github.validate();
             validateCodexModelOverrides();
-            Optional<Boolean> resolvedGithubMode = githubMode.or(() -> github.selected());
-            List<Path> writableRoots = CliValueNormalizer.nonBlankTrimmedPaths(additionalWritableRoots);
+            var resolvedGithubMode = githubMode.or(() -> github.selected());
+            var writableRoots = CliValueNormalizer.nonBlankTrimmedPaths(additionalWritableRoots);
             CliInputValidation.rejectRelativePathsExcept(
                     writableRoots, WorkspaceAccessFlow::isHomeShorthand, "--add-path must be an absolute path.");
             writableRoots = writableRoots.stream()
@@ -428,7 +426,7 @@ final class SetupLocalCommandFactory {
                 throw new TrelloBoardSetupException(
                         "setup_invalid_arguments", "--in-progress cannot be used with --no-in-progress.");
             }
-            boolean detectInProgressState = !noInProgress && inProgressState == null;
+            var detectInProgressState = !noInProgress && inProgressState == null;
             return new LocalSetupRequest(
                     action,
                     dryRun,
@@ -497,7 +495,7 @@ final class SetupLocalCommandFactory {
         }
 
         private List<String> unsupportedForCheck() {
-            List<String> unsupported = new ArrayList<>();
+            var unsupported = new ArrayList<String>();
             addIfPresent(unsupported, "--dry-run", dryRun);
             addIfPresent(unsupported, "--force", force);
             addIfPresent(unsupported, "--board-name", boardName);
@@ -506,7 +504,7 @@ final class SetupLocalCommandFactory {
         }
 
         private List<String> unsupportedForRepairPort() {
-            List<String> unsupported = new ArrayList<>();
+            var unsupported = new ArrayList<String>();
             addIfPresent(unsupported, "--force", force);
             addIfPresent(unsupported, "--key", apiKey);
             addIfPresent(unsupported, "--token", apiToken);
@@ -518,7 +516,7 @@ final class SetupLocalCommandFactory {
         }
 
         private List<String> unsupportedForConfigureGithub() {
-            List<String> unsupported = new ArrayList<>();
+            var unsupported = new ArrayList<String>();
             addIfPresent(unsupported, "--dry-run", dryRun);
             addIfPresent(unsupported, "--force", force);
             addIfPresent(unsupported, "--board-name", boardName);
@@ -668,7 +666,7 @@ final class SetupLocalCommandFactory {
         }
 
         private static CommonOptions copy(CommonOptions source) {
-            CommonOptions copy = new CommonOptions();
+            var copy = new CommonOptions();
             copy.dryRun = source.dryRun;
             copy.nonInteractive = source.nonInteractive;
             copy.force = source.force;

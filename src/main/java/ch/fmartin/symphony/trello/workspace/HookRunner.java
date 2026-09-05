@@ -9,13 +9,14 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import org.jboss.logging.Logger;
+import org.jspecify.annotations.Nullable;
 
 @ApplicationScoped
 public class HookRunner {
     private static final Logger LOG = Logger.getLogger(HookRunner.class);
     private static final int LOG_OUTPUT_LIMIT = 4_096;
 
-    public void runRequired(String name, String script, Path cwd, EffectiveConfig.HooksConfig hooks) {
+    public void runRequired(String name, @Nullable String script, Path cwd, EffectiveConfig.HooksConfig hooks) {
         if (script == null || script.isBlank()) {
             return;
         }
@@ -25,7 +26,7 @@ public class HookRunner {
         }
     }
 
-    public void runBestEffort(String name, String script, Path cwd, EffectiveConfig.HooksConfig hooks) {
+    public void runBestEffort(String name, @Nullable String script, @Nullable Path cwd, EffectiveConfig.HooksConfig hooks) {
         if (script == null || script.isBlank() || cwd == null) {
             return;
         }
@@ -52,7 +53,7 @@ public class HookRunner {
             return HookResult.failure("start_failed: " + e.getMessage());
         }
         try {
-            boolean finished = process.waitFor(timeout);
+            var finished = process.waitFor(timeout);
             if (!finished) {
                 process.destroyForcibly();
                 return HookResult.failure("timeout after " + timeout.toMillis() + " ms");
@@ -63,7 +64,7 @@ public class HookRunner {
                 return HookResult.success(output);
             }
             return HookResult.failure("exit_code=" + process.exitValue() + " output=" + output);
-        } catch (InterruptedException e) {
+        } catch (InterruptedException _) {
             Thread.currentThread().interrupt();
             process.destroyForcibly();
             return HookResult.failure("interrupted");

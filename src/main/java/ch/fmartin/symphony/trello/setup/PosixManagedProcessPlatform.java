@@ -13,7 +13,7 @@ final class PosixManagedProcessPlatform extends ProcessHandleManagedProcessPlatf
 
     @Override
     protected List<String> launchCommand(List<String> command) {
-        List<String> detachedCommand = new ArrayList<>(command.size() + 2);
+        var detachedCommand = new ArrayList<String>(command.size() + 2);
         if (Files.isExecutable(USR_BIN_SETSID)) {
             detachedCommand.add(USR_BIN_SETSID.toString());
         }

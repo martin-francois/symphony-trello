@@ -16,12 +16,10 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-/**
- * Drives the real HTTP routing stack instead of calling the exception mapper directly, so the
- * public local API contract for unsupported methods is proven end to end. The Quarkus test
- * extension boots one shared application and its scope manager does not support concurrent test
- * methods, so this class opts out of parallel execution.
- */
+/// Drives the real HTTP routing stack instead of calling the exception mapper directly, so the
+/// public local API contract for unsupported methods is proven end to end. The Quarkus test
+/// extension boots one shared application and its scope manager does not support concurrent test
+/// methods, so this class opts out of parallel execution.
 @Execution(ExecutionMode.SAME_THREAD)
 @QuarkusTest
 final class LocalStatusApiHttpContractTest {
@@ -90,7 +88,7 @@ final class LocalStatusApiHttpContractTest {
     @Test
     void optionsOnRefreshAnswersWithItsOwnAllowHeader() {
         // given
-        String path = "/api/v1/refresh";
+        var path = "/api/v1/refresh";
 
         // when
         Response response = given().options(path);
@@ -106,8 +104,8 @@ final class LocalStatusApiHttpContractTest {
         // TRELLO is the configured card identifier prefix, so this is an intentional
         // card-details lookup whose card is absent, and a raw 24-character Trello card id is the
         // documented identifier fallback.
-        String prefixedIdentifier = "/api/v1/TRELLO-abc";
-        String rawTrelloCardId = "/api/v1/000000000000000000000001";
+        var prefixedIdentifier = "/api/v1/TRELLO-abc";
+        var rawTrelloCardId = "/api/v1/000000000000000000000001";
 
         // when
         Response prefixed = given().get(prefixedIdentifier);
@@ -175,7 +173,7 @@ final class LocalStatusApiHttpContractTest {
     @Test
     void encodedSlashSegmentsStayNeutral() {
         // given
-        String encodedSlash = "/api/v1/%2f";
+        var encodedSlash = "/api/v1/%2f";
 
         // when
         Response response = given().urlEncodingEnabled(false).get(encodedSlash);

@@ -13,7 +13,7 @@ final class FakeCommandRunner implements CommandRunner {
     private final List<List<String>> interactiveCommands = new ArrayList<>();
 
     FakeCommandRunner returns(int exitCode, String output, String... command) {
-        results.computeIfAbsent(List.of(command), ignored -> new ArrayDeque<>())
+        results.computeIfAbsent(List.of(command), _ -> new ArrayDeque<>())
                 .add(new CommandResult(exitCode, output));
         return this;
     }

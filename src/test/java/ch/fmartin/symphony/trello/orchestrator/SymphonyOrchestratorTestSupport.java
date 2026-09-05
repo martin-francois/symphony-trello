@@ -53,8 +53,8 @@ final class SymphonyOrchestratorTestSupport {
     static final Duration POLL_INTERVAL = Duration.ofMillis(25);
 
     static UsageProbeScenario usageProbeScenario(Path workflow, MutableClock clock, Card first, Card second) {
-        FakeTracker tracker = new FakeTracker(List.of(first, second));
-        AtomicInteger runs = new AtomicInteger();
+        var tracker = new FakeTracker(List.of(first, second));
+        var runs = new AtomicInteger();
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
@@ -89,9 +89,9 @@ final class SymphonyOrchestratorTestSupport {
                 """);
         Card first = TestCards.card("card-a", "TRELLO-a", "Todo");
         Card second = TestCards.card("card-b", "TRELLO-b", "Todo");
-        FakeTracker tracker = new FakeTracker(List.of(first));
-        PublishedAgentRequests requests = new PublishedAgentRequests();
-        CountDownLatch releaseWorkers = new CountDownLatch(1);
+        var tracker = new FakeTracker(List.of(first));
+        var requests = new PublishedAgentRequests();
+        var releaseWorkers = new CountDownLatch(1);
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
@@ -118,13 +118,13 @@ final class SymphonyOrchestratorTestSupport {
         private final Map<String, CompletableFuture<AgentRunner.AgentRunRequest>> requests = new ConcurrentHashMap<>();
 
         void publish(AgentRunner.AgentRunRequest request) {
-            requests.computeIfAbsent(request.config().codex().command(), ignored -> new CompletableFuture<>())
+            requests.computeIfAbsent(request.config().codex().command(), _ -> new CompletableFuture<>())
                     .complete(request);
         }
 
         AgentRunner.AgentRunRequest await(String command) {
-            CompletableFuture<AgentRunner.AgentRunRequest> request =
-                    requests.computeIfAbsent(command, ignored -> new CompletableFuture<>());
+            var request =
+                    requests.computeIfAbsent(command, _ -> new CompletableFuture<>());
             assertThat(request)
                     .as("the %s request should be published within 5 seconds", command)
                     .succeedsWithin(Duration.ofSeconds(5));
@@ -136,7 +136,7 @@ final class SymphonyOrchestratorTestSupport {
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
-            if (request.config().codex().command().equals("command-b")) {
+            if ("command-b".equals(request.config().codex().command())) {
                 commandBReturnedUsage.countDown();
                 return AgentRunResult.codexUsageLimit(
                         "turn_failed: Command B is exhausted.", Optional.of(now.plusSeconds(120)));
@@ -166,20 +166,20 @@ final class SymphonyOrchestratorTestSupport {
     }
 
     static BlockingRun blockRunnerUntilCancelled(AgentRunner runner) {
-        CountDownLatch started = new CountDownLatch(1);
-        AtomicInteger cancelled = new AtomicInteger();
-        doAnswer(invocation -> {
+        var started = new CountDownLatch(1);
+        var cancelled = new AtomicInteger();
+        doAnswer(_ -> {
                     started.countDown();
                     try {
                         blockUntilInterruptedOrTimedOut(Duration.ofSeconds(30));
-                    } catch (InterruptedException e) {
+                    } catch (InterruptedException _) {
                         Thread.currentThread().interrupt();
                     }
                     return AgentRunResult.fail("interrupted");
                 })
                 .when(runner)
                 .run(any());
-        doAnswer(invocation -> {
+        doAnswer(_ -> {
                     cancelled.incrementAndGet();
                     return null;
                 })
@@ -191,7 +191,7 @@ final class SymphonyOrchestratorTestSupport {
     record BlockingRun(CountDownLatch started, AtomicInteger cancelled) {}
 
     static String dispatchFirstCard(Path workflow, FakeTracker tracker) throws Exception {
-        AtomicReference<String> dispatched = new AtomicReference<>();
+        var dispatched = new AtomicReference<String>();
         AgentRunner runner = mock();
         doAnswer(invocation -> {
                     AgentRunner.AgentRunRequest request = invocation.getArgument(0);
@@ -310,7 +310,7 @@ final class SymphonyOrchestratorTestSupport {
     }
 
     static void rewriteWorkflowWithCommand(Path workflow, String command, String extraConfig) throws Exception {
-        long previousModified = Files.getLastModifiedTime(workflow).toMillis();
+        var previousModified = Files.getLastModifiedTime(workflow).toMillis();
         writeWorkflowWithCommand(workflow, command, extraConfig);
         Files.setLastModifiedTime(workflow, FileTime.fromMillis(previousModified + 2_000));
     }
@@ -341,7 +341,7 @@ final class SymphonyOrchestratorTestSupport {
 
     static void rewriteWorkflowWithCommandAndBoard(Path workflow, String command, String boardId, String apiToken)
             throws Exception {
-        long previousModified = Files.getLastModifiedTime(workflow).toMillis();
+        var previousModified = Files.getLastModifiedTime(workflow).toMillis();
         writeWorkflowWithCommandAndBoard(workflow, command, boardId, apiToken);
         Files.setLastModifiedTime(workflow, FileTime.fromMillis(previousModified + 2_000));
     }
@@ -412,7 +412,7 @@ final class SymphonyOrchestratorTestSupport {
             long maxRetryBackoffMillis,
             int maxConcurrentAgents)
             throws Exception {
-        long previousModified = Files.getLastModifiedTime(workflow).toMillis();
+        var previousModified = Files.getLastModifiedTime(workflow).toMillis();
         writeWorkflowWithTarget(
                 workflow,
                 endpoint,
@@ -450,7 +450,7 @@ final class SymphonyOrchestratorTestSupport {
     }
 
     static void rewriteWorkflowWithStallTimeout(Path workflow, long stallTimeoutMillis) throws Exception {
-        long previousModified = Files.getLastModifiedTime(workflow).toMillis();
+        var previousModified = Files.getLastModifiedTime(workflow).toMillis();
         writeWorkflowWithStallTimeout(workflow, stallTimeoutMillis);
         Files.setLastModifiedTime(workflow, FileTime.fromMillis(previousModified + 2_000));
     }
@@ -577,7 +577,7 @@ final class SymphonyOrchestratorTestSupport {
 
     static SymphonyOrchestrator orchestrator(
             Path workflow, TrackerClient tracker, AgentRunner runner, WorkspaceManager workspaces) {
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
+        var orchestrator = new SymphonyOrchestrator(
                 new WorkflowLoader(), new ConfigResolver(), tracker, runner, new PromptRenderer(), workspaces);
         orchestrator.workflowPath = workflow;
         return orchestrator;
@@ -589,7 +589,7 @@ final class SymphonyOrchestratorTestSupport {
             AgentRunner runner,
             Clock clock,
             TrelloHandoffToolHandler usageWorkpads) {
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
+        var orchestrator = new SymphonyOrchestrator(
                 new WorkflowLoader(),
                 new ConfigResolver(),
                 tracker,
@@ -621,7 +621,7 @@ final class SymphonyOrchestratorTestSupport {
     }
 
     static void waitUntil(Condition condition) throws Exception {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         while (System.nanoTime() < deadline) {
             if (condition.matches()) {
                 return;
@@ -660,7 +660,7 @@ final class SymphonyOrchestratorTestSupport {
         void setCandidates(String endpoint, String boardId, List<Card> candidates) {
             String target = targetLabel(endpoint, boardId);
             candidatesByTarget.put(target, List.copyOf(candidates));
-            Map<String, CardLookupResult> states = new ConcurrentHashMap<>();
+            var states = new ConcurrentHashMap<String, CardLookupResult>();
             candidates.forEach(card -> states.put(card.id(), new CardLookupResult.Found(card)));
             statesByTarget.put(target, states);
         }
@@ -674,7 +674,7 @@ final class SymphonyOrchestratorTestSupport {
         }
 
         Map<String, CardLookupResult> states(String endpoint, String boardId) {
-            return statesByTarget.computeIfAbsent(targetLabel(endpoint, boardId), ignored -> new ConcurrentHashMap<>());
+            return statesByTarget.computeIfAbsent(targetLabel(endpoint, boardId), _ -> new ConcurrentHashMap<>());
         }
 
         static String target(EffectiveConfig config) {
@@ -703,7 +703,7 @@ final class SymphonyOrchestratorTestSupport {
             String target = target(config);
             stateFetchTargets.add(target);
             Map<String, CardLookupResult> states = statesByTarget.getOrDefault(target, Map.of());
-            Map<String, CardLookupResult> result = new LinkedHashMap<>();
+            var result = new LinkedHashMap<String, CardLookupResult>();
             cardIds.forEach(
                     cardId -> result.put(cardId, states.getOrDefault(cardId, new CardLookupResult.Missing(cardId))));
             return result;
@@ -773,13 +773,13 @@ final class SymphonyOrchestratorTestSupport {
         }
 
         void setCardState(Card card) {
-            Map<String, CardLookupResult> updated = new LinkedHashMap<>(this.cardStates);
+            var updated = new LinkedHashMap<String, CardLookupResult>(this.cardStates);
             updated.put(card.id(), new CardLookupResult.Found(card));
             this.cardStates = updated;
         }
 
         void setPromptCardState(Card card) {
-            Map<String, CardLookupResult> updated = new LinkedHashMap<>(this.promptCardStateOverrides);
+            var updated = new LinkedHashMap<String, CardLookupResult>(this.promptCardStateOverrides);
             updated.put(card.id(), new CardLookupResult.Found(card));
             this.promptCardStateOverrides = Map.copyOf(updated);
         }
@@ -821,7 +821,7 @@ final class SymphonyOrchestratorTestSupport {
         public Map<String, CardLookupResult> fetchCardStatesForPromptByIds(
                 EffectiveConfig config, List<String> cardIds) {
             promptStateFetches.incrementAndGet();
-            Map<String, CardLookupResult> results = new LinkedHashMap<>(fetchCardStatesByIds(config, cardIds));
+            var results = new LinkedHashMap<String, CardLookupResult>(fetchCardStatesByIds(config, cardIds));
             cardIds.forEach(cardId -> {
                 CardLookupResult promptOverride = promptCardStateOverrides.get(cardId);
                 if (promptOverride != null) {
@@ -862,7 +862,7 @@ final class SymphonyOrchestratorTestSupport {
         final AtomicInteger removalAttempts = new AtomicInteger();
 
         ThrowingWorkspaceManager() {
-            super(new HookRunner());
+            super(hooks);
         }
 
         @Override

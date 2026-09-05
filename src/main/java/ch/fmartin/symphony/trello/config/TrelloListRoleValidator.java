@@ -9,14 +9,14 @@ public final class TrelloListRoleValidator {
 
     public static Optional<Overlap> firstOverlap(
             List<String> activeStates, List<String> terminalStates, String inProgressState, String blockedState) {
-        List<RoleValue> values = new ArrayList<>();
+        var values = new ArrayList<RoleValue>();
         activeStates.forEach(state -> add(values, "active", state));
         terminalStates.forEach(state -> add(values, "terminal", state));
         add(values, "in-progress", inProgressState);
         add(values, "blocked", blockedState);
 
-        for (int left = 0; left < values.size(); left++) {
-            for (int right = left + 1; right < values.size(); right++) {
+        for (var left = 0; left < values.size(); left++) {
+            for (var right = left + 1; right < values.size(); right++) {
                 RoleValue first = values.get(left);
                 RoleValue second = values.get(right);
                 if (first.role().equals(second.role())) {

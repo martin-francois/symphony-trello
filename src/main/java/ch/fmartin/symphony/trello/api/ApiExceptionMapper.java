@@ -27,7 +27,7 @@ public class ApiExceptionMapper implements ExceptionMapper<Throwable> {
         if (exception instanceof WebApplicationException webApplication) {
             // Framework errors such as 405 Method Not Allowed must keep their HTTP status instead
             // of being wrapped as internal server errors.
-            int status = webApplication.getResponse().getStatus();
+            var status = webApplication.getResponse().getStatus();
             return Response.status(status)
                     .type(MediaType.APPLICATION_JSON)
                     .entity(error(webApplicationErrorCode(status), exception.getMessage()))

@@ -39,7 +39,7 @@ public class StatusResource {
     RoutingContext routingContext;
 
     public StatusResource(SymphonyOrchestrator orchestrator) {
-        this(orchestrator, null, ApplicationClock.systemUtc());
+        this(orchestrator, null, clock1);
     }
 
     @Inject
@@ -48,7 +48,7 @@ public class StatusResource {
     }
 
     StatusResource(SymphonyOrchestrator orchestrator, BooleanSupplier loopbackClient) {
-        this(orchestrator, loopbackClient, ApplicationClock.systemUtc());
+        this(orchestrator, loopbackClient, clock1);
     }
 
     StatusResource(SymphonyOrchestrator orchestrator, BooleanSupplier loopbackClient, Clock clock) {
@@ -126,7 +126,7 @@ public class StatusResource {
         if (!isLoopbackClient()) {
             throw new NotFoundException();
         }
-        Map<String, Object> status = new LinkedHashMap<>();
+        var status = new LinkedHashMap<String, Object>();
         status.put("boardId", orchestrator.selectedBoardId());
         status.put("configuredBoardId", orchestrator.selectedConfiguredBoardId());
         status.put("workflowPath", orchestrator.selectedWorkflowPath().toString());
@@ -233,7 +233,7 @@ public class StatusResource {
         }
         try {
             return InetAddress.getByName(hostAddress).isLoopbackAddress();
-        } catch (UnknownHostException ignored) {
+        } catch (UnknownHostException _) {
             return false;
         }
     }

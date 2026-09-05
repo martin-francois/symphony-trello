@@ -15,7 +15,7 @@ final class WorkflowConfigIngestionTest {
         Map<String, Object> envBacked = Map.of("server", Map.of("port", "$STATUS_PORT"));
 
         // when
-        TypedWorkflowConfig literalConfig = WorkflowConfigIngestion.collect(literal, ignored -> Optional.empty());
+        TypedWorkflowConfig literalConfig = WorkflowConfigIngestion.collect(literal, _ -> Optional.empty());
         TypedWorkflowConfig envConfig = WorkflowConfigIngestion.collect(
                 envBacked, name -> "STATUS_PORT".equals(name) ? Optional.of("18080.0") : Optional.empty());
 
@@ -31,7 +31,7 @@ final class WorkflowConfigIngestionTest {
                 "agent", Map.of("max_concurrent_agents", 1.5), "server", Map.of("port", "99999999999999999999999"));
 
         // when
-        TypedWorkflowConfig config = WorkflowConfigIngestion.collect(workflow, ignored -> Optional.empty());
+        TypedWorkflowConfig config = WorkflowConfigIngestion.collect(workflow, _ -> Optional.empty());
 
         // then
         assertThat(config.agentMaxConcurrentAgents().finding()).hasValueSatisfying(finding -> assertThat(finding.kind())
@@ -46,7 +46,7 @@ final class WorkflowConfigIngestionTest {
         Map<String, Object> workflow = Map.of("server", Map.of("port", 70000));
 
         // when
-        TypedWorkflowConfig config = WorkflowConfigIngestion.collect(workflow, ignored -> Optional.empty());
+        TypedWorkflowConfig config = WorkflowConfigIngestion.collect(workflow, _ -> Optional.empty());
 
         // then
         assertThat(config.serverPort().value()).contains(70000);
@@ -61,7 +61,7 @@ final class WorkflowConfigIngestionTest {
         Map<String, Object> workflow = Map.of("server", Map.of("port", ""));
 
         // when
-        TypedWorkflowConfig config = WorkflowConfigIngestion.collect(workflow, ignored -> Optional.empty());
+        TypedWorkflowConfig config = WorkflowConfigIngestion.collect(workflow, _ -> Optional.empty());
 
         // then
         assertThat(config.serverPort()).isEqualTo(new WorkflowIntegerSetting(Optional.empty(), Optional.empty(), true));
@@ -77,21 +77,21 @@ final class WorkflowConfigIngestionTest {
     @Test
     void treatsUnresolvedEnvironmentServerPortAsOmittedOrStrictFailureByPolicy() {
         // given
-        String frontMatter = """
+        var frontMatter = """
                 server:
                   port: $STATUS_PORT
                 """;
 
         // when
-        Optional<TypedWorkflowConfig> omitted = WorkflowConfigIngestion.collectFrontMatter(
-                frontMatter, ignored -> Optional.empty(), WorkflowConfigIngestion.UnresolvedEnvironmentPolicy.OMIT);
+        var omitted = WorkflowConfigIngestion.collectFrontMatter(
+                frontMatter, _ -> Optional.empty(), WorkflowConfigIngestion.UnresolvedEnvironmentPolicy.OMIT);
 
         // then
         assertThat(omitted).hasValueSatisfying(config -> assertThat(config.serverPort())
                 .isEqualTo(WorkflowIntegerSetting.omitted()));
         assertThatThrownBy(() -> WorkflowConfigIngestion.collectFrontMatter(
                         frontMatter,
-                        ignored -> Optional.empty(),
+                        _ -> Optional.empty(),
                         WorkflowConfigIngestion.UnresolvedEnvironmentPolicy.THROW_SERVER_PORT))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Workflow server.port references missing environment variable STATUS_PORT.");
@@ -107,7 +107,7 @@ final class WorkflowConfigIngestionTest {
                 Map.of("max_concurrent_agents_by_state", Map.of("Ready for Codex", 2, "Blocked", 0)));
 
         // when
-        TypedWorkflowConfig config = WorkflowConfigIngestion.collect(workflow, ignored -> Optional.empty());
+        TypedWorkflowConfig config = WorkflowConfigIngestion.collect(workflow, _ -> Optional.empty());
 
         // then
         assertThat(config.priorityLabels()).containsEntry("p1", 1).doesNotContainKey("rush");

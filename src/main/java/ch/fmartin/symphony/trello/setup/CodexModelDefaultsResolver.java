@@ -79,7 +79,7 @@ final class CodexModelDefaultsResolver {
         processBuilder.environment().putAll(environment);
         ProcessEnvironment.removeDefaultSecrets(processBuilder);
         Process process = processBuilder.start();
-        AppServerResponseReader reader = new AppServerResponseReader(process.getInputStream());
+        var reader = new AppServerResponseReader(process.getInputStream());
         try (var writer = process.outputWriter(StandardCharsets.UTF_8)) {
             send(
                     writer,
@@ -95,8 +95,8 @@ final class CodexModelDefaultsResolver {
             send(writer, notification("initialized", object()));
             ArrayNode models = json.createArrayNode();
             String cursor = null;
-            for (int page = 0; page < MAX_MODEL_LIST_PAGES; page++) {
-                int id = page + 2;
+            for (var page = 0; page < MAX_MODEL_LIST_PAGES; page++) {
+                var id = page + 2;
                 send(writer, request(id, "model/list", modelListParams(cursor)));
                 JsonNode response = readResponse(reader, id);
                 JsonNode result = response.path("result");
@@ -131,23 +131,23 @@ final class CodexModelDefaultsResolver {
         if (!models.isArray() || models.isEmpty()) {
             return CodexModelSelectionDefaults.of(CodexModelDefaults.fallback());
         }
-        Map<String, String> reasoningEffortsByModel = new LinkedHashMap<>();
-        Map<String, List<ReasoningEffortOption>> reasoningEffortOptionsByModel = new LinkedHashMap<>();
+        var reasoningEffortsByModel = new LinkedHashMap<String, String>();
+        var reasoningEffortOptionsByModel = new LinkedHashMap<String, List<ReasoningEffortOption>>();
         JsonNode selected = null;
-        boolean selectedIsSymphonyPreferred = false;
-        boolean selectedIsDefault = false;
+        var selectedIsSymphonyPreferred = false;
+        var selectedIsDefault = false;
         for (JsonNode model : models) {
             String modelName = validatedCatalogText(model, "model");
             if (blank(modelName)) {
                 continue;
             }
-            List<ReasoningEffortOption> reasoningEffortOptions = supportedReasoningEfforts(model);
+            var reasoningEffortOptions = supportedReasoningEfforts(model);
             if (!reasoningEffortOptions.isEmpty()) {
                 reasoningEffortOptionsByModel.put(modelName, reasoningEffortOptions);
             }
-            boolean modelIsDefault = model.path("isDefault").asBoolean(false);
-            boolean modelIsHidden = model.path("hidden").asBoolean(false);
-            boolean modelIsSymphonyPreferred = SYMPHONY_PREFERRED_CODEX_MODEL.equals(modelName);
+            var modelIsDefault = model.path("isDefault").asBoolean(false);
+            var modelIsHidden = model.path("hidden").asBoolean(false);
+            var modelIsSymphonyPreferred = SYMPHONY_PREFERRED_CODEX_MODEL.equals(modelName);
             if (!modelIsHidden
                     && shouldSelectModel(
                             selected,
@@ -213,9 +213,9 @@ final class CodexModelDefaultsResolver {
     }
 
     private JsonNode readResponse(AppServerResponseReader reader, int id) throws IOException {
-        long deadline = System.nanoTime() + readTimeout.toNanos();
+        var deadline = System.nanoTime() + readTimeout.toNanos();
         while (true) {
-            long remainingNanos = deadline - System.nanoTime();
+            var remainingNanos = deadline - System.nanoTime();
             if (remainingNanos <= 0) {
                 throw new IOException("Timed out waiting for Codex app-server response");
             }
@@ -247,19 +247,15 @@ final class CodexModelDefaultsResolver {
     private ObjectNode object(Object... entries) {
         ObjectNode node = json.createObjectNode();
         checkArgument(entries.length % 2 == 0, "Object entries must be key/value pairs");
-        for (int i = 0; i < entries.length; i += 2) {
-            String key = (String) entries[i];
+        for (var i = 0; i < entries.length; i += 2) {
+            var key = (String) entries[i];
             Object value = entries[i + 1];
-            if (value instanceof JsonNode jsonNode) {
-                node.set(key, jsonNode);
-            } else if (value instanceof String string) {
-                node.put(key, string);
-            } else if (value instanceof Integer integer) {
-                node.put(key, integer);
-            } else if (value instanceof Boolean bool) {
-                node.put(key, bool);
-            } else {
-                node.set(key, json.valueToTree(value));
+            switch (value) {
+                case JsonNode jsonNode -> node.set(key, jsonNode);
+                case String string -> node.put(key, string);
+                case Integer integer -> node.put(key, integer);
+                case Boolean bool -> node.put(key, bool);
+                case null, default -> node.set(key, json.valueToTree(value));
             }
         }
         return node;
@@ -289,9 +285,9 @@ final class CodexModelDefaultsResolver {
         try {
             process.onExit().get(PROCESS_STOP_TIMEOUT.toNanos(), TimeUnit.NANOSECONDS);
             return true;
-        } catch (ExecutionException e) {
+        } catch (ExecutionException _) {
             return !process.isAlive();
-        } catch (TimeoutException e) {
+        } catch (TimeoutException _) {
             return false;
         }
     }

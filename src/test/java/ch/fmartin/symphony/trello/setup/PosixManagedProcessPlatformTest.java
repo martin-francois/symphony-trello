@@ -13,10 +13,10 @@ final class PosixManagedProcessPlatformTest {
     @Test
     void launchCommandUsesNewSessionAndNohupForTerminalIndependentWorker() {
         // given
-        PosixManagedProcessPlatform platform = new PosixManagedProcessPlatform();
+        var platform = new PosixManagedProcessPlatform();
 
         // when
-        List<String> command = platform.launchCommand(List.of("java", "-jar", "app.jar"));
+        var command = platform.launchCommand(List.of("java", "-jar", "app.jar"));
 
         // then
         if (Files.isExecutable(USR_BIN_SETSID)) {

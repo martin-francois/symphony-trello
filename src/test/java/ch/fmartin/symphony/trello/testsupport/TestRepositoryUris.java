@@ -12,7 +12,7 @@ public final class TestRepositoryUris {
     private TestRepositoryUris() {}
 
     public static boolean hasUnusableExplicitPort(URI uri) {
-        int port = uri.getPort();
+        var port = uri.getPort();
         return port == URI_PORT_ABSENT ? hasExplicitAuthorityPort(uri) : port < MIN_URI_PORT || port > MAX_URI_PORT;
     }
 

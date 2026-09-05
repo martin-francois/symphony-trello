@@ -54,7 +54,7 @@ public record Card(
     }
 
     public Map<String, Object> toTemplateMap() {
-        Map<String, Object> values = new LinkedHashMap<>();
+        var values = new LinkedHashMap<String, Object>();
         values.put("id", id);
         values.put("identifier", identifier);
         values.put("title", title);
@@ -98,11 +98,9 @@ public record Card(
         return notBlank(id) && notBlank(identifier) && notBlank(title) && notBlank(state);
     }
 
-    /**
-     * The Trello card URL preferred for operator click-through, using the stable short URL when
-     * present and falling back to the full canonical URL. Returns {@code null} when neither is known
-     * so snapshot rows can omit an unknown URL.
-     */
+    /// The Trello card URL preferred for operator click-through, using the stable short URL when
+    /// present and falling back to the full canonical URL. Returns `null` when neither is known
+    /// so snapshot rows can omit an unknown URL.
     public @Nullable String cardUrl() {
         if (notBlank(shortUrl)) {
             return shortUrl;
@@ -159,7 +157,7 @@ public record Card(
     }
 
     private static Map<String, Object> checklistMap(Checklist checklist) {
-        Map<String, Object> values = new LinkedHashMap<>();
+        var values = new LinkedHashMap<String, Object>();
         values.put("id", checklist.id());
         values.put("name", checklist.name());
         values.put(
@@ -168,7 +166,7 @@ public record Card(
     }
 
     private static Map<String, Object> attachmentMap(Attachment attachment) {
-        Map<String, Object> values = new LinkedHashMap<>();
+        var values = new LinkedHashMap<String, Object>();
         values.put("id", attachment.id());
         values.put("name", attachment.name());
         values.put("url", attachment.url());
@@ -176,7 +174,7 @@ public record Card(
     }
 
     private static Map<String, Object> checklistItemMap(ChecklistItem item) {
-        Map<String, Object> values = new LinkedHashMap<>();
+        var values = new LinkedHashMap<String, Object>();
         values.put("id", item.id());
         values.put("text", item.text());
         values.put("complete", item.complete());
@@ -184,7 +182,7 @@ public record Card(
     }
 
     private static Map<String, Object> trelloReferenceMap(TrelloReference reference) {
-        Map<String, Object> values = new LinkedHashMap<>();
+        var values = new LinkedHashMap<String, Object>();
         values.put("source", reference.source());
         values.put("text", reference.text());
         values.put("lookup_id", reference.lookupId());
@@ -198,7 +196,7 @@ public record Card(
     }
 
     private static Map<String, Object> prerequisiteProblemMap(PrerequisiteProblem problem) {
-        Map<String, Object> values = new LinkedHashMap<>();
+        var values = new LinkedHashMap<String, Object>();
         values.put("code", problem.code());
         values.put("message", problem.message());
         values.put("checklist", problem.checklist());
@@ -206,7 +204,7 @@ public record Card(
     }
 
     private static Map<String, Object> blockerMap(BlockerRef blocker) {
-        Map<String, Object> values = new LinkedHashMap<>();
+        var values = new LinkedHashMap<String, Object>();
         values.put("id", blocker.id());
         values.put("identifier", blocker.identifier());
         values.put("state", blocker.state());
@@ -215,7 +213,7 @@ public record Card(
     }
 
     private static Map<String, Object> commentMap(Comment comment) {
-        Map<String, Object> values = new LinkedHashMap<>();
+        var values = new LinkedHashMap<String, Object>();
         values.put("id", comment.id());
         values.put("text", comment.text());
         values.put("author", comment.author());

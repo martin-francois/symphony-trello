@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
 import java.util.ArrayList;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 
 final class SetupSystemPropertiesTest {
@@ -13,12 +12,12 @@ final class SetupSystemPropertiesTest {
         // given
         String propertyName = SetupSystemPropertiesTest.class.getName();
         String systemValue = System.getProperty(propertyName);
-        List<String> observedValues = new ArrayList<>();
+        var observedValues = new ArrayList<String>();
 
         // when
-        int result = SetupSystemProperties.withLookup(name -> "outer", () -> {
+        var result = SetupSystemProperties.withLookup(_ -> "outer", () -> {
             observedValues.add(SetupSystemProperties.get(propertyName));
-            int nestedResult = SetupSystemProperties.withLookup(name -> "inner", () -> {
+            var nestedResult = SetupSystemProperties.withLookup(_ -> "inner", () -> {
                 observedValues.add(SetupSystemProperties.get(propertyName));
                 return 41;
             });
@@ -36,14 +35,14 @@ final class SetupSystemPropertiesTest {
     void failedLookupScopeRestoresOuterLookup() {
         // given
         String propertyName = SetupSystemPropertiesTest.class.getName();
-        IllegalStateException failure = new IllegalStateException("failed nested setup");
-        List<String> observedValues = new ArrayList<>();
+        var failure = new IllegalStateException("failed nested setup");
+        var observedValues = new ArrayList<String>();
 
         // when
-        Throwable thrown = catchThrowable(() -> SetupSystemProperties.withLookup(name -> "outer", () -> {
+        Throwable thrown = catchThrowable(() -> SetupSystemProperties.withLookup(_ -> "outer", () -> {
             observedValues.add(SetupSystemProperties.get(propertyName));
             try {
-                return SetupSystemProperties.withLookup(name -> "inner", () -> {
+                return SetupSystemProperties.withLookup(_ -> "inner", () -> {
                     observedValues.add(SetupSystemProperties.get(propertyName));
                     throw failure;
                 });
@@ -64,10 +63,10 @@ final class SetupSystemPropertiesTest {
         // given
         String propertyName = SetupSystemPropertiesTest.class.getName();
         String systemValue = System.getProperty(propertyName);
-        List<String> observedValues = new ArrayList<>();
+        var observedValues = new ArrayList<String>();
 
         // when
-        SetupSystemProperties.withLookup(name -> "outer", () -> {
+        SetupSystemProperties.withLookup(_ -> "outer", () -> {
             SetupSystemProperties.withLookup(null, () -> {
                 observedValues.add(SetupSystemProperties.get(propertyName));
                 return 0;

@@ -139,7 +139,7 @@ final class LocalSetupTestFixture implements AutoCloseable {
     private SetupRunResult runSetupWithEffectiveArgs(LocalSetup localSetup, String input, String[] args) {
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
-        int exitCode = localSetup.run(
+        var exitCode = localSetup.run(
                 args,
                 new BufferedReader(new StringReader(input)),
                 new PrintStream(stdout, true, StandardCharsets.UTF_8),
@@ -165,7 +165,7 @@ final class LocalSetupTestFixture implements AutoCloseable {
     SetupRunResult runSetup(LocalSetupRequest request) {
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
-        int exitCode = setup.run(
+        var exitCode = setup.run(
                 request,
                 new BufferedReader(new StringReader("")),
                 new PrintStream(stdout, true, StandardCharsets.UTF_8),
@@ -205,14 +205,13 @@ final class LocalSetupTestFixture implements AutoCloseable {
                 ---
                 # Test workflow
                 """
-                        .formatted(boardId, port),
-                StandardCharsets.UTF_8);
+                        .formatted(boardId, port));
     }
 
     void givenWorkflowWithGithub(Path workflow, String boardId, int port) throws IOException {
         givenWorkflow(workflow, boardId, port);
         Files.writeString(
-                workflow, Files.readString(workflow, StandardCharsets.UTF_8) + "\n## Pull Request Publication\n");
+                workflow, Files.readString(workflow) + "\n## Pull Request Publication\n");
     }
 
     void givenWorkflowWithoutGithub(Path workflow, String boardId, int port) throws IOException {
@@ -221,7 +220,7 @@ final class LocalSetupTestFixture implements AutoCloseable {
 
     void givenManifest(String content) throws IOException {
         Files.createDirectories(manifestPath().getParent());
-        Files.writeString(manifestPath(), content, StandardCharsets.UTF_8);
+        Files.writeString(manifestPath(), content);
     }
 
     void givenCodexAuthenticated() {
@@ -343,8 +342,8 @@ final class LocalSetupTestFixture implements AutoCloseable {
     }
 
     private static int availablePort() {
-        for (int attempt = FIRST_FIXTURE_PORT; attempt <= LAST_FIXTURE_PORT; attempt++) {
-            int port = nextFixturePort();
+        for (var attempt = FIRST_FIXTURE_PORT; attempt <= LAST_FIXTURE_PORT; attempt++) {
+            var port = nextFixturePort();
             if (!LocalHealthChecker.portAcceptsConnections(port)) {
                 return port;
             }
@@ -455,7 +454,7 @@ final class LocalSetupTestFixture implements AutoCloseable {
                     return new CommandResult(
                             managedCommandAvailable ? 0 : CommandResult.COMMAND_NOT_FOUND_EXIT_CODE, overriddenStatus);
                 }
-                boolean running = startedWorkflows.contains(command[2]);
+                var running = startedWorkflows.contains(command[2]);
                 return new CommandResult(
                         managedCommandAvailable ? 0 : CommandResult.COMMAND_NOT_FOUND_EXIT_CODE,
                         running ? "running " + command[2] : "No managed Symphony process found");
@@ -512,7 +511,7 @@ final class LocalSetupTestFixture implements AutoCloseable {
 
         static HttpServer createHealthServer(int port) throws IOException {
             IOException failure = null;
-            for (int attempt = 0; attempt < 10; attempt++) {
+            for (var attempt = 0; attempt < 10; attempt++) {
                 try {
                     return HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
                 } catch (IOException e) {
@@ -526,7 +525,7 @@ final class LocalSetupTestFixture implements AutoCloseable {
         private static void pollDelayBeforeRetryingHealthServerBind() {
             try {
                 Thread.sleep(25);
-            } catch (InterruptedException e) {
+            } catch (InterruptedException _) {
                 Thread.currentThread().interrupt();
             }
         }
@@ -546,9 +545,9 @@ final class LocalSetupTestFixture implements AutoCloseable {
         int workflowPort(Path workflowPath) {
             try {
                 var matcher = Pattern.compile("(?m)^\\s*port:\\s*(\\d+)\\s*$")
-                        .matcher(Files.readString(workflowPath, StandardCharsets.UTF_8));
+                        .matcher(Files.readString(workflowPath));
                 return matcher.find() ? Integer.parseInt(matcher.group(1)) : defaultServerPort;
-            } catch (IOException e) {
+            } catch (IOException _) {
                 return defaultServerPort;
             }
         }

@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.Console;
 import java.io.IOException;
 import java.io.PrintStream;
+import org.jspecify.annotations.Nullable;
 
 final class StreamTerminal implements Terminal {
     private final BufferedReader input;
@@ -23,7 +24,7 @@ final class StreamTerminal implements Terminal {
     }
 
     @Override
-    public char[] readSecret(String prompt) throws IOException {
+    public char @Nullable[] readSecret(String prompt) throws IOException {
         Console console = SystemConsole.current();
         if (console != null) {
             char[] password = console.readPassword(prompt);

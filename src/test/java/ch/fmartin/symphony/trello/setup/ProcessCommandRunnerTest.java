@@ -26,7 +26,7 @@ final class ProcessCommandRunnerTest {
     @Test
     void runCapturesLargeOutputWithoutBlockingOnProcessPipe() {
         // given
-        ProcessCommandRunner runner = new ProcessCommandRunner(Duration.ofSeconds(2));
+        var runner = new ProcessCommandRunner(Duration.ofSeconds(2));
 
         // when
         CommandResult result = runner.run(BASH, "-lc", "yes output | head -c 200000");
@@ -39,7 +39,7 @@ final class ProcessCommandRunnerTest {
     @Test
     void runTimesOutHungCommands() {
         // given
-        ProcessCommandRunner runner = new ProcessCommandRunner(Duration.ofMillis(50));
+        var runner = new ProcessCommandRunner(Duration.ofMillis(50));
 
         // when
         CommandResult result = runner.run(BASH, "-lc", "while :; do :; done");
@@ -54,16 +54,16 @@ final class ProcessCommandRunnerTest {
         Path pidFile = Files.createTempFile("symphony-trello-command-pid-", ".txt");
         Files.deleteIfExists(pidFile);
         try {
-            ProcessCommandRunner runner = new ProcessCommandRunner(Duration.ofSeconds(30));
-            AtomicReference<CommandResult> result = new AtomicReference<>();
-            Thread runThread = new Thread(
+            var runner = new ProcessCommandRunner(Duration.ofSeconds(30));
+            var result = new AtomicReference<CommandResult>();
+            var runThread = new Thread(
                     () -> result.set(runner.run(
                             BASH, "-lc", "echo $$ > " + shellQuote(pidFile) + "; while :; do sleep 1; done")),
                     "process-command-runner-interrupt-test");
 
             // when
             runThread.start();
-            long childPid = waitForPid(pidFile);
+            var childPid = waitForPid(pidFile);
             runThread.interrupt();
             assertThat(runThread.join(Duration.ofSeconds(5)))
                     .as("the interrupted command-runner thread terminates within 5 seconds")
@@ -87,14 +87,14 @@ final class ProcessCommandRunnerTest {
         // given
 
         // when
-        boolean numeric = isNumericPid(pid);
+        var numeric = isNumericPid(pid);
 
         // then
         assertThat(numeric).as("PID candidate <%s> numeric classification", pid).isEqualTo(expected);
     }
 
     private static long waitForPid(Path pidFile) throws Exception {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         while (System.nanoTime() < deadline) {
             if (Files.isRegularFile(pidFile)) {
                 String pid = Files.readString(pidFile).trim();
@@ -112,9 +112,9 @@ final class ProcessCommandRunnerTest {
     }
 
     private static boolean processIsAlive(long pid) throws InterruptedException {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         while (System.nanoTime() < deadline) {
-            boolean alive = ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false);
+            var alive = ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false);
             if (!alive) {
                 return false;
             }

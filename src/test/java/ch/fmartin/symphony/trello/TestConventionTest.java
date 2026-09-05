@@ -36,7 +36,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
@@ -73,10 +72,10 @@ final class TestConventionTest {
     @Test
     void methodsUseGivenWhenThenSections() throws IOException {
         // given
-        List<String> violations = new ArrayList<>();
+        var violations = new ArrayList<String>();
 
         // when
-        try (Stream<Path> files = Files.walk(Path.of("src/test/java"))) {
+        try (var files = Files.walk(Path.of("src/test/java"))) {
             for (Path file :
                     files.filter(path -> path.toString().endsWith(".java")).toList()) {
                 collectTestSectionViolations(file, violations);
@@ -95,24 +94,28 @@ final class TestConventionTest {
     void methodsUseGivenWhenThenSectionsForWrappedFuzzSignatures(@TempDir Path tempDir) throws IOException {
         // given
         Path source = tempDir.resolve("WrappedFuzzSignatureTest.java");
-        List<String> fixtureLines = List.of(
+        var fixtureLines = List.of(
                 "class WrappedFuzzSignatureTest {",
                 "    @FuzzTest",
                 "    @SuppressWarnings(",
                 "            value = \"fixture }\")",
                 "    void fuzz(",
                 "            @NotNull String input) {",
-                "        // " + "when",
+                """
+                        // \
+                when""",
                 "        input.length();",
                 "",
-                "        // " + "then",
+                """
+                        // \
+                then""",
                 "        input.isBlank();",
                 "    }",
                 "}");
         Files.writeString(source, String.join(System.lineSeparator(), fixtureLines));
 
         // when
-        List<String> violations = testSectionViolations(source);
+        var violations = testSectionViolations(source);
 
         // then
         assertThat(violations).containsExactly(source + ":6: expected // given, // when, and // then in order");
@@ -156,7 +159,7 @@ final class TestConventionTest {
                         .formatted("given", "when", "then"));
 
         // when
-        List<String> violations = testSectionViolations(source);
+        var violations = testSectionViolations(source);
 
         // then
         assertThat(violations).containsExactly(source + ":24: expected // given, // when, and // then in order");
@@ -189,7 +192,7 @@ final class TestConventionTest {
                         .formatted("given", "when", "then", "given", "when", "then"));
 
         // when
-        List<String> violations = testSectionViolations(source);
+        var violations = testSectionViolations(source);
 
         // then
         assertThat(violations).containsExactly(source + ":3: expected // given, // when, and // then in order");
@@ -218,7 +221,7 @@ final class TestConventionTest {
                         .formatted("given", "when", "then"));
 
         // when
-        List<String> violations = testSectionViolations(source);
+        var violations = testSectionViolations(source);
 
         // then
         assertThat(violations).containsExactly(source + ":6: expected a blank line before // when");
@@ -272,7 +275,7 @@ final class TestConventionTest {
                 """);
 
         // when
-        List<String> violations = undescribedDirectAssertJBooleanAssertionViolations(source);
+        var violations = undescribedDirectAssertJBooleanAssertionViolations(source);
 
         // then
         assertThat(violations)
@@ -303,7 +306,7 @@ final class TestConventionTest {
                 """);
 
         // when
-        List<String> violations = undescribedDirectAssertJBooleanAssertionViolations(source);
+        var violations = undescribedDirectAssertJBooleanAssertionViolations(source);
 
         // then
         assertThat(violations).isEmpty();
@@ -329,7 +332,7 @@ final class TestConventionTest {
                 """);
 
         // when
-        List<String> violations = undescribedDirectAssertJBooleanAssertionViolations(source);
+        var violations = undescribedDirectAssertJBooleanAssertionViolations(source);
 
         // then
         assertThat(violations)
@@ -377,7 +380,7 @@ final class TestConventionTest {
                 """);
 
         // when
-        List<String> violations = undescribedDirectAssertJBooleanAssertionViolations(source);
+        var violations = undescribedDirectAssertJBooleanAssertionViolations(source);
 
         // then
         assertThat(violations)
@@ -455,7 +458,7 @@ final class TestConventionTest {
                 """);
 
         // when
-        List<String> violations = undescribedDirectAssertJBooleanAssertionViolations(source);
+        var violations = undescribedDirectAssertJBooleanAssertionViolations(source);
 
         // then
         assertThat(violations).isEmpty();
@@ -488,7 +491,7 @@ final class TestConventionTest {
                 """);
 
         // when
-        List<String> violations = undescribedDirectAssertJBooleanAssertionViolations(source);
+        var violations = undescribedDirectAssertJBooleanAssertionViolations(source);
 
         // then
         assertThat(violations)
@@ -538,7 +541,7 @@ final class TestConventionTest {
                 """);
 
         // when
-        List<String> violations = undescribedDirectAssertJBooleanAssertionViolations(source);
+        var violations = undescribedDirectAssertJBooleanAssertionViolations(source);
 
         // then
         assertThat(violations).isEmpty();
@@ -547,7 +550,7 @@ final class TestConventionTest {
     @Test
     void directAssertJBooleanAssertionsHaveDescriptionsWithoutBlankLiterals() throws IOException {
         // given
-        List<String> violations = new ArrayList<>();
+        var violations = new ArrayList<String>();
 
         // when
         List<Path> files = javaTestSourceFiles();
@@ -564,10 +567,10 @@ final class TestConventionTest {
     @Test
     void simpleMocksUseMockitoInsteadOfManualTestDoubles() throws IOException {
         // given
-        List<String> violations = new ArrayList<>();
+        var violations = new ArrayList<String>();
 
         // when
-        try (Stream<Path> files = Files.walk(Path.of("src/test/java"))) {
+        try (var files = Files.walk(Path.of("src/test/java"))) {
             for (Path file :
                     files.filter(path -> path.toString().endsWith(".java")).toList()) {
                 collectSimpleManualMockViolations(file, violations);
@@ -585,10 +588,10 @@ final class TestConventionTest {
     @Test
     void tesslJsonPinsJavaStyleSkills() throws IOException {
         // given
-        Map<String, Object> tesslJson = JSON.readValue(Path.of("tessl.json").toFile(), JSON_OBJECT);
+        var tesslJson = JSON.readValue(Path.of("tessl.json").toFile(), JSON_OBJECT);
 
         // when
-        Map<String, Object> dependencies = objectMap(tesslJson, "dependencies");
+        var dependencies = objectMap(tesslJson, "dependencies");
 
         // then
         assertThat(version(dependencies, "martinfrancois/java-optionals")).isEqualTo("1.0.0");
@@ -622,9 +625,9 @@ final class TestConventionTest {
     void mavenTestForksAuthorizeJazzerInstrumentationOnJava25() throws IOException {
         // given
         String pom = Files.readString(Path.of("pom.xml"));
-        String permissions =
+        var permissions =
                 "<test.jvm.instrumentation.args>-XX:+EnableDynamicAgentLoading --enable-native-access=ALL-UNNAMED</test.jvm.instrumentation.args>";
-        String testForkArguments =
+        var testForkArguments =
                 "<argLine>@{argLine} ${test.jvm.instrumentation.args} -Xshare:off -javaagent:${org.mockito:mockito-core:jar}</argLine>";
 
         // when
@@ -643,12 +646,12 @@ final class TestConventionTest {
 
     private static String mavenPluginBlock(String pom, String artifactId) {
         String artifact = "<artifactId>" + artifactId + "</artifactId>";
-        int artifactStart = pom.indexOf(artifact);
+        var artifactStart = pom.indexOf(artifact);
         assertThat(artifactStart)
                 .as("Maven plugin %s should be configured", artifactId)
                 .isNotNegative();
-        int pluginStart = pom.lastIndexOf("<plugin>", artifactStart);
-        int pluginEnd = pom.indexOf("</plugin>", artifactStart);
+        var pluginStart = pom.lastIndexOf("<plugin>", artifactStart);
+        var pluginEnd = pom.indexOf("</plugin>", artifactStart);
         assertThat(pluginStart)
                 .as("Maven plugin %s should have an opening element", artifactId)
                 .isNotNegative();
@@ -661,7 +664,7 @@ final class TestConventionTest {
     @Test
     void representativeJavaBoundariesUseJSpecifyAnnotations() throws IOException {
         // given
-        List<Path> nullMarkedBoundaries = List.of(
+        var nullMarkedBoundaries = List.of(
                 Path.of("src/main/java/ch/fmartin/symphony/trello/repository/RepositorySource.java"),
                 Path.of("src/main/java/ch/fmartin/symphony/trello/repository/RepositorySourceSelection.java"),
                 Path.of("src/main/java/ch/fmartin/symphony/trello/config/EffectiveConfig.java"),
@@ -670,7 +673,7 @@ final class TestConventionTest {
                 Path.of("src/main/java/ch/fmartin/symphony/trello/domain/BlockerRef.java"));
 
         // when
-        Map<Path, String> sources = sourcesByPath(nullMarkedBoundaries);
+        var sources = sourcesByPath(nullMarkedBoundaries);
 
         // then
         assertThat(sources).allSatisfy((boundary, source) -> assertThat(source)
@@ -683,7 +686,7 @@ final class TestConventionTest {
     }
 
     private static Map<Path, String> sourcesByPath(List<Path> paths) throws IOException {
-        Map<Path, String> sources = new HashMap<>();
+        var sources = new HashMap<Path, String>();
         for (Path path : paths) {
             sources.put(path, Files.readString(path));
         }
@@ -691,8 +694,8 @@ final class TestConventionTest {
     }
 
     private static void collectSimpleManualMockViolations(Path file, List<String> violations) throws IOException {
-        List<String> lines = Files.readAllLines(file);
-        for (int index = 0; index < lines.size(); index++) {
+        var lines = Files.readAllLines(file);
+        for (var index = 0; index < lines.size(); index++) {
             var matcher = SIMPLE_MANUAL_MOCK.matcher(lines.get(index));
             if (matcher.find()) {
                 violations.add("%s:%d: %s".formatted(file, index + 1, matcher.group()));
@@ -716,7 +719,7 @@ final class TestConventionTest {
     }
 
     static List<String> undescribedDirectAssertJBooleanAssertionViolations(Path file) throws IOException {
-        List<String> violations = new ArrayList<>();
+        var violations = new ArrayList<String>();
         ParsedJavaFile parsed = analyzeJava(file, Files.readString(file));
         collectUndescribedDirectAssertJBooleanAssertionViolations(
                 parsed.file(), parsed.unit(), parsed.trees(), parsed.types(), violations);
@@ -732,7 +735,7 @@ final class TestConventionTest {
     }
 
     private static List<Path> javaTestSourceFiles() throws IOException {
-        List<Path> files = new ArrayList<>();
+        var files = new ArrayList<Path>();
         Files.walkFileTree(Path.of("src/test/java"), new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
@@ -754,13 +757,13 @@ final class TestConventionTest {
             public Void visitMethodInvocation(MethodInvocationTree invocation, Void unused) {
                 if (isUndescribedDirectAssertJBooleanAssertion(invocation, unit, trees, types)) {
                     String terminal = invocationMethodName(invocation);
-                    long terminalEnd = positions.getEndPosition(unit, invocation.getMethodSelect());
+                    var terminalEnd = positions.getEndPosition(unit, invocation.getMethodSelect());
                     checkState(
                             terminalEnd != Diagnostic.NOPOS,
                             "Compiler did not provide a source position for %s()",
                             terminal);
-                    long terminalStart = terminalEnd - terminal.length();
-                    long line = unit.getLineMap().getLineNumber(terminalStart);
+                    var terminalStart = terminalEnd - terminal.length();
+                    var line = unit.getLineMap().getLineNumber(terminalStart);
                     violations.add(
                             "%s:%d: direct AssertJ boolean assertion requires a description without a blank literal before %s()"
                                     .formatted(file, line, terminal));
@@ -868,11 +871,11 @@ final class TestConventionTest {
     }
 
     static List<String> testSectionViolations(Path file) throws IOException {
-        List<String> violations = new ArrayList<>();
+        var violations = new ArrayList<String>();
         String source = Files.readString(file);
         String normalizedSource = source.replace("\r\n", "\n").replace('\r', '\n');
-        List<String> lines = Files.readAllLines(file);
-        Map<Integer, String> lineComments = standaloneLineComments(normalizedSource);
+        var lines = Files.readAllLines(file);
+        var lineComments = standaloneLineComments(normalizedSource);
         for (TestMethod testMethod : testMethods(file, source)) {
             assertTestSections(file, testMethod, lines, lineComments, violations);
         }
@@ -880,13 +883,13 @@ final class TestConventionTest {
     }
 
     private static Map<Integer, String> standaloneLineComments(String source) {
-        Map<Integer, String> comments = new HashMap<>();
+        var comments = new HashMap<Integer, String>();
         JavaLexicalState state = JavaLexicalState.CODE;
-        int line = 0;
-        int lineStart = 0;
-        int index = 0;
+        var line = 0;
+        var lineStart = 0;
+        var index = 0;
         while (index < source.length()) {
-            char current = source.charAt(index);
+            var current = source.charAt(index);
             if (current == '\n') {
                 line++;
                 lineStart = index + 1;
@@ -896,7 +899,7 @@ final class TestConventionTest {
             switch (state) {
                 case CODE -> {
                     if (source.startsWith("//", index)) {
-                        int lineEnd = source.indexOf('\n', index + 2);
+                        var lineEnd = source.indexOf('\n', index + 2);
                         if (lineEnd < 0) {
                             lineEnd = source.length();
                         }
@@ -963,15 +966,15 @@ final class TestConventionTest {
     }
 
     private static boolean isEscaped(String source, int index) {
-        int backslashes = 0;
-        for (int current = index - 1; current >= 0 && source.charAt(current) == '\\'; current--) {
+        var backslashes = 0;
+        for (var current = index - 1; current >= 0 && source.charAt(current) == '\\'; current--) {
             backslashes++;
         }
         return backslashes % 2 != 0;
     }
 
     private static List<TestMethod> testMethods(Path file, String source) throws IOException {
-        List<TestMethod> methods = new ArrayList<>();
+        var methods = new ArrayList<TestMethod>();
         ParsedJavaFile parsed = parseJava(file, source);
         collectTestMethods(parsed.unit(), parsed.trees(), methods);
         return List.copyOf(methods);
@@ -988,13 +991,13 @@ final class TestConventionTest {
     private static ParsedJavaFile compileJava(Path file, String source, boolean analyze) throws IOException {
         JavaCompiler compiler =
                 Objects.requireNonNull(ToolProvider.getSystemJavaCompiler(), "Test convention checks require a JDK");
-        DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+        var diagnostics = new DiagnosticCollector<JavaFileObject>();
         try (StandardJavaFileManager fileManager =
                 compiler.getStandardFileManager(diagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
             JavaFileObject sourceFile = sourceFile(file, source);
-            JavacTask task = (JavacTask)
+            var task = (JavacTask)
                     compiler.getTask(null, fileManager, diagnostics, List.of("-proc:none"), null, List.of(sourceFile));
-            List<CompilationUnitTree> units = parseCompilationUnits(task);
+            var units = parseCompilationUnits(task);
             rejectParseErrors(file, diagnostics);
             checkState(units.size() == 1, "Expected one compilation unit for %s but found %s", file, units.size());
             if (analyze) {
@@ -1008,23 +1011,23 @@ final class TestConventionTest {
     private static List<ParsedJavaFile> analyzeJava(List<Path> files) throws IOException {
         JavaCompiler compiler =
                 Objects.requireNonNull(ToolProvider.getSystemJavaCompiler(), "Test convention checks require a JDK");
-        DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
-        Map<Path, Path> sourcePaths = new HashMap<>();
+        var diagnostics = new DiagnosticCollector<JavaFileObject>();
+        var sourcePaths = new HashMap<Path, Path>();
         for (Path file : files) {
             sourcePaths.put(file.toAbsolutePath().normalize(), file);
         }
         try (StandardJavaFileManager fileManager =
                 compiler.getStandardFileManager(diagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
-            Iterable<? extends JavaFileObject> sourceFiles = fileManager.getJavaFileObjectsFromPaths(files);
-            JavacTask task = (JavacTask)
+            var sourceFiles = fileManager.getJavaFileObjectsFromPaths(files);
+            var task = (JavacTask)
                     compiler.getTask(null, fileManager, diagnostics, List.of("-proc:none"), null, sourceFiles);
-            List<CompilationUnitTree> units = parseCompilationUnits(task);
+            var units = parseCompilationUnits(task);
             rejectParseErrors(diagnostics);
             task.analyze();
             rejectAnalysisErrors(diagnostics);
             Trees trees = Trees.instance(task);
             Types types = task.getTypes();
-            List<ParsedJavaFile> parsed = new ArrayList<>();
+            var parsed = new ArrayList<ParsedJavaFile>();
             for (CompilationUnitTree unit : units) {
                 Path absolutePath =
                         Path.of(unit.getSourceFile().toUri()).toAbsolutePath().normalize();
@@ -1037,7 +1040,7 @@ final class TestConventionTest {
     }
 
     private static List<CompilationUnitTree> parseCompilationUnits(JavacTask task) throws IOException {
-        List<CompilationUnitTree> units = new ArrayList<>();
+        var units = new ArrayList<CompilationUnitTree>();
         for (CompilationUnitTree unit : task.parse()) {
             units.add(unit);
         }
@@ -1059,8 +1062,8 @@ final class TestConventionTest {
             @Override
             public Void visitMethod(MethodTree method, Void unused) {
                 if (isTestMethod(method) && method.getBody() != null) {
-                    long start = positions.getStartPosition(unit, method.getBody());
-                    long end = positions.getEndPosition(unit, method.getBody());
+                    var start = positions.getStartPosition(unit, method.getBody());
+                    var end = positions.getEndPosition(unit, method.getBody());
                     checkState(
                             start != Diagnostic.NOPOS && end != Diagnostic.NOPOS,
                             "Compiler did not provide source positions for %s",
@@ -1083,7 +1086,7 @@ final class TestConventionTest {
 
     private static String simpleAnnotationName(AnnotationTree annotation) {
         String name = annotation.getAnnotationType().toString();
-        int separator = name.lastIndexOf('.');
+        var separator = name.lastIndexOf('.');
         return separator < 0 ? name : name.substring(separator + 1);
     }
 
@@ -1093,14 +1096,14 @@ final class TestConventionTest {
 
     private static void rejectParseErrors(Path file, DiagnosticCollector<JavaFileObject> diagnostics)
             throws IOException {
-        List<String> errors = errorDiagnostics(diagnostics, TestConventionTest::diagnosticWithoutSource);
+        var errors = errorDiagnostics(diagnostics, TestConventionTest::diagnosticWithoutSource);
         if (!errors.isEmpty()) {
             throw new IOException("Could not parse " + file + ": " + String.join("; ", errors));
         }
     }
 
     private static void rejectParseErrors(DiagnosticCollector<JavaFileObject> diagnostics) throws IOException {
-        List<String> errors = errorDiagnostics(diagnostics, TestConventionTest::diagnosticWithSource);
+        var errors = errorDiagnostics(diagnostics, TestConventionTest::diagnosticWithSource);
         if (!errors.isEmpty()) {
             throw new IOException("Could not parse Java test sources: " + String.join("; ", errors));
         }
@@ -1108,14 +1111,14 @@ final class TestConventionTest {
 
     private static void rejectAnalysisErrors(Path file, DiagnosticCollector<JavaFileObject> diagnostics)
             throws IOException {
-        List<String> errors = errorDiagnostics(diagnostics, TestConventionTest::diagnosticWithoutSource);
+        var errors = errorDiagnostics(diagnostics, TestConventionTest::diagnosticWithoutSource);
         if (!errors.isEmpty()) {
             throw new IOException("Could not analyze " + file + ": " + String.join("; ", errors));
         }
     }
 
     private static void rejectAnalysisErrors(DiagnosticCollector<JavaFileObject> diagnostics) throws IOException {
-        List<String> errors = errorDiagnostics(diagnostics, TestConventionTest::diagnosticWithSource);
+        var errors = errorDiagnostics(diagnostics, TestConventionTest::diagnosticWithSource);
         if (!errors.isEmpty()) {
             throw new IOException("Could not analyze Java test sources: " + String.join("; ", errors));
         }
@@ -1124,7 +1127,7 @@ final class TestConventionTest {
     private static List<String> errorDiagnostics(
             DiagnosticCollector<JavaFileObject> diagnostics,
             Function<Diagnostic<? extends JavaFileObject>, String> formatter) {
-        List<String> errors = new ArrayList<>();
+        var errors = new ArrayList<String>();
         for (Diagnostic<? extends JavaFileObject> diagnostic : diagnostics.getDiagnostics()) {
             if (diagnostic.getKind() == Diagnostic.Kind.ERROR) {
                 errors.add(formatter.apply(diagnostic));
@@ -1150,10 +1153,10 @@ final class TestConventionTest {
             List<String> lines,
             Map<Integer, String> lineComments,
             List<String> violations) {
-        int firstBodyLine = method.startLine() + 1;
-        int given = lineOfMarker(lineComments, firstBodyLine, method.endLine(), "given");
-        int when = lineOfMarker(lineComments, firstBodyLine, method.endLine(), "when");
-        int then = lineOfMarker(lineComments, firstBodyLine, method.endLine(), "then");
+        var firstBodyLine = method.startLine() + 1;
+        var given = lineOfMarker(lineComments, firstBodyLine, method.endLine(), "given");
+        var when = lineOfMarker(lineComments, firstBodyLine, method.endLine(), "when");
+        var then = lineOfMarker(lineComments, firstBodyLine, method.endLine(), "then");
         if (given < 0 || when < 0 || then < 0 || !(given < when && when < then)) {
             violations.add(
                     "%s:%d: expected // given, // when, and // then in order".formatted(file, method.startLine() + 1));
@@ -1168,7 +1171,7 @@ final class TestConventionTest {
     }
 
     private static int lineOfMarker(Map<Integer, String> lineComments, int firstBodyLine, int endLine, String marker) {
-        for (int line = firstBodyLine; line < endLine; line++) {
+        for (var line = firstBodyLine; line < endLine; line++) {
             if (marker.equals(lineComments.get(line))) {
                 return line;
             }

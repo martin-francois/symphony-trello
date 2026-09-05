@@ -16,7 +16,7 @@ final class GitHubConfiguratorTest {
         // given
         FakeCommandRunner commands =
                 new FakeCommandRunner().returns(0, "alex", "gh", "api", "user", "--jq", ".login // \"\"");
-        RecordingTerminal terminal = new RecordingTerminal();
+        var terminal = new RecordingTerminal();
 
         // when
         GitHubIntegration integration = new GitHubConfigurator(commands)
@@ -37,7 +37,7 @@ final class GitHubConfiguratorTest {
                 .returns(1, "not logged in", "gh", "auth", "status")
                 .returns(0, "ok", "gh", "auth", "status")
                 .returns(0, "alex", "gh", "api", "user", "--jq", ".login // \"\"");
-        RecordingTerminal terminal = new RecordingTerminal("y");
+        var terminal = new RecordingTerminal("y");
 
         // when
         GitHubIntegration integration = new GitHubConfigurator(commands)
@@ -57,7 +57,7 @@ final class GitHubConfiguratorTest {
         FakeCommandRunner commands = new FakeCommandRunner()
                 .returns(0, "apt", "apt-get", "--version")
                 .returns(0, "0", "id", "-u");
-        RecordingTerminal terminal = new RecordingTerminal("y", "n");
+        var terminal = new RecordingTerminal("y", "n");
 
         // when
         Throwable thrown = catchThrowable(() -> new GitHubConfigurator(commands)
@@ -80,7 +80,7 @@ final class GitHubConfiguratorTest {
                 .returns(0, "gh version", "gh", "--version")
                 .returns(0, "ok", "gh", "auth", "status")
                 .returns(0, "alex", "gh", "api", "user", "--jq", ".login // \"\"");
-        RecordingTerminal terminal = new RecordingTerminal("y", "y");
+        var terminal = new RecordingTerminal("y", "y");
 
         // when
         GitHubIntegration integration = new GitHubConfigurator(commands)
@@ -103,7 +103,7 @@ final class GitHubConfiguratorTest {
         // given
         LocalSetup.Options options = SetupOptionFactory.options(
                 Path.of("target/github-skip"), false, Optional.of(false), List.of(), false, false);
-        RecordingTerminal terminal = new RecordingTerminal();
+        var terminal = new RecordingTerminal();
 
         // when
         GitHubIntegration integration =

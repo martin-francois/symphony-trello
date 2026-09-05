@@ -18,7 +18,7 @@ final class ConnectedBoardRepository {
     private final Path manifestPath;
 
     ConnectedBoardRepository(Path manifestPath) {
-        this(manifestPath, jsonMapper());
+        this(manifestPath, json1);
     }
 
     ConnectedBoardRepository(Path manifestPath, ObjectMapper json) {
@@ -59,13 +59,13 @@ final class ConnectedBoardRepository {
         JsonNode root;
         try {
             root = json.readTree(manifestPath.toFile());
-        } catch (JsonProcessingException e) {
+        } catch (JsonProcessingException _) {
             return new ManifestLoadResult(
                     new ConnectedBoardManifest(List.of()),
                     List.of("Connected-board manifest is not valid JSON."),
                     false);
         }
-        List<String> warnings = manifestShapeWarnings(root);
+        var warnings = manifestShapeWarnings(root);
         if (root == null || !root.isObject() || !root.path("boards").isArray()) {
             return new ManifestLoadResult(new ConnectedBoardManifest(List.of()), warnings, false);
         }
@@ -76,7 +76,7 @@ final class ConnectedBoardRepository {
         }
         try {
             return new ManifestLoadResult(json.treeToValue(root, ConnectedBoardManifest.class), warnings);
-        } catch (IOException | RuntimeException e) {
+        } catch (IOException | RuntimeException _) {
             return new ManifestLoadResult(new ConnectedBoardManifest(List.of()), unloadable(warnings), false);
         }
     }
@@ -85,11 +85,9 @@ final class ConnectedBoardRepository {
         return append(warnings, "Connected-board manifest contains invalid values and could not be loaded for checks.");
     }
 
-    /**
-     * Strict load for lifecycle and setup commands: any invalid manifest shape or incomplete board
-     * row is an expected local configuration error here, never a null dereference deeper in the
-     * command. Only diagnostics and setup-local check load more leniently, via loadForCheck().
-     */
+    /// Strict load for lifecycle and setup commands: any invalid manifest shape or incomplete board
+    /// row is an expected local configuration error here, never a null dereference deeper in the
+    /// command. Only diagnostics and setup-local check load more leniently, via loadForCheck().
     ConnectedBoardManifest loadForLifecycle() throws IOException {
         ConnectedBoardManifest manifest = load();
         if (!Files.isRegularFile(manifestPath)) {
@@ -197,8 +195,8 @@ final class ConnectedBoardRepository {
         if (!boards.isArray()) {
             return List.of("Connected-board manifest field boards must be an array.");
         }
-        List<String> warnings = new ArrayList<>();
-        for (int index = 0; index < boards.size(); index++) {
+        var warnings = new ArrayList<String>();
+        for (var index = 0; index < boards.size(); index++) {
             JsonNode board = boards.get(index);
             if (!board.isObject()) {
                 warnings.add("Connected-board manifest entry " + (index + 1) + " must be an object.");
@@ -242,7 +240,7 @@ final class ConnectedBoardRepository {
                     + LocalPort.MIN + " to " + LocalPort.MAX + ".");
             return;
         }
-        int port = value.asInt();
+        var port = value.asInt();
         if (!LocalPort.isValid(port)) {
             warnings.add("Connected-board manifest entry " + label + " field serverPort must be between "
                     + LocalPort.MIN + " and " + LocalPort.MAX + ".");
@@ -259,7 +257,7 @@ final class ConnectedBoardRepository {
                     + " field additionalWritableRoots must be an array of path strings.");
             return;
         }
-        boolean hasInvalidRoot = StreamSupport.stream(roots.spliterator(), false)
+        var hasInvalidRoot = StreamSupport.stream(roots.spliterator(), false)
                 .anyMatch(root -> !root.isTextual() || root.asText().isBlank());
         if (hasInvalidRoot) {
             warnings.add("Connected-board manifest entry " + label
@@ -275,7 +273,7 @@ final class ConnectedBoardRepository {
     }
 
     private static List<String> append(List<String> warnings, String warning) {
-        List<String> appended = new ArrayList<>(warnings);
+        var appended = new ArrayList<String>(warnings);
         appended.add(warning);
         return List.copyOf(appended);
     }

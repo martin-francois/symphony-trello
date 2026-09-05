@@ -68,13 +68,13 @@ final class LiveTrelloE2eIT {
         Path runDir = Path.of("target/live-e2e-it", runId);
         Path workspaceRoot = runDir.resolve("workspaces");
         Files.createDirectories(runDir);
-        LiveTrelloClient trello = new LiveTrelloClient(credentials);
+        var trello = new LiveTrelloClient(credentials);
         String workspaceId = workspaceIdOrFail(credentials);
-        List<String> disposableBoardIds = new ArrayList<>();
+        var disposableBoardIds = new ArrayList<String>();
         Throwable bodyFailure = null;
 
         try {
-            TrelloBoardSetup setup = new TrelloBoardSetup(json);
+            var setup = new TrelloBoardSetup(json);
             Path boardAWorkflow = runDir.resolve("board-a.WORKFLOW.md");
             Path importedAWorkflow = runDir.resolve("imported-a.WORKFLOW.md");
             Path boardBWorkflow = runDir.resolve("board-b.WORKFLOW.md");
@@ -99,7 +99,7 @@ final class LiveTrelloE2eIT {
                     true));
             String customBoardId = trello.createBoard(runId + " custom existing structure", workspaceId);
             disposableBoardIds.add(customBoardId);
-            Map<String, String> customLists = trello.createLists(
+            var customLists = trello.createLists(
                     customBoardId,
                     List.of(
                             "Intake",
@@ -125,8 +125,8 @@ final class LiveTrelloE2eIT {
             patchWorkflow(boardBWorkflow, completions, TrelloBoardSetup.RECOMMENDED_REVIEW_STATE, 2, 7_000);
             patchWorkflow(customWorkflow, completions, "Review", 2, 7_000);
 
-            Map<String, String> boardALists = trello.listIdsByName(boardA.boardId());
-            Map<String, String> boardBLists = trello.listIdsByName(boardB.boardId());
+            var boardALists = trello.listIdsByName(boardA.boardId());
+            var boardBLists = trello.listIdsByName(boardB.boardId());
             CardRef boardAOlder = trello.createCard(
                     boardALists.get(TrelloBoardSetup.RECOMMENDED_ACTIVE_STATE),
                     runId + " sequential older",
@@ -243,13 +243,13 @@ final class LiveTrelloE2eIT {
         Path externalProject = runDir.resolve("external-docker-project");
         Files.createDirectories(runDir);
         createExternalDockerProject(externalProject, runId);
-        LiveTrelloClient trello = new LiveTrelloClient(credentials);
+        var trello = new LiveTrelloClient(credentials);
         String workspaceId = workspaceIdOrFail(credentials);
-        List<String> disposableBoardIds = new ArrayList<>();
+        var disposableBoardIds = new ArrayList<String>();
         Throwable bodyFailure = null;
 
         try {
-            TrelloBoardSetup setup = new TrelloBoardSetup(json);
+            var setup = new TrelloBoardSetup(json);
             Path workflow = runDir.resolve("external-docker.WORKFLOW.md");
             Path completions = runDir.resolve("fake-codex-external-completions.log");
 
@@ -258,7 +258,7 @@ final class LiveTrelloE2eIT {
             disposableBoardIds.add(board.boardId());
             patchWorkflow(workflow, completions, TrelloBoardSetup.RECOMMENDED_REVIEW_STATE, 1, 30_000);
 
-            Map<String, String> lists = trello.listIdsByName(board.boardId());
+            var lists = trello.listIdsByName(board.boardId());
             CardRef card = trello.createCard(
                     lists.get(TrelloBoardSetup.RECOMMENDED_ACTIVE_STATE),
                     runId + " long external docker task",
@@ -310,13 +310,13 @@ final class LiveTrelloE2eIT {
         Path expectedOutput = externalProject.resolve("docker-output.txt");
         Files.createDirectories(runDir);
         createExternalDockerProject(externalProject, runId);
-        LiveTrelloClient trello = new LiveTrelloClient(credentials);
+        var trello = new LiveTrelloClient(credentials);
         String workspaceId = workspaceIdOrFail(credentials);
-        List<String> disposableBoardIds = new ArrayList<>();
+        var disposableBoardIds = new ArrayList<String>();
         Throwable bodyFailure = null;
 
         try {
-            TrelloBoardSetup setup = new TrelloBoardSetup(json);
+            var setup = new TrelloBoardSetup(json);
             Path workflow = runDir.resolve("real-codex-docker.WORKFLOW.md");
 
             var board = setup.createRecommendedBoard(
@@ -324,7 +324,7 @@ final class LiveTrelloE2eIT {
             disposableBoardIds.add(board.boardId());
             patchWorkflowForRealCodexDocker(workflow, externalProject);
 
-            Map<String, String> lists = trello.listIdsByName(board.boardId());
+            var lists = trello.listIdsByName(board.boardId());
             CardRef card = trello.createCard(
                     lists.get(TrelloBoardSetup.RECOMMENDED_ACTIVE_STATE),
                     runId + " real codex docker task",
@@ -384,13 +384,13 @@ final class LiveTrelloE2eIT {
 
     private static boolean liveE2eEnabled() {
         return LocalEnvironment.get("SYMPHONY_RUN_LIVE_E2E")
-                .map(value -> value.equals("1") || Boolean.parseBoolean(value))
+                .map(value -> "1".equals(value) || Boolean.parseBoolean(value))
                 .orElse(false);
     }
 
     private static boolean realCodexDockerE2eEnabled() {
         return LocalEnvironment.get("SYMPHONY_RUN_REAL_CODEX_DOCKER_E2E")
-                .map(value -> value.equals("1") || Boolean.parseBoolean(value))
+                .map(value -> "1".equals(value) || Boolean.parseBoolean(value))
                 .orElse(false);
     }
 
@@ -560,9 +560,9 @@ final class LiveTrelloE2eIT {
                     .redirectError(ProcessBuilder.Redirect.DISCARD)
                     .start();
             return process.waitFor(Duration.ofSeconds(30)) && process.exitValue() == 0;
-        } catch (IOException e) {
+        } catch (IOException _) {
             return false;
-        } catch (InterruptedException e) {
+        } catch (InterruptedException _) {
             Thread.currentThread().interrupt();
             return false;
         }
@@ -589,7 +589,7 @@ final class LiveTrelloE2eIT {
                 RUNNING_TIMEOUT,
                 () -> {
                     JsonNode state = process.state();
-                    List<String> runningCardIds = runningCardIds(state);
+                    var runningCardIds = runningCardIds(state);
                     return state.path("counts").path("running").asInt() == expectedCount
                             && runningCardIds.containsAll(expectedCardIds);
                 },
@@ -619,7 +619,7 @@ final class LiveTrelloE2eIT {
         waitUntil(
                 STARTUP_TIMEOUT,
                 () -> {
-                    List<String> cardIds = trello.cardIdsInList(listId);
+                    var cardIds = trello.cardIdsInList(listId);
                     return cardIds.contains(higherCard.id())
                             && cardIds.contains(lowerCard.id())
                             && cardIds.indexOf(higherCard.id()) < cardIds.indexOf(lowerCard.id());
@@ -631,7 +631,7 @@ final class LiveTrelloE2eIT {
         waitUntil(
                 HANDOFF_TIMEOUT,
                 () -> {
-                    long count = successfulFakeCodexTurnCount(completions);
+                    var count = successfulFakeCodexTurnCount(completions);
                     assertThat(count)
                             .as(
                                     "fake Codex should not complete duplicate turns before reaching %s completions",
@@ -679,7 +679,7 @@ final class LiveTrelloE2eIT {
     }
 
     private static List<String> runningCardIds(JsonNode state) {
-        List<String> cardIds = new ArrayList<>();
+        var cardIds = new ArrayList<String>();
         state.path("running").forEach(row -> cardIds.add(row.path("card_id").asText()));
         return cardIds;
     }
@@ -694,7 +694,7 @@ final class LiveTrelloE2eIT {
                 }
             } catch (AssertionError e) {
                 lastFailure = e;
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException _) {
                 // Poll again; live Trello and the local status endpoint may be briefly unavailable.
             }
             pollDelayForBoundedLiveWait();
@@ -716,8 +716,8 @@ final class LiveTrelloE2eIT {
 
     private static void cleanupDisposableBoards(
             LiveTrelloClient trello, String workspaceId, String runId, List<String> disposableBoardIds) {
-        List<String> boardIds = new ArrayList<>(disposableBoardIds);
-        List<Throwable> failures = new ArrayList<>();
+        var boardIds = new ArrayList<String>(disposableBoardIds);
+        var failures = new ArrayList<Throwable>();
         try {
             trello.openBoardIdsByNamePrefix(workspaceId, runId).stream()
                     .filter(boardId -> !boardIds.contains(boardId))
@@ -735,7 +735,7 @@ final class LiveTrelloE2eIT {
         }
 
         if (!failures.isEmpty()) {
-            AssertionError cleanupFailure =
+            var cleanupFailure =
                     new AssertionError("Live E2E cleanup could not archive every disposable board");
             failures.forEach(cleanupFailure::addSuppressed);
             throw cleanupFailure;
@@ -743,7 +743,7 @@ final class LiveTrelloE2eIT {
     }
 
     private static int freePort() {
-        try (ServerSocket socket = new ServerSocket(0)) {
+        try (var socket = new ServerSocket(0)) {
             return socket.getLocalPort();
         } catch (IOException e) {
             throw new AssertionError("Could not allocate a free local port", e);
@@ -782,16 +782,16 @@ final class LiveTrelloE2eIT {
         }
 
         String createBoard(String name, String workspaceId) {
-            Map<String, String> query = orderedMap("name", name, "defaultLists", "false", "defaultLabels", "false");
+            var query = orderedMap("name", name, "defaultLists", "false", "defaultLabels", "false");
             query.put("idOrganization", workspaceId);
-            Map<String, Object> board = postMap("boards", query);
+            var board = postMap("boards", query);
             return requiredText(board, "id");
         }
 
         Map<String, String> createLists(String boardId, List<String> names) {
-            Map<String, String> created = new LinkedHashMap<>();
+            var created = new LinkedHashMap<String, String>();
             for (String name : names) {
-                Map<String, Object> list =
+                var list =
                         postMap("lists", orderedMap("name", name, "idBoard", boardId, "pos", "bottom"));
                 created.put(name, requiredText(list, "id"));
             }
@@ -807,7 +807,7 @@ final class LiveTrelloE2eIT {
                     .collect(Collectors.toMap(
                             list -> requiredText(list, "name"),
                             list -> requiredText(list, "id"),
-                            (left, right) -> left,
+                            (left, _) -> left,
                             LinkedHashMap::new));
         }
 
@@ -822,7 +822,7 @@ final class LiveTrelloE2eIT {
         }
 
         CardRef createCard(String listId, String name, String description) {
-            Map<String, Object> card =
+            var card =
                     postMap("cards", orderedMap("idList", listId, "name", name, "desc", description));
             return new CardRef(requiredText(card, "id"));
         }
@@ -838,7 +838,7 @@ final class LiveTrelloE2eIT {
         }
 
         CardState cardState(String cardId) {
-            Map<String, Object> card = getMap(
+            var card = getMap(
                     "cards/" + encodeSegment(cardId),
                     Map.of(
                             "fields",
@@ -849,7 +849,7 @@ final class LiveTrelloE2eIT {
                             Integer.toString(TrelloClient.RECENT_COMMENT_ACTION_LIMIT)));
             Object actions = card.get("actions");
             List<?> comments = actions instanceof List<?> values ? values : List.of();
-            long workpadCount =
+            var workpadCount =
                     comments.stream().filter(LiveTrelloClient::isWorkpadComment).count();
             return new CardState(requiredText(card, "idList"), comments.size(), workpadCount);
         }
@@ -901,7 +901,7 @@ final class LiveTrelloE2eIT {
                         default -> throw new IllegalArgumentException("Unsupported Trello method: " + method);
                     };
             try {
-                HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+                var response = http.send(request, HttpResponse.BodyHandlers.ofString());
                 if (response.statusCode() < 200 || response.statusCode() >= 300) {
                     throw new AssertionError("Trello live E2E request failed with HTTP " + response.statusCode());
                 }
@@ -944,7 +944,7 @@ final class LiveTrelloE2eIT {
                     process.destroyForcibly();
                     process.waitFor();
                 }
-            } catch (InterruptedException e) {
+            } catch (InterruptedException _) {
                 Thread.currentThread().interrupt();
                 process.destroyForcibly();
             }
@@ -953,7 +953,7 @@ final class LiveTrelloE2eIT {
 
     private JsonNode getJson(String url) {
         try {
-            HttpResponse<String> response = http.send(
+            var response = http.send(
                     HttpRequest.newBuilder(URI.create(url))
                             .timeout(Duration.ofSeconds(5))
                             .GET()
@@ -973,7 +973,7 @@ final class LiveTrelloE2eIT {
 
     private void post(String url) {
         try {
-            HttpResponse<String> response = http.send(
+            var response = http.send(
                     HttpRequest.newBuilder(URI.create(url))
                             .timeout(Duration.ofSeconds(5))
                             .POST(HttpRequest.BodyPublishers.noBody())
@@ -1000,8 +1000,8 @@ final class LiveTrelloE2eIT {
     }
 
     private static Map<String, String> orderedMap(String... entries) {
-        Map<String, String> values = new LinkedHashMap<>();
-        for (int index = 0; index < entries.length; index += 2) {
+        var values = new LinkedHashMap<String, String>();
+        for (var index = 0; index < entries.length; index += 2) {
             values.put(entries[index], entries[index + 1]);
         }
         return values;

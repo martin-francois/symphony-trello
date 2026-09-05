@@ -16,7 +16,7 @@ final class WorkspaceAccessFlow {
             return options.additionalWritableRoots();
         }
 
-        List<Path> allowedPaths = new ArrayList<>();
+        var allowedPaths = new ArrayList<Path>();
         terminal.info("");
         terminal.info("Workspace access");
         terminal.info("This controls which files/folders sandboxed Trello card runs may use.");

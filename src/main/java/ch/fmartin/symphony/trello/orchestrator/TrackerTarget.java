@@ -9,7 +9,7 @@ import java.net.URI;
 import java.util.Locale;
 import java.util.Objects;
 
-/** Stable, non-secret identity for one tracker board namespace. */
+/// Stable, non-secret identity for one tracker board namespace.
 record TrackerTarget(String kind, String endpointFingerprint, String resolvedBoardId) {
     static TrackerTarget from(EffectiveConfig config) {
         EffectiveConfig.TrackerConfig tracker = config.tracker();
@@ -28,7 +28,7 @@ record TrackerTarget(String kind, String endpointFingerprint, String resolvedBoa
         String scheme = uri.getScheme().toLowerCase(Locale.ROOT);
         String hostWithoutTrailingDots = DOTS.trimTrailingFrom(uri.getHost().toLowerCase(Locale.ROOT));
         String host = hostWithoutTrailingDots.isEmpty() ? "." : hostWithoutTrailingDots;
-        int port = uri.getPort();
+        var port = uri.getPort();
         if (("http".equals(scheme) && port == 80) || ("https".equals(scheme) && port == 443)) {
             port = -1;
         }
@@ -52,10 +52,10 @@ record TrackerTarget(String kind, String endpointFingerprint, String resolvedBoa
         if (value == null || value.isEmpty()) {
             return "";
         }
-        StringBuilder normalized = new StringBuilder(value.length());
-        int percentEscapeCharactersRemaining = 0;
-        for (int index = 0; index < value.length(); index++) {
-            char current = value.charAt(index);
+        var normalized = new StringBuilder(value.length());
+        var percentEscapeCharactersRemaining = 0;
+        for (var index = 0; index < value.length(); index++) {
+            var current = value.charAt(index);
             if (percentEscapeCharactersRemaining > 0) {
                 normalized.append(Character.toUpperCase(current));
                 percentEscapeCharactersRemaining--;

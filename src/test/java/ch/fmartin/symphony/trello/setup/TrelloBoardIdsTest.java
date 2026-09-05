@@ -56,7 +56,7 @@ final class TrelloBoardIdsTest {
     @Test
     void rejectsNameLikeImportBoardSelectorsInsteadOfTruncatingThem() {
         // given
-        String nameSelector = "What? Board";
+        var nameSelector = "What? Board";
 
         // when
         Throwable thrown = catchThrowable(() -> TrelloBoardIds.parseImportBoardSelector(nameSelector));

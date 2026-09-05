@@ -148,7 +148,7 @@ public class CodexSkillInstaller {
             for (String line : readSafeFile(config).lines().toList()) {
                 String stripped = line.strip();
                 if (stripped.startsWith("worktree")) {
-                    int separator = stripped.indexOf('=');
+                    var separator = stripped.indexOf('=');
                     if (separator > 0) {
                         Path declaredWorktree = resolveFrom(
                                 resolvedGitDir,
@@ -174,7 +174,7 @@ public class CodexSkillInstaller {
     }
 
     private static String namespacedSkillBody(String skillName, byte[] rawBody) {
-        String body = new String(rawBody, StandardCharsets.UTF_8);
+        var body = new String(rawBody, StandardCharsets.UTF_8);
         String namespaced =
                 body.replaceFirst("(?m)^name: %s$".formatted(skillName), "name: " + INSTALLED_SKILL_PREFIX + skillName);
         for (String referencedSkill : SKILL_NAMES) {
@@ -228,7 +228,6 @@ public class CodexSkillInstaller {
         Files.writeString(
                 target,
                 body,
-                StandardCharsets.UTF_8,
                 StandardOpenOption.CREATE,
                 StandardOpenOption.TRUNCATE_EXISTING,
                 StandardOpenOption.WRITE,

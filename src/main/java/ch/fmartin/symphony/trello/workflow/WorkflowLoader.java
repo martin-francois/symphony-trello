@@ -31,7 +31,7 @@ public class WorkflowLoader {
         }
 
         ParsedMarkdown parsed = splitFrontMatter(lines);
-        Map<String, Object> config = parseYamlMap(parsed.frontMatter());
+        var config = parseYamlMap(parsed.frontMatter());
         return new WorkflowDefinition(absolute, config, parsed.body().trim());
     }
 
@@ -40,7 +40,7 @@ public class WorkflowLoader {
             return Map.of();
         }
         try {
-            LinkedHashMap<String, Object> parsed = yaml.readValue(frontMatter, YAML_MAP_TYPE);
+            var parsed = yaml.readValue(frontMatter, YAML_MAP_TYPE);
             if (parsed == null) {
                 return Map.of();
             }
@@ -55,7 +55,7 @@ public class WorkflowLoader {
         }
     }
 
-    private static void rejectNullTopLevelEntries(LinkedHashMap<String, Object> parsed) {
+    private static void rejectNullTopLevelEntries(Map<String, Object> parsed) {
         if (parsed.entrySet().stream().anyMatch(WorkflowLoader::hasNullKeyOrValue)) {
             throw new WorkflowException(
                     "workflow_parse_error", "Workflow front matter top-level keys and values must not be null");
@@ -71,8 +71,8 @@ public class WorkflowLoader {
             return new ParsedMarkdown(null, String.join(System.lineSeparator(), lines));
         }
 
-        int closing = -1;
-        for (int i = 1; i < lines.size(); i++) {
+        var closing = -1;
+        for (var i = 1; i < lines.size(); i++) {
             if ("---".equals(lines.get(i).trim())) {
                 closing = i;
                 break;

@@ -72,20 +72,20 @@ final class UsageLimitPauseIntegrationTest {
                         .formatted(fakeAppServer));
         Card first = TestCards.cardWithLabels("card-1", FIRST_CARD, "Ready for Codex", List.of("p1"));
         Card second = TestCards.cardWithLabels("card-2", SECOND_CARD, "Ready for Codex", List.of("p2"));
-        LocalTracker tracker = new LocalTracker(List.of(first, second));
+        var tracker = new LocalTracker(List.of(first, second));
         tracker.setPreparedCard(inProgress(first));
-        ObjectMapper json = new ObjectMapper();
-        WorkspaceManager workspaces = new WorkspaceManager(new HookRunner());
+        var json = new ObjectMapper();
+        var workspaces = new WorkspaceManager(new HookRunner());
         var codex = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
         var runner = new LocalAgentRunner(workspaces, new HookRunner(), codex, tracker, new PromptRenderer());
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
+        var orchestrator = new SymphonyOrchestrator(
                 new WorkflowLoader(), new ConfigResolver(), tracker, runner, new PromptRenderer(), workspaces);
         orchestrator.workflowPath = workflow;
 
         // when
         orchestrator.start();
         waitUntil(() -> orchestrator.snapshot().counts().retrying() == 1);
-        int candidateFetchesBeforeRefresh = tracker.candidateFetches.get();
+        var candidateFetchesBeforeRefresh = tracker.candidateFetches.get();
         orchestrator.tickNowForTests();
         RuntimeSnapshot snapshot = orchestrator.snapshot();
         orchestrator.stop();
@@ -132,7 +132,7 @@ final class UsageLimitPauseIntegrationTest {
     }
 
     private static void waitUntil(Condition condition) throws Exception {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
         while (System.nanoTime() < deadline) {
             if (condition.matches()) {
                 return;
@@ -169,7 +169,7 @@ final class UsageLimitPauseIntegrationTest {
         }
 
         private void setCardState(Card card) {
-            Map<String, CardLookupResult> updated = new LinkedHashMap<>(cardStates);
+            var updated = new LinkedHashMap<String, CardLookupResult>(cardStates);
             updated.put(card.id(), new CardLookupResult.Found(card));
             cardStates = Map.copyOf(updated);
         }

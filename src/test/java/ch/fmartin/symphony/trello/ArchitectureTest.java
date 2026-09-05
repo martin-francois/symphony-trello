@@ -97,8 +97,9 @@ class ArchitectureTest {
             .should()
             .dependOnClassesThat()
             .haveFullyQualifiedName("ch.fmartin.symphony.trello.setup.CommandRunner")
-            .because("normal worker status must use managed process identity and the local-status endpoint, not "
-                    + "platform service-manager commands");
+            .because("""
+                    normal worker status must use managed process identity and the local-status endpoint, not \
+                    platform service-manager commands""");
 
     @ArchTest
     static final ArchRule EXTRACTED_SETUP_FLOWS_DO_NOT_WRITE_TO_RAW_PRINT_STREAMS = noClasses()
@@ -159,8 +160,8 @@ class ArchitectureTest {
             public boolean test(JavaClass input) {
                 String name = input.getSimpleName();
                 return input.getPackageName().contains(".setup")
-                        && !name.equals("WorkflowConfigEditor")
-                        && !name.equals("TrelloBoardSetup");
+                        && !"WorkflowConfigEditor".equals(name)
+                        && !"TrelloBoardSetup".equals(name);
             }
         };
     }
@@ -170,10 +171,10 @@ class ArchitectureTest {
             @Override
             public boolean test(JavaClass input) {
                 String name = input.getSimpleName();
-                return name.equals("ManagedProcessStore")
-                        || name.equals("ManagedProcessPlatform")
-                        || name.equals("ProcessHandleManagedProcessPlatform")
-                        || name.equals("WindowsManagedProcessPlatform");
+                return "ManagedProcessStore".equals(name)
+                        || "ManagedProcessPlatform".equals(name)
+                        || "ProcessHandleManagedProcessPlatform".equals(name)
+                        || "WindowsManagedProcessPlatform".equals(name);
             }
         };
     }

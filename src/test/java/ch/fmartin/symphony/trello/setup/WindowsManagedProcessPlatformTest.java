@@ -59,10 +59,10 @@ final class WindowsManagedProcessPlatformTest {
     @Test
     void redirectedWorkerLogsAreRewrittenByStartProcess() {
         // given
-        WindowsManagedProcessPlatform platform = new WindowsManagedProcessPlatform();
+        var platform = new WindowsManagedProcessPlatform();
 
         // when
-        boolean appendsToExistingLogs = platform.appendsToExistingLogs();
+        var appendsToExistingLogs = platform.appendsToExistingLogs();
 
         // then
         assertThat(appendsToExistingLogs)
@@ -73,7 +73,7 @@ final class WindowsManagedProcessPlatformTest {
     @Test
     void windowsCommandLineQuotesEmptyWhitespaceAndEmbeddedQuotes() {
         // given
-        List<String> arguments = List.of("", "plain", "has space", "quote\"inside", "C:\\path with spaces\\");
+        var arguments = List.of("", "plain", "has space", "quote\"inside", "C:\\path with spaces\\");
 
         // when
         String commandLine = WindowsManagedProcessPlatform.windowsCommandLine(arguments);

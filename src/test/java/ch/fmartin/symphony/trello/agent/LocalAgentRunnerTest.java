@@ -55,11 +55,11 @@ final class LocalAgentRunnerTest {
 
         // when
         AgentRunResult result = runner.run(
-                new AgentRunner.AgentRunRequest(card, null, renderedPrompt, config, "worker-success", event -> {}));
+                new AgentRunner.AgentRunRequest(card, null, renderedPrompt, config, "worker-success", _ -> {}));
 
         // then
-        ArgumentCaptor<Path> workspace = ArgumentCaptor.forClass(Path.class);
-        ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
+        var workspace = ArgumentCaptor.forClass(Path.class);
+        var prompt = ArgumentCaptor.forClass(String.class);
         Path expectedWorkspace = config.workspace().root().resolve("TRELLO-local");
         assertThat(result).isEqualTo(AgentRunResult.ok());
         verify(codex)
@@ -87,7 +87,7 @@ final class LocalAgentRunnerTest {
     @Test
     void passesResolvedLiteralUrlDefaultToCodexPrompt() {
         // given
-        String repositoryUrl = "https://example.invalid/team/project.git";
+        var repositoryUrl = "https://example.invalid/team/project.git";
         EffectiveConfig config = configWithRepository(Map.of("default_url", repositoryUrl));
 
         // when
@@ -106,7 +106,7 @@ final class LocalAgentRunnerTest {
     @Test
     void passesResolvedEnvironmentUrlDefaultToCodexPrompt() {
         // given
-        String repositoryUrl = "ssh://git@example.invalid/team/project.git";
+        var repositoryUrl = "ssh://git@example.invalid/team/project.git";
         EffectiveConfig config =
                 configWithRepository(Map.of("default_url", "$REPOSITORY_URL"), Map.of("REPOSITORY_URL", repositoryUrl));
 
@@ -166,7 +166,7 @@ final class LocalAgentRunnerTest {
     @Test
     void includesUrlIdentityAndConfiguredPathCheckoutCandidateWhenBothAreConfigured() {
         // given
-        String repositoryUrl = "https://example.invalid/team/project.git";
+        var repositoryUrl = "https://example.invalid/team/project.git";
         Path lowerPriorityPath =
                 tempDir.resolve("lower-priority-repository").toAbsolutePath().normalize();
         EffectiveConfig config = configWithRepository(
@@ -226,7 +226,7 @@ final class LocalAgentRunnerTest {
     @Test
     void fullyQualifiedIssueTargetWithoutRepositoryDefaultIsNotARepositorySourceBlocker() {
         // given
-        String issueTarget = "https://github.example/team/project/issues/123";
+        var issueTarget = "https://github.example/team/project/issues/123";
         EffectiveConfig config = configWithRepository(Map.of());
         Card card = TestCards.cardWithText(
                 "card-1",
@@ -252,7 +252,7 @@ final class LocalAgentRunnerTest {
     void repositoryChangingCardReceivesCompleteCheckoutPreparationOrder() {
         // given
         EffectiveConfig config = configWithRepository(Map.of());
-        String cardTask = "Change README.md in https://github.example/target/project and prepare a pull request.";
+        var cardTask = "Change README.md in https://github.example/target/project and prepare a pull request.";
 
         // when
         String prompt = promptPassedToCodex(config, cardTask);
@@ -376,7 +376,7 @@ final class LocalAgentRunnerTest {
                 tempDir.resolve("lower-priority-checkout").toAbsolutePath().normalize();
         EffectiveConfig config = configWithRepository(
                 Map.of("default_url", "ftp://source.example/team/default.git", "default_path", defaultPath.toString()));
-        String cardTask = "Add a status note to #123. Do not change files.";
+        var cardTask = "Add a status note to #123. Do not change files.";
 
         // when
         String prompt = promptPassedToCodex(config, cardTask);
@@ -398,7 +398,7 @@ final class LocalAgentRunnerTest {
     void conflictingCardIdentitiesBlockInsteadOfOverridingMalformedWorkflowFallback() {
         // given
         EffectiveConfig config = configWithRepository(Map.of("default_url", "ftp://source.example/team/default.git"));
-        String cardTask = "Change files in https://github.example/team/one and https://github.example/team/two.";
+        var cardTask = "Change files in https://github.example/team/one and https://github.example/team/two.";
 
         // when
         String prompt = promptPassedToCodex(config, cardTask);
@@ -414,7 +414,7 @@ final class LocalAgentRunnerTest {
     @Test
     void fullyQualifiedIssueTargetRemainsDirectWhenDefaultNamesAnotherRepository() {
         // given
-        String issueTarget = "https://github.example/target/project/issues/123";
+        var issueTarget = "https://github.example/target/project/issues/123";
         EffectiveConfig config = configWithRepository(Map.of("default_url", "https://source.example/team/default.git"));
 
         // when
@@ -463,7 +463,7 @@ final class LocalAgentRunnerTest {
     @Test
     void explicitRemoteKeepsConfiguredPathCandidateButSuppressesDifferentWorkflowUrl() {
         // given
-        String cardRepository = "https://example.invalid/card-specific.git";
+        var cardRepository = "https://example.invalid/card-specific.git";
         Path defaultPath = tempDir.resolve("default-checkout");
         EffectiveConfig config = configWithRepository(
                 Map.of("default_url", "https://example.invalid/default.git", "default_path", defaultPath.toString()));
@@ -497,7 +497,7 @@ final class LocalAgentRunnerTest {
     @Test
     void explicitRemoteKeepsMatchingConfiguredPathCandidateAtFinalPromptBoundary() {
         // given
-        String cardRepository = "https://example.invalid/team/project.git";
+        var cardRepository = "https://example.invalid/team/project.git";
         Path defaultPath = tempDir.resolve("matching-checkout");
         EffectiveConfig config =
                 configWithRepository(Map.of("default_url", cardRepository, "default_path", defaultPath.toString()));
@@ -584,7 +584,7 @@ final class LocalAgentRunnerTest {
     @Test
     void explicitCardSourceSuppressesCredentialBearingWorkflowDefaultInPrompt() {
         // given
-        String secretDefault = "https://token@example.invalid/team/default.git?access_token=secret";
+        var secretDefault = "https://token@example.invalid/team/default.git?access_token=secret";
         EffectiveConfig config = configWithRepository(Map.of("default_url", secretDefault));
         Card card = TestCards.cardWithText(
                 "card-1",
@@ -626,7 +626,7 @@ final class LocalAgentRunnerTest {
     @Test
     void runtimePromptWarnsAgainstEchoingResolvedPrivateDefaultsToTrello() {
         // given
-        String privateRepositoryUrl = "https://private.example.invalid/team/project.git";
+        var privateRepositoryUrl = "https://private.example.invalid/team/project.git";
         EffectiveConfig config = configWithRepository(Map.of("default_url", privateRepositoryUrl));
 
         // when
@@ -659,7 +659,7 @@ final class LocalAgentRunnerTest {
     @Test
     void credentialBearingWorkflowDefaultIsSanitizedInCodexPrompt() {
         // given
-        String secretDefault = "https://token@example.invalid/team/project.git?access_token=secret";
+        var secretDefault = "https://token@example.invalid/team/project.git?access_token=secret";
         EffectiveConfig config = configWithRepository(Map.of("default_url", secretDefault));
 
         // when
@@ -686,7 +686,7 @@ final class LocalAgentRunnerTest {
 
         // when
         AgentRunResult result = runner.run(new AgentRunner.AgentRunRequest(
-                card, null, "prompt without shipped skill paths", config, "worker-plain", event -> {}));
+                card, null, "prompt without shipped skill paths", config, "worker-plain", _ -> {}));
 
         // then
         assertThat(result).isEqualTo(AgentRunResult.ok());
@@ -697,7 +697,7 @@ final class LocalAgentRunnerTest {
     @Test
     void repositoryDefaultUrlSkillPathDoesNotTriggerBundledSkillInstallation() {
         // given
-        String repositoryUrl = "https://example.invalid/.codex/skills/symphony-trello-commit.git";
+        var repositoryUrl = "https://example.invalid/.codex/skills/symphony-trello-commit.git";
         EffectiveConfig config = configWithRepository(Map.of("default_url", repositoryUrl));
 
         // when
@@ -731,7 +731,7 @@ final class LocalAgentRunnerTest {
     @Test
     void explicitRemoteCandidateSkillPathDoesNotTriggerBundledSkillInstallation() {
         // given
-        String repositoryUrl = "https://example.invalid/team/project.git";
+        var repositoryUrl = "https://example.invalid/team/project.git";
         Path repositoryPath = tempDir.resolve(".codex/skills/symphony-trello-candidate")
                 .toAbsolutePath()
                 .normalize();
@@ -771,7 +771,7 @@ final class LocalAgentRunnerTest {
                 "prompt",
                 config,
                 "worker-failed-hook",
-                event -> {}));
+                _ -> {}));
         runner.cancel("worker-failed-hook");
 
         // then
@@ -783,14 +783,14 @@ final class LocalAgentRunnerTest {
     void cancelInterruptsActiveWorkerThread() throws Exception {
         // given
         CodexAppServerClient codex = mock();
-        CountDownLatch entered = new CountDownLatch(1);
-        AtomicReference<Boolean> interrupted = new AtomicReference<>(false);
-        doAnswer(invocation -> {
+        var entered = new CountDownLatch(1);
+        var interrupted = new AtomicReference<Boolean>(false);
+        doAnswer(_ -> {
                     entered.countDown();
                     try {
                         blockUntilInterruptedOrTimedOut();
                         return AgentRunResult.ok();
-                    } catch (InterruptedException e) {
+                    } catch (InterruptedException _) {
                         Thread.currentThread().interrupt();
                         interrupted.set(true);
                         return AgentRunResult.fail("interrupted");
@@ -808,7 +808,7 @@ final class LocalAgentRunnerTest {
                         "prompt",
                         config,
                         "worker-cancel",
-                        event -> {}))));
+                        _ -> {}))));
         assertThat(entered.await(5, TimeUnit.SECONDS))
                 .as("the active worker enters its Codex session within 5 seconds")
                 .isTrue();
@@ -828,13 +828,13 @@ final class LocalAgentRunnerTest {
     void completedDuplicateIdentityCannotUnregisterNewerActiveWorker() throws Exception {
         // given
         CodexAppServerClient codex = mock();
-        CountDownLatch firstEntered = new CountDownLatch(1);
-        CountDownLatch secondEntered = new CountDownLatch(1);
-        CountDownLatch releaseFirst = new CountDownLatch(1);
-        AtomicBoolean secondInterrupted = new AtomicBoolean();
+        var firstEntered = new CountDownLatch(1);
+        var secondEntered = new CountDownLatch(1);
+        var releaseFirst = new CountDownLatch(1);
+        var secondInterrupted = new AtomicBoolean();
         when(codex.runSession(any(), any(), any(), any(), any(), any(), any())).thenAnswer(invocation -> {
             Card card = invocation.getArgument(1);
-            if (card.id().equals("card-first")) {
+            if ("card-first".equals(card.id())) {
                 firstEntered.countDown();
                 assertThat(releaseFirst.await(5, TimeUnit.SECONDS))
                         .as("the test releases the first duplicate-identity worker within 5 seconds")
@@ -845,7 +845,7 @@ final class LocalAgentRunnerTest {
             try {
                 blockUntilInterruptedOrTimedOut();
                 return AgentRunResult.ok();
-            } catch (InterruptedException e) {
+            } catch (InterruptedException _) {
                 Thread.currentThread().interrupt();
                 secondInterrupted.set(true);
                 return AgentRunResult.fail("interrupted");
@@ -853,8 +853,8 @@ final class LocalAgentRunnerTest {
         });
         var runner = runner(codex, CardLookupResult.Found::new);
         EffectiveConfig config = config(Map.of());
-        AtomicReference<AgentRunResult> firstResult = new AtomicReference<>();
-        AtomicReference<AgentRunResult> secondResult = new AtomicReference<>();
+        var firstResult = new AtomicReference<AgentRunResult>();
+        var secondResult = new AtomicReference<AgentRunResult>();
         Thread first = Thread.ofVirtual()
                 .start(() -> firstResult.set(runner.run(new AgentRunner.AgentRunRequest(
                         TestCards.card("card-first", "TRELLO-duplicate-first", "Ready for Codex"),
@@ -862,7 +862,7 @@ final class LocalAgentRunnerTest {
                         "prompt",
                         config,
                         "worker-duplicate",
-                        event -> {}))));
+                        _ -> {}))));
         assertThat(firstEntered.await(5, TimeUnit.SECONDS))
                 .as("the first duplicate-identity worker starts within 5 seconds")
                 .isTrue();
@@ -873,7 +873,7 @@ final class LocalAgentRunnerTest {
                         "prompt",
                         config,
                         "worker-duplicate",
-                        event -> {}))));
+                        _ -> {}))));
         assertThat(secondEntered.await(5, TimeUnit.SECONDS))
                 .as("the replacement duplicate-identity worker starts within 5 seconds")
                 .isTrue();
@@ -900,7 +900,7 @@ final class LocalAgentRunnerTest {
     void continuesSameSessionWhileCardRemainsActiveAndMaxTurnsAllowsIt() throws Exception {
         // given
         CodexAppServerClient codex = mock();
-        AtomicReference<CodexAppServerClient.TurnController> controller = new AtomicReference<>();
+        var controller = new AtomicReference<CodexAppServerClient.TurnController>();
         when(codex.runSession(any(), any(), any(), any(), any(), any(), any())).thenAnswer(invocation -> {
             controller.set(invocation.getArgument(6));
             return AgentRunResult.ok();
@@ -915,7 +915,7 @@ final class LocalAgentRunnerTest {
                 "prompt",
                 config,
                 "worker-multiturn",
-                event -> {}));
+                _ -> {}));
 
         // then
         assertThat(result).isEqualTo(AgentRunResult.ok());
@@ -927,14 +927,14 @@ final class LocalAgentRunnerTest {
     void stopsSameSessionWhenCardLeavesActiveStates() throws Exception {
         // given
         CodexAppServerClient codex = mock();
-        AtomicReference<CodexAppServerClient.TurnController> controller = new AtomicReference<>();
+        var controller = new AtomicReference<CodexAppServerClient.TurnController>();
         when(codex.runSession(any(), any(), any(), any(), any(), any(), any())).thenAnswer(invocation -> {
             controller.set(invocation.getArgument(6));
             return AgentRunResult.ok();
         });
         var runner = runner(
                 codex,
-                ignored -> new CardLookupResult.Found(TestCards.card("card-1", "TRELLO-review", "Human Review")));
+                _ -> new CardLookupResult.Found(TestCards.card("card-1", "TRELLO-review", "Human Review")));
         EffectiveConfig config = config(Map.of(), Map.of("max_turns", 2));
 
         // when
@@ -944,7 +944,7 @@ final class LocalAgentRunnerTest {
                 "prompt",
                 config,
                 "worker-stop",
-                event -> {}));
+                _ -> {}));
 
         // then
         assertThat(result).isEqualTo(AgentRunResult.ok());
@@ -966,7 +966,7 @@ final class LocalAgentRunnerTest {
 
     private String promptPassedToCodex(EffectiveConfig config, String renderedPrompt, Card card) {
         CodexAppServerClient codex = mock();
-        AtomicReference<String> prompt = new AtomicReference<>();
+        var prompt = new AtomicReference<String>();
         when(codex.runSession(any(), any(), any(), any(), any(), any(), any())).thenAnswer(invocation -> {
             prompt.set(invocation.getArgument(3));
             return AgentRunResult.ok();
@@ -974,7 +974,7 @@ final class LocalAgentRunnerTest {
         var runner = runner(codex, CardLookupResult.Found::new);
 
         AgentRunResult result = runner.run(new AgentRunner.AgentRunRequest(
-                card, null, renderedPrompt, config, "worker-runtime-prompt", event -> {}));
+                card, null, renderedPrompt, config, "worker-runtime-prompt", _ -> {}));
 
         assertThat(result).isEqualTo(AgentRunResult.ok());
         assertThat(prompt).hasValueSatisfying(value -> assertThat(value).isNotBlank());

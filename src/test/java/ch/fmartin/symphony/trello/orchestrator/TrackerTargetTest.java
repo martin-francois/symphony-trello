@@ -23,8 +23,8 @@ final class TrackerTargetTest {
     @Test
     void keepsDotSegmentsDistinctWhenRawEndpointPathIsSent() {
         // given
-        String trackerKind = "trello";
-        String boardId = "board-1";
+        var trackerKind = "trello";
+        var boardId = "board-1";
 
         // when
         TrackerTarget endpointWithDotSegments =
@@ -42,7 +42,7 @@ final class TrackerTargetTest {
         TrackerTarget withoutEmptyComponent = TrackerTarget.from("trello", "https://api.example.test/1", "board-1");
 
         // when
-        List<TrackerTarget> explicitlyEmptyComponents = List.of(
+        var explicitlyEmptyComponents = List.of(
                 TrackerTarget.from("trello", "https://@api.example.test/1", "board-1"),
                 TrackerTarget.from("trello", "https://api.example.test/1?", "board-1"),
                 TrackerTarget.from("trello", "https://api.example.test/1#", "board-1"));
@@ -54,9 +54,9 @@ final class TrackerTargetTest {
     @Test
     void onlyNormalizesSlashesAtEndOfWholeRawEndpoint() {
         // given
-        String trackerKind = "trello";
-        String boardId = "board-1";
-        String endpoint = "https://api.example.test/1";
+        var trackerKind = "trello";
+        var boardId = "board-1";
+        var endpoint = "https://api.example.test/1";
 
         // when
         TrackerTarget trailingSlashes = TrackerTarget.from(trackerKind, endpoint + "///", boardId);
@@ -83,7 +83,7 @@ final class TrackerTargetTest {
         TrackerTarget baseline = TrackerTarget.from("trello", "https://api.example.test/1", "board-1");
 
         // when
-        List<TrackerTarget> distinctTargets = List.of(
+        var distinctTargets = List.of(
                 TrackerTarget.from("trello", "https://other.example.test/1", "board-1"),
                 TrackerTarget.from("trello", "https://api.example.test:8443/1", "board-1"),
                 TrackerTarget.from("trello", "https://api.example.test/2", "board-1"),

@@ -10,7 +10,6 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -42,13 +41,13 @@ public class ConfigResolver {
 
     public EffectiveConfig resolve(WorkflowDefinition workflow) {
         Map<String, Object> root = workflow.config();
-        Map<String, Object> tracker = object(root, "tracker");
-        Map<String, Object> workspace = object(root, "workspace");
-        Map<String, Object> repository = object(root, "repository");
-        Map<String, Object> hooks = object(root, "hooks");
-        Map<String, Object> agent = object(root, "agent");
-        Map<String, Object> codex = object(root, "codex");
-        boolean codexDangerFullAccess = environmentValue("SYMPHONY_CODEX_DANGER_FULL_ACCESS")
+        var tracker = object(root, "tracker");
+        var workspace = object(root, "workspace");
+        var repository = object(root, "repository");
+        var hooks = object(root, "hooks");
+        var agent = object(root, "agent");
+        var codex = object(root, "codex");
+        var codexDangerFullAccess = environmentValue("SYMPHONY_CODEX_DANGER_FULL_ACCESS")
                 .map(Boolean::parseBoolean)
                 .orElse(false);
         try {
@@ -58,7 +57,7 @@ public class ConfigResolver {
         }
         object(root, "polling");
         object(root, "server");
-        Map<String, Object> trelloTools = object(root, "trello_tools");
+        var trelloTools = object(root, "trello_tools");
         object(tracker, "priority_labels");
         object(agent, "max_concurrent_agents_by_state");
         TypedWorkflowConfig typedWorkflow = WorkflowConfigIngestion.collect(workflow, environmentResolver);
@@ -81,7 +80,7 @@ public class ConfigResolver {
             throw new ConfigException("codex_sandbox_policy_invalid", e.getMessage(), e);
         }
 
-        boolean writes = bool(trelloTools, "allow_writes", false);
+        var writes = bool(trelloTools, "allow_writes", false);
         return new EffectiveConfig(
                 workflow.path(),
                 new EffectiveConfig.TrackerConfig(
@@ -238,7 +237,7 @@ public class ConfigResolver {
 
     private String environmentString(Map<String, Object> root, String key, String defaultValue) {
         String configured = string(root, key, defaultValue);
-        Optional<String> reference = EnvironmentReferences.referenceName(configured);
+        var reference = EnvironmentReferences.referenceName(configured);
         // Plain branching because an unresolved reference must yield the nullable default, which
         // Optional.map would silently turn back into the raw reference text.
         if (reference.isPresent()) {
@@ -249,7 +248,7 @@ public class ConfigResolver {
 
     private String optionalEnvironmentString(Map<String, Object> root, String key) {
         String configured = optionalString(root, key);
-        Optional<String> reference = EnvironmentReferences.referenceName(configured);
+        var reference = EnvironmentReferences.referenceName(configured);
         if (reference.isPresent()) {
             return environmentValue(reference.get())
                     .filter(value -> !blank(value))
@@ -270,7 +269,7 @@ public class ConfigResolver {
     private Path optionalLowerPriorityRepositoryPath(Path workflowDirectory, Map<String, Object> repository) {
         try {
             return optionalRepositoryPath(workflowDirectory, repository);
-        } catch (ConfigException ignored) {
+        } catch (ConfigException _) {
             // The URL remains the selected source. An unusable lower-priority path cannot be a
             // checkout candidate and retains the existing URL-over-path compatibility behavior.
             return null;
@@ -280,7 +279,7 @@ public class ConfigResolver {
     private String secret(
             Path workflowDirectory, Map<String, Object> root, String key, String displayName, String defaultEnv) {
         String configured = string(root, key, "$" + defaultEnv);
-        Optional<String> reference = EnvironmentReferences.referenceName(configured);
+        var reference = EnvironmentReferences.referenceName(configured);
         if (reference.isPresent()) {
             return environmentValueOrDefault(reference.get(), null);
         }
@@ -301,12 +300,12 @@ public class ConfigResolver {
     private String fileSecret(Path workflowDirectory, String displayName, String configuredPath) {
         Path secretPath = path(workflowDirectory, configuredPath);
         try {
-            long size = Files.size(secretPath);
+            var size = Files.size(secretPath);
             if (size > MAX_SECRET_BYTES) {
                 throw new ConfigException(
                         "secret_file_too_large", displayName + " secret file is too large: " + secretPath);
             }
-            return stripTrailingLineBreaks(Files.readString(secretPath, StandardCharsets.UTF_8));
+            return stripTrailingLineBreaks(Files.readString(secretPath));
         } catch (IOException e) {
             throw new ConfigException(
                     "secret_file_read_error", displayName + " secret file cannot be read: " + secretPath, e);
@@ -330,8 +329,8 @@ public class ConfigResolver {
         // Scheme comparison is case-insensitive like TrelloApiEndpoint.normalize on the setup
         // side, so a workflow endpoint accepted during setup cannot fail here over letter case.
         String scheme = uri.getScheme() == null ? null : uri.getScheme().toLowerCase(Locale.ROOT);
-        boolean httpScheme = "http".equals(scheme) || "https".equals(scheme);
-        boolean hasHost = uri.getHost() != null;
+        var httpScheme = "http".equals(scheme) || "https".equals(scheme);
+        var hasHost = uri.getHost() != null;
         if (!httpScheme || !hasHost) {
             throw new ConfigException(
                     "invalid_tracker_endpoint", "tracker.endpoint must be an absolute http(s) URL with a host");
@@ -347,7 +346,7 @@ public class ConfigResolver {
     }
 
     private static Duration millis(WorkflowIntegerSetting setting, String key, long defaultValue) {
-        int value = integer(setting, (int) defaultValue);
+        var value = integer(setting, (int) defaultValue);
         if (value < 0) {
             throw new ConfigException("config_value_error", key + " must be non-negative");
         }
@@ -390,9 +389,9 @@ public class ConfigResolver {
     }
 
     private List<Path> additionalWritableRoots(Path workflowDirectory, Map<String, Object> codex) {
-        Stream<Path> configuredRoots = list(codex, "additional_writable_roots", List.of()).stream()
+        var configuredRoots = list(codex, "additional_writable_roots", List.of()).stream()
                 .map(value -> path(workflowDirectory, value));
-        Stream<Path> environmentRoots = environmentValue("SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS").stream()
+        var environmentRoots = environmentValue("SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS").stream()
                 .flatMap(PATH_SEPARATOR::splitToStream)
                 .map(String::trim)
                 .filter(value -> !value.isBlank())
@@ -427,14 +426,14 @@ public class ConfigResolver {
         if (configured == null) {
             return null;
         }
-        Optional<String> reference = EnvironmentReferences.referenceName(configured);
+        var reference = EnvironmentReferences.referenceName(configured);
         if (reference.isPresent()) {
             return environmentValue(reference.get())
                     .filter(value -> !blank(value))
                     .orElse(null);
         }
         if (configured.startsWith("$")) {
-            int separator = configured.indexOf('/');
+            var separator = configured.indexOf('/');
             if (separator > 1) {
                 String name = configured.substring(1, separator);
                 if (EnvironmentReferences.referenceName("$" + name).isPresent()) {
@@ -457,7 +456,7 @@ public class ConfigResolver {
         if (expanded.startsWith("$") && expanded.indexOf('/') < 0) {
             expanded = environmentResolver.apply(expanded.substring(1)).orElse(expanded);
         } else if (expanded.startsWith("$")) {
-            int separator = expanded.indexOf('/');
+            var separator = expanded.indexOf('/');
             String name = expanded.substring(1, separator);
             String suffix = expanded.substring(separator);
             expanded = environmentResolver

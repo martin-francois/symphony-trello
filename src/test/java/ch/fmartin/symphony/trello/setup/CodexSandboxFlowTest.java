@@ -12,10 +12,10 @@ final class CodexSandboxFlowTest {
     @Test
     void defaultNoKeepsSandboxEnabled() throws Exception {
         // given
-        RecordingTerminal terminal = new RecordingTerminal("n");
+        var terminal = new RecordingTerminal("n");
 
         // when
-        boolean dangerFullAccess =
+        var dangerFullAccess =
                 new CodexSandboxFlow().resolve(SetupOptionFactory.options(Path.of("target/sandbox-no")), terminal);
 
         // then
@@ -31,10 +31,10 @@ final class CodexSandboxFlowTest {
     @Test
     void acceptedPromptEnablesDangerFullAccess() throws Exception {
         // given
-        RecordingTerminal terminal = new RecordingTerminal("y");
+        var terminal = new RecordingTerminal("y");
 
         // when
-        boolean dangerFullAccess =
+        var dangerFullAccess =
                 new CodexSandboxFlow().resolve(SetupOptionFactory.options(Path.of("target/sandbox-yes")), terminal);
 
         // then
@@ -52,10 +52,10 @@ final class CodexSandboxFlowTest {
         // given
         LocalSetup.Options options = SetupOptionFactory.options(
                 Path.of("target/sandbox-flag"), false, Optional.empty(), List.of(), false, true);
-        RecordingTerminal terminal = new RecordingTerminal();
+        var terminal = new RecordingTerminal();
 
         // when
-        boolean dangerFullAccess = new CodexSandboxFlow().resolve(options, terminal);
+        var dangerFullAccess = new CodexSandboxFlow().resolve(options, terminal);
 
         // then
         assertThat(dangerFullAccess)
@@ -71,10 +71,10 @@ final class CodexSandboxFlowTest {
         // given
         LocalSetup.Options options = SetupOptionFactory.options(
                 Path.of("target/sandbox-non-interactive"), true, Optional.empty(), List.of(), false, true);
-        RecordingTerminal terminal = new RecordingTerminal();
+        var terminal = new RecordingTerminal();
 
         // when
-        boolean dangerFullAccess = new CodexSandboxFlow().resolve(options, terminal);
+        var dangerFullAccess = new CodexSandboxFlow().resolve(options, terminal);
 
         // then
         assertThat(dangerFullAccess)

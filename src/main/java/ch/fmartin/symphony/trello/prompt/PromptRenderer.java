@@ -21,14 +21,14 @@ public class PromptRenderer {
     public String render(String template, Card card, Integer attempt) {
         String effectiveTemplate = template == null || template.isBlank() ? DEFAULT_PROMPT : template;
         Map<String, Object> cardData = card.toTemplateMap();
-        Map<String, Object> context = new HashMap<>();
+        var context = new HashMap<String, Object>();
         context.put("card", cardData);
         context.put("issue", cardData);
         context.put("attempt", attempt);
 
         try {
             PebbleTemplate compiled = engine.getLiteralTemplate(effectiveTemplate);
-            StringWriter writer = new StringWriter();
+            var writer = new StringWriter();
             compiled.evaluate(writer, context);
             return writer.toString();
         } catch (PebbleException e) {

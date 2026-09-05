@@ -124,7 +124,7 @@ public final class RepositorySourceFuzzer {
     }
 
     private static boolean unsafePromptLineCharacter(int codePoint) {
-        int type = Character.getType(codePoint);
+        var type = Character.getType(codePoint);
         return Character.isISOControl(codePoint)
                 || type == Character.LINE_SEPARATOR
                 || type == Character.PARAGRAPH_SEPARATOR;

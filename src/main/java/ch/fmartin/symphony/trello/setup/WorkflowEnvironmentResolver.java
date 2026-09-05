@@ -11,7 +11,7 @@ final class WorkflowEnvironmentResolver {
 
     static Function<String, Optional<String>> resolver(Map<String, String> environment, Path envPath) {
         Path dotenvPath = envPath == null ? LocalEnvironment.defaultDotenv(environment) : envPath;
-        Map<String, String> dotenv = LocalEnvironment.load(dotenvPath);
+        var dotenv = LocalEnvironment.load(dotenvPath);
         return name -> value(environment, dotenv, name);
     }
 
@@ -23,7 +23,7 @@ final class WorkflowEnvironmentResolver {
 
     private static Optional<String> dotenvHttpPortOverrideSource(Map<String, String> environment, Path envPath) {
         Path dotenvPath = envPath == null ? LocalEnvironment.defaultDotenv(environment) : envPath;
-        Map<String, String> dotenv = LocalEnvironment.load(dotenvPath);
+        var dotenv = LocalEnvironment.load(dotenvPath);
         return firstPresentHttpPortName(dotenv).map(name -> name + " in " + dotenvPath);
     }
 

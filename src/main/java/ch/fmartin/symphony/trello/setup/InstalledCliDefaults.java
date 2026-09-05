@@ -64,10 +64,10 @@ final class InstalledCliDefaults {
     }
 
     private static List<String> setupLocal(List<String> args, InstalledPaths paths) {
-        List<String> defaults = new ArrayList<>();
-        boolean explicitConfigDir = hasOption(args, "--config-dir");
-        Optional<String> explicitConfigDirValue = optionValue(args, "--config-dir");
-        boolean lifecycle = setupLocalLifecycleSubcommand(args.subList(1, args.size()));
+        var defaults = new ArrayList<String>();
+        var explicitConfigDir = hasOption(args, "--config-dir");
+        var explicitConfigDirValue = optionValue(args, "--config-dir");
+        var lifecycle = setupLocalLifecycleSubcommand(args.subList(1, args.size()));
         if (!explicitConfigDir) {
             paths.configDir().ifPresent(value -> add(defaults, "--config-dir", value));
         }
@@ -85,7 +85,7 @@ final class InstalledCliDefaults {
     }
 
     private static List<String> boardSetup(List<String> args, InstalledPaths paths) {
-        List<String> defaults = new ArrayList<>();
+        var defaults = new ArrayList<String>();
         addIfMissing(defaults, args, "--workspace-root", paths.workspaceRoot());
         // Keep connected-board rows in the installed manifest even for explicit external workflow
         // paths, so default diagnostics and board-selector lifecycle commands keep seeing them.
@@ -102,9 +102,9 @@ final class InstalledCliDefaults {
     }
 
     private static List<String> lifecycle(List<String> args, InstalledPaths paths) {
-        List<String> defaults = new ArrayList<>();
-        boolean explicitConfigDir = hasOption(args, "--config-dir");
-        Optional<String> explicitConfigDirValue = optionValue(args, "--config-dir");
+        var defaults = new ArrayList<String>();
+        var explicitConfigDir = hasOption(args, "--config-dir");
+        var explicitConfigDirValue = optionValue(args, "--config-dir");
         if (!explicitConfigDir) {
             paths.configDir().ifPresent(value -> add(defaults, "--config-dir", value));
             addIfMissing(defaults, args, "--workspace-root", paths.workspaceRoot());
@@ -129,7 +129,7 @@ final class InstalledCliDefaults {
         if (defaults.isEmpty()) {
             return args;
         }
-        List<String> result = new ArrayList<>(1 + defaults.size() + Math.max(0, args.size() - 1));
+        var result = new ArrayList<String>(1 + defaults.size() + Math.max(0, args.size() - 1));
         result.add(args.getFirst());
         result.addAll(defaults);
         result.addAll(args.subList(1, args.size()));
@@ -152,7 +152,7 @@ final class InstalledCliDefaults {
     }
 
     private static Optional<String> optionValue(List<String> args, String option) {
-        for (int index = 0; index < args.size(); index++) {
+        for (var index = 0; index < args.size(); index++) {
             String value = args.get(index);
             if (value.equals(option)) {
                 return index + 1 < args.size() ? Optional.of(args.get(index + 1)) : Optional.empty();
@@ -165,7 +165,7 @@ final class InstalledCliDefaults {
     }
 
     private static boolean setupLocalLifecycleSubcommand(List<String> args) {
-        int index = 0;
+        var index = 0;
         while (index < args.size()) {
             String value = args.get(index);
             if (SETUP_LOCAL_LIFECYCLE_COMMANDS.contains(value)) {

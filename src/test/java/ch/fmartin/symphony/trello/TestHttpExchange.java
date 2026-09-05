@@ -12,7 +12,7 @@ public final class TestHttpExchange {
     private TestHttpExchange() {}
 
     public static Map<String, String> query(HttpExchange exchange) {
-        Map<String, String> values = new LinkedHashMap<>();
+        var values = new LinkedHashMap<String, String>();
         String rawQuery = exchange.getRequestURI().getRawQuery();
         if (rawQuery == null || rawQuery.isBlank()) {
             return values;

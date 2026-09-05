@@ -1,7 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -34,7 +33,7 @@ final class ProcessCommandRunner implements CommandRunner {
                 process.waitFor(Duration.ofSeconds(1));
                 return new CommandResult(CommandResult.TIMED_OUT_EXIT_CODE, "command timed out");
             }
-            String output = Files.readString(outputFile, StandardCharsets.UTF_8);
+            String output = Files.readString(outputFile);
             return new CommandResult(process.exitValue(), output);
         } catch (IOException e) {
             return CommandResult.launchFailed(e.getMessage());
@@ -59,7 +58,7 @@ final class ProcessCommandRunner implements CommandRunner {
         }
         try {
             Files.deleteIfExists(outputFile);
-        } catch (IOException ignored) {
+        } catch (IOException _) {
             // Best effort: command output is diagnostic-only and the OS temp cleaner can remove it later.
         }
     }

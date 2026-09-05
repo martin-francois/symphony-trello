@@ -20,7 +20,7 @@ final class InstalledCliDefaultsTest {
         InstalledCliDefaults.InstalledPaths paths = installedPaths();
 
         // when
-        List<String> args = InstalledCliDefaults.apply(List.of("status"), paths);
+        var args = InstalledCliDefaults.apply(List.of("status"), paths);
 
         // then
         assertThat(args)
@@ -43,7 +43,7 @@ final class InstalledCliDefaultsTest {
         Path isolatedConfigDir = Path.of("/tmp/isolated-config");
 
         // when
-        List<String> args =
+        var args =
                 InstalledCliDefaults.apply(List.of("diagnostics", "--config-dir", isolatedConfigDir.toString()), paths);
 
         // then
@@ -65,7 +65,7 @@ final class InstalledCliDefaultsTest {
         // given
         Path environmentWorkspaceRoot = Path.of("/tmp/environment-workspaces");
         Path environmentStateHome = Path.of("/tmp/environment-state");
-        InstalledCliDefaults.InstalledPaths paths = new InstalledCliDefaults.InstalledPaths(
+        var paths = new InstalledCliDefaults.InstalledPaths(
                 Optional.of(configDir.toString()),
                 Optional.of(environmentWorkspaceRoot.toString()),
                 Optional.of(environmentStateHome.toString()),
@@ -74,7 +74,7 @@ final class InstalledCliDefaultsTest {
                 Optional.of(stateHome.toString()));
 
         // when
-        List<String> args = InstalledCliDefaults.apply(List.of("status", "--config-dir", "/tmp/other-config"), paths);
+        var args = InstalledCliDefaults.apply(List.of("status", "--config-dir", "/tmp/other-config"), paths);
 
         // then
         assertThat(args)
@@ -96,7 +96,7 @@ final class InstalledCliDefaultsTest {
         InstalledCliDefaults.InstalledPaths paths = installedPaths();
 
         // when
-        List<String> args = InstalledCliDefaults.apply(List.of("setup-local", "check"), paths);
+        var args = InstalledCliDefaults.apply(List.of("setup-local", "check"), paths);
 
         // then
         assertThat(args).containsExactly("setup-local", "--config-dir", configDir.toString(), "check");
@@ -108,7 +108,7 @@ final class InstalledCliDefaultsTest {
         InstalledCliDefaults.InstalledPaths paths = installedPaths();
 
         // when
-        List<String> args = InstalledCliDefaults.apply(List.of("setup-local", "--board", "SYNTH001"), paths);
+        var args = InstalledCliDefaults.apply(List.of("setup-local", "--board", "SYNTH001"), paths);
 
         // then
         assertThat(args)
@@ -128,7 +128,7 @@ final class InstalledCliDefaultsTest {
         InstalledCliDefaults.InstalledPaths paths = installedPaths();
 
         // when
-        List<String> args = InstalledCliDefaults.apply(List.of("new-board", "--name", "Synthetic Board"), paths);
+        var args = InstalledCliDefaults.apply(List.of("new-board", "--name", "Synthetic Board"), paths);
 
         // then
         assertThat(args)
@@ -148,7 +148,7 @@ final class InstalledCliDefaultsTest {
         InstalledCliDefaults.InstalledPaths paths = installedPaths();
 
         // when
-        List<String> args = InstalledCliDefaults.apply(
+        var args = InstalledCliDefaults.apply(
                 List.of("import-board", "--board", "SYNTH001", "--manifest", "/tmp/custom-manifest.json"), paths);
 
         // then
@@ -166,13 +166,13 @@ final class InstalledCliDefaultsTest {
     @Test
     void reportsUserStateHomeOverrideWhenEnvironmentDiffersFromInstalledDefault() {
         // given
-        Map<String, String> environment =
+        var environment =
                 Map.of("SYMPHONY_TRELLO_STATE_HOME", "/tmp/state", "SYMPHONY_TRELLO_CONFIG_DIR", configDir.toString());
         InstalledCliDefaults.InstalledPaths paths = InstalledCliDefaults.InstalledPaths.from(
                 environment, Map.of(InstalledCliDefaults.INSTALLED_STATE_HOME_PROPERTY, stateHome.toString()));
 
         // when
-        boolean userOverride = paths.stateHomeFromUserEnvironment();
+        var userOverride = paths.stateHomeFromUserEnvironment();
 
         // then
         assertThat(userOverride)

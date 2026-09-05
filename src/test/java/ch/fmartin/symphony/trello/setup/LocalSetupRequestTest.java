@@ -13,7 +13,7 @@ final class LocalSetupRequestTest {
     @Test
     void rejectsOutOfBoundsMaxAgentsAtConstruction() {
         // given
-        int unboundedMaxAgents = 999999;
+        var unboundedMaxAgents = 999999;
 
         // when
         Throwable thrown = catchThrowable(() -> request(unboundedMaxAgents));
@@ -29,7 +29,7 @@ final class LocalSetupRequestTest {
     @Test
     void rejectsZeroMaxAgentsAtConstruction() {
         // given
-        int zeroMaxAgents = 0;
+        var zeroMaxAgents = 0;
 
         // when
         Throwable thrown = catchThrowable(() -> request(zeroMaxAgents));

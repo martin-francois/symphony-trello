@@ -27,7 +27,7 @@ final class MarkdownTable {
 
     static MarkdownTable leftAligned(List<String> headers) {
         return new MarkdownTable(
-                headers, headers.stream().map(header -> Alignment.LEFT).toList());
+                headers, headers.stream().map(_ -> Alignment.LEFT).toList());
     }
 
     MarkdownTable row(Object... cells) {

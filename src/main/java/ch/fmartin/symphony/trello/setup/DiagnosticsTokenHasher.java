@@ -74,8 +74,8 @@ final class DiagnosticsTokenHasher {
             return Optional.empty();
         }
         try {
-            return parseKey(Files.readString(keyPath, StandardCharsets.UTF_8)).map(DiagnosticsTokenHasher::persisted);
-        } catch (IOException ignored) {
+            return parseKey(Files.readString(keyPath)).map(DiagnosticsTokenHasher::persisted);
+        } catch (IOException _) {
             return Optional.empty();
         }
     }
@@ -89,9 +89,9 @@ final class DiagnosticsTokenHasher {
             }
             createKeyFile(keyPath, key);
             return Optional.of(persisted(key));
-        } catch (FileAlreadyExistsException ignored) {
+        } catch (FileAlreadyExistsException _) {
             return readKey(keyPath);
-        } catch (IOException ignored) {
+        } catch (IOException _) {
             return Optional.of(temporary(key));
         }
     }
@@ -99,12 +99,11 @@ final class DiagnosticsTokenHasher {
     private static void createKeyFile(Path keyPath, byte[] key) throws IOException {
         if (supportsPosixFilePermissions(keyPath)) {
             Files.createFile(keyPath, PosixFilePermissions.asFileAttribute(ownerOnlyKeyPermissions()));
-            Files.writeString(keyPath, HexFormat.of().formatHex(key) + "\n", StandardCharsets.UTF_8);
+            Files.writeString(keyPath, HexFormat.of().formatHex(key) + "\n");
         } else {
             Files.writeString(
                     keyPath,
                     HexFormat.of().formatHex(key) + "\n",
-                    StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE_NEW,
                     StandardOpenOption.WRITE);
         }
@@ -127,7 +126,7 @@ final class DiagnosticsTokenHasher {
         }
         try {
             return Optional.of(HexFormat.of().parseHex(hex));
-        } catch (IllegalArgumentException ignored) {
+        } catch (IllegalArgumentException _) {
             return Optional.empty();
         }
     }

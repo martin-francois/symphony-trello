@@ -56,7 +56,7 @@ final class RepositorySourceResolverTest {
     @Test
     void preservesSafeUriPercentEncodingWithoutCreatingDelimitersOrSpaces() {
         // given
-        String repository = "https://github.example/team/%3Fquery%23fragment%20space%25percent%2Fslash.git";
+        var repository = "https://github.example/team/%3Fquery%23fragment%20space%25percent%2Fslash.git";
         Card card = cardWithDescription("Repository URL: " + repository);
 
         // when
@@ -199,7 +199,7 @@ final class RepositorySourceResolverTest {
     void blankUrlLabelInTitleSuppressesWorkflowDefault() {
         // given
         Card card = cardWithText("Repository URL:", "No source in description", List.of());
-        EffectiveConfig.RepositoryConfig repository =
+        var repository =
                 new EffectiveConfig.RepositoryConfig("https://github.example/team/default.git", null);
 
         // when
@@ -214,7 +214,7 @@ final class RepositorySourceResolverTest {
     void blankPathLabelInDescriptionSuppressesWorkflowDefault() {
         // given
         Card card = cardWithDescription("Repository path:");
-        EffectiveConfig.RepositoryConfig repository =
+        var repository =
                 new EffectiveConfig.RepositoryConfig("https://github.example/team/default.git", null);
 
         // when
@@ -229,7 +229,7 @@ final class RepositorySourceResolverTest {
     void blankLabelInCommentSuppressesWorkflowDefault() {
         // given
         Card card = cardWithText("Implement feature", "No source in description", List.of(comment("Repo:")));
-        EffectiveConfig.RepositoryConfig repository =
+        var repository =
                 new EffectiveConfig.RepositoryConfig("https://github.example/team/default.git", null);
 
         // when
@@ -258,7 +258,7 @@ final class RepositorySourceResolverTest {
     @ParameterizedTest(name = "{0}")
     void recognizesRepositoryDeclarationsAfterRegexLineBreaks(String scenario, String lineBreak) {
         // given
-        String expectedSource = "https://github.example/team/project.git";
+        var expectedSource = "https://github.example/team/project.git";
         String description = "prefix" + lineBreak + "Repository URL: " + expectedSource;
         Card card = cardWithDescription(description);
 
@@ -379,7 +379,7 @@ final class RepositorySourceResolverTest {
     void explicitSourceSuppressesInvalidWorkflowDefault() {
         // given
         Card card = cardWithDescription("Repository URL: https://github.example/team/card.git");
-        EffectiveConfig.RepositoryConfig repository = new EffectiveConfig.RepositoryConfig(
+        var repository = new EffectiveConfig.RepositoryConfig(
                 "https://token@example.invalid/team/default.git?access_token=secret", null);
 
         // when
@@ -394,7 +394,7 @@ final class RepositorySourceResolverTest {
     void invalidExplicitSourceSuppressesEveryWorkflowDefault() {
         // given
         Card card = cardWithDescription("Repository URL: ftp://example.invalid/team/project.git");
-        EffectiveConfig.RepositoryConfig repository = new EffectiveConfig.RepositoryConfig(
+        var repository = new EffectiveConfig.RepositoryConfig(
                 "https://github.example/team/default.git", tempDir.resolve("repo"));
 
         // when
@@ -409,7 +409,7 @@ final class RepositorySourceResolverTest {
     void invalidExplicitSourceNeverFallsBackToWorkflowDefault() {
         // given
         Card card = cardWithDescription("Repository URL: ftp://example.invalid/team/project.git");
-        EffectiveConfig.RepositoryConfig repository =
+        var repository =
                 new EffectiveConfig.RepositoryConfig("https://github.example/team/default.git", null);
 
         // when
@@ -503,7 +503,7 @@ final class RepositorySourceResolverTest {
         String value = "before" + Character.toString(codePoint) + "after";
 
         // when
-        boolean safe = RepositorySourceText.safePromptLine(value);
+        var safe = RepositorySourceText.safePromptLine(value);
 
         // then
         assertThat(safe).as(scenario).isFalse();
@@ -553,7 +553,7 @@ final class RepositorySourceResolverTest {
     @Test
     void selectsWorkflowDefaultUrlWhenCardHasNoExplicitSource() {
         // given
-        EffectiveConfig.RepositoryConfig repository =
+        var repository =
                 new EffectiveConfig.RepositoryConfig("https://github.example/team/default.git", null);
 
         // when
@@ -568,7 +568,7 @@ final class RepositorySourceResolverTest {
     @Test
     void preservesTokenPunctuationCompatibilityForExistingWorkflowDefaults() {
         // given
-        EffectiveConfig.RepositoryConfig repository =
+        var repository =
                 new EffectiveConfig.RepositoryConfig("<https://github.example/team/default.git>.", null);
 
         // when
@@ -582,7 +582,7 @@ final class RepositorySourceResolverTest {
     @Test
     void rejectsBarePathWorkflowDefaultUrlInsteadOfConvertingItToLocalPath() {
         // given
-        EffectiveConfig.RepositoryConfig repository = new EffectiveConfig.RepositoryConfig("relative/repo.git", null);
+        var repository = new EffectiveConfig.RepositoryConfig("relative/repo.git", null);
 
         // when
         RepositorySourceSelection selection = resolver.select(cardWithDescription("No source"), repository);
@@ -597,7 +597,7 @@ final class RepositorySourceResolverTest {
     void rejectsWorkflowDefaultUrlWithEmptyQueryOrFragmentMarkerAndSuppressesPath(String defaultUrl) {
         // given
         Path fallbackPath = tempDir.resolve("fallback").toAbsolutePath().normalize();
-        EffectiveConfig.RepositoryConfig repository = new EffectiveConfig.RepositoryConfig(defaultUrl, fallbackPath);
+        var repository = new EffectiveConfig.RepositoryConfig(defaultUrl, fallbackPath);
 
         // when
         RepositorySourceSelection selection = resolver.select(cardWithDescription("No source"), repository);
@@ -632,7 +632,7 @@ final class RepositorySourceResolverTest {
     void selectsWorkflowDefaultPathWhenUrlIsAbsent() {
         // given
         Path repositoryPath = tempDir.resolve("repo").toAbsolutePath().normalize();
-        EffectiveConfig.RepositoryConfig repository = new EffectiveConfig.RepositoryConfig(null, repositoryPath);
+        var repository = new EffectiveConfig.RepositoryConfig(null, repositoryPath);
 
         // when
         RepositorySourceSelection selection = resolver.select(cardWithDescription("No source"), repository);

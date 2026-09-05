@@ -16,7 +16,7 @@ final class CodexModelSelectionFlow {
         String model = valueOrDefault(options.codexModel(), defaults.model());
         String reasoningEffort = reasoningEffortDefault(options, selectionDefaults, model);
         Optional<String> modelOverride = options.codexModel();
-        Optional<String> reasoningEffortOverride =
+        var reasoningEffortOverride =
                 reasoningEffortOverride(options, selectionDefaults, defaults, modelOverride, model, reasoningEffort);
         if (options.nonInteractive()) {
             validateExplicitReasoningEffort(options, selectionDefaults, model, reasoningEffort);
@@ -103,9 +103,9 @@ final class CodexModelSelectionFlow {
             if (modelOverride.isPresent()) {
                 return selectionDefaults
                         .reasoningEffortForSelectedModel(model, defaults, false)
-                        .map(ignored -> reasoningEffort);
+                        .map(_ -> reasoningEffort);
             }
-            return selectionDefaults.reasoningEffortForModel(model).map(ignored -> reasoningEffort);
+            return selectionDefaults.reasoningEffortForModel(model).map(_ -> reasoningEffort);
         }
         return Optional.empty();
     }
@@ -131,7 +131,7 @@ final class CodexModelSelectionFlow {
             String currentReasoningEffort,
             List<ReasoningEffortOption> options) {
         terminal.info("Reasoning effort choices for " + model + ":");
-        Optional<String> defaultReasoningEffort = selectionDefaults.reasoningEffortForModel(model);
+        var defaultReasoningEffort = selectionDefaults.reasoningEffortForModel(model);
         for (ReasoningEffortOption option : options) {
             terminal.info(reasoningEffortOptionLine(option, defaultReasoningEffort, currentReasoningEffort));
         }
@@ -151,8 +151,8 @@ final class CodexModelSelectionFlow {
 
     private static String reasoningEffortMarkers(
             String reasoningEffort, Optional<String> defaultReasoningEffort, String currentReasoningEffort) {
-        boolean isDefault = defaultReasoningEffort.map(reasoningEffort::equals).orElse(false);
-        boolean isCurrent = Objects.equals(reasoningEffort, currentReasoningEffort);
+        var isDefault = defaultReasoningEffort.map(reasoningEffort::equals).orElse(false);
+        var isCurrent = Objects.equals(reasoningEffort, currentReasoningEffort);
         if (isDefault && isCurrent) {
             return " (default, current)";
         }
@@ -168,7 +168,7 @@ final class CodexModelSelectionFlow {
             String model,
             String reasoningEffort) {
         options.codexReasoningEffort()
-                .ifPresent(ignored -> selectionDefaults.validateReasoningEffortForModel(model, reasoningEffort));
+                .ifPresent(_ -> selectionDefaults.validateReasoningEffortForModel(model, reasoningEffort));
     }
 
     private static String valueOrDefault(Optional<String> value, String defaultValue) {

@@ -15,7 +15,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
 final class AdrConformanceTest {
@@ -52,10 +51,10 @@ final class AdrConformanceTest {
     @Test
     void architecturalDecisionRecordsUseMadrTemplateShape() throws IOException {
         // given
-        List<String> violations = new ArrayList<>();
+        var violations = new ArrayList<String>();
 
         // when
-        try (Stream<Path> files = Files.list(Path.of("docs/adr"))) {
+        try (var files = Files.list(Path.of("docs/adr"))) {
             List<Path> adrFiles = files.filter(path -> path.toString().endsWith(".md"))
                     .sorted()
                     .toList();
@@ -74,7 +73,7 @@ final class AdrConformanceTest {
     }
 
     private static void collectAdrShapeViolations(Path file, List<String> violations) throws IOException {
-        List<String> lines = Files.readAllLines(file);
+        var lines = Files.readAllLines(file);
         if (lines.size() < 20) {
             violations.add("%s: ADR is too short to contain the MADR template sections".formatted(file));
             return;
@@ -85,13 +84,13 @@ final class AdrConformanceTest {
     }
 
     private static void assertUniqueAdrNumbers(List<Path> files, List<String> violations) {
-        Map<String, List<Path>> filesByNumber = new LinkedHashMap<>();
+        var filesByNumber = new LinkedHashMap<String, List<Path>>();
         for (Path file : files) {
             String filename = file.getFileName().toString();
             Matcher matcher = ADR_FILE.matcher(filename);
             if (matcher.matches()) {
                 filesByNumber
-                        .computeIfAbsent(matcher.group(1), ignored -> new ArrayList<>())
+                        .computeIfAbsent(matcher.group(1), _ -> new ArrayList<>())
                         .add(file);
             }
         }
@@ -104,11 +103,11 @@ final class AdrConformanceTest {
     }
 
     private static void assertAdrMetadata(Path file, List<String> lines, List<String> violations) {
-        if (!lines.getFirst().equals("---")) {
+        if (!"---".equals(lines.getFirst())) {
             violations.add("%s:1: expected YAML front matter start".formatted(file));
             return;
         }
-        int end = lines.subList(1, lines.size()).indexOf("---") + 1;
+        var end = lines.subList(1, lines.size()).indexOf("---") + 1;
         if (end <= 0) {
             violations.add("%s: expected YAML front matter end".formatted(file));
             return;
@@ -165,15 +164,15 @@ final class AdrConformanceTest {
     private static void assertAdrHeadings(Path file, List<String> lines, List<String> violations) {
         List<String> headings =
                 lines.stream().filter(line -> line.startsWith("#")).toList();
-        long titles = headings.stream()
+        var titles = headings.stream()
                 .filter(line -> line.startsWith("# ") && !line.startsWith("##"))
                 .count();
         if (titles != 1) {
             violations.add("%s: expected exactly one ADR title heading".formatted(file));
         }
-        int previous = -1;
+        var previous = -1;
         for (String heading : ADR_HEADINGS) {
-            int index = lines.indexOf(heading);
+            var index = lines.indexOf(heading);
             if (index < 0) {
                 violations.add("%s: expected ADR heading %s".formatted(file, heading));
                 continue;
@@ -186,7 +185,7 @@ final class AdrConformanceTest {
     }
 
     private static void assertNoAdrTemplatePlaceholders(Path file, List<String> lines, List<String> violations) {
-        for (int index = 0; index < lines.size(); index++) {
+        for (var index = 0; index < lines.size(); index++) {
             String line = lines.get(index);
             for (String placeholder : ADR_TEMPLATE_PLACEHOLDERS) {
                 if (line.contains(placeholder)) {

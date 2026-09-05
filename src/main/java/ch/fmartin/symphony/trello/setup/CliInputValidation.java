@@ -92,7 +92,7 @@ final class CliInputValidation {
     }
 
     static void rejectBlankText(String optionName, Optional<String> value, String message) {
-        value.map(String::strip).filter(String::isBlank).ifPresent(ignored -> {
+        value.map(String::strip).filter(String::isBlank).ifPresent(_ -> {
             throw new TrelloBoardSetupException("setup_invalid_arguments", message);
         });
     }
@@ -119,7 +119,7 @@ final class CliInputValidation {
         if (message == null || !ISO_CONTROL_CHARACTERS.matchesAnyOf(message)) {
             return message;
         }
-        StringBuilder safe = new StringBuilder(message.length());
+        var safe = new StringBuilder(message.length());
         message.codePoints().forEach(codePoint -> appendSafeCliCodePoint(safe, codePoint));
         return safe.toString();
     }
@@ -128,7 +128,7 @@ final class CliInputValidation {
         if (message == null || !ISO_CONTROL_CHARACTERS.matchesAnyOf(message)) {
             return message;
         }
-        StringBuilder safe = new StringBuilder(message.length());
+        var safe = new StringBuilder(message.length());
         message.codePoints().forEach(codePoint -> appendSafeDiagnosticsCodePoint(safe, codePoint));
         return safe.toString();
     }
@@ -247,7 +247,7 @@ final class CliInputValidation {
     }
 
     private static boolean symlinkExpandedPathIsStandardStreamDevicePath(Path value) {
-        Set<Path> visitedLinks = new HashSet<>();
+        var visitedLinks = new HashSet<Path>();
         Path absolute = value.toAbsolutePath().normalize();
         Path current = absolute.getRoot() == null ? Path.of("") : absolute.getRoot();
         for (Path element : absolute) {
@@ -283,7 +283,7 @@ final class CliInputValidation {
                     return new SymlinkExpansion(resolvedTarget, true);
                 }
                 current = resolvedTarget;
-            } catch (IOException ignored) {
+            } catch (IOException _) {
                 // If the link target cannot be read, the writer handles the filesystem failure.
                 return new SymlinkExpansion(current, false);
             }
@@ -297,7 +297,7 @@ final class CliInputValidation {
     private static boolean realPathIsStandardStreamDevicePath(Path value) {
         try {
             return isStandardStreamDevicePath(value.toRealPath().toString());
-        } catch (IOException ignored) {
+        } catch (IOException _) {
             // New output files do not have a real path yet; the writer handles other filesystem failures.
             return false;
         }

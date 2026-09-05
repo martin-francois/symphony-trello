@@ -53,15 +53,15 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeRetryableInProgressWorkflow(workflow);
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card first = TestCards.card("card-1", "TRELLO-first", "Todo");
         Card second = TestCards.card("card-2", "TRELLO-second", "Todo");
-        FakeTracker tracker = new FakeTracker(List.of(first, second));
+        var tracker = new FakeTracker(List.of(first, second));
         tracker.preparedCard = TestCards.card("card-1", "TRELLO-first", "In Progress");
-        AtomicBoolean pauseVisibleBeforeTrelloIo = new AtomicBoolean();
-        AtomicReference<SymphonyOrchestrator> orchestratorRef = new AtomicReference<>();
+        var pauseVisibleBeforeTrelloIo = new AtomicBoolean();
+        var orchestratorRef = new AtomicReference<SymphonyOrchestrator>();
         AgentRunner runner = mock();
-        when(runner.run(any())).thenAnswer(invocation -> {
+        when(runner.run(any())).thenAnswer(_ -> {
             tracker.stateFetchHook = () -> pauseVisibleBeforeTrelloIo.compareAndSet(
                     false, orchestratorRef.get().snapshot().dispatchPause() != null);
             return AgentRunResult.codexUsageLimit("turn_failed: Usage is unavailable.", Optional.empty());
@@ -74,7 +74,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         orchestrator.start();
         waitUntil(() -> orchestrator.snapshot().counts().retrying() == 1);
         RuntimeSnapshot paused = orchestrator.snapshot();
-        int candidateFetchesBeforeManualTick = tracker.candidateFetches.get();
+        var candidateFetchesBeforeManualTick = tracker.candidateFetches.get();
         orchestrator.tickNowForTests();
         RuntimeSnapshot afterManualTick = orchestrator.snapshot();
         orchestrator.stop();
@@ -103,8 +103,8 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         writeWorkflow(workflow, "60000");
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
         Instant farFutureReset = Instant.ofEpochSecond(Instant.MAX.getEpochSecond() - 1);
-        MutableClock clock = new MutableClock(now);
-        FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
+        var clock = new MutableClock(now);
+        var tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
         AgentRunner runner = mock();
         when(runner.run(any()))
                 .thenReturn(AgentRunResult.codexUsageLimit(
@@ -136,14 +136,14 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                   max_retry_backoff_ms: 60000
                 """);
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card genericCard = TestCards.card("card-generic", "TRELLO-generic", "Todo");
         Card usageCard = TestCards.card("card-usage", "TRELLO-usage", "Todo");
-        FakeTracker tracker = new FakeTracker(List.of(genericCard));
+        var tracker = new FakeTracker(List.of(genericCard));
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
-            return request.card().id().equals("card-usage")
+            return "card-usage".equals(request.card().id())
                     ? AgentRunResult.codexUsageLimit("turn_failed: Usage is unavailable.", Optional.empty())
                     : AgentRunResult.fail("generic failure");
         });
@@ -156,7 +156,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         orchestrator.tickNowForTests();
         waitUntil(() -> orchestrator.snapshot().dispatchPause() != null
                 && orchestrator.snapshot().counts().retrying() == 2);
-        int stateFetchesBeforeDeferredTimer = tracker.stateFetches.get();
+        var stateFetchesBeforeDeferredTimer = tracker.stateFetches.get();
         orchestrator.retryNowForTests("card-generic");
         RuntimeSnapshot snapshot = orchestrator.snapshot();
         orchestrator.stop();
@@ -164,7 +164,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         // then
         assertThat(tracker.stateFetches).hasValue(stateFetchesBeforeDeferredTimer);
         assertThat(snapshot.retrying())
-                .filteredOn(retry -> retry.cardIdentifier().equals("TRELLO-generic"))
+                .filteredOn(retry -> "TRELLO-generic".equals(retry.cardIdentifier()))
                 .singleElement()
                 .satisfies(retry -> {
                     assertThat(retry.attempt()).isEqualTo(1);
@@ -185,19 +185,19 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                   max_retry_backoff_ms: 60000
                 """);
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card genericCard = TestCards.card("card-generic", "TRELLO-generic", "Todo");
         Card usageCard = TestCards.card("card-usage", "TRELLO-usage", "Todo");
-        FakeTracker tracker = new FakeTracker(List.of(genericCard, usageCard));
-        CountDownLatch workersStarted = new CountDownLatch(2);
-        CountDownLatch releaseGeneric = new CountDownLatch(1);
-        CountDownLatch releaseUsage = new CountDownLatch(1);
-        AtomicInteger genericRuns = new AtomicInteger();
+        var tracker = new FakeTracker(List.of(genericCard, usageCard));
+        var workersStarted = new CountDownLatch(2);
+        var releaseGeneric = new CountDownLatch(1);
+        var releaseUsage = new CountDownLatch(1);
+        var genericRuns = new AtomicInteger();
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             workersStarted.countDown();
-            if (request.card().id().equals("card-generic")) {
+            if ("card-generic".equals(request.card().id())) {
                 genericRuns.incrementAndGet();
                 assertThat(releaseGeneric.await(5, TimeUnit.SECONDS))
                         .as("the test should release the generic-failure worker within 5 seconds")
@@ -225,11 +225,11 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         waitUntil(() -> orchestrator.snapshot().dispatchPause() != null
                 && orchestrator.snapshot().retrying().size() == 1);
         tracker.setCandidateList(List.of(genericCard));
-        int prepareCallsBeforeDeadline = tracker.prepareForDispatchCalls.get();
+        var prepareCallsBeforeDeadline = tracker.prepareForDispatchCalls.get();
         clock.advance(Duration.ofSeconds(5));
         orchestrator.dispatchPauseDeadlineNowForTests(now.plusSeconds(5));
         RuntimeSnapshot afterEarlyDeadline = orchestrator.snapshot();
-        int prepareCallsAfterDeadline = tracker.prepareForDispatchCalls.get();
+        var prepareCallsAfterDeadline = tracker.prepareForDispatchCalls.get();
         orchestrator.stop();
 
         // then
@@ -256,21 +256,21 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                   max_retry_backoff_ms: 60000
                 """);
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card card = TestCards.card("card-1", "TRELLO-abc", "Todo");
-        FakeTracker tracker = new FakeTracker(List.of(card));
-        AtomicInteger runs = new AtomicInteger();
+        var tracker = new FakeTracker(List.of(card));
+        var runs = new AtomicInteger();
         AgentRunner runner = mock();
-        when(runner.run(any())).thenAnswer(invocation -> {
-            int run = runs.incrementAndGet();
+        when(runner.run(any())).thenAnswer(_ -> {
+            var run = runs.incrementAndGet();
             if (run < 3) {
                 return AgentRunResult.codexUsageLimit("turn_failed: Usage is unavailable.", Optional.empty());
             }
             tracker.setCardState(TestCards.card("card-1", "TRELLO-abc", "Human Review"));
             return AgentRunResult.ok();
         });
-        List<String> sections = new CopyOnWriteArrayList<>();
-        AtomicInteger removals = new AtomicInteger();
+        var sections = new CopyOnWriteArrayList<String>();
+        var removals = new AtomicInteger();
         TrelloHandoffToolHandler workpads = mock();
         doAnswer(invocation -> {
                     String section = invocation.getArgument(2);
@@ -317,13 +317,13 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeRetryableInProgressWorkflow(workflow);
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card card = TestCards.card("card-1", "TRELLO-abc", "Todo");
-        FakeTracker tracker = new FakeTracker(List.of(card));
+        var tracker = new FakeTracker(List.of(card));
         tracker.preparedCard = TestCards.card("card-1", "TRELLO-abc", "In Progress");
-        AtomicInteger runs = new AtomicInteger();
+        var runs = new AtomicInteger();
         AgentRunner runner = mock();
-        when(runner.run(any())).thenAnswer(invocation -> {
+        when(runner.run(any())).thenAnswer(_ -> {
             if (runs.incrementAndGet() == 1) {
                 return AgentRunResult.codexUsageLimit("turn_failed: Usage is unavailable.", Optional.empty());
             }
@@ -383,17 +383,17 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                 {{ card.state }}
                 """);
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card card = TestCards.cardWithLabels("card-1", "TRELLO-abc", "Todo", List.of("ready for codex"));
-        FakeTracker tracker = new FakeTracker(List.of(card));
+        var tracker = new FakeTracker(List.of(card));
         tracker.preparedCard =
                 TestCards.cardWithLabels("card-1", "TRELLO-abc", "In Progress", List.of("ready for codex"));
-        AtomicInteger runs = new AtomicInteger();
-        CountDownLatch probeStarted = new CountDownLatch(1);
-        CountDownLatch staleExitHandled = new CountDownLatch(2);
+        var runs = new AtomicInteger();
+        var probeStarted = new CountDownLatch(1);
+        var staleExitHandled = new CountDownLatch(2);
         AgentRunner runner = mock();
-        when(runner.run(any())).thenAnswer(invocation -> {
-            int run = runs.incrementAndGet();
+        when(runner.run(any())).thenAnswer(_ -> {
+            var run = runs.incrementAndGet();
             if (run == 1) {
                 return AgentRunResult.codexUsageLimit("turn_failed: Usage is unavailable.", Optional.empty());
             }
@@ -401,7 +401,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                 probeStarted.countDown();
                 try {
                     new CountDownLatch(1).await();
-                } catch (InterruptedException e) {
+                } catch (InterruptedException _) {
                     Thread.currentThread().interrupt();
                 }
                 return AgentRunResult.codexUsageLimit(
@@ -456,17 +456,17 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                   max_retry_backoff_ms: 60000
                 """);
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card first = TestCards.card("card-1", "TRELLO-first", "Todo");
         Card second = TestCards.card("card-2", "TRELLO-second", "Todo");
-        FakeTracker tracker = new FakeTracker(List.of(first, second));
-        AtomicInteger runs = new AtomicInteger();
-        CountDownLatch probeStarted = new CountDownLatch(1);
-        CountDownLatch staleResultReturned = new CountDownLatch(1);
+        var tracker = new FakeTracker(List.of(first, second));
+        var runs = new AtomicInteger();
+        var probeStarted = new CountDownLatch(1);
+        var staleResultReturned = new CountDownLatch(1);
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
-            int run = runs.incrementAndGet();
+            var run = runs.incrementAndGet();
             if (run == 1) {
                 return AgentRunResult.codexUsageLimit("turn_failed: Usage is unavailable.", Optional.empty());
             }
@@ -474,7 +474,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                 probeStarted.countDown();
                 try {
                     new CountDownLatch(1).await();
-                } catch (InterruptedException e) {
+                } catch (InterruptedException _) {
                     Thread.currentThread().interrupt();
                 }
                 staleResultReturned.countDown();
@@ -517,20 +517,20 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeRetryableInProgressWorkflow(workflow);
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
-        FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
+        var clock = new MutableClock(now);
+        var tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
         AgentRunner runner = mock();
         when(runner.run(any()))
                 .thenReturn(AgentRunResult.codexUsageLimit("turn_failed: Usage is unavailable.", Optional.empty()));
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner, clock, successfulWorkpadHandler());
-        AtomicInteger scheduledDeadlines = new AtomicInteger();
+        var scheduledDeadlines = new AtomicInteger();
         orchestrator.dispatchPauseScheduleHookForTests = scheduledDeadlines::incrementAndGet;
 
         // when
         orchestrator.start();
         waitUntil(() -> orchestrator.snapshot().dispatchPause() != null);
         RuntimeSnapshot.DispatchPause pause = orchestrator.snapshot().dispatchPause();
-        int schedulesBeforeEarlyCallback = scheduledDeadlines.get();
+        var schedulesBeforeEarlyCallback = scheduledDeadlines.get();
         orchestrator.dispatchPauseDeadlineNowForTests(pause.until());
         RuntimeSnapshot afterEarlyCallback = orchestrator.snapshot();
         orchestrator.stop();
@@ -553,18 +553,18 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                   max_retry_backoff_ms: 60000
                 """);
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
-        FakeTracker tracker = new FakeTracker(List.of(
+        var clock = new MutableClock(now);
+        var tracker = new FakeTracker(List.of(
                 TestCards.card("card-usage", "TRELLO-usage", "Todo"),
                 TestCards.card("card-generic", "TRELLO-generic", "Todo")));
-        CountDownLatch workersStarted = new CountDownLatch(2);
-        CountDownLatch releaseUsage = new CountDownLatch(1);
-        CountDownLatch releaseGeneric = new CountDownLatch(1);
+        var workersStarted = new CountDownLatch(2);
+        var releaseUsage = new CountDownLatch(1);
+        var releaseGeneric = new CountDownLatch(1);
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             workersStarted.countDown();
-            if (request.card().id().equals("card-usage")) {
+            if ("card-usage".equals(request.card().id())) {
                 assertThat(releaseUsage.await(5, TimeUnit.SECONDS))
                         .as("the test should release the usage-limited worker within 5 seconds")
                         .isTrue();
@@ -592,7 +592,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
 
         // then
         assertThat(snapshot.retrying())
-                .filteredOn(retry -> retry.cardIdentifier().equals("TRELLO-generic"))
+                .filteredOn(retry -> "TRELLO-generic".equals(retry.cardIdentifier()))
                 .singleElement()
                 .satisfies(retry -> assertThat(retry.dueAt()).isEqualTo(now.plusSeconds(120)));
     }
@@ -602,15 +602,15 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflow(workflow, "60000");
-        FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
-        CountDownLatch workerStarted = new CountDownLatch(1);
-        CountDownLatch exitHandled = new CountDownLatch(1);
+        var tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
+        var workerStarted = new CountDownLatch(1);
+        var exitHandled = new CountDownLatch(1);
         AgentRunner runner = mock();
-        when(runner.run(any())).thenAnswer(invocation -> {
+        when(runner.run(any())).thenAnswer(_ -> {
             workerStarted.countDown();
             try {
                 new CountDownLatch(1).await();
-            } catch (InterruptedException e) {
+            } catch (InterruptedException _) {
                 Thread.currentThread().interrupt();
             }
             return AgentRunResult.codexUsageLimit("turn_failed: late usage result", Optional.empty());
@@ -640,15 +640,15 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflow(workflow, "60000");
-        FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
-        CountDownLatch workerStarted = new CountDownLatch(1);
-        CountDownLatch releaseWorker = new CountDownLatch(1);
-        CountDownLatch tickFetchStarted = new CountDownLatch(1);
-        CountDownLatch releaseTickFetch = new CountDownLatch(1);
-        CountDownLatch concurrentWorkerExitFetch = new CountDownLatch(1);
-        AtomicInteger hookedFetches = new AtomicInteger();
+        var tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
+        var workerStarted = new CountDownLatch(1);
+        var releaseWorker = new CountDownLatch(1);
+        var tickFetchStarted = new CountDownLatch(1);
+        var releaseTickFetch = new CountDownLatch(1);
+        var concurrentWorkerExitFetch = new CountDownLatch(1);
+        var hookedFetches = new AtomicInteger();
         AgentRunner runner = mock();
-        when(runner.run(any())).thenAnswer(invocation -> {
+        when(runner.run(any())).thenAnswer(_ -> {
             workerStarted.countDown();
             assertThat(releaseWorker.await(5, TimeUnit.SECONDS))
                     .as("the exceptional worker should be released within 5 seconds")
@@ -708,20 +708,20 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                   max_retry_backoff_ms: 60000
                 """);
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card runningCard = TestCards.card("card-running", "TRELLO-running", "Todo");
         Card limiter = TestCards.card("card-limiter", "TRELLO-limiter", "Todo");
-        FakeTracker tracker = new FakeTracker(List.of(runningCard, limiter));
-        CountDownLatch runningWorkerStarted = new CountDownLatch(1);
-        CountDownLatch releaseRunningWorker = new CountDownLatch(1);
-        CountDownLatch tickFetchStarted = new CountDownLatch(1);
-        CountDownLatch releaseTickFetch = new CountDownLatch(1);
-        CountDownLatch concurrentDeadlineFetch = new CountDownLatch(1);
-        AtomicInteger hookedFetches = new AtomicInteger();
+        var tracker = new FakeTracker(List.of(runningCard, limiter));
+        var runningWorkerStarted = new CountDownLatch(1);
+        var releaseRunningWorker = new CountDownLatch(1);
+        var tickFetchStarted = new CountDownLatch(1);
+        var releaseTickFetch = new CountDownLatch(1);
+        var concurrentDeadlineFetch = new CountDownLatch(1);
+        var hookedFetches = new AtomicInteger();
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
-            if (request.card().id().equals("card-running")) {
+            if ("card-running".equals(request.card().id())) {
                 runningWorkerStarted.countDown();
                 assertThat(releaseRunningWorker.await(5, TimeUnit.SECONDS))
                         .as("the already-running worker should be released within 5 seconds")
@@ -760,7 +760,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                 .as("the refresh tracker fetch should start within 5 seconds")
                 .isTrue();
         clock.advance(Duration.ofSeconds(60));
-        CompletableFuture<Void> deadline =
+        var deadline =
                 CompletableFuture.runAsync(() -> orchestrator.dispatchPauseDeadlineNowForTests(now.plusSeconds(60)));
 
         // then
@@ -782,7 +782,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflow(workflow, "60000");
-        FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
+        var tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
         AgentRunner runner = mock();
         when(runner.run(any())).thenReturn(AgentRunResult.fail("generic failure"));
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
@@ -791,7 +791,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         orchestrator.start();
         waitUntil(() -> orchestrator.snapshot().counts().retrying() == 1);
         orchestrator.stop();
-        int stateFetchesAfterStop = tracker.stateFetches.get();
+        var stateFetchesAfterStop = tracker.stateFetches.get();
         orchestrator.retryNowForTests("card-1");
         RuntimeSnapshot snapshot = orchestrator.snapshot();
 
@@ -813,13 +813,13 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                   max_retry_backoff_ms: 60000
                 """);
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card first = TestCards.card("card-1", "TRELLO-first", "Todo");
         Card second = TestCards.card("card-2", "TRELLO-second", "Todo");
-        FakeTracker tracker = new FakeTracker(List.of(first, second));
-        AtomicInteger runs = new AtomicInteger();
-        CountDownLatch candidateProbeStarted = new CountDownLatch(1);
-        CountDownLatch releaseCandidateProbe = new CountDownLatch(1);
+        var tracker = new FakeTracker(List.of(first, second));
+        var runs = new AtomicInteger();
+        var candidateProbeStarted = new CountDownLatch(1);
+        var releaseCandidateProbe = new CountDownLatch(1);
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
@@ -871,7 +871,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                   max_retry_backoff_ms: 60000
                 """);
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card first = TestCards.card("card-1", "TRELLO-first", "Todo");
         Card second = TestCards.card("card-2", "TRELLO-second", "Todo");
         UsageProbeScenario scenario = usageProbeScenario(workflow, clock, first, second);
@@ -923,7 +923,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                 """
                         .formatted(trackerConstraint));
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card first = "labels".equals(constraint)
                 ? TestCards.cardWithLabels("card-1", "TRELLO-first", "Todo", List.of("Ready for Codex"))
                 : TestCards.card("card-1", "TRELLO-first", "Todo");
@@ -987,7 +987,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                 {{ card.title }}
                 """);
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card first = TestCards.card("card-1", "TRELLO-first", "Todo");
         Card second = TestCards.card("card-2", "TRELLO-second", "Todo");
         Card deeplyBlockedFirst = cardWithPriorityAndBlockers(
@@ -1028,12 +1028,12 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                   max_retry_backoff_ms: 0
                 """);
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card card = TestCards.card("card-1", "TRELLO-first", "Todo");
-        FakeTracker tracker = new FakeTracker(List.of(card));
-        AtomicInteger runs = new AtomicInteger();
+        var tracker = new FakeTracker(List.of(card));
+        var runs = new AtomicInteger();
         AgentRunner runner = mock();
-        when(runner.run(any())).thenAnswer(invocation -> {
+        when(runner.run(any())).thenAnswer(_ -> {
             runs.incrementAndGet();
             tracker.setCardState(TestCards.card("card-1", "TRELLO-first", "Human Review"));
             return AgentRunResult.codexUsageLimit("turn_failed: Usage is unavailable.", Optional.empty());
@@ -1073,12 +1073,12 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                         "## Codex Workpad\n\n" + staleSection,
                         "Codex",
                         Instant.parse("2026-07-10T10:00:00Z"))));
-        FakeTracker tracker = new FakeTracker(List.of(card));
-        AtomicInteger runs = new AtomicInteger();
-        CountDownLatch secondWorkerStarted = new CountDownLatch(1);
-        CountDownLatch releaseSecondWorker = new CountDownLatch(1);
+        var tracker = new FakeTracker(List.of(card));
+        var runs = new AtomicInteger();
+        var secondWorkerStarted = new CountDownLatch(1);
+        var releaseSecondWorker = new CountDownLatch(1);
         AgentRunner runner = mock();
-        when(runner.run(any())).thenAnswer(invocation -> {
+        when(runner.run(any())).thenAnswer(_ -> {
             if (runs.incrementAndGet() == 1) {
                 return AgentRunResult.ok();
             }
@@ -1089,14 +1089,14 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
             tracker.setCardState(TestCards.card("card-1", "TRELLO-abc", "Human Review"));
             return AgentRunResult.ok();
         });
-        AtomicInteger cleanupAttempts = new AtomicInteger();
+        var cleanupAttempts = new AtomicInteger();
         TrelloHandoffToolHandler workpads = mock();
         when(workpads.updateCodexUsageSection(any(), anyString(), nullable(String.class)))
                 .thenAnswer(invocation -> {
                     String section = invocation.getArgument(2);
                     return section != null || cleanupAttempts.incrementAndGet() > 1;
                 });
-        MutableClock clock = new MutableClock(Instant.parse("2026-07-10T12:00:00Z"));
+        var clock = new MutableClock(Instant.parse("2026-07-10T12:00:00Z"));
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner, clock, workpads);
 
         // when
@@ -1134,18 +1134,18 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                   max_retry_backoff_ms: 60000
                 """);
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
-        FakeTracker tracker = new FakeTracker(List.of(
+        var clock = new MutableClock(now);
+        var tracker = new FakeTracker(List.of(
                 TestCards.card("card-long", "TRELLO-long", "Todo"),
                 TestCards.card("card-short", "TRELLO-short", "Todo")));
-        CountDownLatch workersStarted = new CountDownLatch(2);
-        CountDownLatch releaseLong = new CountDownLatch(1);
-        CountDownLatch releaseShort = new CountDownLatch(1);
+        var workersStarted = new CountDownLatch(2);
+        var releaseLong = new CountDownLatch(1);
+        var releaseShort = new CountDownLatch(1);
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             workersStarted.countDown();
-            if (request.card().id().equals("card-long")) {
+            if ("card-long".equals(request.card().id())) {
                 assertThat(releaseLong.await(5, TimeUnit.SECONDS))
                         .as("the worker returning the longer usage pause should be released within 5 seconds")
                         .isTrue();
@@ -1193,31 +1193,31 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                   max_retry_backoff_ms: 60000
                 """);
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card retryCard = TestCards.card("card-retry", "TRELLO-retry", "Todo");
         Card limiter = TestCards.card("card-limiter", "TRELLO-limiter", "Todo");
         Card probe = TestCards.card("card-probe", "TRELLO-probe", "Todo");
-        FakeTracker tracker = new FakeTracker(List.of(retryCard, limiter, probe));
+        var tracker = new FakeTracker(List.of(retryCard, limiter, probe));
         tracker.setCandidateList(List.of(retryCard, limiter));
-        AtomicInteger retryCardRuns = new AtomicInteger();
+        var retryCardRuns = new AtomicInteger();
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
-            if (request.card().id().equals("card-retry")) {
+            if ("card-retry".equals(request.card().id())) {
                 retryCardRuns.incrementAndGet();
                 return AgentRunResult.fail("temporary failure");
             }
             tracker.setCardState(
                     TestCards.card(request.card().id(), request.card().identifier(), "Human Review"));
-            return request.card().id().equals("card-limiter")
+            return "card-limiter".equals(request.card().id())
                     ? AgentRunResult.codexUsageLimit(
                             "turn_failed: Usage is unavailable.", Optional.of(now.plusSeconds(5)))
                     : AgentRunResult.ok();
         });
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner, clock, successfulWorkpadHandler());
-        CountDownLatch staleCallbackWaiting = new CountDownLatch(1);
-        AtomicBoolean launchStaleCallback = new AtomicBoolean(true);
-        AtomicReference<CompletableFuture<Void>> staleCallback = new AtomicReference<>();
+        var staleCallbackWaiting = new CountDownLatch(1);
+        var launchStaleCallback = new AtomicBoolean(true);
+        var staleCallback = new AtomicReference<CompletableFuture<Void>>();
 
         // when
         orchestrator.start();
@@ -1268,22 +1268,22 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                   max_retry_backoff_ms: 60000
                 """);
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
-        FakeTracker tracker = new FakeTracker(List.of(
+        var clock = new MutableClock(now);
+        var tracker = new FakeTracker(List.of(
                 TestCards.card("card-probe", "TRELLO-probe", "Todo"),
                 TestCards.card("card-late", "TRELLO-late", "Todo")));
-        CountDownLatch initialWorkersStarted = new CountDownLatch(2);
-        CountDownLatch releaseInitialProbeCard = new CountDownLatch(1);
-        CountDownLatch releaseLateWorker = new CountDownLatch(1);
-        CountDownLatch availabilityProbeStarted = new CountDownLatch(1);
-        CountDownLatch releaseAvailabilityProbe = new CountDownLatch(1);
-        AtomicInteger runs = new AtomicInteger();
-        AtomicInteger probeCardRuns = new AtomicInteger();
+        var initialWorkersStarted = new CountDownLatch(2);
+        var releaseInitialProbeCard = new CountDownLatch(1);
+        var releaseLateWorker = new CountDownLatch(1);
+        var availabilityProbeStarted = new CountDownLatch(1);
+        var releaseAvailabilityProbe = new CountDownLatch(1);
+        var runs = new AtomicInteger();
+        var probeCardRuns = new AtomicInteger();
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             runs.incrementAndGet();
-            if (request.card().id().equals("card-late")) {
+            if ("card-late".equals(request.card().id())) {
                 initialWorkersStarted.countDown();
                 assertThat(releaseLateWorker.await(5, TimeUnit.SECONDS))
                         .as("the late concurrent usage worker should be released within 5 seconds")
@@ -1342,7 +1342,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflow(workflow, "60000");
-        FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
+        var tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
         AgentRunner runner = mock();
         doAnswer(invocation -> {
                     AgentRunner.AgentRunRequest request = invocation.getArgument(0);
@@ -1389,16 +1389,16 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflow(workflow, "60000");
-        FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
+        var tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
         AgentRunner runner = mock();
-        AtomicReference<AgentRunner.AgentRunRequest> request = new AtomicReference<>();
-        CountDownLatch started = new CountDownLatch(1);
+        var request = new AtomicReference<AgentRunner.AgentRunRequest>();
+        var started = new CountDownLatch(1);
         doAnswer(invocation -> {
                     request.set(invocation.getArgument(0));
                     started.countDown();
                     try {
                         blockUntilInterruptedOrTimedOut(Duration.ofSeconds(30));
-                    } catch (InterruptedException e) {
+                    } catch (InterruptedException _) {
                         Thread.currentThread().interrupt();
                     }
                     return AgentRunResult.fail("interrupted");
@@ -1412,7 +1412,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         assertThat(started.await(5, TimeUnit.SECONDS))
                 .as("the worker supplying rate-limit events should start within 5 seconds")
                 .isTrue();
-        boolean currentAccepted = request.get()
+        var currentAccepted = request.get()
                 .listener()
                 .onEventAndReportAccepted(rateLimitEvent(
                         request.get(),
@@ -1420,7 +1420,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                         new ObjectMapper().createObjectNode().put("account", "current")));
         RuntimeSnapshot whileRunning = orchestrator.snapshot();
         orchestrator.stop();
-        boolean staleAccepted = request.get()
+        var staleAccepted = request.get()
                 .listener()
                 .onEventAndReportAccepted(rateLimitEvent(
                         request.get(),
@@ -1451,16 +1451,16 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                   max_retry_backoff_ms: 60000
                 """);
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card card = TestCards.card("card-1", "TRELLO-retry", "Todo");
-        FakeTracker tracker = new FakeTracker(List.of(card));
-        List<AgentRunner.AgentRunRequest> requests = new CopyOnWriteArrayList<>();
-        CountDownLatch commandBStarted = new CountDownLatch(1);
+        var tracker = new FakeTracker(List.of(card));
+        var requests = new CopyOnWriteArrayList<AgentRunner.AgentRunRequest>();
+        var commandBStarted = new CountDownLatch(1);
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             requests.add(request);
-            if (request.config().codex().command().equals("command-a")) {
+            if ("command-a".equals(request.config().codex().command())) {
                 return AgentRunResult.codexUsageLimit(
                         "turn_failed: Command A is exhausted.", Optional.of(now.plusSeconds(60)));
             }
@@ -1468,7 +1468,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
             tracker.setCardState(TestCards.card("card-1", "TRELLO-retry", "Human Review"));
             return AgentRunResult.ok();
         });
-        List<String> cleanupCommands = new CopyOnWriteArrayList<>();
+        var cleanupCommands = new CopyOnWriteArrayList<String>();
         TrelloHandoffToolHandler workpads = mock();
         when(workpads.updateCodexUsageSection(any(), anyString(), nullable(String.class)))
                 .thenAnswer(invocation -> {
@@ -1521,27 +1521,27 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                   max_retry_backoff_ms: 60000
                 """);
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card generic = TestCards.card("card-generic", "TRELLO-generic", "Todo");
         Card usage = TestCards.card("card-usage", "TRELLO-usage", "Todo");
-        FakeTracker tracker = new FakeTracker(List.of(generic, usage));
-        CountDownLatch firstWorkersStarted = new CountDownLatch(2);
-        CountDownLatch releaseGeneric = new CountDownLatch(1);
-        CountDownLatch releaseUsage = new CountDownLatch(1);
-        CountDownLatch commandBUsageStarted = new CountDownLatch(1);
-        AtomicInteger genericRuns = new AtomicInteger();
+        var tracker = new FakeTracker(List.of(generic, usage));
+        var firstWorkersStarted = new CountDownLatch(2);
+        var releaseGeneric = new CountDownLatch(1);
+        var releaseUsage = new CountDownLatch(1);
+        var commandBUsageStarted = new CountDownLatch(1);
+        var genericRuns = new AtomicInteger();
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
-            if (request.config().codex().command().equals("command-b")) {
-                if (request.card().id().equals("card-usage")) {
+            if ("command-b".equals(request.config().codex().command())) {
+                if ("card-usage".equals(request.card().id())) {
                     commandBUsageStarted.countDown();
                     tracker.setCardState(TestCards.card("card-usage", "TRELLO-usage", "Human Review"));
                 }
                 return AgentRunResult.ok();
             }
             firstWorkersStarted.countDown();
-            if (request.card().id().equals("card-generic")) {
+            if ("card-generic".equals(request.card().id())) {
                 genericRuns.incrementAndGet();
                 assertThat(releaseGeneric.await(5, TimeUnit.SECONDS))
                         .as("the command A generic-failure worker should be released within 5 seconds")
@@ -1584,7 +1584,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         // then
         assertThat(afterReload.dispatchPause()).isNull();
         assertThat(afterReload.retrying())
-                .filteredOn(retry -> retry.cardIdentifier().equals("TRELLO-generic"))
+                .filteredOn(retry -> "TRELLO-generic".equals(retry.cardIdentifier()))
                 .singleElement()
                 .satisfies(retry -> assertThat(retry.dueAt()).isEqualTo(now.plusSeconds(10)));
         assertThat(genericRuns).hasValue(1);
@@ -1670,13 +1670,13 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflowWithCommand(workflow, "command-a", "");
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card card = TestCards.card("card-1", "TRELLO-late", "Todo");
-        FakeTracker tracker = new FakeTracker(List.of(card));
-        CountDownLatch commandAStarted = new CountDownLatch(1);
-        CountDownLatch releaseCommandA = new CountDownLatch(1);
-        CountDownLatch commandBStarted = new CountDownLatch(1);
-        List<String> workpadCommands = new CopyOnWriteArrayList<>();
+        var tracker = new FakeTracker(List.of(card));
+        var commandAStarted = new CountDownLatch(1);
+        var releaseCommandA = new CountDownLatch(1);
+        var commandBStarted = new CountDownLatch(1);
+        var workpadCommands = new CopyOnWriteArrayList<String>();
         TrelloHandoffToolHandler workpads = mock();
         when(workpads.updateCodexUsageSection(any(), anyString(), nullable(String.class)))
                 .thenAnswer(invocation -> {
@@ -1689,7 +1689,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
-            if (request.config().codex().command().equals("command-a")) {
+            if ("command-a".equals(request.config().codex().command())) {
                 commandAStarted.countDown();
                 assertThat(releaseCommandA.await(5, TimeUnit.SECONDS))
                         .as("the previous-command worker should be released within 5 seconds")
@@ -1733,9 +1733,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflowWithCommand(workflow, "command-a", "");
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card card = TestCards.card("card-1", "TRELLO-invalid-reload", "Todo");
-        FakeTracker tracker = new FakeTracker(List.of(card));
+        var tracker = new FakeTracker(List.of(card));
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
@@ -1751,7 +1751,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         orchestrator.start();
         waitUntil(() -> orchestrator.snapshot().dispatchPause() != null);
         RuntimeSnapshot beforeReload = orchestrator.snapshot();
-        long previousModified = Files.getLastModifiedTime(workflow).toMillis();
+        var previousModified = Files.getLastModifiedTime(workflow).toMillis();
         Files.writeString(
                 workflow,
                 """
@@ -1780,10 +1780,10 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflowWithCommand(workflow, "command-a", "");
         Card card = TestCards.card("card-1", "TRELLO-queued", "Todo");
-        FakeTracker tracker = new FakeTracker(List.of(card));
-        AtomicReference<String> launchedCommand = new AtomicReference<>();
-        CountDownLatch workerClosureEntered = new CountDownLatch(1);
-        CountDownLatch releaseWorkerClosure = new CountDownLatch(1);
+        var tracker = new FakeTracker(List.of(card));
+        var launchedCommand = new AtomicReference<String>();
+        var workerClosureEntered = new CountDownLatch(1);
+        var releaseWorkerClosure = new CountDownLatch(1);
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
@@ -1826,14 +1826,14 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         writeWorkflowWithCommand(workflow, "command-a", "");
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
         Instant reset = now.plusSeconds(60);
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card card = TestCards.card("card-1", "TRELLO-deadline", "Todo");
-        FakeTracker tracker = new FakeTracker(List.of(card));
-        AtomicInteger commandBRuns = new AtomicInteger();
+        var tracker = new FakeTracker(List.of(card));
+        var commandBRuns = new AtomicInteger();
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
-            if (request.config().codex().command().equals("command-b")) {
+            if ("command-b".equals(request.config().codex().command())) {
                 commandBRuns.incrementAndGet();
             }
             return AgentRunResult.codexUsageLimit("turn_failed: Exhausted.", Optional.of(reset));
@@ -1866,10 +1866,10 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflowWithCommand(workflow, "command-a", "");
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card card = TestCards.card("card-1", "TRELLO-workpad-owner", "Todo");
-        FakeTracker tracker = new FakeTracker(List.of(card));
-        List<String> workpadEvents = new CopyOnWriteArrayList<>();
+        var tracker = new FakeTracker(List.of(card));
+        var workpadEvents = new CopyOnWriteArrayList<String>();
         TrelloHandoffToolHandler workpads = mock();
         when(workpads.updateCodexUsageSection(any(), anyString(), nullable(String.class)))
                 .thenAnswer(invocation -> {
@@ -1877,9 +1877,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                     String section = invocation.getArgument(2);
                     String command = updateConfig.codex().command();
                     workpadEvents.add(command + (section == null ? ":clear" : ":set"));
-                    return section != null || !command.equals("command-a");
+                    return section != null || !"command-a".equals(command);
                 });
-        CountDownLatch commandBReturnedUsage = new CountDownLatch(1);
+        var commandBReturnedUsage = new CountDownLatch(1);
         AgentRunner runner = commandScopedUsageLimitRunner(now, commandBReturnedUsage);
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner, clock, workpads);
 
@@ -1907,12 +1907,12 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflowWithCommandAndBoard(workflow, "command-a", "board-1", "token-a");
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card boardACard = cardOnBoard("shared-card", "TRELLO-board-a", "Todo", "board-1");
         Card boardBCard = cardOnBoard("shared-card", "TRELLO-board-b", "Todo", "board-2");
-        FakeTracker tracker = new FakeTracker(List.of(boardACard));
+        var tracker = new FakeTracker(List.of(boardACard));
         tracker.resolveConfiguredBoardId = true;
-        List<String> workpadEvents = new CopyOnWriteArrayList<>();
+        var workpadEvents = new CopyOnWriteArrayList<String>();
         TrelloHandoffToolHandler workpads = mock();
         when(workpads.updateCodexUsageSection(any(), anyString(), nullable(String.class)))
                 .thenAnswer(invocation -> {
@@ -1921,9 +1921,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                     workpadEvents.add(
                             owner.codex().command() + "/" + owner.tracker().resolvedBoardId() + "/"
                                     + owner.tracker().apiToken() + (section == null ? ":clear" : ":set"));
-                    return section != null || !owner.codex().command().equals("command-a");
+                    return section != null || !"command-a".equals(owner.codex().command());
                 });
-        CountDownLatch commandBReturnedUsage = new CountDownLatch(1);
+        var commandBReturnedUsage = new CountDownLatch(1);
         AgentRunner runner = commandScopedUsageLimitRunner(now, commandBReturnedUsage);
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner, clock, workpads);
 
@@ -1941,7 +1941,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         orchestrator.stop();
 
         // then
-        int boardBSet = workpadEvents.indexOf("command-b/board-2/token-b:set");
+        var boardBSet = workpadEvents.indexOf("command-b/board-2/token-b:set");
         assertThat(boardBSet).isGreaterThanOrEqualTo(0);
         assertThat(workpadEvents.subList(boardBSet, workpadEvents.size()))
                 .contains("command-a/board-1/token-a:clear", "command-b/board-2/token-b:clear");
@@ -1952,22 +1952,22 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void runningWorkerKeepsLaunchTrackerScopeAndLateActiveResultDoesNotRetryOnReloadedTarget() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        String endpoint = "https://api.example.test/1";
+        var endpoint = "https://api.example.test/1";
         writeWorkflowWithTarget(workflow, endpoint, "board-a", "token-a", "command", "work-a");
         Card cardA = cardOnBoard("shared-card", "TRELLO-board-a", "Todo", "board-a");
         Card sameIdOnB = cardOnBoard("shared-card", "TRELLO-board-b", "Human Review", "board-b");
-        ScopedTracker tracker = new ScopedTracker();
+        var tracker = new ScopedTracker();
         tracker.setCandidates(endpoint, "board-a", List.of(cardA));
         tracker.setCandidates(endpoint, "board-b", List.of());
         tracker.setCardState(endpoint, "board-b", sameIdOnB);
-        CountDownLatch commandAStarted = new CountDownLatch(1);
-        CountDownLatch releaseCommandA = new CountDownLatch(1);
+        var commandAStarted = new CountDownLatch(1);
+        var releaseCommandA = new CountDownLatch(1);
         AgentRunner runner = mock();
-        when(runner.run(any())).thenAnswer(ignored -> {
+        when(runner.run(any())).thenAnswer(_ -> {
             commandAStarted.countDown();
             try {
                 releaseCommandA.await(5, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
+            } catch (InterruptedException _) {
                 Thread.currentThread().interrupt();
                 return AgentRunResult.fail("interrupted");
             }
@@ -2004,26 +2004,26 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void lateSameCommandOldTargetUsagePausesCurrentTargetWithoutTransplantingRetry() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        String endpoint = "https://api.example.test/1";
+        var endpoint = "https://api.example.test/1";
         writeWorkflowWithTarget(workflow, endpoint, "board-a", "token-a", "same-command", "work-a");
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card cardA = cardOnBoard("card-a", "TRELLO-late-a", "Todo", "board-a");
         Card cardB = cardOnBoard("card-b", "TRELLO-fresh-b", "Todo", "board-b");
-        ScopedTracker tracker = new ScopedTracker();
+        var tracker = new ScopedTracker();
         tracker.setCandidates(endpoint, "board-a", List.of(cardA));
         tracker.setCandidates(endpoint, "board-b", List.of());
-        List<String> workpadEvents = new CopyOnWriteArrayList<>();
-        TrelloHandoffToolHandler workpads = recordingWorkpads(workpadEvents, ignored -> true);
-        CountDownLatch oldTargetStarted = new CountDownLatch(1);
-        CountDownLatch releaseOldTarget = new CountDownLatch(1);
-        CountDownLatch newTargetStarted = new CountDownLatch(1);
-        List<AgentRunner.AgentRunRequest> requests = new CopyOnWriteArrayList<>();
+        var workpadEvents = new CopyOnWriteArrayList<String>();
+        TrelloHandoffToolHandler workpads = recordingWorkpads(workpadEvents, _ -> true);
+        var oldTargetStarted = new CountDownLatch(1);
+        var releaseOldTarget = new CountDownLatch(1);
+        var newTargetStarted = new CountDownLatch(1);
+        var requests = new CopyOnWriteArrayList<AgentRunner.AgentRunRequest>();
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             requests.add(request);
-            if (request.config().tracker().resolvedBoardId().equals("board-a")) {
+            if ("board-a".equals(request.config().tracker().resolvedBoardId())) {
                 oldTargetStarted.countDown();
                 assertThat(releaseOldTarget.await(5, TimeUnit.SECONDS))
                         .as("the old-target worker should be released within 5 seconds")
@@ -2050,14 +2050,14 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         releaseOldTarget.countDown();
         waitUntil(() -> tracker.releases.size() == 1);
         RuntimeSnapshot afterLateUsage = orchestrator.snapshot();
-        long boardBFetchesBeforePausedTick = tracker.candidateFetchTargets.stream()
+        var boardBFetchesBeforePausedTick = tracker.candidateFetchTargets.stream()
                 .filter(targetLabel(endpoint, "board-b")::equals)
                 .count();
         orchestrator.tickNowForTests();
         RuntimeSnapshot beforeDeadline = orchestrator.snapshot();
-        List<String> workpadEventsBeforeDeadline = List.copyOf(workpadEvents);
-        int requestsBeforeDeadline = requests.size();
-        long boardBFetchesAfterPausedTick = tracker.candidateFetchTargets.stream()
+        var workpadEventsBeforeDeadline = List.copyOf(workpadEvents);
+        var requestsBeforeDeadline = requests.size();
+        var boardBFetchesAfterPausedTick = tracker.candidateFetchTargets.stream()
                 .filter(targetLabel(endpoint, "board-b")::equals)
                 .count();
         clock.advance(Duration.ofMinutes(2));
@@ -2096,21 +2096,21 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void multiHopTrackerRotationPurgesLateUsageWorkpadOwnershipOutsideNextTarget() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        String endpoint = "https://api.example.test/1";
+        var endpoint = "https://api.example.test/1";
         writeWorkflowWithTarget(workflow, endpoint, "board-a", "token-a", "same-command", "work-a", 60_000, 1);
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card cardA = cardOnBoard("card-a", "TRELLO-late-a", "Todo", "board-a");
-        ScopedTracker tracker = new ScopedTracker();
+        var tracker = new ScopedTracker();
         tracker.setCandidates(endpoint, "board-a", List.of(cardA));
         tracker.setCandidates(endpoint, "board-b", List.of());
         tracker.setCandidates(endpoint, "board-c", List.of());
-        List<String> workpadEvents = new CopyOnWriteArrayList<>();
-        TrelloHandoffToolHandler workpads = recordingWorkpads(workpadEvents, ignored -> true);
-        CountDownLatch oldTargetStarted = new CountDownLatch(1);
-        CountDownLatch releaseOldTarget = new CountDownLatch(1);
+        var workpadEvents = new CopyOnWriteArrayList<String>();
+        TrelloHandoffToolHandler workpads = recordingWorkpads(workpadEvents, _ -> true);
+        var oldTargetStarted = new CountDownLatch(1);
+        var releaseOldTarget = new CountDownLatch(1);
         AgentRunner runner = mock();
-        when(runner.run(any())).thenAnswer(invocation -> {
+        when(runner.run(any())).thenAnswer(_ -> {
             oldTargetStarted.countDown();
             assertThat(releaseOldTarget.await(5, TimeUnit.SECONDS))
                     .as("the old-target worker should be released within 5 seconds")
@@ -2134,13 +2134,13 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
 
         rewriteWorkflowWithTarget(workflow, endpoint, "board-c", "token-c", "same-command", "work-c", 180_000, 1);
         orchestrator.tickNowForTests();
-        List<String> afterRotation = List.copyOf(workpadEvents);
+        var afterRotation = List.copyOf(workpadEvents);
 
         clock.advance(Duration.ofMinutes(2));
         orchestrator.dispatchPauseDeadlineNowForTests(now.plusSeconds(120));
         waitUntil(() -> orchestrator.snapshot().dispatchPause() != null
                 && orchestrator.snapshot().dispatchPause().until().equals(now.plusSeconds(300)));
-        List<String> afterRearm = List.copyOf(workpadEvents);
+        var afterRearm = List.copyOf(workpadEvents);
         orchestrator.stop();
 
         // then
@@ -2153,19 +2153,19 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void lateSameTargetUsageUsesCurrentWorkpadOwnerAndFallbackPolicy() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        String endpoint = "https://api.example.test/1";
+        var endpoint = "https://api.example.test/1";
         writeWorkflowWithTarget(workflow, endpoint, "board-a", "token-a", "same-command", "work-a", 60_000, 1);
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card card = cardOnBoard("card-a", "TRELLO-same-target", "Todo", "board-a");
-        ScopedTracker tracker = new ScopedTracker();
+        var tracker = new ScopedTracker();
         tracker.setCandidates(endpoint, "board-a", List.of(card));
-        List<String> workpadEvents = new CopyOnWriteArrayList<>();
-        TrelloHandoffToolHandler workpads = recordingWorkpads(workpadEvents, ignored -> true);
-        CountDownLatch workerStarted = new CountDownLatch(1);
-        CountDownLatch releaseWorker = new CountDownLatch(1);
+        var workpadEvents = new CopyOnWriteArrayList<String>();
+        TrelloHandoffToolHandler workpads = recordingWorkpads(workpadEvents, _ -> true);
+        var workerStarted = new CountDownLatch(1);
+        var releaseWorker = new CountDownLatch(1);
         AgentRunner runner = mock();
-        when(runner.run(any())).thenAnswer(invocation -> {
+        when(runner.run(any())).thenAnswer(_ -> {
             workerStarted.countDown();
             assertThat(releaseWorker.await(5, TimeUnit.SECONDS))
                     .as("the same-target worker should be released within 5 seconds")
@@ -2185,7 +2185,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         waitUntil(() -> orchestrator.snapshot().dispatchPause() != null
                 && workpadEvents.contains(endpoint + "/board-a/token-b:set"));
         RuntimeSnapshot snapshot = orchestrator.snapshot();
-        List<String> eventsWhilePaused = List.copyOf(workpadEvents);
+        var eventsWhilePaused = List.copyOf(workpadEvents);
         orchestrator.stop();
 
         // then
@@ -2199,16 +2199,16 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void returningToLateUsageTargetRefreshesWorkpadCleanupOwnerAfterRotation() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        String endpoint = "https://api.example.test/1";
+        var endpoint = "https://api.example.test/1";
         writeWorkflowWithTarget(workflow, endpoint, "board-a", "token-a-old", "same-command", "work-a", 60_000, 1);
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card lateCard = cardOnBoard("card-a-late", "TRELLO-late-a", "Todo", "board-a");
         Card freshCard = cardOnBoard("card-a-fresh", "TRELLO-fresh-a", "Todo", "board-a");
-        ScopedTracker tracker = new ScopedTracker();
+        var tracker = new ScopedTracker();
         tracker.setCandidates(endpoint, "board-a", List.of(lateCard));
         tracker.setCandidates(endpoint, "board-b", List.of());
-        List<String> workpadEvents = new CopyOnWriteArrayList<>();
+        var workpadEvents = new CopyOnWriteArrayList<String>();
         TrelloHandoffToolHandler workpads = mock();
         when(workpads.updateCodexUsageSection(any(), anyString(), nullable(String.class)))
                 .thenAnswer(invocation -> {
@@ -2220,13 +2220,13 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                             + (section == null ? ":clear" : ":set"));
                     return true;
                 });
-        CountDownLatch oldTargetStarted = new CountDownLatch(1);
-        CountDownLatch releaseOldTarget = new CountDownLatch(1);
-        CountDownLatch freshTargetStarted = new CountDownLatch(1);
+        var oldTargetStarted = new CountDownLatch(1);
+        var releaseOldTarget = new CountDownLatch(1);
+        var freshTargetStarted = new CountDownLatch(1);
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
-            if (request.config().tracker().apiToken().equals("token-a-old")) {
+            if ("token-a-old".equals(request.config().tracker().apiToken())) {
                 oldTargetStarted.countDown();
                 assertThat(releaseOldTarget.await(5, TimeUnit.SECONDS))
                         .as("the old-owner target worker should be released within 5 seconds")
@@ -2262,7 +2262,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         orchestrator.dispatchPauseDeadlineNowForTests(now.plusSeconds(120));
         waitUntil(() -> orchestrator.snapshot().dispatchPause() != null
                 && orchestrator.snapshot().dispatchPause().until().equals(now.plusSeconds(300)));
-        List<String> afterCurrentPolicyRearm = List.copyOf(workpadEvents);
+        var afterCurrentPolicyRearm = List.copyOf(workpadEvents);
         tracker.setCandidates(endpoint, "board-a", List.of(freshCard));
         clock.advance(Duration.ofMinutes(3));
         orchestrator.dispatchPauseDeadlineNowForTests(now.plusSeconds(300));
@@ -2288,23 +2288,23 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void sameCommandBoardReloadDetachesOldUsageOwnershipAndProbesNewBoardFresh() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        String endpoint = "https://api.example.test/1";
+        var endpoint = "https://api.example.test/1";
         writeWorkflowWithTarget(workflow, endpoint, "board-a", "token-a", "same-command", "work-a");
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card cardA = cardOnBoard("card-a", "TRELLO-board-a", "Todo", "board-a");
         Card cardB = cardOnBoard("card-b", "TRELLO-board-b", "Todo", "board-b");
-        ScopedTracker tracker = new ScopedTracker();
+        var tracker = new ScopedTracker();
         tracker.setCandidates(endpoint, "board-a", List.of(cardA));
         tracker.setCandidates(endpoint, "board-b", List.of());
-        List<String> workpadEvents = new CopyOnWriteArrayList<>();
-        TrelloHandoffToolHandler workpads = recordingWorkpads(workpadEvents, ignored -> true);
-        List<AgentRunner.AgentRunRequest> requests = new CopyOnWriteArrayList<>();
+        var workpadEvents = new CopyOnWriteArrayList<String>();
+        TrelloHandoffToolHandler workpads = recordingWorkpads(workpadEvents, _ -> true);
+        var requests = new CopyOnWriteArrayList<AgentRunner.AgentRunRequest>();
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             requests.add(request);
-            if (request.config().tracker().resolvedBoardId().equals("board-a")) {
+            if ("board-a".equals(request.config().tracker().resolvedBoardId())) {
                 return AgentRunResult.codexUsageLimit(
                         "turn_failed: Board A usage limit.", Optional.of(now.plusSeconds(60)));
             }
@@ -2338,14 +2338,14 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void sameTargetCredentialReloadRefreshesActiveWorkpadOwnerConfig() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        String endpoint = "https://api.example.test/1";
+        var endpoint = "https://api.example.test/1";
         writeWorkflowWithTarget(workflow, endpoint, "board-a", "token-a", "same-command", "work");
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
         Card card = cardOnBoard("card-a", "TRELLO-board-a", "Todo", "board-a");
-        ScopedTracker tracker = new ScopedTracker();
+        var tracker = new ScopedTracker();
         tracker.setCandidates(endpoint, "board-a", List.of(card));
-        List<String> workpadEvents = new CopyOnWriteArrayList<>();
-        TrelloHandoffToolHandler workpads = recordingWorkpads(workpadEvents, ignored -> true);
+        var workpadEvents = new CopyOnWriteArrayList<String>();
+        TrelloHandoffToolHandler workpads = recordingWorkpads(workpadEvents, _ -> true);
         AgentRunner runner = mock();
         when(runner.run(any()))
                 .thenReturn(
@@ -2368,19 +2368,19 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void differentTrackerSameCardIdDoesNotInheritPreviousTargetRetry() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        String endpoint = "https://api.example.test/1";
+        var endpoint = "https://api.example.test/1";
         writeWorkflowWithTarget(workflow, endpoint, "board-a", "token-a", "command-a", "work-a");
         Card cardA = cardOnBoard("shared-card", "TRELLO-board-a", "Todo", "board-a");
         Card cardB = cardOnBoard("shared-card", "TRELLO-board-b", "Todo", "board-b");
-        ScopedTracker tracker = new ScopedTracker();
+        var tracker = new ScopedTracker();
         tracker.setCandidates(endpoint, "board-a", List.of(cardA));
         tracker.setCandidates(endpoint, "board-b", List.of());
-        List<AgentRunner.AgentRunRequest> requests = new CopyOnWriteArrayList<>();
+        var requests = new CopyOnWriteArrayList<AgentRunner.AgentRunRequest>();
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             requests.add(request);
-            if (request.config().tracker().resolvedBoardId().equals("board-a")) {
+            if ("board-a".equals(request.config().tracker().resolvedBoardId())) {
                 return AgentRunResult.fail("generic command A failure");
             }
             tracker.setCardState(
@@ -2410,25 +2410,25 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void sameBoardAndCardIdsOnDifferentEndpointsKeepIndependentCleanupOwnership() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        String endpointA = "https://api-a.example.test/1/";
-        String endpointB = "https://api-b.example.test/1";
+        var endpointA = "https://api-a.example.test/1/";
+        var endpointB = "https://api-b.example.test/1";
         writeWorkflowWithTarget(workflow, endpointA, "shared-board", "token-a", "command-a", "work-a");
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        MutableClock clock = new MutableClock(now);
+        var clock = new MutableClock(now);
         Card cardA = cardOnBoard("shared-card", "TRELLO-endpoint-a", "Todo", "shared-board");
         Card cardB = cardOnBoard("shared-card", "TRELLO-endpoint-b", "Todo", "shared-board");
-        ScopedTracker tracker = new ScopedTracker();
+        var tracker = new ScopedTracker();
         tracker.setCandidates(endpointA, "shared-board", List.of(cardA));
         tracker.setCandidates(endpointB, "shared-board", List.of());
-        List<String> workpadEvents = new CopyOnWriteArrayList<>();
-        AtomicInteger endpointAClears = new AtomicInteger();
+        var workpadEvents = new CopyOnWriteArrayList<String>();
+        var endpointAClears = new AtomicInteger();
         TrelloHandoffToolHandler workpads = recordingWorkpads(workpadEvents, event -> {
             if (event.equals(endpointA + "/shared-board/token-a:clear")) {
                 return endpointAClears.incrementAndGet() > 1;
             }
             return true;
         });
-        CountDownLatch commandBReturnedUsage = new CountDownLatch(1);
+        var commandBReturnedUsage = new CountDownLatch(1);
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);

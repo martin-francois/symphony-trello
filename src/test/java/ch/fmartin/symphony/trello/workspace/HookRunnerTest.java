@@ -48,7 +48,7 @@ final class HookRunnerTest {
 
         // then
         assertThat(tempDir.resolve("cwd.txt")).content(StandardCharsets.UTF_8).contains(tempDir.toString());
-        assertThat(Files.readString(tempDir.resolve("shell.txt"), StandardCharsets.UTF_8))
+        assertThat(Files.readString(tempDir.resolve("shell.txt")))
                 .contains("non-login");
     }
 

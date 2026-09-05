@@ -57,12 +57,12 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
                 new WorkerHealthScenario(
                         "wrong-board",
                         "Wrong Board Queue",
-                        (test, workflow, env) -> {
+                        (test, workflow, _) -> {
                             test.commands.stopHealthServer(workflow.toString());
                             test.commands.startHealthServer(workflow, "other-board");
                             return () -> {};
                         },
-                        (test, workflow, env) -> new String[] {
+                        (_, workflow, _) -> new String[] {
                             "WARN  \"Wrong Board Queue\" local server: http://127.0.0.1:",
                             "(wrong Symphony workflow or board)",
                             "Expected workflow: " + workflow.toAbsolutePath().normalize(),
@@ -73,17 +73,16 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
                 new WorkerHealthScenario(
                         "wrong-workflow",
                         "Wrong Workflow Queue",
-                        (test, workflow, env) -> {
+                        (test, workflow, _) -> {
                             Path wrongWorkflow = test.tempDir.resolve("WORKFLOW.actual.md");
                             Files.writeString(
                                     wrongWorkflow,
-                                    Files.readString(workflow, StandardCharsets.UTF_8),
-                                    StandardCharsets.UTF_8);
+                                    Files.readString(workflow));
                             test.commands.stopHealthServer(workflow.toString());
                             test.commands.startHealthServer(wrongWorkflow, "board-1");
                             return () -> {};
                         },
-                        (test, workflow, env) -> new String[] {
+                        (test, _, _) -> new String[] {
                             "WARN  \"Wrong Workflow Queue\" local server: http://127.0.0.1:",
                             "(wrong Symphony workflow or board)",
                             "Actual workflow: "
@@ -97,7 +96,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
                 new WorkerHealthScenario(
                         "port-used",
                         "Port Used Queue",
-                        (test, workflow, env) -> {
+                        (test, workflow, _) -> {
                             test.commands.stopHealthServer(workflow.toString());
                             HttpServer otherServer = LocalSetupTestFixture.FakeCommands.createHealthServer(
                                     test.commands.workflowPort(workflow));
@@ -111,7 +110,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
                             otherServer.start();
                             return () -> otherServer.stop(0);
                         },
-                        (test, workflow, env) -> new String[] {
+                        (test, workflow, _) -> new String[] {
                             "WARN  \"Port Used Queue\" configured port "
                                     + test.commands.workflowPort(workflow)
                                     + " is in use by another process",
@@ -121,11 +120,11 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
                 new WorkerHealthScenario(
                         "stopped",
                         "Stopped Queue",
-                        (test, workflow, env) -> {
+                        (test, workflow, _) -> {
                             test.commands.stopHealthServer(workflow.toString());
                             return () -> {};
                         },
-                        (test, workflow, env) -> new String[] {
+                        (_, _, env) -> new String[] {
                             "WARN  \"Stopped Queue\" local server is not running",
                             "Start: symphony-trello start --env " + env
                         },
@@ -177,8 +176,8 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
     @Test
     void setupPrefersRealHttpPortOverrideOverDotenvAlias() throws Exception {
         // given
-        int envPort = availablePort();
-        int dotenvPort = availablePort();
+        var envPort = availablePort();
+        var dotenvPort = availablePort();
         commands.healthPortOverride = envPort;
         LocalSetup setupWithOverride = setupWithEnvironment(Map.of(
                 "SYMPHONY_TRELLO_CONFIG_DIR",
@@ -196,8 +195,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
                 TRELLO_API_TOKEN=token
                 SYMPHONY_HTTP_PORT=%d
                 """
-                        .formatted(dotenvPort),
-                StandardCharsets.UTF_8);
+                        .formatted(dotenvPort));
 
         // when
         SetupRunResult setupResult = runSetup(
@@ -246,9 +244,8 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
                 "--no-github");
         Files.writeString(
                 workflow,
-                Files.readString(workflow, StandardCharsets.UTF_8)
-                        .replace("board_id: \"abc123\"", "board_id: \"other-board\""),
-                StandardCharsets.UTF_8);
+                Files.readString(workflow)
+                        .replace("board_id: \"abc123\"", "board_id: \"other-board\""));
 
         // when
         SetupRunResult result = runSetup("check", "--endpoint", endpoint());
@@ -267,7 +264,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.port-mismatch.md");
         Path env = tempDir.resolve(".env.port-mismatch");
-        int port = availablePort();
+        var port = availablePort();
         SetupRunResult setupResult = runSetup(
                 "--non-interactive",
                 "--endpoint",
@@ -287,8 +284,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
                 "--no-github");
         Files.writeString(
                 workflow,
-                Files.readString(workflow, StandardCharsets.UTF_8).replace("port: " + port, "port: " + (port + 1)),
-                StandardCharsets.UTF_8);
+                Files.readString(workflow).replace("port: " + port, "port: " + (port + 1)));
 
         // when
         SetupRunResult result = runSetup("check", "--endpoint", endpoint());
@@ -312,7 +308,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         Files.createDirectories(configDir);
         Files.createDirectories(envDirectory);
         Files.createDirectories(fixture.workspaceRoot());
-        Files.writeString(workspaceFile, "not a directory", StandardCharsets.UTF_8);
+        Files.writeString(workspaceFile, "not a directory");
         writeWorkflow(workflow, "synthetic-board", 20451);
         fixture.givenManifest(
                 """
@@ -461,7 +457,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         Path env = configDir.resolve(".env.valid");
         Files.createDirectories(configDir);
         Files.createDirectories(fixture.workspaceRoot());
-        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials());
         writeWorkflow(workflow, "valid-board-id", 20457);
         commands.startHealthServer(workflow, "other-board");
         fixture.givenManifest(
@@ -500,7 +496,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         Path env = configDir.resolve(".env.valid");
         Files.createDirectories(configDir);
         Files.createDirectories(fixture.workspaceRoot());
-        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials());
         writeWorkflow(workflow, "valid-board-id", 20457);
         fixture.givenManifest(
                 """
@@ -556,7 +552,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
     @Test
     void setupRejectsExplicitServerPortReservedByConnectedBoard() {
         // given
-        int reservedPort = availablePort();
+        var reservedPort = availablePort();
         Path firstWorkflow = tempDir.resolve("WORKFLOW.first.md");
         Path secondWorkflow = tempDir.resolve("WORKFLOW.second.md");
         Path env = tempDir.resolve(".env");

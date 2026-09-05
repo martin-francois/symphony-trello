@@ -17,9 +17,9 @@ final class ProcessHandleManagedProcessPlatformTest {
     @Test
     void managedWorkerEnvironmentDropsInstallerCompletionMode() {
         // given
-        Map<String, String> inheritedEnvironment = new LinkedHashMap<>(
+        var inheritedEnvironment = new LinkedHashMap<String, String>(
                 Map.of(LocalSetup.INSTALLER_COMPLETION_ENV, "defer", "KEEP_INHERITED", "inherited"));
-        Map<String, String> configuredEnvironment =
+        var configuredEnvironment =
                 Map.of(LocalSetup.INSTALLER_COMPLETION_ENV, "print", "KEEP_CONFIGURED", "configured");
 
         // when
@@ -37,12 +37,12 @@ final class ProcessHandleManagedProcessPlatformTest {
         // given
         Path appHome = tempDir.resolve("symphony");
         Path workflow = tempDir.resolve("config/WORKFLOW.md");
-        List<String> arguments = javaArguments(appHome, workflow);
+        var arguments = javaArguments(appHome, workflow);
 
         // when
-        boolean workflowMatch =
+        var workflowMatch =
                 ProcessHandleManagedProcessPlatform.isManagedCommand(arguments, appHome, Optional.of(workflow));
-        boolean installMatch =
+        var installMatch =
                 ProcessHandleManagedProcessPlatform.isManagedCommand(arguments, appHome, Optional.empty());
 
         // then
@@ -59,13 +59,13 @@ final class ProcessHandleManagedProcessPlatformTest {
         // given
         Path appHome = tempDir.resolve("symphony");
         Path workflow = tempDir.resolve("config/WORKFLOW.md");
-        List<String> otherInstallArguments = javaArguments(tempDir.resolve("symphony-old"), workflow);
-        List<String> otherWorkflowArguments = javaArguments(appHome, tempDir.resolve("config/WORKFLOW.md.bak"));
+        var otherInstallArguments = javaArguments(tempDir.resolve("symphony-old"), workflow);
+        var otherWorkflowArguments = javaArguments(appHome, tempDir.resolve("config/WORKFLOW.md.bak"));
 
         // when
-        boolean installPrefixMatch = ProcessHandleManagedProcessPlatform.isManagedCommand(
+        var installPrefixMatch = ProcessHandleManagedProcessPlatform.isManagedCommand(
                 otherInstallArguments, appHome, Optional.of(workflow));
-        boolean workflowPrefixMatch = ProcessHandleManagedProcessPlatform.isManagedCommand(
+        var workflowPrefixMatch = ProcessHandleManagedProcessPlatform.isManagedCommand(
                 otherWorkflowArguments, appHome, Optional.of(workflow));
 
         // then

@@ -53,7 +53,7 @@ final class PrerequisiteChecker {
     }
 
     private static Optional<Integer> firstInteger(String line) {
-        for (int index = 0; index < line.length(); index++) {
+        for (var index = 0; index < line.length(); index++) {
             if (Character.isDigit(line.charAt(index))) {
                 return Optional.of(parseIntegerPrefix(line, index));
             }
@@ -62,7 +62,7 @@ final class PrerequisiteChecker {
     }
 
     private static int parseIntegerPrefix(String line, int start) {
-        int end = start + 1;
+        var end = start + 1;
         while (end < line.length() && Character.isDigit(line.charAt(end))) {
             end++;
         }

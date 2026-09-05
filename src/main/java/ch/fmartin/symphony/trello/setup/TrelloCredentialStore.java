@@ -6,7 +6,6 @@ import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -31,7 +30,7 @@ final class TrelloCredentialStore {
     }
 
     CredentialSelection loadOrPrompt(LocalSetup.Options options, Path envPath, Terminal terminal) throws IOException {
-        Map<String, String> dotenv = LocalEnvironment.load(envPath);
+        var dotenv = LocalEnvironment.load(envPath);
         CredentialValue key = credentialValue(
                 TrelloEnvironment.API_KEY,
                 options.apiKey(),
@@ -83,7 +82,7 @@ final class TrelloCredentialStore {
     }
 
     CredentialSelection loadExisting(LocalSetup.Options options, Path envPath) {
-        Map<String, String> dotenv = LocalEnvironment.load(envPath);
+        var dotenv = LocalEnvironment.load(envPath);
         CredentialValue key = credentialValue(
                 TrelloEnvironment.API_KEY,
                 options.apiKey(),
@@ -110,11 +109,9 @@ final class TrelloCredentialStore {
                 .orElseGet(() -> dotenvCredential(name, dotenvValue));
     }
 
-    /**
-     * Credential file values are used literally and never expanded. A value that looks like an
-     * environment reference is a local configuration mistake that would otherwise reach Trello as
-     * a literal credential and fail as a misleading authentication error.
-     */
+    /// Credential file values are used literally and never expanded. A value that looks like an
+    /// environment reference is a local configuration mistake that would otherwise reach Trello as
+    /// a literal credential and fail as a misleading authentication error.
     static CredentialValue dotenvCredential(String name, String value) {
         if (value != null
                 && (EnvironmentReferences.referenceName(value).isPresent()
@@ -153,7 +150,7 @@ final class TrelloCredentialStore {
 
     private static List<String> updatedEnvLines(CredentialSelection credentials, Path envPath) throws IOException {
         List<String> lines =
-                Files.isRegularFile(envPath) ? Files.readAllLines(envPath, StandardCharsets.UTF_8) : new ArrayList<>();
+                Files.isRegularFile(envPath) ? Files.readAllLines(envPath) : new ArrayList<>();
         if (credentials.persistApiKey()) {
             lines = upsertEnv(lines, TrelloEnvironment.API_KEY, credentials.apiKey());
         }
@@ -169,7 +166,7 @@ final class TrelloCredentialStore {
             Files.createDirectories(parent);
         }
         if (Files.exists(envPath)) {
-            Files.write(envPath, lines, StandardCharsets.UTF_8, StandardOpenOption.TRUNCATE_EXISTING);
+            Files.write(envPath, lines, StandardOpenOption.TRUNCATE_EXISTING);
         } else {
             if (supportsPosixFilePermissions(
                     parent == null ? envPath.toAbsolutePath().normalize() : parent)) {
@@ -177,7 +174,7 @@ final class TrelloCredentialStore {
             } else {
                 Files.createFile(envPath);
             }
-            Files.write(envPath, lines, StandardCharsets.UTF_8, StandardOpenOption.TRUNCATE_EXISTING);
+            Files.write(envPath, lines, StandardOpenOption.TRUNCATE_EXISTING);
         }
         secureEnvPermissions(envPath);
     }
@@ -250,8 +247,8 @@ final class TrelloCredentialStore {
     }
 
     static List<String> upsertEnv(List<String> lines, String key, String value) {
-        List<String> updated = new ArrayList<>();
-        boolean replaced = false;
+        var updated = new ArrayList<String>();
+        var replaced = false;
         for (String line : lines) {
             if (definesEnvKey(line, key)) {
                 updated.add(key + "=" + dotenvValue(value));
@@ -273,10 +270,10 @@ final class TrelloCredentialStore {
         if (Pattern.matches("[A-Za-z0-9_./:@%+=,-]+", value)) {
             return value;
         }
-        StringBuilder escaped = new StringBuilder(value.length() + 2);
+        var escaped = new StringBuilder(value.length() + 2);
         escaped.append('"');
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
+        for (var i = 0; i < value.length(); i++) {
+            var c = value.charAt(i);
             switch (c) {
                 case '"' -> escaped.append("\\\"");
                 case '\\' -> escaped.append("\\\\");
@@ -295,7 +292,7 @@ final class TrelloCredentialStore {
         if (candidate.startsWith("export ")) {
             candidate = candidate.substring("export ".length()).stripLeading();
         }
-        int separator = candidate.indexOf('=');
+        var separator = candidate.indexOf('=');
         if (separator <= 0) {
             return false;
         }

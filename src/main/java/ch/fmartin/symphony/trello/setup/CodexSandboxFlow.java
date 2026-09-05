@@ -21,7 +21,7 @@ final class CodexSandboxFlow {
             printWarning(terminal);
             return true;
         }
-        boolean accepted = PromptSupport.yes(
+        var accepted = PromptSupport.yes(
                 terminal,
                 "Allow Codex to run without its command/filesystem sandbox for this workflow (danger-full-access)? [y/N] ");
         if (accepted) {

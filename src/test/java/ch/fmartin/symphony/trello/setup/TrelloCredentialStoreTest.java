@@ -24,7 +24,7 @@ final class TrelloCredentialStoreTest {
         // given
         Path env = tempDir.resolve(".env");
         LocalSetup.Options options = options(env, "direct-key", "direct-token");
-        RecordingTerminal terminal = new RecordingTerminal();
+        var terminal = new RecordingTerminal();
 
         // when
         TrelloCredentialStore.CredentialSelection credentials =
@@ -43,7 +43,7 @@ final class TrelloCredentialStoreTest {
         // given
         Path env = tempDir.resolve(".env");
         LocalSetup.Options options = SetupOptionFactory.options(tempDir);
-        TrelloCredentialStore store =
+        var store =
                 new TrelloCredentialStore(Map.of("TRELLO_API_KEY", "env-key", "TRELLO_API_TOKEN", "env-token"));
 
         // when
@@ -62,7 +62,7 @@ final class TrelloCredentialStoreTest {
     void existingDotenvCredentialsAreNotCopiedIntoAnotherDotenv() throws Exception {
         // given
         Path env = tempDir.resolve(".env");
-        Files.writeString(env, "TRELLO_API_KEY=dotenv-key\nTRELLO_API_TOKEN=dotenv-token\n", StandardCharsets.UTF_8);
+        Files.writeString(env, "TRELLO_API_KEY=dotenv-key\nTRELLO_API_TOKEN=dotenv-token\n");
         LocalSetup.Options options = SetupOptionFactory.options(tempDir);
 
         // when
@@ -82,7 +82,7 @@ final class TrelloCredentialStoreTest {
         List<String> lines = List.of();
 
         // when
-        List<String> updated = TrelloCredentialStore.upsertEnv(lines, "TRELLO_API_TOKEN", "a b\"c\\d");
+        var updated = TrelloCredentialStore.upsertEnv(lines, "TRELLO_API_TOKEN", "a b\"c\\d");
 
         // then
         assertThat(updated).containsExactly("TRELLO_API_TOKEN=\"a b\\\"c\\\\d\"");
@@ -105,7 +105,7 @@ final class TrelloCredentialStoreTest {
         // given
         Path env = tempDir.resolve(".env");
         LocalSetup.Options options = options(env, "key", "token");
-        TrelloCredentialStore store = new TrelloCredentialStore(Map.of());
+        var store = new TrelloCredentialStore(Map.of());
 
         // when
         store.write(store.loadOrPrompt(options, env, new RecordingTerminal()), env, new RecordingTerminal());

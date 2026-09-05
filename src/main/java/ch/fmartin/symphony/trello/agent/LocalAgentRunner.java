@@ -36,7 +36,7 @@ public class LocalAgentRunner implements AgentRunner {
             CodexAppServerClient codex,
             TrackerClient tracker,
             PromptRenderer prompts) {
-        this(workspaceManager, hooks, codex, tracker, prompts, new CodexSkillInstaller());
+        this(workspaceManager, hooks, codex, tracker, prompts, codexSkills1);
     }
 
     @Inject
@@ -47,7 +47,7 @@ public class LocalAgentRunner implements AgentRunner {
             TrackerClient tracker,
             PromptRenderer prompts,
             CodexSkillInstaller codexSkills) {
-        this(workspaceManager, hooks, codex, tracker, prompts, codexSkills, new RepositorySourceResolver());
+        this(workspaceManager, hooks, codex, tracker, prompts, codexSkills, repositorySources1);
     }
 
     LocalAgentRunner(
@@ -79,7 +79,7 @@ public class LocalAgentRunner implements AgentRunner {
                     request.config().hooks().beforeRun(),
                     workspace.path(),
                     request.config().hooks());
-            boolean installBundledSkills = usesBundledCodexSkills(request.prompt());
+            var installBundledSkills = usesBundledCodexSkills(request.prompt());
             String prompt = withRepositorySourceContext(request);
             if (installBundledSkills) {
                 codexSkills.installInto(workspace.path());
@@ -106,11 +106,9 @@ public class LocalAgentRunner implements AgentRunner {
         }
     }
 
-    /**
-     * Shipped skills are installed only when the rendered prompt references their namespaced
-     * paths, so workflows whose prompts do not use the shipped skills, such as hand-authored
-     * workflows that expect an empty workspace root, keep their workspace shape.
-     */
+    /// Shipped skills are installed only when the rendered prompt references their namespaced
+    /// paths, so workflows whose prompts do not use the shipped skills, such as hand-authored
+    /// workflows that expect an empty workspace root, keep their workspace shape.
     private static boolean usesBundledCodexSkills(String prompt) {
         return prompt != null && prompt.contains(".codex/skills/" + CodexSkillCatalog.INSTALLED_SKILL_PREFIX);
     }

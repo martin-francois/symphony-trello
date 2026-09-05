@@ -44,7 +44,7 @@ public class CodexAppServerClient {
     private final Map<String, RateLimitState> rateLimitsByCodexCommand = new ConcurrentHashMap<>();
 
     public CodexAppServerClient(ObjectMapper json, TrelloHandoffToolHandler trelloTools) {
-        this(json, trelloTools, ApplicationClock.systemUtc());
+        this(json, trelloTools, clock1);
     }
 
     @Inject
@@ -61,7 +61,7 @@ public class CodexAppServerClient {
             String prompt,
             String workerIdentity,
             AgentEventListener listener) {
-        return runSession(config, card, workspace, prompt, workerIdentity, listener, turn -> TurnDecision.stop());
+        return runSession(config, card, workspace, prompt, workerIdentity, listener, _ -> TurnDecision.stop());
     }
 
     public AgentRunResult runSession(
@@ -87,7 +87,7 @@ public class CodexAppServerClient {
             return AgentRunResult.fail("codex_not_found: " + e.getMessage());
         }
 
-        try (AppServerSession session = new AppServerSession(process, config, card, workerIdentity, listener)) {
+        try (var session = new AppServerSession(process, config, card, workerIdentity, listener)) {
             ObjectNode capabilities = object();
             if (trelloTools.shouldEnableExperimentalApi(config)) {
                 capabilities.put("experimentalApi", true);
@@ -118,7 +118,7 @@ public class CodexAppServerClient {
             }
 
             String nextPrompt = prompt;
-            int turnNumber = 0;
+            var turnNumber = 0;
             while (nextPrompt != null) {
                 turnNumber++;
                 JsonNode turn = request(
@@ -247,7 +247,7 @@ public class CodexAppServerClient {
 
     private ObjectNode object(Object... keyValues) {
         ObjectNode node = json.createObjectNode();
-        for (int i = 0; i < keyValues.length; i += 2) {
+        for (var i = 0; i < keyValues.length; i += 2) {
             node.set(keyValues[i].toString(), json.valueToTree(keyValues[i + 1]));
         }
         return node;
@@ -360,7 +360,7 @@ public class CodexAppServerClient {
             this.workerIdentity = workerIdentity;
             this.listener = listener;
             this.rateLimitState =
-                    rateLimitsByCodexCommand.computeIfAbsent(config.codex().command(), ignored -> new RateLimitState());
+                    rateLimitsByCodexCommand.computeIfAbsent(config.codex().command(), _ -> new RateLimitState());
             this.writer = process.outputWriter(StandardCharsets.UTF_8);
         }
 
@@ -375,8 +375,8 @@ public class CodexAppServerClient {
                 throw unwrapReaderFailure(failure);
             }
             nextRequestId++;
-            int id = nextRequestId;
-            CompletableFuture<JsonNode> future = new CompletableFuture<>();
+            var id = nextRequestId;
+            var future = new CompletableFuture<JsonNode>();
             responses.put(id, future);
             ObjectNode request = object("id", id, "method", method, "params", params);
             write(request);
@@ -436,7 +436,7 @@ public class CodexAppServerClient {
         }
 
         private void readStdout() {
-            try (BufferedReader reader = new BufferedReader(
+            try (var reader = new BufferedReader(
                     new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8), 10 * 1024 * 1024)) {
                 String line = reader.readLine();
                 while (line != null) {
@@ -451,7 +451,7 @@ public class CodexAppServerClient {
         }
 
         private void readStderr() {
-            try (BufferedReader reader =
+            try (var reader =
                     new BufferedReader(new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
                 String line = reader.readLine();
                 while (line != null) {
@@ -487,7 +487,7 @@ public class CodexAppServerClient {
         }
 
         private void respondToServerRequest(JsonNode request) throws IOException {
-            int id = request.path("id").asInt();
+            var id = request.path("id").asInt();
             String method = request.path("method").asText();
             ObjectNode result =
                     switch (method) {
@@ -512,12 +512,12 @@ public class CodexAppServerClient {
             JsonNode params = message.path("params");
             String threadId = params.path("threadId").asText(null);
             String turnId = turnId(params);
-            Map<String, Long> usage = extractUsage(method, params);
+            var usage = extractUsage(method, params);
             if (Objects.equals(method, "account/rateLimits/updated")) {
                 synchronized (rateLimitState) {
                     JsonNode update = params.path("rateLimits");
                     JsonNode payload = mergedRateLimits(update);
-                    boolean accepted = listener.onEventAndReportAccepted(event(
+                    var accepted = listener.onEventAndReportAccepted(event(
                             method,
                             workerIdentity,
                             process.pid(),
@@ -657,7 +657,7 @@ public class CodexAppServerClient {
             try {
                 Instant reset = Instant.ofEpochSecond(resetsAt.longValue());
                 return reset.isAfter(now) ? Optional.of(reset) : Optional.empty();
-            } catch (DateTimeException | ArithmeticException e) {
+            } catch (DateTimeException | ArithmeticException _) {
                 return Optional.empty();
             }
         }
@@ -761,7 +761,7 @@ public class CodexAppServerClient {
                 if (!process.waitFor(Duration.ofSeconds(2))) {
                     process.destroyForcibly();
                 }
-            } catch (InterruptedException e) {
+            } catch (InterruptedException _) {
                 Thread.currentThread().interrupt();
                 process.destroyForcibly();
             }

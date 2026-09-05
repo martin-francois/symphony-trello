@@ -84,7 +84,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     }
 
     static int run(String[] args, PrintStream out, PrintStream err) {
-        ObjectMapper json = new ObjectMapper();
+        var json = new ObjectMapper();
         return runWithSelectionDefaults(
                 args, out, err, () -> new CodexModelDefaultsResolver(json).resolveSelectionDefaults());
     }
@@ -116,9 +116,9 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             PrintStream out,
             PrintStream err,
             Supplier<CodexModelSelectionDefaults> codexModelSelectionDefaults) {
-        ObjectMapper json = new ObjectMapper();
-        TrelloBoardSetup boardSetup = new TrelloBoardSetup(json, codexModelSelectionDefaults);
-        LocalWorkerManager workerManager = new LocalWorkerManager(System.getenv());
+        var json = new ObjectMapper();
+        var boardSetup = new TrelloBoardSetup(json, codexModelSelectionDefaults);
+        var workerManager = new LocalWorkerManager(System.getenv());
         return run(
                 args,
                 new TrelloBoardSetupService(boardSetup, workerManager, System.getenv()),
@@ -153,7 +153,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                         "setup-local", new SetupLocalCommandFactory.SetupLocalCommand(localSetup, input, out, err))
                 .setOut(new PrintWriter(out, true, StandardCharsets.UTF_8))
                 .setErr(new PrintWriter(err, true, StandardCharsets.UTF_8))
-                .setExecutionExceptionHandler((exception, ignored, parseResult) -> {
+                .setExecutionExceptionHandler((exception, _, _) -> {
                     SetupLocalCommandFactory.printExecutionFailure(err, exception, errorCode(exception));
                     if (!(exception instanceof ParameterException)) {
                         SetupDiagnosticReporter.reportFailure(exception, effectiveArgs, input, out, err);
@@ -612,7 +612,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             if (parent != null) {
                 Files.createDirectories(parent);
             }
-            Files.writeString(absolute, body, StandardCharsets.UTF_8);
+            Files.writeString(absolute, body);
         }
     }
 
@@ -850,12 +850,10 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             }
         }
 
-        /**
-         * The appended cause summary keeps local CLI stderr diagnosable: without it the underlying
-         * filesystem exception is invisible and a transient write-probe failure cannot be
-         * root-caused (issue #388). The actionable first sentences stay unchanged so existing user
-         * guidance and the {@code setup_env_write_failed} hint mapping remain valid.
-         */
+        /// The appended cause summary keeps local CLI stderr diagnosable: without it the underlying
+        /// filesystem exception is invisible and a transient write-probe failure cannot be
+        /// root-caused (issue #388). The actionable first sentences stay unchanged so existing user
+        /// guidance and the `setup_env_write_failed` hint mapping remain valid.
         private static TrelloBoardSetupException envWriteFailure(IOException exception) {
             return new TrelloBoardSetupException(
                     "setup_env_write_failed",
@@ -1089,7 +1087,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         @SuppressWarnings("unchecked")
         public boolean preprocess(
                 Stack<String> args, CommandSpec commandSpec, ArgSpec argSpec, Map<String, Object> info) {
-            boolean attached = !" ".equals(info.get("separator"));
+            var attached = !" ".equals(info.get("separator"));
             if (args.empty() && !attached) {
                 return false;
             }
@@ -1111,7 +1109,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         }
 
         private static String optionName(String value) {
-            int separator = value.indexOf('=');
+            var separator = value.indexOf('=');
             return separator < 0 ? value : value.substring(0, separator);
         }
     }

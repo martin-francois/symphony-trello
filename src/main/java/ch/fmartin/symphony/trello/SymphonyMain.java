@@ -78,7 +78,7 @@ public class SymphonyMain {
         @Override
         public int run(String... args) {
             CliOptions options = CliOptions.parse(args);
-            int workflowExitCode = options.workflowPath()
+            var workflowExitCode = options.workflowPath()
                     .map(Path::of)
                     .map(this::selectWorkflow)
                     .orElse(0);
@@ -114,10 +114,10 @@ public class SymphonyMain {
             return Optional.empty();
         }
         try {
-            List<String> lines = Files.readAllLines(workflowPath);
-            Optional<String> frontMatter = frontMatter(lines);
+            var lines = Files.readAllLines(workflowPath);
+            var frontMatter = frontMatter(lines);
             return frontMatter.flatMap(value -> configuredServerPort(value, LocalEnvironment::get));
-        } catch (IOException ignored) {
+        } catch (IOException _) {
             return Optional.empty();
         }
     }
@@ -150,7 +150,7 @@ public class SymphonyMain {
         if (lines.isEmpty() || !"---".equals(lines.getFirst().trim())) {
             return Optional.empty();
         }
-        for (int i = 1; i < lines.size(); i++) {
+        for (var i = 1; i < lines.size(); i++) {
             if ("---".equals(lines.get(i).trim())) {
                 return Optional.of(String.join(System.lineSeparator(), lines.subList(1, i)));
             }

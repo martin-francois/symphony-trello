@@ -33,7 +33,7 @@ final class LocalWorkerManagerTestFixture {
     }
 
     LocalWorkerManagerTestFixture(Path tempDir, Map<String, String> environment) {
-        this(tempDir, environment, new WorkflowConfigEditor());
+        this(tempDir, environment, workflowConfig);
     }
 
     LocalWorkerManagerTestFixture(Path tempDir, Map<String, String> environment, WorkflowConfigEditor workflowConfig) {
@@ -67,25 +67,25 @@ final class LocalWorkerManagerTestFixture {
 
     WorkerRunResult start(StartWorkerRequest request) throws Exception {
         var stdout = new ByteArrayOutputStream();
-        int exitCode = manager.start(request, printStream(stdout));
+        var exitCode = manager.start(request, printStream(stdout));
         return new WorkerRunResult(exitCode, stdout.toString(StandardCharsets.UTF_8));
     }
 
     WorkerRunResult stop(StopWorkerRequest request) throws Exception {
         var stdout = new ByteArrayOutputStream();
-        int exitCode = manager.stop(request, printStream(stdout));
+        var exitCode = manager.stop(request, printStream(stdout));
         return new WorkerRunResult(exitCode, stdout.toString(StandardCharsets.UTF_8));
     }
 
     WorkerRunResult status(WorkerStatusRequest request) throws Exception {
         var stdout = new ByteArrayOutputStream();
-        int exitCode = manager.status(request, printStream(stdout));
+        var exitCode = manager.status(request, printStream(stdout));
         return new WorkerRunResult(exitCode, stdout.toString(StandardCharsets.UTF_8));
     }
 
     WorkerRunResult logs(WorkerLogsRequest request) throws Exception {
         var stdout = new ByteArrayOutputStream();
-        int exitCode = manager.logs(request, printStream(stdout));
+        var exitCode = manager.logs(request, printStream(stdout));
         return new WorkerRunResult(exitCode, stdout.toString(StandardCharsets.UTF_8));
     }
 
@@ -102,8 +102,8 @@ final class LocalWorkerManagerTestFixture {
             ConnectedBoard board, long pid, String startupLog) throws Exception {
         ManagedProcessStore.ManagedProcessFiles files = managedFiles(board);
         stubStoppedStartedWorker(board, pid);
-        when(platform.start(any(), eq(paths.appHome()), any(), any(), any())).thenAnswer(invocation -> {
-            Files.writeString(files.stdoutLog(), startupLog, StandardCharsets.UTF_8);
+        when(platform.start(any(), eq(paths.appHome()), any(), any(), any())).thenAnswer(_ -> {
+            Files.writeString(files.stdoutLog(), startupLog);
             return new ManagedProcessHandle(pid);
         });
         return files;
@@ -166,7 +166,7 @@ final class LocalWorkerManagerTestFixture {
     }
 
     ManagedProcessStore.ManagedProcessFiles writeManagedPid(ConnectedBoard board, long pid) throws Exception {
-        ManagedProcessStore store = new ManagedProcessStore(paths.stateHome());
+        var store = new ManagedProcessStore(paths.stateHome());
         Files.createDirectories(paths.stateHome());
         ManagedProcessStore.ManagedProcessFiles files = store.files(board.workflowPath());
         store.writePid(files.pidFile(), pid);
@@ -340,8 +340,7 @@ final class LocalWorkerManagerTestFixture {
                 ---
                 # %s
                 """
-                        .formatted(boardId, ConfigDefaults.DEFAULT_SERVER_PORT, boardName),
-                StandardCharsets.UTF_8);
+                        .formatted(boardId, ConfigDefaults.DEFAULT_SERVER_PORT, boardName));
         writeEnv(paths.defaultEnvPath());
         return ConnectedBoardBuilder.connectedBoard(workflow.toAbsolutePath().normalize())
                 .withBoardId(boardId)
@@ -358,11 +357,11 @@ final class LocalWorkerManagerTestFixture {
         if (parent != null) {
             Files.createDirectories(parent);
         }
-        Files.writeString(envPath, TestEnv.trelloCredentials("test-key", "test-token"), StandardCharsets.UTF_8);
+        Files.writeString(envPath, TestEnv.trelloCredentials("test-key", "test-token"));
     }
 
     void save(ConnectedBoard... boards) throws Exception {
-        ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(boards));
+        var manifest = new ConnectedBoardManifest(List.of(boards));
         new ConnectedBoardRepository(paths.manifestPath()).save(manifest);
     }
 

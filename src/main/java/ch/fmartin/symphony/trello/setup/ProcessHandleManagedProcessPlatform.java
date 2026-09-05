@@ -34,7 +34,7 @@ abstract class ProcessHandleManagedProcessPlatform implements ManagedProcessPlat
     }
 
     static Map<String, String> withoutInstallerCompletionEnvironment(Map<String, String> environment) {
-        Map<String, String> sanitized = new LinkedHashMap<>(environment);
+        var sanitized = new LinkedHashMap<String, String>(environment);
         sanitized.remove(LocalSetup.INSTALLER_COMPLETION_ENV);
         return Map.copyOf(sanitized);
     }
@@ -65,7 +65,7 @@ abstract class ProcessHandleManagedProcessPlatform implements ManagedProcessPlat
                 .normalize()
                 .resolve("target/quarkus-app/quarkus-run.jar")
                 .toString();
-        boolean matchesInstall = arguments.contains(marker) && arguments.contains(jar);
+        var matchesInstall = arguments.contains(marker) && arguments.contains(jar);
         return workflowPath
                 .map(Path::toAbsolutePath)
                 .map(Path::normalize)
@@ -124,7 +124,7 @@ abstract class ProcessHandleManagedProcessPlatform implements ManagedProcessPlat
         try {
             handle.onExit().get(timeout.toMillis(), TimeUnit.MILLISECONDS);
             return true;
-        } catch (Exception ignored) {
+        } catch (Exception _) {
             return !handle.isAlive();
         }
     }

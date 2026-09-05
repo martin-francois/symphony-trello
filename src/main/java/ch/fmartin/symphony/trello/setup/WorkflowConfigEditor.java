@@ -18,13 +18,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermission;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,7 +42,7 @@ final class WorkflowConfigEditor {
     private static final Pattern FRONT_MATTER =
             Pattern.compile("\\A---\\R(?<yaml>.*?)\\R---\\R(?<body>.*)\\z", Pattern.DOTALL);
     private static final Set<PosixFilePermission> POSIX_WRITE_PERMISSIONS =
-            Set.of(PosixFilePermission.OWNER_WRITE, PosixFilePermission.GROUP_WRITE, PosixFilePermission.OTHERS_WRITE);
+            EnumSet.of(PosixFilePermission.OWNER_WRITE, PosixFilePermission.GROUP_WRITE, PosixFilePermission.OTHERS_WRITE);
 
     WorkflowValidation validate(ConnectedBoard board) {
         return validate(board, LocalEnvironment::get);
@@ -61,7 +61,7 @@ final class WorkflowConfigEditor {
         }
         try {
             FrontMatter frontMatter = read(board.workflowPath());
-            SequencedMap<String, Object> yaml = parseYaml(frontMatter);
+            var yaml = parseYaml(frontMatter);
             WorkflowValidation boardIdValidation = boardId(yaml, environmentResolver)
                     .map(configuredBoardId -> validateBoardId(board, configuredBoardId))
                     .orElseGet(() -> WorkflowValidation.warn("Workflow file is missing tracker.board_id for "
@@ -117,7 +117,7 @@ final class WorkflowConfigEditor {
     WorkflowIntegerSetting serverPortSetting(Path workflowPath) {
         try {
             return serverPortSetting(parseYaml(read(workflowPath)));
-        } catch (IOException | RuntimeException ignored) {
+        } catch (IOException | RuntimeException _) {
             return WorkflowIntegerSetting.omitted();
         }
     }
@@ -126,27 +126,25 @@ final class WorkflowConfigEditor {
             Path workflowPath, Function<String, Optional<String>> environmentResolver) {
         try {
             return serverPortSetting(parseYaml(read(workflowPath)), environmentResolver);
-        } catch (IOException | RuntimeException ignored) {
+        } catch (IOException | RuntimeException _) {
             return WorkflowIntegerSetting.omitted();
         }
     }
 
     WorkflowServerPortClassification classifyServerPortForDiagnostics(Path workflowPath) {
-        return classifyServerPortForDiagnostics(workflowPath, ignored -> Optional.empty());
+        return classifyServerPortForDiagnostics(workflowPath, _ -> Optional.empty());
     }
 
-    /**
-     * Classifies the effective workflow server.port for diagnostics health probing, resolving
-     * environment references through the given resolver. A reference the resolver cannot satisfy
-     * classifies as omitted: diagnostics without the board environment cannot know the real port,
-     * so the manifest fallback covers it like a missing setting.
-     */
+    /// Classifies the effective workflow server.port for diagnostics health probing, resolving
+    /// environment references through the given resolver. A reference the resolver cannot satisfy
+    /// classifies as omitted: diagnostics without the board environment cannot know the real port,
+    /// so the manifest fallback covers it like a missing setting.
     WorkflowServerPortClassification classifyServerPortForDiagnostics(
             Path workflowPath, Function<String, Optional<String>> environmentResolver) {
         SequencedMap<String, Object> yaml;
         try {
             yaml = parseYaml(read(workflowPath));
-        } catch (IOException | TrelloBoardSetupException ignored) {
+        } catch (IOException | TrelloBoardSetupException _) {
             // An unreadable file or invalid front matter is already reported by the workflow
             // summary; probing falls back to the manifest port like a missing setting.
             return WorkflowServerPortClassification.unreadable();
@@ -155,13 +153,13 @@ final class WorkflowConfigEditor {
     }
 
     Optional<String> boardId(Path workflowPath) {
-        return boardId(workflowPath, ignored -> Optional.empty());
+        return boardId(workflowPath, _ -> Optional.empty());
     }
 
     Optional<String> boardId(Path workflowPath, Function<String, Optional<String>> environmentResolver) {
         try {
             return boardId(parseYaml(read(workflowPath)), environmentResolver);
-        } catch (IOException | TrelloBoardSetupException ignored) {
+        } catch (IOException | TrelloBoardSetupException _) {
             return Optional.empty();
         }
     }
@@ -202,11 +200,9 @@ final class WorkflowConfigEditor {
         }
     }
 
-    /**
-     * Rejects literal server.port values outside the local port range before a worker launch.
-     * Environment-reference problems are reported by validateServerPortReference first, so this
-     * check only flags literal values such as 70000, -1, or fractional YAML numbers.
-     */
+    /// Rejects literal server.port values outside the local port range before a worker launch.
+    /// Environment-reference problems are reported by validateServerPortReference first, so this
+    /// check only flags literal values such as 70000, -1, or fractional YAML numbers.
     private void validateLaunchServerPort(
             SequencedMap<String, Object> yaml, Function<String, Optional<String>> environmentResolver) {
         if (invalidServerPortSetting(yaml, environmentResolver)) {
@@ -217,7 +213,7 @@ final class WorkflowConfigEditor {
 
     Optional<TrackerCredentialReferences> trackerCredentialReferences(Path workflowPath) {
         try {
-            SequencedMap<String, Object> yaml = parseYaml(read(workflowPath));
+            var yaml = parseYaml(read(workflowPath));
             if (!(yaml.get("tracker") instanceof Map<?, ?> tracker)) {
                 return Optional.empty();
             }
@@ -226,7 +222,7 @@ final class WorkflowConfigEditor {
             }
             return Optional.of(new TrackerCredentialReferences(
                     optionalString(tracker.get("api_key")), optionalString(tracker.get("api_token"))));
-        } catch (IOException | TrelloBoardSetupException ignored) {
+        } catch (IOException | TrelloBoardSetupException _) {
             return Optional.empty();
         }
     }
@@ -237,21 +233,21 @@ final class WorkflowConfigEditor {
 
     TrelloBoardSetup.RepositoryDefaults repositoryDefaults(Path workflowPath) {
         try {
-            SequencedMap<String, Object> yaml = parseYaml(read(workflowPath));
+            var yaml = parseYaml(read(workflowPath));
             if (!(yaml.get("repository") instanceof Map<?, ?> repository)) {
                 return TrelloBoardSetup.RepositoryDefaults.empty();
             }
             return TrelloBoardSetup.RepositoryDefaults.preserved(
                     optionalString(repository.get("default_url")).orElse(null),
                     optionalString(repository.get("default_path")).orElse(null));
-        } catch (IOException | RuntimeException ignored) {
+        } catch (IOException | RuntimeException _) {
             return TrelloBoardSetup.RepositoryDefaults.empty();
         }
     }
 
     WorkflowIntegerSetting maxAgentsSetting(Path workflowPath) {
         try {
-            SequencedMap<String, Object> yaml = parseYaml(read(workflowPath));
+            var yaml = parseYaml(read(workflowPath));
             if (!(yaml.get("agent") instanceof Map<?, ?> agent)) {
                 return WorkflowIntegerSetting.omitted();
             }
@@ -259,7 +255,7 @@ final class WorkflowConfigEditor {
                 return WorkflowIntegerSetting.omitted();
             }
             return typedConfig(yaml).agentMaxConcurrentAgents();
-        } catch (IOException | RuntimeException ignored) {
+        } catch (IOException | RuntimeException _) {
             return WorkflowIntegerSetting.omitted();
         }
     }
@@ -267,7 +263,7 @@ final class WorkflowConfigEditor {
     WorkflowListConfiguration listConfiguration(Path workflowPath) {
         try {
             FrontMatter frontMatter = read(workflowPath);
-            SequencedMap<String, Object> yaml = parseYaml(frontMatter);
+            var yaml = parseYaml(frontMatter);
             if (!(yaml.get("tracker") instanceof Map<?, ?> tracker)) {
                 return WorkflowListConfiguration.empty();
             }
@@ -279,7 +275,7 @@ final class WorkflowConfigEditor {
                             .or(() -> blockedStateFromWorkflowBody(frontMatter.body())),
                     invalidListSetting(tracker, "active_states"),
                     invalidListSetting(tracker, "terminal_states"));
-        } catch (IOException | RuntimeException ignored) {
+        } catch (IOException | RuntimeException _) {
             return WorkflowListConfiguration.empty();
         }
     }
@@ -331,8 +327,8 @@ final class WorkflowConfigEditor {
         requireLaunchableWorkflowFile(workflowPath);
         ReadWorkflow readWorkflow = readWorkflowForLaunch(workflowPath);
         try {
-            SequencedMap<String, Object> yaml = parseYaml(readWorkflow.frontMatter());
-            WorkflowDefinition workflow = new WorkflowDefinition(
+            var yaml = parseYaml(readWorkflow.frontMatter());
+            var workflow = new WorkflowDefinition(
                     workflowPath.toAbsolutePath().normalize(),
                     yaml,
                     readWorkflow.frontMatter().body().trim());
@@ -354,10 +350,8 @@ final class WorkflowConfigEditor {
         }
     }
 
-    /**
-     * Rejects workflow paths that cannot possibly launch, with the same expected
-     * setup_workflow_invalid classification as unusable workflow content.
-     */
+    /// Rejects workflow paths that cannot possibly launch, with the same expected
+    /// setup_workflow_invalid classification as unusable workflow content.
     void requireLaunchableWorkflowFile(Path workflowPath) {
         if (Files.isRegularFile(workflowPath)) {
             return;
@@ -507,13 +501,13 @@ final class WorkflowConfigEditor {
         if (message == null) {
             return Optional.empty();
         }
-        int separator = message.lastIndexOf(": ");
+        var separator = message.lastIndexOf(": ");
         if (separator < 0 || separator + 2 >= message.length()) {
             return Optional.empty();
         }
         try {
             return Optional.of(Path.of(message.substring(separator + 2)));
-        } catch (InvalidPathException ignored) {
+        } catch (InvalidPathException _) {
             // If the underlying private path cannot be parsed on this host, keep the public
             // message sanitized and omit only the optional lookup token.
             return Optional.empty();
@@ -586,7 +580,7 @@ final class WorkflowConfigEditor {
         }
         try {
             FrontMatter frontMatter = read(workflowPath);
-            SequencedMap<String, Object> yaml = parseYaml(frontMatter);
+            var yaml = parseYaml(frontMatter);
             if (validateServerPort && invalidServerPortSetting(yaml, environmentResolver)) {
                 return WorkflowValidation.warn("invalid server.port");
             }
@@ -594,7 +588,7 @@ final class WorkflowConfigEditor {
                 return WorkflowValidation.warn("overlapping tracker list roles");
             }
             return WorkflowValidation.valid();
-        } catch (IOException | RuntimeException e) {
+        } catch (IOException | RuntimeException _) {
             return WorkflowValidation.warn("unreadable or invalid workflow configuration");
         }
     }
@@ -606,7 +600,7 @@ final class WorkflowConfigEditor {
         }
         try {
             FrontMatter frontMatter = read(board.workflowPath());
-            SequencedMap<String, Object> yaml = parseYaml(frontMatter);
+            var yaml = parseYaml(frontMatter);
             WorkflowValidation boardIdValidation = boardId(yaml, environmentResolver)
                     .map(configuredBoardId -> validateBoardId(board, configuredBoardId))
                     .orElseGet(() -> WorkflowValidation.warn("missing tracker.board_id"));
@@ -620,16 +614,16 @@ final class WorkflowConfigEditor {
                 return WorkflowValidation.warn("overlapping tracker list roles");
             }
             return WorkflowValidation.valid();
-        } catch (IOException | RuntimeException e) {
+        } catch (IOException | RuntimeException _) {
             return WorkflowValidation.warn("unreadable or invalid workflow configuration");
         }
     }
 
     void updateServerPort(Path workflowPath, int port) throws IOException {
         ReadWorkflow readWorkflow = readWorkflow(workflowPath);
-        SequencedMap<String, Object> yaml = parseYaml(readWorkflow.frontMatter());
+        var yaml = parseYaml(readWorkflow.frontMatter());
         Object serverValue = yaml.get("server");
-        SequencedMap<String, Object> server = new LinkedHashMap<>();
+        var server = new LinkedHashMap<String, Object>();
         if (serverValue instanceof Map<?, ?> existingServer) {
             existingServer.forEach((key, value) -> server.put(String.valueOf(key), value));
         }
@@ -648,12 +642,12 @@ final class WorkflowConfigEditor {
             return;
         }
         ReadWorkflow readWorkflow = readWorkflow(workflowPath);
-        SequencedMap<String, Object> yaml = parseYaml(readWorkflow.frontMatter());
+        var yaml = parseYaml(readWorkflow.frontMatter());
         Object codexValue = yaml.get("codex");
         if (!(codexValue instanceof Map<?, ?> existingCodex)) {
             throw new TrelloBoardSetupException("setup_workflow_codex_missing", "Workflow has no codex section.");
         }
-        SequencedMap<String, Object> codex = new LinkedHashMap<>();
+        var codex = new LinkedHashMap<String, Object>();
         existingCodex.forEach((key, value) -> codex.put(String.valueOf(key), value));
         if (!additionalWritableRoots.isEmpty()) {
             codex.put(
@@ -687,12 +681,12 @@ final class WorkflowConfigEditor {
         if (!Files.isRegularFile(workflowPath)) {
             throw new IOException("Workflow path is not a regular file.");
         }
-        String content = Files.readString(workflowPath, StandardCharsets.UTF_8);
+        String content = Files.readString(workflowPath);
         return new ReadWorkflow(content, FrontMatter.parse(content));
     }
 
     private static SequencedMap<String, Object> parseYaml(FrontMatter frontMatter) throws IOException {
-        SequencedMap<String, Object> yaml = YAML.readValue(frontMatter.yaml(), YAML_MAP_TYPE);
+        var yaml = YAML.readValue(frontMatter.yaml(), YAML_MAP_TYPE);
         if (yaml == null) {
             throw new TrelloBoardSetupException(
                     "setup_workflow_frontmatter_not_map", "Workflow front matter must be a YAML map.");
@@ -713,12 +707,12 @@ final class WorkflowConfigEditor {
         if (parent == null) {
             throw new IOException("Workflow path has no parent directory.");
         }
-        Optional<Set<PosixFilePermission>> permissions = readPosixPermissions(target);
+        var permissions = readPosixPermissions(target);
         requireWritableTarget(target, permissions);
         requireUnchangedTarget(target, expectedContent);
         Path temporary = Files.createTempFile(parent, temporaryPrefix(target), ".tmp");
         try {
-            Files.writeString(temporary, content, StandardCharsets.UTF_8);
+            Files.writeString(temporary, content);
             if (permissions.isPresent()) {
                 Files.setPosixFilePermissions(temporary, permissions.get());
             }
@@ -737,7 +731,7 @@ final class WorkflowConfigEditor {
     }
 
     private static void requireUnchangedTarget(Path target, String expectedContent) throws IOException {
-        if (!Files.readString(target, StandardCharsets.UTF_8).equals(expectedContent)) {
+        if (!Files.readString(target).equals(expectedContent)) {
             throw new IOException("Workflow file changed while preparing the update.");
         }
     }
@@ -757,7 +751,7 @@ final class WorkflowConfigEditor {
     private static Optional<Set<PosixFilePermission>> readPosixPermissions(Path target) {
         try {
             return Optional.of(Files.getPosixFilePermissions(target));
-        } catch (IOException | UnsupportedOperationException ignored) {
+        } catch (IOException | UnsupportedOperationException _) {
             // Preserving POSIX permissions is best effort; the write path itself remains strict.
             return Optional.empty();
         }
@@ -769,7 +763,7 @@ final class WorkflowConfigEditor {
     }
 
     private static WorkflowIntegerSetting serverPortSetting(Map<String, Object> yaml) {
-        return serverPortSetting(yaml, ignored -> Optional.empty());
+        return serverPortSetting(yaml, _ -> Optional.empty());
     }
 
     private static WorkflowIntegerSetting serverPortSetting(
@@ -848,15 +842,14 @@ final class WorkflowConfigEditor {
         if (!(serverValue instanceof Map<?, ?> server)) {
             return;
         }
-        environmentReferenceName(server.get("port")).ifPresent(name -> {
+        environmentReferenceName(server.get("port")).ifPresent(name ->
             environmentResolver
                     .apply(name)
                     .map(String::trim)
                     .filter(value -> !value.isBlank())
                     .ifPresentOrElse(value -> validateResolvedServerPort(value, name), () -> {
                         throw unresolvedEnvironmentReference("server.port", name);
-                    });
-        });
+                    }));
     }
 
     private static void validateResolvedServerPort(String value, String environmentName) {
@@ -881,7 +874,7 @@ final class WorkflowConfigEditor {
     }
 
     private static TypedWorkflowConfig typedConfig(Map<String, Object> yaml) {
-        return typedConfig(yaml, ignored -> Optional.empty());
+        return typedConfig(yaml, _ -> Optional.empty());
     }
 
     private static TypedWorkflowConfig typedConfig(

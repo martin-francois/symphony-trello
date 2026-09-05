@@ -41,7 +41,7 @@ final class WorkflowFileNames {
 
     private static String generatedSlug(String value, String blankFallback, int suffixLength) {
         String slug = slug(value, blankFallback);
-        int readableSlugLength = Math.min(MAX_GENERATED_WORKFLOW_SLUG_LENGTH, maxReadableSlugLength(suffixLength));
+        var readableSlugLength = Math.min(MAX_GENERATED_WORKFLOW_SLUG_LENGTH, maxReadableSlugLength(suffixLength));
         if (slug.length() <= readableSlugLength) {
             return slug;
         }

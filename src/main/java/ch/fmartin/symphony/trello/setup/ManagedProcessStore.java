@@ -44,9 +44,9 @@ final class ManagedProcessStore {
 
     Long readPid(Path pidFile) {
         try {
-            String text = Files.readString(pidFile, StandardCharsets.UTF_8).trim();
+            String text = Files.readString(pidFile).trim();
             return text.isBlank() ? null : Long.parseLong(text);
-        } catch (IOException | NumberFormatException e) {
+        } catch (IOException | NumberFormatException _) {
             return null;
         }
     }
@@ -63,11 +63,9 @@ final class ManagedProcessStore {
         return Files.deleteIfExists(pidFile);
     }
 
-    /**
-     * Moves the worker logs aside when a workflow path is reused for a different Trello board, so
-     * diagnostics for the new board do not surface the previous board's history. Rotated files use
-     * a suffix that the diagnostics log selection does not match.
-     */
+    /// Moves the worker logs aside when a workflow path is reused for a different Trello board, so
+    /// diagnostics for the new board do not surface the previous board's history. Rotated files use
+    /// a suffix that the diagnostics log selection does not match.
     void rotateLogsForNewBoardIdentity(Path workflowPath) throws IOException {
         ManagedProcessFiles files = files(workflowPath);
         rotateLog(files.stdoutLog());
@@ -95,14 +93,14 @@ final class ManagedProcessStore {
             // Resolve file and directory symlinks so a symlinked workflow selector shares the
             // managed pid and log files of its target workflow.
             return absolute.toRealPath();
-        } catch (IOException ignored) {
+        } catch (IOException _) {
             Path parent = absolute.getParent();
             if (parent == null || !Files.isDirectory(parent)) {
                 return absolute;
             }
             try {
                 return parent.toRealPath().resolve(absolute.getFileName());
-            } catch (IOException alsoIgnored) {
+            } catch (IOException _) {
                 return absolute;
             }
         }

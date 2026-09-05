@@ -53,10 +53,10 @@ public final class CodexUsageWorkpadSection {
             return workpad;
         }
         String result = workpad;
-        int start = result.indexOf(START_MARKER);
+        var start = result.indexOf(START_MARKER);
         while (start >= 0) {
-            int end = result.indexOf(END_MARKER, start + START_MARKER.length());
-            int after = end + END_MARKER.length();
+            var end = result.indexOf(END_MARKER, start + START_MARKER.length());
+            var after = end + END_MARKER.length();
             result = (result.substring(0, start).stripTrailing() + "\n\n"
                             + result.substring(after).stripLeading())
                     .stripTrailing();
@@ -69,11 +69,11 @@ public final class CodexUsageWorkpadSection {
         if (workpad == null || hasMalformedManagedSectionMarkers(workpad)) {
             return null;
         }
-        int start = workpad.indexOf(START_MARKER);
+        var start = workpad.indexOf(START_MARKER);
         if (start < 0) {
             return null;
         }
-        int end = workpad.indexOf(END_MARKER, start + START_MARKER.length());
+        var end = workpad.indexOf(END_MARKER, start + START_MARKER.length());
         return workpad.substring(start, end + END_MARKER.length());
     }
 
@@ -81,22 +81,22 @@ public final class CodexUsageWorkpadSection {
         if (workpad == null) {
             return false;
         }
-        int cursor = 0;
-        int sections = 0;
+        var cursor = 0;
+        var sections = 0;
         while (cursor < workpad.length()) {
-            int start = workpad.indexOf(START_MARKER, cursor);
-            int unmatchedEnd = workpad.indexOf(END_MARKER, cursor);
+            var start = workpad.indexOf(START_MARKER, cursor);
+            var unmatchedEnd = workpad.indexOf(END_MARKER, cursor);
             if (start < 0) {
                 return unmatchedEnd >= 0;
             }
             if (unmatchedEnd >= 0 && unmatchedEnd < start) {
                 return true;
             }
-            int end = workpad.indexOf(END_MARKER, start + START_MARKER.length());
+            var end = workpad.indexOf(END_MARKER, start + START_MARKER.length());
             if (end < 0) {
                 return true;
             }
-            int nestedStart = workpad.indexOf(START_MARKER, start + START_MARKER.length());
+            var nestedStart = workpad.indexOf(START_MARKER, start + START_MARKER.length());
             if (nestedStart >= 0 && nestedStart < end) {
                 return true;
             }
@@ -121,11 +121,11 @@ public final class CodexUsageWorkpadSection {
     }
 
     private static String normalizeSingleLine(String value) {
-        StringBuilder normalized = new StringBuilder(value.length());
-        boolean pendingSpace = false;
+        var normalized = new StringBuilder(value.length());
+        var pendingSpace = false;
         var codePoints = value.codePoints().iterator();
         while (codePoints.hasNext()) {
-            int codePoint = codePoints.nextInt();
+            var codePoint = codePoints.nextInt();
             if (isUnsafeOrWhitespace(codePoint)) {
                 pendingSpace = normalized.length() > 0;
                 continue;
@@ -140,7 +140,7 @@ public final class CodexUsageWorkpadSection {
     }
 
     private static boolean isUnsafeOrWhitespace(int codePoint) {
-        int type = Character.getType(codePoint);
+        var type = Character.getType(codePoint);
         return Character.isWhitespace(codePoint)
                 || Character.isSpaceChar(codePoint)
                 || type == Character.CONTROL
@@ -151,17 +151,17 @@ public final class CodexUsageWorkpadSection {
     }
 
     private static String escapeMarkdownWithinLimit(String value) {
-        long escapedLength = value.codePoints()
+        var escapedLength = value.codePoints()
                 .mapToLong(CodexUsageWorkpadSection::escapedLength)
                 .sum();
-        boolean truncated = escapedLength > MAX_MESSAGE_CODE_POINTS;
+        var truncated = escapedLength > MAX_MESSAGE_CODE_POINTS;
         int budget = truncated ? MAX_MESSAGE_CODE_POINTS - 3 : MAX_MESSAGE_CODE_POINTS;
-        int used = 0;
-        StringBuilder escaped = new StringBuilder(Math.min(value.length(), MAX_MESSAGE_CODE_POINTS));
+        var used = 0;
+        var escaped = new StringBuilder(Math.min(value.length(), MAX_MESSAGE_CODE_POINTS));
         var codePoints = value.codePoints().iterator();
         while (codePoints.hasNext()) {
-            int codePoint = codePoints.nextInt();
-            int length = escapedLength(codePoint);
+            var codePoint = codePoints.nextInt();
+            var length = escapedLength(codePoint);
             if (used + length > budget) {
                 break;
             }

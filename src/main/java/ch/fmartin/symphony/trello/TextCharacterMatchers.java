@@ -2,7 +2,7 @@ package ch.fmartin.symphony.trello;
 
 import com.google.common.base.CharMatcher;
 
-/** Shared character classes whose semantics must stay aligned across package boundaries. */
+/// Shared character classes whose semantics must stay aligned across package boundaries.
 public final class TextCharacterMatchers {
     public static final String UNICODE_BYTE_ORDER_MARK = "\uFEFF";
     public static final String UNICODE_NEXT_LINE = "\u0085";

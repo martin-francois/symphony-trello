@@ -15,7 +15,6 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -47,13 +46,13 @@ final class PackagedAppSmokeIT {
         assertThat(QUARKUS_RUNNER)
                 .as("Run through Maven verify so the Quarkus runner has been packaged.")
                 .isRegularFile();
-        int trelloPort = freePort();
-        int appPort = freePortExcept(trelloPort);
+        var trelloPort = freePort();
+        var appPort = freePortExcept(trelloPort);
         Path workflow = tempDir.resolve("WORKFLOW.smoke.md");
         Path workspaceRoot = tempDir.resolve("workspaces");
         Path stdout = tempDir.resolve("symphony.log");
         Path stderr = tempDir.resolve("symphony.err");
-        Files.writeString(workflow, workflow(trelloPort, appPort, workspaceRoot), StandardCharsets.UTF_8);
+        Files.writeString(workflow, workflow(trelloPort, appPort, workspaceRoot));
 
         FakeTrelloEndpoint trello = FakeTrelloEndpoint.start(trelloPort);
         try (trello) {
@@ -94,7 +93,7 @@ final class PackagedAppSmokeIT {
         Throwable lastFailure = null;
         while (now().isBefore(deadline)) {
             try {
-                HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+                var response = http.send(request, HttpResponse.BodyHandlers.ofString());
                 if (response.statusCode() == 200) {
                     return json.readTree(response.body());
                 }
@@ -119,7 +118,7 @@ final class PackagedAppSmokeIT {
             ProcessHandle exited = process.toHandle().onExit().get(duration.toMillis(), TimeUnit.MILLISECONDS);
             fail("Packaged worker exited within %s after first healthy startup response, pid=%s"
                     .formatted(duration, exited.pid()));
-        } catch (TimeoutException expected) {
+        } catch (TimeoutException _) {
             assertThat(process.isAlive())
                     .as("packaged worker should stay alive after first healthy startup response")
                     .isTrue();
@@ -158,13 +157,13 @@ final class PackagedAppSmokeIT {
     }
 
     private static int freePort() throws IOException {
-        try (ServerSocket socket = new ServerSocket(0)) {
+        try (var socket = new ServerSocket(0)) {
             return socket.getLocalPort();
         }
     }
 
     private static int freePortExcept(int reservedPort) throws IOException {
-        int port = freePort();
+        var port = freePort();
         while (port == reservedPort) {
             port = freePort();
         }
@@ -181,7 +180,7 @@ final class PackagedAppSmokeIT {
 
     private static String read(Path path) {
         try {
-            return Files.readString(path, StandardCharsets.UTF_8);
+            return Files.readString(path);
         } catch (IOException e) {
             return "<unreadable: " + e.getMessage() + ">";
         }

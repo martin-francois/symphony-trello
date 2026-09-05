@@ -63,7 +63,7 @@ public final class LocalSetup {
     }
 
     LocalSetup(TrelloBoardSetup boardSetup, CommandRunner commands, Map<String, String> environment) {
-        this(boardSetup, commands, environment, new WorkflowConfigEditor(), null);
+        this(boardSetup, commands, environment, workflowConfig1, null);
     }
 
     LocalSetup(
@@ -101,7 +101,7 @@ public final class LocalSetup {
     }
 
     public static int run(String[] args, InputStream in, PrintStream out, PrintStream err) {
-        ObjectMapper json = new ObjectMapper();
+        var json = new ObjectMapper();
         return run(args, in, out, err, () -> new CodexModelDefaultsResolver(json).resolveSelectionDefaults());
     }
 
@@ -111,7 +111,7 @@ public final class LocalSetup {
             PrintStream out,
             PrintStream err,
             Supplier<CodexModelSelectionDefaults> codexModelSelectionDefaults) {
-        ObjectMapper json = new ObjectMapper();
+        var json = new ObjectMapper();
         return new SetupLocalCommandFactory()
                 .execute(
                         args,
@@ -134,7 +134,7 @@ public final class LocalSetup {
         PrintStream out = borrowedOut(terminal); // NOPMD - Terminal owns the stream.
         PrintStream err = borrowedErr(terminal); // NOPMD - Terminal owns the stream.
         Options options = null;
-        boolean completionOnly = installerCompletionMode(INSTALLER_COMPLETION_PRINT);
+        var completionOnly = installerCompletionMode(INSTALLER_COMPLETION_PRINT);
         try {
             options = Options.from(request, environment);
             if (completionOnly) {
@@ -233,7 +233,7 @@ public final class LocalSetup {
             options = configureCodexAccess(options, terminal);
             applyCodexAccess(options, result.workflowPath());
             ConnectedBoard connectedBoard = ConnectedBoard.from(result, options, githubIntegration);
-            List<ConnectedBoard> replacedBoards = manifest.boardsReplacedBy(connectedBoard);
+            var replacedBoards = manifest.boardsReplacedBy(connectedBoard);
             stopReplacedBoards(options, replacedBoards);
             workerManager.rotateLogsForReplacedBoards(localWorkerPaths(options), connectedBoard, replacedBoards);
             manifest = manifest.withBoard(connectedBoard);
@@ -258,7 +258,7 @@ public final class LocalSetup {
             return 0;
         } catch (TrelloBoardSetupException | IllegalArgumentException | IOException e) {
             err.println("setup_failed code=%s message=%s".formatted(errorCode(e), e.getMessage()));
-            Optional<Path> hintEnvPath = Optional.ofNullable(options).map(Options::envPath);
+            var hintEnvPath = Optional.ofNullable(options).map(Options::envPath);
             SetupDiagnosticReporter.userActionHint(e, hintEnvPath).ifPresent(hint -> err.println("Next step: " + hint));
             if (!completionOnly) {
                 diagnosticReporter.reportFailure(e, request, terminal);
@@ -294,7 +294,7 @@ public final class LocalSetup {
     private ConnectedBoardManifest connectedBoardsUnchecked(Options options) {
         try {
             return connectedBoards(options).load();
-        } catch (IOException e) {
+        } catch (IOException _) {
             return new ConnectedBoardManifest(List.of());
         }
     }
@@ -312,7 +312,7 @@ public final class LocalSetup {
         ConnectedBoardRepository.ManifestLoadResult manifestLoad =
                 connectedBoards(options).loadForCheck();
         ConnectedBoardManifest manifest = manifestLoad.manifest();
-        boolean ok = prerequisites.readyFor(options);
+        var ok = prerequisites.readyFor(options);
         if (prerequisites.readyFor(options)) {
             out.println("  OK      Local prerequisites ready");
         }
@@ -327,7 +327,7 @@ public final class LocalSetup {
             out.println("  WARN    No Trello boards connected to Symphony");
             return prerequisites.readyFor(options) ? 0 : CliExitCodes.SETUP_FAILURE;
         }
-        List<ConnectedBoard> selectedBoards = boardsForCheck(manifest, options);
+        var selectedBoards = boardsForCheck(manifest, options);
         for (ConnectedBoard board : selectedBoards) {
             ConnectedBoardLocalValidation localValidation = validateConnectedBoardLocalPaths(board);
             for (String warning : localValidation.warnings()) {
@@ -340,7 +340,7 @@ public final class LocalSetup {
             if (!localValidation.ok()) {
                 ok = false;
             } else {
-                Function<String, Optional<String>> workflowEnvironment =
+                var workflowEnvironment =
                         WorkflowEnvironmentResolver.resolver(environment, board.envPath());
                 WorkflowValidation workflow = workflowConfig.validate(board, workflowEnvironment);
                 if (workflow.ok() || isHealthyStaleManifestPort(board, healthBoard, workflow, health)) {
@@ -380,8 +380,8 @@ public final class LocalSetup {
     }
 
     private static ConnectedBoardLocalValidation validateConnectedBoardLocalPaths(ConnectedBoard board) {
-        List<String> warnings = new ArrayList<>();
-        boolean envUsable = true;
+        var warnings = new ArrayList<String>();
+        var envUsable = true;
         if (board.workflowPath() == null) {
             warnings.add("Workflow path for " + DisplayNames.quotedName(board.boardName())
                     + " is missing from "
@@ -462,7 +462,7 @@ public final class LocalSetup {
     }
 
     private static String repairPortSelector(ConnectedBoardManifest manifest, ConnectedBoard board) {
-        long sameNameCount = manifest.boards().stream()
+        var sameNameCount = manifest.boards().stream()
                 .filter(candidate -> equalsIgnoreCase(candidate.boardName(), board.boardName()))
                 .count();
         if (sameNameCount <= 1 && commandSafeSelector(board.boardName())) {
@@ -474,16 +474,14 @@ public final class LocalSetup {
         return board.boardId();
     }
 
-    /**
-     * The suggested repair command wraps the selector in plain double quotes, where {@code $} and
-     * backticks still expand in POSIX shells and PowerShell, {@code !} still triggers history
-     * expansion in interactive bash, paired {@code %} still expands in cmd, backslashes and
-     * embedded quotes break the quoting itself, and the CLI rejects control characters in its own
-     * arguments. A board name containing any of those can never become a copyable runnable
-     * suggestion, so the opaque board key or id selects the same board safely instead. All other
-     * characters, including spaces and the remaining punctuation, are literal inside double quotes
-     * in POSIX shells, PowerShell, and cmd.
-     */
+    /// The suggested repair command wraps the selector in plain double quotes, where `$` and
+    /// backticks still expand in POSIX shells and PowerShell, `!` still triggers history
+    /// expansion in interactive bash, paired `%` still expands in cmd, backslashes and
+    /// embedded quotes break the quoting itself, and the CLI rejects control characters in its own
+    /// arguments. A board name containing any of those can never become a copyable runnable
+    /// suggestion, so the opaque board key or id selects the same board safely instead. All other
+    /// characters, including spaces and the remaining punctuation, are literal inside double quotes
+    /// in POSIX shells, PowerShell, and cmd.
     private static boolean commandSafeSelector(String value) {
         return value != null && !value.isBlank() && UNSAFE_COMMAND_SELECTOR_CHARACTER.matchesNoneOf(value);
     }
@@ -547,8 +545,8 @@ public final class LocalSetup {
                     + LocalHealthChecker.localServerUrl(reconciledBoard.serverPort()));
             return 0;
         }
-        boolean wasRunning = health.kind() == BoardHealthKind.SAME_WORKFLOW;
-        int port = nextAvailablePort(options, manifest, reconciledBoard);
+        var wasRunning = health.kind() == BoardHealthKind.SAME_WORKFLOW;
+        var port = nextAvailablePort(options, manifest, reconciledBoard);
         if (options.dryRun()) {
             out.println();
             out.println("Dry run");
@@ -619,7 +617,7 @@ public final class LocalSetup {
     }
 
     private int nextAvailablePort(Options options, ConnectedBoardManifest manifest, ConnectedBoard ignoredBoard) {
-        Set<Integer> reserved = manifest.boards().stream()
+        var reserved = manifest.boards().stream()
                 .filter(board -> !board.boardId().equals(ignoredBoard.boardId()))
                 .map(ConnectedBoard::serverPort)
                 // Use a mutable HashSet so file-discovered ports can be merged below and each port check is fast.
@@ -627,7 +625,7 @@ public final class LocalSetup {
         // Local workflow files outside the manifest still reserve their ports, so a repaired
         // board cannot collide with a stale or disconnected workflow that may be started later.
         reserved.addAll(localWorkflowFilePortReservations(options, ignoredBoard));
-        for (int port = TrelloBoardSetup.DEFAULT_SERVER_PORT; port <= LocalPort.MAX; port++) {
+        for (var port = TrelloBoardSetup.DEFAULT_SERVER_PORT; port <= LocalPort.MAX; port++) {
             if (!reserved.contains(port) && !boardSetup.portInUse(port)) {
                 return port;
             }
@@ -649,7 +647,7 @@ public final class LocalSetup {
                             file, WorkflowEnvironmentResolver.resolver(environment, options.envPath())))
                     .flatMap(Optional::stream)
                     .collect(toImmutableSet());
-        } catch (IOException ignored) {
+        } catch (IOException _) {
             // A config directory that cannot be listed leaves only the manifest and probe checks.
             return Set.of();
         }
@@ -677,8 +675,8 @@ public final class LocalSetup {
     }
 
     private Options configureCodexAccess(Options options, Terminal terminal) throws IOException {
-        List<Path> allowedPaths = workspaceAccessFlow.resolve(options, terminal);
-        boolean dangerFullAccess = codexSandboxFlow.resolve(options, terminal);
+        var allowedPaths = workspaceAccessFlow.resolve(options, terminal);
+        var dangerFullAccess = codexSandboxFlow.resolve(options, terminal);
         return options.withCodexAccess(allowedPaths, dangerFullAccess);
     }
 
@@ -700,7 +698,7 @@ public final class LocalSetup {
 
     private Options validatePreflightCodexReasoningEffort(Options options) {
         return options.codexReasoningEffort()
-                .filter(ignored -> codexModelKnownDuringPreflight(options))
+                .filter(_ -> codexModelKnownDuringPreflight(options))
                 .map(reasoningEffort -> validatePreflightCodexReasoningEffort(options, reasoningEffort))
                 .orElse(options);
     }
@@ -714,7 +712,7 @@ public final class LocalSetup {
     }
 
     private Options validatePreflightCodexReasoningEffort(Options options, String reasoningEffort) {
-        Optional<Path> workflowPath = TrelloBoardConnector.preflightWorkflowPath(options);
+        var workflowPath = TrelloBoardConnector.preflightWorkflowPath(options);
         if (options.codexModel().isEmpty() && workflowPath.isEmpty() && !preflightUsesCatalogDefaultModel(options)) {
             return options;
         }
@@ -733,7 +731,7 @@ public final class LocalSetup {
     private Options validatePreflightCodexReasoningEffort(
             Options options, String reasoningEffort, Optional<Path> workflowPath, CodexModelSelectionDefaults catalog) {
         CodexModelSelectionDefaults selectionDefaults = options.codexModel()
-                .map(ignored -> catalog)
+                .map(_ -> catalog)
                 .or(() -> workflowPath.map(path -> boardSetup.codexModelSelectionDefaultsForWorkflow(path, catalog)))
                 .orElse(catalog);
         String model = options.codexModel().orElseGet(selectionDefaults.defaults()::model);
@@ -754,7 +752,7 @@ public final class LocalSetup {
             return files.filter(Files::isRegularFile)
                     .map(PathNames::fileName)
                     .noneMatch(WorkflowFileNames::isGeneratedFileName);
-        } catch (IOException ignored) {
+        } catch (IOException _) {
             // An unreadable directory could contain the forced board's workflow, so its model is unknown.
             return false;
         }
@@ -805,7 +803,7 @@ public final class LocalSetup {
                 return ExistingSetupAction.UPDATE_CODEX_ACCESS;
             }
             if (options.configureGithub() || !options.hasExplicitBoardSetupRequest()) {
-                List<ConnectedBoard> nonGithubBoards = nonGithubBoards(manifest);
+                var nonGithubBoards = nonGithubBoards(manifest);
                 if (!nonGithubBoards.isEmpty()) {
                     rejectInvalidConfigureGithubUpgradeRequestBeforeAuth(options, nonGithubBoards);
                     return ExistingSetupAction.UPGRADE_GITHUB;
@@ -835,7 +833,7 @@ public final class LocalSetup {
         }
         out.println();
         out.println("Trello boards configured for Symphony:");
-        for (int i = 0; i < manifest.boards().size(); i++) {
+        for (var i = 0; i < manifest.boards().size(); i++) {
             ConnectedBoard board = manifest.boards().get(i);
             out.println(
                     "  " + (i + 1) + ". " + DisplayNames.quotedName(board.boardName()) + "     " + board.boardUrl());
@@ -877,7 +875,7 @@ public final class LocalSetup {
     }
 
     private static void rejectInvalidUnconnectedBoardSelector(ConnectedBoardManifest manifest, String selectedBoard) {
-        List<ConnectedBoard> connectedMatches = manifest.findAllByBoard(selectedBoard);
+        var connectedMatches = manifest.findAllByBoard(selectedBoard);
         if (connectedMatches.size() > 1) {
             throw ambiguousConnectedBoardSelector();
         }
@@ -949,7 +947,7 @@ public final class LocalSetup {
     private ConnectedBoard withRequestedCodexAccess(Options options, ConnectedBoard board, Terminal terminal)
             throws IOException {
         PrintStream out = borrowedOut(terminal); // NOPMD - Terminal owns the stream.
-        List<Path> requestedRoots = new ArrayList<>();
+        var requestedRoots = new ArrayList<Path>();
         for (Path root : options.additionalWritableRoots()) {
             if (WorkspaceAccessFlow.isBroadAccessPath(root) && !options.allowAllPaths() && !options.nonInteractive()) {
                 out.println();
@@ -965,13 +963,13 @@ public final class LocalSetup {
             }
             requestedRoots.add(root);
         }
-        List<Path> updatedRoots = new ArrayList<>(board.additionalWritableRoots());
+        var updatedRoots = new ArrayList<Path>(board.additionalWritableRoots());
         for (Path root : requestedRoots) {
             if (updatedRoots.stream().noneMatch(existing -> PathsEqual.samePath(existing, root))) {
                 updatedRoots.add(root);
             }
         }
-        boolean requestedDangerFullAccess = options.dangerFullAccess();
+        var requestedDangerFullAccess = options.dangerFullAccess();
         if (requestedDangerFullAccess && !board.dangerFullAccess()) {
             if (options.nonInteractive()) {
                 CodexSandboxFlow.printWarning(terminal);
@@ -986,7 +984,7 @@ public final class LocalSetup {
                 }
             }
         }
-        boolean updatedDangerFullAccess = board.dangerFullAccess() || requestedDangerFullAccess;
+        var updatedDangerFullAccess = board.dangerFullAccess() || requestedDangerFullAccess;
         return board.withCodexAccess(List.copyOf(updatedRoots), updatedDangerFullAccess);
     }
 
@@ -1013,7 +1011,7 @@ public final class LocalSetup {
         }
         out.println();
         out.println("Choose the Trello board to update:");
-        for (int i = 0; i < manifest.boards().size(); i++) {
+        for (var i = 0; i < manifest.boards().size(); i++) {
             out.println("  " + (i + 1) + ". "
                     + DisplayNames.quotedName(manifest.boards().get(i).boardName()));
         }
@@ -1036,7 +1034,7 @@ public final class LocalSetup {
 
     private static ConnectedBoard selectedConnectedBoard(
             ConnectedBoardManifest manifest, String selector, String notFoundCode, String notFoundMessage) {
-        List<ConnectedBoard> matches = manifest.findAllByBoard(selector);
+        var matches = manifest.findAllByBoard(selector);
         if (matches.isEmpty()) {
             throw new TrelloBoardSetupException(notFoundCode, notFoundMessage);
         }
@@ -1132,11 +1130,11 @@ public final class LocalSetup {
         BoardHealth previousHealth = healthChecker.boardHealth(board);
         ensureManagedRestartPossible(options, board, previousHealth);
         TrelloBoardSetup selectedBoardSetup = boardSetupWithCodexModel(options);
-        List<String> openLists = selectedBoardSetup.getOpenBoardListNames(
+        var openLists = selectedBoardSetup.getOpenBoardListNames(
                 new TrelloBoardSetup.BoardInfoRequest(options.endpoint(), credentials, board.boardId()));
         WorkflowListConfiguration existingLists =
                 workflowConfig.listConfiguration(board.workflowPath()).onlyOpenLists(openLists);
-        if (openLists.stream().noneMatch(name -> name.equalsIgnoreCase(TrelloBoardSetup.RECOMMENDED_MERGING_STATE))) {
+        if (openLists.stream().noneMatch(TrelloBoardSetup.RECOMMENDED_MERGING_STATE::equalsIgnoreCase)) {
             out.println();
             out.println("GitHub mode needs one more Trello list:");
             out.println("  " + TrelloBoardSetup.RECOMMENDED_MERGING_STATE);
@@ -1175,7 +1173,7 @@ public final class LocalSetup {
         applyCodexAccess(
                 options.withCodexAccess(access.additionalWritableRoots(), access.dangerFullAccess()),
                 board.workflowPath());
-        ConnectedBoard upgraded = new ConnectedBoard(
+        var upgraded = new ConnectedBoard(
                 board.boardId(),
                 board.boardKey(),
                 board.boardName(),
@@ -1217,7 +1215,7 @@ public final class LocalSetup {
 
     private static ConnectedBoard selectNonGithubBoardForUpgrade(
             Options options, ConnectedBoardManifest manifest, Terminal terminal) throws IOException {
-        List<ConnectedBoard> candidates = nonGithubBoards(manifest);
+        var candidates = nonGithubBoards(manifest);
         if (candidates.isEmpty()) {
             throw new TrelloBoardSetupException(
                     "setup_github_upgrade_not_found", "No non-GitHub connected board is available to upgrade.");
@@ -1248,7 +1246,7 @@ public final class LocalSetup {
         }
         out.println();
         out.println("Choose the Trello board to configure for GitHub:");
-        for (int i = 0; i < candidates.size(); i++) {
+        for (var i = 0; i < candidates.size(); i++) {
             out.println("  " + (i + 1) + ". "
                     + DisplayNames.quotedName(candidates.get(i).boardName()));
         }
@@ -1301,7 +1299,7 @@ public final class LocalSetup {
             out.println("Disconnect cancelled.");
             return;
         }
-        int selected = parseChoice(answer, 1, manifest.boards().size());
+        var selected = parseChoice(answer, 1, manifest.boards().size());
         ConnectedBoard removed = manifest.boards().get(selected - 1);
         stopBoard(options, removed.boardName(), removed.workflowPath());
         connectedBoards(options).save(manifest.withoutBoard(removed.boardId()));
@@ -1353,7 +1351,7 @@ public final class LocalSetup {
                         List.of(),
                         false));
         try {
-            try (PrintStream out = new PrintStream(OutputStream.nullOutputStream(), true, StandardCharsets.UTF_8)) {
+            try (var out = new PrintStream(OutputStream.nullOutputStream(), true, StandardCharsets.UTF_8)) {
                 workerManager.stop(localWorkerPaths(options), board, out);
             }
         } catch (IOException e) {
@@ -1406,7 +1404,7 @@ public final class LocalSetup {
         if (replacedBoards.isEmpty()) {
             return;
         }
-        List<Path> stoppedWorkflowPaths = new ArrayList<>();
+        var stoppedWorkflowPaths = new ArrayList<Path>();
         for (ConnectedBoard board : replacedBoards) {
             if (stoppedWorkflowPaths.stream().anyMatch(stopped -> PathsEqual.samePath(stopped, board.workflowPath()))) {
                 continue;
@@ -1606,15 +1604,15 @@ public final class LocalSetup {
             URI endpoint,
             Path callerDirectory) {
         static Options from(LocalSetupRequest request, Map<String, String> environment) {
-            boolean check = request.action() == LocalSetupRequest.Action.CHECK;
-            boolean repairPort = request.action() == LocalSetupRequest.Action.REPAIR_PORT;
-            boolean configureGithub = request.action() == LocalSetupRequest.Action.CONFIGURE_GITHUB;
+            var check = request.action() == LocalSetupRequest.Action.CHECK;
+            var repairPort = request.action() == LocalSetupRequest.Action.REPAIR_PORT;
+            var configureGithub = request.action() == LocalSetupRequest.Action.CONFIGURE_GITHUB;
             Path configDir = request.configDir().orElseGet(() -> defaultConfigDir(environment));
             Path workflow = request.workflowPath().orElse(TrelloBoardSetup.DEFAULT_WORKFLOW_PATH);
-            boolean workflowPathExplicit = request.workflowPath().isPresent();
+            var workflowPathExplicit = request.workflowPath().isPresent();
             Path workspaceRoot = request.workspaceRoot().orElseGet(() -> defaultWorkspaceRoot(environment));
             Path manifest = request.manifestPath().orElse(Path.of(ConnectedBoardManifest.FILE_NAME));
-            boolean manifestPathExplicit = request.manifestPath().isPresent();
+            var manifestPathExplicit = request.manifestPath().isPresent();
             Path envPath = request.envPath().orElse(DEFAULT_ENV_PATH);
             List<Path> additionalWritableRoots = request.additionalWritableRoots().stream()
                     .map(path -> WorkspaceAccessFlow.resolveAccessPath(path, callerDirectory(environment)))
@@ -1631,14 +1629,14 @@ public final class LocalSetup {
             additionalWritableRoots =
                     additionalWritableRoots.stream().map(Path::normalize).toList();
             if (request.nonInteractive()) {
-                boolean broadPathAllowed = request.allowAllPaths();
+                var broadPathAllowed = request.allowAllPaths();
                 additionalWritableRoots.forEach(
                         path -> WorkspaceAccessFlow.rejectBroadAccessPath(path, broadPathAllowed));
             }
             if (workflowPathExplicit) {
                 workflow = resolveUserDataPath(workflow, configDir);
             }
-            boolean workspaceRootExplicit = request.workspaceRoot().isPresent();
+            var workspaceRootExplicit = request.workspaceRoot().isPresent();
             TrelloCredentialStore.validateEnvPath(envPath);
             String command = environment.getOrDefault(COMMAND_ENV, DEFAULT_COMMAND);
             return new Options(

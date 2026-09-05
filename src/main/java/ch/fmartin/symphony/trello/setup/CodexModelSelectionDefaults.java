@@ -163,7 +163,7 @@ record CodexModelSelectionDefaults(
         if (values == null || values.isEmpty()) {
             return Map.of();
         }
-        Map<String, String> sanitized = new LinkedHashMap<>();
+        var sanitized = new LinkedHashMap<String, String>();
         values.forEach((model, reasoningEffort) -> {
             if (!blank(model) && !blank(reasoningEffort)) {
                 sanitized.put(model.strip(), reasoningEffort.strip());
@@ -176,7 +176,7 @@ record CodexModelSelectionDefaults(
         if (values == null || values.isEmpty()) {
             return Map.of();
         }
-        Map<String, List<ReasoningEffortOption>> optionsByModel = new LinkedHashMap<>();
+        var optionsByModel = new LinkedHashMap<String, List<ReasoningEffortOption>>();
         values.forEach((model, choices) -> {
             if (!blank(model) && choices != null) {
                 List<ReasoningEffortOption> options = choices.stream()
@@ -196,15 +196,15 @@ record CodexModelSelectionDefaults(
         if (values == null || values.isEmpty()) {
             return Map.of();
         }
-        Map<String, List<ReasoningEffortOption>> sanitized = new LinkedHashMap<>();
+        var sanitized = new LinkedHashMap<String, List<ReasoningEffortOption>>();
         values.forEach((model, options) -> {
             if (!blank(model) && options != null) {
-                Map<String, ReasoningEffortOption> uniqueOptionsInCatalogOrder = options.stream()
+                var uniqueOptionsInCatalogOrder = options.stream()
                         .filter(Objects::nonNull)
                         .collect(Collectors.toMap(
                                 ReasoningEffortOption::reasoningEffort,
                                 Function.identity(),
-                                (first, ignored) -> first,
+                                (first, _) -> first,
                                 LinkedHashMap::new));
                 if (!uniqueOptionsInCatalogOrder.isEmpty()) {
                     sanitized.put(model.strip(), List.copyOf(uniqueOptionsInCatalogOrder.values()));

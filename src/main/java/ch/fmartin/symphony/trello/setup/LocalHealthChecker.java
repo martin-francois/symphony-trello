@@ -39,10 +39,7 @@ final class LocalHealthChecker {
     private final WorkflowConfigEditor workflowConfig;
 
     LocalHealthChecker(Map<String, String> environment, WorkflowConfigEditor workflowConfig) {
-        this(
-                environment,
-                workflowConfig,
-                HttpClient.newBuilder().connectTimeout(LOCAL_STATUS_TIMEOUT).build());
+        this(environment, workflowConfig, httpClient1);
     }
 
     LocalHealthChecker(Map<String, String> environment, WorkflowConfigEditor workflowConfig, HttpClient httpClient) {
@@ -52,7 +49,7 @@ final class LocalHealthChecker {
     }
 
     BoardHealth boardHealth(ConnectedBoard board) {
-        int port = managedHealthPort(board.workflowPath(), board.serverPort(), board.envPath());
+        var port = managedHealthPort(board.workflowPath(), board.serverPort(), board.envPath());
         return workflowHealth(board.workflowPath(), board.boardId(), board.boardKey(), port);
     }
 
@@ -60,21 +57,19 @@ final class LocalHealthChecker {
         return waitForSameWorkflow(board, port, processAlive, STARTUP_ALIVE_WAIT);
     }
 
-    /**
-     * Waits for the freshly started worker to report the expected workflow. A cold JVM on a slow
-     * host can need well over ten seconds to bind its HTTP port, so the budget is generous while
-     * the process is still alive; a worker whose process has died can never become healthy, so
-     * that case returns immediately instead of burning the remaining budget.
-     *
-     * <p>This polls instead of waiting for a worker-side readiness event. A readiness marker file
-     * watched with {@code WatchService} was considered and deferred: the HTTP probe stays
-     * mandatory because only the answer on the port proves the listener is the expected worker
-     * for this workflow and board, and the event would save at most one poll interval on a wait
-     * dominated by multi-second JVM startup. See
-     * docs/adr/0053-sleep-based-waits-kept-as-polling-boundaries.md.
-     */
+    /// Waits for the freshly started worker to report the expected workflow. A cold JVM on a slow
+    /// host can need well over ten seconds to bind its HTTP port, so the budget is generous while
+    /// the process is still alive; a worker whose process has died can never become healthy, so
+    /// that case returns immediately instead of burning the remaining budget.
+    ///
+    /// This polls instead of waiting for a worker-side readiness event. A readiness marker file
+    /// watched with `WatchService` was considered and deferred: the HTTP probe stays
+    /// mandatory because only the answer on the port proves the listener is the expected worker
+    /// for this workflow and board, and the event would save at most one poll interval on a wait
+    /// dominated by multi-second JVM startup. See
+    /// docs/adr/0053-sleep-based-waits-kept-as-polling-boundaries.md.
     BoardHealth waitForSameWorkflow(ConnectedBoard board, int port, BooleanSupplier processAlive, Duration aliveWait) {
-        long deadline = System.nanoTime() + aliveWait.toNanos();
+        var deadline = System.nanoTime() + aliveWait.toNanos();
         while (true) {
             BoardHealth last = workflowHealth(board.workflowPath(), board.boardId(), board.boardKey(), port);
             if (last.kind() == BoardHealthKind.SAME_WORKFLOW
@@ -101,12 +96,12 @@ final class LocalHealthChecker {
         return probeWorkflowHealth(expectedWorkflowPath, expectedBoardId, expectedBoardKey, port);
     }
 
-    /** Returns false when interrupted, so callers report the freshest health instead of probing on. */
+    /// Returns false when interrupted, so callers report the freshest health instead of probing on.
     private static boolean sleptWithoutInterrupt(Duration delay) {
         try {
             Thread.sleep(delay);
             return true;
-        } catch (InterruptedException e) {
+        } catch (InterruptedException _) {
             Thread.currentThread().interrupt();
             return false;
         }
@@ -122,15 +117,15 @@ final class LocalHealthChecker {
                     .timeout(LOCAL_STATUS_TIMEOUT)
                     .GET()
                     .build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != Status.OK.getStatusCode()) {
                 return new BoardHealth(BoardHealthKind.PORT_USED, port, Optional.empty(), Optional.empty());
             }
-            Map<String, Object> status = JSON.readValue(response.body(), JSON_MAP_TYPE);
-            Optional<String> actualWorkflowPath = optionalString(status.get("workflowPath"));
-            Optional<String> actualBoardId = optionalString(status.get("boardId"));
-            Optional<String> actualConfiguredBoardId = optionalString(status.get("configuredBoardId"));
-            Optional<Long> workerPid = optionalPid(status.get("pid"));
+            var status = JSON.readValue(response.body(), JSON_MAP_TYPE);
+            var actualWorkflowPath = optionalString(status.get("workflowPath"));
+            var actualBoardId = optionalString(status.get("boardId"));
+            var actualConfiguredBoardId = optionalString(status.get("configuredBoardId"));
+            var workerPid = optionalPid(status.get("pid"));
             if (actualWorkflowPath
                             .filter(path -> PathsEqual.samePath(Path.of(path), expectedWorkflowPath))
                             .isPresent()
@@ -162,7 +157,7 @@ final class LocalHealthChecker {
     }
 
     private int stableWorkflowPort(Path workflowPath, int fallbackPort, Path envPath) {
-        int port = workflowConfig
+        var port = workflowConfig
                 .serverPort(workflowPath, WorkflowEnvironmentResolver.resolver(environment, envPath))
                 .orElse(fallbackPort);
         if (port == 0) {
@@ -181,10 +176,10 @@ final class LocalHealthChecker {
         if (port <= 0) {
             return false;
         }
-        try (Socket socket = new Socket()) {
+        try (var socket = new Socket()) {
             socket.connect(new InetSocketAddress(LOOPBACK_IPV4, port), 150);
             return true;
-        } catch (IOException e) {
+        } catch (IOException _) {
             return false;
         }
     }
@@ -219,7 +214,7 @@ final class LocalHealthChecker {
                 .filter(value -> !blank(value))
                 .map(value -> {
                     try {
-                        int port = Integer.parseInt(value.trim());
+                        var port = Integer.parseInt(value.trim());
                         if (!LocalPort.isValid(port)) {
                             throw new TrelloBoardSetupException(
                                     "setup_invalid_http_port_override",
@@ -263,7 +258,7 @@ final class LocalHealthChecker {
 
     private static Optional<Long> optionalPid(Object value) {
         if (value instanceof Number number) {
-            long pid = number.longValue();
+            var pid = number.longValue();
             return pid > 0 ? Optional.of(pid) : Optional.empty();
         }
         return Optional.empty();

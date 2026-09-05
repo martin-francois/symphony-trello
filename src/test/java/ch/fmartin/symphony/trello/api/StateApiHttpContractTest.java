@@ -46,7 +46,7 @@ final class StateApiHttpContractTest {
 
         // then
         assertThat(response.statusCode()).isEqualTo(200);
-        Map<String, Object> payload = response.as(new TypeRef<>() {});
+        var payload = response.as(new TypeRef<String, Object>() {});
         assertThat(payload).containsEntry("dispatch_pause", null);
     }
 
@@ -62,7 +62,7 @@ final class StateApiHttpContractTest {
 
         // then
         assertThat(response.statusCode()).isEqualTo(200);
-        Map<String, Object> payload = response.as(new TypeRef<>() {});
+        var payload = response.as(new TypeRef<String, Object>() {});
         assertThat(payload)
                 .containsKeys(
                         "generated_at",
@@ -75,12 +75,12 @@ final class StateApiHttpContractTest {
                         "rate_limits")
                 .doesNotContainKeys("generatedAt", "codexTotals", "dispatchPause", "rateLimits");
 
-        Map<String, Object> routing = map(payload.get("routing"));
+        var routing = map(payload.get("routing"));
         assertThat(routing)
                 .containsKeys("active_lists", "terminal_lists", "handoff_lists")
                 .doesNotContainKeys("activeLists", "terminalLists", "handoffLists");
 
-        Map<String, Object> running = firstMap(payload.get("running"));
+        var running = firstMap(payload.get("running"));
         assertThat(running)
                 .containsKeys(
                         "card_id",
@@ -115,7 +115,7 @@ final class StateApiHttpContractTest {
                 .containsKeys("input_tokens", "output_tokens", "total_tokens")
                 .doesNotContainKeys("inputTokens", "outputTokens", "totalTokens");
 
-        Map<String, Object> retrying = firstMap(payload.get("retrying"));
+        var retrying = firstMap(payload.get("retrying"));
         assertThat(retrying)
                 .containsKeys("card_id", "card_identifier", "card_url", "attempt", "due_at", "error")
                 .doesNotContainKeys("cardId", "cardIdentifier", "cardUrl", "dueAt");
@@ -126,7 +126,7 @@ final class StateApiHttpContractTest {
                 .containsEntry("attempt", 3)
                 .containsEntry("due_at", "2026-02-24T20:16:00Z");
 
-        Map<String, Object> codexTotals = map(payload.get("codex_totals"));
+        var codexTotals = map(payload.get("codex_totals"));
         assertThat(codexTotals)
                 .containsKeys("input_tokens", "output_tokens", "total_tokens", "seconds_running")
                 .doesNotContainKeys("inputTokens", "outputTokens", "totalTokens", "secondsRunning");
@@ -137,7 +137,7 @@ final class StateApiHttpContractTest {
                 .containsEntry("detected", "2026-02-24T20:15:31Z")
                 .containsEntry("until", "2026-02-24T21:15:30Z");
 
-        Map<String, Object> rateLimits = map(payload.get("rate_limits"));
+        var rateLimits = map(payload.get("rate_limits"));
         assertThat(rateLimits)
                 .containsEntry("limitType", "tokens")
                 .containsEntry("remainingRequests", 42)

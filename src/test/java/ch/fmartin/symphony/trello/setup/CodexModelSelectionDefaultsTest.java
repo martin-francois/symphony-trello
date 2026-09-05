@@ -20,14 +20,14 @@ final class CodexModelSelectionDefaultsTest {
     @Test
     void legacyReasoningEffortChoicesAreNormalizedAndEmptyModelsAreOmitted() {
         // given
-        Map<String, List<String>> choicesByModel = new LinkedHashMap<>();
+        var choicesByModel = new LinkedHashMap<String, List<String>>();
         choicesByModel.put(" gpt-5.6-sol ", List.of(" low ", "", "medium"));
         choicesByModel.put("empty", List.of("", " "));
         choicesByModel.put(" duplicate ", List.of("low"));
         choicesByModel.put("duplicate", List.of("high"));
 
         // when
-        CodexModelSelectionDefaults defaults =
+        var defaults =
                 new CodexModelSelectionDefaults(CodexModelDefaults.fallback(), Map.of(), choicesByModel);
 
         // then
@@ -39,7 +39,7 @@ final class CodexModelSelectionDefaultsTest {
     @Test
     void reasoningEffortOptionsKeepCatalogOrderAndFirstDuplicateDescription() {
         // given
-        Map<String, List<ReasoningEffortOption>> optionsByModel = new LinkedHashMap<>();
+        var optionsByModel = new LinkedHashMap<String, List<ReasoningEffortOption>>();
         optionsByModel.put(
                 " gpt-5.6-sol ",
                 List.of(
@@ -100,7 +100,7 @@ final class CodexModelSelectionDefaultsTest {
         String reasoningEffort = "high" + Character.toString(separator) + "effort";
 
         // when
-        ReasoningEffortOption option = new ReasoningEffortOption(reasoningEffort, "Deep reasoning");
+        var option = new ReasoningEffortOption(reasoningEffort, "Deep reasoning");
 
         // then
         assertThat(option.reasoningEffort()).isEqualTo(reasoningEffort);
@@ -113,7 +113,7 @@ final class CodexModelSelectionDefaultsTest {
         String description = "Deep" + Character.toString(separator) + "reasoning";
 
         // when
-        ReasoningEffortOption option = new ReasoningEffortOption("high", description);
+        var option = new ReasoningEffortOption("high", description);
 
         // then
         assertThat(option.description()).isEqualTo(description);

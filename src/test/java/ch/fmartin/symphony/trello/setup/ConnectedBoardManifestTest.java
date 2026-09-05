@@ -12,7 +12,7 @@ final class ConnectedBoardManifestTest {
     void findByBoardHandlesMissingBoardKey() {
         // given
         ConnectedBoard board = board("board-1", null, "Queue", Path.of("WORKFLOW.md"));
-        ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(board));
+        var manifest = new ConnectedBoardManifest(List.of(board));
 
         // when
         var byName = manifest.findByBoard("Queue");
@@ -30,7 +30,7 @@ final class ConnectedBoardManifestTest {
         // given
         ConnectedBoard first = board("board-1", "first", "Queue", Path.of("WORKFLOW.first.md"));
         ConnectedBoard second = board("board-2", "second", "Queue", Path.of("WORKFLOW.second.md"));
-        ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(first, second));
+        var manifest = new ConnectedBoardManifest(List.of(first, second));
 
         // when
         var selected = manifest.findByBoard("Queue");
@@ -48,7 +48,7 @@ final class ConnectedBoardManifestTest {
                 "Queue",
                 "https://trello.com/b/SYNTH003/synthetic-board",
                 Path.of("WORKFLOW.md"));
-        ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(board));
+        var manifest = new ConnectedBoardManifest(List.of(board));
 
         // when
         var byShortLink = manifest.findByBoard("SYNTH003");
@@ -68,7 +68,7 @@ final class ConnectedBoardManifestTest {
                 "Queue",
                 "https://trello.com/b/SYNTH003/synthetic-board",
                 Path.of("WORKFLOW.md"));
-        ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(board));
+        var manifest = new ConnectedBoardManifest(List.of(board));
 
         // when
         var byQuery = manifest.findByBoard("SYNTH003?utm=test");
@@ -91,7 +91,7 @@ final class ConnectedBoardManifestTest {
                 "Queue",
                 "https://trello.com/b/SYNTH003/synthetic-board",
                 Path.of("WORKFLOW.second.md"));
-        ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(literallyNamed, shortLinked));
+        var manifest = new ConnectedBoardManifest(List.of(literallyNamed, shortLinked));
 
         // when
         var selected = manifest.findAllByBoard("SYNTH003?utm=test");
@@ -104,7 +104,7 @@ final class ConnectedBoardManifestTest {
     void findByBoardLeavesNameLikeSelectorsContainingQuestionMarksUnmatched() {
         // given
         ConnectedBoard board = board("board-1", "SYNTH003", "Queue", Path.of("WORKFLOW.md"));
-        ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(board));
+        var manifest = new ConnectedBoardManifest(List.of(board));
 
         // when
         var unmatched = manifest.findByBoard("What? Board");
@@ -122,7 +122,7 @@ final class ConnectedBoardManifestTest {
                 "Queue",
                 "https://trello.com/b/SYNTH003/synthetic-board",
                 Path.of("WORKFLOW.md"));
-        ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(board));
+        var manifest = new ConnectedBoardManifest(List.of(board));
 
         // when
         Throwable notTrello = catchThrowable(() -> manifest.findByBoard("https://not-trello.com/b/SYNTH003/anything"));
@@ -165,7 +165,7 @@ final class ConnectedBoardManifestTest {
                 "Queue",
                 "https://trello.com/b/SYNTH003/synthetic-board",
                 Path.of("WORKFLOW.md"));
-        ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(board));
+        var manifest = new ConnectedBoardManifest(List.of(board));
 
         // when
         Throwable cardUrl = catchThrowable(() -> manifest.findByBoard("https://trello.com/c/SYNTH003/not-a-board"));
@@ -186,7 +186,7 @@ final class ConnectedBoardManifestTest {
                 "https://not-trello.com/b/team",
                 "https://trello.com/b/SYNTH003/synthetic-board",
                 Path.of("WORKFLOW.md"));
-        ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(board));
+        var manifest = new ConnectedBoardManifest(List.of(board));
 
         // when
         var selected = manifest.findByBoard("https://not-trello.com/b/team");
@@ -204,7 +204,7 @@ final class ConnectedBoardManifestTest {
                 "Queue",
                 "https://trello.com/b/SYNTH003/synthetic-board",
                 Path.of("WORKFLOW.md"));
-        ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(board));
+        var manifest = new ConnectedBoardManifest(List.of(board));
 
         // when
         var byUppercaseTrelloUrl = manifest.findByBoard("HTTPS://TRELLO.COM/b/SYNTH003/anything");
@@ -221,7 +221,7 @@ final class ConnectedBoardManifestTest {
         Path workflow = Path.of("WORKFLOW.md");
         ConnectedBoard first = board("board-1", "first", "First Queue", workflow);
         ConnectedBoard second = board("board-2", "second", "Second Queue", workflow);
-        ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(first, second));
+        var manifest = new ConnectedBoardManifest(List.of(first, second));
 
         // when
         var selected = manifest.findByWorkflow(workflow);

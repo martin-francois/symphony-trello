@@ -8,7 +8,7 @@ final class CliValueNormalizerTest {
     @Test
     void commaSeparatedValuesPreserveEmptyAndTrailingFields() {
         // given
-        String valuesWithEmptyFields = "alpha,,beta,";
+        var valuesWithEmptyFields = "alpha,,beta,";
 
         // when
         var fields = CliValueNormalizer.commaSeparatedValues(valuesWithEmptyFields);

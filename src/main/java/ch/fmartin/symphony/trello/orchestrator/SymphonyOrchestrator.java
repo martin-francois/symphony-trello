@@ -64,6 +64,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
+import org.jspecify.annotations.Nullable;
 
 @ApplicationScoped
 public class SymphonyOrchestrator {
@@ -90,30 +91,28 @@ public class SymphonyOrchestrator {
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private final ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor();
 
-    /**
-     * Serializes the long-running operations (start, stop, tick, worker exit, retry timers, agent
-     * events) against each other, exactly like the previous synchronized methods did. Trello and
-     * filesystem I/O may run while holding this lock, but never while holding the instance
-     * monitor: status reads take only the monitor, so they must never queue behind a Trello
-     * round-trip. Every write to reader-visible state happens under both locks; reads inside
-     * operations need no monitor because all writers hold this lock. Exception: config and
-     * workflowPath are volatile and written under this lock only, because the lock-free
-     * local-status getters read each as one immutable reference and need no cross-field
-     * consistency; workflow and workflowLastModified are confined to lock holders and have no
-     * lock-free readers.
-     */
+    /// Serializes the long-running operations (start, stop, tick, worker exit, retry timers, agent
+    /// events) against each other, exactly like the previous synchronized methods did. Trello and
+    /// filesystem I/O may run while holding this lock, but never while holding the instance
+    /// monitor: status reads take only the monitor, so they must never queue behind a Trello
+    /// round-trip. Every write to reader-visible state happens under both locks; reads inside
+    /// operations need no monitor because all writers hold this lock. Exception: config and
+    /// workflowPath are volatile and written under this lock only, because the lock-free
+    /// local-status getters read each as one immutable reference and need no cross-field
+    /// consistency; workflow and workflowLastModified are confined to lock holders and have no
+    /// lock-free readers.
     private final ReentrantLock operationLock = new ReentrantLock();
 
     private final Map<RuntimeCardKey, RunningEntry> running = new LinkedHashMap<>();
     private final Map<RuntimeCardKey, RetryEntry> retryAttempts = new LinkedHashMap<>();
     private final Set<RuntimeCardKey> claimed = new HashSet<>();
     private final Set<RuntimeCardKey> completed = new HashSet<>();
-    private final LinkedHashMap<String, Instant> ignoredWorkers = new LinkedHashMap<>();
+    private final Map<String, Instant> ignoredWorkers = new LinkedHashMap<>();
     // Bound each card's diagnostic history so long sessions cannot grow memory and API responses
     // indefinitely; EvictingQueue retains the newest events in chronological order.
     private final Map<RuntimeCardKey, EvictingQueue<CardDebugDetails.EventInfo>> recentEvents = new HashMap<>();
     private final Map<UsageWorkpadTarget, UsageWorkpadState> usageWorkpadMessages = new LinkedHashMap<>();
-    private final LinkedHashMap<UsageWorkpadTarget, UsageWorkpadCleanup> pendingUsageWorkpadCleanup =
+    private final Map<UsageWorkpadTarget, UsageWorkpadCleanup> pendingUsageWorkpadCleanup =
             new LinkedHashMap<>();
     private final Map<String, Object> rateLimitsByCommand = new HashMap<>();
 
@@ -136,15 +135,13 @@ public class SymphonyOrchestrator {
     private boolean started;
     private DispatchPause dispatchPause;
 
-    /**
-     * Runs inside finishTickAndScheduleNext between refresh consumption and the next schedule,
-     * the exact boundary where a concurrent refresh used to be overwritten by the interval
-     * schedule. Tests use it to pin the boundary contract; production keeps the no-op.
-     */
+    /// Runs inside finishTickAndScheduleNext between refresh consumption and the next schedule,
+    /// the exact boundary where a concurrent refresh used to be overwritten by the interval
+    /// schedule. Tests use it to pin the boundary contract; production keeps the no-op.
     Runnable tickCompletionHookForTests = () -> {};
 
     Runnable dispatchPauseScheduleHookForTests = () -> {};
-    BiConsumer<String, Long> retryEntryRescheduleHookForTests = (ignoredCardId, ignoredGeneration) -> {};
+    BiConsumer<String, Long> retryEntryRescheduleHookForTests = (_, _) -> {};
     Runnable retryTimerWaitingHookForTests = () -> {};
     Runnable workerExitCompletionHookForTests = () -> {};
     Runnable workerLaunchHookForTests = () -> {};
@@ -213,8 +210,8 @@ public class SymphonyOrchestrator {
 
     public void start() {
         operationLock.lock();
-        boolean releaseLockOnFailure = false;
-        boolean startupComplete = false;
+        var releaseLockOnFailure = false;
+        var startupComplete = false;
         try {
             synchronized (this) {
                 if (started) {
@@ -277,11 +274,9 @@ public class SymphonyOrchestrator {
         }
     }
 
-    /**
-     * Marking not-started before anything else closes the refresh window: once this ran, a
-     * concurrent requestRefresh() is a no-op and cannot schedule a tick against the scheduler
-     * that stop is about to shut down.
-     */
+    /// Marking not-started before anything else closes the refresh window: once this ran, a
+    /// concurrent requestRefresh() is a no-op and cannot schedule a tick against the scheduler
+    /// that stop is about to shut down.
     private synchronized void markStoppingAndCancelTick() {
         started = false;
         if (tickTimer != null) {
@@ -318,17 +313,17 @@ public class SymphonyOrchestrator {
         return selected.toAbsolutePath().normalize();
     }
 
-    public String selectedBoardId() {
+    public @Nullable String selectedBoardId() {
         EffectiveConfig current = config;
         return current == null ? null : current.tracker().resolvedBoardId();
     }
 
-    public String selectedConfiguredBoardId() {
+    public @Nullable String selectedConfiguredBoardId() {
         EffectiveConfig current = config;
         return current == null ? null : current.tracker().boardId();
     }
 
-    /** The configured card identifier prefix, or the documented default before configuration loads. */
+    /// The configured card identifier prefix, or the documented default before configuration loads.
     public String cardIdentifierPrefix() {
         EffectiveConfig current = config;
         return current == null
@@ -341,13 +336,11 @@ public class SymphonyOrchestrator {
         scheduleRefreshIfStartedAndIdle();
     }
 
-    /**
-     * The monitor makes this atomic with tick completion: it runs entirely before or entirely
-     * after finishTickAndScheduleNext, so a refresh either gets consumed by the finishing tick or
-     * replaces the interval schedule with a zero-delay tick, never the other way around. After
-     * stop marked the orchestrator as not started, this is a no-op, so a late refresh cannot
-     * schedule against the shut-down scheduler.
-     */
+    /// The monitor makes this atomic with tick completion: it runs entirely before or entirely
+    /// after finishTickAndScheduleNext, so a refresh either gets consumed by the finishing tick or
+    /// replaces the interval schedule with a zero-delay tick, never the other way around. After
+    /// stop marked the orchestrator as not started, this is a no-op, so a late refresh cannot
+    /// schedule against the shut-down scheduler.
     private synchronized void scheduleRefreshIfStartedAndIdle() {
         if (started && !tickRunning) {
             scheduleTick(Duration.ZERO);
@@ -428,16 +421,14 @@ public class SymphonyOrchestrator {
         return true;
     }
 
-    /**
-     * Tick completion is atomic: clearing tickRunning, consuming the refresh flag, and scheduling
-     * the next tick happen under one monitor section. A concurrent requestRefresh() therefore
-     * runs entirely before this (and is consumed here as the zero-delay schedule) or entirely
-     * after it (and replaces the interval schedule), so a refresh at the completion boundary can
-     * never be overwritten by the normal polling interval.
-     */
+    /// Tick completion is atomic: clearing tickRunning, consuming the refresh flag, and scheduling
+    /// the next tick happen under one monitor section. A concurrent requestRefresh() therefore
+    /// runs entirely before this (and is consumed here as the zero-delay schedule) or entirely
+    /// after it (and replaces the interval schedule), so a refresh at the completion boundary can
+    /// never be overwritten by the normal polling interval.
     private synchronized void finishTickAndScheduleNext() {
         tickRunning = false;
-        boolean refreshRequestedDuringTick = consumeRefreshRequest();
+        var refreshRequestedDuringTick = consumeRefreshRequest();
         tickCompletionHookForTests.run();
         scheduleTick(
                 refreshRequestedDuringTick ? Duration.ZERO : config.polling().interval());
@@ -483,7 +474,7 @@ public class SymphonyOrchestrator {
 
     private void reloadIfChanged() {
         Instant modified = lastModified(config.workflowPath());
-        boolean forced = workflowReloadRequested.getAndSet(false);
+        var forced = workflowReloadRequested.getAndSet(false);
         if (!forced && workflowLastModified != null && !modified.isAfter(workflowLastModified)) {
             return;
         }
@@ -501,9 +492,9 @@ public class SymphonyOrchestrator {
     private void applyValidReload(WorkflowDefinition nextWorkflow, EffectiveConfig nextConfig, Instant modified) {
         synchronized (this) {
             EffectiveConfig previousConfig = config;
-            boolean commandChanged = !Objects.equals(
+            var commandChanged = !Objects.equals(
                     previousConfig.codex().command(), nextConfig.codex().command());
-            boolean trackerTargetChanged = !TrackerTarget.from(previousConfig).equals(TrackerTarget.from(nextConfig));
+            var trackerTargetChanged = !TrackerTarget.from(previousConfig).equals(TrackerTarget.from(nextConfig));
             if (trackerTargetChanged) {
                 rotateTrackerTarget(nextConfig, !commandChanged);
             }
@@ -517,7 +508,7 @@ public class SymphonyOrchestrator {
         }
     }
 
-    /** Called with the state monitor held after reload rotations have detached prior ownership. */
+    /// Called with the state monitor held after reload rotations have detached prior ownership.
     private void refreshUsageOwnership(EffectiveConfig nextConfig) {
         TrackerTarget currentTarget = TrackerTarget.from(nextConfig);
         usageWorkpadMessages.replaceAll(
@@ -530,7 +521,7 @@ public class SymphonyOrchestrator {
                         : cleanup);
     }
 
-    /** Called with the state monitor held and the operation lock owned by the reload tick. */
+    /// Called with the state monitor held and the operation lock owned by the reload tick.
     private void rotateTrackerTarget(EffectiveConfig nextConfig, boolean retainCommandPause) {
         TrackerTarget nextTarget = TrackerTarget.from(nextConfig);
 
@@ -553,7 +544,7 @@ public class SymphonyOrchestrator {
         }
 
         if (retainCommandPause && dispatchPause != null) {
-            Optional<UsageProbe> retainedProbe = dispatchPause
+            var retainedProbe = dispatchPause
                     .probe()
                     .filter(probe -> probe.target().trackerTarget().equals(nextTarget));
             dispatchPause = new DispatchPause(
@@ -566,7 +557,7 @@ public class SymphonyOrchestrator {
         }
     }
 
-    /** Called with the state monitor held and the operation lock owned by the reload tick. */
+    /// Called with the state monitor held and the operation lock owned by the reload tick.
     private void rotateCodexCommandScope(EffectiveConfig previousConfig, EffectiveConfig nextConfig) {
         String previousCommand = previousConfig.codex().command();
         if (dispatchPause != null && Objects.equals(dispatchPause.command(), previousCommand)) {
@@ -594,7 +585,7 @@ public class SymphonyOrchestrator {
     private static Instant lastModified(Path path) {
         try {
             return Files.getLastModifiedTime(path).toInstant();
-        } catch (IOException e) {
+        } catch (IOException _) {
             return Instant.EPOCH;
         }
     }
@@ -634,7 +625,7 @@ public class SymphonyOrchestrator {
         while (workflowWatchService != null) {
             try {
                 WatchKey key = workflowWatchService.take();
-                boolean changed = false;
+                var changed = false;
                 for (WatchEvent<?> event : key.pollEvents()) {
                     if (event.context() instanceof Path changedPath && changedPath.equals(fileName)) {
                         changed = true;
@@ -645,9 +636,9 @@ public class SymphonyOrchestrator {
                     workflowReloadRequested.set(true);
                     requestRefresh();
                 }
-            } catch (ClosedWatchServiceException e) {
+            } catch (ClosedWatchServiceException _) {
                 return;
-            } catch (InterruptedException e) {
+            } catch (InterruptedException _) {
                 Thread.currentThread().interrupt();
                 return;
             } catch (RuntimeException e) {
@@ -672,9 +663,9 @@ public class SymphonyOrchestrator {
         if (running.isEmpty()) {
             return;
         }
-        Map<EffectiveConfig, List<RunningEntry>> entriesByLaunchConfig = new LinkedHashMap<>();
+        var entriesByLaunchConfig = new LinkedHashMap<EffectiveConfig, List<RunningEntry>>();
         List.copyOf(running.values()).forEach(entry -> entriesByLaunchConfig
-                .computeIfAbsent(entry.launchConfig, ignored -> new java.util.ArrayList<>())
+                .computeIfAbsent(entry.launchConfig, _ -> new java.util.ArrayList<>())
                 .add(entry));
         entriesByLaunchConfig.forEach((launchConfig, entries) -> {
             Map<String, CardLookupResult> refreshed;
@@ -801,11 +792,11 @@ public class SymphonyOrchestrator {
             return;
         }
         configResolver.validateForDispatch(config);
-        List<Card> fetchedCandidates = tracker.fetchCandidateCards(config);
+        var fetchedCandidates = tracker.fetchCandidateCards(config);
         List<Card> candidates = fetchedCandidates.stream()
                 .sorted(TrelloClient.dispatchComparator(config, prerequisitePriorityOverrides(fetchedCandidates)))
                 .toList();
-        Set<String> releasedCards = releaseIdleInProgressOverflow(candidates);
+        var releasedCards = releaseIdleInProgressOverflow(candidates);
         DispatchBudget budget = DispatchBudget.from(config, running.values());
         for (Card card : candidates) {
             if (releasedCards.contains(card.id())) {
@@ -853,7 +844,7 @@ public class SymphonyOrchestrator {
             return Optional.empty();
         }
         String workerIdentity = UUID.randomUUID().toString();
-        RunningEntry entry =
+        var entry =
                 new RunningEntry(dispatchCard, card, workerIdentity, attempt, clock.instant(), launchConfig);
         RuntimeCardKey runningKey = runtimeKey(entry);
         synchronized (this) {
@@ -913,7 +904,7 @@ public class SymphonyOrchestrator {
     }
 
     private void reconcileStaleUsageWorkpad(Card card) {
-        boolean hasManagedSection = card.comments().stream()
+        var hasManagedSection = card.comments().stream()
                 .map(Card.Comment::text)
                 .anyMatch(CodexUsageWorkpadSection::containsManagedSection);
         if (!hasManagedSection || isDispatchPaused()) {
@@ -983,9 +974,9 @@ public class SymphonyOrchestrator {
             running.remove(cardKey);
             addRuntime(entry);
         }
-        boolean currentTrackerTarget = isCurrentTrackerTarget(entry.launchTarget);
-        boolean typedUsageLimit = result.failureCategory() == AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT;
-        boolean commandScopedUsageLimit = typedUsageLimit && isCurrentCodexCommand(entry.launchCommand);
+        var currentTrackerTarget = isCurrentTrackerTarget(entry.launchTarget);
+        var typedUsageLimit = result.failureCategory() == AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT;
+        var commandScopedUsageLimit = typedUsageLimit && isCurrentCodexCommand(entry.launchCommand);
         DispatchPause usagePause = commandScopedUsageLimit ? installOrExtendUsagePause(entry, result) : null;
         if (!commandScopedUsageLimit && isBoundUsageProbe(entry.launchTarget, cardKey.cardId(), workerIdentity)) {
             clearUsagePauseAfterProbeResult(entry.launchTarget, cardKey.cardId(), workerIdentity);
@@ -1110,7 +1101,7 @@ public class SymphonyOrchestrator {
                 return false;
             }
             RuntimeCardKey cardKey = ownedEntry.orElseThrow().getKey();
-            Optional<RunningEntry> currentEntry = currentRunningEntry(cardKey, event.workerIdentity());
+            var currentEntry = currentRunningEntry(cardKey, event.workerIdentity());
             if (currentEntry.isEmpty()) {
                 return false;
             }
@@ -1177,9 +1168,9 @@ public class SymphonyOrchestrator {
         if (usage == null || usage.isEmpty()) {
             return;
         }
-        long input = usage.getOrDefault("input_tokens", 0L);
-        long output = usage.getOrDefault("output_tokens", 0L);
-        long total = usage.getOrDefault("total_tokens", input + output);
+        var input = usage.getOrDefault("input_tokens", 0L);
+        var output = usage.getOrDefault("output_tokens", 0L);
+        var total = usage.getOrDefault("total_tokens", input + output);
         totalInputTokens += Math.max(0, input - entry.lastReportedInputTokens);
         totalOutputTokens += Math.max(0, output - entry.lastReportedOutputTokens);
         totalTokens += Math.max(0, total - entry.lastReportedTotalTokens);
@@ -1197,7 +1188,7 @@ public class SymphonyOrchestrator {
         EffectiveConfig currentConfig = config;
         EffectiveConfig workpadOwnerConfig =
                 entry.launchTarget.equals(TrackerTarget.from(currentConfig)) ? currentConfig : entry.launchConfig;
-        UsageWorkpadTarget workpadTarget = new UsageWorkpadTarget(entry.launchTarget, cardId);
+        var workpadTarget = new UsageWorkpadTarget(entry.launchTarget, cardId);
         Instant detectedAt = clock.instant();
         Instant reportedReset = result.retryNotBefore()
                 .filter(candidate -> candidate.isAfter(detectedAt))
@@ -1213,7 +1204,7 @@ public class SymphonyOrchestrator {
                 dispatchPause = new DispatchPause(
                         entry.launchCommand, dispatchPauseGeneration, detectedAt, reportedReset, Optional.empty());
             } else {
-                Optional<UsageProbe> retainedProbe =
+                var retainedProbe =
                         dispatchPause.probe().filter(probe -> !probe.matches(workpadTarget, workerIdentity));
                 Instant extendedUntil =
                         reportedReset.isAfter(dispatchPause.until()) ? reportedReset : dispatchPause.until();
@@ -1241,7 +1232,7 @@ public class SymphonyOrchestrator {
     }
 
     private static String usageLimitMessage(String reason) {
-        int separator = reason.indexOf(": ");
+        var separator = reason.indexOf(": ");
         return separator < 0 ? reason : reason.substring(separator + 2);
     }
 
@@ -1271,7 +1262,7 @@ public class SymphonyOrchestrator {
     }
 
     private synchronized boolean isUsageProbeCard(TrackerTarget trackerTarget, String cardId) {
-        UsageWorkpadTarget target = new UsageWorkpadTarget(trackerTarget, cardId);
+        var target = new UsageWorkpadTarget(trackerTarget, cardId);
         return dispatchPause != null
                 && dispatchPause
                         .probe()
@@ -1281,7 +1272,7 @@ public class SymphonyOrchestrator {
     }
 
     private synchronized boolean isBoundUsageProbe(TrackerTarget trackerTarget, String cardId, String workerIdentity) {
-        UsageWorkpadTarget target = new UsageWorkpadTarget(trackerTarget, cardId);
+        var target = new UsageWorkpadTarget(trackerTarget, cardId);
         return dispatchPause != null
                 && dispatchPause
                         .probe()
@@ -1295,7 +1286,7 @@ public class SymphonyOrchestrator {
     }
 
     private boolean updateUsageWorkpad(EffectiveConfig ownerConfig, String cardId, String section) {
-        boolean updated = usageWorkpads
+        var updated = usageWorkpads
                 .map(handler -> handler.updateCodexUsageSection(ownerConfig, cardId, section))
                 .orElse(true);
         if (!updated) {
@@ -1316,7 +1307,7 @@ public class SymphonyOrchestrator {
         Instant now = clock.instant();
         pendingUsageWorkpadCleanup.compute(
                 target,
-                (ignored, existing) -> existing == null || !existing.expiresAt().isAfter(now)
+                (_, existing) -> existing == null || !existing.expiresAt().isAfter(now)
                         ? new UsageWorkpadCleanup(ownerConfig, now.plus(USAGE_WORKPAD_CLEANUP_TTL), now)
                         : existing);
         while (pendingUsageWorkpadCleanup.size() > USAGE_WORKPAD_CLEANUP_LIMIT) {
@@ -1346,7 +1337,7 @@ public class SymphonyOrchestrator {
         pending.forEach(pendingCleanup -> {
             UsageWorkpadTarget target = pendingCleanup.target();
             UsageWorkpadCleanup attempted = pendingCleanup.cleanup();
-            boolean updated = updateUsageWorkpad(attempted.ownerConfig(), target.cardId(), null);
+            var updated = updateUsageWorkpad(attempted.ownerConfig(), target.cardId(), null);
             synchronized (this) {
                 if (updated) {
                     pendingUsageWorkpadCleanup.remove(target);
@@ -1366,7 +1357,7 @@ public class SymphonyOrchestrator {
         if (dispatchPauseTimer != null) {
             dispatchPauseTimer.cancel(false);
         }
-        long delayMillis = delayMillisUntil(pause.until());
+        var delayMillis = delayMillisUntil(pause.until());
         dispatchPauseTimer = scheduler.schedule(
                 () -> onDispatchPauseDeadline(pause.command(), pause.generation(), pause.until()),
                 delayMillis,
@@ -1450,12 +1441,12 @@ public class SymphonyOrchestrator {
     private void probeOneCandidateAtUsageDeadline() {
         Optional<Card> candidate;
         try {
-            List<Card> fetched = tracker.fetchCandidateCards(config);
+            var fetched = tracker.fetchCandidateCards(config);
             candidate = fetched.stream()
                     .sorted(TrelloClient.dispatchComparator(config, prerequisitePriorityOverrides(fetched)))
                     .filter(card -> shouldDispatch(card, false))
                     .findFirst();
-        } catch (RuntimeException e) {
+        } catch (RuntimeException _) {
             LOG.warnf("codex_dispatch_pause=%s probe_candidate=failed", CODEX_USAGE_LIMIT_PAUSE);
             rearmUsagePauseWithoutProbe();
             return;
@@ -1477,7 +1468,7 @@ public class SymphonyOrchestrator {
         }
         updateUsageWorkpad(
                 config, probeCard.id(), CodexUsageWorkpadSection.rechecking(usageWorkpadMessage(workpadTarget)));
-        boolean workerStarted = false;
+        var workerStarted = false;
         try {
             workerStarted = refreshForDispatch(probeCard)
                     .flatMap(refreshed -> dispatch(refreshed, null))
@@ -1670,8 +1661,8 @@ public class SymphonyOrchestrator {
                 existing.timer().cancel(false);
             }
             retryGeneration++;
-            long generation = retryGeneration;
-            ScheduledFuture<?> timer =
+            var generation = retryGeneration;
+            var timer =
                     scheduler.schedule(() -> onRetryTimer(retryKey, generation), delayMillis, TimeUnit.MILLISECONDS);
             retryAttempts.put(
                     retryKey,
@@ -1728,17 +1719,17 @@ public class SymphonyOrchestrator {
         }
         retry.timer().cancel(false);
         String cardId = cardKey.cardId();
-        UsageWorkpadTarget workpadTarget = new UsageWorkpadTarget(retry.trackerTarget(), cardId);
-        boolean usageRecheck = isUsageProbeCard(retry.trackerTarget(), cardId);
-        boolean recheckWorkerStarted = false;
-        boolean retireUsageProbe = false;
+        var workpadTarget = new UsageWorkpadTarget(retry.trackerTarget(), cardId);
+        var usageRecheck = isUsageProbeCard(retry.trackerTarget(), cardId);
+        var recheckWorkerStarted = false;
+        var retireUsageProbe = false;
         try {
             Map<String, CardLookupResult> refreshed;
             try {
                 refreshed = usageRecheck
                         ? tracker.fetchCardStatesForPromptByIds(config, List.of(cardId))
                         : tracker.fetchCardStatesByIds(config, List.of(cardId));
-            } catch (RuntimeException e) {
+            } catch (RuntimeException _) {
                 scheduleRetry(
                         cardId,
                         retry.attempt() + 1,
@@ -1852,7 +1843,7 @@ public class SymphonyOrchestrator {
 
     private boolean deferRetryForDispatchPause(RetryEntry retry) {
         DispatchPause pause;
-        boolean beginRecheck = false;
+        var beginRecheck = false;
         synchronized (this) {
             pause = dispatchPause;
             if (pause == null) {
@@ -1872,7 +1863,7 @@ public class SymphonyOrchestrator {
             if (!retry.codexUsageLimit()) {
                 return true;
             }
-            UsageWorkpadTarget workpadTarget = new UsageWorkpadTarget(retry.trackerTarget(), retry.cardId());
+            var workpadTarget = new UsageWorkpadTarget(retry.trackerTarget(), retry.cardId());
             usageWorkpadMessages.putIfAbsent(
                     workpadTarget, new UsageWorkpadState(config, "Codex usage is temporarily unavailable."));
             pendingUsageWorkpadCleanup.remove(workpadTarget);
@@ -1883,7 +1874,7 @@ public class SymphonyOrchestrator {
             beginRecheck = true;
         }
         if (beginRecheck) {
-            UsageWorkpadTarget workpadTarget = new UsageWorkpadTarget(retry.trackerTarget(), retry.cardId());
+            var workpadTarget = new UsageWorkpadTarget(retry.trackerTarget(), retry.cardId());
             UsageWorkpadState state = usageWorkpadMessages.get(workpadTarget);
             updateUsageWorkpad(
                     state.ownerConfig(),
@@ -1911,7 +1902,7 @@ public class SymphonyOrchestrator {
         }
     }
 
-    /** Called with the state monitor held. */
+    /// Called with the state monitor held.
     private void rescheduleRetryForCommandChange(RetryEntry retry, EffectiveConfig nextConfig, Instant now) {
         RetryEntry current = retryAttempts.get(runtimeKey(retry));
         if (current == null || current.generation() != retry.generation()) {
@@ -1924,7 +1915,7 @@ public class SymphonyOrchestrator {
                 retry, dueAt, naturalDueAt, nextConfig.codex().command(), TrackerTarget.from(nextConfig), false);
     }
 
-    /** Called with the state monitor held after the prior timer has been cancelled. */
+    /// Called with the state monitor held after the prior timer has been cancelled.
     private void replaceRetryEntry(
             RetryEntry retry,
             Instant dueAt,
@@ -1932,12 +1923,12 @@ public class SymphonyOrchestrator {
             String codexCommand,
             TrackerTarget trackerTarget,
             boolean codexUsageLimit) {
-        long delayMillis = delayMillisUntil(dueAt);
+        var delayMillis = delayMillisUntil(dueAt);
         retryGeneration++;
-        long generation = retryGeneration;
+        var generation = retryGeneration;
         RuntimeCardKey previousKey = runtimeKey(retry);
         RuntimeCardKey replacementKey = runtimeKey(trackerTarget, retry.cardId());
-        ScheduledFuture<?> timer =
+        var timer =
                 scheduler.schedule(() -> onRetryTimer(replacementKey, generation), delayMillis, TimeUnit.MILLISECONDS);
         if (!previousKey.equals(replacementKey)) {
             retryAttempts.remove(previousKey);
@@ -1968,7 +1959,7 @@ public class SymphonyOrchestrator {
         }
         try {
             return Math.max(remaining.toMillis(), 1);
-        } catch (ArithmeticException e) {
+        } catch (ArithmeticException _) {
             return Long.MAX_VALUE;
         }
     }
@@ -2013,19 +2004,19 @@ public class SymphonyOrchestrator {
         if (requiredLabels.stream().anyMatch(String::isBlank)) {
             return false;
         }
-        Set<String> cardLabels =
+        var cardLabels =
                 card.labels().stream().map(StateNames::normalize).collect(toImmutableSet());
         return cardLabels.containsAll(requiredLabels);
     }
 
     private Map<String, Integer> prerequisitePriorityOverrides(List<Card> candidates) {
-        Set<String> dispatchableCandidateIds = dispatchableCandidateIds(candidates);
-        Map<String, Integer> overrides = HashMap.newHashMap(dispatchableCandidateIds.size());
+        var dispatchableCandidateIds = dispatchableCandidateIds(candidates);
+        var overrides = HashMap.newHashMap(dispatchableCandidateIds.size());
         for (Card card : candidates) {
             if (blockersAllowDispatch(card)) {
                 continue;
             }
-            int inheritedPriority = priorityOrDefault(card);
+            var inheritedPriority = priorityOrDefault(card);
             for (var blocker : card.blockedBy()) {
                 if (dispatchableCandidateIds.contains(blocker.id())) {
                     overrides.merge(blocker.id(), inheritedPriority, Math::min);
@@ -2036,8 +2027,8 @@ public class SymphonyOrchestrator {
     }
 
     private Set<String> dispatchableCandidateIds(List<Card> candidates) {
-        Set<String> seen = HashSet.newHashSet(candidates.size());
-        Set<String> dispatchableIds = HashSet.newHashSet(candidates.size());
+        var seen = HashSet.newHashSet(candidates.size());
+        var dispatchableIds = HashSet.newHashSet(candidates.size());
         for (Card candidate : candidates) {
             if (seen.add(candidate.id()) && shouldDispatchIgnoringSlots(candidate, false)) {
                 dispatchableIds.add(candidate.id());
@@ -2056,7 +2047,7 @@ public class SymphonyOrchestrator {
         }
 
         DispatchBudget planned = DispatchBudget.from(config, running.values());
-        Set<String> releasedCards = HashSet.newHashSet(candidates.size());
+        var releasedCards = HashSet.newHashSet(candidates.size());
         for (Card card : candidates) {
             if (isAlreadyReserved(card)) {
                 continue;
@@ -2169,7 +2160,7 @@ public class SymphonyOrchestrator {
     private Map<String, Integer> runningCountsByState() {
         return running.values().stream()
                 .map(entry -> StateNames.normalize(entry.card.state()))
-                .collect(Collectors.toMap(Function.identity(), state -> 1, Integer::sum, HashMap::new));
+                .collect(Collectors.toMap(Function.identity(), _ -> 1, Integer::sum, HashMap::new));
     }
 
     private static final class DispatchBudget {
@@ -2187,9 +2178,9 @@ public class SymphonyOrchestrator {
         }
 
         static DispatchBudget from(EffectiveConfig config, Collection<RunningEntry> runningEntries) {
-            Map<String, Integer> usedByState = runningEntries.stream()
+            var usedByState = runningEntries.stream()
                     .map(entry -> StateNames.normalize(entry.card.state()))
-                    .collect(Collectors.toMap(Function.identity(), state -> 1, Integer::sum, HashMap::new));
+                    .collect(Collectors.toMap(Function.identity(), _ -> 1, Integer::sum, HashMap::new));
             return new DispatchBudget(
                     config.agent().maxConcurrentAgents(),
                     config.agent().maxConcurrentAgentsByState(),
@@ -2287,7 +2278,7 @@ public class SymphonyOrchestrator {
         private static FileLock tryWorkflowLock(FileChannel channel) throws IOException {
             try {
                 return channel.tryLock();
-            } catch (OverlappingFileLockException e) {
+            } catch (OverlappingFileLockException _) {
                 return null;
             }
         }
@@ -2295,7 +2286,7 @@ public class SymphonyOrchestrator {
         private static void closeQuietly(FileChannel channel) {
             try {
                 channel.close();
-            } catch (IOException ignored) {
+            } catch (IOException _) {
                 // Startup is already failing, and the OS will reclaim the descriptor on exit.
             }
         }
@@ -2321,7 +2312,7 @@ public class SymphonyOrchestrator {
     }
 
     private Duration backoff(int attempt) {
-        long delay = INITIAL_RETRY_BACKOFF_MILLIS * (1L << Math.clamp(attempt - 1, 0, MAX_RETRY_BACKOFF_SHIFT));
+        var delay = INITIAL_RETRY_BACKOFF_MILLIS * (1L << Math.clamp(attempt - 1, 0, MAX_RETRY_BACKOFF_SHIFT));
         return Duration.ofMillis(
                 Math.min(delay, config.agent().maxRetryBackoff().toMillis()));
     }
@@ -2336,7 +2327,7 @@ public class SymphonyOrchestrator {
 
     private void addRecentEvent(RuntimeCardKey cardKey, CardDebugDetails.EventInfo event) {
         recentEvents
-                .computeIfAbsent(cardKey, ignored -> EvictingQueue.create(RECENT_EVENT_LIMIT))
+                .computeIfAbsent(cardKey, _ -> EvictingQueue.create(RECENT_EVENT_LIMIT))
                 .add(event);
     }
 
@@ -2370,7 +2361,7 @@ public class SymphonyOrchestrator {
                 running.values().stream().map(this::runningRow).toList();
         List<RuntimeSnapshot.RetryRow> retryRows =
                 retryAttempts.values().stream().map(this::retryRow).toList();
-        double activeSeconds = running.values().stream()
+        var activeSeconds = running.values().stream()
                         .mapToLong(
                                 entry -> Duration.between(entry.startedAt, now).toMillis())
                         .sum()
@@ -2404,7 +2395,7 @@ public class SymphonyOrchestrator {
 
     public synchronized Optional<CardDebugDetails> cardDetails(String cardIdentifier) {
         TrackerTarget currentTarget = config == null ? null : TrackerTarget.from(config);
-        Optional<CardDetailsSelection> selection = running.entrySet().stream()
+        var selection = running.entrySet().stream()
                 .filter(entry -> Objects.equals(entry.getKey().trackerTarget(), currentTarget))
                 .filter(entry -> entry.getValue().identifier().equals(cardIdentifier))
                 .findFirst()

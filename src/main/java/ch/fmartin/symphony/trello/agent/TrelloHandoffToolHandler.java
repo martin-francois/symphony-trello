@@ -61,7 +61,7 @@ public class TrelloHandoffToolHandler {
     public TrelloHandoffToolHandler(ObjectMapper json, TrelloClient trello) {
         this.json = json;
         this.trello = trello;
-        for (int index = 0; index < workpadLocks.length; index++) {
+        for (var index = 0; index < workpadLocks.length; index++) {
             workpadLocks[index] = new Object();
         }
     }
@@ -302,7 +302,7 @@ public class TrelloHandoffToolHandler {
                     "trello_blocker_recheck_comment_window_incomplete",
                     "Cannot safely create blocker recheck status because the fetched Trello comment window is full and an older managed status may exist.");
         }
-        Map<String, Object> created = trello.addComment(config, currentCard.id(), text);
+        var created = trello.addComment(config, currentCard.id(), text);
         String actionId = string(created.get("id"));
         if (blank(actionId)) {
             return failure(
@@ -349,8 +349,8 @@ public class TrelloHandoffToolHandler {
             String status,
             List<Card.Comment> managedComments,
             Card.Comment primary) {
-        int duplicatesFound = managedComments.size() - 1;
-        boolean destructiveAllowed = config.trelloTools().allowDestructiveOperations();
+        var duplicatesFound = managedComments.size() - 1;
+        var destructiveAllowed = config.trelloTools().allowDestructiveOperations();
         String authoritativeText = duplicatesFound > 0 && !destructiveAllowed
                 ? blockerRecheckTextWithManualCleanup(text, duplicatesFound)
                 : text;
@@ -372,7 +372,7 @@ public class TrelloHandoffToolHandler {
             boolean destructiveAllowed,
             DuplicateCleanup cleanup) {
         // LinkedHashMap keeps model-visible tool result fields in a stable diagnostic order.
-        Map<String, String> result = new LinkedHashMap<>();
+        var result = new LinkedHashMap<String, String>();
         result.put("status", status);
         result.put("card_id", cardId);
         result.put("action_id", actionId);
@@ -398,7 +398,7 @@ public class TrelloHandoffToolHandler {
     }
 
     private static String blockerRecheckTextWithManualCleanup(String text, int duplicatesFound) {
-        int footerStart = text.lastIndexOf("\n\n" + BLOCKER_RECHECK_FOOTER_PREFIX);
+        var footerStart = text.lastIndexOf("\n\n" + BLOCKER_RECHECK_FOOTER_PREFIX);
         checkArgument(footerStart >= 0, "Managed blocker-recheck text must contain its footer");
         return text.substring(0, footerStart)
                 + blockerRecheckManualCleanupNote(duplicatesFound)
@@ -447,7 +447,7 @@ public class TrelloHandoffToolHandler {
     private static boolean isExactBlockerHandoff(String text) {
         String firstLine = firstNonBlankLine(text).toLowerCase(Locale.ROOT);
         return firstLine.startsWith("blocked:")
-                || firstLine.equals("blocked by")
+                || "blocked by".equals(firstLine)
                 || firstLine.startsWith("blocked by ")
                 || firstLine.startsWith("blocked by:");
     }
@@ -514,12 +514,12 @@ public class TrelloHandoffToolHandler {
         }
         String linkPrefix =
                 BLOCKER_RECHECK_FOOTER_PREFIX + TRELLO_CARD_URL_PREFIX + card.shortLink() + TRELLO_COMMENT_FRAGMENT;
-        int footerStart = text.lastIndexOf("\n\n" + linkPrefix);
+        var footerStart = text.lastIndexOf("\n\n" + linkPrefix);
         if (footerStart < 0 || !text.endsWith(BLOCKER_RECHECK_FOOTER_SUFFIX)) {
             return null;
         }
-        int actionIdStart = footerStart + 2 + linkPrefix.length();
-        int actionIdEnd = text.length() - BLOCKER_RECHECK_FOOTER_SUFFIX.length();
+        var actionIdStart = footerStart + 2 + linkPrefix.length();
+        var actionIdEnd = text.length() - BLOCKER_RECHECK_FOOTER_SUFFIX.length();
         String actionId = text.substring(actionIdStart, actionIdEnd);
         return safeActionId(actionId) ? actionId : null;
     }
@@ -531,12 +531,12 @@ public class TrelloHandoffToolHandler {
     }
 
     private static String shortTaskSummary(String title) {
-        StringBuilder plain = new StringBuilder();
-        boolean previousWhitespace = true;
+        var plain = new StringBuilder();
+        var previousWhitespace = true;
         if (title != null) {
             PrimitiveIterator.OfInt codePoints = title.codePoints().iterator();
             while (codePoints.hasNext()) {
-                int codePoint = codePoints.nextInt();
+                var codePoint = codePoints.nextInt();
                 if (unsafeSummaryCodePoint(codePoint) || Character.isWhitespace(codePoint)) {
                     if (!previousWhitespace) {
                         plain.append(' ');
@@ -552,16 +552,16 @@ public class TrelloHandoffToolHandler {
         if (summary.isEmpty()) {
             return "this card";
         }
-        int codePoints = summary.codePointCount(0, summary.length());
+        var codePoints = summary.codePointCount(0, summary.length());
         if (codePoints <= TASK_SUMMARY_BODY_CODE_POINT_LIMIT) {
             return summary;
         }
-        int end = summary.offsetByCodePoints(0, TASK_SUMMARY_BODY_CODE_POINT_LIMIT - ELLIPSIS_CODE_POINT_COUNT);
+        var end = summary.offsetByCodePoints(0, TASK_SUMMARY_BODY_CODE_POINT_LIMIT - ELLIPSIS_CODE_POINT_COUNT);
         return summary.substring(0, end).stripTrailing() + "...";
     }
 
     private static boolean unsafeSummaryCodePoint(int codePoint) {
-        int type = Character.getType(codePoint);
+        var type = Character.getType(codePoint);
         return Character.isISOControl(codePoint)
                 || type == Character.FORMAT
                 || type == Character.LINE_SEPARATOR
@@ -573,7 +573,7 @@ public class TrelloHandoffToolHandler {
     }
 
     private static boolean endsSentence(String summary) {
-        int last = summary.codePointBefore(summary.length());
+        var last = summary.codePointBefore(summary.length());
         return last == '.' || last == '!' || last == '?';
     }
 
@@ -589,9 +589,9 @@ public class TrelloHandoffToolHandler {
         if (blank(value) || value.length() > maxLength) {
             return false;
         }
-        for (int index = 0; index < value.length(); index++) {
-            char c = value.charAt(index);
-            boolean asciiLetter = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+        for (var index = 0; index < value.length(); index++) {
+            var c = value.charAt(index);
+            var asciiLetter = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
             if (!asciiLetter && !(c >= '0' && c <= '9') && c != '-' && c != '_') {
                 return false;
             }
@@ -670,14 +670,14 @@ public class TrelloHandoffToolHandler {
                         .path("success")
                         .asBoolean();
             }
-        } catch (RuntimeException e) {
+        } catch (RuntimeException _) {
             LOG.warnf("card_id=%s codex_usage_workpad=failed", cardId);
             return false;
         }
     }
 
     private ObjectNode upsertAgentWorkpadComment(EffectiveConfig config, String cardId, Card currentCard, String text) {
-        List<Card.Comment> workpads = workpadComments(currentCard);
+        var workpads = workpadComments(currentCard);
         if (workpads.isEmpty()) {
             return createWorkpad(config, cardId, currentCard, text);
         }
@@ -690,7 +690,7 @@ public class TrelloHandoffToolHandler {
         if (blank(primary.id())) {
             return failure("trello_workpad_missing_action_id", "Existing workpad comment has no Trello action id.");
         }
-        boolean destructiveAllowed = config.trelloTools().allowDestructiveOperations();
+        var destructiveAllowed = config.trelloTools().allowDestructiveOperations();
         Card.Comment nonPrimaryOwner = nonPrimaryManagedOwner(managed, primary);
         if (nonPrimaryOwner != null && !destructiveAllowed) {
             return failure(
@@ -704,7 +704,7 @@ public class TrelloHandoffToolHandler {
 
     private ObjectNode upsertCodexUsageWorkpadComment(
             EffectiveConfig config, String cardId, Card currentCard, String section) {
-        List<Card.Comment> workpads = workpadComments(currentCard);
+        var workpads = workpadComments(currentCard);
         if (workpads.isEmpty()) {
             if (commentWindowMayBeIncomplete(currentCard)) {
                 LOG.warnf("card_id=%s codex_usage_workpad=comment_window_incomplete", cardId);
@@ -732,7 +732,7 @@ public class TrelloHandoffToolHandler {
         if (blank(primary.id())) {
             return failure("trello_workpad_missing_action_id", "Existing workpad comment has no Trello action id.");
         }
-        boolean destructiveAllowed = config.trelloTools().allowDestructiveOperations();
+        var destructiveAllowed = config.trelloTools().allowDestructiveOperations();
         Card.Comment nonPrimaryOwner = nonPrimaryManagedOwner(managed, primary);
         if (nonPrimaryOwner != null && !destructiveAllowed) {
             LOG.warnf("card_id=%s codex_usage_workpad=managed_section_non_primary", cardId);
@@ -757,8 +757,8 @@ public class TrelloHandoffToolHandler {
             Card.Comment primary,
             String canonicalText,
             Card.Comment nonPrimaryManagedOwner) {
-        int duplicatesFound = workpads.size() - 1;
-        boolean destructiveAllowed = config.trelloTools().allowDestructiveOperations();
+        var duplicatesFound = workpads.size() - 1;
+        var destructiveAllowed = config.trelloTools().allowDestructiveOperations();
         // Without the destructive opt-in, the duplicates stay on the card, so the canonical
         // workpad itself must tell the next agent or human that manual cleanup is required.
         String authoritativeText = duplicatesFound > 0 && !destructiveAllowed
@@ -775,7 +775,7 @@ public class TrelloHandoffToolHandler {
         if (nonPrimaryManagedOwner != null && !cleanup.removedActionIds().contains(nonPrimaryManagedOwner.id())) {
             try {
                 trello.updateComment(config, primary.id(), primary.text());
-            } catch (RuntimeException e) {
+            } catch (RuntimeException _) {
                 LOG.warnf("workpad_managed_section_transfer_rollback outcome=failed action_id=%s", primary.id());
                 return failure(
                         "trello_workpad_managed_section_transfer_rollback_failed",
@@ -897,17 +897,15 @@ public class TrelloHandoffToolHandler {
                 + " comments manually and keep this one.";
     }
 
-    /**
-     * A managed comment family should have one authoritative comment, so destructive-policy cleanup
-     * removes duplicates only after the authoritative state is safe. Failed or unaddressable deletes
-     * stay visible and are reported instead of disappearing from the cleanup totals. Workpad callers
-     * additionally fail when an undeleted duplicate owns the managed usage section.
-     */
+    /// A managed comment family should have one authoritative comment, so destructive-policy cleanup
+    /// removes duplicates only after the authoritative state is safe. Failed or unaddressable deletes
+    /// stay visible and are reported instead of disappearing from the cleanup totals. Workpad callers
+    /// additionally fail when an undeleted duplicate owns the managed usage section.
     private DuplicateCleanup removeDuplicateManagedComments(
             EffectiveConfig config, List<Card.Comment> managedComments, Card.Comment primary, String logEvent) {
-        int removed = 0;
-        int deleteFailed = 0;
-        List<String> removedActionIds = new ArrayList<>();
+        var removed = 0;
+        var deleteFailed = 0;
+        var removedActionIds = new ArrayList<String>();
         for (Card.Comment duplicate : managedComments) {
             if (duplicate.equals(primary)) {
                 continue;
@@ -943,7 +941,7 @@ public class TrelloHandoffToolHandler {
         if (commentWindowMayBeIncomplete(currentCard)) {
             return incompleteWorkpadWindowFailure();
         }
-        Map<String, Object> created = trello.addComment(config, cardId, text);
+        var created = trello.addComment(config, cardId, text);
         return success(Map.of("status", "workpad_created", "card_id", cardId, "action_id", string(created.get("id"))));
     }
 
@@ -960,7 +958,7 @@ public class TrelloHandoffToolHandler {
     private static String workpadText(String text) {
         String trimmed = stripManualCleanupNotes(text.strip());
         if (trimmed.startsWith(WORKPAD_MARKER)) {
-            int markerEnd = markerLineEnd(trimmed);
+            var markerEnd = markerLineEnd(trimmed);
             return trimmed.substring(0, markerEnd) + TrelloMarkdown.escapeLeadingHashtags(trimmed.substring(markerEnd));
         }
         return WORKPAD_MARKER
@@ -969,11 +967,9 @@ public class TrelloHandoffToolHandler {
                 + TrelloMarkdown.escapeLeadingHashtags(trimmed);
     }
 
-    /**
-     * Agents often echo the previous workpad body into the next upsert, so a cleanup note from an
-     * earlier update is dropped before the fresh state is decided. This keeps the note from
-     * accumulating and removes it once the duplicates are gone.
-     */
+    /// Agents often echo the previous workpad body into the next upsert, so a cleanup note from an
+    /// earlier update is dropped before the fresh state is decided. This keeps the note from
+    /// accumulating and removes it once the duplicates are gone.
     private static String stripManualCleanupNotes(String text) {
         if (!text.contains(DUPLICATE_WORKPADS_NOTE_PREFIX)) {
             return text;
@@ -985,7 +981,7 @@ public class TrelloHandoffToolHandler {
     }
 
     private static int markerLineEnd(String text) {
-        int lineEnd = text.indexOf('\n');
+        var lineEnd = text.indexOf('\n');
         return lineEnd < 0 ? text.length() : lineEnd;
     }
 
@@ -1019,7 +1015,7 @@ public class TrelloHandoffToolHandler {
     }
 
     private BoardListMatch resolveAllowedTarget(EffectiveConfig config, String listId, String listName) {
-        List<TrelloClient.BoardList> lists = trello.fetchBoardLists(config);
+        var lists = trello.fetchBoardLists(config);
         List<TrelloClient.BoardList> openLists =
                 lists.stream().filter(list -> !list.closed()).toList();
         if (!blank(listId)) {
@@ -1126,7 +1122,7 @@ public class TrelloHandoffToolHandler {
     }
 
     private ObjectNode failure(String code, String message) {
-        Map<String, String> payload = new LinkedHashMap<>();
+        var payload = new LinkedHashMap<String, String>();
         payload.put("error", code);
         payload.put("message", blank(message) ? code : message);
         ObjectNode result = object("success", false);
@@ -1141,7 +1137,7 @@ public class TrelloHandoffToolHandler {
     private String toJson(Map<String, String> payload) {
         try {
             return json.writeValueAsString(payload);
-        } catch (Exception e) {
+        } catch (Exception _) {
             return payload.toString();
         }
     }
@@ -1152,7 +1148,7 @@ public class TrelloHandoffToolHandler {
 
     private ObjectNode object(Object... keyValues) {
         ObjectNode node = json.createObjectNode();
-        for (int i = 0; i < keyValues.length; i += 2) {
+        for (var i = 0; i < keyValues.length; i += 2) {
             node.set(keyValues[i].toString(), json.valueToTree(keyValues[i + 1]));
         }
         return node;
@@ -1192,7 +1188,7 @@ public class TrelloHandoffToolHandler {
                     && uri.getRawUserInfo() == null
                     && uri.getRawQuery() == null
                     && uri.getRawFragment() == null;
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException _) {
             return false;
         }
     }
@@ -1201,8 +1197,8 @@ public class TrelloHandoffToolHandler {
         if (value == null) {
             return false;
         }
-        for (int index = 0; index < value.length(); index++) {
-            char c = value.charAt(index);
+        for (var index = 0; index < value.length(); index++) {
+            var c = value.charAt(index);
             if (c < ' ' || c == 0x7F) {
                 return true;
             }

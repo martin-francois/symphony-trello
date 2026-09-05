@@ -5,12 +5,10 @@ import static com.google.common.base.Strings.nullToEmpty;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * Display-quoting for external Trello names in CLI output, generated prose, and diagnostics.
- * Trello allows quotes, backslashes, and control characters such as newlines in board, list, and
- * card names, so rendered names escape them: one logical message must stay on one physical line
- * with unambiguous quoted boundaries.
- */
+/// Display-quoting for external Trello names in CLI output, generated prose, and diagnostics.
+/// Trello allows quotes, backslashes, and control characters such as newlines in board, list, and
+/// card names, so rendered names escape them: one logical message must stay on one physical line
+/// with unambiguous quoted boundaries.
 final class DisplayNames {
     private DisplayNames() {}
 
@@ -23,9 +21,9 @@ final class DisplayNames {
     }
 
     private static String escape(String name) {
-        StringBuilder safe = new StringBuilder(name.length());
-        for (int index = 0; index < name.length(); index++) {
-            char current = name.charAt(index);
+        var safe = new StringBuilder(name.length());
+        for (var index = 0; index < name.length(); index++) {
+            var current = name.charAt(index);
             switch (current) {
                 case '\\' -> safe.append("\\\\");
                 case '"' -> safe.append("\\\"");

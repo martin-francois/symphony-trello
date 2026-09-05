@@ -13,9 +13,9 @@ final class TrelloChecklistClassifier {
     private TrelloChecklistClassifier() {}
 
     static ChecklistAnalysis analyze(Card.Checklist checklist) {
-        List<PrerequisiteItem> prerequisites = new ArrayList<>();
-        boolean hasAmbiguousItem = false;
-        boolean hasOrdinaryItem = false;
+        var prerequisites = new ArrayList<PrerequisiteItem>();
+        var hasAmbiguousItem = false;
+        var hasOrdinaryItem = false;
         for (Card.ChecklistItem item : checklist.items()) {
             String text = nullToEmpty(item.text()).strip();
             if (text.isEmpty()) {

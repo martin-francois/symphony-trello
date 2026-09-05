@@ -64,10 +64,8 @@ final class SetupDiagnosticReporter {
     private static final int LOG_LINE_LIMIT = 80;
     private static final int LOG_BYTE_LIMIT = 128 * 1024;
 
-    /**
-     * More same-second failure reports than this means something is looping; give up instead of
-     * scanning the directory forever. The caller treats the failure as report-write-unavailable.
-     */
+    /// More same-second failure reports than this means something is looping; give up instead of
+    /// scanning the directory forever. The caller treats the failure as report-write-unavailable.
     private static final int MAX_REPORT_NAME_ATTEMPTS = 100;
 
     private static final List<String> DIAGNOSTIC_TOOL_COMMANDS =
@@ -76,11 +74,9 @@ final class SetupDiagnosticReporter {
             "git", "java", "javac", "mvn", "npm", "node", "codex", "gh", "apt-get", "sudo", "doas", "brew", "winget",
             "dnf", "yum", "pacman", "zypper", "docker");
     private static final Set<String> HASHED_INSTALLER_CONTEXT_KEYS = Set.of("repo_url", "ref", "source_commit");
-    /**
-     * Installer refs are used as diagnostics redaction terms only when they are distinctive. Common
-     * branch names appear in normal logs and framework thread names, so redacting them would damage
-     * public-safe diagnostics more than it would protect private context.
-     */
+    /// Installer refs are used as diagnostics redaction terms only when they are distinctive. Common
+    /// branch names appear in normal logs and framework thread names, so redacting them would damage
+    /// public-safe diagnostics more than it would protect private context.
     private static final Set<String> NON_DISTINCTIVE_INSTALLER_REFS = Set.of("head", "main", "master", "trunk");
 
     private static final Pattern GIT_COMMIT_ID = Pattern.compile("(?i)[0-9a-f]{7,64}");
@@ -256,7 +252,7 @@ final class SetupDiagnosticReporter {
 
     SetupDiagnosticReporter(
             Map<String, String> environment, CommandRunner commandRunner, RecentLogLister recentLogLister) {
-        this(environment, commandRunner, recentLogLister, ApplicationClock.systemUtc());
+        this(environment, commandRunner, recentLogLister, clock1);
     }
 
     SetupDiagnosticReporter(
@@ -264,7 +260,7 @@ final class SetupDiagnosticReporter {
             CommandRunner commandRunner,
             RecentLogLister recentLogLister,
             Clock clock) {
-        this(environment, commandRunner, recentLogLister, clock, System.getProperty("os.name"));
+        this(environment, commandRunner, recentLogLister, clock, osName1);
     }
 
     SetupDiagnosticReporter(
@@ -307,8 +303,8 @@ final class SetupDiagnosticReporter {
         if (!shouldReport(exception)) {
             return Optional.empty();
         }
-        SetupDiagnosticReporter reporter = new SetupDiagnosticReporter(System.getenv(), new ProcessCommandRunner());
-        List<String> arguments = List.of(args);
+        var reporter = new SetupDiagnosticReporter(System.getenv(), new ProcessCommandRunner());
+        var arguments = List.of(args);
         if (arguments.contains("--dry-run")) {
             return Optional.empty();
         }
@@ -389,7 +385,7 @@ final class SetupDiagnosticReporter {
     }
 
     private static String workerCredentialHint(TrelloBoardSetupException exception, Path dotenvPath) {
-        List<String> assignments = workerCredentialAssignments(exception);
+        var assignments = workerCredentialAssignments(exception);
         String intro = assignments.size() == 1
                 ? "Set this Trello credential variable in your shell or in this .env credential file:"
                 : "Set these Trello credential variables in your shell or in this .env credential file:";
@@ -477,7 +473,7 @@ final class SetupDiagnosticReporter {
         if (request.dryRun()) {
             return Optional.empty();
         }
-        Optional<Path> reportPath = write(exception, request);
+        var reportPath = write(exception, request);
         reportPath.ifPresent(path -> {
             terminal.err().println("Troubleshooting report written: " + path);
             terminal.err().println("Review it before sharing. It is intended to omit secrets and private context.");
@@ -494,7 +490,7 @@ final class SetupDiagnosticReporter {
             Terminal terminal,
             boolean offerIssuePrompt,
             WorkflowPathResolution workflowPathResolution) {
-        Optional<Path> reportPath = write(exception, args, workflowPathResolution);
+        var reportPath = write(exception, args, workflowPathResolution);
         reportPath.ifPresent(path -> {
             terminal.err().println("Troubleshooting report written: " + path);
             terminal.err().println("Review it before sharing. It is intended to omit secrets and private context.");
@@ -524,11 +520,11 @@ final class SetupDiagnosticReporter {
     private String renderDiagnostics(DiagnosticsRequest request, Optional<DiagnosticsTokenHasher> sharedTokenHasher)
             throws IOException {
         DiagnosticsContext context = diagnosticsContext(request, sharedTokenHasher);
-        List<String> args = diagnosticsArguments(request, false);
+        var args = diagnosticsArguments(request, false);
         sensitiveValues = sensitiveValues(context.manifest(), context.paths(), args);
         deepDiagnostics = request.deep();
 
-        StringBuilder body = new StringBuilder();
+        var body = new StringBuilder();
         body.append("# Symphony for Trello Diagnostics\n\n");
         body.append("Review this output before sharing it. It is intended to omit secrets and private context.\n");
 
@@ -564,7 +560,7 @@ final class SetupDiagnosticReporter {
                 context.paths().defaultEnvPath());
         appendInvalidConnectedBoardWorkflows(
                 body, context.selectedManifest(), context.paths().defaultEnvPath());
-        SequencedSet<Path> allWorkflowPaths = new LinkedHashSet<>(context.selectedWorkflowPaths());
+        var allWorkflowPaths = new LinkedHashSet<Path>(context.selectedWorkflowPaths());
         allWorkflowPaths.addAll(context.unconnectedWorkflowPaths());
         appendInvalidWorkflowFiles(
                 body,
@@ -611,7 +607,7 @@ final class SetupDiagnosticReporter {
             throws IOException {
         DiagnosticsContext context = diagnosticsContext(request, sharedTokenHasher);
 
-        StringBuilder body = new StringBuilder();
+        var body = new StringBuilder();
         body.append("# Symphony for Trello Private Context\n\n");
         body.append("Private diagnostics context. Do not paste this output into public issues.\n");
         body.append("It may include Trello board names, board ids, board URLs, and local paths.\n");
@@ -681,7 +677,7 @@ final class SetupDiagnosticReporter {
             return;
         }
 
-        long distinctValues =
+        var distinctValues =
                 matches.stream().map(PrivateContextMapping::value).distinct().count();
         line(body, "lookup_status", distinctValues == 1 ? "found" : "ambiguous");
         line(body, "lookup_match_count", matches.size());
@@ -695,7 +691,7 @@ final class SetupDiagnosticReporter {
     }
 
     private List<PrivateContextMapping> privateContextMappings(DiagnosticsContext context) {
-        List<PrivateContextMapping> mappings = new ArrayList<>();
+        var mappings = new ArrayList<PrivateContextMapping>();
         addSystemMappings(mappings);
         addLocalPathMappings(mappings, context.paths(), context.manifestPath());
         addInstallerContextMappings(mappings, context.paths());
@@ -772,7 +768,7 @@ final class SetupDiagnosticReporter {
     }
 
     private static Optional<InstallerContextEntry> installerContextEntry(String line) {
-        int separator = line.indexOf('=');
+        var separator = line.indexOf('=');
         if (separator < 0) {
             return Optional.empty();
         }
@@ -814,7 +810,7 @@ final class SetupDiagnosticReporter {
     }
 
     private void addWorkflowMappings(List<PrivateContextMapping> mappings, SequencedSet<Path> workflowPaths) {
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        var editor = new WorkflowConfigEditor();
         for (Path workflow : workflowPaths) {
             String boardId = editor.boardId(workflow).orElse("");
             addMapping(mappings, "workflow", "workflow_path", pathToken(workflow.toString()), workflow);
@@ -841,7 +837,7 @@ final class SetupDiagnosticReporter {
 
     private void addLogMappings(
             List<PrivateContextMapping> mappings, Path stateHome, SequencedSet<Path> workflowPaths, boolean selected) {
-        Set<Path> rows = new LinkedHashSet<>();
+        var rows = new LinkedHashSet<Path>();
         rows.addAll(expectedLogFiles(stateHome, workflowPaths));
         if (!selected) {
             rows.addAll(existingLogFiles(stateHome));
@@ -860,7 +856,7 @@ final class SetupDiagnosticReporter {
 
     private void addProcessStateMappings(
             List<PrivateContextMapping> mappings, Path stateHome, SequencedSet<Path> workflowPaths, boolean selected) {
-        Set<Path> rows = new LinkedHashSet<>();
+        var rows = new LinkedHashSet<Path>();
         rows.addAll(expectedPidFiles(stateHome, workflowPaths));
         if (!selected) {
             rows.addAll(existingPidFiles(stateHome));
@@ -900,18 +896,18 @@ final class SetupDiagnosticReporter {
         DiagnosticsSelection selection =
                 selectDiagnostics(manifest, request.board(), request.workflow(), paths.configDir());
         tokenHasher = sharedTokenHasher.orElseGet(() -> diagnosticsTokenHasher(request, paths));
-        ConnectedBoardManifest selectedManifest = new ConnectedBoardManifest(selection.boards());
-        boolean selected = selection.kind() != DiagnosticsSelectorKind.NONE;
+        var selectedManifest = new ConnectedBoardManifest(selection.boards());
+        var selected = selection.kind() != DiagnosticsSelectorKind.NONE;
         // A request without a --board/--workflow selector is a "broad" run: it reports every
         // connected board and also workflow files that are merely present in the config directory.
         // With at least one connected board, those unconnected files render in their own
         // Unconnected Workflow Files section and skip port probes, so stale or disconnected files
         // do not look like current local context. With no connected boards at all, the discovered
         // files stay the primary context because they are everything this setup has.
-        boolean separateUnconnectedWorkflows =
+        var separateUnconnectedWorkflows =
                 !selected && !selectedManifest.boards().isEmpty();
-        boolean unconnectedFilesArePrimaryContext = !selected && !separateUnconnectedWorkflows;
-        SequencedSet<Path> selectedWorkflowPaths = reportWorkflowPaths(
+        var unconnectedFilesArePrimaryContext = !selected && !separateUnconnectedWorkflows;
+        var selectedWorkflowPaths = reportWorkflowPaths(
                 selectedManifest, selection.workflow(), paths.configDir(), unconnectedFilesArePrimaryContext);
         SequencedSet<Path> unconnectedWorkflowPaths = separateUnconnectedWorkflows
                 ? reportWorkflowPaths(selectedManifest, selection.workflow(), paths.configDir(), true).stream()
@@ -937,11 +933,11 @@ final class SetupDiagnosticReporter {
                 body,
                 "selected_manifest_board_count",
                 context.selectedManifest().boards().size());
-        long readableSelectedWorkflows = context.selectedWorkflowPaths().stream()
+        var readableSelectedWorkflows = context.selectedWorkflowPaths().stream()
                 .filter(Files::isRegularFile)
                 .count();
         line(body, "selected_workflow_file_count", readableSelectedWorkflows);
-        long missingSelectedWorkflows = context.selectedWorkflowPaths().size() - readableSelectedWorkflows;
+        var missingSelectedWorkflows = context.selectedWorkflowPaths().size() - readableSelectedWorkflows;
         if (missingSelectedWorkflows > 0) {
             // A requested workflow selector that is missing or not a regular file must not look
             // like an included workflow file.
@@ -983,7 +979,7 @@ final class SetupDiagnosticReporter {
                     .map(path -> resolveUserDataPath(path, paths.configDir()))
                     .orElseGet(paths::manifestPath);
             return write(exception, args, paths, manifestPath, workflowPathResolution);
-        } catch (RuntimeException | IOException ignored) {
+        } catch (RuntimeException | IOException _) {
             return Optional.empty();
         }
     }
@@ -996,7 +992,7 @@ final class SetupDiagnosticReporter {
                     .map(path -> resolveUserDataPath(path, paths.configDir()))
                     .orElseGet(paths::manifestPath);
             return write(exception, requestArguments(request), paths, manifestPath, WorkflowPathResolution.CONFIG_DIR);
-        } catch (RuntimeException | IOException ignored) {
+        } catch (RuntimeException | IOException _) {
             return Optional.empty();
         }
     }
@@ -1013,23 +1009,21 @@ final class SetupDiagnosticReporter {
             Files.createDirectories(reportDir);
             String content = render(exception, args, paths, manifestPath, workflowPathResolution);
             return Optional.of(writeUniqueReport(reportDir, FILE_TIMESTAMP.format(now()), content));
-        } catch (RuntimeException | IOException ignored) {
+        } catch (RuntimeException | IOException _) {
             return Optional.empty();
         }
     }
 
-    /**
-     * Creates the report with CREATE_NEW and a numeric suffix so two failures in the same second
-     * cannot overwrite each other's report.
-     */
+    /// Creates the report with CREATE_NEW and a numeric suffix so two failures in the same second
+    /// cannot overwrite each other's report.
     private static Path writeUniqueReport(Path reportDir, String timestamp, String content) throws IOException {
-        for (int attempt = 1; attempt <= MAX_REPORT_NAME_ATTEMPTS; attempt++) {
+        for (var attempt = 1; attempt <= MAX_REPORT_NAME_ATTEMPTS; attempt++) {
             String suffix = attempt == 1 ? "" : "-" + attempt;
             Path report = reportDir.resolve("setup-failure-" + timestamp + suffix + ".md");
             try {
-                Files.writeString(report, content, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
+                Files.writeString(report, content, StandardOpenOption.CREATE_NEW);
                 return report;
-            } catch (FileAlreadyExistsException ignored) {
+            } catch (FileAlreadyExistsException _) {
                 // Another report from the same second owns this name; loop to the next suffix.
             }
         }
@@ -1049,7 +1043,7 @@ final class SetupDiagnosticReporter {
         tokenHasher = DiagnosticsTokenHasher.load(paths.configDir());
         sensitiveValues = sensitiveValues(manifest, paths, args);
 
-        StringBuilder body = new StringBuilder();
+        var body = new StringBuilder();
         body.append("# Symphony for Trello Setup Failure\n\n");
         section(body, "Failure");
         line(body, "time_utc", now().toString());
@@ -1123,9 +1117,9 @@ final class SetupDiagnosticReporter {
             return Optional.empty();
         }
         try {
-            List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
+            var lines = Files.readAllLines(path);
             return osReleaseValue(lines, "PRETTY_NAME").or(() -> osReleaseNameAndVersion(lines));
-        } catch (IOException ignored) {
+        } catch (IOException _) {
             return Optional.empty();
         }
     }
@@ -1150,8 +1144,8 @@ final class SetupDiagnosticReporter {
         if (stripped.length() < 2) {
             return stripped;
         }
-        char first = stripped.charAt(0);
-        char last = stripped.charAt(stripped.length() - 1);
+        var first = stripped.charAt(0);
+        var last = stripped.charAt(stripped.length() - 1);
         if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
             return stripped.substring(1, stripped.length() - 1);
         }
@@ -1159,7 +1153,7 @@ final class SetupDiagnosticReporter {
     }
 
     private void appendInstallerContext(StringBuilder body, LocalWorkerPaths paths, Path manifestPath) {
-        Map<String, String> values = new LinkedHashMap<>();
+        var values = new LinkedHashMap<String, String>();
         values.put("app_home", paths.appHome().toString());
         values.put("config_dir", paths.configDir().toString());
         values.put("workspace_root", paths.workspaceRoot().toString());
@@ -1303,7 +1297,7 @@ final class SetupDiagnosticReporter {
     private static Stream<Path> pathIfValid(String value) {
         try {
             return Stream.of(Path.of(value));
-        } catch (InvalidPathException e) {
+        } catch (InvalidPathException _) {
             return Stream.of();
         }
     }
@@ -1354,8 +1348,8 @@ final class SetupDiagnosticReporter {
         if (stripped.length() < 2) {
             return stripped;
         }
-        char first = stripped.charAt(0);
-        char last = stripped.charAt(stripped.length() - 1);
+        var first = stripped.charAt(0);
+        var last = stripped.charAt(stripped.length() - 1);
         if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
             return stripped.substring(1, stripped.length() - 1);
         }
@@ -1395,7 +1389,7 @@ final class SetupDiagnosticReporter {
                 return new ManifestSnapshot(new ConnectedBoardManifest(List.of()), ManifestStatus.INVALID);
             }
             return new ManifestSnapshot(result.manifest(), ManifestStatus.LOADED);
-        } catch (IOException | RuntimeException ignored) {
+        } catch (IOException | RuntimeException _) {
             return new ManifestSnapshot(new ConnectedBoardManifest(List.of()), ManifestStatus.UNREADABLE);
         }
     }
@@ -1547,7 +1541,7 @@ final class SetupDiagnosticReporter {
     }
 
     private static DiagnosticsSelection selectBoardDiagnostics(ConnectedBoardManifest manifest, String boardSelector) {
-        List<ConnectedBoard> matches = manifest.findAllByBoard(boardSelector);
+        var matches = manifest.findAllByBoard(boardSelector);
         if (matches.size() > 1) {
             throw new TrelloBoardSetupException(
                     "setup_invalid_arguments",
@@ -1561,7 +1555,7 @@ final class SetupDiagnosticReporter {
         Path workflow = resolveWorkflowPathOption(selectedWorkflow, configDir, WorkflowPathResolution.CONFIG_DIR);
         rejectUnusableSelectedWorkflow(
                 workflow, workflowEnvironmentResolver(manifest, workflow, configDir.resolve(".env")));
-        List<ConnectedBoard> matches = manifest.findAllByWorkflow(workflow);
+        var matches = manifest.findAllByWorkflow(workflow);
         if (matches.size() > 1) {
             throw new TrelloBoardSetupException(
                     "setup_invalid_arguments",
@@ -1609,8 +1603,8 @@ final class SetupDiagnosticReporter {
             LocalWorkerPaths paths,
             List<String> args,
             WorkflowPathResolution workflowPathResolution) {
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
-        SequencedSet<Path> workflowPaths =
+        var editor = new WorkflowConfigEditor();
+        var workflowPaths =
                 reportWorkflowPaths(manifest, paths, args, workflowPathResolution, !hasBoardOption(args));
         MarkdownTable table = workflowTable();
         for (Path workflow : workflowPaths) {
@@ -1625,7 +1619,7 @@ final class SetupDiagnosticReporter {
             ConnectedBoardManifest manifest,
             SequencedSet<Path> workflowPaths,
             Path defaultEnvPath) {
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        var editor = new WorkflowConfigEditor();
         MarkdownTable table = workflowTable();
         for (Path workflow : workflowPaths) {
             appendWorkflowRow(table, editor, workflow, workflowEnvironmentResolver(manifest, workflow, defaultEnvPath));
@@ -1669,7 +1663,7 @@ final class SetupDiagnosticReporter {
             ConnectedBoardManifest manifest,
             SequencedSet<Path> workflowPaths,
             Path defaultEnvPath) {
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        var editor = new WorkflowConfigEditor();
         List<InvalidWorkflowFile> invalidWorkflows = workflowPaths.stream()
                 .map(workflow -> editor.diagnosticsWarning(
                                 workflow, workflowEnvironmentResolver(manifest, workflow, defaultEnvPath))
@@ -1689,7 +1683,7 @@ final class SetupDiagnosticReporter {
 
     private void appendInvalidConnectedBoardWorkflows(
             StringBuilder body, ConnectedBoardManifest manifest, Path defaultEnvPath) {
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        var editor = new WorkflowConfigEditor();
         List<InvalidConnectedBoardWorkflow> invalidWorkflows = manifest.boards().stream()
                 .map(board -> invalidConnectedBoardWorkflow(editor, board, defaultEnvPath))
                 .flatMap(Optional::stream)
@@ -1722,7 +1716,7 @@ final class SetupDiagnosticReporter {
     }
 
     private void appendLocalWorkflowIdentifiers(StringBuilder body, SequencedSet<Path> workflowPaths) {
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        var editor = new WorkflowConfigEditor();
         MarkdownTable table = MarkdownTable.of(
                 List.of(
                         "workflow_token",
@@ -1765,7 +1759,7 @@ final class SetupDiagnosticReporter {
     }
 
     private void appendLocalSecretFileIdentifiers(StringBuilder body, SequencedSet<Path> workflowPaths) {
-        List<SecretFileMapping> secretFiles = secretFileMappings(workflowPaths);
+        var secretFiles = secretFileMappings(workflowPaths);
         if (secretFiles.isEmpty()) {
             return;
         }
@@ -1784,8 +1778,8 @@ final class SetupDiagnosticReporter {
     }
 
     private List<SecretFileMapping> secretFileMappings(SequencedSet<Path> workflowPaths) {
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
-        List<SecretFileMapping> secretFiles = new ArrayList<>();
+        var editor = new WorkflowConfigEditor();
+        var secretFiles = new ArrayList<SecretFileMapping>();
         for (Path workflow : workflowPaths) {
             editor.trackerCredentialReferences(workflow).ifPresent(credentials -> {
                 secretFileMapping(workflow, "tracker.api_key", credentials.apiKey())
@@ -1805,7 +1799,7 @@ final class SetupDiagnosticReporter {
     }
 
     private Optional<Path> secretFilePath(Path workflow, String configuredValue) {
-        String prefix = "file:";
+        var prefix = "file:";
         if (!configuredValue.startsWith(prefix)) {
             return Optional.empty();
         }
@@ -1815,7 +1809,7 @@ final class SetupDiagnosticReporter {
             Path workflowDirectory = workflowDirectory(workflow);
             Path secretFile = configuredPath.isAbsolute() ? configuredPath : workflowDirectory.resolve(configuredPath);
             return Optional.of(secretFile.toAbsolutePath().normalize());
-        } catch (InvalidPathException e) {
+        } catch (InvalidPathException _) {
             return Optional.empty();
         }
     }
@@ -1847,8 +1841,8 @@ final class SetupDiagnosticReporter {
             LocalWorkerPaths paths,
             List<String> args,
             WorkflowPathResolution workflowPathResolution) {
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
-        SequencedSet<Integer> ports = probePorts(
+        var editor = new WorkflowConfigEditor();
+        var ports = probePorts(
                 editor,
                 manifest,
                 reportWorkflowPaths(manifest, paths, args, workflowPathResolution, !hasBoardOption(args)),
@@ -1874,8 +1868,8 @@ final class SetupDiagnosticReporter {
             ConnectedBoardManifest manifest,
             SequencedSet<Path> workflowPaths,
             Path defaultEnvPath) {
-        WorkflowConfigEditor editor = new WorkflowConfigEditor();
-        SequencedSet<Integer> ports = probePorts(editor, manifest, workflowPaths, defaultEnvPath);
+        var editor = new WorkflowConfigEditor();
+        var ports = probePorts(editor, manifest, workflowPaths, defaultEnvPath);
         if (ports.isEmpty()) {
             body.append("No configured local ports found.\n");
             return;
@@ -1907,8 +1901,8 @@ final class SetupDiagnosticReporter {
 
     private static SequencedSet<Path> reportWorkflowPaths(
             ConnectedBoardManifest manifest, Optional<Path> selectedWorkflow, Path configDir, boolean scanConfigDir) {
-        SequencedSet<Path> workflowPaths = new LinkedHashSet<>();
-        Set<Path> canonicalIdentities = new HashSet<>();
+        var workflowPaths = new LinkedHashSet<Path>();
+        var canonicalIdentities = new HashSet<Path>();
         addManifestWorkflowPaths(workflowPaths, canonicalIdentities, manifest);
         selectedWorkflow.ifPresent(workflow -> addUniqueWorkflow(workflowPaths, canonicalIdentities, workflow));
         if (scanConfigDir) {
@@ -1933,10 +1927,8 @@ final class SetupDiagnosticReporter {
         }
     }
 
-    /**
-     * A symlinked selector and its manifest target are the same workflow, so uniqueness is keyed
-     * on the canonical path: one symlinked workflow must not appear as two selected rows.
-     */
+    /// A symlinked selector and its manifest target are the same workflow, so uniqueness is keyed
+    /// on the canonical path: one symlinked workflow must not appear as two selected rows.
     private static void addUniqueWorkflow(
             SequencedSet<Path> workflowPaths, Set<Path> canonicalIdentities, Path workflow) {
         if (canonicalIdentities.add(PathsEqual.canonical(workflow))) {
@@ -1945,16 +1937,16 @@ final class SetupDiagnosticReporter {
     }
 
     private static boolean hasBoardOption(List<String> args) {
-        return args.stream().anyMatch(arg -> arg.equals("--board") || arg.startsWith("--board="));
+        return args.stream().anyMatch(arg -> "--board".equals(arg) || arg.startsWith("--board="));
     }
 
     private static List<Path> workflowFilesIfReadable(Path configDir) {
-        try (Stream<Path> files = Files.list(configDir)) {
+        try (var files = Files.list(configDir)) {
             return files.filter(path -> path.getFileName().toString().endsWith(".md"))
                     .filter(SetupDiagnosticReporter::hasWorkflowFileName)
                     .filter(Files::isRegularFile)
                     .toList();
-        } catch (IOException e) {
+        } catch (IOException _) {
             return List.of();
         }
     }
@@ -1970,7 +1962,7 @@ final class SetupDiagnosticReporter {
     }
 
     private static Optional<Path> pathOption(List<String> args, String option) {
-        for (int index = 0; index < args.size(); index++) {
+        for (var index = 0; index < args.size(); index++) {
             String arg = args.get(index);
             if (option.equals(arg) && index + 1 < args.size()) {
                 return Optional.of(Path.of(args.get(index + 1)));
@@ -1990,22 +1982,20 @@ final class SetupDiagnosticReporter {
         };
     }
 
-    /**
-     * One effective port per board: the workflow file's server.port is current, and the manifest
-     * port is only the fallback when the workflow does not declare a readable port. Unioning both
-     * would probe stale historical ports after a workflow path was reused or repaired.
-     */
+    /// One effective port per board: the workflow file's server.port is current, and the manifest
+    /// port is only the fallback when the workflow does not declare a readable port. Unioning both
+    /// would probe stale historical ports after a workflow path was reused or repaired.
     private SequencedSet<Integer> probePorts(
             WorkflowConfigEditor editor,
             ConnectedBoardManifest manifest,
             SequencedSet<Path> workflowPaths,
             Path defaultEnvPath) {
-        SequencedSet<Integer> ports = new LinkedHashSet<>();
+        var ports = new LinkedHashSet<Integer>();
         for (ConnectedBoard board : manifest.boards()) {
             boardProbePort(editor, board, defaultEnvPath).ifPresent(ports::add);
         }
         for (Path workflow : workflowPaths) {
-            boolean connected = manifest.boards().stream()
+            var connected = manifest.boards().stream()
                     .anyMatch(board ->
                             board.workflowPath() != null && PathsEqual.samePath(board.workflowPath(), workflow));
             if (connected) {
@@ -2019,13 +2009,11 @@ final class SetupDiagnosticReporter {
         return ports;
     }
 
-    /**
-     * The effective workflow declaration wins over the manifest: a declared or env-resolved
-     * out-of-range port renders the safe skip line and a non-numeric port is reported by the
-     * workflow summary, in both cases without probing the stale manifest port. The manifest port
-     * only covers workflows that omit server.port, cannot be read, or reference an environment
-     * value the board environment does not define.
-     */
+    /// The effective workflow declaration wins over the manifest: a declared or env-resolved
+    /// out-of-range port renders the safe skip line and a non-numeric port is reported by the
+    /// workflow summary, in both cases without probing the stale manifest port. The manifest port
+    /// only covers workflows that omit server.port, cannot be read, or reference an environment
+    /// value the board environment does not define.
     private Optional<Integer> boardProbePort(WorkflowConfigEditor editor, ConnectedBoard board, Path defaultEnvPath) {
         if (board.workflowPath() == null) {
             return Optional.of(board.serverPort());
@@ -2049,7 +2037,7 @@ final class SetupDiagnosticReporter {
                     .timeout(PROBE_TIMEOUT)
                     .GET()
                     .build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             line(body, "status", response.statusCode());
             body.append("\n```json\n");
             body.append(probeBody(path, response.body()));
@@ -2071,12 +2059,10 @@ final class SetupDiagnosticReporter {
         return exception.getClass().getSimpleName() + ": " + message;
     }
 
-    /**
-     * Like {@link #exceptionSummary(Exception)}, but safe for user-facing setup stderr:
-     * {@link FileSystemException} messages embed the affected paths, so only the path-free
-     * reason is kept for them. Other IOException messages at the setup boundaries are
-     * hand-written without paths.
-     */
+    /// Like [#exceptionSummary(Exception)], but safe for user-facing setup stderr:
+    /// [FileSystemException] messages embed the affected paths, so only the path-free
+    /// reason is kept for them. Other IOException messages at the setup boundaries are
+    /// hand-written without paths.
     static String pathFreeExceptionSummary(Exception exception) {
         if (!(exception instanceof FileSystemException fileSystemException)) {
             return exceptionSummary(exception);
@@ -2097,11 +2083,11 @@ final class SetupDiagnosticReporter {
             body.append(Files.exists(stateHome) ? "State home is not a directory.\n" : "State directory is missing.\n");
             return;
         }
-        Set<Path> selectedLogs = selectedWorkflows
+        var selectedLogs = selectedWorkflows
                 .map(workflows -> expectedLogFiles(stateHome, workflows))
                 .orElseGet(Set::of);
         List<Path> logs;
-        try (Stream<Path> files = recentLogLister.list(stateHome)) {
+        try (var files = recentLogLister.list(stateHome)) {
             logs = files.filter(SetupDiagnosticReporter::isRegularLogFile)
                     .filter(path -> {
                         String name = path.getFileName().toString();
@@ -2113,7 +2099,7 @@ final class SetupDiagnosticReporter {
                     .sorted(Comparator.comparing(this::lastModified).reversed())
                     .limit(6)
                     .toList();
-        } catch (IOException e) {
+        } catch (IOException _) {
             body.append("Could not list recent worker logs.\n");
             return;
         }
@@ -2137,13 +2123,13 @@ final class SetupDiagnosticReporter {
         }
         MarkdownTable table = MarkdownTable.leftAligned(List.of(
                 "path_token", "log_path", "workflow_token", "workflow_path", "stream", "exists", "has_content"));
-        Set<Path> rows = new LinkedHashSet<>();
+        var rows = new LinkedHashSet<Path>();
         rows.addAll(expectedLogFiles(stateHome, workflowPaths));
         if (!selected) {
             rows.addAll(existingLogFiles(stateHome));
         }
         for (Path log : rows) {
-            Optional<WorkflowLogMapping> mapping = workflowLogMapping(stateHome, workflowPaths, log);
+            var mapping = workflowLogMapping(stateHome, workflowPaths, log);
             table.row(
                     pathToken(log.toString()),
                     log,
@@ -2166,13 +2152,13 @@ final class SetupDiagnosticReporter {
         }
         MarkdownTable table = MarkdownTable.leftAligned(
                 List.of("path_token", "pid_file", "workflow_token", "workflow_path", "exists"));
-        Set<Path> rows = new LinkedHashSet<>();
+        var rows = new LinkedHashSet<Path>();
         rows.addAll(expectedPidFiles(stateHome, workflowPaths));
         if (!selected) {
             rows.addAll(existingPidFiles(stateHome));
         }
         for (Path pidFile : rows) {
-            Optional<WorkflowProcessStateMapping> mapping =
+            var mapping =
                     workflowProcessStateMapping(stateHome, workflowPaths, pidFile);
             table.row(
                     pathToken(pidFile.toString()),
@@ -2187,7 +2173,7 @@ final class SetupDiagnosticReporter {
     }
 
     private List<Path> existingLogFiles(Path stateHome) {
-        try (Stream<Path> files = recentLogLister.list(stateHome)) {
+        try (var files = recentLogLister.list(stateHome)) {
             return files.filter(SetupDiagnosticReporter::isRegularLogFile)
                     .filter(path -> {
                         String name = path.getFileName().toString();
@@ -2195,7 +2181,7 @@ final class SetupDiagnosticReporter {
                     })
                     .sorted()
                     .toList();
-        } catch (IOException e) {
+        } catch (IOException _) {
             return List.of();
         }
     }
@@ -2203,7 +2189,7 @@ final class SetupDiagnosticReporter {
     private static List<Path> existingPidFiles(Path stateHome) {
         try {
             return new ManagedProcessStore(stateHome).pidFiles();
-        } catch (IOException e) {
+        } catch (IOException _) {
             return List.of();
         }
     }
@@ -2248,7 +2234,7 @@ final class SetupDiagnosticReporter {
     private static boolean nonEmptyOrUnreadable(Path path) {
         try (FileChannel channel = openLogFile(path)) {
             return channel.size() > 0;
-        } catch (IOException ignored) {
+        } catch (IOException _) {
             // Keep unreadable logs visible so logTail can report a sanitized read failure.
             return isRegularLogFile(path);
         }
@@ -2259,7 +2245,7 @@ final class SetupDiagnosticReporter {
     }
 
     private static Set<Path> expectedLogFiles(Path stateHome, SequencedSet<Path> workflowPaths) {
-        ManagedProcessStore store = new ManagedProcessStore(stateHome);
+        var store = new ManagedProcessStore(stateHome);
         return workflowPaths.stream()
                 .flatMap(workflow -> {
                     ManagedProcessStore.ManagedProcessFiles files = store.files(workflow);
@@ -2270,7 +2256,7 @@ final class SetupDiagnosticReporter {
     }
 
     private static Set<Path> expectedPidFiles(Path stateHome, SequencedSet<Path> workflowPaths) {
-        ManagedProcessStore store = new ManagedProcessStore(stateHome);
+        var store = new ManagedProcessStore(stateHome);
         return workflowPaths.stream()
                 .map(workflow -> store.files(workflow).pidFile())
                 .map(path -> path.toAbsolutePath().normalize())
@@ -2280,7 +2266,7 @@ final class SetupDiagnosticReporter {
     private Instant lastModified(Path path) {
         try {
             return Files.getLastModifiedTime(path).toInstant();
-        } catch (IOException ignored) {
+        } catch (IOException _) {
             return Instant.EPOCH;
         }
     }
@@ -2298,7 +2284,7 @@ final class SetupDiagnosticReporter {
             if (answer == null || !answer.toLowerCase(Locale.ROOT).startsWith("y")) {
                 return;
             }
-            String body = Files.readString(reportPath, StandardCharsets.UTF_8);
+            String body = Files.readString(reportPath);
             PrintStream out = borrowedOut(terminal); // NOPMD - Terminal owns the stream.
             out.println();
             out.println("Issue title:");
@@ -2331,7 +2317,7 @@ final class SetupDiagnosticReporter {
     }
 
     private static List<String> requestArguments(LocalSetupRequest request) {
-        List<String> args = new ArrayList<>();
+        var args = new ArrayList<String>();
         args.add("setup-local");
         switch (request.action()) {
             case CHECK -> args.add("check");
@@ -2369,7 +2355,7 @@ final class SetupDiagnosticReporter {
     }
 
     private static List<String> diagnosticsArguments(DiagnosticsRequest request, boolean privateContext) {
-        List<String> args = new ArrayList<>();
+        var args = new ArrayList<String>();
         args.add("diagnostics");
         addFlag(args, privateContext, "--show-private-context");
         addOption(args, "--board", request.board());
@@ -2439,12 +2425,10 @@ final class SetupDiagnosticReporter {
         return CliInputValidation.safeDiagnosticsText(redactAbsolutePosixPaths(sanitized));
     }
 
-    /**
-     * Replaces a sensitive value. An absolute-path value extends over a following path remainder
-     * and always renders as a path token, so one private path renders as one stable token that
-     * matches the path tokens elsewhere in the report instead of a value token or adjacent value
-     * and path tokens.
-     */
+    /// Replaces a sensitive value. An absolute-path value extends over a following path remainder
+    /// and always renders as a path token, so one private path renders as one stable token that
+    /// matches the path tokens elsewhere in the report instead of a value token or adjacent value
+    /// and path tokens.
     private String replaceSensitiveValue(String text, String sensitiveValue) {
         if (!looksLikeAbsolutePath(sensitiveValue)) {
             return text.replace(sensitiveValue, "<value:" + hash(sensitiveValue) + ">");
@@ -2458,17 +2442,17 @@ final class SetupDiagnosticReporter {
     }
 
     private String redactUrlUserInfo(String value) {
-        StringBuilder redacted = new StringBuilder(value.length());
-        int cursor = 0;
+        var redacted = new StringBuilder(value.length());
+        var cursor = 0;
         while (cursor < value.length()) {
-            int schemeStart = nextHttpScheme(value, cursor);
+            var schemeStart = nextHttpScheme(value, cursor);
             if (schemeStart < 0) {
                 redacted.append(value, cursor, value.length());
                 break;
             }
-            int authorityStart = schemeStart + httpSchemeLength(value, schemeStart);
-            int authorityEnd = urlAuthorityEnd(value, authorityStart);
-            int at = value.indexOf('@', authorityStart, authorityEnd);
+            var authorityStart = schemeStart + httpSchemeLength(value, schemeStart);
+            var authorityEnd = urlAuthorityEnd(value, authorityStart);
+            var at = value.indexOf('@', authorityStart, authorityEnd);
             if (at < 0) {
                 redacted.append(value, cursor, authorityEnd);
             } else {
@@ -2482,8 +2466,8 @@ final class SetupDiagnosticReporter {
     }
 
     private int nextHttpScheme(String value, int start) {
-        int maxStart = value.length() - HTTP_SCHEME.length();
-        for (int index = Math.max(0, start); index <= maxStart; index++) {
+        var maxStart = value.length() - HTTP_SCHEME.length();
+        for (var index = Math.max(0, start); index <= maxStart; index++) {
             if (startsWithAsciiIgnoreCase(value, index, HTTP_SCHEME)
                     || startsWithAsciiIgnoreCase(value, index, HTTPS_SCHEME)) {
                 return index;
@@ -2499,22 +2483,22 @@ final class SetupDiagnosticReporter {
     }
 
     private static int urlAuthorityEnd(String value, int start) {
-        int terminator = URL_AUTHORITY_TERMINATOR.indexIn(value, start);
+        var terminator = URL_AUTHORITY_TERMINATOR.indexIn(value, start);
         return terminator < 0 ? value.length() : terminator;
     }
 
     private String redactGithubSshRemotes(String value) {
-        StringBuilder redacted = new StringBuilder(value.length());
-        int cursor = 0;
+        var redacted = new StringBuilder(value.length());
+        var cursor = 0;
         while (cursor < value.length()) {
-            int git = indexOfIgnoreCase(value, GITHUB_SSH_HOST, cursor);
+            var git = indexOfIgnoreCase(value, GITHUB_SSH_HOST, cursor);
             if (git < 0) {
                 redacted.append(value, cursor, value.length());
                 break;
             }
-            int remoteStart = githubSshRemoteStart(value, git);
-            int separator = git + GITHUB_SSH_HOST.length();
-            int remoteEnd = tokenEnd(value, separator + 1);
+            var remoteStart = githubSshRemoteStart(value, git);
+            var separator = git + GITHUB_SSH_HOST.length();
+            var remoteEnd = tokenEnd(value, separator + 1);
             if (!isGithubSshRemote(value, remoteStart, separator, remoteEnd)) {
                 redacted.append(value, cursor, git + 1);
                 cursor = git + 1;
@@ -2530,7 +2514,7 @@ final class SetupDiagnosticReporter {
     }
 
     private static int githubSshRemoteStart(String value, int git) {
-        int sshStart = git - SSH_SCHEME.length();
+        var sshStart = git - SSH_SCHEME.length();
         return startsWithAsciiIgnoreCase(value, sshStart, SSH_SCHEME) && hasRegexWordBoundaryBefore(value, sshStart)
                 ? sshStart
                 : git;
@@ -2551,20 +2535,20 @@ final class SetupDiagnosticReporter {
         if (start >= value.length()) {
             return value.length();
         }
-        int terminator = TOKEN_TERMINATOR.indexIn(value, start);
+        var terminator = TOKEN_TERMINATOR.indexIn(value, start);
         return terminator < 0 ? value.length() : terminator;
     }
 
     private String redactAbsolutePosixPaths(String value) {
-        StringBuilder redacted = new StringBuilder(value.length());
-        int cursor = 0;
+        var redacted = new StringBuilder(value.length());
+        var cursor = 0;
         while (cursor < value.length()) {
-            int start = nextAbsolutePosixPathStart(value, cursor);
+            var start = nextAbsolutePosixPathStart(value, cursor);
             if (start < 0) {
                 redacted.append(value, cursor, value.length());
                 break;
             }
-            int end = absolutePosixPathEnd(value, start);
+            var end = absolutePosixPathEnd(value, start);
             redacted.append(value, cursor, start).append(pathToken(value.substring(start, end)));
             cursor = end;
         }
@@ -2572,7 +2556,7 @@ final class SetupDiagnosticReporter {
     }
 
     private static int nextAbsolutePosixPathStart(String value, int cursor) {
-        int index = POSIX_PATH_START.indexIn(value, cursor);
+        var index = POSIX_PATH_START.indexIn(value, cursor);
         while (index >= 0) {
             if (isPosixPathStartBoundary(value, index)) {
                 return index;
@@ -2591,13 +2575,13 @@ final class SetupDiagnosticReporter {
     }
 
     private static int absolutePosixPathEnd(String value, int start) {
-        int terminator = POSIX_PATH_TERMINATOR.indexIn(value, start + 1);
+        var terminator = POSIX_PATH_TERMINATOR.indexIn(value, start + 1);
         return terminator < 0 ? value.length() : terminator;
     }
 
     private static int indexOfIgnoreCase(String value, String needle, int start) {
-        int maxStart = value.length() - needle.length();
-        for (int index = Math.max(0, start); index <= maxStart; index++) {
+        var maxStart = value.length() - needle.length();
+        for (var index = Math.max(0, start); index <= maxStart; index++) {
             if (startsWithAsciiIgnoreCase(value, index, needle)) {
                 return index;
             }
@@ -2609,7 +2593,7 @@ final class SetupDiagnosticReporter {
         if (start < 0 || start + prefix.length() > value.length()) {
             return false;
         }
-        for (int index = 0; index < prefix.length(); index++) {
+        for (var index = 0; index < prefix.length(); index++) {
             if (Ascii.toLowerCase(value.charAt(start + index)) != Ascii.toLowerCase(prefix.charAt(index))) {
                 return false;
             }
@@ -2639,7 +2623,7 @@ final class SetupDiagnosticReporter {
     private String sanitizeInstallerContextBlock(String context) {
         List<String> lines = context.lines()
                 .map(line -> {
-                    int separator = line.indexOf('=');
+                    var separator = line.indexOf('=');
                     if (separator < 0) {
                         return sanitize(line);
                     }
@@ -2652,7 +2636,7 @@ final class SetupDiagnosticReporter {
     }
 
     private List<String> sensitiveValues(ConnectedBoardManifest manifest, LocalWorkerPaths paths, List<String> args) {
-        List<String> values = new ArrayList<>(manifest.boards().stream()
+        var values = new ArrayList<String>(manifest.boards().stream()
                 .flatMap(board -> Stream.of(board.boardId(), board.boardKey(), board.boardName(), board.boardUrl()))
                 .filter(value -> value != null && !value.isBlank())
                 .toList());
@@ -2661,7 +2645,7 @@ final class SetupDiagnosticReporter {
         addDistinctiveInstallerContextValue(values, "ref", environment.get("SYMPHONY_TRELLO_REF"));
         Path context = paths.stateHome().resolve("install-context.properties");
         readInstallContextContent(context).ifPresent(content -> content.lines().forEach(line -> {
-            int separator = line.indexOf('=');
+            var separator = line.indexOf('=');
             if (separator < 0) {
                 return;
             }
@@ -2706,20 +2690,20 @@ final class SetupDiagnosticReporter {
             }
             buffer.flip();
             return Optional.of(StandardCharsets.UTF_8.decode(buffer).toString());
-        } catch (IOException | ArithmeticException e) {
+        } catch (IOException | ArithmeticException _) {
             return Optional.of("Could not read installer context file.");
         }
     }
 
     private static List<String> commandOptionValues(List<String> args) {
-        List<String> values = new ArrayList<>();
-        boolean captureNext = false;
+        var values = new ArrayList<String>();
+        var captureNext = false;
         for (String arg : args) {
             if (captureNext) {
                 addValue(values, arg);
                 captureNext = false;
             } else {
-                Optional<String> redactedOption = redactedCommandValueOption(arg);
+                var redactedOption = redactedCommandValueOption(arg);
                 captureNext = redactedOption.map(arg::equals).orElse(false);
                 redactedOption
                         .filter(option -> !arg.equals(option))
@@ -2737,14 +2721,14 @@ final class SetupDiagnosticReporter {
     }
 
     private String sanitizeCommand(List<String> args) {
-        List<String> sanitizedArgs = new ArrayList<>();
-        boolean redactNext = false;
+        var sanitizedArgs = new ArrayList<String>();
+        var redactNext = false;
         for (String arg : args) {
             if (redactNext) {
                 sanitizedArgs.add("<redacted>");
                 redactNext = false;
             } else {
-                Optional<String> redactedOption = redactedCommandValueOption(arg);
+                var redactedOption = redactedCommandValueOption(arg);
                 sanitizedArgs.add(redactedOption
                         .map(option -> arg.equals(option) ? arg : option + "=<redacted>")
                         .orElse(arg));
@@ -2788,8 +2772,8 @@ final class SetupDiagnosticReporter {
             return sanitize(truncate(body, BODY_LIMIT));
         }
         try {
-            Map<?, ?> state = json.readValue(body, Map.class);
-            Map<String, Object> summary = new LinkedHashMap<>();
+            var state = json.readValue(body, Map.class);
+            var summary = new LinkedHashMap<String, Object>();
             summary.put("generatedAt", state.get("generated_at"));
             if (state.get("counts") instanceof Map<?, ?> counts) {
                 summary.put("counts", counts);
@@ -2805,20 +2789,20 @@ final class SetupDiagnosticReporter {
                                 "handoffLists", listSize(routing.get("handoff_lists"))));
             }
             return sanitize(truncate(json.writeValueAsString(summary), BODY_LIMIT));
-        } catch (IOException | RuntimeException ignored) {
+        } catch (IOException | RuntimeException _) {
             return sanitize("{\"summary\":\"state response omitted because it was not parseable\"}");
         }
     }
 
     private String localStatusBody(String body) {
         try {
-            Map<?, ?> status = json.readValue(body, Map.class);
-            Map<String, Object> summary = new LinkedHashMap<>();
+            var status = json.readValue(body, Map.class);
+            var summary = new LinkedHashMap<String, Object>();
             summary.put("resolved_board_hash", hash(String.valueOf(status.get("boardId"))));
             summary.put("configured_board_input_hash", hash(String.valueOf(status.get("configuredBoardId"))));
             summary.put("workflow_path", sanitize(String.valueOf(status.get("workflowPath"))));
             return sanitize(truncate(json.writeValueAsString(summary), BODY_LIMIT));
-        } catch (IOException | RuntimeException ignored) {
+        } catch (IOException | RuntimeException _) {
             return sanitize("{\"summary\":\"local-status response omitted because it was not parseable\"}");
         }
     }
@@ -2828,7 +2812,7 @@ final class SetupDiagnosticReporter {
     }
 
     private List<String> sensitivePaths() {
-        List<String> paths = new ArrayList<>();
+        var paths = new ArrayList<String>();
         addPath(paths, System.getProperty("user.home"));
         addPath(paths, environment.get("SYMPHONY_HOME"));
         addPath(paths, environment.get("SYMPHONY_TRELLO_APP_HOME"));
@@ -2888,8 +2872,8 @@ final class SetupDiagnosticReporter {
 
     private static String removeQuarkusBannerLines(String text) {
         List<String> lines = text.lines().toList();
-        List<String> kept = new ArrayList<>();
-        int index = 0;
+        var kept = new ArrayList<String>();
+        var index = 0;
         while (index < lines.size()) {
             if (isQuarkusBannerBlock(lines, index)) {
                 index += 4;
@@ -2940,8 +2924,8 @@ final class SetupDiagnosticReporter {
 
     private static String tail(Path path, int maxLines) {
         try (FileChannel channel = openLogFile(path)) {
-            long size = channel.size();
-            int bytesToRead = (int) Math.min(LOG_BYTE_LIMIT, size);
+            var size = channel.size();
+            var bytesToRead = (int) Math.min(LOG_BYTE_LIMIT, size);
             ByteBuffer buffer = ByteBuffer.allocate(bytesToRead);
             channel.position(Math.max(0, size - bytesToRead));
             while (buffer.hasRemaining() && channel.read(buffer) != -1) {
@@ -2950,13 +2934,13 @@ final class SetupDiagnosticReporter {
             buffer.flip();
             String text = StandardCharsets.UTF_8.decode(buffer).toString();
             if (size > bytesToRead) {
-                int firstLineBreak = text.indexOf('\n');
+                var firstLineBreak = text.indexOf('\n');
                 if (firstLineBreak >= 0 && firstLineBreak + 1 < text.length()) {
                     text = text.substring(firstLineBreak + 1);
                 }
             }
             List<String> lines = text.lines().toList();
-            int from = Math.max(0, lines.size() - maxLines);
+            var from = Math.max(0, lines.size() - maxLines);
             return String.join("\n", lines.subList(from, lines.size()));
         } catch (IOException e) {
             return "Could not read log: " + e.getMessage();
@@ -2996,9 +2980,9 @@ final class SetupDiagnosticReporter {
     }
 
     private static String markdownFence(String content) {
-        int longestRun = 0;
-        int currentRun = 0;
-        for (int index = 0; index < content.length(); index++) {
+        var longestRun = 0;
+        var currentRun = 0;
+        for (var index = 0; index < content.length(); index++) {
             if (content.charAt(index) == '`') {
                 currentRun++;
                 longestRun = Math.max(longestRun, currentRun);
@@ -3056,7 +3040,7 @@ final class SetupDiagnosticReporter {
         }
 
         private String windowsBatchCommandLine(String... arguments) {
-            List<String> parts = new ArrayList<>();
+            var parts = new ArrayList<String>();
             parts.add(executable);
             parts.addAll(List.of(arguments));
             return "\"" + parts.stream().map(ToolCommand::quoteForCmd).collect(Collectors.joining(" ")) + "\"";

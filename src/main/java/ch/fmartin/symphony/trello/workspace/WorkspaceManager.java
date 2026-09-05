@@ -7,6 +7,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.regex.Pattern;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 @ApplicationScoped
 public class WorkspaceManager {
@@ -26,14 +28,14 @@ public class WorkspaceManager {
 
         try {
             Files.createDirectories(root);
-            boolean created = Files.notExists(workspacePath);
+            var created = Files.notExists(workspacePath);
             if (created) {
                 Files.createDirectory(workspacePath);
             } else if (!Files.isDirectory(workspacePath)) {
                 throw new WorkspaceException(
                         "workspace_not_directory", workspacePath + " exists but is not a directory");
             }
-            Workspace workspace = new Workspace(workspacePath, key, created);
+            var workspace = new Workspace(workspacePath, key, created);
             if (created) {
                 hooks.runRequired("after_create", config.hooks().afterCreate(), workspacePath, config.hooks());
             }
@@ -43,7 +45,7 @@ public class WorkspaceManager {
         }
     }
 
-    public void removeForIdentifierIfPresent(String cardIdentifier, EffectiveConfig config) {
+    public void removeForIdentifierIfPresent(@Nullable String cardIdentifier, EffectiveConfig config) {
         if (cardIdentifier == null || cardIdentifier.isBlank()) {
             return;
         }
@@ -78,8 +80,8 @@ public class WorkspaceManager {
         }
     }
 
-    public static String sanitize(String identifier) {
-        if (identifier == null || identifier.isBlank()) {
+    public static String sanitize(@NonNull String identifier) {
+        if (identifier.isBlank()) {
             throw new WorkspaceException("workspace_identifier_missing", "Card identifier is required");
         }
         return UNSAFE.matcher(identifier).replaceAll("_");

@@ -61,18 +61,18 @@ final class SymphonyMainTest {
     @Test
     void normalizesWholeValuedFloatServerPortBeforeQuarkusStarts() {
         // given
-        String literalFloat = """
+        var literalFloat = """
                 server:
                   port: 18080.0
                 """;
-        String envBackedFloat =
+        var envBackedFloat =
                 """
                 server:
                   port: $SYMPHONY_FLOAT_PORT
                 """;
 
         // when
-        var literal = SymphonyMain.configuredServerPort(literalFloat, ignored -> Optional.empty());
+        var literal = SymphonyMain.configuredServerPort(literalFloat, _ -> Optional.empty());
         var envBacked = SymphonyMain.configuredServerPort(
                 envBackedFloat, name -> "SYMPHONY_FLOAT_PORT".equals(name) ? Optional.of("18080.0") : Optional.empty());
 
@@ -86,11 +86,11 @@ final class SymphonyMainTest {
     @Test
     void rejectsFractionalServerPortBeforeQuarkusStarts() {
         // given
-        String literalFraction = """
+        var literalFraction = """
                 server:
                   port: 18080.5
                 """;
-        String envBackedFraction =
+        var envBackedFraction =
                 """
                 server:
                   port: $SYMPHONY_FRACTION_PORT
@@ -98,7 +98,7 @@ final class SymphonyMainTest {
 
         // when
         Throwable literal =
-                catchThrowable(() -> SymphonyMain.configuredServerPort(literalFraction, ignored -> Optional.empty()));
+                catchThrowable(() -> SymphonyMain.configuredServerPort(literalFraction, _ -> Optional.empty()));
         Throwable envBacked = catchThrowable(() -> SymphonyMain.configuredServerPort(
                 envBackedFraction,
                 name -> "SYMPHONY_FRACTION_PORT".equals(name) ? Optional.of("18080.5") : Optional.empty()));
@@ -115,7 +115,7 @@ final class SymphonyMainTest {
     @Test
     void rejectsWholeButTooLargeServerPortBeforeQuarkusStarts() {
         // given
-        String tooLarge =
+        var tooLarge =
                 """
                 server:
                   port: 99999999999999999999999
@@ -123,7 +123,7 @@ final class SymphonyMainTest {
 
         // when
         Throwable thrown =
-                catchThrowable(() -> SymphonyMain.configuredServerPort(tooLarge, ignored -> Optional.empty()));
+                catchThrowable(() -> SymphonyMain.configuredServerPort(tooLarge, _ -> Optional.empty()));
 
         // then
         assertThat(thrown)
@@ -134,7 +134,7 @@ final class SymphonyMainTest {
     @Test
     void resolvesServerPortEnvironmentReferenceBeforeQuarkusStarts() {
         // given
-        String frontMatter =
+        var frontMatter =
                 """
                 server:
                   port: $SYMPHONY_TEST_PORT
@@ -151,14 +151,14 @@ final class SymphonyMainTest {
     @Test
     void rejectsUnresolvedServerPortEnvironmentReferenceBeforeQuarkusStarts() {
         // given
-        String frontMatter =
+        var frontMatter =
                 """
                 server:
                   port: $SYMPHONY_TEST_PORT
                 """;
 
         // when
-        var thrown = assertThatThrownBy(() -> SymphonyMain.configuredServerPort(frontMatter, name -> Optional.empty()));
+        var thrown = assertThatThrownBy(() -> SymphonyMain.configuredServerPort(frontMatter, _ -> Optional.empty()));
 
         // then
         thrown.isInstanceOf(IllegalArgumentException.class)

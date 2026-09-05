@@ -14,7 +14,7 @@ final class WorkflowEnvironmentResolverTest {
     @Test
     void externalHttpPortOverrideSourceUsesConfiguredEnvironmentNameOrder() {
         // given
-        Map<String, String> environment = Map.of("SYMPHONY_HTTP_PORT", "18080", "QUARKUS_HTTP_PORT", "19080");
+        var environment = Map.of("SYMPHONY_HTTP_PORT", "18080", "QUARKUS_HTTP_PORT", "19080");
 
         // when
         var source = WorkflowEnvironmentResolver.externalHttpPortOverrideSource(environment, tempDir.resolve(".env"));

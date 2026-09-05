@@ -46,7 +46,7 @@ final class GitHubConfigurator {
                 ? "GitHub CLI is installed but not logged in.\nAllow Symphony to create pull requests on GitHub? [y/N] "
                 : "GitHub CLI is not installed.\nAllow Symphony to create pull requests on GitHub? [y/N] ";
         String answer = terminal.readLine(prompt);
-        boolean enabled =
+        var enabled =
                 answer != null && answer.trim().toLowerCase(Locale.ROOT).startsWith("y");
         if (!enabled) {
             terminal.info("");

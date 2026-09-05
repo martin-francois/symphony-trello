@@ -61,7 +61,7 @@ final class TrelloCardReferenceParser {
     }
 
     private static Optional<TrelloCardReference> exactCardUrl(String text) {
-        List<ReferencedRange> urls = cardUrlRanges(text);
+        var urls = cardUrlRanges(text);
         if (urls.size() != 1) {
             return Optional.empty();
         }
@@ -77,15 +77,15 @@ final class TrelloCardReferenceParser {
 
     private static List<ReferencedRange> cardUrlRanges(String text) {
         String lower = Ascii.toLowerCase(text);
-        List<ReferencedRange> references = new ArrayList<>();
-        int searchFrom = 0;
+        var references = new ArrayList<ReferencedRange>();
+        var searchFrom = 0;
         while (searchFrom < text.length()) {
-            int start = lower.indexOf(CARD_URL_PREFIX, searchFrom);
+            var start = lower.indexOf(CARD_URL_PREFIX, searchFrom);
             if (start < 0) {
                 break;
             }
-            int idStart = start + CARD_URL_PREFIX.length();
-            int idEnd = idStart;
+            var idStart = start + CARD_URL_PREFIX.length();
+            var idEnd = idStart;
             while (idEnd < text.length() && CARD_ID_CHARACTER.matches(text.charAt(idEnd))) {
                 idEnd++;
             }
@@ -93,7 +93,7 @@ final class TrelloCardReferenceParser {
                 searchFrom = idStart;
                 continue;
             }
-            int end = idEnd;
+            var end = idEnd;
             while (end < text.length() && !URL_TERMINATOR.matches(text.charAt(end))) {
                 end++;
             }

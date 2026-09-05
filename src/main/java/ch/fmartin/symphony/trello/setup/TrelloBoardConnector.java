@@ -61,13 +61,13 @@ final class TrelloBoardConnector {
     }
 
     void preflightRequestedServerPort(LocalSetup.Options options, ConnectedBoardManifest manifest) {
-        options.serverPort().ifPresent(ignored -> preflightWorkflowPath(options)
+        options.serverPort().ifPresent(_ -> preflightWorkflowPath(options)
                 .ifPresent(workflowPath -> localSetupServerPort(options, manifest, workflowPath)));
     }
 
     void rejectDryRunNewBoardInProgress(LocalSetup.Options options) {
         BoardSetupChoice dryRunChoice = options.existingBoardId()
-                .map(ignored -> BoardSetupChoice.EXISTING)
+                .map(_ -> BoardSetupChoice.EXISTING)
                 .orElse(BoardSetupChoice.NEW);
         rejectNewBoardInProgress(options, dryRunChoice);
     }
@@ -117,7 +117,7 @@ final class TrelloBoardConnector {
         String parsedBoardId = TrelloBoardIds.parseImportBoardSelector(boardId);
         TrelloBoardSetup.BoardInfo boardInfo = boardSetup.getBoardInfo(
                 new TrelloBoardSetup.BoardInfoRequest(options.endpoint(), credentials, parsedBoardId));
-        List<String> openLists = boardSetup.getOpenBoardListNames(
+        var openLists = boardSetup.getOpenBoardListNames(
                 new TrelloBoardSetup.BoardInfoRequest(options.endpoint(), credentials, boardInfo.boardId()));
         Path workflowPath = resolveWorkflowPath(options, boardInfo.boardName());
         options = configureCodexModel(options, workflowPath, terminal);
@@ -149,7 +149,7 @@ final class TrelloBoardConnector {
     }
 
     private static String requestedBoardSelector(LocalSetup.Options options, Terminal terminal) throws IOException {
-        Optional<String> boardId = options.existingBoardId().filter(id -> !blank(id));
+        var boardId = options.existingBoardId().filter(id -> !blank(id));
         if (boardId.isEmpty()) {
             return terminal.readLine("Trello board URL, shortlink, or id: ");
         }
@@ -164,13 +164,13 @@ final class TrelloBoardConnector {
             CredentialPersistence credentialPersistence,
             Terminal terminal)
             throws IOException {
-        Optional<String> configuredBoardName = options.boardName().filter(name -> !blank(name));
+        var configuredBoardName = options.boardName().filter(name -> !blank(name));
         if (configuredBoardName.isEmpty() && !options.nonInteractive()) {
             String answer = terminal.readLine("Board name [\"" + DEFAULT_BOARD_NAME + "\"]: ");
             configuredBoardName = Optional.ofNullable(answer).filter(name -> !blank(name));
         }
         String boardName = configuredBoardName.orElse(DEFAULT_BOARD_NAME);
-        List<TrelloBoardSetup.WorkspaceInfo> workspaces =
+        var workspaces =
                 boardSetup.listWorkspaces(new TrelloBoardSetup.WorkspaceListRequest(options.endpoint(), credentials));
         String workspaceId = workspaceId(options, workspaces, terminal);
         Path workflowPath = resolveWorkflowPath(options, boardName);
@@ -231,7 +231,7 @@ final class TrelloBoardConnector {
                 .maxAgents(workflowPath)
                 .map(maxAgents -> new MaxAgentsSelection(maxAgents, true))
                 .orElseGet(() -> new MaxAgentsSelection(TrelloBoardSetup.DEFAULT_MAX_CONCURRENT_AGENTS, false));
-        int defaultMaxAgents = currentMaxAgents.value();
+        var defaultMaxAgents = currentMaxAgents.value();
         if (options.nonInteractive()) {
             return currentMaxAgents;
         }
@@ -287,7 +287,7 @@ final class TrelloBoardConnector {
         }
         terminal.info("");
         terminal.info("Choose Trello Workspace:");
-        for (int i = 0; i < workspaces.size(); i++) {
+        for (var i = 0; i < workspaces.size(); i++) {
             terminal.info("  " + (i + 1) + ". "
                     + DisplayNames.quotedName(workspaces.get(i).displayName()));
         }
@@ -296,7 +296,7 @@ final class TrelloBoardConnector {
                     "setup_workspace_id_required",
                     "This token can access multiple Trello Workspaces. Re-run with --workspace-id.");
         }
-        int selected = PromptSupport.requiredChoice(
+        var selected = PromptSupport.requiredChoice(
                 terminal.readLine("Workspace: "),
                 workspaces.size(),
                 "setup_workspace_id_required",
@@ -322,12 +322,12 @@ final class TrelloBoardConnector {
                 ? detectedList(openListNames, TrelloBoardSetup.RECOMMENDED_IN_PROGRESS_STATE)
                         .orElse(null)
                 : options.inProgressState();
-        boolean detectInProgressState = false;
+        var detectInProgressState = false;
         String blockedState = blank(options.blockedState())
                 ? detectedList(openListNames, TrelloBoardSetup.RECOMMENDED_BLOCKED_STATE)
                         .orElse(null)
                 : options.blockedState();
-        boolean createMissingGithubLists = githubIntegration.enabled();
+        var createMissingGithubLists = githubIntegration.enabled();
         if (!options.nonInteractive()) {
             terminal.info("");
             terminal.info("Existing board lists");
@@ -346,7 +346,7 @@ final class TrelloBoardConnector {
             }
             if (githubIntegration.enabled()
                     && openListNames.stream()
-                            .noneMatch(name -> name.equalsIgnoreCase(TrelloBoardSetup.RECOMMENDED_MERGING_STATE))) {
+                            .noneMatch(TrelloBoardSetup.RECOMMENDED_MERGING_STATE::equalsIgnoreCase)) {
                 terminal.info(
                         "GitHub mode will create this missing list: " + TrelloBoardSetup.RECOMMENDED_MERGING_STATE);
                 createMissingGithubLists = PromptSupport.yesDefaultTrue(terminal, "Create missing GitHub list? [Y/n] ");
@@ -419,7 +419,7 @@ final class TrelloBoardConnector {
         Path parent = requested.getParent();
         Path candidate =
                 parentOrCurrent(parent).resolve(WorkflowFileNames.generatedFileName(boardName, "trello-board", 2));
-        for (int suffix = 3; Files.exists(candidate.toAbsolutePath().normalize()); suffix++) {
+        for (var suffix = 3; Files.exists(candidate.toAbsolutePath().normalize()); suffix++) {
             candidate = parentOrCurrent(parent)
                     .resolve(WorkflowFileNames.generatedFileName(boardName, "trello-board", suffix));
         }
@@ -435,15 +435,15 @@ final class TrelloBoardConnector {
             ConnectedBoardManifest manifest,
             Path workflowPath,
             WorkflowConfigEditor editor) {
-        Set<Integer> reservedPorts = reservedWorkflowServerPorts(
-                manifest, workflowPath, options.force(), editor, ignored -> Optional.empty());
+        var reservedPorts = reservedWorkflowServerPorts(
+                manifest, workflowPath, options.force(), editor, _ -> Optional.empty());
         return options.serverPort()
                 .map(requestedPort -> validatedRequestedServerPort(requestedPort, reservedPorts))
                 .orElseGet(() -> firstAvailableServerPort(reservedPorts));
     }
 
     private int firstAvailableServerPort(Set<Integer> reservedPorts) {
-        for (int port = TrelloBoardSetup.DEFAULT_SERVER_PORT; port <= LocalPort.MAX; port++) {
+        for (var port = TrelloBoardSetup.DEFAULT_SERVER_PORT; port <= LocalPort.MAX; port++) {
             if (!reservedPorts.contains(port) && !boardSetup.portInUse(port)) {
                 return port;
             }
@@ -466,7 +466,7 @@ final class TrelloBoardConnector {
     }
 
     private int localSetupServerPort(LocalSetup.Options options, ConnectedBoardManifest manifest, Path workflowPath) {
-        Set<Integer> reservedPorts = reservedWorkflowServerPorts(
+        var reservedPorts = reservedWorkflowServerPorts(
                 manifest,
                 workflowPath,
                 options.force(),
@@ -480,7 +480,7 @@ final class TrelloBoardConnector {
 
     private Integer localSetupImportServerPort(
             LocalSetup.Options options, ConnectedBoardManifest manifest, Path workflowPath) throws IOException {
-        Set<Integer> reservedPorts = reservedWorkflowServerPorts(
+        var reservedPorts = reservedWorkflowServerPorts(
                 manifest,
                 workflowPath,
                 options.force(),
@@ -507,7 +507,7 @@ final class TrelloBoardConnector {
                 || !Files.isRegularFile(workflowPath.toAbsolutePath().normalize())) {
             return Optional.empty();
         }
-        Optional<Integer> existingPort = workflowConfig
+        var existingPort = workflowConfig
                 .serverPort(workflowPath, name -> LocalEnvironment.get(name, options.envPath()))
                 .filter(port -> port != 0)
                 .filter(port -> !reservedPorts.contains(port));
@@ -554,7 +554,7 @@ final class TrelloBoardConnector {
         }
         try {
             return workerManager.canStopManagedWorker(localWorkerPaths(options), matches.getFirst());
-        } catch (IOException e) {
+        } catch (IOException _) {
             return false;
         }
     }
@@ -574,7 +574,7 @@ final class TrelloBoardConnector {
             boolean replacingTarget,
             WorkflowConfigEditor editor,
             Function<String, Optional<String>> environmentResolver) {
-        Set<Integer> reservedPorts = manifest.boards().stream()
+        var reservedPorts = manifest.boards().stream()
                 .filter(board -> !PathsEqual.samePath(board.workflowPath(), workflowPath))
                 .map(ConnectedBoard::serverPort)
                 // Keep this mutable because sibling workflow ports are merged before returning the
@@ -601,7 +601,7 @@ final class TrelloBoardConnector {
                     .filter(path -> !replacingTarget || !path.equals(absolute))
                     .flatMap(path -> editor.serverPort(path, environmentResolver).stream())
                     .collect(Collectors.toUnmodifiableSet());
-        } catch (IOException ignored) {
+        } catch (IOException _) {
             return Set.of();
         }
     }

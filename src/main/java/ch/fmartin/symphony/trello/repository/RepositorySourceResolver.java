@@ -39,10 +39,8 @@ public final class RepositorySourceResolver {
         return workflowDefault(repository);
     }
 
-    /**
-     * Validates a repository URL intended for {@code repository.default_url} without resolving or
-     * contacting the repository.
-     */
+    /// Validates a repository URL intended for `repository.default_url` without resolving or
+    /// contacting the repository.
     public RepositorySourceSelection selectWorkflowDefaultUrl(String value) {
         if (!RepositorySourceText.safePromptLine(value)) {
             return invalid(
@@ -63,7 +61,7 @@ public final class RepositorySourceResolver {
     }
 
     private RepositorySourceSelection explicitSource(Card card) {
-        List<Declaration> declarations = declarations(card);
+        var declarations = declarations(card);
 
         return switch (declarations.size()) {
             case 0 -> RepositorySourceSelection.none();
@@ -75,7 +73,7 @@ public final class RepositorySourceResolver {
     private static RepositorySourceSelection explicitSourceFromMultipleDeclarations(List<Declaration> declarations) {
         RepositorySourceSelection first = parseExplicitSource(declarations.getFirst());
 
-        boolean allEquivalent = first.status() == RepositorySourceSelection.Status.SELECTED
+        var allEquivalent = first.status() == RepositorySourceSelection.Status.SELECTED
                 && declarations.stream()
                         .skip(1)
                         .map(RepositorySourceResolver::parseExplicitSource)
@@ -149,7 +147,7 @@ public final class RepositorySourceResolver {
             }
         }
         try {
-            URI uri = new URI(value);
+            var uri = new URI(value);
             String scheme = lower(uri.getScheme());
             if ("http".equals(scheme) || "https".equals(scheme)) {
                 return httpRemote(uri, origin);
@@ -158,7 +156,7 @@ public final class RepositorySourceResolver {
                 return sshRemote(uri, origin);
             }
             return RepositorySourceSelection.none();
-        } catch (URISyntaxException | IllegalArgumentException e) {
+        } catch (URISyntaxException | IllegalArgumentException _) {
             return RepositorySourceSelection.none();
         }
     }
@@ -212,21 +210,21 @@ public final class RepositorySourceResolver {
         }
         String repositoryPath = stripSlashes(rawPath);
         try {
-            RepositoryIdentity identity = new RepositoryIdentity(authorityHost(uri), repositoryPath);
+            var identity = new RepositoryIdentity(authorityHost(uri), repositoryPath);
             return RepositorySourceSelection.selected(new RepositorySource(
                     RepositorySource.Kind.REMOTE,
                     origin,
                     normalizedUri(uri, repositoryPath, includeUser),
                     identity,
                     null));
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException _) {
             return invalid(
                     "repository_remote_malformed", "The selected repository URL must include a valid repository path.");
         }
     }
 
     private static boolean invalidExplicitPort(URI uri) {
-        int port = uri.getPort();
+        var port = uri.getPort();
         return port == URI_PORT_ABSENT ? hasExplicitAuthorityPort(uri) : port < MIN_URI_PORT || port > MAX_URI_PORT;
     }
 
@@ -237,7 +235,7 @@ public final class RepositorySourceResolver {
         }
         String hostAndPort = authority.substring(authority.lastIndexOf('@') + 1);
         if (hostAndPort.startsWith("[")) {
-            int closingBracket = hostAndPort.indexOf(']');
+            var closingBracket = hostAndPort.indexOf(']');
             return closingBracket >= 0
                     && closingBracket + 1 < hostAndPort.length()
                     && hostAndPort.charAt(closingBracket + 1) == ':';
@@ -249,7 +247,7 @@ public final class RepositorySourceResolver {
         if (value.contains("://") || explicitUriScheme(value)) {
             return RepositorySourceSelection.none();
         }
-        int colon = value.indexOf(':');
+        var colon = value.indexOf(':');
         if (colon <= 0 || colon == value.length() - 1) {
             return RepositorySourceSelection.none();
         }
@@ -265,7 +263,7 @@ public final class RepositorySourceResolver {
                 || rawPath.isBlank()) {
             return RepositorySourceSelection.none();
         }
-        int at = hostPart.lastIndexOf('@');
+        var at = hostPart.lastIndexOf('@');
         String user = at >= 0 ? hostPart.substring(0, at) : null;
         String host = at >= 0 ? hostPart.substring(at + 1) : hostPart;
         if ((user != null && !simpleName(user)) || !simpleHost(host)) {
@@ -274,10 +272,10 @@ public final class RepositorySourceResolver {
         String path = stripSlashes(rawPath);
         try {
             String prefix = user == null ? "" : user + "@";
-            RepositoryIdentity identity = new RepositoryIdentity(host, path);
+            var identity = new RepositoryIdentity(host, path);
             return RepositorySourceSelection.selected(new RepositorySource(
                     RepositorySource.Kind.REMOTE, origin, prefix + identity.host() + ":" + path, identity, null));
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException _) {
             return invalid(
                     "repository_remote_malformed",
                     "The selected SCP-style repository remote must include a valid host and repository path.");
@@ -286,7 +284,7 @@ public final class RepositorySourceResolver {
 
     private static RepositorySourceSelection fileUriPath(String value, RepositorySource.Origin origin) {
         try {
-            URI uri = new URI(value);
+            var uri = new URI(value);
             if (!"file".equals(lower(uri.getScheme()))
                     || hasQueryOrFragment(uri)
                     || unsafeUriComponent(uri.getRawPath(), uri.getPath())) {
@@ -297,7 +295,7 @@ public final class RepositorySourceResolver {
             Path path = Path.of(uri).toAbsolutePath().normalize();
             return RepositorySourceSelection.selected(
                     new RepositorySource(RepositorySource.Kind.LOCAL_PATH, origin, path.toString(), null, path));
-        } catch (IllegalArgumentException | URISyntaxException e) {
+        } catch (IllegalArgumentException | URISyntaxException _) {
             return invalid(
                     "repository_path_malformed",
                     "The selected file repository URL is malformed. Use a valid file URL or local checkout path.");
@@ -312,7 +310,7 @@ public final class RepositorySourceResolver {
             Path path = Path.of(stripAngleBrackets(value)).toAbsolutePath().normalize();
             return RepositorySourceSelection.selected(
                     new RepositorySource(RepositorySource.Kind.LOCAL_PATH, origin, path.toString(), null, path));
-        } catch (InvalidPathException e) {
+        } catch (InvalidPathException _) {
             return invalid("repository_path_malformed", "The selected local repository path is malformed.");
         }
     }

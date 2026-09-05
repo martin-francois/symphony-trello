@@ -70,7 +70,7 @@ public class TrelloClient implements TrackerClient {
 
     @Override
     public String resolveBoardId(EffectiveConfig config) {
-        Map<String, Object> board = getMap(
+        var board = getMap(
                 config, "boards/" + encodeSegment(config.tracker().boardId()), Map.of("fields", "id,name,closed"));
         if (bool(board.get("closed"))) {
             throw new TrelloException("trello_board_closed", "Configured Trello board is archived");
@@ -81,12 +81,12 @@ public class TrelloClient implements TrackerClient {
     @Override
     public List<Card> fetchCandidateCards(EffectiveConfig config) {
         BoardContext context = boardContext(config);
-        List<Map<String, Object>> payload = getList(
+        var payload = getList(
                 config,
                 "boards/" + encodeSegment(context.boardId()) + "/cards/open",
                 Map.of("fields", CARD_FIELDS, "filter", "open"));
-        List<Card> candidates = new ArrayList<>();
-        Set<String> cardsWithComments = new HashSet<>();
+        var candidates = new ArrayList<Card>();
+        var cardsWithComments = new HashSet<String>();
         for (Map<String, Object> cardPayload : payload) {
             normalize(cardPayload, context, config).ifPresent(card -> {
                 if (!isActive(card, config) || isTerminal(card, config)) {
@@ -107,23 +107,23 @@ public class TrelloClient implements TrackerClient {
     @Override
     public List<Card> fetchTerminalCards(EffectiveConfig config) {
         BoardContext context = boardContext(config);
-        List<Map<String, Object>> boardCards = getList(
+        var boardCards = getList(
                 config,
                 "boards/" + encodeSegment(context.boardId()) + "/cards/all",
                 Map.of("fields", CARD_FIELDS, "filter", "all"));
-        List<Card> normalized = boardCards.stream()
+        var normalized = boardCards.stream()
                 .map(card -> normalize(card, context, config))
                 .flatMap(Optional::stream)
                 .filter(card -> isTerminal(card, config))
                 // Keep this mutable: archived terminal cards are appended below before de-duplication.
                 .collect(Collectors.toCollection(ArrayList::new));
 
-        Set<String> archivedListIds = context.lists().values().stream()
+        var archivedListIds = context.lists().values().stream()
                 .filter(BoardList::closed)
                 .map(BoardList::id)
                 .collect(toImmutableSet());
         for (String listId : archivedListIds) {
-            List<Map<String, Object>> listCards = getList(
+            var listCards = getList(
                     config,
                     "lists/" + encodeSegment(listId) + "/cards",
                     Map.of("fields", CARD_FIELDS, "filter", "all"));
@@ -132,7 +132,7 @@ public class TrelloClient implements TrackerClient {
 
         // Preserve Trello encounter order while de-duplicating cards returned by board and archived-list endpoints.
         return normalized.stream()
-                .collect(Collectors.toMap(Card::id, Function.identity(), (left, right) -> left, LinkedHashMap::new))
+                .collect(Collectors.toMap(Card::id, Function.identity(), (left, _) -> left, LinkedHashMap::new))
                 .values()
                 .stream()
                 .toList();
@@ -154,17 +154,17 @@ public class TrelloClient implements TrackerClient {
 
     @Override
     public Map<String, CardLookupResult> fetchCardStatesForPromptByIds(EffectiveConfig config, List<String> cardIds) {
-        Map<String, CardLookupResult> results = fetchCardStatesByIds(config, cardIds, true);
+        var results = fetchCardStatesByIds(config, cardIds, true);
         List<Card> foundCards = results.values().stream()
                 .filter(CardLookupResult.Found.class::isInstance)
                 .map(CardLookupResult.Found.class::cast)
                 .map(CardLookupResult.Found::card)
                 .toList();
-        Map<String, Card> enriched =
+        var enriched =
                 enrichPrerequisites(config, foundCards, true, cardsWithComments(foundCards)).stream()
                         .collect(Collectors.toMap(
-                                Card::id, Function.identity(), (left, right) -> left, LinkedHashMap::new));
-        Map<String, CardLookupResult> updated = new LinkedHashMap<>();
+                                Card::id, Function.identity(), (left, _) -> left, LinkedHashMap::new));
+        var updated = new LinkedHashMap<String, CardLookupResult>();
         results.forEach((cardId, result) -> {
             if (result instanceof CardLookupResult.Found found) {
                 updated.put(
@@ -235,15 +235,15 @@ public class TrelloClient implements TrackerClient {
     private Map<String, CardLookupResult> fetchCardStatesByIds(
             EffectiveConfig config, List<String> cardIds, boolean includeOlderWorkpad) {
         BoardContext context = boardContext(config);
-        Map<String, CardLookupResult> results = new LinkedHashMap<>();
+        var results = new LinkedHashMap<String, CardLookupResult>();
         for (String cardId : cardIds) {
             try {
-                Map<String, Object> payload =
+                var payload =
                         cardWithComments(config, cardId, RECENT_COMMENT_ACTION_LIMIT, includeOlderWorkpad);
                 if (includeOlderWorkpad) {
                     payload = includeOlderWorkpadComment(config, cardId, payload);
                 }
-                Optional<Card> card = normalize(payload, context, config);
+                var card = normalize(payload, context, config);
                 results.put(
                         cardId,
                         card.<CardLookupResult>map(CardLookupResult.Found::new)
@@ -263,8 +263,8 @@ public class TrelloClient implements TrackerClient {
     public CardLookupResult fetchCardStateForWorkpad(EffectiveConfig config, String cardId) {
         BoardContext context = boardContext(config);
         try {
-            Map<String, Object> payload = cardWithComments(config, cardId, WORKPAD_COMMENT_ACTION_LIMIT);
-            Optional<Card> card = normalize(payload, context, config);
+            var payload = cardWithComments(config, cardId, WORKPAD_COMMENT_ACTION_LIMIT);
+            var card = normalize(payload, context, config);
             return card.<CardLookupResult>map(CardLookupResult.Found::new)
                     .orElseGet(() -> new CardLookupResult.Failed(
                             cardId, "trello_unknown_payload", "Card payload could not be normalized"));
@@ -282,7 +282,7 @@ public class TrelloClient implements TrackerClient {
 
     private Map<String, Object> cardWithComments(
             EffectiveConfig config, String cardId, int actionLimit, boolean includePromptContext) {
-        Map<String, String> query = new LinkedHashMap<>();
+        var query = new LinkedHashMap<String, String>();
         query.put("fields", CARD_FIELDS);
         query.put("attachments", includePromptContext ? "true" : "false");
         if (includePromptContext) {
@@ -300,7 +300,7 @@ public class TrelloClient implements TrackerClient {
     }
 
     private List<Card.Checklist> fetchChecklists(EffectiveConfig config, String cardId) {
-        List<Map<String, Object>> payload = getList(
+        var payload = getList(
                 config,
                 "cards/" + encodeSegment(cardId) + "/checklists",
                 Map.of("fields", "id,name", "checkItem_fields", "id,name,state"));
@@ -309,7 +309,7 @@ public class TrelloClient implements TrackerClient {
 
     private Map<String, Object> includeOlderWorkpadComment(
             EffectiveConfig config, String cardId, Map<String, Object> recentPayload) {
-        List<Map<String, Object>> recentActions = actionMaps(recentPayload);
+        var recentActions = actionMaps(recentPayload);
         if (hasWorkpadComment(recentActions) || recentActions.size() < RECENT_COMMENT_ACTION_LIMIT) {
             return recentPayload;
         }
@@ -334,10 +334,10 @@ public class TrelloClient implements TrackerClient {
             Map<String, Object> recentPayload,
             List<Map<String, Object>> recentActions,
             Map<String, Object> existingWorkpad) {
-        List<Map<String, Object>> mergedActions = new ArrayList<>();
+        var mergedActions = new ArrayList<Map<String, Object>>();
         mergedActions.add(existingWorkpad);
         mergedActions.addAll(recentActions);
-        Map<String, Object> mergedPayload = new LinkedHashMap<>(recentPayload);
+        var mergedPayload = new LinkedHashMap<String, Object>(recentPayload);
         mergedPayload.put("actions", mergedActions);
         return mergedPayload;
     }
@@ -350,8 +350,8 @@ public class TrelloClient implements TrackerClient {
         List<PrerequisiteAnalysis> analyses = cards.stream()
                 .map(card -> analyzePrerequisites(card, includeReferenceContext))
                 .toList();
-        Map<String, CardLookupResult> lookupResults = lookupReferencedCards(config, analyses);
-        List<Card> enriched = new ArrayList<>();
+        var lookupResults = lookupReferencedCards(config, analyses);
+        var enriched = new ArrayList<Card>();
         for (PrerequisiteAnalysis analysis : analyses) {
             enriched.add(enrichPrerequisiteCard(
                     config,
@@ -377,10 +377,10 @@ public class TrelloClient implements TrackerClient {
     }
 
     private static Stream<String> lookupIds(PrerequisiteAnalysis analysis) {
-        Stream<String> prerequisiteLookupIds = analysis.plan().items().stream()
+        var prerequisiteLookupIds = analysis.plan().items().stream()
                 .map(TrelloChecklistClassifier.PrerequisiteItem::reference)
                 .map(TrelloCardReference::lookupId);
-        Stream<String> promptLookupIds = analysis.promptReferences().values().stream()
+        var promptLookupIds = analysis.promptReferences().values().stream()
                 .map(ReferencedText::reference)
                 .map(TrelloCardReference::lookupId);
         return Stream.concat(prerequisiteLookupIds, promptLookupIds);
@@ -393,7 +393,7 @@ public class TrelloClient implements TrackerClient {
             boolean mayHaveWaitingComment) {
         Card card = analysis.card();
         ResolvedPrerequisites resolved = resolvePrerequisites(config, card, analysis.plan(), lookupResults);
-        List<Card.TrelloReference> references = promptReferences(config, analysis.promptReferences(), lookupResults);
+        var references = promptReferences(config, analysis.promptReferences(), lookupResults);
         Card enriched = card.withRelationships(card.checklists(), references, resolved.problems(), resolved.blockers());
         syncPrerequisiteWaitingFeedback(config, enriched, mayHaveWaitingComment);
         return enriched;
@@ -407,8 +407,8 @@ public class TrelloClient implements TrackerClient {
     }
 
     private static PrerequisitePlan prerequisitePlan(Card card) {
-        List<TrelloChecklistClassifier.PrerequisiteItem> items = new ArrayList<>();
-        List<Card.PrerequisiteProblem> problems = new ArrayList<>();
+        var items = new ArrayList<TrelloChecklistClassifier.PrerequisiteItem>();
+        var problems = new ArrayList<Card.PrerequisiteProblem>();
         for (Card.Checklist checklist : card.checklists()) {
             TrelloChecklistClassifier.ChecklistAnalysis analysis = TrelloChecklistClassifier.analyze(checklist);
             items.addAll(analysis.prerequisites());
@@ -419,11 +419,11 @@ public class TrelloClient implements TrackerClient {
 
     private ResolvedPrerequisites resolvePrerequisites(
             EffectiveConfig config, Card card, PrerequisitePlan plan, Map<String, CardLookupResult> lookupResults) {
-        List<Card.PrerequisiteProblem> problems = new ArrayList<>(plan.problems());
+        var problems = new ArrayList<Card.PrerequisiteProblem>(plan.problems());
         // Preserve prerequisite checklist order so generated blockers follow the operator-authored checklist.
-        Map<String, BlockerRef> blockers = LinkedHashMap.newLinkedHashMap(
+        var blockers = LinkedHashMap.newLinkedHashMap(
                 plan.items().size() + (plan.problems().isEmpty() ? 0 : 1));
-        boolean continueChecklistSync = true;
+        var continueChecklistSync = true;
         for (TrelloChecklistClassifier.PrerequisiteItem item : plan.items()) {
             TrelloCardReference reference = item.reference();
             CardLookupResult result = lookupResults.get(reference.lookupId());
@@ -488,7 +488,7 @@ public class TrelloClient implements TrackerClient {
         if (blank(item.item().id())) {
             return true;
         }
-        boolean targetComplete = isResolvedTerminal(config, card, result);
+        var targetComplete = isResolvedTerminal(config, card, result);
         if (item.item().complete() == targetComplete) {
             return true;
         }
@@ -545,7 +545,7 @@ public class TrelloClient implements TrackerClient {
     }
 
     private static Map<String, ReferencedText> promptReferenceTexts(Card card, PrerequisitePlan plan) {
-        ReferenceAccumulator references = new ReferenceAccumulator();
+        var references = new ReferenceAccumulator();
         references.add("title", card.title());
         references.add("description", card.description());
         for (Card.Checklist checklist : card.checklists()) {
@@ -611,7 +611,7 @@ public class TrelloClient implements TrackerClient {
         if (!config.tracker().blockerEnforcedStates().contains(StateNames.normalize(card.state()))) {
             return;
         }
-        boolean waiting = card.blockedBy().stream()
+        var waiting = card.blockedBy().stream()
                 .anyMatch(blocker -> blocker.state() == null
                         || !config.tracker().terminalStates().contains(StateNames.normalize(blocker.state())));
         if (!waiting && card.prerequisiteProblems().isEmpty()) {
@@ -648,7 +648,7 @@ public class TrelloClient implements TrackerClient {
 
     private void clearPrerequisiteWaitingComment(EffectiveConfig config, Card card) {
         try {
-            Optional<Card.Comment> existing = prerequisiteWaitingComment(config, card.id());
+            var existing = prerequisiteWaitingComment(config, card.id());
             String text = resolvedPrerequisiteStatusText();
             existing.filter(comment -> !blank(comment.id()))
                     .filter(comment -> !text.equals(comment.text()))
@@ -659,7 +659,7 @@ public class TrelloClient implements TrackerClient {
     }
 
     private Optional<Card.Comment> prerequisiteWaitingComment(EffectiveConfig config, String cardId) {
-        Map<String, Object> payload = getMap(
+        var payload = getMap(
                 config,
                 "cards/" + encodeSegment(cardId),
                 Map.of(
@@ -684,7 +684,7 @@ public class TrelloClient implements TrackerClient {
     }
 
     private static String prerequisiteWaitingText(Card card) {
-        List<String> lines = new ArrayList<>();
+        var lines = new ArrayList<String>();
         lines.add(PREREQUISITE_STATUS_COMMENT_MARKER);
         lines.add("");
         lines.add("Status: waiting for prerequisites.");
@@ -806,7 +806,7 @@ public class TrelloClient implements TrackerClient {
 
     private static int activeOrder(Card card, EffectiveConfig config) {
         if (card.listId() != null && !config.tracker().activeListIds().isEmpty()) {
-            int index = config.tracker().activeListIds().indexOf(card.listId());
+            var index = config.tracker().activeListIds().indexOf(card.listId());
             return index < 0
                     ? Integer.MAX_VALUE
                     : config.tracker().activeListIds().size() - 1 - index;
@@ -814,18 +814,18 @@ public class TrelloClient implements TrackerClient {
         List<String> active = config.tracker().activeStates().stream()
                 .map(StateNames::normalize)
                 .toList();
-        int index = active.indexOf(StateNames.normalize(card.state()));
+        var index = active.indexOf(StateNames.normalize(card.state()));
         return index < 0 ? Integer.MAX_VALUE : active.size() - 1 - index;
     }
 
     private BoardContext boardContext(EffectiveConfig config) {
-        Map<String, Object> board = getMap(
+        var board = getMap(
                 config, "boards/" + encodeSegment(config.tracker().boardId()), Map.of("fields", "id,name,closed"));
         String boardId = requiredString(board, "id", "trello_unknown_payload");
-        boolean boardClosed = bool(board.get("closed"));
-        Map<String, BoardList> listMap = fetchBoardLists(config.withResolvedBoardId(boardId)).stream()
+        var boardClosed = bool(board.get("closed"));
+        var listMap = fetchBoardLists(config.withResolvedBoardId(boardId)).stream()
                 .collect(Collectors.toMap(
-                        BoardList::id, Function.identity(), (left, right) -> left, LinkedHashMap::new));
+                        BoardList::id, Function.identity(), (left, _) -> left, LinkedHashMap::new));
         return new BoardContext(boardId, boardClosed, listMap);
     }
 
@@ -866,10 +866,10 @@ public class TrelloClient implements TrackerClient {
         Card.ChecklistItem item = singleCheckItemByName(checklist, itemName);
         if (item == null) {
             // Preserve query parameter order for deterministic request logs and tests.
-            Map<String, String> query = new LinkedHashMap<>();
+            var query = new LinkedHashMap<String, String>();
             query.put("name", itemName);
             query.put("checked", Boolean.toString(complete));
-            Map<String, Object> created =
+            var created =
                     postMap(config, "checklists/" + encodeSegment(checklist.id()) + "/checkItems", query);
             return new ChecklistItemWrite(
                     checklist.id(), requiredString(created, "id", "trello_unknown_payload"), complete, "created");
@@ -883,7 +883,7 @@ public class TrelloClient implements TrackerClient {
 
     public UrlAttachmentWrite addUrlAttachment(EffectiveConfig config, String cardId, String url, String name) {
         // Keep the URL first so request logs mirror the documented Trello attachment call.
-        Map<String, String> query = new LinkedHashMap<>();
+        var query = new LinkedHashMap<String, String>();
         query.put("url", url);
         if (!blank(name)) {
             query.put("name", name);
@@ -893,7 +893,7 @@ public class TrelloClient implements TrackerClient {
     }
 
     private Card.Checklist createChecklist(EffectiveConfig config, String cardId, String checklistName) {
-        Map<String, Object> created =
+        var created =
                 postMap(config, "cards/" + encodeSegment(cardId) + "/checklists", Map.of("name", checklistName));
         return new Card.Checklist(requiredString(created, "id", "trello_unknown_payload"), checklistName, List.of());
     }
@@ -926,15 +926,15 @@ public class TrelloClient implements TrackerClient {
 
     private static boolean shouldMoveBeforeDispatch(EffectiveConfig config, Card card, BoardList target) {
         if (card.listId() != null && !config.tracker().activeListIds().isEmpty()) {
-            int currentIndex = config.tracker().activeListIds().indexOf(card.listId());
-            int targetIndex = config.tracker().activeListIds().indexOf(target.id());
+            var currentIndex = config.tracker().activeListIds().indexOf(card.listId());
+            var targetIndex = config.tracker().activeListIds().indexOf(target.id());
             return currentIndex >= 0 && targetIndex >= 0 && currentIndex < targetIndex;
         }
         List<String> active = config.tracker().activeStates().stream()
                 .map(StateNames::normalize)
                 .toList();
-        int currentIndex = active.indexOf(StateNames.normalize(card.state()));
-        int targetIndex = active.indexOf(StateNames.normalize(target.name()));
+        var currentIndex = active.indexOf(StateNames.normalize(card.state()));
+        var targetIndex = active.indexOf(StateNames.normalize(target.name()));
         return currentIndex >= 0 && targetIndex >= 0 && currentIndex < targetIndex;
     }
 
@@ -987,7 +987,7 @@ public class TrelloClient implements TrackerClient {
 
     private static Optional<BoardList> releaseTarget(EffectiveConfig config, Card card, BoardContext context) {
         if (card.listId() != null && !config.tracker().activeListIds().isEmpty()) {
-            int currentIndex = config.tracker().activeListIds().indexOf(card.listId());
+            var currentIndex = config.tracker().activeListIds().indexOf(card.listId());
             if (currentIndex > 0) {
                 return Optional.ofNullable(context.lists()
                                 .get(config.tracker().activeListIds().get(currentIndex - 1)))
@@ -998,12 +998,12 @@ public class TrelloClient implements TrackerClient {
         List<String> active = config.tracker().activeStates().stream()
                 .map(StateNames::normalize)
                 .toList();
-        int inProgressIndex =
+        var inProgressIndex =
                 active.indexOf(StateNames.normalize(config.tracker().inProgressState()));
         if (inProgressIndex <= 0) {
             return Optional.empty();
         }
-        Set<String> targetNames = Set.of(active.get(inProgressIndex - 1));
+        var targetNames = Set.of(active.get(inProgressIndex - 1));
         return context.lists().values().stream()
                 .filter(list -> !list.closed())
                 .filter(list -> targetNames.contains(StateNames.normalize(list.name())))
@@ -1020,7 +1020,7 @@ public class TrelloClient implements TrackerClient {
             return Optional.empty();
         }
         BoardList list = listId == null ? null : context.lists().get(listId);
-        boolean cardClosed = bool(payload.get("closed"));
+        var cardClosed = bool(payload.get("closed"));
         String state;
         String source;
         if (context.boardClosed()) {
@@ -1040,7 +1040,7 @@ public class TrelloClient implements TrackerClient {
             source = "unknown";
         }
 
-        List<String> labels = labels(payload);
+        var labels = labels(payload);
         Integer priority = labels.stream()
                 .map(label -> config.tracker().priorityLabels().get(StateNames.normalize(label)))
                 .filter(Objects::nonNull)
@@ -1220,7 +1220,7 @@ public class TrelloClient implements TrackerClient {
             String method, EffectiveConfig config, String path, Map<String, String> query, boolean retry) {
         URI uri = uri(config, path, query);
         int maxAttempts = retry ? Math.max(1, config.tracker().maxApiRetries() + 1) : 1;
-        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+        for (var attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
                 HttpRequest.Builder builder = HttpRequest.newBuilder(uri)
                         .timeout(config.tracker().requestTimeout())
@@ -1237,7 +1237,7 @@ public class TrelloClient implements TrackerClient {
                             case "DELETE" -> builder.DELETE().build();
                             default -> throw new IllegalArgumentException("Unsupported Trello method: " + method);
                         };
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
                 if (isSuccessfulStatus(response.statusCode())) {
                     return response.body();
                 }
@@ -1304,15 +1304,15 @@ public class TrelloClient implements TrackerClient {
     }
 
     private static Duration exponentialBackoffWithJitter(EffectiveConfig config, int attempt) {
-        long base = config.tracker().apiRetryBaseDelay().toMillis();
-        long jitter = ThreadLocalRandom.current().nextLong(Math.max(1L, base));
+        var base = config.tracker().apiRetryBaseDelay().toMillis();
+        var jitter = ThreadLocalRandom.current().nextLong(Math.max(1L, base));
         return Duration.ofMillis((base * (1L << Math.min(attempt - 1, 8))) + jitter);
     }
 
     private static Optional<Duration> parseRetryAfter(String value) {
         try {
             return Optional.of(Duration.ofSeconds(Long.parseLong(value))).filter(duration -> !duration.isNegative());
-        } catch (NumberFormatException e) {
+        } catch (NumberFormatException _) {
             return Optional.empty();
         }
     }
@@ -1348,7 +1348,7 @@ public class TrelloClient implements TrackerClient {
         }
         try {
             return Integer.parseInt(value.toString());
-        } catch (NumberFormatException e) {
+        } catch (NumberFormatException _) {
             return 0;
         }
     }
@@ -1421,9 +1421,9 @@ public class TrelloClient implements TrackerClient {
             return null;
         }
         try {
-            long epochSeconds = Long.parseLong(id.substring(0, 8), 16);
+            var epochSeconds = Long.parseLong(id.substring(0, 8), 16);
             return Instant.ofEpochSecond(epochSeconds);
-        } catch (NumberFormatException e) {
+        } catch (NumberFormatException _) {
             return null;
         }
     }
