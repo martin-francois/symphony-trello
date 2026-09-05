@@ -43,7 +43,6 @@ final class ReleaseWorkflowTest {
                         "bash \"$release_script\"",
                         "\"${{ steps.release-assets.outputs.asset_dir }}\"",
                         "Attest release assets",
-                        "uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1",
                         "subject-path: ${{ steps.release-assets.outputs.asset_dir }}/*",
                         "create-storage-record: false",
                         "Add release provenance asset",
@@ -58,6 +57,7 @@ final class ReleaseWorkflowTest {
                         "Publish release",
                         "gh release edit \"$RELEASE_TAG\" --repo \"$GITHUB_REPOSITORY\" --draft=false --latest")
                 .contains("if: ${{ github.event_name == 'push' }}")
+                .containsPattern("(?m)^\\s*uses: actions/attest@[0-9a-f]{40} # v[0-9]+\\.[0-9]+\\.[0-9]+$")
                 .doesNotContain(
                         "workflow_dispatch:",
                         "DISPATCH_VERSION",

@@ -767,7 +767,10 @@ test("write credentials are isolated from recipe execution", () => {
   assert.match(reportJob, /statuses: write/);
   assert.match(reportJob, /context: "OpenRewrite update validation"/);
   assert.doesNotMatch(reportJob, /(?:rewrite:run|spotless:apply|OPENREWRITE_AUTOMATION_)/);
-  assert.match(publishJob, /actions\/create-github-app-token@fee1f7d/);
+  assert.match(
+    publishJob,
+    /^ {8}uses: actions\/create-github-app-token@[0-9a-f]{40} # v[0-9]+$/m,
+  );
   assert.match(publishJob, /if: \$\{\{ steps\.publication\.outputs\.required == 'true' \}\}/g);
   assert.match(publishJob, /permission-contents: write/);
   assert.match(publishJob, /permission-pull-requests: write/);
