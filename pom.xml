@@ -35,11 +35,8 @@
     <picnic-refaster.namePattern>(CollectionRules[$]Collection(AddAllToCollectionBlock|Contains)|NullRules[$]RequireNonNullElseGet|PreconditionsRules[$]Check(Argument|State)WithMessage|PrimitiveRules[$]MathClampInt|StreamRules[$]StreamNoneMatch|StringBuilderRules[$]StringBuilderRepeat)</picnic-refaster.namePattern>
     <jacoco.version>0.8.14</jacoco.version>
     <mockito.version>5.23.0</mockito.version>
-    <picocli.version>4.7.7</picocli.version>
     <findsecbugs.version>1.14.0</findsecbugs.version>
-    <guava.version>33.6.0-jre</guava.version>
     <jazzer.version>0.30.0</jazzer.version>
-    <jspecify.version>1.0.0</jspecify.version>
     <rewrite-maven-plugin.version>6.44.0</rewrite-maven-plugin.version>
     <rewrite-maven.version>8.87.0</rewrite-maven.version>
     <rewrite-migrate-java.version>3.40.0</rewrite-migrate-java.version>
@@ -53,6 +50,13 @@
 
   <dependencyManagement>
     <dependencies>
+      <dependency>
+        <groupId>${quarkus.platform.group-id}</groupId>
+        <artifactId>${quarkus.platform.artifact-id}</artifactId>
+        <version>${quarkus.platform.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
       <!-- Keep the stable OpenTelemetry modules aligned while the Quarkus BOM trails the security fix. -->
       <dependency>
         <groupId>io.opentelemetry</groupId>
@@ -61,28 +65,21 @@
         <type>pom</type>
         <scope>import</scope>
       </dependency>
-      <dependency>
-        <groupId>${quarkus.platform.group-id}</groupId>
-        <artifactId>${quarkus.platform.artifact-id}</artifactId>
-        <version>${quarkus.platform.version}</version>
-        <type>pom</type>
-        <scope>import</scope>
-      </dependency>
     </dependencies>
   </dependencyManagement>
 
   <dependencies>
     <dependency>
-      <groupId>io.quarkus</groupId>
-      <artifactId>quarkus-rest-jackson</artifactId>
+      <groupId>com.fasterxml.jackson.dataformat</groupId>
+      <artifactId>jackson-dataformat-yaml</artifactId>
     </dependency>
     <dependency>
-      <groupId>io.quarkus</groupId>
-      <artifactId>quarkus-arc</artifactId>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
     </dependency>
     <dependency>
-      <groupId>io.quarkus</groupId>
-      <artifactId>quarkus-scheduler</artifactId>
+      <groupId>info.picocli</groupId>
+      <artifactId>picocli</artifactId>
     </dependency>
     <dependency>
       <groupId>io.pebbletemplates</groupId>
@@ -90,34 +87,37 @@
       <version>${pebble.version}</version>
     </dependency>
     <dependency>
-      <groupId>com.fasterxml.jackson.dataformat</groupId>
-      <artifactId>jackson-dataformat-yaml</artifactId>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-arc</artifactId>
     </dependency>
     <dependency>
-      <groupId>info.picocli</groupId>
-      <artifactId>picocli</artifactId>
-      <version>${picocli.version}</version>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-rest-jackson</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
-      <version>${guava.version}</version>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-scheduler</artifactId>
     </dependency>
     <dependency>
       <groupId>org.jspecify</groupId>
       <artifactId>jspecify</artifactId>
-      <version>${jspecify.version}</version>
     </dependency>
 
     <dependency>
-      <groupId>io.quarkus</groupId>
-      <artifactId>quarkus-junit</artifactId>
+      <groupId>com.code-intelligence</groupId>
+      <artifactId>jazzer-junit</artifactId>
+      <version>${jazzer.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>com.tngtech.archunit</groupId>
       <artifactId>archunit-junit5</artifactId>
       <version>${archunit.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-junit</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -146,12 +146,6 @@
       <groupId>org.mockito</groupId>
       <artifactId>mockito-junit-jupiter</artifactId>
       <version>${mockito.version}</version>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>com.code-intelligence</groupId>
-      <artifactId>jazzer-junit</artifactId>
-      <version>${jazzer.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -441,6 +435,7 @@
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-pmd-plugin</artifactId>
+            <version>3.28.0</version>
             <executions>
               <execution>
                 <id>jpinpoint-report</id>
@@ -481,11 +476,6 @@
             </configuration>
             <dependencies>
               <dependency>
-                <groupId>org.openrewrite</groupId>
-                <artifactId>rewrite-maven</artifactId>
-                <version>${rewrite-maven.version}</version>
-              </dependency>
-              <dependency>
                 <groupId>org.openrewrite.recipe</groupId>
                 <artifactId>rewrite-migrate-java</artifactId>
                 <version>${rewrite-migrate-java.version}</version>
@@ -499,6 +489,11 @@
                 <groupId>org.openrewrite.recipe</groupId>
                 <artifactId>rewrite-testing-frameworks</artifactId>
                 <version>${rewrite-testing-frameworks.version}</version>
+              </dependency>
+              <dependency>
+                <groupId>org.openrewrite</groupId>
+                <artifactId>rewrite-maven</artifactId>
+                <version>${rewrite-maven.version}</version>
               </dependency>
             </dependencies>
           </plugin>
