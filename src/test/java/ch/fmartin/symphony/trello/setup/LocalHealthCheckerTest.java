@@ -48,7 +48,7 @@ final class LocalHealthCheckerTest {
 
         // then
         assertThat(health.kind()).isEqualTo(BoardHealthKind.SAME_WORKFLOW);
-        assertThat(health.actualBoardId()).contains("full-board-id");
+        assertThat(health.actualBoardId()).hasValue("full-board-id");
         assertThat(health.workerPid()).isEmpty();
     }
 
@@ -69,7 +69,7 @@ final class LocalHealthCheckerTest {
 
         // then
         assertThat(health.kind()).isEqualTo(BoardHealthKind.SAME_WORKFLOW);
-        assertThat(health.workerPid()).contains(4242L);
+        assertThat(health.workerPid()).hasValue(4242L);
     }
 
     @Test

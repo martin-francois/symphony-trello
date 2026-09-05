@@ -228,11 +228,10 @@ final class TrelloHandoffToolHandlerTest {
                         .path("inputSchema")
                         .path("properties")
                         .path("status")
-                        .path("enum")
-                        .toString())
-                .isEqualTo("[\"checking\",\"resumed\"]");
-        assertThat(tools.get(3).path("inputSchema").path("required").toString())
-                .isEqualTo("[\"checklist_name\",\"item_name\",\"complete\"]");
+                        .path("enum"))
+                .hasToString("[\"checking\",\"resumed\"]");
+        assertThat(tools.get(3).path("inputSchema").path("required"))
+                .hasToString("[\"checklist_name\",\"item_name\",\"complete\"]");
     }
 
     @Test

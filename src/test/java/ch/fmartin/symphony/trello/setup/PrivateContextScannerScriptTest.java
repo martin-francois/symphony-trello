@@ -32,7 +32,7 @@ final class PrivateContextScannerScriptTest {
         ProcessResult result = runScanner("Found " + PRIVATE_TRELLO_URL + "\n", "--stdin");
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output())
                 .contains("trello-url-private-context")
                 .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");
@@ -48,7 +48,7 @@ final class PrivateContextScannerScriptTest {
                 runScannerWithEnvironment(dockerFallbackEnvironment(), "Found " + PRIVATE_TRELLO_URL + "\n", "--stdin");
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output())
                 .contains("trello-url-private-context")
                 .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");
@@ -83,7 +83,7 @@ final class PrivateContextScannerScriptTest {
         ProcessResult result = runScanner("", "--file", body.toString());
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output()).contains("trello-id-private-context").doesNotContain(PRIVATE_TRELLO_ID);
     }
 
@@ -149,7 +149,7 @@ final class PrivateContextScannerScriptTest {
         ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--git-range", "HEAD~1..HEAD");
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output())
                 .contains("git-range:HEAD~1..HEAD", "trello-url-private-context")
                 .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");
@@ -170,7 +170,7 @@ final class PrivateContextScannerScriptTest {
         ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--git-range", "HEAD~1..HEAD");
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output())
                 .contains("git-range:HEAD~1..HEAD", "git-patch:HEAD~1..HEAD", "trello-url-private-context")
                 .doesNotContain(PRIVATE_TRELLO_ID, PRIVATE_TRELLO_URL, "AbCd1234");
@@ -190,7 +190,7 @@ final class PrivateContextScannerScriptTest {
         ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--git-range", "HEAD~1..HEAD");
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output())
                 .contains("trello-url-private-context")
                 .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");
@@ -211,7 +211,7 @@ final class PrivateContextScannerScriptTest {
         ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--git-range", "HEAD~1..HEAD");
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output())
                 .contains("git-patch:HEAD~1..HEAD", "trello-url-private-context")
                 .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");
@@ -236,7 +236,7 @@ final class PrivateContextScannerScriptTest {
         ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--git-range", "HEAD~2..HEAD");
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output())
                 .contains("git-patch:HEAD~2..HEAD", "trello-url-private-context")
                 .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");
@@ -280,7 +280,7 @@ final class PrivateContextScannerScriptTest {
         ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--worktree");
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output())
                 .contains("trello-url-private-context")
                 .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");
@@ -300,7 +300,7 @@ final class PrivateContextScannerScriptTest {
         ProcessResult result = run(scannerEnvironment(), subdirectory, scanner().toString(), "--worktree");
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output())
                 .contains("trello-url-private-context")
                 .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");
@@ -346,7 +346,7 @@ final class PrivateContextScannerScriptTest {
         ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--worktree");
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output())
                 .contains("trello-url-private-context")
                 .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");
@@ -364,7 +364,7 @@ final class PrivateContextScannerScriptTest {
         ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--worktree");
 
         // then
-        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.exitCode()).isOne();
         assertThat(result.output())
                 .contains("trello-url-private-context")
                 .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");

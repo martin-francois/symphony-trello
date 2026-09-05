@@ -75,7 +75,9 @@ final class LocalWorkerManagerTest {
                         any(),
                         any(),
                         any());
-        assertThat(Files.readString(onlyPidFile(fixture.paths.stateHome()))).isEqualTo("42");
+        assertThat(onlyPidFile(fixture.paths.stateHome()))
+                .content(StandardCharsets.UTF_8)
+                .isEqualTo("42");
     }
 
     @Test
@@ -256,9 +258,9 @@ final class LocalWorkerManagerTest {
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
             assertThat(failure.code()).isEqualTo("setup_worker_missing_trello_credentials");
             assertThat(failure).hasMessage("Missing Trello credentials for worker start.");
-            assertThat(failure.dotenvPath()).contains(board.envPath());
-            assertThat(failure.trelloApiKeyEnvironmentName()).contains("TRELLO_API_KEY");
-            assertThat(failure.trelloApiTokenEnvironmentName()).contains("TRELLO_API_TOKEN");
+            assertThat(failure.dotenvPath()).hasValue(board.envPath());
+            assertThat(failure.trelloApiKeyEnvironmentName()).hasValue("TRELLO_API_KEY");
+            assertThat(failure.trelloApiTokenEnvironmentName()).hasValue("TRELLO_API_TOKEN");
         });
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
@@ -329,8 +331,8 @@ final class LocalWorkerManagerTest {
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
             assertThat(failure.code()).isEqualTo("setup_worker_missing_trello_credentials");
             assertThat(failure).hasMessage("Missing Trello credentials for worker start.");
-            assertThat(failure.trelloApiKeyEnvironmentName()).contains("CUSTOM_TRELLO_API_KEY");
-            assertThat(failure.trelloApiTokenEnvironmentName()).contains("CUSTOM_TRELLO_API_TOKEN");
+            assertThat(failure.trelloApiKeyEnvironmentName()).hasValue("CUSTOM_TRELLO_API_KEY");
+            assertThat(failure.trelloApiTokenEnvironmentName()).hasValue("CUSTOM_TRELLO_API_TOKEN");
         });
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
@@ -749,7 +751,7 @@ final class LocalWorkerManagerTest {
                     .as("the expected local error must fire instead of a misleading Trello auth failure")
                     .isEqualTo("setup_credentials_environment_reference");
             assertThat(failure).hasMessageContaining("credential file values are used literally");
-            assertThat(failure.dotenvPath()).contains(board.envPath());
+            assertThat(failure.dotenvPath()).hasValue(board.envPath());
         });
         verify(fixture.credentialPreflight, never()).verify(any(), any(), any());
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
@@ -1493,7 +1495,9 @@ final class LocalWorkerManagerTest {
 
         // then
         result.assertSuccess().stdoutContains("Started Symphony for Trello: \"Queue\"");
-        assertThat(Files.readString(onlyPidFile(fixture.paths.stateHome()))).isEqualTo("99");
+        assertThat(onlyPidFile(fixture.paths.stateHome()))
+                .content(StandardCharsets.UTF_8)
+                .isEqualTo("99");
         verify(fixture.platform).stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5));
         verify(fixture.platform, times(1)).start(any(), eq(fixture.paths.appHome()), any(), any(), any());
     }
@@ -1536,7 +1540,9 @@ final class LocalWorkerManagerTest {
 
         // then
         result.assertSuccess().stdoutContains("Started Symphony for Trello: \"Queue\"");
-        assertThat(Files.readString(onlyPidFile(fixture.paths.stateHome()))).isEqualTo("99");
+        assertThat(onlyPidFile(fixture.paths.stateHome()))
+                .content(StandardCharsets.UTF_8)
+                .isEqualTo("99");
         verify(fixture.platform).stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5));
         verify(fixture.platform).start(any(), eq(fixture.paths.appHome()), any(), any(), any());
     }
@@ -1587,7 +1593,8 @@ final class LocalWorkerManagerTest {
                 .stdoutContains(
                         "already running", "Restored missing managed worker tracking pid=" + scenario.reportedPid());
         assertNoLifecyclePrivateOutput(result, scenario.fixture(), scenario.board());
-        assertThat(Files.readString(onlyPidFile(scenario.fixture().paths.stateHome())))
+        assertThat(onlyPidFile(scenario.fixture().paths.stateHome()))
+                .content(StandardCharsets.UTF_8)
                 .isEqualTo(Long.toString(scenario.reportedPid()));
         verifyPostStopStoppedWithoutLaunch(scenario.fixture());
     }
@@ -1817,7 +1824,7 @@ final class LocalWorkerManagerTest {
         // then
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
             assertThat(failure.code()).isEqualTo("trello_auth_failed");
-            assertThat(failure.dotenvPath()).contains(fixture.paths.defaultEnvPath());
+            assertThat(failure.dotenvPath()).hasValue(fixture.paths.defaultEnvPath());
             assertThat(failure.getMessage()).doesNotContain(".log", ".err");
         });
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
@@ -1842,7 +1849,7 @@ final class LocalWorkerManagerTest {
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
             assertThat(failure.code()).isEqualTo("trello_auth_failed");
             assertThat(failure.getMessage()).contains("Trello rejected the resolved API credentials");
-            assertThat(failure.dotenvPath()).contains(fixture.paths.defaultEnvPath());
+            assertThat(failure.dotenvPath()).hasValue(fixture.paths.defaultEnvPath());
             assertThat(failure.getMessage()).doesNotContain(".log", ".err");
         });
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
@@ -1909,10 +1916,10 @@ final class LocalWorkerManagerTest {
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
             assertThat(failure.code()).isEqualTo("trello_auth_failed");
             assertThat(failure.trelloApiKeyCredentialSource())
-                    .contains(TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT);
+                    .hasValue(TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT);
             assertThat(failure.trelloApiTokenCredentialSource())
-                    .contains(TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT);
-            assertThat(failure.dotenvPath()).contains(board.envPath());
+                    .hasValue(TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT);
+            assertThat(failure.dotenvPath()).hasValue(board.envPath());
         });
     }
 
@@ -3934,7 +3941,7 @@ final class LocalWorkerManagerTest {
             }
             assertThat(Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)).isEqualTo(directory);
             if (!directory) {
-                assertThat(Files.readString(path, StandardCharsets.UTF_8)).isEqualTo(content);
+                assertThat(path).content(StandardCharsets.UTF_8).isEqualTo(content);
             }
         }
     }
@@ -4359,7 +4366,9 @@ final class LocalWorkerManagerTest {
             LocalWorkerManagerTestFixture fixture, ConnectedBoard board, String originalWorkflow, String expectedPid)
             throws Exception {
         assertThat(board.workflowPath()).content(StandardCharsets.UTF_8).isEqualTo(originalWorkflow);
-        assertThat(Files.readString(onlyPidFile(fixture.paths.stateHome()))).isEqualTo(expectedPid);
+        assertThat(onlyPidFile(fixture.paths.stateHome()))
+                .content(StandardCharsets.UTF_8)
+                .isEqualTo(expectedPid);
         verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }

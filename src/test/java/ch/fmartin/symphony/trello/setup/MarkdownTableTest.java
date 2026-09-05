@@ -20,14 +20,14 @@ final class MarkdownTableTest {
         table.appendTo(body);
 
         // then
-        assertThat(body.toString())
-                .isEqualTo(
+        assertThat(body)
+                .hasToString(
                         """
-                        | name | status |
-                        | --- | --- |
-                        | git | available |
-                        | codex | missing |
-                        """);
+                | name | status |
+                | --- | --- |
+                | git | available |
+                | codex | missing |
+                """);
     }
 
     @Test

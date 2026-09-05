@@ -105,7 +105,9 @@ final class ReleasePackagingScriptTest {
         // then
         assertThat(second.exitCode()).as(second.output()).isZero();
         assertExpectedAssets(destination);
-        assertThat(Files.readString(destination.resolve("install.sh"))).contains("1.2.3");
+        assertThat(destination.resolve("install.sh"))
+                .content(StandardCharsets.UTF_8)
+                .contains("1.2.3");
     }
 
     @Test
@@ -541,7 +543,8 @@ final class ReleasePackagingScriptTest {
                     .containsExactlyElementsOf(expectedAssets(version));
         }
         assertThat(destination.resolve(".symphony-trello-release-assets")).exists();
-        assertThat(Files.readString(destination.resolve("checksums.txt")))
+        assertThat(destination.resolve("checksums.txt"))
+                .content(StandardCharsets.UTF_8)
                 .contains(
                         "  install.sh",
                         "  install.ps1",
@@ -550,10 +553,12 @@ final class ReleasePackagingScriptTest {
                         "  symphony-trello-" + version + ".tar.gz",
                         "  symphony-trello-" + version + ".zip")
                 .doesNotContain("checksums.txt", ".symphony-trello-release-assets", "\r");
-        assertThat(Files.readString(destination.resolve("install.sh")))
+        assertThat(destination.resolve("install.sh"))
+                .content(StandardCharsets.UTF_8)
                 .contains("DEFAULT_VERSION=\"" + version + "\"")
                 .doesNotContain("DEFAULT_VERSION=\"0.0.0\"", "v" + version);
-        assertThat(Files.readString(destination.resolve("install.ps1")))
+        assertThat(destination.resolve("install.ps1"))
+                .content(StandardCharsets.UTF_8)
                 .contains(
                         "else { \"" + version + "\" }",
                         "else { \"v" + version + "\" }",

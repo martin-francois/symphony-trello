@@ -880,7 +880,8 @@ final class TrelloBoardSetupMainTest {
                 "--output",
                 tempDir.resolve("invalid-port-diagnostics.md").toString());
         invalidPortResult.assertSuccess();
-        assertThat(Files.readString(tempDir.resolve("invalid-port-diagnostics.md"), StandardCharsets.UTF_8))
+        assertThat(tempDir.resolve("invalid-port-diagnostics.md"))
+                .content(StandardCharsets.UTF_8)
                 .contains("invalid server.port")
                 .doesNotContain("IllegalArgumentException", "private-board-id");
     }
@@ -2829,7 +2830,7 @@ final class TrelloBoardSetupMainTest {
         assertThat(createdBoardName.get()).isNull();
         assertThat(workflow).doesNotExist();
         assertThat(env).doesNotExist();
-        assertThat(Files.readString(manifest, StandardCharsets.UTF_8)).isEqualTo(manifestContent);
+        assertThat(manifest).content(StandardCharsets.UTF_8).isEqualTo(manifestContent);
     }
 
     @Test
@@ -4650,7 +4651,7 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
-    void usesConfiguredDefaultWorkflowDirectoryWithoutDisablingBoardNameFallback() throws IOException {
+    void usesConfiguredDefaultWorkflowDirectoryWithoutDisablingBoardNameFallback() throws Exception {
         // given
         Path configDirectory = tempDir.resolve("config");
         Files.createDirectories(configDirectory);
@@ -4813,7 +4814,7 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
-    void explicitDefaultWorkflowPathDoesNotUseBoardNameFallback() throws IOException {
+    void explicitDefaultWorkflowPathDoesNotUseBoardNameFallback() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Files.writeString(workflow, "existing workflow", StandardCharsets.UTF_8);
@@ -5562,7 +5563,7 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
-    void importBoardRejectsReasoningEffortUnsupportedByExistingModelBeforeTrelloRequest() throws IOException {
+    void importBoardRejectsReasoningEffortUnsupportedByExistingModelBeforeTrelloRequest() throws Exception {
         // given
         Path workflow = tempDir.resolve("unsupported-existing-model-reasoning.WORKFLOW.md");
         Files.writeString(
@@ -5622,7 +5623,7 @@ final class TrelloBoardSetupMainTest {
 
     @Test
     void importBoardWritesFallbackReasoningForExplicitModelWhenUnsupportedDiscoveryPreservesExistingOmission()
-            throws IOException {
+            throws Exception {
         // given
         Path workflow = tempDir.resolve("explicit-import-unsupported-existing-omitted.WORKFLOW.md");
         Files.writeString(
@@ -5668,7 +5669,7 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
-    void importBoardPreservesExistingReasoningForExplicitModelOverride() throws IOException {
+    void importBoardPreservesExistingReasoningForExplicitModelOverride() throws Exception {
         // given
         Path workflow = tempDir.resolve("explicit-import-preserve-existing-reasoning.WORKFLOW.md");
         Files.writeString(
@@ -5720,7 +5721,7 @@ final class TrelloBoardSetupMainTest {
 
     @Test
     void importBoardPreservesReasoningOmissionForUnknownExplicitModelWhenDiscoverySupportsFirstClassFields()
-            throws IOException {
+            throws Exception {
         // given
         Path workflow = tempDir.resolve("explicit-import-supported-existing-omitted.WORKFLOW.md");
         Files.writeString(
@@ -6879,11 +6880,10 @@ final class TrelloBoardSetupMainTest {
                         "Logs for ",
                         "stdout should not be printed",
                         "stderr should not be printed");
-        assertThat(Files.readString(files.pidFile(), StandardCharsets.UTF_8)).isEqualTo(pidBefore);
-        assertThat(Files.readString(files.stdoutLog(), StandardCharsets.UTF_8)).isEqualTo(stdoutBefore);
-        assertThat(Files.readString(files.stderrLog(), StandardCharsets.UTF_8)).isEqualTo(stderrBefore);
-        assertThat(Files.readString(files.processLockFile(), StandardCharsets.UTF_8))
-                .isEqualTo(lockBefore);
+        assertThat(files.pidFile()).content(StandardCharsets.UTF_8).isEqualTo(pidBefore);
+        assertThat(files.stdoutLog()).content(StandardCharsets.UTF_8).isEqualTo(stdoutBefore);
+        assertThat(files.stderrLog()).content(StandardCharsets.UTF_8).isEqualTo(stderrBefore);
+        assertThat(files.processLockFile()).content(StandardCharsets.UTF_8).isEqualTo(lockBefore);
     }
 
     @Test

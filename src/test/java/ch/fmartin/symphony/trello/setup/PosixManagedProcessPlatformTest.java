@@ -21,7 +21,7 @@ final class PosixManagedProcessPlatformTest {
         // then
         if (Files.isExecutable(USR_BIN_SETSID)) {
             assertThat(command).hasSize(5);
-            assertThat(command.getFirst()).endsWith("setsid");
+            assertThat(command).first().endsWith("setsid");
             assertThat(command.get(1)).endsWith("nohup");
         } else {
             assertThat(command).hasSize(4).first().asString().endsWith("nohup");

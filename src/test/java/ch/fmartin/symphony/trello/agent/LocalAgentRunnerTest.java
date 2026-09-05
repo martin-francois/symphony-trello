@@ -20,7 +20,7 @@ import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workspace.CodexSkillInstaller;
 import ch.fmartin.symphony.trello.workspace.HookRunner;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
-import java.nio.file.Files;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -77,8 +77,12 @@ final class LocalAgentRunnerTest {
                 .contains("No workflow repository default is configured");
         assertThat(workspace.getValue())
                 .isEqualTo(expectedWorkspace.toAbsolutePath().normalize());
-        assertThat(Files.readString(expectedWorkspace.resolve("before.txt"))).contains("before");
-        assertThat(Files.readString(expectedWorkspace.resolve("after.txt"))).contains("after");
+        assertThat(expectedWorkspace.resolve("before.txt"))
+                .content(StandardCharsets.UTF_8)
+                .contains("before");
+        assertThat(expectedWorkspace.resolve("after.txt"))
+                .content(StandardCharsets.UTF_8)
+                .contains("after");
         assertThat(expectedWorkspace.resolve(CodexSkillInstaller.installedSkillPath("commit")))
                 .content()
                 .contains("configure it from the authenticated GitHub login");

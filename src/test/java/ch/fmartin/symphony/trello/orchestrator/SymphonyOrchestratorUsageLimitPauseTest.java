@@ -87,7 +87,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                 .isEqualTo(new RuntimeSnapshot.DispatchPause("CODEX_USAGE_LIMIT", now, now.plusSeconds(60)));
         assertThat(paused.retrying()).singleElement().satisfies(retry -> {
             assertThat(retry.cardIdentifier()).isEqualTo("TRELLO-first");
-            assertThat(retry.attempt()).isEqualTo(1);
+            assertThat(retry.attempt()).isOne();
             assertThat(retry.dueAt()).isEqualTo(now.plusSeconds(60));
         });
         assertThat(tracker.releasedCards).containsExactly("TRELLO-first");
@@ -167,7 +167,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                 .filteredOn(retry -> retry.cardIdentifier().equals("TRELLO-generic"))
                 .singleElement()
                 .satisfies(retry -> {
-                    assertThat(retry.attempt()).isEqualTo(1);
+                    assertThat(retry.attempt()).isOne();
                     assertThat(retry.dueAt()).isEqualTo(now.plusSeconds(60));
                 });
     }
@@ -239,7 +239,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                 .isEqualTo(new RuntimeSnapshot.DispatchPause("CODEX_USAGE_LIMIT", now, now.plusSeconds(10)));
         assertThat(afterEarlyDeadline.retrying()).singleElement().satisfies(retry -> {
             assertThat(retry.cardIdentifier()).isEqualTo("TRELLO-generic");
-            assertThat(retry.attempt()).isEqualTo(1);
+            assertThat(retry.attempt()).isOne();
             assertThat(retry.dueAt()).isEqualTo(now.plusSeconds(10));
         });
     }
@@ -1249,7 +1249,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         // then
         assertThat(afterStaleCallback.retrying()).singleElement().satisfies(retry -> {
             assertThat(retry.cardIdentifier()).isEqualTo("TRELLO-retry");
-            assertThat(retry.attempt()).isEqualTo(1);
+            assertThat(retry.attempt()).isOne();
             assertThat(retry.dueAt()).isEqualTo(now.plusSeconds(10));
         });
         assertThat(retryCardRuns).hasValue(1);
@@ -1504,7 +1504,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         assertThat(requests)
                 .extracting(request -> request.config().codex().command())
                 .containsExactly("command-a", "command-b");
-        assertThat(requests.get(1).attempt()).isEqualTo(1);
+        assertThat(requests.get(1).attempt()).isOne();
         assertThat(cleanupCommands).contains("command-b").doesNotContain("command-a");
     }
 
@@ -1942,7 +1942,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
 
         // then
         int boardBSet = workpadEvents.indexOf("command-b/board-2/token-b:set");
-        assertThat(boardBSet).isGreaterThanOrEqualTo(0);
+        assertThat(boardBSet).isNotNegative();
         assertThat(workpadEvents.subList(boardBSet, workpadEvents.size()))
                 .contains("command-a/board-1/token-a:clear", "command-b/board-2/token-b:clear");
         assertThat(workpadEvents).doesNotContain("command-a/board-2/token-b:clear");
@@ -1994,7 +1994,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         assertThat(tracker.releases).singleElement().satisfies(release -> {
             assertThat(release.endpoint()).isEqualTo(endpoint);
             assertThat(release.boardId()).isEqualTo("board-a");
-            assertThat(release.workspaceRoot().getFileName().toString()).isEqualTo("work-a");
+            assertThat(release.workspaceRoot()).hasFileName("work-a");
             assertThat(release.cardId()).isEqualTo("shared-card");
         });
         assertThat(afterLateResult.retrying()).isEmpty();
@@ -2075,7 +2075,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         assertThat(afterLateUsage.dispatchPause().until()).isEqualTo(now.plusSeconds(120));
         assertThat(afterLateUsage.retrying()).isEmpty();
         assertThat(beforeDeadline.dispatchPause()).isNotNull();
-        assertThat(requestsBeforeDeadline).isEqualTo(1);
+        assertThat(requestsBeforeDeadline).isOne();
         assertThat(boardBFetchesAfterPausedTick).isEqualTo(boardBFetchesBeforePausedTick);
         assertThat(requests).hasSize(2);
         assertThat(requests.get(1).config().tracker().resolvedBoardId()).isEqualTo("board-b");
@@ -2087,7 +2087,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         assertThat(tracker.releases).singleElement().satisfies(release -> {
             assertThat(release.endpoint()).isEqualTo(endpoint);
             assertThat(release.boardId()).isEqualTo("board-a");
-            assertThat(release.workspaceRoot().getFileName().toString()).isEqualTo("work-a");
+            assertThat(release.workspaceRoot()).hasFileName("work-a");
             assertThat(release.cardId()).isEqualTo("card-a");
         });
     }

@@ -696,7 +696,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void shippedDebugSkillDoesNotAskAgentsToCopyExactFilesystemBlockerPaths() throws IOException {
+    void shippedDebugSkillDoesNotAskAgentsToCopyExactFilesystemBlockerPaths() throws Exception {
         // given
         Path skill = Path.of(".codex/skills/debug/SKILL.md");
 
@@ -757,7 +757,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void generatedWorkflowCoversRepositoryNeedDecisionTableBeforeSourceBlocking() throws IOException {
+    void generatedWorkflowCoversRepositoryNeedDecisionTableBeforeSourceBlocking() throws Exception {
         // given
         Path workflow = tempDir.resolve("repository-need-policy.md");
 
@@ -1487,11 +1487,11 @@ final class TrelloBoardSetupTest {
         // then
         assertThat(resolutions.get()).isOne();
         assertThat(defaults.defaults()).isEqualTo(TrelloBoardSetup.CodexModelDefaults.partial("gpt-existing", null));
-        assertThat(defaults.reasoningEffortForModel("gpt-6")).contains("high");
+        assertThat(defaults.reasoningEffortForModel("gpt-6")).hasValue("high");
     }
 
     @Test
-    void resolvesDefaultCodexCommandWhenWorkflowOmitsCommand() throws IOException {
+    void resolvesDefaultCodexCommandWhenWorkflowOmitsCommand() throws Exception {
         // given
         Path workflow = tempDir.resolve("workflow-without-codex-command.md");
         Files.writeString(
@@ -1943,7 +1943,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void importRefusesToOverwriteExistingWorkflowUnlessForced() throws IOException {
+    void importRefusesToOverwriteExistingWorkflowUnlessForced() throws Exception {
         // given
         boardListsResponse.set(
                 """
@@ -2015,7 +2015,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void newBoardRejectsRequestedServerPortAlreadyListeningBeforeTrelloRequest() throws IOException {
+    void newBoardRejectsRequestedServerPortAlreadyListeningBeforeTrelloRequest() throws Exception {
         // given
         // This test binds its own listener, so it uses the real port probe on a port it owns.
         TrelloBoardSetup probingSetup = new TrelloBoardSetup(new ObjectMapper());
@@ -2055,7 +2055,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void importBoardRejectsRequestedServerPortAlreadyListeningBeforeTrelloRequest() throws IOException {
+    void importBoardRejectsRequestedServerPortAlreadyListeningBeforeTrelloRequest() throws Exception {
         // given
         // This test binds its own listener, so it uses the real port probe on a port it owns.
         TrelloBoardSetup probingSetup = new TrelloBoardSetup(new ObjectMapper());
@@ -2100,7 +2100,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void newBoardReservesNormalizedWholeFloatSiblingWorkflowPort() throws IOException {
+    void newBoardReservesNormalizedWholeFloatSiblingWorkflowPort() throws Exception {
         // given
         // A stale sibling workflow with port 18080.0 reserves exactly 18080; it must never
         // reserve a truncated or shifted value.
@@ -2137,7 +2137,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void newBoardRejectsFractionalSiblingWorkflowPortInsteadOfTruncatingIt() throws IOException {
+    void newBoardRejectsFractionalSiblingWorkflowPortInsteadOfTruncatingIt() throws Exception {
         // given
         // The sibling scan already fails strictly for non-numeric ports, so a fractional port is
         // rejected the same way instead of silently reserving the truncated value.
@@ -2178,7 +2178,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void newBoardSkipsUnresolvedEnvironmentBackedSiblingWorkflowPort() throws IOException {
+    void newBoardSkipsUnresolvedEnvironmentBackedSiblingWorkflowPort() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Path siblingWorkflow = tempDir.resolve("WORKFLOW.env-port.md");
@@ -2216,7 +2216,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void newBoardSkipsPortsTheAvailabilityProbeReportsBusy() throws IOException {
+    void newBoardSkipsPortsTheAvailabilityProbeReportsBusy() throws Exception {
         // given
         // Deterministically simulates live workers occupying the first ports of the managed
         // range, which previously made these tests depend on real host port occupancy.
@@ -2242,7 +2242,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void importExistingBoardRoundTripsControlCharacterListNames() throws IOException {
+    void importExistingBoardRoundTripsControlCharacterListNames() throws Exception {
         // given
         // Trello list names can contain control characters; the request bypasses the CLI option
         // validation exactly like names fetched from Trello do, so the generated workflow must
@@ -2289,7 +2289,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void importExistingBoardEscapesControlCharacterListNamesInGeneratedPromptProse() throws IOException {
+    void importExistingBoardEscapesControlCharacterListNamesInGeneratedPromptProse() throws Exception {
         // given
         // Trello list names can contain quotes and control characters; the generated workflow
         // prompt prose must render them display-escaped on one physical line, while the YAML
@@ -2385,7 +2385,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void newBoardUsesSluggedWorkflowPathWhenDefaultWorkflowAlreadyExists() throws IOException {
+    void newBoardUsesSluggedWorkflowPathWhenDefaultWorkflowAlreadyExists() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Files.writeString(workflow, "keep me", StandardCharsets.UTF_8);
@@ -2410,7 +2410,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void newBoardBoundsGeneratedWorkflowPathForLongBoardNames() throws IOException {
+    void newBoardBoundsGeneratedWorkflowPathForLongBoardNames() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Files.writeString(workflow, "keep me", StandardCharsets.UTF_8);
@@ -2441,7 +2441,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void newBoardBoundsGeneratedWorkflowPathWhenLongBoardNameFallbackNeedsNumericSuffix() throws IOException {
+    void newBoardBoundsGeneratedWorkflowPathWhenLongBoardNameFallbackNeedsNumericSuffix() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Files.writeString(workflow, "keep me", StandardCharsets.UTF_8);
@@ -2474,7 +2474,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void newBoardUsesNextServerPortWhenExistingWorkflowUsesDefaultPort() throws IOException {
+    void newBoardUsesNextServerPortWhenExistingWorkflowUsesDefaultPort() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         int existingPort = ConfigDefaults.DEFAULT_SERVER_PORT;
@@ -2570,7 +2570,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void newBoardRejectsRequestedServerPortReservedByExistingWorkflow() throws IOException {
+    void newBoardRejectsRequestedServerPortReservedByExistingWorkflow() throws Exception {
         // given
         Path existingWorkflow = tempDir.resolve("project-a.WORKFLOW.md");
         Files.writeString(
@@ -2610,7 +2610,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void newBoardIgnoresEphemeralServerPortReservedByExistingWorkflow() throws IOException {
+    void newBoardIgnoresEphemeralServerPortReservedByExistingWorkflow() throws Exception {
         // given
         Path existingWorkflow = tempDir.resolve("ephemeral.WORKFLOW.md");
         Files.writeString(
@@ -2649,7 +2649,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void forceNewBoardPreservesExistingServerPortWhenItDoesNotConflict() throws IOException {
+    void forceNewBoardPreservesExistingServerPortWhenItDoesNotConflict() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         int expectedPort = firstAvailableManagedPort();
@@ -2686,7 +2686,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void forceNewBoardDoesNotPreserveExistingServerPortWhenItIsAlreadyListening() throws IOException {
+    void forceNewBoardDoesNotPreserveExistingServerPortWhenItIsAlreadyListening() throws Exception {
         // given
         // This test binds its own listener, so it uses the real port probe on a port it owns.
         TrelloBoardSetup probingSetup = new TrelloBoardSetup(new ObjectMapper());
@@ -2734,7 +2734,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void forceNewBoardDoesNotPreserveExistingServerPortWhenSiblingAlreadyUsesIt() throws IOException {
+    void forceNewBoardDoesNotPreserveExistingServerPortWhenSiblingAlreadyUsesIt() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         int siblingPort = firstAvailableManagedPort();
@@ -2787,7 +2787,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void forceNewBoardCanReplaceMalformedExistingWorkflow() throws IOException {
+    void forceNewBoardCanReplaceMalformedExistingWorkflow() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         int expectedPort = ConfigDefaults.DEFAULT_SERVER_PORT;
@@ -2821,7 +2821,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void newBoardAddsNumericSuffixWhenSluggedWorkflowPathAlreadyExists() throws IOException {
+    void newBoardAddsNumericSuffixWhenSluggedWorkflowPathAlreadyExists() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Path firstGeneratedWorkflow = tempDir.resolve("WORKFLOW.my-project.md");
@@ -2901,7 +2901,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void newBoardRefusesToOverwriteExplicitWorkflowPathUnlessForced() throws IOException {
+    void newBoardRefusesToOverwriteExplicitWorkflowPathUnlessForced() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Files.writeString(workflow, "keep me", StandardCharsets.UTF_8);
@@ -2947,7 +2947,7 @@ final class TrelloBoardSetupTest {
 
     private static String repositoryPolicySection(String workflow) {
         int start = workflow.indexOf(REPOSITORY_POLICY_HEADING);
-        assertThat(start).as("repository policy heading offset").isGreaterThanOrEqualTo(0);
+        assertThat(start).as("repository policy heading offset").isNotNegative();
         int precedence = workflow.indexOf(REPOSITORY_SOURCE_PRECEDENCE_HEADING, start);
         assertThat(precedence).as("repository source precedence heading offset").isGreaterThan(start);
         int end = workflow.indexOf("\n## ", precedence + REPOSITORY_SOURCE_PRECEDENCE_HEADING.length());

@@ -415,7 +415,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
-    void dryRunRejectsReasoningEffortOutsideImplicitForcedWorkflowModelChoices() throws IOException {
+    void dryRunRejectsReasoningEffortOutsideImplicitForcedWorkflowModelChoices() throws Exception {
         // given
         LocalSetup catalogBackedSetup = setupWithSolReasoningCatalog();
         Path configDir = tempDir.resolve("implicit-dry-run-workflow");
@@ -462,7 +462,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
-    void forcedBoardSelectorDryRunDefersValidationWhenGeneratedWorkflowModelIsUnknown() throws IOException {
+    void forcedBoardSelectorDryRunDefersValidationWhenGeneratedWorkflowModelIsUnknown() throws Exception {
         // given
         LocalSetup catalogBackedSetup = setupWithSolReasoningCatalog();
         Path configDir = tempDir.resolve("forced-board-selector-dry-run");
@@ -4185,7 +4185,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(trello.createdLists()).isEmpty();
         assertThat(workflow).doesNotExist();
         assertThat(env).doesNotExist();
-        assertThat(Files.readString(manifest, StandardCharsets.UTF_8)).isEqualTo(originalManifest);
+        assertThat(manifest).content(StandardCharsets.UTF_8).isEqualTo(originalManifest);
     }
 
     @Test
@@ -4235,7 +4235,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(trello.createdLists()).isEmpty();
         assertThat(workflow).doesNotExist();
         assertThat(env).doesNotExist();
-        assertThat(Files.readString(manifest, StandardCharsets.UTF_8)).isEqualTo(originalManifest);
+        assertThat(manifest).content(StandardCharsets.UTF_8).isEqualTo(originalManifest);
     }
 
     @Test
@@ -5535,8 +5535,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .stdoutContains("No port repair needed.", "already configured for an available port")
                 .stdoutDoesNotContain("WOULD   update");
         repairResult.assertSuccess().stdoutContains("No port repair needed.").stdoutDoesNotContain("Updated ");
-        assertThat(Files.readString(workflow, StandardCharsets.UTF_8)).isEqualTo(originalWorkflow);
-        assertThat(Files.readString(manifest, StandardCharsets.UTF_8)).isEqualTo(originalManifest);
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(originalWorkflow);
+        assertThat(manifest).content(StandardCharsets.UTF_8).isEqualTo(originalManifest);
         assertThat(commands.commandEvents).isEmpty();
         assertThat(commands.stoppedWorkflows).isEmpty();
         assertThat(commands.startedEnvFiles).isEmpty();
@@ -5907,8 +5907,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "WOULD   update \"Stale Repair Queue\" to use http://127.0.0.1:"
                                 + ConfigDefaults.DEFAULT_SERVER_PORT,
                         "WOULD   restart Symphony");
-        assertThat(Files.readString(workflow, StandardCharsets.UTF_8)).isEqualTo(originalWorkflow);
-        assertThat(Files.readString(manifest, StandardCharsets.UTF_8)).isEqualTo(originalManifest);
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(originalWorkflow);
+        assertThat(manifest).content(StandardCharsets.UTF_8).isEqualTo(originalManifest);
     }
 
     @Test
@@ -5934,7 +5934,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "OK      Updated connected-board manifest for \"Stale Actual Repair Queue\" to use http://127.0.0.1:"
                                 + workflowPort)
                 .stdoutDoesNotContain("Restart:", "Updated \"Stale Actual Repair Queue\" to use");
-        assertThat(Files.readString(workflow, StandardCharsets.UTF_8)).isEqualTo(originalWorkflow);
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(originalWorkflow);
         assertThatManifest(manifest).hasBoardWithPort("Stale Actual Repair Queue", workflowPort);
         assertThat(commands.commandEvents).isEmpty();
     }
@@ -6174,8 +6174,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "setup_repair_port_http_override",
                         "SYMPHONY_HTTP_PORT in " + env,
                         "Remove or update SYMPHONY_HTTP_PORT/QUARKUS_HTTP_PORT");
-        assertThat(Files.readString(workflow, StandardCharsets.UTF_8)).isEqualTo(originalWorkflow);
-        assertThat(Files.readString(manifest, StandardCharsets.UTF_8)).isEqualTo(originalManifest);
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(originalWorkflow);
+        assertThat(manifest).content(StandardCharsets.UTF_8).isEqualTo(originalManifest);
         assertThat(commands.commandEvents).isEmpty();
         assertThat(commands.stoppedWorkflows).isEmpty();
         assertThat(commands.startedEnvFiles).isEmpty();
@@ -6228,8 +6228,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "setup_repair_port_http_override",
                         "QUARKUS_HTTP_PORT environment variable",
                         "Remove or update SYMPHONY_HTTP_PORT/QUARKUS_HTTP_PORT");
-        assertThat(Files.readString(workflow, StandardCharsets.UTF_8)).isEqualTo(originalWorkflow);
-        assertThat(Files.readString(manifest, StandardCharsets.UTF_8)).isEqualTo(originalManifest);
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(originalWorkflow);
+        assertThat(manifest).content(StandardCharsets.UTF_8).isEqualTo(originalManifest);
         assertThat(commands.commandEvents).isEmpty();
         assertThat(commands.stoppedWorkflows).isEmpty();
         assertThat(commands.startedEnvFiles).isEmpty();
@@ -7325,7 +7325,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .extractingByKey("codex")
                 .asString()
                 .contains(allowedPath.toString());
-        assertThat(Files.readString(workflow, StandardCharsets.UTF_8)).doesNotStartWith("---\n---\n");
+        assertThat(workflow).content(StandardCharsets.UTF_8).doesNotStartWith("---\n---\n");
     }
 
     @Test

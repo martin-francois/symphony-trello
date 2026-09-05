@@ -33,8 +33,8 @@ final class LocalEnvironmentTest {
         var apiToken = LocalEnvironment.get("TRELLO_API_TOKEN", dotenv, Map.of());
 
         // then
-        assertThat(apiKey).contains("key-from-dotenv");
-        assertThat(apiToken).contains("token-from-dotenv");
+        assertThat(apiKey).hasValue("key-from-dotenv");
+        assertThat(apiToken).hasValue("token-from-dotenv");
     }
 
     @Test
@@ -47,7 +47,7 @@ final class LocalEnvironmentTest {
         var apiKey = LocalEnvironment.get("TRELLO_API_KEY", dotenv, Map.of());
 
         // then
-        assertThat(apiKey).contains("key-behind-bom");
+        assertThat(apiKey).hasValue("key-behind-bom");
     }
 
     @Test
@@ -63,7 +63,7 @@ final class LocalEnvironmentTest {
         var apiKey = LocalEnvironment.get("TRELLO_API_KEY", dotenv, Map.of());
 
         // then
-        assertThat(apiKey).contains("quoted-key");
+        assertThat(apiKey).hasValue("quoted-key");
     }
 
     @Test
@@ -77,7 +77,7 @@ final class LocalEnvironmentTest {
         var apiKey = LocalEnvironment.get("TRELLO_API_KEY", dotenv, Map.of());
 
         // then
-        assertThat(apiKey).contains("exported-key");
+        assertThat(apiKey).hasValue("exported-key");
     }
 
     @Test
@@ -95,7 +95,7 @@ final class LocalEnvironmentTest {
 
         // then
         assertThat(apiKey).isEmpty();
-        assertThat(apiToken).contains("token");
+        assertThat(apiToken).hasValue("token");
     }
 
     @Test
@@ -108,7 +108,7 @@ final class LocalEnvironmentTest {
         var apiKey = LocalEnvironment.get("TRELLO_API_KEY", dotenv, Map.of("TRELLO_API_KEY", "key-from-env"));
 
         // then
-        assertThat(apiKey).contains("key-from-env");
+        assertThat(apiKey).hasValue("key-from-env");
     }
 
     @Test
@@ -122,7 +122,7 @@ final class LocalEnvironmentTest {
                 dotenv, Map.of("QUARKUS_HTTP_PORT", "19080"), "SYMPHONY_HTTP_PORT", "QUARKUS_HTTP_PORT");
 
         // then
-        assertThat(port).contains("19080");
+        assertThat(port).hasValue("19080");
     }
 
     @Test
@@ -139,7 +139,7 @@ final class LocalEnvironmentTest {
                 "QUARKUS_HTTP_PORT");
 
         // then
-        assertThat(port).contains("18080");
+        assertThat(port).hasValue("18080");
     }
 
     @Test
@@ -152,7 +152,7 @@ final class LocalEnvironmentTest {
         var apiToken = LocalEnvironment.get("TRELLO_API_TOKEN", dotenv, Map.of());
 
         // then
-        assertThat(apiToken).contains("token\"quoted\\path\tvalue");
+        assertThat(apiToken).hasValue("token\"quoted\\path\tvalue");
     }
 
     @Test
@@ -165,7 +165,7 @@ final class LocalEnvironmentTest {
         var workflowPath = LocalEnvironment.get("SYMPHONY_WORKFLOW_PATH", dotenv, Map.of());
 
         // then
-        assertThat(workflowPath).contains("C:\\Users\\Jane Doe\\WORKFLOW.md");
+        assertThat(workflowPath).hasValue("C:\\Users\\Jane Doe\\WORKFLOW.md");
     }
 
     @Test

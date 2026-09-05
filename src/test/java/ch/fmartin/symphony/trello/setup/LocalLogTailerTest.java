@@ -58,6 +58,6 @@ final class LocalLogTailerTest {
         // then
         String expected =
                 String.join(System.lineSeparator(), allLines.subList(50, allLines.size())) + System.lineSeparator();
-        assertThat(stdout.toString(StandardCharsets.UTF_8)).isEqualTo(expected);
+        assertThat(stdout).hasToString(StandardCharsets.UTF_8, expected);
     }
 }

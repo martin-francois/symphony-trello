@@ -58,7 +58,7 @@ final class WorkflowConfigEditorTest {
 
         // then
         assertThat(lists.activeStates()).containsExactly("Ready for Codex");
-        assertThat(editor.serverPort(workflow)).contains(18081);
+        assertThat(editor.serverPort(workflow)).hasValue(18081);
         assertThat(workflow).content(StandardCharsets.UTF_8).contains("# Body");
     }
 
@@ -91,7 +91,7 @@ final class WorkflowConfigEditorTest {
         editor.updateServerPort(workflow, 18081);
 
         // then
-        assertThat(editor.serverPort(workflow)).contains(18081);
+        assertThat(editor.serverPort(workflow)).hasValue(18081);
         assertThat(workflow).content(StandardCharsets.UTF_8).contains("# Body");
     }
 
@@ -114,7 +114,7 @@ final class WorkflowConfigEditorTest {
 
         // then
         assertThat(link).isSymbolicLink();
-        assertThat(editor.serverPort(target)).contains(18081);
+        assertThat(editor.serverPort(target)).hasValue(18081);
         assertThat(link).content(StandardCharsets.UTF_8).contains("port: 18081", "# Body");
         assertThat(target).content(StandardCharsets.UTF_8).contains("port: 18081", "# Body");
     }
@@ -127,15 +127,15 @@ final class WorkflowConfigEditorTest {
         assumeTrue(Files.getFileStore(workflow).supportsFileAttributeView("posix"));
         Set<PosixFilePermission> permissions = Set.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE);
         Files.setPosixFilePermissions(workflow, permissions);
-        assertThat(Files.getPosixFilePermissions(workflow)).containsExactlyInAnyOrderElementsOf(permissions);
+        assertThat(Files.getPosixFilePermissions(workflow)).hasSameElementsAs(permissions);
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
 
         // when
         editor.updateServerPort(workflow, 18081);
 
         // then
-        assertThat(editor.serverPort(workflow)).contains(18081);
-        assertThat(Files.getPosixFilePermissions(workflow)).containsExactlyInAnyOrderElementsOf(permissions);
+        assertThat(editor.serverPort(workflow)).hasValue(18081);
+        assertThat(Files.getPosixFilePermissions(workflow)).hasSameElementsAs(permissions);
     }
 
     @Test
@@ -147,7 +147,7 @@ final class WorkflowConfigEditorTest {
         assumeTrue(Files.getFileStore(workflow).supportsFileAttributeView("posix"));
         Set<PosixFilePermission> readOnlyPermissions = Set.of(PosixFilePermission.OWNER_READ);
         Files.setPosixFilePermissions(workflow, readOnlyPermissions);
-        assertThat(Files.getPosixFilePermissions(workflow)).containsExactlyInAnyOrderElementsOf(readOnlyPermissions);
+        assertThat(Files.getPosixFilePermissions(workflow)).hasSameElementsAs(readOnlyPermissions);
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
 
         // when

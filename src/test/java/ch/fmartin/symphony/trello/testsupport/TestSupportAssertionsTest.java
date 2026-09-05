@@ -2,7 +2,6 @@ package ch.fmartin.symphony.trello.testsupport;
 
 import static ch.fmartin.symphony.trello.testsupport.TerminalTranscriptAssertions.assertThatTranscript;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
@@ -68,8 +67,10 @@ final class TestSupportAssertionsTest {
 
         // then
         assertThat(returnedAssertions).isSameAs(assertions);
-        assertThatNullPointerException().isThrownBy(() -> assertions.containsSectionsInOrder("section"));
-        assertThatNullPointerException().isThrownBy(() -> assertions.containsSectionsInOrder((String[]) null));
+        assertThatThrownBy(() -> assertions.containsSectionsInOrder("section"))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> assertions.containsSectionsInOrder((String[]) null))
+                .isInstanceOf(NullPointerException.class);
     }
 
     @Test
@@ -98,7 +99,7 @@ final class TestSupportAssertionsTest {
         ThrowingCallable action = () -> new RecordingTerminal(input);
 
         // then
-        assertThatNullPointerException().isThrownBy(action);
+        assertThatThrownBy(action).isInstanceOf(NullPointerException.class);
     }
 
     private static List<Arguments> acceptedRunResultCases() {

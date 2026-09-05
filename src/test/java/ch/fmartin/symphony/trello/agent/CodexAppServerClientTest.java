@@ -716,7 +716,7 @@ final class CodexAppServerClientTest {
         assertThat(result.failureCategory()).isEqualTo(AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT);
         assertThat(result.reason()).isEqualTo("turn_failed: Usage is unavailable.");
         assertThat(result.reason()).doesNotContain("private account payload", "additionalDetails", "rateLimits");
-        assertThat(result.retryNotBefore()).contains(secondaryReset);
+        assertThat(result.retryNotBefore()).hasValue(secondaryReset);
         assertThat(events.stream()
                         .filter(event -> event.event().equals("turn/completed"))
                         .map(AgentEvent::message))
@@ -782,7 +782,7 @@ final class CodexAppServerClientTest {
 
         // then
         assertThat(result.failureCategory()).isEqualTo(AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT);
-        assertThat(result.retryNotBefore()).contains(farFutureReset);
+        assertThat(result.retryNotBefore()).hasValue(farFutureReset);
     }
 
     @Test
@@ -813,7 +813,7 @@ final class CodexAppServerClientTest {
 
         // then
         assertThat(result.failureCategory()).isEqualTo(AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT);
-        assertThat(result.retryNotBefore()).contains(laterPrimaryReset);
+        assertThat(result.retryNotBefore()).hasValue(laterPrimaryReset);
         assertThat(publishedRateLimits).hasSize(3);
         assertThat(publishedRateLimits.get(1).path("primary").path("resetsAt").asLong())
                 .isEqualTo(laterPrimaryReset.getEpochSecond());
@@ -934,7 +934,7 @@ final class CodexAppServerClientTest {
         // then
         assertThat(first).isEqualTo(AgentRunResult.ok());
         assertThat(second.failureCategory()).isEqualTo(AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT);
-        assertThat(second.retryNotBefore()).contains(laterPrimaryReset);
+        assertThat(second.retryNotBefore()).hasValue(laterPrimaryReset);
         assertThat(publishedRateLimits).hasSize(2);
         JsonNode merged = publishedRateLimits.get(1);
         assertThat(merged.path("primary").path("resetsAt").asLong()).isEqualTo(laterPrimaryReset.getEpochSecond());
@@ -988,7 +988,7 @@ final class CodexAppServerClientTest {
         // then
         assertThat(first).isEqualTo(AgentRunResult.ok());
         assertThat(second.failureCategory()).isEqualTo(AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT);
-        assertThat(second.retryNotBefore()).contains(secondAccountReset);
+        assertThat(second.retryNotBefore()).hasValue(secondAccountReset);
         assertThat(publishedRateLimits)
                 .hasSize(2)
                 .element(1)
@@ -1090,7 +1090,7 @@ final class CodexAppServerClientTest {
                 .filter(result -> result.failureCategory() == AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT)
                 .findFirst()
                 .orElseThrow();
-        assertThat(usageLimit.retryNotBefore()).contains(laterPrimaryReset);
+        assertThat(usageLimit.retryNotBefore()).hasValue(laterPrimaryReset);
         assertThat(publishedRateLimits).hasSize(2);
         JsonNode latestPublished = publishedRateLimits.getLast();
         assertThat(latestPublished.path("primary").path("resetsAt").asLong())
@@ -1189,7 +1189,7 @@ final class CodexAppServerClientTest {
                 .findFirst()
                 .orElseThrow();
         if (accepted) {
-            assertThat(usageLimit.retryNotBefore()).contains(reset);
+            assertThat(usageLimit.retryNotBefore()).hasValue(reset);
         } else {
             assertThat(usageLimit.retryNotBefore()).isEmpty();
         }

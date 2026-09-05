@@ -309,12 +309,13 @@ final class InstallerScriptTest {
         repeatedFirst.assertSuccess();
         Path firstHome = Path.of(first.output());
         Path secondHome = Path.of(second.output());
-        assertThat(firstHome.getParent()).isEqualTo(temporaryDirectory);
-        assertThat(firstHome).isDirectory();
-        assertThat(firstHome.getFileName().toString()).isEqualTo("first-symphony-home-user-home");
-        assertThat(secondHome.getParent()).isEqualTo(temporaryDirectory);
+        assertThat(firstHome)
+                .hasParentRaw(temporaryDirectory)
+                .isDirectory()
+                .hasFileName("first-symphony-home-user-home");
+        assertThat(secondHome).hasParentRaw(temporaryDirectory);
         assertThat(secondHome).isDirectory().isNotEqualTo(firstHome);
-        assertThat(secondHome.getFileName().toString()).isEqualTo("second-symphony-home-user-home");
+        assertThat(secondHome).hasFileName("second-symphony-home-user-home");
         assertThat(Path.of(repeatedFirst.output())).isEqualTo(firstHome);
     }
 
@@ -2560,7 +2561,8 @@ final class InstallerScriptTest {
 
         // then
         result.assertSuccess();
-        assertThat(Files.readString(btrfsLog, StandardCharsets.UTF_8))
+        assertThat(btrfsLog)
+                .content(StandardCharsets.UTF_8)
                 .containsSubsequence(
                         "delete " + app.resolve("nested/deeper"),
                         "delete " + app.resolve("nested"),
@@ -2615,7 +2617,8 @@ final class InstallerScriptTest {
 
         // then
         result.assertSuccess();
-        assertThat(Files.readString(btrfsLog, StandardCharsets.UTF_8))
+        assertThat(btrfsLog)
+                .content(StandardCharsets.UTF_8)
                 .contains("rm -rf --one-file-system " + app)
                 .doesNotContain("delete ");
         assertThat(app).doesNotExist();
@@ -4150,10 +4153,12 @@ final class InstallerScriptTest {
                         "Added " + binDirectory + " to PATH in " + profile,
                         "Added " + binDirectory + " to PATH in " + loginProfile);
         assertThat(secondInstall.output()).contains("PATH setup already exists in " + profile);
-        assertThat(Files.readString(profile, StandardCharsets.UTF_8))
+        assertThat(profile)
+                .content(StandardCharsets.UTF_8)
                 .contains("# >>> Symphony for Trello PATH >>>", expectedLine, "# <<< Symphony for Trello PATH <<<")
                 .containsOnlyOnce(expectedLine);
-        assertThat(Files.readString(loginProfile, StandardCharsets.UTF_8))
+        assertThat(loginProfile)
+                .content(StandardCharsets.UTF_8)
                 .contains("# >>> Symphony for Trello PATH >>>", expectedLine, "# <<< Symphony for Trello PATH <<<")
                 .containsOnlyOnce(expectedLine);
     }
@@ -5108,7 +5113,8 @@ final class InstallerScriptTest {
         assertThat(result.output())
                 .contains("  apt-get update && apt-get install -y git", "  apt-get install -y openjdk-25-jdk")
                 .doesNotContain("  apt-get update && apt-get install -y openjdk-25-jdk");
-        assertThat(Files.readString(aptLog, StandardCharsets.UTF_8))
+        assertThat(aptLog)
+                .content(StandardCharsets.UTF_8)
                 .contains("update", "install -y git")
                 .doesNotContain("openjdk-25-jdk");
     }
@@ -5183,7 +5189,8 @@ final class InstallerScriptTest {
                         "Open a new terminal with Java 25+ on PATH",
                         "Open a new terminal with npm on PATH");
         assertThat(userRoot).doesNotExist();
-        assertThat(Files.readString(commandLog, StandardCharsets.UTF_8))
+        assertThat(commandLog)
+                .content(StandardCharsets.UTF_8)
                 .isEqualTo(
                         "sudo transactional-update --non-interactive pkg install git java-25-openjdk-devel nodejs npm\n"
                                 + "transactional-update --non-interactive pkg install git java-25-openjdk-devel nodejs npm\n");
@@ -6221,7 +6228,7 @@ final class InstallerScriptTest {
                         .toArray(String[]::new));
 
         // then
-        assertThat(result.exitCode()).as(result.output()).isEqualTo(1);
+        assertThat(result.exitCode()).as(result.output()).isOne();
         assertThat(result.output()).contains("install.ps1 supports Windows PowerShell setup only");
     }
 
@@ -7169,8 +7176,8 @@ final class InstallerScriptTest {
                         "--remove-state",
                         "--yes-local-data",
                         ".symphony-trello-install",
-                        "Trello boards were not deleted or archived.");
-        assertThat(posixUninstaller).doesNotContain(",,}");
+                        "Trello boards were not deleted or archived.")
+                .doesNotContain(",,}");
         assertThat(powershellUninstaller)
                 .contains(
                         "WOULD STOP",
@@ -7467,7 +7474,8 @@ final class InstallerScriptTest {
                         "systemd_user_dir=" + xdgConfigHome.resolve("systemd/user"),
                         "systemd_service_path=" + servicePath,
                         "autostart_env_path=" + autostartEnvPath);
-        assertThat(Files.readString(fakeLog, StandardCharsets.UTF_8))
+        assertThat(fakeLog)
+                .content(StandardCharsets.UTF_8)
                 .contains(
                         "systemctl --user enable symphony-trello.service",
                         "systemctl --user restart symphony-trello.service",
@@ -7670,7 +7678,8 @@ final class InstallerScriptTest {
                             "Restarting managed workers after update...",
                             "Stopped WORKFLOW.docs-queue.md",
                             "Starting setup...");
-            assertThat(Files.readString(fakeLog, StandardCharsets.UTF_8))
+            assertThat(fakeLog)
+                    .content(StandardCharsets.UTF_8)
                     .contains("mvnw -q -f " + symphonyHome.resolve("app/pom.xml") + " -DskipTests clean package")
                     .containsSubsequence(
                             "TrelloBoardSetupMain stop",
@@ -7727,7 +7736,8 @@ final class InstallerScriptTest {
             assertThat(update.output())
                     .contains(
                             "Stopping managed workers before update...", "Restarting managed workers after update...");
-            assertThat(Files.readString(fakeLog, StandardCharsets.UTF_8))
+            assertThat(fakeLog)
+                    .content(StandardCharsets.UTF_8)
                     .containsSubsequence("TrelloBoardSetupMain stop", "TrelloBoardSetupMain start", "--all");
         } finally {
             if (Files.exists(binDirectory.resolve("symphony-trello"))) {
@@ -7790,7 +7800,7 @@ final class InstallerScriptTest {
             assertThat(stalePid).doesNotExist();
             assertThat(zeroPid).doesNotExist();
             assertThat(reusedPid).doesNotExist();
-            assertThat(Files.readString(fakeLog, StandardCharsets.UTF_8)).doesNotContain("TrelloBoardSetupMain stop");
+            assertThat(fakeLog).content(StandardCharsets.UTF_8).doesNotContain("TrelloBoardSetupMain stop");
         } finally {
             unrelated.destroyForcibly();
         }
@@ -8068,7 +8078,7 @@ final class InstallerScriptTest {
                         .toArray(String[]::new));
 
         // then
-        assertThat(result.exitCode()).as(result.output()).isEqualTo(1);
+        assertThat(result.exitCode()).as(result.output()).isOne();
         assertThat(normalizedWhitespace(result.output()))
                 .contains(
                         "Refusing to update existing Git checkout without Symphony installer",
@@ -8405,10 +8415,10 @@ final class InstallerScriptTest {
 
     private static String assertBtrfsSubvolumeDeletes(Path btrfsLog, Path app) throws IOException {
         String log = Files.readString(btrfsLog, StandardCharsets.UTF_8);
-        assertThat(log)
+        return assertThat(log)
                 .containsSubsequence(
-                        "delete " + app.resolve("nested/deeper"), "delete " + app.resolve("nested"), "delete " + app);
-        return log;
+                        "delete " + app.resolve("nested/deeper"), "delete " + app.resolve("nested"), "delete " + app)
+                .actual();
     }
 
     private static String normalizedWhitespace(String text) {

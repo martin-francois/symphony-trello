@@ -342,7 +342,7 @@ final class LiveTrelloE2eIT {
                 assertCardList(trello, card, lists.get(TrelloBoardSetup.RECOMMENDED_IN_PROGRESS_STATE));
                 waitForHandoff(trello, card, lists.get(TrelloBoardSetup.RECOMMENDED_REVIEW_STATE));
                 assertStateDrained(process);
-                assertThat(Files.readString(expectedOutput)).contains(runId);
+                assertThat(expectedOutput).content(StandardCharsets.UTF_8).contains(runId);
             }
         } catch (Exception e) {
             bodyFailure = e;

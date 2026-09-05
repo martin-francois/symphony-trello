@@ -2,7 +2,6 @@ package ch.fmartin.symphony.trello;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -10,7 +9,7 @@ import org.junit.jupiter.api.Test;
 
 final class ReleaseWorkflowTest {
     @Test
-    void releaseWorkflowBuildsAssetsOnlyForReleasePleaseCreatedTags() throws IOException {
+    void releaseWorkflowBuildsAssetsOnlyForReleasePleaseCreatedTags() throws Exception {
         // given
         Path workflow = Path.of(".github/workflows/release-please.yml");
 
@@ -79,7 +78,7 @@ final class ReleaseWorkflowTest {
     }
 
     @Test
-    void releasePleaseConfigCreatesDraftReleasesAndRefreshesGeneratedMetadata() throws IOException {
+    void releasePleaseConfigCreatesDraftReleasesAndRefreshesGeneratedMetadata() throws Exception {
         // given
         Path normalConfig = Path.of("release-please-config.json");
 
@@ -91,7 +90,7 @@ final class ReleaseWorkflowTest {
     }
 
     @Test
-    void releasePleasePullRequestsDoNotCreateCiChecks() throws IOException {
+    void releasePleasePullRequestsDoNotCreateCiChecks() throws Exception {
         // given
         Path releaseConfig = Path.of("release-please-config.json");
         Path compatibilityLabelerWorkflow = Path.of(".github/workflows/compatibility-labeler.yml");
@@ -157,7 +156,7 @@ final class ReleaseWorkflowTest {
     }
 
     @Test
-    void releaseWorkflowUploadsAndVerifiesEveryPublicDownloadAsset() throws IOException {
+    void releaseWorkflowUploadsAndVerifiesEveryPublicDownloadAsset() throws Exception {
         // given
         Path workflow = Path.of(".github/workflows/release-please.yml");
 
@@ -182,7 +181,7 @@ final class ReleaseWorkflowTest {
     }
 
     @Test
-    void releaseWorkflowSkipsAssetsWhenReleasePleaseDoesNotCreateRelease() throws IOException {
+    void releaseWorkflowSkipsAssetsWhenReleasePleaseDoesNotCreateRelease() throws Exception {
         // given
         Path workflow = Path.of(".github/workflows/release-please.yml");
 
@@ -201,7 +200,7 @@ final class ReleaseWorkflowTest {
     }
 
     @Test
-    void releasePackagingUsesTagLocalToolingForInstallersAndApp() throws IOException {
+    void releasePackagingUsesTagLocalToolingForInstallersAndApp() throws Exception {
         // given
         Path script = Path.of("scripts/package-release-assets.sh");
 

@@ -22,7 +22,7 @@ final class CodexSkillStructureTest {
     private final ObjectMapper yaml = new ObjectMapper(new YAMLFactory());
 
     @Test
-    void repositoryLocalSkillsHaveValidFrontMatterAndMatchingNames() throws IOException {
+    void repositoryLocalSkillsHaveValidFrontMatterAndMatchingNames() throws Exception {
         // given
         List<Path> skillFiles = repositoryLocalSkillFiles();
 
@@ -55,7 +55,7 @@ final class CodexSkillStructureTest {
     }
 
     @Test
-    void repositoryLocalSkillsArePackagedForWorkspaceSeeding() throws IOException {
+    void repositoryLocalSkillsArePackagedForWorkspaceSeeding() throws Exception {
         // given
         List<Path> skillFiles = repositoryLocalSkillFiles();
 
@@ -82,7 +82,7 @@ final class CodexSkillStructureTest {
     }
 
     @Test
-    void reviewSweepSkillCoversPrFeedbackSourcesAndOutcomes() throws IOException {
+    void reviewSweepSkillCoversPrFeedbackSourcesAndOutcomes() throws Exception {
         // given
         Path skill = SKILLS_ROOT.resolve("review-sweep").resolve("SKILL.md");
 
@@ -129,7 +129,7 @@ final class CodexSkillStructureTest {
     }
 
     @Test
-    void trelloHandoffSkillCoversReworkWithoutResetByDefault() throws IOException {
+    void trelloHandoffSkillCoversReworkWithoutResetByDefault() throws Exception {
         // given
         Path skill = SKILLS_ROOT.resolve("trello-handoff").resolve("SKILL.md");
 
@@ -193,7 +193,7 @@ final class CodexSkillStructureTest {
     }
 
     @Test
-    void commitAndPushPrSkillsCoverGithubAuthorIdentityPolicy() throws IOException {
+    void commitAndPushPrSkillsCoverGithubAuthorIdentityPolicy() throws Exception {
         // given
         Path commitSkill = SKILLS_ROOT.resolve("commit").resolve("SKILL.md");
         Path pushPrSkill = SKILLS_ROOT.resolve("push-pr").resolve("SKILL.md");
@@ -275,7 +275,7 @@ final class CodexSkillStructureTest {
     }
 
     @Test
-    void landSkillFailsClosedAndAvoidsAutoMergeByDefault() throws IOException {
+    void landSkillFailsClosedAndAvoidsAutoMergeByDefault() throws Exception {
         // given
         Path skill = SKILLS_ROOT.resolve("land").resolve("SKILL.md");
 
@@ -303,7 +303,7 @@ final class CodexSkillStructureTest {
             String content = Files.readString(file, StandardCharsets.UTF_8);
             assertThat(content).as("front matter start for %s", file).startsWith("---\n");
             int end = content.indexOf("\n---\n", 4);
-            assertThat(end).as("front matter end for %s", file).isGreaterThan(0);
+            assertThat(end).as("front matter end for %s", file).isPositive();
             Map<String, Object> frontMatter = yaml.readValue(content.substring(4, end), MAP_TYPE);
             String body = content.substring(end + "\n---\n".length());
             return new SkillMetadata(

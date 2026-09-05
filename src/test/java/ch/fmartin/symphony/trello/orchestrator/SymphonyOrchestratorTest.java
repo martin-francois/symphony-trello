@@ -71,10 +71,10 @@ final class SymphonyOrchestratorTest {
         orchestrator.stop();
 
         // then
-        assertThat(snapshot.counts().retrying()).isEqualTo(1);
+        assertThat(snapshot.counts().retrying()).isOne();
         assertThat(snapshot.retrying()).singleElement().satisfies(row -> {
             assertThat(row.cardIdentifier()).isEqualTo("TRELLO-abc");
-            assertThat(row.attempt()).isEqualTo(1);
+            assertThat(row.attempt()).isOne();
         });
         assertThat(snapshot.routing().activeLists()).containsExactly("Todo");
         assertThat(snapshot.routing().terminalLists()).contains("done");
@@ -173,7 +173,7 @@ final class SymphonyOrchestratorTest {
         assertThat(runs).hasValue(1);
         assertThat(snapshot.retrying()).singleElement().satisfies(row -> assertThat(row.cardIdentifier())
                 .isEqualTo("TRELLO-match"));
-        assertThat(tracker.promptStateFetches.get()).isEqualTo(1);
+        assertThat(tracker.promptStateFetches.get()).isOne();
     }
 
     @Test
@@ -255,7 +255,7 @@ final class SymphonyOrchestratorTest {
 
         // then
         assertThat(prompt.get()).contains("Review the edge case.");
-        assertThat(tracker.promptStateFetches.get()).isGreaterThanOrEqualTo(1);
+        assertThat(tracker.promptStateFetches.get()).isPositive();
     }
 
     @Test
@@ -300,7 +300,7 @@ final class SymphonyOrchestratorTest {
         orchestrator.stop();
 
         // then
-        assertThat(tracker.prepareForDispatchCalls.get()).isEqualTo(1);
+        assertThat(tracker.prepareForDispatchCalls.get()).isOne();
         assertThat(request.get().card().state()).isEqualTo("In Progress");
         assertThat(request.get().prompt()).isEqualTo("In Progress");
     }
@@ -1383,7 +1383,7 @@ final class SymphonyOrchestratorTest {
         orchestrator.stop();
 
         // then
-        assertThat(runs.get()).isEqualTo(1);
+        assertThat(runs.get()).isOne();
         assertCardReleasedForRetry(snapshot, tracker);
     }
 
@@ -1606,7 +1606,7 @@ final class SymphonyOrchestratorTest {
         orchestrator.stop();
 
         // then
-        assertThat(snapshot.counts().running()).isEqualTo(1);
+        assertThat(snapshot.counts().running()).isOne();
         assertThat(snapshot.counts().retrying()).isZero();
     }
 
@@ -1816,7 +1816,7 @@ final class SymphonyOrchestratorTest {
                 .extracting(RuntimeSnapshot.RunningRow::cardIdentifier)
                 .isEqualTo("TRELLO-stale-retry-b");
         assertThat(beforeStaleCallback.retrying()).isEmpty();
-        assertThat(afterStaleCallback.running()).isEqualTo(beforeStaleCallback.running());
+        assertThat(afterStaleCallback.running()).containsExactlyElementsOf(beforeStaleCallback.running());
         assertThat(afterStaleCallback.retrying()).isEmpty();
         assertThat(requests).hasSize(2);
         assertThat(requests.get(1).attempt()).isNull();

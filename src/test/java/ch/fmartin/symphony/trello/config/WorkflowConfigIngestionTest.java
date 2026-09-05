@@ -20,8 +20,8 @@ final class WorkflowConfigIngestionTest {
                 envBacked, name -> "STATUS_PORT".equals(name) ? Optional.of("18080.0") : Optional.empty());
 
         // then
-        assertThat(literalConfig.serverPort().value()).contains(18080);
-        assertThat(envConfig.serverPort().value()).contains(18080);
+        assertThat(literalConfig.serverPort().value()).hasValue(18080);
+        assertThat(envConfig.serverPort().value()).hasValue(18080);
     }
 
     @Test
@@ -49,7 +49,7 @@ final class WorkflowConfigIngestionTest {
         TypedWorkflowConfig config = WorkflowConfigIngestion.collect(workflow, ignored -> Optional.empty());
 
         // then
-        assertThat(config.serverPort().value()).contains(70000);
+        assertThat(config.serverPort().value()).hasValue(70000);
         assertThat(config.localServerPortSetting().diagnosticsCell()).isEqualTo("invalid");
         assertThat(config.serverPortClassification().kind())
                 .isEqualTo(WorkflowServerPortClassification.Kind.OUT_OF_RANGE);

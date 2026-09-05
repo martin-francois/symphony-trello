@@ -242,14 +242,15 @@ final class TrelloClientTest {
         // then
         assertThat(cards).singleElement().satisfies(card -> {
             assertThat(card.identifier()).isEqualTo("TRELLO-abc");
-            assertThat(card.priority()).isEqualTo(1);
+            assertThat(card.priority()).isOne();
             assertThat(card.state()).isEqualTo("Todo");
             assertThat(card.comments()).isEmpty();
             assertThat(card.createdAt()).isNotNull();
         });
         assertThat(authorization.get()).contains("oauth_consumer_key=\"key\"").contains("oauth_token=\"token\"");
         assertThat(readRequests).hasSize(1);
-        assertThat(readRequests.getFirst())
+        assertThat(readRequests)
+                .first()
                 .startsWith("GET /1/boards/board-1/cards/open?")
                 .contains("fields=")
                 .doesNotContain("actions=");
@@ -1667,7 +1668,7 @@ final class TrelloClientTest {
 
     private static String queryValue(String request, String name) {
         int queryStart = request.indexOf('?');
-        assertThat(queryStart).as("request has query").isGreaterThanOrEqualTo(0);
+        assertThat(queryStart).as("request has query").isNotNegative();
         for (String part : Splitter.on('&').split(request.substring(queryStart + 1))) {
             int separator = part.indexOf('=');
             String key = separator < 0 ? part : part.substring(0, separator);

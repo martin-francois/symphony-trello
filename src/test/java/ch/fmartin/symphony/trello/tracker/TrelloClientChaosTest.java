@@ -65,7 +65,7 @@ final class TrelloClientChaosTest {
 
     @MethodSource("readFaults")
     @ParameterizedTest(name = "{0}")
-    void readFaultsFailWithoutTrelloWrites(String scenario, FaultPoint faultPoint) throws IOException {
+    void readFaultsFailWithoutTrelloWrites(String scenario, FaultPoint faultPoint) throws Exception {
         // given
         configureCandidateRoutes(faultPoint);
 
@@ -120,7 +120,7 @@ final class TrelloClientChaosTest {
     }
 
     @Test
-    void readRateLimitRetriesButWriteRateLimitDoesNotRetry() throws IOException {
+    void readRateLimitRetriesButWriteRateLimitDoesNotRetry() throws Exception {
         // given
         CountingResponse board = new CountingResponse(429, boardJson("board-1", "Board", false));
         trello.on("/1/boards/input", board::respond);

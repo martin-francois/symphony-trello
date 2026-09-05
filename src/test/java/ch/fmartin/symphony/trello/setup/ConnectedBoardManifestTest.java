@@ -20,8 +20,8 @@ final class ConnectedBoardManifestTest {
         var missing = manifest.findByBoard("other");
 
         // then
-        assertThat(byName).contains(board);
-        assertThat(byId).contains(board);
+        assertThat(byName).hasValue(board);
+        assertThat(byId).hasValue(board);
         assertThat(missing).isEmpty();
     }
 
@@ -36,7 +36,7 @@ final class ConnectedBoardManifestTest {
         var selected = manifest.findByBoard("Queue");
 
         // then
-        assertThat(selected).contains(first);
+        assertThat(selected).hasValue(first);
     }
 
     @Test
@@ -55,8 +55,8 @@ final class ConnectedBoardManifestTest {
         var byUrl = manifest.findByBoard("https://trello.com/b/SYNTH003/synthetic-board");
 
         // then
-        assertThat(byShortLink).contains(board);
-        assertThat(byUrl).contains(board);
+        assertThat(byShortLink).hasValue(board);
+        assertThat(byUrl).hasValue(board);
     }
 
     @Test
@@ -76,9 +76,9 @@ final class ConnectedBoardManifestTest {
         var byQueryAfterSlash = manifest.findByBoard("SYNTH003/?utm=test");
 
         // then
-        assertThat(byQuery).contains(board);
-        assertThat(byFragment).contains(board);
-        assertThat(byQueryAfterSlash).contains(board);
+        assertThat(byQuery).hasValue(board);
+        assertThat(byFragment).hasValue(board);
+        assertThat(byQueryAfterSlash).hasValue(board);
     }
 
     @Test
@@ -192,7 +192,7 @@ final class ConnectedBoardManifestTest {
         var selected = manifest.findByBoard("https://not-trello.com/b/team");
 
         // then
-        assertThat(selected).contains(board);
+        assertThat(selected).hasValue(board);
     }
 
     @Test
@@ -211,8 +211,8 @@ final class ConnectedBoardManifestTest {
         var byWwwTrelloUrl = manifest.findByBoard("https://www.trello.com/b/SYNTH003/anything");
 
         // then
-        assertThat(byUppercaseTrelloUrl).contains(board);
-        assertThat(byWwwTrelloUrl).contains(board);
+        assertThat(byUppercaseTrelloUrl).hasValue(board);
+        assertThat(byWwwTrelloUrl).hasValue(board);
     }
 
     @Test
@@ -228,7 +228,7 @@ final class ConnectedBoardManifestTest {
         var matches = manifest.findAllByWorkflow(workflow);
 
         // then
-        assertThat(selected).contains(first);
+        assertThat(selected).hasValue(first);
         assertThat(matches).containsExactly(first, second);
     }
 
