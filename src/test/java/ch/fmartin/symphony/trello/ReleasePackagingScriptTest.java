@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -582,7 +583,7 @@ final class ReleasePackagingScriptTest {
         try (var archive = new ZipFile(
                 destination.resolve("symphony-trello-" + version + ".zip").toFile())) {
             assertThat(Collections.list(archive.entries()))
-                    .extracting(entry -> entry.getName())
+                    .extracting(ZipEntry::getName)
                     .contains(
                             "symphony-trello-" + version + "/",
                             "symphony-trello-" + version + "/VERSION",
