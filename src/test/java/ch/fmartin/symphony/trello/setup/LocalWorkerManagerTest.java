@@ -84,7 +84,7 @@ final class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         writeExistingGithubWorkflowWithoutSandboxPolicy(board, "  board_id: \"board-1\"\n", "");
-        String originalWorkflow = Files.readString(board.workflowPath(), StandardCharsets.UTF_8);
+        String originalWorkflow = Files.readString(board.workflowPath());
         ConnectedBoard githubBoard = new ConnectedBoard(
                 board.boardId(),
                 board.boardKey(),
@@ -130,8 +130,7 @@ final class LocalWorkerManagerTest {
                   port: 18080
                 ---
                 # Queue
-                """,
-                StandardCharsets.UTF_8);
+                """);
         when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
                 .thenReturn(new ManagedProcessHandle(42));
         when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), expectedEnv))
@@ -270,8 +269,8 @@ final class LocalWorkerManagerTest {
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         Path secrets = fixture.paths.configDir().resolve("secrets");
         Files.createDirectories(secrets);
-        Files.writeString(secrets.resolve("trello-api-key"), "key-from-file\n", StandardCharsets.UTF_8);
-        Files.writeString(secrets.resolve("trello-api-token"), "token-from-file\n", StandardCharsets.UTF_8);
+        Files.writeString(secrets.resolve("trello-api-key"), "key-from-file\n");
+        Files.writeString(secrets.resolve("trello-api-token"), "token-from-file\n");
         Files.writeString(
                 board.workflowPath(),
                 """
@@ -285,8 +284,7 @@ final class LocalWorkerManagerTest {
                   port: 18080
                 ---
                 # Queue
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.deleteIfExists(board.envPath());
         fixture.save(board);
         fixture.stubHealthyStartedWorker(board, 42);
@@ -317,8 +315,7 @@ final class LocalWorkerManagerTest {
                   port: 18080
                 ---
                 # Queue
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.deleteIfExists(board.envPath());
         fixture.save(board);
 
@@ -353,8 +350,7 @@ final class LocalWorkerManagerTest {
                   port: $SYMPHONY_TEST_PORT
                 ---
                 # Queue
-                """,
-                StandardCharsets.UTF_8);
+                """);
         fixture.save(board);
 
         // when
@@ -389,8 +385,7 @@ final class LocalWorkerManagerTest {
                   port: $SYMPHONY_TEST_PORT
                 ---
                 # Queue
-                """,
-                StandardCharsets.UTF_8);
+                """);
         fixture.save(board);
 
         // when
@@ -447,8 +442,7 @@ final class LocalWorkerManagerTest {
                   port: 18080
                 ---
                 # Queue
-                """,
-                StandardCharsets.UTF_8);
+                """);
         fixture.save(board);
 
         // when
@@ -480,8 +474,7 @@ final class LocalWorkerManagerTest {
                   port: 18080
                 ---
                 # Queue
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.deleteIfExists(board.envPath());
         fixture.save(board);
 
@@ -691,7 +684,7 @@ final class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         Path envPath = fixture.paths.configDir().resolve(".env.key-only");
-        Files.writeString(envPath, "TRELLO_API_KEY=test-key\n", StandardCharsets.UTF_8);
+        Files.writeString(envPath, "TRELLO_API_KEY=test-key\n");
         fixture.save(board);
         fixture.stubManagedPid(board, 42);
         fixture.stubWorkflowHealth(board, envPath, board.serverPort(), fixture.sameWorkflow(board));
@@ -710,7 +703,7 @@ final class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         Path envPath = fixture.paths.configDir().resolve(".env.key-only");
-        Files.writeString(envPath, "TRELLO_API_KEY=test-key\n", StandardCharsets.UTF_8);
+        Files.writeString(envPath, "TRELLO_API_KEY=test-key\n");
         fixture.save(board);
         fixture.stubWorkflowHealth(board, envPath, board.serverPort(), fixture.stopped(board));
 
@@ -734,10 +727,7 @@ final class LocalWorkerManagerTest {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
-        Files.writeString(
-                board.envPath(),
-                "TRELLO_API_KEY=" + dotenvValue + "\nTRELLO_API_TOKEN=real-token\n",
-                StandardCharsets.UTF_8);
+        Files.writeString(board.envPath(), "TRELLO_API_KEY=" + dotenvValue + "\nTRELLO_API_TOKEN=real-token\n");
         fixture.save(board);
 
         // when
@@ -761,10 +751,7 @@ final class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(
                 tempDir, Map.of("TRELLO_API_KEY", "env-key", "TRELLO_API_TOKEN", "env-token"));
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
-        Files.writeString(
-                board.envPath(),
-                "TRELLO_API_KEY=${REAL_KEY}\nTRELLO_API_TOKEN=${REAL_TOKEN}\n",
-                StandardCharsets.UTF_8);
+        Files.writeString(board.envPath(), "TRELLO_API_KEY=${REAL_KEY}\nTRELLO_API_TOKEN=${REAL_TOKEN}\n");
         fixture.save(board);
         fixture.stubHealthyStartedWorker(board, 42);
 
@@ -820,7 +807,7 @@ final class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        Files.writeString(board.workflowPath(), workflowContent, StandardCharsets.UTF_8);
+        Files.writeString(board.workflowPath(), workflowContent);
 
         // when
         Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
@@ -930,7 +917,7 @@ final class LocalWorkerManagerTest {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         Files.createDirectories(fixture.paths.configDir());
-        Files.writeString(fixture.paths.manifestPath(), "not-valid-json", StandardCharsets.UTF_8);
+        Files.writeString(fixture.paths.manifestPath(), "not-valid-json");
 
         // when
         Throwable thrown = catchThrowable(() -> fixture.status(fixture.statusRequest("Queue")));
@@ -1041,7 +1028,7 @@ final class LocalWorkerManagerTest {
         ConnectedBoard stopped = fixture.connectedBoard("board-stopped", "Stopped", "02-stopped");
         ConnectedBoard wrongWorkflow = fixture.connectedBoard("board-wrong", "Wrong", "03-wrong");
         ConnectedBoard invalid = fixture.connectedBoard("board-invalid", "Invalid", "04-invalid");
-        Files.writeString(invalid.workflowPath(), "plain body\n", StandardCharsets.UTF_8);
+        Files.writeString(invalid.workflowPath(), "plain body\n");
         fixture.save(running, stopped, wrongWorkflow, invalid);
         fixture.stubManagedPidWithHealth(running, 41, fixture.sameWorkflowWithPid(running, 41));
         fixture.stubManagedPidWithHealth(wrongWorkflow, 42, fixture.wrongWorkflow(wrongWorkflow));
@@ -1232,7 +1219,7 @@ final class LocalWorkerManagerTest {
         ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
         ManagedProcessStore.ManagedProcessFiles files = store.files(oldBoard.workflowPath());
         Files.createDirectories(fixture.paths.stateHome());
-        Files.writeString(files.stdoutLog(), "old board startup failure", StandardCharsets.UTF_8);
+        Files.writeString(files.stdoutLog(), "old board startup failure");
 
         // when
         fixture.manager.rotateLogsForReplacedBoards(fixture.paths, newBoard, List.of(oldBoard));
@@ -1251,7 +1238,7 @@ final class LocalWorkerManagerTest {
         ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
         ManagedProcessStore.ManagedProcessFiles files = store.files(board.workflowPath());
         Files.createDirectories(fixture.paths.stateHome());
-        Files.writeString(files.stdoutLog(), "same board history", StandardCharsets.UTF_8);
+        Files.writeString(files.stdoutLog(), "same board history");
 
         // when
         fixture.manager.rotateLogsForReplacedBoards(fixture.paths, board, List.of(board));
@@ -1309,8 +1296,7 @@ final class LocalWorkerManagerTest {
                   port: 18081
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         Throwable thrown = catchThrowable(() -> fixture.start(fixture.startWorkflowRequest(staleWorkflow)));
@@ -1343,8 +1329,7 @@ final class LocalWorkerManagerTest {
                 ---
                 # Shortlink Queue
                 """
-                        .formatted(ConfigDefaults.DEFAULT_SERVER_PORT),
-                StandardCharsets.UTF_8);
+                        .formatted(ConfigDefaults.DEFAULT_SERVER_PORT));
         fixture.writeEnv(fixture.paths.defaultEnvPath());
         ConnectedBoard row = ConnectedBoardBuilder.connectedBoard(
                         rowWorkflow.toAbsolutePath().normalize())
@@ -1369,8 +1354,7 @@ final class LocalWorkerManagerTest {
                   port: 18081
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         Throwable thrown = catchThrowable(() -> fixture.start(fixture.startWorkflowRequest(staleWorkflow)));
@@ -1392,7 +1376,7 @@ final class LocalWorkerManagerTest {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         Files.createDirectories(fixture.paths.configDir());
-        Files.writeString(fixture.paths.manifestPath(), content, StandardCharsets.UTF_8);
+        Files.writeString(fixture.paths.manifestPath(), content);
 
         // when
         List<Throwable> failures = lifecycleCommandFailures(fixture);
@@ -1417,7 +1401,7 @@ final class LocalWorkerManagerTest {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         Files.createDirectories(fixture.paths.configDir());
-        Files.writeString(fixture.paths.manifestPath(), "{\"boards\":[{}]}", StandardCharsets.UTF_8);
+        Files.writeString(fixture.paths.manifestPath(), "{\"boards\":[{}]}");
 
         // when
         List<Throwable> failures = lifecycleCommandFailures(fixture);
@@ -1465,8 +1449,7 @@ final class LocalWorkerManagerTest {
                   port: 18081
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
                 .thenReturn(new ManagedProcessHandle(99L));
         when(fixture.platform.stop(eq(99L), any(Duration.class), any(Duration.class)))
@@ -1721,8 +1704,7 @@ final class LocalWorkerManagerTest {
                   port: "not-a-port"
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         fixture.stubWorkflowHealth(
                 board,
                 new BoardHealth(BoardHealthKind.PORT_USED, board.serverPort(), Optional.empty(), Optional.empty()));
@@ -1927,8 +1909,7 @@ final class LocalWorkerManagerTest {
                 files.stdoutLog(),
                 """
                 Caused by: ch.fmartin.symphony.trello.tracker.TrelloException: Trello authentication failed
-                """,
-                StandardCharsets.UTF_8);
+                """);
         fixture.stubStoppedStartedWorker(board, 42);
         String workflowToken = PrivateContextTokens.pathToken(fixture.paths.configDir(), board.workflowPath());
         String stdoutToken = PrivateContextTokens.pathToken(fixture.paths.configDir(), files.stdoutLog());
@@ -1966,12 +1947,11 @@ final class LocalWorkerManagerTest {
                 """
                 Stale startup log content that is longer than the next worker startup failure.
                 This simulates redirect targets left behind by an earlier managed process start.
-                """,
-                StandardCharsets.UTF_8);
+                """);
         fixture.stubStoppedStartedWorker(board, 42);
         when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
                 .thenAnswer(invocation -> {
-                    Files.writeString(files.stdoutLog(), "Trello authentication failed\n", StandardCharsets.UTF_8);
+                    Files.writeString(files.stdoutLog(), "Trello authentication failed\n");
                     return new ManagedProcessHandle(42);
                 });
 
@@ -1993,7 +1973,7 @@ final class LocalWorkerManagerTest {
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         ManagedProcessStore.ManagedProcessFiles files = fixture.managedFiles(board);
-        Files.writeString(files.stdoutLog(), "stale log\n", StandardCharsets.UTF_8);
+        Files.writeString(files.stdoutLog(), "stale log\n");
         stubStartupLogRewrite(
                 fixture,
                 board,
@@ -2213,7 +2193,7 @@ final class LocalWorkerManagerTest {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
-        Files.writeString(board.workflowPath(), "plain body\n", StandardCharsets.UTF_8);
+        Files.writeString(board.workflowPath(), "plain body\n");
         fixture.save(board);
 
         // when
@@ -2265,16 +2245,14 @@ final class LocalWorkerManagerTest {
                   port: $SYMPHONY_TEST_PORT
                 ---
                 # Queue
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.writeString(
                 board.envPath(),
                 """
                 TRELLO_API_KEY=test-key
                 TRELLO_API_TOKEN=test-token
                 SYMPHONY_TEST_PORT=19091
-                """,
-                StandardCharsets.UTF_8);
+                """);
         fixture.save(board);
         when(fixture.healthChecker.boardHealth(board)).thenReturn(fixture.stopped(19091));
 
@@ -2293,9 +2271,7 @@ final class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         Files.writeString(
-                board.workflowPath(),
-                Files.readString(board.workflowPath(), StandardCharsets.UTF_8).replace("port: 18080", "port: 18081"),
-                StandardCharsets.UTF_8);
+                board.workflowPath(), Files.readString(board.workflowPath()).replace("port: 18080", "port: 18081"));
         fixture.save(board);
         stubUntrackedStatusHealth(fixture, board, 73, true);
 
@@ -2411,8 +2387,7 @@ final class LocalWorkerManagerTest {
                   port: $SYMPHONY_TEST_PORT
                 ---
                 # Queue
-                """,
-                StandardCharsets.UTF_8);
+                """);
         fixture.save(board);
         fixture.writeManagedPid(board, 42);
         when(fixture.platform.isAlive(42)).thenReturn(true);
@@ -2444,11 +2419,10 @@ final class LocalWorkerManagerTest {
                   port: $SYMPHONY_TEST_PORT
                 ---
                 # Queue
-                """,
-                StandardCharsets.UTF_8);
+                """);
         fixture.save(board);
         ManagedProcessStore.ManagedProcessFiles files = fixture.managedFiles(board);
-        Files.writeString(files.stdoutLog(), "worker log line\n", StandardCharsets.UTF_8);
+        Files.writeString(files.stdoutLog(), "worker log line\n");
 
         // when
         WorkerRunResult result = fixture.logs(fixture.logsWorkflowRequest(board.workflowPath()));
@@ -2853,7 +2827,7 @@ final class LocalWorkerManagerTest {
         if (parent != null) {
             Files.createDirectories(parent);
         }
-        Files.writeString(path, text, StandardCharsets.UTF_8);
+        Files.writeString(path, text);
     }
 
     private static void createSymbolicLinkOrSkip(Path link, Path target) throws IOException {
@@ -3008,7 +2982,7 @@ final class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         Files.createDirectories(fixture.paths.configDir());
         Path workflow = fixture.paths.configDir().resolve(invalidWorkflow.fileName());
-        Files.writeString(workflow, invalidWorkflow.content(), StandardCharsets.UTF_8);
+        Files.writeString(workflow, invalidWorkflow.content());
 
         // when
         writeManagedLog(fixture, workflow);
@@ -3044,7 +3018,7 @@ final class LocalWorkerManagerTest {
         Files.createDirectories(fixture.paths.configDir());
         fixture.writeEnv(fixture.paths.defaultEnvPath());
         Path workflow = fixture.paths.configDir().resolve(invalidCase.fileName());
-        Files.writeString(workflow, invalidCase.content(), StandardCharsets.UTF_8);
+        Files.writeString(workflow, invalidCase.content());
 
         // when
         Throwable thrown = catchThrowable(() -> fixture.start(fixture.startWorkflowRequest(workflow)));
@@ -3140,8 +3114,7 @@ final class LocalWorkerManagerTest {
                 ---
                 Body
                 """
-                        .formatted(secretPath),
-                StandardCharsets.UTF_8);
+                        .formatted(secretPath));
         ConnectedBoard board = ConnectedBoardBuilder.connectedBoard(
                         workflow.toAbsolutePath().normalize())
                 .withBoardId("board-1")
@@ -3208,7 +3181,7 @@ final class LocalWorkerManagerTest {
         Path secretPath = privateDir.resolve("trello-token.txt");
         String secretFileToken = PrivateContextTokens.pathToken(fixture.paths.configDir(), secretPath);
         Files.createDirectories(privateDir);
-        Files.writeString(secretPath, "x".repeat(70_000), StandardCharsets.UTF_8);
+        Files.writeString(secretPath, "x".repeat(70_000));
         Files.writeString(
                 board.workflowPath(),
                 """
@@ -3223,8 +3196,7 @@ final class LocalWorkerManagerTest {
                 ---
                 Body
                 """
-                        .formatted(secretPath),
-                StandardCharsets.UTF_8);
+                        .formatted(secretPath));
         fixture.save(board);
 
         // when
@@ -3265,8 +3237,7 @@ final class LocalWorkerManagerTest {
                   port: 19090
                 ---
                 # Direct
-                """,
-                StandardCharsets.UTF_8);
+                """);
         when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
                 .thenReturn(new ManagedProcessHandle(42));
         when(fixture.healthChecker.managedHealthPort(any(), anyInt(), nullable(Path.class)))
@@ -3307,8 +3278,7 @@ final class LocalWorkerManagerTest {
                 TRELLO_API_KEY=test-key
                 TRELLO_API_TOKEN=test-token
                 DIRECT_BOARD_ID=resolved-direct-board
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.writeString(
                 workflow,
                 """
@@ -3320,8 +3290,7 @@ final class LocalWorkerManagerTest {
                   port: 19092
                 ---
                 # Direct
-                """,
-                StandardCharsets.UTF_8);
+                """);
         when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
                 .thenReturn(new ManagedProcessHandle(42));
         when(fixture.healthChecker.managedHealthPort(any(), anyInt(), nullable(Path.class)))
@@ -3363,8 +3332,7 @@ final class LocalWorkerManagerTest {
                 TRELLO_API_KEY=test-key
                 TRELLO_API_TOKEN=test-token
                 WORKER_PORT=19093
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.writeString(
                 board.workflowPath(),
                 """
@@ -3376,8 +3344,7 @@ final class LocalWorkerManagerTest {
                   port: $WORKER_PORT
                 ---
                 # Override
-                """,
-                StandardCharsets.UTF_8);
+                """);
         when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
                 .thenReturn(new ManagedProcessHandle(42));
         when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), overrideEnv))
@@ -3439,8 +3406,7 @@ final class LocalWorkerManagerTest {
                   port: 19091
                 ---
                 # Direct status
-                """,
-                StandardCharsets.UTF_8);
+                """);
         when(fixture.healthChecker.boardHealth(any()))
                 .thenReturn(new BoardHealth(BoardHealthKind.STOPPED, 19091, Optional.empty(), Optional.empty()));
 
@@ -3462,8 +3428,7 @@ final class LocalWorkerManagerTest {
                 """
                 DIRECT_STATUS_BOARD_ID=resolved-status-board
                 DIRECT_STATUS_PORT=19093
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.writeString(
                 workflow,
                 """
@@ -3474,8 +3439,7 @@ final class LocalWorkerManagerTest {
                   port: $DIRECT_STATUS_PORT
                 ---
                 # Direct status
-                """,
-                StandardCharsets.UTF_8);
+                """);
         when(fixture.healthChecker.boardHealth(argThat(
                         board -> "resolved-status-board".equals(board.boardId()) && board.serverPort() == 19093)))
                 .thenReturn(new BoardHealth(BoardHealthKind.STOPPED, 19093, Optional.empty(), Optional.empty()));
@@ -3498,8 +3462,7 @@ final class LocalWorkerManagerTest {
                 """
                 DIRECT_STOP_BOARD_ID=resolved-stop-board
                 DIRECT_STOP_PORT=19094
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.writeString(
                 workflow,
                 """
@@ -3510,8 +3473,7 @@ final class LocalWorkerManagerTest {
                   port: $DIRECT_STOP_PORT
                 ---
                 # Direct stop
-                """,
-                StandardCharsets.UTF_8);
+                """);
         ConnectedBoard expectedBoard = ConnectedBoardBuilder.connectedBoard(
                         workflow.toAbsolutePath().normalize())
                 .withBoardId("resolved-stop-board")
@@ -3924,7 +3886,7 @@ final class LocalWorkerManagerTest {
             if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
                 return new FileSnapshot(true, true, "");
             }
-            return new FileSnapshot(true, false, Files.readString(path, StandardCharsets.UTF_8));
+            return new FileSnapshot(true, false, Files.readString(path));
         }
 
         void assertUnchanged(Path path) throws IOException {
@@ -3934,7 +3896,7 @@ final class LocalWorkerManagerTest {
             }
             assertThat(Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)).isEqualTo(directory);
             if (!directory) {
-                assertThat(Files.readString(path, StandardCharsets.UTF_8)).isEqualTo(content);
+                assertThat(Files.readString(path)).isEqualTo(content);
             }
         }
     }
@@ -4020,8 +3982,7 @@ final class LocalWorkerManagerTest {
                 ---
                 # Queue
                 """
-                        .formatted(missingSecret, board.boardId(), board.serverPort()),
-                StandardCharsets.UTF_8);
+                        .formatted(missingSecret, board.boardId(), board.serverPort()));
     }
 
     private static List<Throwable> lifecycleCommandFailures(LocalWorkerManagerTestFixture fixture) {
@@ -4050,7 +4011,7 @@ final class LocalWorkerManagerTest {
         Files.createDirectories(fixture.paths.stateHome());
         ManagedProcessStore.ManagedProcessFiles files =
                 new ManagedProcessStore(fixture.paths.stateHome()).files(workflow);
-        Files.writeString(files.stdoutLog(), "worker log line\n", StandardCharsets.UTF_8);
+        Files.writeString(files.stdoutLog(), "worker log line\n");
     }
 
     private static ConnectedBoard saveBoardWithManagedPid(LocalWorkerManagerTestFixture fixture) throws Exception {
@@ -4160,16 +4121,14 @@ final class LocalWorkerManagerTest {
                   port: $SYMPHONY_TEST_PORT
                 ---
                 # Queue
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.writeString(
                 board.envPath(),
                 """
                 TRELLO_API_KEY=test-key
                 TRELLO_API_TOKEN=test-token
                 SYMPHONY_HTTP_PORT=19094
-                """,
-                StandardCharsets.UTF_8);
+                """);
         fixture.save(board);
         when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
                 .thenReturn(new ManagedProcessHandle(42));
@@ -4218,8 +4177,7 @@ final class LocalWorkerManagerTest {
 
                 Card URL: {{ card.url }}
                 """
-                        .formatted(trackerFields, board.serverPort(), codexFields),
-                StandardCharsets.UTF_8);
+                        .formatted(trackerFields, board.serverPort(), codexFields));
     }
 
     private static void stubStartupLogRewrite(
@@ -4231,7 +4189,7 @@ final class LocalWorkerManagerTest {
         fixture.stubStoppedStartedWorker(board, 42);
         when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
                 .thenAnswer(invocation -> {
-                    Files.writeString(files.stdoutLog(), logText, StandardCharsets.UTF_8);
+                    Files.writeString(files.stdoutLog(), logText);
                     return new ManagedProcessHandle(42);
                 });
     }
@@ -4251,8 +4209,7 @@ final class LocalWorkerManagerTest {
                   turn_sandbox_policy: []
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
     }
 
     private static Thread startThread(

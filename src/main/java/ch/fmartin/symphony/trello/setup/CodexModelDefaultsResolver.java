@@ -250,16 +250,12 @@ final class CodexModelDefaultsResolver {
         for (int i = 0; i < entries.length; i += 2) {
             String key = (String) entries[i];
             Object value = entries[i + 1];
-            if (value instanceof JsonNode jsonNode) {
-                node.set(key, jsonNode);
-            } else if (value instanceof String string) {
-                node.put(key, string);
-            } else if (value instanceof Integer integer) {
-                node.put(key, integer);
-            } else if (value instanceof Boolean bool) {
-                node.put(key, bool);
-            } else {
-                node.set(key, json.valueToTree(value));
+            switch (value) {
+                case JsonNode jsonNode -> node.set(key, jsonNode);
+                case String string -> node.put(key, string);
+                case Integer integer -> node.put(key, integer);
+                case Boolean bool -> node.put(key, bool);
+                case null, default -> node.set(key, json.valueToTree(value));
             }
         }
         return node;

@@ -146,9 +146,8 @@ final class LocalHealthCheckerTest {
                   port: $SYMPHONY_TEST_PORT
                 ---
                 Prompt
-                """,
-                StandardCharsets.UTF_8);
-        Files.writeString(dotenv, "SYMPHONY_TEST_PORT=19091\n", StandardCharsets.UTF_8);
+                """);
+        Files.writeString(dotenv, "SYMPHONY_TEST_PORT=19091\n");
         LocalHealthChecker checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
 
         // when

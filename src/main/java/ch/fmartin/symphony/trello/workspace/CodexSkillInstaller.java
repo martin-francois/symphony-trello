@@ -228,7 +228,6 @@ public class CodexSkillInstaller {
         Files.writeString(
                 target,
                 body,
-                StandardCharsets.UTF_8,
                 StandardOpenOption.CREATE,
                 StandardOpenOption.TRUNCATE_EXISTING,
                 StandardOpenOption.WRITE,

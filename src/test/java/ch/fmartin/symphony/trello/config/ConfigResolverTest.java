@@ -6,7 +6,6 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -1166,8 +1165,7 @@ final class ConfigResolverTest {
                 ## Trello List Routing
 
                 Card URL: {{ card.url }}
-                """,
-                StandardCharsets.UTF_8);
+                """);
         ConfigResolver resolver = new ConfigResolver(
                 name -> "SYMPHONY_CODEX_DANGER_FULL_ACCESS".equals(name) ? Optional.of("true") : Optional.empty());
 

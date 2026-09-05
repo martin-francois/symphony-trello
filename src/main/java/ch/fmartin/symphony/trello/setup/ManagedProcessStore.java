@@ -44,7 +44,7 @@ final class ManagedProcessStore {
 
     Long readPid(Path pidFile) {
         try {
-            String text = Files.readString(pidFile, StandardCharsets.UTF_8).trim();
+            String text = Files.readString(pidFile).trim();
             return text.isBlank() ? null : Long.parseLong(text);
         } catch (IOException | NumberFormatException e) {
             return null;

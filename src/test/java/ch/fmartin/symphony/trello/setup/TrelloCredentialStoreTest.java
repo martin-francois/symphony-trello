@@ -62,7 +62,7 @@ final class TrelloCredentialStoreTest {
     void existingDotenvCredentialsAreNotCopiedIntoAnotherDotenv() throws Exception {
         // given
         Path env = tempDir.resolve(".env");
-        Files.writeString(env, "TRELLO_API_KEY=dotenv-key\nTRELLO_API_TOKEN=dotenv-token\n", StandardCharsets.UTF_8);
+        Files.writeString(env, "TRELLO_API_KEY=dotenv-key\nTRELLO_API_TOKEN=dotenv-token\n");
         LocalSetup.Options options = SetupOptionFactory.options(tempDir);
 
         // when

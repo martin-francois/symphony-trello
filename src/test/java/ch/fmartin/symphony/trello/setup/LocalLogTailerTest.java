@@ -27,8 +27,7 @@ final class LocalLogTailerTest {
                         "\n",
                         IntStream.rangeClosed(1, 150)
                                 .mapToObj(line -> "line-" + line)
-                                .toList()),
-                StandardCharsets.UTF_8);
+                                .toList()));
         ByteArrayOutputStream stdout = new ByteArrayOutputStream();
 
         // when
@@ -49,7 +48,7 @@ final class LocalLogTailerTest {
         for (int line = 1; line <= 300; line++) {
             allLines.add("line-%03d-%s".formatted(line, payload));
         }
-        Files.writeString(logFile, String.join("\n", allLines), StandardCharsets.UTF_8);
+        Files.writeString(logFile, String.join("\n", allLines));
         ByteArrayOutputStream stdout = new ByteArrayOutputStream();
 
         // when

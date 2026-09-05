@@ -612,7 +612,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             if (parent != null) {
                 Files.createDirectories(parent);
             }
-            Files.writeString(absolute, body, StandardCharsets.UTF_8);
+            Files.writeString(absolute, body);
         }
     }
 

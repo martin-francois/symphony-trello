@@ -13,7 +13,7 @@ public final class ExternalFileLockHolder {
         Path lockPath = Path.of(arguments[0]);
         try (FileChannel channel = FileChannel.open(lockPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
                 FileLock ignored = channel.lock()) {
-            System.out.println("locked");
+            IO.println("locked");
             System.out.flush();
             System.in.read();
         }

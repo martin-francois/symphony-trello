@@ -3,7 +3,6 @@ package ch.fmartin.symphony.trello.config;
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_BYTE_ORDER_MARK;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -41,7 +40,7 @@ final class LocalEnvironmentTest {
     void ignoresOneLeadingUtf8ByteOrderMarkBeforeTheFirstKey() throws Exception {
         // given
         Path dotenv = tempDir.resolve(".env");
-        Files.writeString(dotenv, UNICODE_BYTE_ORDER_MARK + "TRELLO_API_KEY=key-behind-bom\n", StandardCharsets.UTF_8);
+        Files.writeString(dotenv, UNICODE_BYTE_ORDER_MARK + "TRELLO_API_KEY=key-behind-bom\n");
 
         // when
         var apiKey = LocalEnvironment.get("TRELLO_API_KEY", dotenv, Map.of());
@@ -54,10 +53,7 @@ final class LocalEnvironmentTest {
     void parsesQuotedValueWithTrailingCommentBehindAByteOrderMark() throws Exception {
         // given
         Path dotenv = tempDir.resolve(".env");
-        Files.writeString(
-                dotenv,
-                UNICODE_BYTE_ORDER_MARK + "TRELLO_API_KEY=\"quoted-key\" # personal key\n",
-                StandardCharsets.UTF_8);
+        Files.writeString(dotenv, UNICODE_BYTE_ORDER_MARK + "TRELLO_API_KEY=\"quoted-key\" # personal key\n");
 
         // when
         var apiKey = LocalEnvironment.get("TRELLO_API_KEY", dotenv, Map.of());
@@ -70,8 +66,7 @@ final class LocalEnvironmentTest {
     void parsesExportPrefixBehindAByteOrderMark() throws Exception {
         // given
         Path dotenv = tempDir.resolve(".env");
-        Files.writeString(
-                dotenv, UNICODE_BYTE_ORDER_MARK + "export TRELLO_API_KEY=exported-key\n", StandardCharsets.UTF_8);
+        Files.writeString(dotenv, UNICODE_BYTE_ORDER_MARK + "export TRELLO_API_KEY=exported-key\n");
 
         // when
         var apiKey = LocalEnvironment.get("TRELLO_API_KEY", dotenv, Map.of());
@@ -86,8 +81,7 @@ final class LocalEnvironmentTest {
         Path dotenv = tempDir.resolve(".env");
         Files.writeString(
                 dotenv,
-                UNICODE_BYTE_ORDER_MARK + UNICODE_BYTE_ORDER_MARK + "TRELLO_API_KEY=value\nTRELLO_API_TOKEN=token\n",
-                StandardCharsets.UTF_8);
+                UNICODE_BYTE_ORDER_MARK + UNICODE_BYTE_ORDER_MARK + "TRELLO_API_KEY=value\nTRELLO_API_TOKEN=token\n");
 
         // when
         var apiKey = LocalEnvironment.get("TRELLO_API_KEY", dotenv, Map.of());
@@ -211,8 +205,7 @@ final class LocalEnvironmentTest {
                 PLAIN=plain-value # plain comment
                 HASH_IN_VALUE=abc#def
                 HASH_IN_QUOTES="value # not a comment"
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         Map<String, String> values = LocalEnvironment.load(dotenv);

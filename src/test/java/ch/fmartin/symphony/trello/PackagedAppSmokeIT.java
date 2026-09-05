@@ -15,7 +15,6 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -53,7 +52,7 @@ final class PackagedAppSmokeIT {
         Path workspaceRoot = tempDir.resolve("workspaces");
         Path stdout = tempDir.resolve("symphony.log");
         Path stderr = tempDir.resolve("symphony.err");
-        Files.writeString(workflow, workflow(trelloPort, appPort, workspaceRoot), StandardCharsets.UTF_8);
+        Files.writeString(workflow, workflow(trelloPort, appPort, workspaceRoot));
 
         FakeTrelloEndpoint trello = FakeTrelloEndpoint.start(trelloPort);
         try (trello) {
@@ -181,7 +180,7 @@ final class PackagedAppSmokeIT {
 
     private static String read(Path path) {
         try {
-            return Files.readString(path, StandardCharsets.UTF_8);
+            return Files.readString(path);
         } catch (IOException e) {
             return "<unreadable: " + e.getMessage() + ">";
         }

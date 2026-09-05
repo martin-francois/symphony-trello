@@ -6,7 +6,6 @@ import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -152,8 +151,7 @@ final class TrelloCredentialStore {
     }
 
     private static List<String> updatedEnvLines(CredentialSelection credentials, Path envPath) throws IOException {
-        List<String> lines =
-                Files.isRegularFile(envPath) ? Files.readAllLines(envPath, StandardCharsets.UTF_8) : new ArrayList<>();
+        List<String> lines = Files.isRegularFile(envPath) ? Files.readAllLines(envPath) : new ArrayList<>();
         if (credentials.persistApiKey()) {
             lines = upsertEnv(lines, TrelloEnvironment.API_KEY, credentials.apiKey());
         }
@@ -169,7 +167,7 @@ final class TrelloCredentialStore {
             Files.createDirectories(parent);
         }
         if (Files.exists(envPath)) {
-            Files.write(envPath, lines, StandardCharsets.UTF_8, StandardOpenOption.TRUNCATE_EXISTING);
+            Files.write(envPath, lines, StandardOpenOption.TRUNCATE_EXISTING);
         } else {
             if (supportsPosixFilePermissions(
                     parent == null ? envPath.toAbsolutePath().normalize() : parent)) {
@@ -177,7 +175,7 @@ final class TrelloCredentialStore {
             } else {
                 Files.createFile(envPath);
             }
-            Files.write(envPath, lines, StandardCharsets.UTF_8, StandardOpenOption.TRUNCATE_EXISTING);
+            Files.write(envPath, lines, StandardOpenOption.TRUNCATE_EXISTING);
         }
         secureEnvPermissions(envPath);
     }

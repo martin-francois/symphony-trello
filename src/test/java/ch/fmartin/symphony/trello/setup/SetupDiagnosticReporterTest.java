@@ -227,7 +227,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Path workflow = configDir.resolve("WORKFLOW.symlink-target.md");
-        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(20992), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(20992));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "000000000000000000000001",
@@ -417,15 +417,13 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Path workflow = configDir.resolve("WORKFLOW.selected-env-port.md");
-        Files.writeString(
-                workflow, TestWorkflows.diagnosticsWorkflowWithEnvironmentBackedPort(), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithEnvironmentBackedPort());
         Files.writeString(
                 configDir.resolve(".env"),
                 """
                 BOARD_ID_REF=000000000000000000000001
                 BOARD_STATUS_PORT=20728
-                """,
-                StandardCharsets.UTF_8);
+                """);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -488,12 +486,8 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Path workflow = configDir.resolve("WORKFLOW.env-port.md");
-        Files.writeString(
-                workflow, TestWorkflows.diagnosticsWorkflowWithEnvironmentBackedPort(), StandardCharsets.UTF_8);
-        Files.writeString(
-                configDir.resolve(".env"),
-                "BOARD_ID_REF=000000000000000000000001\n" + statusPortLine + "\n",
-                StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithEnvironmentBackedPort());
+        Files.writeString(configDir.resolve(".env"), "BOARD_ID_REF=000000000000000000000001\n" + statusPortLine + "\n");
         saveSyntheticBoard(configDir, workflow, manifestPort);
         return new EnvironmentBackedPortScenario(
                 new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner()), configDir, stateHome);
@@ -523,7 +517,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Path workflow = configDir.resolve("WORKFLOW.minimal.md");
-        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(20986), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(20986));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -551,9 +545,9 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Path connectedWorkflow = configDir.resolve("WORKFLOW.connected.md");
-        Files.writeString(connectedWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(20987), StandardCharsets.UTF_8);
+        Files.writeString(connectedWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(20987));
         Path staleWorkflow = configDir.resolve("WORKFLOW.stale.md");
-        Files.writeString(staleWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(20988), StandardCharsets.UTF_8);
+        Files.writeString(staleWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(20988));
         saveSyntheticBoard(configDir, connectedWorkflow, 20987);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
@@ -581,7 +575,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Files.createDirectories(toolDirectory);
-        Files.writeString(java, "", StandardCharsets.UTF_8);
+        Files.writeString(java, "");
         java.toFile().setExecutable(true);
         CommandRunner commands = command -> {
             if ("sh".equals(command[0]) || "cmd".equals(command[0])) {
@@ -613,7 +607,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Files.createDirectories(toolDirectory);
-        Files.writeString(java, "", StandardCharsets.UTF_8);
+        Files.writeString(java, "");
         java.toFile().setExecutable(true);
         FakeCommandRunner commands = new FakeCommandRunner()
                 .returns(0, "openjdk version \"25\"\nopenjdk version \"26\"\n", java.toString(), "-version");
@@ -644,8 +638,8 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(stateHome);
         Files.createDirectories(firstDirectory);
         Files.createDirectories(secondDirectory);
-        Files.writeString(firstCodex, "", StandardCharsets.UTF_8);
-        Files.writeString(secondCodex, "", StandardCharsets.UTF_8);
+        Files.writeString(firstCodex, "");
+        Files.writeString(secondCodex, "");
         if (!firstCodex.toFile().setExecutable(true) || !secondCodex.toFile().setExecutable(true)) {
             abort("test filesystem does not support executable tool fixtures");
         }
@@ -697,7 +691,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Files.createDirectories(toolDirectory);
-        Files.writeString(codex, "", StandardCharsets.UTF_8);
+        Files.writeString(codex, "");
         codex.toFile().setExecutable(true);
         FakeCommandRunner commands = new FakeCommandRunner().returns(2, "unsupported\n", codex.toString(), "--version");
         var reporter = new SetupDiagnosticReporter(Map.of("PATH", toolDirectory.toString()), commands);
@@ -725,8 +719,8 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(stateHome);
         Files.createDirectories(shadowDirectory);
         Files.createDirectories(executableDirectory);
-        Files.writeString(shadowCodex, "", StandardCharsets.UTF_8);
-        Files.writeString(realCodex, "", StandardCharsets.UTF_8);
+        Files.writeString(shadowCodex, "");
+        Files.writeString(realCodex, "");
         shadowCodex.toFile().setExecutable(false);
         if (Files.isExecutable(shadowCodex)) {
             abort("test filesystem does not support non-executable tool fixtures");
@@ -760,7 +754,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Files.createDirectories(toolDirectory);
-        Files.writeString(codexShim, "", StandardCharsets.UTF_8);
+        Files.writeString(codexShim, "");
         CommandRunner commands = command -> {
             if ("sh".equals(command[0]) || "cmd".equals(command[0])) {
                 throw new AssertionError("diagnostics tool probe must not call a helper shell");
@@ -796,7 +790,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Files.createDirectories(toolDirectory);
-        Files.writeString(codexShim, "", StandardCharsets.UTF_8);
+        Files.writeString(codexShim, "");
         FakeCommandRunner commands = new FakeCommandRunner()
                 .returns(0, "codex-cli 9.9\n", windowsBatchCommand(codexShim, "--version"))
                 .returns(0, "Logged in\n", windowsBatchCommand(codexShim, "login", "status"));
@@ -824,7 +818,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Files.createDirectories(toolDirectory);
-        Files.writeString(codexShim, "", StandardCharsets.UTF_8);
+        Files.writeString(codexShim, "");
         FakeCommandRunner commands = new FakeCommandRunner()
                 .returns(0, "codex-cli 9.9\n", windowsBatchCommand(codexShim, "--version"))
                 .returns(1, "not logged in\n", windowsBatchCommand(codexShim, "login", "status"));
@@ -852,7 +846,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Files.createDirectories(toolDirectory);
-        Files.writeString(ghShim, "", StandardCharsets.UTF_8);
+        Files.writeString(ghShim, "");
         FakeCommandRunner commands = new FakeCommandRunner()
                 .returns(0, "gh version 2.70.0\n", windowsBatchCommand(ghShim, "--version"))
                 .returns(0, "github.com\n", windowsBatchCommand(ghShim, "auth", "status"));
@@ -880,7 +874,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Files.createDirectories(toolDirectory);
-        Files.writeString(ghShim, "", StandardCharsets.UTF_8);
+        Files.writeString(ghShim, "");
         FakeCommandRunner commands = new FakeCommandRunner()
                 .returns(0, "gh version 2.70.0\n", windowsBatchCommand(ghShim, "--version"))
                 .returns(1, "not authenticated\n", windowsBatchCommand(ghShim, "auth", "status"));
@@ -908,7 +902,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Files.createDirectories(toolDirectory);
-        Files.writeString(codexExe, "", StandardCharsets.UTF_8);
+        Files.writeString(codexExe, "");
         FakeCommandRunner commands =
                 new FakeCommandRunner().returns(0, "codex-cli 9.9\n", codexExe.toString(), "--version");
         var reporter = new SetupDiagnosticReporter(
@@ -935,7 +929,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Files.createDirectories(toolDirectory);
-        Files.writeString(codexExe, "", StandardCharsets.UTF_8);
+        Files.writeString(codexExe, "");
         FakeCommandRunner commands =
                 new FakeCommandRunner().returns(2, "unsupported\n", codexExe.toString(), "--version");
         var reporter = new SetupDiagnosticReporter(
@@ -962,7 +956,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Files.createDirectories(toolDirectory);
-        Files.writeString(codexExe, "", StandardCharsets.UTF_8);
+        Files.writeString(codexExe, "");
         CommandRunner commands = command -> {
             if (List.of(command).equals(List.of(codexExe.toString(), "--version"))) {
                 return CommandResult.launchFailed("permission denied");
@@ -996,8 +990,7 @@ final class SetupDiagnosticReporterTest {
                 configDir.resolve(ConnectedBoardManifest.FILE_NAME),
                 """
                 {"boards":[{},{"boardName":"Private Board","boardId":"abc","boardKey":"def","serverPort":18199}]}
-                """,
-                StandardCharsets.UTF_8);
+                """);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -1018,13 +1011,12 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.empty-row.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(20723), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(20723));
         Files.writeString(
                 configDir.resolve(ConnectedBoardManifest.FILE_NAME),
                 """
                 {"boards":[{}]}
-                """,
-                StandardCharsets.UTF_8);
+                """);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -1045,13 +1037,12 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.partial-row.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(20724), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(20724));
         Files.writeString(
                 configDir.resolve(ConnectedBoardManifest.FILE_NAME),
                 """
                 {"boards":[{"boardName":"Private Board","boardId":"abc","boardKey":"def","serverPort":18199}]}
-                """,
-                StandardCharsets.UTF_8);
+                """);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -1072,7 +1063,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Path manifest = configDir.resolve(ConnectedBoardManifest.FILE_NAME);
-        Files.writeString(manifest, manifestContent, StandardCharsets.UTF_8);
+        Files.writeString(manifest, manifestContent);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -1133,7 +1124,7 @@ final class SetupDiagnosticReporterTest {
         Path configDir = tempDir.resolve("state-file-config");
         Path stateHomeFile = tempDir.resolve("state-file");
         Files.createDirectories(configDir);
-        Files.writeString(stateHomeFile, "plain", StandardCharsets.UTF_8);
+        Files.writeString(stateHomeFile, "plain");
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -1166,12 +1157,9 @@ final class SetupDiagnosticReporterTest {
         SameSecondReportScenario scenario = sameSecondReportScenario("exhausted-collision");
         Path reportDir = scenario.configDir().resolveSibling("state").resolve("troubleshooting");
         Files.createDirectories(reportDir);
-        Files.writeString(reportDir.resolve("setup-failure-20260502-030405.md"), "taken", StandardCharsets.UTF_8);
+        Files.writeString(reportDir.resolve("setup-failure-20260502-030405.md"), "taken");
         for (int suffix = 2; suffix <= 100; suffix++) {
-            Files.writeString(
-                    reportDir.resolve("setup-failure-20260502-030405-" + suffix + ".md"),
-                    "taken",
-                    StandardCharsets.UTF_8);
+            Files.writeString(reportDir.resolve("setup-failure-20260502-030405-" + suffix + ".md"), "taken");
         }
 
         // when
@@ -1220,7 +1208,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Path workflow = configDir.resolve("WORKFLOW.reused.md");
-        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(20991), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(20991));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "000000000000000000000001",
@@ -1461,8 +1449,8 @@ final class SetupDiagnosticReporterTest {
         Path env = configDir.resolve(".env");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(privateWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19181), StandardCharsets.UTF_8);
-        Files.writeString(otherWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19182), StandardCharsets.UTF_8);
+        Files.writeString(privateWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19181));
+        Files.writeString(otherWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19182));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
@@ -1497,15 +1485,13 @@ final class SetupDiagnosticReporterTest {
                 board https://trello.com/b/SYNTH901/sensitive-board
                 repo /Users/Jane Doe/client/private-repo
                 selected-tail-line
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.writeString(
                 store.files(otherWorkflow).stderrLog(),
                 """
                 other-board-secret
                 other-tail-line
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Path toolDirectory = fakeToolDirectory(tempDir, "codex", "gh");
         FakeCommandRunner commands = new FakeCommandRunner()
                 .returns(0, "codex-cli 1.2.3\n", toolDirectory.resolve("codex").toString(), "--version")
@@ -1569,8 +1555,8 @@ final class SetupDiagnosticReporterTest {
         Path otherWorkflow = configDir.resolve("WORKFLOW.other.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(selectedWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19191), StandardCharsets.UTF_8);
-        Files.writeString(otherWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19192), StandardCharsets.UTF_8);
+        Files.writeString(selectedWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19191));
+        Files.writeString(otherWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19192));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
@@ -1646,15 +1632,13 @@ final class SetupDiagnosticReporterTest {
                   port: $SYNTHETIC_WORKER_PORT
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.writeString(
                 env,
                 """
                 SYNTHETIC_BOARD_ID=resolved-env-board-id
                 SYNTHETIC_WORKER_PORT=19301
-                """,
-                StandardCharsets.UTF_8);
+                """);
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "resolved-env-board-id",
@@ -1808,8 +1792,8 @@ final class SetupDiagnosticReporterTest {
         Path env = configDir.resolve(".env");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19199), StandardCharsets.UTF_8);
-        Files.writeString(env, "TRELLO_API_TOKEN=secret-token\n", StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19199));
+        Files.writeString(env, "TRELLO_API_TOKEN=secret-token\n");
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "private-board-id",
@@ -1824,7 +1808,7 @@ final class SetupDiagnosticReporterTest {
                         List.of(tempDir.resolve("private checkout")),
                         false))));
         ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
-        Files.writeString(logs.stdoutLog(), "secret log content\n", StandardCharsets.UTF_8);
+        Files.writeString(logs.stdoutLog(), "secret log content\n");
         DiagnosticsTokenHasher.load(configDir);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
@@ -1876,7 +1860,7 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.lookup.md");
         Path env = configDir.resolve(".env.lookup");
         Files.createDirectories(configDir);
-        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19201), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19201));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "lookup-board-id",
@@ -1942,8 +1926,7 @@ final class SetupDiagnosticReporterTest {
                 codex_npm_prefix=%s
                 workspace_root=%s
                 """
-                        .formatted(binDir, codexNpmPrefix, installedWorkspaceRoot),
-                StandardCharsets.UTF_8);
+                        .formatted(binDir, codexNpmPrefix, installedWorkspaceRoot));
         var reporter = new SetupDiagnosticReporter(
                 Map.of("SHELL", shell.toString(), "SYMPHONY_TRELLO_WRAPPER_SHELL", wrapperShell.toString()),
                 new FakeCommandRunner());
@@ -2006,7 +1989,7 @@ final class SetupDiagnosticReporterTest {
         Path stateHome = tempDir.resolve("lookup-pid-state");
         Path workflow = configDir.resolve("WORKFLOW.lookup-pid.md");
         Files.createDirectories(configDir);
-        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19203), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19203));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "lookup-pid-board-id",
@@ -2073,8 +2056,7 @@ final class SetupDiagnosticReporterTest {
                   port: 19204
                 ---
                 # Lookup Secret
-                """,
-                StandardCharsets.UTF_8);
+                """);
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "lookup-secret-board-id",
@@ -2161,7 +2143,7 @@ final class SetupDiagnosticReporterTest {
         Path configDir = tempDir.resolve("lookup-malformed-config");
         Path workflow = configDir.resolve("WORKFLOW.private.md");
         Files.createDirectories(configDir);
-        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19202), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19202));
         DiagnosticsTokenHasher.load(configDir);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
@@ -2196,8 +2178,7 @@ final class SetupDiagnosticReporterTest {
         // given
         Path configDir = tempDir.resolve("Jane Doe").resolve("temporary-key-config");
         Files.createDirectories(configDir);
-        Files.writeString(
-                configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME), "invalid-local-key", StandardCharsets.UTF_8);
+        Files.writeString(configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME), "invalid-local-key");
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -2279,9 +2260,8 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.private.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(
-                configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME), "invalid-local-key", StandardCharsets.UTF_8);
-        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19198), StandardCharsets.UTF_8);
+        Files.writeString(configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME), "invalid-local-key");
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19198));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "private-board-id",
@@ -2334,8 +2314,7 @@ final class SetupDiagnosticReporterTest {
         Path configDir = tempDir.resolve("setup-failure-temporary-key-config");
         Path stateHome = tempDir.resolve("setup-failure-temporary-key-state");
         Files.createDirectories(configDir);
-        Files.writeString(
-                configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME), "invalid-local-key", StandardCharsets.UTF_8);
+        Files.writeString(configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME), "invalid-local-key");
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -2397,8 +2376,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(workspaceRoot);
         Files.createDirectories(stateHome);
-        Files.writeString(
-                configDir.resolve(ConnectedBoardManifest.FILE_NAME), "{\"boards\":[]}", StandardCharsets.UTF_8);
+        Files.writeString(configDir.resolve(ConnectedBoardManifest.FILE_NAME), "{\"boards\":[]}");
         String githubToken = "ghp_" + "abcdefghijklmnopqrstuvwxyz1234567890abcd";
         String trelloToken = "ATTA" + "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz";
         String openAiToken = "sk-" + "proj-abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz";
@@ -2412,8 +2390,7 @@ final class SetupDiagnosticReporterTest {
                 password=super-secret-value
                 ordinary 1234567890abcdef1234567890abcdef
                 """
-                        .formatted(githubToken, trelloToken, openAiToken),
-                StandardCharsets.UTF_8);
+                        .formatted(githubToken, trelloToken, openAiToken));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -2445,13 +2422,13 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(workspaceRoot);
         Files.createDirectories(stateHome);
-        Files.writeString(
-                configDir.resolve(ConnectedBoardManifest.FILE_NAME), "{\"boards\":[]}", StandardCharsets.UTF_8);
+        Files.writeString(configDir.resolve(ConnectedBoardManifest.FILE_NAME), "{\"boards\":[]}");
         Files.writeString(
                 stateHome.resolve("url-user-info.log"),
-                "authority https://user:secret@example.invalid/path\n"
-                        + "path-at https://example.invalid/path@outside\n",
-                StandardCharsets.UTF_8);
+                """
+                authority https://user:secret@example.invalid/path
+                path-at https://example.invalid/path@outside
+                """);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -2481,8 +2458,7 @@ final class SetupDiagnosticReporterTest {
                 nested %s/nested/output.txt end
                 ref private-ref-value end
                 """
-                        .formatted(configDir, configDir),
-                StandardCharsets.UTF_8);
+                        .formatted(configDir, configDir));
         var reporter = new SetupDiagnosticReporter(
                 Map.of("SYMPHONY_TRELLO_REF", "private-ref-value"), new FakeCommandRunner());
 
@@ -2512,11 +2488,8 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(workspaceRoot);
         Files.createDirectories(stateHome);
-        Files.writeString(stateHome.resolve("install-context.properties"), "ref=main\n", StandardCharsets.UTF_8);
-        Files.writeString(
-                stateHome.resolve("worker.log"),
-                "INFO  [io.quarkus] (main) symphony-trello started\n",
-                StandardCharsets.UTF_8);
+        Files.writeString(stateHome.resolve("install-context.properties"), "ref=main\n");
+        Files.writeString(stateHome.resolve("worker.log"), "INFO  [io.quarkus] (main) symphony-trello started\n");
         var reporter = new SetupDiagnosticReporter(Map.of("SYMPHONY_TRELLO_REF", "main"), new FakeCommandRunner());
 
         // when
@@ -2538,8 +2511,8 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(workspaceRoot);
         Files.createDirectories(stateHome);
-        Files.writeString(stateHome.resolve("install-context.properties"), "ref=prod\n", StandardCharsets.UTF_8);
-        Files.writeString(stateHome.resolve("worker.log"), "branch prod failed\n", StandardCharsets.UTF_8);
+        Files.writeString(stateHome.resolve("install-context.properties"), "ref=prod\n");
+        Files.writeString(stateHome.resolve("worker.log"), "branch prod failed\n");
         var reporter = new SetupDiagnosticReporter(Map.of("SYMPHONY_TRELLO_REF", "prod"), new FakeCommandRunner());
 
         // when
@@ -2562,9 +2535,8 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(workspaceRoot);
         Files.createDirectories(stateHome);
         String repoUrl = "git@h:r";
-        Files.writeString(
-                stateHome.resolve("install-context.properties"), "repo_url=" + repoUrl + "\n", StandardCharsets.UTF_8);
-        Files.writeString(stateHome.resolve("worker.log"), "repo " + repoUrl + " failed\n", StandardCharsets.UTF_8);
+        Files.writeString(stateHome.resolve("install-context.properties"), "repo_url=" + repoUrl + "\n");
+        Files.writeString(stateHome.resolve("worker.log"), "repo " + repoUrl + " failed\n");
         var reporter =
                 new SetupDiagnosticReporter(Map.of("SYMPHONY_TRELLO_REPO_URL", repoUrl), new FakeCommandRunner());
 
@@ -2590,12 +2562,8 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(workspaceRoot);
         Files.createDirectories(stateHome);
         String sourceCommit = "0123456789abcdef0123456789abcdef01234567";
-        Files.writeString(
-                stateHome.resolve("install-context.properties"),
-                "source_commit=" + sourceCommit + "\n",
-                StandardCharsets.UTF_8);
-        Files.writeString(
-                stateHome.resolve("worker.log"), "commit " + sourceCommit + " failed\n", StandardCharsets.UTF_8);
+        Files.writeString(stateHome.resolve("install-context.properties"), "source_commit=" + sourceCommit + "\n");
+        Files.writeString(stateHome.resolve("worker.log"), "commit " + sourceCommit + " failed\n");
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -2621,13 +2589,8 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(stateHome);
         String malformedSourceCommit = "not-a-commit-value";
         Files.writeString(
-                stateHome.resolve("install-context.properties"),
-                "source_commit=" + malformedSourceCommit + "\n",
-                StandardCharsets.UTF_8);
-        Files.writeString(
-                stateHome.resolve("worker.log"),
-                "ordinary " + malformedSourceCommit + " text\n",
-                StandardCharsets.UTF_8);
+                stateHome.resolve("install-context.properties"), "source_commit=" + malformedSourceCommit + "\n");
+        Files.writeString(stateHome.resolve("worker.log"), "ordinary " + malformedSourceCommit + " text\n");
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -2651,8 +2614,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(workspaceRoot);
         Files.createDirectories(stateHome);
-        Files.writeString(
-                configDir.resolve(ConnectedBoardManifest.FILE_NAME), "{\"boards\":[]}", StandardCharsets.UTF_8);
+        Files.writeString(configDir.resolve(ConnectedBoardManifest.FILE_NAME), "{\"boards\":[]}");
         String trelloToken = "ATTA" + "thisLooksLikeASecretTokenValue1234567890";
         Files.writeString(
                 stateHome.resolve("parser-secret.log"),
@@ -2662,8 +2624,7 @@ final class SetupDiagnosticReporterTest {
                  ... sLikeASecretTokenValue1234567890
                 line: 4, column: 14
                 """
-                        .formatted(trelloToken),
-                StandardCharsets.UTF_8);
+                        .formatted(trelloToken));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -2689,8 +2650,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(workspaceRoot);
         Files.createDirectories(stateHome);
-        Files.writeString(
-                configDir.resolve(ConnectedBoardManifest.FILE_NAME), "{\"boards\":[]}", StandardCharsets.UTF_8);
+        Files.writeString(configDir.resolve(ConnectedBoardManifest.FILE_NAME), "{\"boards\":[]}");
         Files.writeString(
                 stateHome.resolve("fake-fence.log"),
                 """
@@ -2700,8 +2660,7 @@ final class SetupDiagnosticReporterTest {
                 [link](https://example.com)
                 ```
                 after fence
-                """,
-                StandardCharsets.UTF_8);
+                """);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -2732,8 +2691,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(workspaceRoot);
         Files.createDirectories(stateHome);
-        Files.writeString(
-                configDir.resolve(ConnectedBoardManifest.FILE_NAME), "{\"boards\":[]}", StandardCharsets.UTF_8);
+        Files.writeString(configDir.resolve(ConnectedBoardManifest.FILE_NAME), "{\"boards\":[]}");
         Files.writeString(
                 stateHome.resolve("fake-control.log"),
                 """
@@ -2744,8 +2702,7 @@ final class SetupDiagnosticReporterTest {
                 formfeed before\fafter
                 carriage before\rafter
                 """
-                        .formatted(ANSI_ESCAPE_IN_LOG, TERMINAL_BELL_IN_LOG),
-                StandardCharsets.UTF_8);
+                        .formatted(ANSI_ESCAPE_IN_LOG, TERMINAL_BELL_IN_LOG));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -2774,8 +2731,8 @@ final class SetupDiagnosticReporterTest {
         Path secondWorkflow = configDir.resolve("WORKFLOW.second.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(firstWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19194), StandardCharsets.UTF_8);
-        Files.writeString(secondWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19195), StandardCharsets.UTF_8);
+        Files.writeString(firstWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19194));
+        Files.writeString(secondWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19195));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -2803,7 +2760,7 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.logs.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19196), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19196));
         ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
         Files.writeString(
                 logs.stdoutLog(),
@@ -2818,9 +2775,8 @@ final class SetupDiagnosticReporterTest {
                 2026-05-29 08:02:27,698 INFO  [app] worker started
                  --/ legitimate command output
                 2026-05-29 08:03:29,223 INFO  [app] useful worker event
-                """,
-                StandardCharsets.UTF_8);
-        Files.writeString(logs.stderrLog(), "", StandardCharsets.UTF_8);
+                """);
+        Files.writeString(logs.stderrLog(), "");
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -2846,11 +2802,11 @@ final class SetupDiagnosticReporterTest {
         Path privateHostFile = tempDir.resolve("private-host-file.txt");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19197), StandardCharsets.UTF_8);
-        Files.writeString(privateHostFile, "PRIVATE_HOST_FILE_MARKER_SHOULD_NOT_APPEAR\n", StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19197));
+        Files.writeString(privateHostFile, "PRIVATE_HOST_FILE_MARKER_SHOULD_NOT_APPEAR\n");
         ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
         createSymbolicLinkOrSkip(logs.stdoutLog(), privateHostFile);
-        Files.writeString(logs.stderrLog(), "", StandardCharsets.UTF_8);
+        Files.writeString(logs.stderrLog(), "");
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -2875,7 +2831,7 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.pre-timestamp.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19197), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19197));
         ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
         Files.writeString(
                 logs.stdoutLog(),
@@ -2883,8 +2839,7 @@ final class SetupDiagnosticReporterTest {
                 JVM startup failure before logging initialized
                 java.lang.IllegalStateException: useful pre-log failure
                 2026-05-29 08:02:27,698 INFO  [app] worker started
-                """,
-                StandardCharsets.UTF_8);
+                """);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -2907,7 +2862,7 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.partial-banner.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19198), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19198));
         ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
         Files.writeString(
                 logs.stdoutLog(),
@@ -2918,8 +2873,7 @@ final class SetupDiagnosticReporterTest {
                 --\\___\\_\\____/_/ |_/_/|_/_/|_|\\____/___/
                  --/ legitimate command output
                 2026-05-29 08:03:29,223 INFO  [app] useful worker event
-                """,
-                StandardCharsets.UTF_8);
+                """);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -2941,8 +2895,8 @@ final class SetupDiagnosticReporterTest {
         Path otherWorkflow = configDir.resolve("WORKFLOW.other-relative.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19184), StandardCharsets.UTF_8);
-        Files.writeString(otherWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19185), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19184));
+        Files.writeString(otherWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19185));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
@@ -2970,8 +2924,8 @@ final class SetupDiagnosticReporterTest {
                                 List.of(),
                                 false))));
         ManagedProcessStore store = new ManagedProcessStore(stateHome);
-        Files.writeString(store.files(workflow).stdoutLog(), "selected workflow log\n", StandardCharsets.UTF_8);
-        Files.writeString(store.files(otherWorkflow).stdoutLog(), "other workflow log\n", StandardCharsets.UTF_8);
+        Files.writeString(store.files(workflow).stdoutLog(), "selected workflow log\n");
+        Files.writeString(store.files(otherWorkflow).stdoutLog(), "other workflow log\n");
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -3014,15 +2968,13 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.missing-env-path.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(
-                workflow, TestWorkflows.diagnosticsWorkflowWithEnvironmentBackedPort(), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithEnvironmentBackedPort());
         Files.writeString(
                 configDir.resolve(".env"),
                 """
                 BOARD_ID_REF=000000000000000000000002
                 BOARD_STATUS_PORT=19421
-                """,
-                StandardCharsets.UTF_8);
+                """);
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "000000000000000000000002",
@@ -3067,8 +3019,8 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(requestedWorkflow.getParent());
         Files.createDirectories(stateHome);
-        Files.writeString(manifestWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19186), StandardCharsets.UTF_8);
-        Files.writeString(requestedWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19187), StandardCharsets.UTF_8);
+        Files.writeString(manifestWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19186));
+        Files.writeString(requestedWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19187));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "manifest-board-id",
@@ -3083,9 +3035,8 @@ final class SetupDiagnosticReporterTest {
                         List.of(),
                         false))));
         ManagedProcessStore store = new ManagedProcessStore(stateHome);
-        Files.writeString(store.files(manifestWorkflow).stdoutLog(), "manifest workflow log\n", StandardCharsets.UTF_8);
-        Files.writeString(
-                store.files(requestedWorkflow).stdoutLog(), "requested workflow log\n", StandardCharsets.UTF_8);
+        Files.writeString(store.files(manifestWorkflow).stdoutLog(), "manifest workflow log\n");
+        Files.writeString(store.files(requestedWorkflow).stdoutLog(), "requested workflow log\n");
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -3121,8 +3072,8 @@ final class SetupDiagnosticReporterTest {
         String privateBoardName = "Private Duplicate Board";
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflowA, TestWorkflows.diagnosticsWorkflowWithPort(19188), StandardCharsets.UTF_8);
-        Files.writeString(workflowB, TestWorkflows.diagnosticsWorkflowWithPort(19189), StandardCharsets.UTF_8);
+        Files.writeString(workflowA, TestWorkflows.diagnosticsWorkflowWithPort(19188));
+        Files.writeString(workflowB, TestWorkflows.diagnosticsWorkflowWithPort(19189));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
@@ -3150,8 +3101,8 @@ final class SetupDiagnosticReporterTest {
                                 List.of(),
                                 false))));
         ManagedProcessStore store = new ManagedProcessStore(stateHome);
-        Files.writeString(store.files(workflowA).stdoutLog(), "private board A log\n", StandardCharsets.UTF_8);
-        Files.writeString(store.files(workflowB).stdoutLog(), "private board B log\n", StandardCharsets.UTF_8);
+        Files.writeString(store.files(workflowA).stdoutLog(), "private board A log\n");
+        Files.writeString(store.files(workflowB).stdoutLog(), "private board B log\n");
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -3192,7 +3143,7 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.private-shared.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19193), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19193));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
@@ -3220,7 +3171,7 @@ final class SetupDiagnosticReporterTest {
                                 List.of(),
                                 false))));
         ManagedProcessStore store = new ManagedProcessStore(stateHome);
-        Files.writeString(store.files(workflow).stdoutLog(), "private workflow log\n", StandardCharsets.UTF_8);
+        Files.writeString(store.files(workflow).stdoutLog(), "private workflow log\n");
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -3260,7 +3211,7 @@ final class SetupDiagnosticReporterTest {
         Path configDir = tempDir.resolve("conflicting-selector-config");
         Path workflow = configDir.resolve("WORKFLOW.private.md");
         Files.createDirectories(configDir);
-        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19190), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19190));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -3363,8 +3314,8 @@ final class SetupDiagnosticReporterTest {
         Path invalidPort = configDir.resolve("WORKFLOW.invalid-port.md");
         Files.createDirectories(directory);
         Files.createDirectories(stateHome);
-        Files.writeString(empty, "", StandardCharsets.UTF_8);
-        Files.writeString(noFrontMatter, "Body only\n", StandardCharsets.UTF_8);
+        Files.writeString(empty, "");
+        Files.writeString(noFrontMatter, "Body only\n");
         Files.writeString(
                 invalidPort,
                 """
@@ -3375,8 +3326,7 @@ final class SetupDiagnosticReporterTest {
                   port: "not-a-port"
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
         // Invalid server.port values stay selectable: diagnostics is the inspection tool for
         // such workflows and reports the port problem inside the rendered report instead.
@@ -3445,7 +3395,7 @@ final class SetupDiagnosticReporterTest {
                 """
                         .formatted(port);
         String privateSourceCommit = "abcdef0123456789abcdef0123456789abcdef01";
-        Files.writeString(workflow, workflowContent, StandardCharsets.UTF_8);
+        Files.writeString(workflow, workflowContent);
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "private-board-id",
@@ -3489,8 +3439,7 @@ final class SetupDiagnosticReporterTest {
                 {"cardId":"private-json-card-id","cardIdentifier":"TRELLO-private-json"}
                 nested parent path %s
                 """
-                        .formatted(appHome.resolve("Secret Client").resolve("repo")),
-                StandardCharsets.UTF_8);
+                        .formatted(appHome.resolve("Secret Client").resolve("repo")));
         Files.writeString(
                 stateHome.resolve("install-context.properties"),
                 """
@@ -3499,9 +3448,8 @@ final class SetupDiagnosticReporterTest {
                 source_commit=%s
                 TRELLO_TOKEN=secret-value
                 """
-                        .formatted(privateSourceCommit),
-                StandardCharsets.UTF_8);
-        Files.writeString(stateHome.resolve("large.log"), largeLog(), StandardCharsets.UTF_8);
+                        .formatted(privateSourceCommit));
+        Files.writeString(stateHome.resolve("large.log"), largeLog());
         Path toolDirectory = fakeToolDirectory(tempDir, "git", "codex");
         FakeCommandRunner commands = new FakeCommandRunner()
                 .returns(0, "git version 2.45.0\n", toolDirectory.resolve("git").toString(), "--version")
@@ -3642,8 +3590,7 @@ final class SetupDiagnosticReporterTest {
                 """
                 PRIVATE_INSTALL_CONTEXT_MARKER_SHOULD_NOT_APPEAR
                 secret_token=abc123
-                """,
-                StandardCharsets.UTF_8);
+                """);
         createSymbolicLinkOrSkip(stateHome.resolve("install-context.properties"), privateContext);
         var reporter = new SetupDiagnosticReporter(
                 Map.of(
@@ -3682,8 +3629,7 @@ final class SetupDiagnosticReporterTest {
                   port: 19090
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         new ConnectedBoardRepository(resolvedManifest)
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "request-board-id",
@@ -3796,8 +3742,7 @@ final class SetupDiagnosticReporterTest {
                 ---
                 Body
                 """
-                        .formatted(port),
-                StandardCharsets.UTF_8);
+                        .formatted(port));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
         var terminal = new RecordingTerminal();
 
@@ -3820,7 +3765,7 @@ final class SetupDiagnosticReporterTest {
         Path configDir = tempDir.resolve("lifecycle-config");
         Path relativeWorkflow = Path.of("target", "diagnostic-workflow-" + System.nanoTime() + ".md");
         Files.createDirectories(relativeWorkflow.toAbsolutePath().normalize().getParent());
-        Files.writeString(relativeWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19192), StandardCharsets.UTF_8);
+        Files.writeString(relativeWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19192));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         try {
@@ -3853,7 +3798,7 @@ final class SetupDiagnosticReporterTest {
         Path configDir = tempDir.resolve("setup-config");
         Path workflow = configDir.resolve("custom.md");
         Files.createDirectories(configDir);
-        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19193), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19193));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -3884,8 +3829,7 @@ final class SetupDiagnosticReporterTest {
                   port: 19091
                 ---
                 Notes, not a Symphony workflow.
-                """,
-                StandardCharsets.UTF_8);
+                """);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
         var terminal = new RecordingTerminal();
 
@@ -3912,8 +3856,7 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.invalid-max-agents.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(
-                workflow, TestWorkflows.diagnosticsWorkflowWithMaxAgents(maxAgentsValue), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithMaxAgents(maxAgentsValue));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -3952,9 +3895,8 @@ final class SetupDiagnosticReporterTest {
                 ---
                 Body
                 """
-                        .formatted(invalidPortValue),
-                StandardCharsets.UTF_8);
-        Files.writeString(validWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(20999), StandardCharsets.UTF_8);
+                        .formatted(invalidPortValue));
+        Files.writeString(validWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(20999));
         // The fixed clock keeps the rendered time_utc line free of every invalidPortValue substring;
         // the system clock makes "-1" match dates such as 2026-06-10.
         var reporter = new SetupDiagnosticReporter(
@@ -3998,7 +3940,7 @@ final class SetupDiagnosticReporterTest {
         Path env = configDir.resolve(".env");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(plainWorkflow, "plain body with client notes\n", StandardCharsets.UTF_8);
+        Files.writeString(plainWorkflow, "plain body with client notes\n");
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
@@ -4061,8 +4003,7 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.invalid-routing.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(
-                workflow, TestWorkflows.diagnosticsWorkflowWithRoutingLists(routingListValue), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithRoutingLists(routingListValue));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -4163,7 +4104,7 @@ final class SetupDiagnosticReporterTest {
 
         private Path workflow(String fileName, String content) throws IOException {
             Path workflow = configDir.resolve(fileName);
-            Files.writeString(workflow, content, StandardCharsets.UTF_8);
+            Files.writeString(workflow, content);
             return workflow;
         }
 
@@ -4253,7 +4194,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(toolDirectory);
         for (String tool : tools) {
             Path executable = toolDirectory.resolve(tool);
-            Files.writeString(executable, "", StandardCharsets.UTF_8);
+            Files.writeString(executable, "");
             executable.toFile().setExecutable(true);
         }
         return toolDirectory;
@@ -4282,8 +4223,7 @@ final class SetupDiagnosticReporterTest {
 
     private static byte[] diagnosticsKey(Path configDir) throws IOException {
         return HexFormat.of()
-                .parseHex(Files.readString(
-                                configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME), StandardCharsets.UTF_8)
+                .parseHex(Files.readString(configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME))
                         .strip());
     }
 

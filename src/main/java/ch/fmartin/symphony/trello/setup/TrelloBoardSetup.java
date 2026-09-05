@@ -753,14 +753,9 @@ public final class TrelloBoardSetup {
                 Files.createDirectories(parent);
             }
             if (force) {
-                Files.writeString(
-                        absolute,
-                        workflow,
-                        StandardCharsets.UTF_8,
-                        StandardOpenOption.CREATE,
-                        StandardOpenOption.TRUNCATE_EXISTING);
+                Files.writeString(absolute, workflow, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
             } else {
-                Files.writeString(absolute, workflow, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
+                Files.writeString(absolute, workflow, StandardOpenOption.CREATE_NEW);
             }
         } catch (IOException e) {
             throw new TrelloBoardSetupException(
@@ -925,7 +920,7 @@ public final class TrelloBoardSetup {
             return Optional.empty();
         }
         try {
-            String text = Files.readString(workflowPath, StandardCharsets.UTF_8);
+            String text = Files.readString(workflowPath);
             return readYamlFrontMatter(text);
         } catch (IOException e) {
             throw new TrelloBoardSetupException(
@@ -1804,8 +1799,9 @@ public final class TrelloBoardSetup {
                     ? "update the workpad with a short rework plan"
                     : "record a short rework plan for the final response";
             String reworkEvidence = workpadToolEnabled
-                    ? "update the existing workpad with the rework evidence, and add one concise handoff comment. Do not create\n"
-                            + "duplicate progress summary comments when the workpad already contains the details."
+                    ? """
+                            update the existing workpad with the rework evidence, and add one concise handoff comment. Do not create
+                            duplicate progress summary comments when the workpad already contains the details."""
                     : "include the rework evidence in the final response.";
             return """
                     ## Rework From Human Review
@@ -1829,8 +1825,9 @@ public final class TrelloBoardSetup {
                 ? "update the workpad with a short rework plan"
                 : "record a short rework plan for the final response";
         String reworkEvidence = workpadToolEnabled
-                ? "update the existing workpad with the rework evidence, and add one concise handoff comment. Do not create\n"
-                        + "duplicate progress summary comments when the workpad already contains the details."
+                ? """
+                        update the existing workpad with the rework evidence, and add one concise handoff comment. Do not create
+                        duplicate progress summary comments when the workpad already contains the details."""
                 : "include the rework evidence in the final response.";
         String resetRestrictions = workpadToolEnabled
                 ? "close the existing PR, delete the workpad, or create a new branch"

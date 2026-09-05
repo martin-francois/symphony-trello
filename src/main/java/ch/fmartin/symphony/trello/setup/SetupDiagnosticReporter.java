@@ -1027,7 +1027,7 @@ final class SetupDiagnosticReporter {
             String suffix = attempt == 1 ? "" : "-" + attempt;
             Path report = reportDir.resolve("setup-failure-" + timestamp + suffix + ".md");
             try {
-                Files.writeString(report, content, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
+                Files.writeString(report, content, StandardOpenOption.CREATE_NEW);
                 return report;
             } catch (FileAlreadyExistsException ignored) {
                 // Another report from the same second owns this name; loop to the next suffix.
@@ -1123,7 +1123,7 @@ final class SetupDiagnosticReporter {
             return Optional.empty();
         }
         try {
-            List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
+            List<String> lines = Files.readAllLines(path);
             return osReleaseValue(lines, "PRETTY_NAME").or(() -> osReleaseNameAndVersion(lines));
         } catch (IOException ignored) {
             return Optional.empty();
@@ -2298,7 +2298,7 @@ final class SetupDiagnosticReporter {
             if (answer == null || !answer.toLowerCase(Locale.ROOT).startsWith("y")) {
                 return;
             }
-            String body = Files.readString(reportPath, StandardCharsets.UTF_8);
+            String body = Files.readString(reportPath);
             PrintStream out = borrowedOut(terminal); // NOPMD - Terminal owns the stream.
             out.println();
             out.println("Issue title:");

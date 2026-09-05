@@ -10,7 +10,6 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -306,7 +305,7 @@ public class ConfigResolver {
                 throw new ConfigException(
                         "secret_file_too_large", displayName + " secret file is too large: " + secretPath);
             }
-            return stripTrailingLineBreaks(Files.readString(secretPath, StandardCharsets.UTF_8));
+            return stripTrailingLineBreaks(Files.readString(secretPath));
         } catch (IOException e) {
             throw new ConfigException(
                     "secret_file_read_error", displayName + " secret file cannot be read: " + secretPath, e);

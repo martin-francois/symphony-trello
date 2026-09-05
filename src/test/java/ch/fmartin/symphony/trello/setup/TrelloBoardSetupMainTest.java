@@ -367,8 +367,7 @@ final class TrelloBoardSetupMainTest {
                   port: 19183
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "private-board-id",
@@ -384,8 +383,7 @@ final class TrelloBoardSetupMainTest {
                         false))));
         Files.writeString(
                 stateHome.resolve("WORKFLOW.private.err"),
-                "token=secret-token\npath=" + tempDir.resolve("client checkout") + "\n",
-                StandardCharsets.UTF_8);
+                "token=secret-token\npath=" + tempDir.resolve("client checkout") + "\n");
 
         // when
         CliRunResult result = runCli(
@@ -435,7 +433,7 @@ final class TrelloBoardSetupMainTest {
         Path workflow = configDir.resolve("WORKFLOW.queue.md");
         Path env = configDir.resolve(".env");
         Files.createDirectories(configDir);
-        Files.writeString(workflow, TestWorkflows.workflowWithBoardAndPort("board-id", 19191), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.workflowWithBoardAndPort("board-id", 19191));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "board-id",
@@ -480,7 +478,7 @@ final class TrelloBoardSetupMainTest {
         Path workflow = configDir.resolve("WORKFLOW.queue.md");
         Path env = configDir.resolve(".env");
         Files.createDirectories(configDir);
-        Files.writeString(workflow, TestWorkflows.workflowWithBoardAndPort("board-id", 19192), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.workflowWithBoardAndPort("board-id", 19192));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "board-id",
@@ -530,9 +528,8 @@ final class TrelloBoardSetupMainTest {
                 .resolve("private-context.json");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(
-                workflow, TestWorkflows.workflowWithBoardAndPort("private-board-id", 19184), StandardCharsets.UTF_8);
-        Files.writeString(env, "TRELLO_API_TOKEN=secret-token\n", StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.workflowWithBoardAndPort("private-board-id", 19184));
+        Files.writeString(env, "TRELLO_API_TOKEN=secret-token\n");
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "private-board-id",
@@ -547,7 +544,7 @@ final class TrelloBoardSetupMainTest {
                         List.of(tempDir.resolve("client checkout")),
                         false))));
         ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
-        Files.writeString(logs.stderrLog(), "secret log content\n", StandardCharsets.UTF_8);
+        Files.writeString(logs.stderrLog(), "secret log content\n");
 
         // when
         CliRunResult result = runCli(
@@ -597,8 +594,7 @@ final class TrelloBoardSetupMainTest {
         Path workflow = configDir.resolve("WORKFLOW.private-lookup.md");
         Path env = configDir.resolve(".env.private-lookup");
         Files.createDirectories(configDir);
-        Files.writeString(
-                workflow, TestWorkflows.workflowWithBoardAndPort("lookup-board-id", 19185), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.workflowWithBoardAndPort("lookup-board-id", 19185));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "lookup-board-id",
@@ -671,10 +667,8 @@ final class TrelloBoardSetupMainTest {
         Path output = tempDir.resolve("diagnostics-selector-output.txt");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(
-                workflowA, TestWorkflows.workflowWithBoardAndPort("board-a-id", 19188), StandardCharsets.UTF_8);
-        Files.writeString(
-                workflowB, TestWorkflows.workflowWithBoardAndPort("board-b-id", 19189), StandardCharsets.UTF_8);
+        Files.writeString(workflowA, TestWorkflows.workflowWithBoardAndPort("board-a-id", 19188));
+        Files.writeString(workflowB, TestWorkflows.workflowWithBoardAndPort("board-b-id", 19189));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
@@ -702,8 +696,8 @@ final class TrelloBoardSetupMainTest {
                                 List.of(),
                                 false))));
         ManagedProcessStore store = new ManagedProcessStore(stateHome);
-        Files.writeString(store.files(workflowA).stdoutLog(), "board A log\n", StandardCharsets.UTF_8);
-        Files.writeString(store.files(workflowB).stdoutLog(), "board B log\n", StandardCharsets.UTF_8);
+        Files.writeString(store.files(workflowA).stdoutLog(), "board A log\n");
+        Files.writeString(store.files(workflowB).stdoutLog(), "board B log\n");
 
         // when
         CliRunResult result = runCli(
@@ -809,8 +803,8 @@ final class TrelloBoardSetupMainTest {
         Path invalidPort = configDir.resolve("WORKFLOW.invalid-port.md");
         Files.createDirectories(directory);
         Files.createDirectories(stateHome);
-        Files.writeString(empty, "", StandardCharsets.UTF_8);
-        Files.writeString(noFrontMatter, "Body only\n", StandardCharsets.UTF_8);
+        Files.writeString(empty, "");
+        Files.writeString(noFrontMatter, "Body only\n");
         Files.writeString(
                 invalidPort,
                 """
@@ -821,8 +815,7 @@ final class TrelloBoardSetupMainTest {
                   port: "not-a-port"
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         record UnusableWorkflowSelector(String name, Path workflow) {}
         // Invalid server.port values stay selectable: diagnostics is the inspection tool for such
         // workflows and reports the port problem inside the rendered report instead.
@@ -880,7 +873,7 @@ final class TrelloBoardSetupMainTest {
                 "--output",
                 tempDir.resolve("invalid-port-diagnostics.md").toString());
         invalidPortResult.assertSuccess();
-        assertThat(Files.readString(tempDir.resolve("invalid-port-diagnostics.md"), StandardCharsets.UTF_8))
+        assertThat(Files.readString(tempDir.resolve("invalid-port-diagnostics.md")))
                 .contains("invalid server.port")
                 .doesNotContain("IllegalArgumentException", "private-board-id");
     }
@@ -897,10 +890,8 @@ final class TrelloBoardSetupMainTest {
         String privateBoardName = "Private Duplicate Board";
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(
-                workflowA, TestWorkflows.workflowWithBoardAndPort("private-board-a-id", 19190), StandardCharsets.UTF_8);
-        Files.writeString(
-                workflowB, TestWorkflows.workflowWithBoardAndPort("private-board-b-id", 19191), StandardCharsets.UTF_8);
+        Files.writeString(workflowA, TestWorkflows.workflowWithBoardAndPort("private-board-a-id", 19190));
+        Files.writeString(workflowB, TestWorkflows.workflowWithBoardAndPort("private-board-b-id", 19191));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
@@ -928,8 +919,8 @@ final class TrelloBoardSetupMainTest {
                                 List.of(),
                                 false))));
         ManagedProcessStore store = new ManagedProcessStore(stateHome);
-        Files.writeString(store.files(workflowA).stdoutLog(), "private board A log\n", StandardCharsets.UTF_8);
-        Files.writeString(store.files(workflowB).stdoutLog(), "private board B log\n", StandardCharsets.UTF_8);
+        Files.writeString(store.files(workflowA).stdoutLog(), "private board A log\n");
+        Files.writeString(store.files(workflowB).stdoutLog(), "private board B log\n");
 
         // when
         CliRunResult result = runCli(
@@ -981,8 +972,8 @@ final class TrelloBoardSetupMainTest {
         Path privateHostFile = tempDir.resolve("private-host-file.txt");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, TestWorkflows.workflowWithBoardAndPort("board-id", 19194), StandardCharsets.UTF_8);
-        Files.writeString(privateHostFile, "PRIVATE_HOST_FILE_MARKER_SHOULD_NOT_APPEAR\n", StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.workflowWithBoardAndPort("board-id", 19194));
+        Files.writeString(privateHostFile, "PRIVATE_HOST_FILE_MARKER_SHOULD_NOT_APPEAR\n");
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "board-id",
@@ -998,7 +989,7 @@ final class TrelloBoardSetupMainTest {
                         false))));
         ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
         createSymbolicLinkOrSkip(logs.stdoutLog(), privateHostFile);
-        Files.writeString(logs.stderrLog(), "", StandardCharsets.UTF_8);
+        Files.writeString(logs.stderrLog(), "");
 
         // when
         CliRunResult result = runCli(
@@ -1025,7 +1016,7 @@ final class TrelloBoardSetupMainTest {
         Path privatePathComponent = tempDir.resolve("Jane Doe");
         Path output = privatePathComponent.resolve("diagnostics.txt");
         Files.createDirectories(configDir);
-        Files.writeString(privatePathComponent, "not a directory", StandardCharsets.UTF_8);
+        Files.writeString(privatePathComponent, "not a directory");
 
         // when
         CliRunResult result =
@@ -1609,9 +1600,8 @@ final class TrelloBoardSetupMainTest {
         Path workflow = configDir.resolve("WORKFLOW.queue.md");
         Path env = configDir.resolve(".env");
         Files.createDirectories(configDir);
-        Files.writeString(
-                workflow, TestWorkflows.workflowWithBoardAndPort("board-start-id", 19192), StandardCharsets.UTF_8);
-        Files.writeString(env, dotenvContent, StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.workflowWithBoardAndPort("board-start-id", 19192));
+        Files.writeString(env, dotenvContent);
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "board-start-id",
@@ -1694,8 +1684,7 @@ final class TrelloBoardSetupMainTest {
                   port: $WORKER_PORT
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         createFifo(env, tempDir);
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
@@ -1741,8 +1730,7 @@ final class TrelloBoardSetupMainTest {
         Files.createDirectories(configDir);
         Files.createDirectories(workspaceRoot);
         Files.createDirectories(envDirectory);
-        Files.writeString(
-                workflow, TestWorkflows.workflowWithBoardAndPort("board-start-id", 19194), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.workflowWithBoardAndPort("board-start-id", 19194));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "board-start-id",
@@ -1784,7 +1772,7 @@ final class TrelloBoardSetupMainTest {
         Path env = configDir.resolve(".env");
         Files.createDirectories(configDir);
         Files.createDirectories(privateDir);
-        Files.writeString(env, TestEnv.trelloCredentials("dummy", "dummy"), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials("dummy", "dummy"));
         createFifo(workflow, tempDir);
 
         // when
@@ -2287,8 +2275,7 @@ final class TrelloBoardSetupMainTest {
             Files.writeString(
                     workflow,
                     TestWorkflows.workflowWithRepositoryDefaults(
-                            "existing-board", serverPort, REPOSITORY_URL_REFERENCE, REPOSITORY_PATH_REFERENCE),
-                    StandardCharsets.UTF_8);
+                            "existing-board", serverPort, REPOSITORY_URL_REFERENCE, REPOSITORY_PATH_REFERENCE));
             SetupCommandBuilder command = scenario.newBoard()
                     ? SetupCommandBuilder.newBoard(endpoint()).name("Preserved Direct Defaults Queue")
                     : SetupCommandBuilder.importBoard(endpoint())
@@ -2645,8 +2632,7 @@ final class TrelloBoardSetupMainTest {
         Path env = tempDir.resolve(".env.force-existing-live-port");
         HttpServer listeningServer = startLoopbackServer();
         int listeningPort = listeningServer.getAddress().getPort();
-        Files.writeString(
-                workflow, TestWorkflows.workflowWithBoardAndPort("board-1", listeningPort), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.workflowWithBoardAndPort("board-1", listeningPort));
         ConnectedBoard previousBoard = ConnectedBoardBuilder.connectedBoard(
                         workflow.toAbsolutePath().normalize())
                 .withBoardId("board-1")
@@ -2712,7 +2698,7 @@ final class TrelloBoardSetupMainTest {
         // given
         Path workflow = tempDir.resolve("manifest-preflight.WORKFLOW.md");
         Path env = tempDir.resolve(".env.manifest-preflight");
-        Files.writeString(tempDir.resolve(ConnectedBoardManifest.FILE_NAME), "{not-json", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve(ConnectedBoardManifest.FILE_NAME), "{not-json");
 
         // when
         CliRunResult result = runCli(
@@ -2751,8 +2737,7 @@ final class TrelloBoardSetupMainTest {
         // given
         Path workflow = tempDir.resolve("unusable-manifest-preflight.WORKFLOW.md");
         Path env = tempDir.resolve(".env.unusable-manifest-preflight");
-        Files.writeString(
-                tempDir.resolve(ConnectedBoardManifest.FILE_NAME), "{\"boards\":[{}]}", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve(ConnectedBoardManifest.FILE_NAME), "{\"boards\":[{}]}");
 
         // when
         CliRunResult result = runCli(
@@ -2794,7 +2779,7 @@ final class TrelloBoardSetupMainTest {
         Path workflow = tempDir.resolve("null-boards-preflight.WORKFLOW.md");
         Path env = tempDir.resolve(".env.null-boards-preflight");
         Path manifest = tempDir.resolve(ConnectedBoardManifest.FILE_NAME);
-        Files.writeString(manifest, manifestContent, StandardCharsets.UTF_8);
+        Files.writeString(manifest, manifestContent);
 
         // when
         CliRunResult result = runCli(
@@ -2829,7 +2814,7 @@ final class TrelloBoardSetupMainTest {
         assertThat(createdBoardName.get()).isNull();
         assertThat(workflow).doesNotExist();
         assertThat(env).doesNotExist();
-        assertThat(Files.readString(manifest, StandardCharsets.UTF_8)).isEqualTo(manifestContent);
+        assertThat(Files.readString(manifest)).isEqualTo(manifestContent);
     }
 
     @Test
@@ -2993,7 +2978,7 @@ final class TrelloBoardSetupMainTest {
     void importBoardRejectsWorkflowUnderFileParentWithoutBlamingManifest() throws Exception {
         // given
         Path plainFile = tempDir.resolve("not-a-directory");
-        Files.writeString(plainFile, "plain", StandardCharsets.UTF_8);
+        Files.writeString(plainFile, "plain");
         Path workflow = plainFile.resolve("WORKFLOW.import.md");
         Path env = tempDir.resolve(".env.file-parent-workflow");
 
@@ -3055,7 +3040,7 @@ final class TrelloBoardSetupMainTest {
         // given
         Path env = tempDir.resolve("custom-env-dir").resolve(".env.custom");
         Files.createDirectories(env.getParent());
-        Files.writeString(env, TestEnv.trelloCredentials("env-key", "env-token"), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials("env-key", "env-token"));
 
         // when
         CliRunResult result =
@@ -3071,10 +3056,7 @@ final class TrelloBoardSetupMainTest {
     void listWorkspacesReadsCredentialsBehindAByteOrderMark() throws Exception {
         // given
         Path env = tempDir.resolve(".env.bom");
-        Files.writeString(
-                env,
-                UNICODE_BYTE_ORDER_MARK + "TRELLO_API_KEY=bom-key\nTRELLO_API_TOKEN=bom-token\n",
-                StandardCharsets.UTF_8);
+        Files.writeString(env, UNICODE_BYTE_ORDER_MARK + "TRELLO_API_KEY=bom-key\nTRELLO_API_TOKEN=bom-token\n");
 
         // when
         CliRunResult result =
@@ -3093,7 +3075,7 @@ final class TrelloBoardSetupMainTest {
         // given
         Path env = credentialSource.envPath(tempDir);
         Files.createDirectories(env.getParent());
-        Files.writeString(env, "# no Trello credentials yet\n", StandardCharsets.UTF_8);
+        Files.writeString(env, "# no Trello credentials yet\n");
 
         // when
         CliRunResult result = runCliWithoutTrelloCredentials(
@@ -3169,8 +3151,7 @@ final class TrelloBoardSetupMainTest {
     void rejectsReferenceLookingCredentialFileValuesBeforeAnyTrelloRequest(String dotenvValue) throws Exception {
         // given
         Path env = tempDir.resolve(".env.reference");
-        Files.writeString(
-                env, "TRELLO_API_KEY=" + dotenvValue + "\nTRELLO_API_TOKEN=real-token\n", StandardCharsets.UTF_8);
+        Files.writeString(env, "TRELLO_API_KEY=" + dotenvValue + "\nTRELLO_API_TOKEN=real-token\n");
 
         // when
         CliRunResult result =
@@ -3193,7 +3174,7 @@ final class TrelloBoardSetupMainTest {
     void directCredentialOptionsWinOverReferenceLookingCredentialFileValues() throws Exception {
         // given
         Path env = tempDir.resolve(".env.reference-overridden");
-        Files.writeString(env, "TRELLO_API_KEY=${REAL_KEY}\nTRELLO_API_TOKEN=${REAL_TOKEN}\n", StandardCharsets.UTF_8);
+        Files.writeString(env, "TRELLO_API_KEY=${REAL_KEY}\nTRELLO_API_TOKEN=${REAL_TOKEN}\n");
 
         // when
         CliRunResult result = runCli(
@@ -3219,9 +3200,7 @@ final class TrelloBoardSetupMainTest {
         Path configDir = tempDir.resolve("installed-config-dir");
         Files.createDirectories(configDir);
         Files.writeString(
-                configDir.resolve(".env"),
-                "TRELLO_API_KEY=config-dir-key\nTRELLO_API_TOKEN=config-dir-token\n",
-                StandardCharsets.UTF_8);
+                configDir.resolve(".env"), "TRELLO_API_KEY=config-dir-key\nTRELLO_API_TOKEN=config-dir-token\n");
 
         // when
         CliRunResult result = runCliWithoutTrelloCredentials(
@@ -3237,8 +3216,7 @@ final class TrelloBoardSetupMainTest {
     void listWorkspacesWithoutCredentialsIgnoresAmbientDotenvSelector() throws Exception {
         // given
         Path ambientEnv = tempDir.resolve(".env.ambient");
-        Files.writeString(
-                ambientEnv, "TRELLO_API_KEY=ambient-key\nTRELLO_API_TOKEN=ambient-token\n", StandardCharsets.UTF_8);
+        Files.writeString(ambientEnv, "TRELLO_API_KEY=ambient-key\nTRELLO_API_TOKEN=ambient-token\n");
 
         // when
         MainProcessResult result = runMainProcess(
@@ -3265,11 +3243,9 @@ final class TrelloBoardSetupMainTest {
         Path configDir = tempDir.resolve("losing-config-dir");
         Files.createDirectories(configDir);
         Files.writeString(
-                configDir.resolve(".env"),
-                "TRELLO_API_KEY=config-dir-key\nTRELLO_API_TOKEN=config-dir-token\n",
-                StandardCharsets.UTF_8);
+                configDir.resolve(".env"), "TRELLO_API_KEY=config-dir-key\nTRELLO_API_TOKEN=config-dir-token\n");
         Path env = tempDir.resolve(".env.winning");
-        Files.writeString(env, TestEnv.trelloCredentials("env-key", "env-token"), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials("env-key", "env-token"));
 
         // when
         CliRunResult result = runCliWithoutTrelloCredentials(
@@ -3293,11 +3269,9 @@ final class TrelloBoardSetupMainTest {
         Path configDir = tempDir.resolve("overridden-config-dir");
         Files.createDirectories(configDir);
         Files.writeString(
-                configDir.resolve(".env"),
-                "TRELLO_API_KEY=config-dir-key\nTRELLO_API_TOKEN=config-dir-token\n",
-                StandardCharsets.UTF_8);
+                configDir.resolve(".env"), "TRELLO_API_KEY=config-dir-key\nTRELLO_API_TOKEN=config-dir-token\n");
         Path env = tempDir.resolve(".env.overridden");
-        Files.writeString(env, TestEnv.trelloCredentials("env-key", "env-token"), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials("env-key", "env-token"));
 
         // when
         CliRunResult result = runCli(
@@ -3323,7 +3297,7 @@ final class TrelloBoardSetupMainTest {
     void listWorkspacesRejectsConfigDirPointingAtAFileBeforeAnyTrelloRequest() throws Exception {
         // given
         Path notADirectory = tempDir.resolve("config-dir-as-file");
-        Files.writeString(notADirectory, "not a directory", StandardCharsets.UTF_8);
+        Files.writeString(notADirectory, "not a directory");
 
         // when
         CliRunResult result =
@@ -3390,7 +3364,7 @@ final class TrelloBoardSetupMainTest {
         Path newWorkflow = tempDir.resolve("new-existing-board.WORKFLOW.md");
         Path previousEnv = tempDir.resolve(".env.previous-existing");
         Path newEnv = tempDir.resolve(".env.new-existing");
-        Files.writeString(previousWorkflow, "previous workflow", StandardCharsets.UTF_8);
+        Files.writeString(previousWorkflow, "previous workflow");
         ConnectedBoard previousBoard = ConnectedBoardBuilder.connectedBoard(
                         previousWorkflow.toAbsolutePath().normalize())
                 .withBoardId("board-1")
@@ -3625,7 +3599,7 @@ final class TrelloBoardSetupMainTest {
         // given
         Path workflow = tempDir.resolve("runtime-env-source.WORKFLOW.md");
         Path env = tempDir.resolve(".env.runtime");
-        Files.writeString(env, "TRELLO_API_KEY=dotenv-key\nTRELLO_API_TOKEN=dotenv-token\n", StandardCharsets.UTF_8);
+        Files.writeString(env, "TRELLO_API_KEY=dotenv-key\nTRELLO_API_TOKEN=dotenv-token\n");
 
         // when
         CliRunResult result = runCli(
@@ -3701,7 +3675,7 @@ final class TrelloBoardSetupMainTest {
         // given
         Path workflow = tempDir.resolve("unsafe-configured-runtime-env.WORKFLOW.md");
         Path env = tempDir.resolve("README.md");
-        Files.writeString(env, "readme", StandardCharsets.UTF_8);
+        Files.writeString(env, "readme");
 
         // when
         MainProcessResult result = runMainProcess(
@@ -3732,7 +3706,7 @@ final class TrelloBoardSetupMainTest {
         // given
         Path workflow = tempDir.resolve("unsafe-configured-runtime-env-with-env-credentials.WORKFLOW.md");
         Path env = tempDir.resolve("README.md");
-        Files.writeString(env, "readme", StandardCharsets.UTF_8);
+        Files.writeString(env, "readme");
 
         // when
         MainProcessResult result = runMainProcess(
@@ -3770,7 +3744,7 @@ final class TrelloBoardSetupMainTest {
     void newBoardRejectsUnwritableRuntimeEnvFileBeforeCreatingBoard() throws Exception {
         // given
         Path notDirectory = tempDir.resolve("not-a-directory");
-        Files.writeString(notDirectory, "not a directory", StandardCharsets.UTF_8);
+        Files.writeString(notDirectory, "not a directory");
         Path env = notDirectory.resolve(".env.runtime");
         Path workflow = tempDir.resolve("unwritable-runtime-env.WORKFLOW.md");
 
@@ -3824,7 +3798,7 @@ final class TrelloBoardSetupMainTest {
             Map<String, String> query = query(exchange);
             createdBoardName.set(query.get("name"));
             Files.delete(envParent);
-            Files.writeString(envParent, "not a directory", StandardCharsets.UTF_8);
+            Files.writeString(envParent, "not a directory");
             respond(exchange, boardJson("board-1", query.get("name"), "abc123", "https://trello.com/b/abc123/board"));
         });
 
@@ -3848,7 +3822,7 @@ final class TrelloBoardSetupMainTest {
         // given
         Path env = tempDir.resolve("README.md");
         Path workflow = tempDir.resolve("unsafe-runtime-env.WORKFLOW.md");
-        Files.writeString(env, "readme", StandardCharsets.UTF_8);
+        Files.writeString(env, "readme");
 
         // when
         CliRunResult result = runNewBoardWithRuntimeEnv(workflow, env, true);
@@ -3863,7 +3837,7 @@ final class TrelloBoardSetupMainTest {
         // given
         Path env = tempDir.resolve("README.md");
         Path workflow = tempDir.resolve("unsafe-runtime-env-without-direct-credentials.WORKFLOW.md");
-        Files.writeString(env, "readme", StandardCharsets.UTF_8);
+        Files.writeString(env, "readme");
 
         // when
         CliRunResult result = runNewBoardWithRuntimeEnv(workflow, env, false);
@@ -4011,7 +3985,7 @@ final class TrelloBoardSetupMainTest {
         // given
         Path env = tempDir.resolve(".env.runtime");
         Path workflow = tempDir.resolve("missing-credentials-runtime-env.WORKFLOW.md");
-        Files.writeString(env, "# no credentials yet\n", StandardCharsets.UTF_8);
+        Files.writeString(env, "# no credentials yet\n");
 
         // when
         MainProcessResult result = runMainProcessWithoutTrelloCredentials(
@@ -4047,7 +4021,7 @@ final class TrelloBoardSetupMainTest {
     void newBoardDoesNotWriteRuntimeEnvWhenWorkflowPreflightFails() throws Exception {
         // given
         Path workflow = tempDir.resolve("existing-runtime-env.WORKFLOW.md");
-        Files.writeString(workflow, "existing workflow", StandardCharsets.UTF_8);
+        Files.writeString(workflow, "existing workflow");
         Path env = tempDir.resolve(".env.runtime");
 
         // when
@@ -4086,7 +4060,7 @@ final class TrelloBoardSetupMainTest {
     void importBoardDoesNotContactTrelloWhenWorkflowPreflightFails() throws Exception {
         // given
         Path workflow = tempDir.resolve("existing-import-runtime-env.WORKFLOW.md");
-        Files.writeString(workflow, "existing workflow", StandardCharsets.UTF_8);
+        Files.writeString(workflow, "existing workflow");
         Path env = tempDir.resolve(".env.import-runtime");
 
         // when
@@ -4656,7 +4630,7 @@ final class TrelloBoardSetupMainTest {
         Files.createDirectories(configDirectory);
         Path defaultWorkflow = configDirectory.resolve("WORKFLOW.md");
         Path env = configDirectory.resolve(".env.second-board");
-        Files.writeString(defaultWorkflow, "existing", StandardCharsets.UTF_8);
+        Files.writeString(defaultWorkflow, "existing");
 
         // when
         CliRunResult result = runCli(
@@ -4816,7 +4790,7 @@ final class TrelloBoardSetupMainTest {
     void explicitDefaultWorkflowPathDoesNotUseBoardNameFallback() throws IOException {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(workflow, "existing workflow", StandardCharsets.UTF_8);
+        Files.writeString(workflow, "existing workflow");
         Path fallback = tempDir.resolve("WORKFLOW.symmetry-queue.md");
         Path env = tempDir.resolve(".env.explicit-workflow");
 
@@ -5296,10 +5270,9 @@ final class TrelloBoardSetupMainTest {
                   port: $SYNTHETIC_IMPORT_STATUS_PORT
                 ---
                 Existing body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Path env = tempDir.resolve(".env.imported-port");
-        Files.writeString(env, "SYNTHETIC_IMPORT_STATUS_PORT=19091\n", StandardCharsets.UTF_8);
+        Files.writeString(env, "SYNTHETIC_IMPORT_STATUS_PORT=19091\n");
 
         // when
         CliRunResult result = runCli(
@@ -5355,14 +5328,10 @@ final class TrelloBoardSetupMainTest {
                   port: $SYNTHETIC_IMPORT_STATUS_PORT
                 ---
                 Existing body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Path workflow = tempDir.resolve("new-import.WORKFLOW.md");
         Path env = tempDir.resolve(".env.import-port-scan");
-        Files.writeString(
-                env,
-                "SYNTHETIC_IMPORT_STATUS_PORT=" + ConfigDefaults.DEFAULT_SERVER_PORT + "\n",
-                StandardCharsets.UTF_8);
+        Files.writeString(env, "SYNTHETIC_IMPORT_STATUS_PORT=" + ConfigDefaults.DEFAULT_SERVER_PORT + "\n");
 
         // when
         CliRunResult result = runCliWithNoBusyPorts(
@@ -5405,14 +5374,10 @@ final class TrelloBoardSetupMainTest {
                   port: $SYNTHETIC_NEW_BOARD_STATUS_PORT
                 ---
                 Existing body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Path workflow = tempDir.resolve("new-board-env-port.WORKFLOW.md");
         Path env = tempDir.resolve(".env.new-board-port-scan");
-        Files.writeString(
-                env,
-                "SYNTHETIC_NEW_BOARD_STATUS_PORT=" + ConfigDefaults.DEFAULT_SERVER_PORT + "\n",
-                StandardCharsets.UTF_8);
+        Files.writeString(env, "SYNTHETIC_NEW_BOARD_STATUS_PORT=" + ConfigDefaults.DEFAULT_SERVER_PORT + "\n");
 
         // when
         CliRunResult result = runCliWithNoBusyPorts(
@@ -5575,8 +5540,7 @@ final class TrelloBoardSetupMainTest {
                   reasoning_effort: "high"
                 ---
                 Old body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         CodexModelSelectionDefaults catalog = new CodexModelSelectionDefaults(
                 new TrelloBoardSetup.CodexModelDefaults("gpt-default", "medium"),
                 Map.of("gpt-default", "medium", "gpt-existing", "high"),
@@ -5633,8 +5597,7 @@ final class TrelloBoardSetupMainTest {
                   command: codex app-server
                 ---
                 Old body
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         CliRunResult result = runCli(
@@ -5681,8 +5644,7 @@ final class TrelloBoardSetupMainTest {
                   reasoning_effort: "low"
                 ---
                 Old body
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         CliRunResult result = runCliWithSelectionDefaults(
@@ -5731,8 +5693,7 @@ final class TrelloBoardSetupMainTest {
                   command: codex app-server
                 ---
                 Old body
-                """,
-                StandardCharsets.UTF_8);
+                """);
 
         // when
         CliRunResult result = runCliWithSelectionDefaults(
@@ -5871,7 +5832,7 @@ final class TrelloBoardSetupMainTest {
             throws Exception {
         // given
         Path workspaceFile = tempDir.resolve("direct-workspace-root-file");
-        Files.writeString(workspaceFile, "not a directory", StandardCharsets.UTF_8);
+        Files.writeString(workspaceFile, "not a directory");
         Path importWorkflow = tempDir.resolve("direct-invalid-workspace-root.WORKFLOW.md");
         Map<String, String> replacements = Map.of(
                 "<endpoint>",
@@ -6042,9 +6003,9 @@ final class TrelloBoardSetupMainTest {
         Path configFile = tempDir.resolve("lifecycle-config-file");
         Path workspaceFile = tempDir.resolve("lifecycle-workspace-file");
         Path stateFile = tempDir.resolve("lifecycle-state-file");
-        Files.writeString(configFile, "file", StandardCharsets.UTF_8);
-        Files.writeString(workspaceFile, "file", StandardCharsets.UTF_8);
-        Files.writeString(stateFile, "file", StandardCharsets.UTF_8);
+        Files.writeString(configFile, "file");
+        Files.writeString(workspaceFile, "file");
+        Files.writeString(stateFile, "file");
         Map<String, String> replacements = Map.of(
                 "<configFile>",
                 configFile.toString(),
@@ -6630,7 +6591,7 @@ final class TrelloBoardSetupMainTest {
         Path requestedWorkflow = configDir.resolve("WORKFLOW.requested.md");
         Path env = configDir.resolve(".env");
         Files.createDirectories(configDir);
-        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials());
         HttpServer runningWorker = startLoopbackServer();
         int runningPort = runningWorker.getAddress().getPort();
         Files.writeString(
@@ -6646,8 +6607,7 @@ final class TrelloBoardSetupMainTest {
                 ---
                 # Running workflow
                 """
-                        .formatted(endpoint(), runningPort),
-                StandardCharsets.UTF_8);
+                        .formatted(endpoint(), runningPort));
         Files.writeString(
                 requestedWorkflow,
                 """
@@ -6661,8 +6621,7 @@ final class TrelloBoardSetupMainTest {
                 ---
                 # Requested workflow
                 """
-                        .formatted(endpoint()),
-                StandardCharsets.UTF_8);
+                        .formatted(endpoint()));
         ConnectedBoard runningBoard = connectedBoard(runningWorkflow, runningPort);
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(runningBoard)));
@@ -6730,10 +6689,9 @@ final class TrelloBoardSetupMainTest {
                   port: 18123.5
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Path env = configDir.resolve(".env");
-        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials());
 
         // when
         CliRunResult result = runCli(
@@ -6838,14 +6796,14 @@ final class TrelloBoardSetupMainTest {
         Path workflow = configDir.resolve("missing.WORKFLOW.md");
         ManagedProcessStore.ManagedProcessFiles files = new ManagedProcessStore(stateHome).files(workflow);
         Files.createDirectories(stateHome);
-        Files.writeString(files.pidFile(), "42", StandardCharsets.UTF_8);
-        Files.writeString(files.stdoutLog(), "stdout should not be printed\n", StandardCharsets.UTF_8);
-        Files.writeString(files.stderrLog(), "stderr should not be printed\n", StandardCharsets.UTF_8);
-        Files.writeString(files.processLockFile(), "lock should remain\n", StandardCharsets.UTF_8);
-        String pidBefore = Files.readString(files.pidFile(), StandardCharsets.UTF_8);
-        String stdoutBefore = Files.readString(files.stdoutLog(), StandardCharsets.UTF_8);
-        String stderrBefore = Files.readString(files.stderrLog(), StandardCharsets.UTF_8);
-        String lockBefore = Files.readString(files.processLockFile(), StandardCharsets.UTF_8);
+        Files.writeString(files.pidFile(), "42");
+        Files.writeString(files.stdoutLog(), "stdout should not be printed\n");
+        Files.writeString(files.stderrLog(), "stderr should not be printed\n");
+        Files.writeString(files.processLockFile(), "lock should remain\n");
+        String pidBefore = Files.readString(files.pidFile());
+        String stdoutBefore = Files.readString(files.stdoutLog());
+        String stderrBefore = Files.readString(files.stderrLog());
+        String lockBefore = Files.readString(files.processLockFile());
         assertThat(workflow).doesNotExist();
 
         // when
@@ -6879,11 +6837,10 @@ final class TrelloBoardSetupMainTest {
                         "Logs for ",
                         "stdout should not be printed",
                         "stderr should not be printed");
-        assertThat(Files.readString(files.pidFile(), StandardCharsets.UTF_8)).isEqualTo(pidBefore);
-        assertThat(Files.readString(files.stdoutLog(), StandardCharsets.UTF_8)).isEqualTo(stdoutBefore);
-        assertThat(Files.readString(files.stderrLog(), StandardCharsets.UTF_8)).isEqualTo(stderrBefore);
-        assertThat(Files.readString(files.processLockFile(), StandardCharsets.UTF_8))
-                .isEqualTo(lockBefore);
+        assertThat(Files.readString(files.pidFile())).isEqualTo(pidBefore);
+        assertThat(Files.readString(files.stdoutLog())).isEqualTo(stdoutBefore);
+        assertThat(Files.readString(files.stderrLog())).isEqualTo(stderrBefore);
+        assertThat(Files.readString(files.processLockFile())).isEqualTo(lockBefore);
     }
 
     @Test
@@ -7465,7 +7422,7 @@ final class TrelloBoardSetupMainTest {
     }
 
     private static void writeExecutable(Path path, String content) throws IOException {
-        Files.writeString(path, content, StandardCharsets.UTF_8);
+        Files.writeString(path, content);
         assertThat(path.toFile().setExecutable(true))
                 .as("the generated helper script is executable")
                 .isTrue();
@@ -7575,7 +7532,7 @@ final class TrelloBoardSetupMainTest {
         Path previousWorkflow = tempDir.resolve(slug + "-previous.WORKFLOW.md");
         Path newWorkflow = tempDir.resolve(slug + "-new.WORKFLOW.md");
         Path env = tempDir.resolve(".env." + slug);
-        Files.writeString(previousWorkflow, "previous workflow", StandardCharsets.UTF_8);
+        Files.writeString(previousWorkflow, "previous workflow");
         ConnectedBoard previousBoard = ConnectedBoardBuilder.connectedBoard(
                         previousWorkflow.toAbsolutePath().normalize())
                 .withBoardId("board-1")

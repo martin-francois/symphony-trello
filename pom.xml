@@ -33,7 +33,7 @@
     <error-prone.version>2.49.0</error-prone.version>
     <error-prone-support.version>0.29.0</error-prone-support.version>
     <picnic-refaster.namePattern>(CollectionRules[$]Collection(AddAllToCollectionBlock|Contains)|NullRules[$]RequireNonNullElseGet|PreconditionsRules[$]Check(Argument|State)WithMessage|PrimitiveRules[$]MathClampInt|StreamRules[$]StreamNoneMatch|StringBuilderRules[$]StringBuilderRepeat)</picnic-refaster.namePattern>
-    <jacoco.version>0.8.14</jacoco.version>
+    <jacoco.version>0.8.15</jacoco.version>
     <mockito.version>5.23.0</mockito.version>
     <picocli.version>4.7.7</picocli.version>
     <findsecbugs.version>1.14.0</findsecbugs.version>
@@ -45,7 +45,7 @@
     <rewrite-migrate-java.version>3.40.0</rewrite-migrate-java.version>
     <rewrite-static-analysis.version>2.39.0</rewrite-static-analysis.version>
     <rewrite-testing-frameworks.version>3.42.0</rewrite-testing-frameworks.version>
-    <spotbugs-maven-plugin.version>4.9.8.3</spotbugs-maven-plugin.version>
+    <spotbugs-maven-plugin.version>4.9.8.5</spotbugs-maven-plugin.version>
     <spotless.version>3.5.1</spotless.version>
     <surefire.version>3.5.6</surefire.version>
     <test.jvm.instrumentation.args>-XX:+EnableDynamicAgentLoading --enable-native-access=ALL-UNNAMED</test.jvm.instrumentation.args>
@@ -236,7 +236,7 @@
             <arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED</arg>
           </compilerArgs>
           <fork>true</fork>
-          <release>${maven.compiler.release}</release>
+          <release>${java.version}</release>
           <parameters>true</parameters>
         </configuration>
       </plugin>

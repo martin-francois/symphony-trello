@@ -48,8 +48,7 @@ final class WorkflowConfigEditorTest {
                   command: codex app-server\r
                 ---\r
                 # Body\r
-                """,
-                StandardCharsets.UTF_8);
+                """);
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
 
         // when
@@ -83,8 +82,7 @@ final class WorkflowConfigEditorTest {
                   command: codex app-server
                 ---
                 # Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
 
         // when
@@ -100,7 +98,7 @@ final class WorkflowConfigEditorTest {
         // given
         Path target = tempDir.resolve("WORKFLOW.target.md");
         Path link = tempDir.resolve("WORKFLOW.link.md");
-        Files.writeString(target, workflowWithBody("# Body"), StandardCharsets.UTF_8);
+        Files.writeString(target, workflowWithBody("# Body"));
         try {
             Files.createSymbolicLink(link, target.getFileName());
         } catch (IOException | UnsupportedOperationException e) {
@@ -123,7 +121,7 @@ final class WorkflowConfigEditorTest {
     void updateServerPortPreservesPosixPermissionsWhenSupported() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.permissions.md");
-        Files.writeString(workflow, workflowWithBody("# Body"), StandardCharsets.UTF_8);
+        Files.writeString(workflow, workflowWithBody("# Body"));
         assumeTrue(Files.getFileStore(workflow).supportsFileAttributeView("posix"));
         Set<PosixFilePermission> permissions = Set.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE);
         Files.setPosixFilePermissions(workflow, permissions);
@@ -143,7 +141,7 @@ final class WorkflowConfigEditorTest {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.read-only-update.md");
         String original = workflowWithBody("# Body");
-        Files.writeString(workflow, original, StandardCharsets.UTF_8);
+        Files.writeString(workflow, original);
         assumeTrue(Files.getFileStore(workflow).supportsFileAttributeView("posix"));
         Set<PosixFilePermission> readOnlyPermissions = Set.of(PosixFilePermission.OWNER_READ);
         Files.setPosixFilePermissions(workflow, readOnlyPermissions);
@@ -177,8 +175,7 @@ final class WorkflowConfigEditorTest {
                 ---
                 Body
                 """
-                        .formatted(portLine),
-                StandardCharsets.UTF_8);
+                        .formatted(portLine));
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
 
         // when
@@ -241,8 +238,7 @@ final class WorkflowConfigEditorTest {
                   port: $STATUS_PORT
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
         Function<String, Optional<String>> resolver =
                 variable -> "STATUS_PORT".equals(variable) ? Optional.ofNullable(resolvedValue) : Optional.empty();
@@ -297,8 +293,7 @@ final class WorkflowConfigEditorTest {
                 null
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
 
         // when
@@ -333,8 +328,7 @@ final class WorkflowConfigEditorTest {
                   command: codex app-server
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
 
         // when
@@ -365,8 +359,7 @@ final class WorkflowConfigEditorTest {
                   command: codex app-server
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         ConnectedBoard board = ConnectedBoardBuilder.connectedBoard(workflow)
                 .withBoardId("board-1")
                 .withBoardKey("abc123")
@@ -412,8 +405,7 @@ final class WorkflowConfigEditorTest {
                   command: codex app-server
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
 
         // when
@@ -448,8 +440,7 @@ final class WorkflowConfigEditorTest {
                   command: codex app-server
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
 
         // when
@@ -473,7 +464,7 @@ final class WorkflowConfigEditorTest {
                     type: readOnly
                 """,
                 currentWorkflowBody());
-        Files.writeString(workflow, original, StandardCharsets.UTF_8);
+        Files.writeString(workflow, original);
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
 
         // when
@@ -504,7 +495,7 @@ final class WorkflowConfigEditorTest {
                   turn_sandbox_policy:
                 """,
                 currentWorkflowBody());
-        Files.writeString(workflow, original, StandardCharsets.UTF_8);
+        Files.writeString(workflow, original);
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
 
         // when
@@ -542,7 +533,7 @@ final class WorkflowConfigEditorTest {
                 %s
                 """
                         .formatted(currentWorkflowBody());
-        Files.writeString(workflow, original, StandardCharsets.UTF_8);
+        Files.writeString(workflow, original);
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
 
         // when
@@ -584,7 +575,7 @@ final class WorkflowConfigEditorTest {
                 This is an existing private workflow. It may mention that operators should record the branch,
                 commit, and validation evidence.
                 """;
-        Files.writeString(workflow, original, StandardCharsets.UTF_8);
+        Files.writeString(workflow, original);
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
 
         // when
@@ -610,7 +601,7 @@ final class WorkflowConfigEditorTest {
                 ---
                 Body
                 """;
-        Files.writeString(workflow, original, StandardCharsets.UTF_8);
+        Files.writeString(workflow, original);
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
 
         // when
@@ -645,7 +636,7 @@ final class WorkflowConfigEditorTest {
                 ---
                 Body
                 """;
-        Files.writeString(workflow, original, StandardCharsets.UTF_8);
+        Files.writeString(workflow, original);
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
 
         // when
@@ -682,8 +673,7 @@ final class WorkflowConfigEditorTest {
                   command: codex app-server
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
+                """);
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
 
         // when

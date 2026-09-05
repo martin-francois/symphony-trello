@@ -300,7 +300,7 @@ final class CodexSkillStructureTest {
 
     private SkillMetadata readSkillMetadata(Path file) {
         try {
-            String content = Files.readString(file, StandardCharsets.UTF_8);
+            String content = Files.readString(file);
             assertThat(content).as("front matter start for %s", file).startsWith("---\n");
             int end = content.indexOf("\n---\n", 4);
             assertThat(end).as("front matter end for %s", file).isGreaterThan(0);

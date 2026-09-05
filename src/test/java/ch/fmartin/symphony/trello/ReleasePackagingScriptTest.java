@@ -97,7 +97,7 @@ final class ReleasePackagingScriptTest {
         Path destination = project.root().resolve("dist/release-assets");
         ProcessResult first = project.run(VERSION);
         assertThat(first.exitCode()).as(first.output()).isZero();
-        Files.writeString(destination.resolve("install.sh"), "stale", StandardCharsets.UTF_8);
+        Files.writeString(destination.resolve("install.sh"), "stale");
 
         // when
         ProcessResult second = project.run(VERSION);
@@ -140,7 +140,7 @@ final class ReleasePackagingScriptTest {
                 "checksums.txt",
                 "symphony-trello-1.2.2.tar.gz",
                 "symphony-trello-1.2.2.zip")) {
-            Files.writeString(destination.resolve(asset), "unowned", StandardCharsets.UTF_8);
+            Files.writeString(destination.resolve(asset), "unowned");
         }
 
         // when
@@ -282,14 +282,14 @@ final class ReleasePackagingScriptTest {
                         (temp, root) -> PreparedDestination.withSentinel(root.resolve("target/.."), root)),
                 new InvalidDestinationCase("destination is a file", "must be a directory", (temp, root) -> {
                     Path destination = root.resolve("dist-file");
-                    Files.writeString(destination, "sentinel", StandardCharsets.UTF_8);
+                    Files.writeString(destination, "sentinel");
                     return PreparedDestination.withoutSentinel(destination);
                 }),
                 new InvalidDestinationCase(
                         "existing non-empty unowned destination", "contains files not managed", (temp, root) -> {
                             Path destination = root.resolve("dist/unowned");
                             Files.createDirectories(destination);
-                            Files.writeString(destination.resolve("keep.txt"), "sentinel", StandardCharsets.UTF_8);
+                            Files.writeString(destination.resolve("keep.txt"), "sentinel");
                             return PreparedDestination.withSentinel(destination, destination);
                         }),
                 new InvalidDestinationCase(
@@ -298,7 +298,7 @@ final class ReleasePackagingScriptTest {
                         (temp, root) -> {
                             Path destination = root.resolve("custom");
                             Files.createDirectories(destination);
-                            Files.writeString(destination.resolve("install.sh"), "sentinel", StandardCharsets.UTF_8);
+                            Files.writeString(destination.resolve("install.sh"), "sentinel");
                             return PreparedDestination.withSentinel(destination, destination);
                         }),
                 new InvalidDestinationCase(
@@ -495,8 +495,7 @@ final class ReleasePackagingScriptTest {
                 #!/usr/bin/env bash
                 DEFAULT_VERSION="0.0.0" # x-release-please-version
                 echo install
-                """,
-                StandardCharsets.UTF_8);
+                """);
         Files.writeString(
                 root.resolve("install.ps1"),
                 """
@@ -506,12 +505,10 @@ final class ReleasePackagingScriptTest {
                   [switch]$Help
                 )
                 $DefaultVersion = "0.0.0" # x-release-please-version
-                """,
-                StandardCharsets.UTF_8);
-        Files.writeString(
-                root.resolve("uninstall.sh"), "#!/usr/bin/env bash\necho uninstall\n", StandardCharsets.UTF_8);
-        Files.writeString(root.resolve("uninstall.ps1"), "Write-Output uninstall\n", StandardCharsets.UTF_8);
-        Files.writeString(root.resolve("README.md"), "readme\n", StandardCharsets.UTF_8);
+                """);
+        Files.writeString(root.resolve("uninstall.sh"), "#!/usr/bin/env bash\necho uninstall\n");
+        Files.writeString(root.resolve("uninstall.ps1"), "Write-Output uninstall\n");
+        Files.writeString(root.resolve("README.md"), "readme\n");
         TestProject project = new TestProject(root);
         project.writeSuccessfulMavenWrapper();
         return project;
@@ -525,7 +522,7 @@ final class ReleasePackagingScriptTest {
     }
 
     private static void rewrite(Path file, UnaryOperator<String> replacement) throws IOException {
-        Files.writeString(file, replacement.apply(Files.readString(file)), StandardCharsets.UTF_8);
+        Files.writeString(file, replacement.apply(Files.readString(file)));
     }
 
     private static void assertExpectedAssets(Path destination) throws IOException {
@@ -573,8 +570,7 @@ final class ReleasePackagingScriptTest {
     private static void writeOwnershipMarker(Path destination) throws IOException {
         Files.writeString(
                 destination.resolve(".symphony-trello-release-assets"),
-                String.join("\n", expectedAssets(VERSION)) + "\n",
-                StandardCharsets.UTF_8);
+                String.join("\n", expectedAssets(VERSION)) + "\n");
     }
 
     private static List<String> expectedAssets(String version) {
@@ -613,7 +609,7 @@ final class ReleasePackagingScriptTest {
 
         void writeMavenWrapper(String content) throws IOException {
             Path mvnw = root.resolve("mvnw");
-            Files.writeString(mvnw, content, StandardCharsets.UTF_8);
+            Files.writeString(mvnw, content);
             mvnw.toFile().setExecutable(true);
         }
 
@@ -673,7 +669,7 @@ final class ReleasePackagingScriptTest {
         static PreparedDestination withSentinel(Path requestedPath, Path actualDirectory) throws IOException {
             Files.createDirectories(actualDirectory);
             Path sentinel = actualDirectory.resolve("sentinel.txt");
-            Files.writeString(sentinel, "sentinel", StandardCharsets.UTF_8);
+            Files.writeString(sentinel, "sentinel");
             return new PreparedDestination(requestedPath, sentinel, null, null);
         }
 
@@ -689,7 +685,7 @@ final class ReleasePackagingScriptTest {
                 throws IOException {
             Files.createDirectories(target);
             Path sentinel = target.resolve("sentinel.txt");
-            Files.writeString(sentinel, "sentinel", StandardCharsets.UTF_8);
+            Files.writeString(sentinel, "sentinel");
             return new PreparedDestination(requestedPath, sentinel, symlink, target);
         }
 

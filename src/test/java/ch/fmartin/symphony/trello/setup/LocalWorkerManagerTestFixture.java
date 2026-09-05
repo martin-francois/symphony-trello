@@ -103,7 +103,7 @@ final class LocalWorkerManagerTestFixture {
         ManagedProcessStore.ManagedProcessFiles files = managedFiles(board);
         stubStoppedStartedWorker(board, pid);
         when(platform.start(any(), eq(paths.appHome()), any(), any(), any())).thenAnswer(invocation -> {
-            Files.writeString(files.stdoutLog(), startupLog, StandardCharsets.UTF_8);
+            Files.writeString(files.stdoutLog(), startupLog);
             return new ManagedProcessHandle(pid);
         });
         return files;
@@ -340,8 +340,7 @@ final class LocalWorkerManagerTestFixture {
                 ---
                 # %s
                 """
-                        .formatted(boardId, ConfigDefaults.DEFAULT_SERVER_PORT, boardName),
-                StandardCharsets.UTF_8);
+                        .formatted(boardId, ConfigDefaults.DEFAULT_SERVER_PORT, boardName));
         writeEnv(paths.defaultEnvPath());
         return ConnectedBoardBuilder.connectedBoard(workflow.toAbsolutePath().normalize())
                 .withBoardId(boardId)
@@ -358,7 +357,7 @@ final class LocalWorkerManagerTestFixture {
         if (parent != null) {
             Files.createDirectories(parent);
         }
-        Files.writeString(envPath, TestEnv.trelloCredentials("test-key", "test-token"), StandardCharsets.UTF_8);
+        Files.writeString(envPath, TestEnv.trelloCredentials("test-key", "test-token"));
     }
 
     void save(ConnectedBoard... boards) throws Exception {
