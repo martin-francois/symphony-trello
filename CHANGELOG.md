@@ -1,5 +1,99 @@
 # Changelog
 
+## 1.3.0 (2026-09-05)
+
+## What's Changed
+* test(concurrency): audit production guards by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/583
+* test(orchestrator): synchronize command request publication by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/595
+* test(setup): isolate managed-port selection by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/596
+* fix(ci): rotate size-label reconciliation by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/599
+* feat(release): credit contributors in changelog by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/598
+* feat(build): add guarded OpenRewrite maintenance lane by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/592
+* feat(build): automate OpenRewrite updates by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/604
+* docs: explain queueing cards for future Codex capacity by @YashRaj0307 in https://github.com/martin-francois/symphony-trello/pull/594
+* fix(ci): keep Error Prone updates compatible by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/607
+* test(ci): isolate host-dependent fixtures by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/608
+* chore(deps): update openrewrite toolchain by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/606
+* test(ci): decouple guards from dependency pins by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/610
+* chore(deps): update dependency org.openrewrite:rewrite-maven to v8.87.1 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/611
+* fix(ci): handle SpotBugs 4.10 false positives by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/612
+* fix(ci): bound parallel test resources by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/615
+* docs: add demo video to README by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/605
+* fix(deps): update all dependencies by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/609
+* fix(deps): update all dependencies by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/617
+* chore(deps): update dependency pnpm to v11.13.1 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/621
+* chore(deps): update all dependencies by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/622
+* chore(deps): update dependency pnpm to v11.14.0 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/623
+* chore(deps): update dependency pnpm to v11.15.0 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/624
+* feat(ci): track pull requests waiting for author action by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/619
+* chore(deps): update dependency pnpm to v11.15.1 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/625
+* chore(deps): update actions/checkout action to v7.0.1 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/626
+* chore(deps): update github/codeql-action action to v4.37.2 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/627
+* chore(deps): update semgrep/semgrep docker tag to v1.170.1 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/628
+* chore(deps): update github/codeql-action action to v4.37.3 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/629
+* chore(deps): update dependency pnpm to v11.16.0 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/630
+* chore(deps): update semgrep/semgrep docker tag to v1.171.0 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/631
+* fix(deps): update all dependencies to v3.37.4 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/632
+* chore(deps): update all dependencies by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/633
+* chore(deps): update dependency com.diffplug.spotless:spotless-maven-plugin to v3.9.0 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/635
+* chore(deps): update semgrep/semgrep docker tag to v1.172.0 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/636
+* chore(deps): update openrewrite toolchain by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/620
+* fix(deps): update all dependencies by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/637
+* chore(deps): update actions/attest action to v4.2.1 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/639
+* build: pin tool images and share engineering guidance by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/634
+* fix(renovate): separate major updates from the automergeable bundle by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/641
+* chore(deps): update openrewrite toolchain by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/644
+* fix(deps): update all non-major dependencies by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/643
+* chore(deps): update actions/setup-java digest to b6effb0 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/645
+* chore(config): refresh lockfiles on a schedule so transitive advisories get fixed by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/646
+* chore(deps): pin dependencies by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/647
+* chore(deps): update github/codeql-action action to v4.37.5 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/648
+* fix(deps): update all non-major dependencies by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/650
+* chore(deps): update dependency pnpm to v11.21.0 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/651
+* chore(deps): update all non-major dependencies to v21.2.2 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/652
+* fix(deps): update all non-major dependencies by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/653
+* chore(deps): update dependency pnpm to v11.22.0 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/654
+* test: harden OpenRewrite workflow contract checks by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/656
+* chore(deps): update openrewrite toolchain by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/657
+* chore(deps): update dependency com.diffplug.spotless:spotless-maven-plugin to v3.10.0 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/658
+* fix(deps): update dependency com.google.guava:guava to v33.7.1-jre by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/660
+* docs(README): don't require knowledge of WORKFLOW.md when using insta… by @nw1n in https://github.com/martin-francois/symphony-trello/pull/662
+* docs(README): explain api key and token sensitivity in logical order by @nw1n in https://github.com/martin-francois/symphony-trello/pull/663
+* docs(README): explain that the token link is hidden inside a paragrap… by @nw1n in https://github.com/martin-francois/symphony-trello/pull/664
+* chore(deps): update dependency org.openrewrite:rewrite-maven to v8.90.1 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/659
+* fix(deps): update all non-major dependencies to v3.38.3 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/671
+* chore(deps): update dependency com.github.spotbugs:spotbugs-maven-plugin to v4.10.4.0 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/673
+* chore(deps): update OpenRewrite toolchain by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/672
+* chore(deps): update semgrep/semgrep docker tag to v1.174.0 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/675
+* chore(deps): update dependency org.openrewrite:rewrite-maven to v8.90.3 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/674
+* chore(deps): update github/codeql-action action to v4.37.8 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/676
+* docs(agents): require dated migration cleanup by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/677
+* chore(deps): update dependency pnpm to v11.23.0 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/679
+* docs: clarify repository defaults for generic Git repositories by @YashRaj0307 in https://github.com/martin-francois/symphony-trello/pull/613
+* ci: add ClusterFuzzLite continuous fuzzing by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/512
+* fix(ci): reclaim ClusterFuzzLite build output by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/680
+* fix(ci): make fuzz storage failures visible by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/681
+* fix(ci): support Java 25 fuzz coverage by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/682
+* fix(ci): install Java 25 for fuzz coverage by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/683
+* fix(ci): keep continuous fuzzing running by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/684
+* chore(deps): update dependency pnpm to v11.24.0 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/685
+* fix(ci): bootstrap continuous fuzzing deterministically by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/686
+* fix(ci): schedule watchdog in established workflow by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/688
+* fix(fuzzing): replace cron with a self-queued watchdog by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/689
+* docs: clarify issue label application by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/694
+* chore(deps): update actions/setup-java action to v6 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/687
+* chore(deps): update dependency org.openrewrite:rewrite-maven to v8.90.4 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/695
+* test(ci): make setup-java order guard version-independent by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/696
+* fix(deps): update all non-major dependencies by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/697
+* chore(deps): update dependency com.diffplug.spotless:spotless-maven-plugin to v3.10.1 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/698
+* chore(deps): update dependency pnpm to v11.25.0 by @renovate[bot] in https://github.com/martin-francois/symphony-trello/pull/699
+
+## New Contributors
+* @YashRaj0307 made their first contribution in https://github.com/martin-francois/symphony-trello/pull/594
+* @nw1n made their first contribution in https://github.com/martin-francois/symphony-trello/pull/662
+
+**Full Changelog**: https://github.com/martin-francois/symphony-trello/compare/v1.2.0...v1.3.0
+
 ## [1.2.0](https://github.com/martin-francois/symphony-trello/compare/v1.1.1...v1.2.0) (2026-07-14)
 
 
