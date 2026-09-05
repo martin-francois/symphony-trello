@@ -11,9 +11,11 @@ import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.code_intelligence.jazzer.mutation.annotation.NotNull;
 import com.code_intelligence.jazzer.mutation.annotation.WithUtf8Length;
 import java.util.stream.Stream;
+import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 final class TrelloCardReferenceParserFuzzTest {
+    @ParameterizedTest
     @SuppressWarnings({"JUnitValueSource", "LexicographicalAnnotationListing"})
     @MethodSource("trelloReferenceTexts")
     @FuzzTest(maxDuration = "10s", maxExecutions = 20_000)
@@ -28,6 +30,7 @@ final class TrelloCardReferenceParserFuzzTest {
         assertReferenceParsingKeepsLookupIdsAndUrlsStable(candidate, result);
     }
 
+    @ParameterizedTest
     @SuppressWarnings({"JUnitValueSource", "LexicographicalAnnotationListing"})
     @MethodSource("checklistTexts")
     @FuzzTest(maxDuration = "10s", maxExecutions = 20_000)

@@ -50,7 +50,7 @@ final class AdrConformanceTest {
             "… <!--");
 
     @Test
-    void architecturalDecisionRecordsUseMadrTemplateShape() throws IOException {
+    void architecturalDecisionRecordsUseMadrTemplateShape() throws Exception {
         // given
         List<String> violations = new ArrayList<>();
 

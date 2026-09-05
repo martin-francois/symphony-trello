@@ -1715,7 +1715,7 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
-    void redactsRelativeStateHomeArgumentFromRenderedCommand() throws IOException {
+    void redactsRelativeStateHomeArgumentFromRenderedCommand() throws Exception {
         // given
         Path configDir = tempDir.resolve("relative-state-config");
         Files.createDirectories(configDir);
@@ -1729,7 +1729,7 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
-    void deepDiagnosticsRunsAuthStatusProbes() throws IOException {
+    void deepDiagnosticsRunsAuthStatusProbes() throws Exception {
         // given
         Path configDir = tempDir.resolve("deep-config");
         Files.createDirectories(configDir);
@@ -1761,7 +1761,7 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
-    void deepPrivateContextIncludesDeepDiagnosticsAndPrivateContext() throws IOException {
+    void deepPrivateContextIncludesDeepDiagnosticsAndPrivateContext() throws Exception {
         // given
         Path configDir = tempDir.resolve("deep-private-config");
         Files.createDirectories(configDir);

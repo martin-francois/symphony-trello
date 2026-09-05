@@ -415,7 +415,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
-    void dryRunRejectsReasoningEffortOutsideImplicitForcedWorkflowModelChoices() throws IOException {
+    void dryRunRejectsReasoningEffortOutsideImplicitForcedWorkflowModelChoices() throws Exception {
         // given
         LocalSetup catalogBackedSetup = setupWithSolReasoningCatalog();
         Path configDir = tempDir.resolve("implicit-dry-run-workflow");
@@ -462,7 +462,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
-    void forcedBoardSelectorDryRunDefersValidationWhenGeneratedWorkflowModelIsUnknown() throws IOException {
+    void forcedBoardSelectorDryRunDefersValidationWhenGeneratedWorkflowModelIsUnknown() throws Exception {
         // given
         LocalSetup catalogBackedSetup = setupWithSolReasoningCatalog();
         Path configDir = tempDir.resolve("forced-board-selector-dry-run");

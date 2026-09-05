@@ -4650,7 +4650,7 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
-    void usesConfiguredDefaultWorkflowDirectoryWithoutDisablingBoardNameFallback() throws IOException {
+    void usesConfiguredDefaultWorkflowDirectoryWithoutDisablingBoardNameFallback() throws Exception {
         // given
         Path configDirectory = tempDir.resolve("config");
         Files.createDirectories(configDirectory);
@@ -4813,7 +4813,7 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
-    void explicitDefaultWorkflowPathDoesNotUseBoardNameFallback() throws IOException {
+    void explicitDefaultWorkflowPathDoesNotUseBoardNameFallback() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Files.writeString(workflow, "existing workflow", StandardCharsets.UTF_8);
@@ -5562,7 +5562,7 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
-    void importBoardRejectsReasoningEffortUnsupportedByExistingModelBeforeTrelloRequest() throws IOException {
+    void importBoardRejectsReasoningEffortUnsupportedByExistingModelBeforeTrelloRequest() throws Exception {
         // given
         Path workflow = tempDir.resolve("unsupported-existing-model-reasoning.WORKFLOW.md");
         Files.writeString(
@@ -5622,7 +5622,7 @@ final class TrelloBoardSetupMainTest {
 
     @Test
     void importBoardWritesFallbackReasoningForExplicitModelWhenUnsupportedDiscoveryPreservesExistingOmission()
-            throws IOException {
+            throws Exception {
         // given
         Path workflow = tempDir.resolve("explicit-import-unsupported-existing-omitted.WORKFLOW.md");
         Files.writeString(
@@ -5668,7 +5668,7 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
-    void importBoardPreservesExistingReasoningForExplicitModelOverride() throws IOException {
+    void importBoardPreservesExistingReasoningForExplicitModelOverride() throws Exception {
         // given
         Path workflow = tempDir.resolve("explicit-import-preserve-existing-reasoning.WORKFLOW.md");
         Files.writeString(
@@ -5720,7 +5720,7 @@ final class TrelloBoardSetupMainTest {
 
     @Test
     void importBoardPreservesReasoningOmissionForUnknownExplicitModelWhenDiscoverySupportsFirstClassFields()
-            throws IOException {
+            throws Exception {
         // given
         Path workflow = tempDir.resolve("explicit-import-supported-existing-omitted.WORKFLOW.md");
         Files.writeString(

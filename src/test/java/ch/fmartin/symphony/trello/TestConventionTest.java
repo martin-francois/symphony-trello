@@ -71,7 +71,7 @@ final class TestConventionTest {
     private static final Set<String> TEST_ANNOTATIONS = Set.of("FuzzTest", "ParameterizedTest", "Test");
 
     @Test
-    void methodsUseGivenWhenThenSections() throws IOException {
+    void methodsUseGivenWhenThenSections() throws Exception {
         // given
         List<String> violations = new ArrayList<>();
 
@@ -92,7 +92,7 @@ final class TestConventionTest {
     }
 
     @Test
-    void methodsUseGivenWhenThenSectionsForWrappedFuzzSignatures(@TempDir Path tempDir) throws IOException {
+    void methodsUseGivenWhenThenSectionsForWrappedFuzzSignatures(@TempDir Path tempDir) throws Exception {
         // given
         Path source = tempDir.resolve("WrappedFuzzSignatureTest.java");
         List<String> fixtureLines = List.of(
@@ -119,7 +119,7 @@ final class TestConventionTest {
     }
 
     @Test
-    void compilerPositionsIgnoreJavaLexicalBraces(@TempDir Path tempDir) throws IOException {
+    void compilerPositionsIgnoreJavaLexicalBraces(@TempDir Path tempDir) throws Exception {
         // given
         Path source = tempDir.resolve("LexicalBracesTest.java");
         Files.writeString(
@@ -163,7 +163,7 @@ final class TestConventionTest {
     }
 
     @Test
-    void sectionsIgnoreMarkersInsideTextBlocksAndBlockComments(@TempDir Path tempDir) throws IOException {
+    void sectionsIgnoreMarkersInsideTextBlocksAndBlockComments(@TempDir Path tempDir) throws Exception {
         // given
         Path source = tempDir.resolve("FakeSectionMarkersTest.java");
         Files.writeString(
@@ -196,7 +196,7 @@ final class TestConventionTest {
     }
 
     @Test
-    void compilerPositionsPreserveBlankLineViolationNumbers(@TempDir Path tempDir) throws IOException {
+    void compilerPositionsPreserveBlankLineViolationNumbers(@TempDir Path tempDir) throws Exception {
         // given
         Path source = tempDir.resolve("BlankLineTest.java");
         Files.writeString(
@@ -225,7 +225,7 @@ final class TestConventionTest {
     }
 
     @Test
-    void compilerParseErrorsIncludeTheFixtureAndDiagnosticLine(@TempDir Path tempDir) throws IOException {
+    void compilerParseErrorsIncludeTheFixtureAndDiagnosticLine(@TempDir Path tempDir) throws Exception {
         // given
         Path source = tempDir.resolve("BrokenTest.java");
         Files.writeString(
@@ -250,7 +250,7 @@ final class TestConventionTest {
     }
 
     @Test
-    void directAssertJBooleanAssertionsAreRejectedWithCompilerPositions(@TempDir Path tempDir) throws IOException {
+    void directAssertJBooleanAssertionsAreRejectedWithCompilerPositions(@TempDir Path tempDir) throws Exception {
         // given
         Path source = tempDir.resolve("RawBooleanAssertionsTest.java");
         Files.writeString(
@@ -284,7 +284,7 @@ final class TestConventionTest {
     }
 
     @Test
-    void describedDirectAssertJBooleanAssertionsAreAccepted(@TempDir Path tempDir) throws IOException {
+    void describedDirectAssertJBooleanAssertionsAreAccepted(@TempDir Path tempDir) throws Exception {
         // given
         Path source = tempDir.resolve("DescribedBooleanAssertionsTest.java");
         Files.writeString(
@@ -310,7 +310,7 @@ final class TestConventionTest {
     }
 
     @Test
-    void qualifiedAssertJBooleanAssertionsAreRejected(@TempDir Path tempDir) throws IOException {
+    void qualifiedAssertJBooleanAssertionsAreRejected(@TempDir Path tempDir) throws Exception {
         // given
         Path source = tempDir.resolve("QualifiedBooleanAssertionsTest.java");
         Files.writeString(
@@ -343,7 +343,7 @@ final class TestConventionTest {
     }
 
     @Test
-    void alternativeAssertJBooleanEntryPointsAreRejected(@TempDir Path tempDir) throws IOException {
+    void alternativeAssertJBooleanEntryPointsAreRejected(@TempDir Path tempDir) throws Exception {
         // given
         Path source = tempDir.resolve("AlternativeBooleanAssertionsTest.java");
         Files.writeString(
@@ -401,7 +401,7 @@ final class TestConventionTest {
     }
 
     @Test
-    void customAssertThatRootsAreIgnored(@TempDir Path tempDir) throws IOException {
+    void customAssertThatRootsAreIgnored(@TempDir Path tempDir) throws Exception {
         // given
         Path source = tempDir.resolve("CustomBooleanAssertionsTest.java");
         Files.writeString(
@@ -463,7 +463,7 @@ final class TestConventionTest {
 
     @Test
     void blankLiteralAssertJDescriptionsAreRejectedButNonliteralDescriptionsAreAccepted(@TempDir Path tempDir)
-            throws IOException {
+            throws Exception {
         // given
         Path source = tempDir.resolve("BlankBooleanDescriptionsTest.java");
         Files.writeString(
@@ -509,7 +509,7 @@ final class TestConventionTest {
 
     @Test
     void directAssertJBooleanScannerIgnoresLexicalTextAndTypeSpecificAssertions(@TempDir Path tempDir)
-            throws IOException {
+            throws Exception {
         // given
         Path source = tempDir.resolve("OtherAssertionsTest.java");
         Files.writeString(
@@ -545,7 +545,7 @@ final class TestConventionTest {
     }
 
     @Test
-    void directAssertJBooleanAssertionsHaveDescriptionsWithoutBlankLiterals() throws IOException {
+    void directAssertJBooleanAssertionsHaveDescriptionsWithoutBlankLiterals() throws Exception {
         // given
         List<String> violations = new ArrayList<>();
 
@@ -562,7 +562,7 @@ final class TestConventionTest {
     }
 
     @Test
-    void simpleMocksUseMockitoInsteadOfManualTestDoubles() throws IOException {
+    void simpleMocksUseMockitoInsteadOfManualTestDoubles() throws Exception {
         // given
         List<String> violations = new ArrayList<>();
 
@@ -583,7 +583,7 @@ final class TestConventionTest {
     }
 
     @Test
-    void tesslJsonPinsJavaStyleSkills() throws IOException {
+    void tesslJsonPinsJavaStyleSkills() throws Exception {
         // given
         Map<String, Object> tesslJson = JSON.readValue(Path.of("tessl.json").toFile(), JSON_OBJECT);
 
@@ -596,7 +596,7 @@ final class TestConventionTest {
     }
 
     @Test
-    void pomProvidesJSpecifyAnnotationsToProductionSources() throws IOException {
+    void pomProvidesJSpecifyAnnotationsToProductionSources() throws Exception {
         // given
         String pom = Files.readString(Path.of("pom.xml"));
 
@@ -619,7 +619,7 @@ final class TestConventionTest {
     }
 
     @Test
-    void mavenTestForksAuthorizeJazzerInstrumentationOnJava25() throws IOException {
+    void mavenTestForksAuthorizeJazzerInstrumentationOnJava25() throws Exception {
         // given
         String pom = Files.readString(Path.of("pom.xml"));
         String permissions =
@@ -659,7 +659,7 @@ final class TestConventionTest {
     }
 
     @Test
-    void representativeJavaBoundariesUseJSpecifyAnnotations() throws IOException {
+    void representativeJavaBoundariesUseJSpecifyAnnotations() throws Exception {
         // given
         List<Path> nullMarkedBoundaries = List.of(
                 Path.of("src/main/java/ch/fmartin/symphony/trello/repository/RepositorySource.java"),

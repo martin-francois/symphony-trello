@@ -22,7 +22,7 @@ final class CodexSkillStructureTest {
     private final ObjectMapper yaml = new ObjectMapper(new YAMLFactory());
 
     @Test
-    void repositoryLocalSkillsHaveValidFrontMatterAndMatchingNames() throws IOException {
+    void repositoryLocalSkillsHaveValidFrontMatterAndMatchingNames() throws Exception {
         // given
         List<Path> skillFiles = repositoryLocalSkillFiles();
 
@@ -55,7 +55,7 @@ final class CodexSkillStructureTest {
     }
 
     @Test
-    void repositoryLocalSkillsArePackagedForWorkspaceSeeding() throws IOException {
+    void repositoryLocalSkillsArePackagedForWorkspaceSeeding() throws Exception {
         // given
         List<Path> skillFiles = repositoryLocalSkillFiles();
 
@@ -82,7 +82,7 @@ final class CodexSkillStructureTest {
     }
 
     @Test
-    void reviewSweepSkillCoversPrFeedbackSourcesAndOutcomes() throws IOException {
+    void reviewSweepSkillCoversPrFeedbackSourcesAndOutcomes() throws Exception {
         // given
         Path skill = SKILLS_ROOT.resolve("review-sweep").resolve("SKILL.md");
 
@@ -129,7 +129,7 @@ final class CodexSkillStructureTest {
     }
 
     @Test
-    void trelloHandoffSkillCoversReworkWithoutResetByDefault() throws IOException {
+    void trelloHandoffSkillCoversReworkWithoutResetByDefault() throws Exception {
         // given
         Path skill = SKILLS_ROOT.resolve("trello-handoff").resolve("SKILL.md");
 
@@ -193,7 +193,7 @@ final class CodexSkillStructureTest {
     }
 
     @Test
-    void commitAndPushPrSkillsCoverGithubAuthorIdentityPolicy() throws IOException {
+    void commitAndPushPrSkillsCoverGithubAuthorIdentityPolicy() throws Exception {
         // given
         Path commitSkill = SKILLS_ROOT.resolve("commit").resolve("SKILL.md");
         Path pushPrSkill = SKILLS_ROOT.resolve("push-pr").resolve("SKILL.md");
@@ -275,7 +275,7 @@ final class CodexSkillStructureTest {
     }
 
     @Test
-    void landSkillFailsClosedAndAvoidsAutoMergeByDefault() throws IOException {
+    void landSkillFailsClosedAndAvoidsAutoMergeByDefault() throws Exception {
         // given
         Path skill = SKILLS_ROOT.resolve("land").resolve("SKILL.md");
 

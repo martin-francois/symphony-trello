@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 final class RepositorySourceResolverFuzzTest {
@@ -24,6 +25,7 @@ final class RepositorySourceResolverFuzzTest {
 
     private final RepositorySourceResolver resolver = new RepositorySourceResolver();
 
+    @ParameterizedTest
     @SuppressWarnings({"JUnitValueSource", "LexicographicalAnnotationListing"})
     @MethodSource("labelledRepositorySourceValues")
     @FuzzTest(maxDuration = "10s", maxExecutions = 20_000)
@@ -39,6 +41,7 @@ final class RepositorySourceResolverFuzzTest {
         assertSelectionFitsPromptBoundaries(selection);
     }
 
+    @ParameterizedTest
     @SuppressWarnings({"JUnitValueSource", "LexicographicalAnnotationListing"})
     @MethodSource("cardTexts")
     @FuzzTest(maxDuration = "10s", maxExecutions = 20_000)
@@ -53,6 +56,7 @@ final class RepositorySourceResolverFuzzTest {
         assertSelectionFitsPromptBoundaries(selection);
     }
 
+    @ParameterizedTest
     @SuppressWarnings({"JUnitValueSource", "LexicographicalAnnotationListing"})
     @MethodSource("workflowDefaultUrlValues")
     @FuzzTest(maxDuration = "10s", maxExecutions = 20_000)

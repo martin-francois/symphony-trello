@@ -36,7 +36,7 @@ final class WorkflowLoaderFuzzTest {
     @MethodSource("workflowBytes")
     @ParameterizedTest
     @SuppressWarnings("JUnitValueSource")
-    void workflowLoaderSeedsHandleKnownBoundaries(byte[] markdown) throws IOException {
+    void workflowLoaderSeedsHandleKnownBoundaries(byte[] markdown) throws Exception {
         // given
         byte[] candidate = markdown;
 
