@@ -3666,6 +3666,13 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - CLI surfaces startup failure cleanly
 - CLI exits with success when application starts and shuts down normally
 - CLI exits nonzero when startup fails or the host process exits abnormally
+- installed-wrapper defaults keep the installed workspace and state roots when the installed config
+  directory is passed explicitly
+- installer-managed setup forwards the configured state home to managed worker startup
+- installer updates stop workers tracked in configured and legacy state roots, restart them in the
+  configured root, and leave legacy logs available as history
+- fresh interactive explicit-layout setup offers sanitized, opt-in feedback after GitHub setup;
+  declining or being unable to create the issue does not fail setup
 
 ### 17.8 Trello Workflow Conformance
 
@@ -4086,6 +4093,16 @@ When this profile is used:
 - on generic Linux, macOS, and WSL2 installs, default local paths SHOULD follow the user's XDG-style
   homes: app and workspaces under the data home, config under the config home, state/logs under the
   state home, and dependency caches under the cache home
+- installer-managed `setup-local` MUST pass its selected state home to managed worker startup.
+  Direct advanced `setup-local --state-home PATH` use MUST store managed worker PID files and logs
+  below `PATH`. When an installed wrapper receives its own installed config directory explicitly,
+  it MUST retain the installed workspace and state roots unless the user explicitly overrides them
+- until the migration contract tracked by
+  [GitHub issue #678](https://github.com/martin-francois/symphony-trello/issues/678) is removed, an
+  update MUST inspect both the configured state home and the former config-sibling `state` directory
+  for managed worker PID files, stop managed workers tracked in either location, and restart them in
+  the configured state home. It MUST NOT silently use the legacy directory for new PID files or logs,
+  and it MUST preserve existing legacy logs as historical data
 - on openSUSE MicroOS-like Linux hosts, and on other Linux hosts with the same storage topology,
   where the user's home is on the small root-backed filesystem and `/var` is a separate larger
   mutable filesystem, the POSIX installer SHOULD place heavy Symphony app, workspace, state, config,
@@ -4115,6 +4132,12 @@ When this profile is used:
 - GitHub-enabled existing-board import MAY create a missing `Merging` list after the user has
   selected or requested GitHub integration. `setup-local configure-github` MUST be able to upgrade
   an existing connected non-GitHub board in place instead of forcing a new board connection
+- after the GitHub integration step of a successful fresh interactive install with explicit layout
+  variables, setup SHOULD ask whether the layout represents a reusable convention. When the user
+  opts in, setup MUST show the complete sanitized issue content before asking to create it through
+  an authenticated GitHub CLI. If GitHub CLI creation is unavailable or declined, setup MUST print a
+  prefilled browser link. The report MUST omit credentials, usernames, hostnames, and account details;
+  it MUST redact paths outside the user's home and MUST NOT make setup fail
 - GitHub-enabled generated boards include `Merging` and PR publication/merge workflow guidance
 - non-GitHub generated boards MUST NOT create `Merging`, include it in active states, or require PR
   publication/merging before `Human Review`
