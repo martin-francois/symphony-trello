@@ -4,7 +4,7 @@
 
   <groupId>ch.fmartin.symphony.trello</groupId>
   <artifactId>symphony-trello</artifactId>
-  <version>1.2.0</version>
+  <version>1.3.0</version>
   <name>Symphony for Trello</name>
   <description>Quarkus service that orchestrates Codex workers from Trello cards.</description>
 
