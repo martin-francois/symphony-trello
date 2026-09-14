@@ -67,6 +67,20 @@
     {
       "customType": "regex",
       "managerFilePatterns": [
+        "/^\\.github/workflows/ci\\.yml$/",
+        "/^scripts/dependency-governance\\.test\\.ts$/"
+      ],
+      "matchStrings": [
+        "--package\\s+renovate@(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "datasourceTemplate": "npm",
+      "depNameTemplate": "renovate",
+      "versioningTemplate": "semver",
+      "description": "Keep the pinned Renovate config validator and its regression expectation in lockstep so CI never resolves a moving toolchain."
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
         "/^\\.github/workflows/commitlint\\.yml$/",
         "/^scripts/commitlint-local$/"
       ],
