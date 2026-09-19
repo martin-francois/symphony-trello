@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { parse } from "yaml";
 
 const POM = readFileSync(new URL("../pom.xml", import.meta.url), "utf8");
 const CONFIDENCE_MAP = readFileSync(
   new URL("../docs/testing/dependency-upgrade-confidence.md", import.meta.url),
+  "utf8",
+);
+const CI_WORKFLOW = readFileSync(
+  new URL("../.github/workflows/ci.yml", import.meta.url),
   "utf8",
 );
 
@@ -89,4 +94,27 @@ test("an artifact without both evidence cells has no upgrade-confidence evidence
 
   // then
   assert.deepEqual([...documented], ["documented-artifact"]);
+});
+
+test("Renovate validation is reproducible and permits only required builds", () => {
+  // given
+  const expectedCommand =
+    "pnpm dlx --allow-build=core-js-pure --allow-build=dtrace-provider " +
+    "--allow-build=protobufjs --allow-build=re2 --package renovate@44.65.5 " +
+    "renovate-config-validator renovate.json --strict";
+  const ciWorkflow = parse(CI_WORKFLOW) as {
+    jobs?: {
+      renovate?: {
+        steps?: Array<{ name?: unknown; run?: unknown }>;
+      };
+    };
+  };
+
+  // when
+  const validationCommand = ciWorkflow.jobs?.renovate?.steps?.find(
+    ({ name }) => name === "Validate Renovate config",
+  )?.run;
+
+  // then
+  assert.equal(validationCommand, expectedCommand);
 });
