@@ -46,7 +46,7 @@ jobs:
         if: ${{ steps.release-assets.outputs.upload_assets == 'true' }}
         with:
           distribution: temurin
-          java-version: "25"
+          java-version: "25.0.4+7.0.LTS"
           cache: maven
       - name: Build release assets
         if: ${{ steps.release-assets.outputs.upload_assets == 'true' }}
