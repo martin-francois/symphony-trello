@@ -41,22 +41,11 @@ requirements.
   their owning rules. The `Required merge checks` ruleset on the default branch enforces the
   required checks, linear history, and thread resolution, and the script test `major update pull
   requests require manual merge` asserts the major-update policy.
-- Group dependencies by release or compatibility contract, with one deliberate exception: the
-  repository-wide non-major bundle described in
-  [ADR 0076](../adr/0076-separate-major-updates-from-the-automergeable-bundle.md). That bundle is a
-  cost decision, not a compatibility claim, and it is deliberately limited to non-major updates so
-  the blast radius of a failure stays small.
-- A group MUST NOT hide which dependency caused a failed check. Automation cannot prove this rule;
-  pull-request review of the failing check's attribution is the required evidence before merging a
-  group. When the non-major bundle fails, attribute the failure by bisecting the bundle locally
-  rather than by re-running the pull request, which is both faster and free.
-- Major updates MUST NOT share a branch with the automergeable non-major bundle, because a single
-  review-required major would otherwise suppress automatic merging for every routine update
-  travelling with it. A package that requires a manual merge MUST leave that bundle through
-  `groupName: null` rather than through `automerge: false` alone, for the same reason. The script
-  tests `major updates never join the automergeable non-major bundle` and `a manual-merge package is
-  excluded from the automergeable bundle` enforce both rules; see
-  [ADR 0076](../adr/0076-separate-major-updates-from-the-automergeable-bundle.md).
+- This public repository groups dependencies by release or compatibility contract. Unrelated
+  non-major updates have separate pull requests and no weekly update schedule.
+- Keep majors reviewed and separate from non-major updates. Keep the coordinated OpenRewrite
+  group and the Quarkus and vendored-guidance review exceptions intact. A passing check MUST NOT
+  enable automatic merging for a dependency whose rule requires manual review.
 - For each direct dependency and build plugin, document its failure surface and the required check
   that detects a bad update. A dependency is eligible for automatic merge only when that evidence is
   a required check. The script test enforces complete coverage in

@@ -12,6 +12,20 @@ informed: [Future maintainers, Contributors]
 
 # Separate Major Updates From The Automergeable Bundle
 
+## Grouping amendment, 19 September 2026
+
+This repository is public. Ordinary updates have no weekly schedule. Group only dependencies that
+need coordinated updates, such as a shared release train or toolchain; unrelated non-major updates
+have separate pull requests. Keep major upgrades and existing manual-review exceptions reviewed,
+retain the seven-day ordinary release-age gate, and keep security fixes immediate.
+
+This amendment supersedes only the grouping and scheduling choice below. Existing merge-safety,
+coverage, and compatibility requirements remain in force. The maintainer selected this policy.
+A single group containing both automatic and reviewed updates was rejected because it delays
+routine fixes behind manual work. Separate updates for every declaration were rejected where
+members require coordinated changes. Validate the configuration with the official Renovate validator
+and inspect effective grouping and merge decisions with Renovate's package-rule engine.
+
 ## Context and Problem Statement
 
 The repository grouped every dependency update into one pull request through the `group:all` preset.

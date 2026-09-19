@@ -1024,7 +1024,7 @@ test("update-type predicates follow Renovate's match-everything default", () => 
   assert.equal(matchesNonMajor({matchUpdateTypes: ["major", "minor"]}), true);
 });
 
-test("major updates never join the automergeable non-major bundle", () => {
+test("public updates separate unrelated dependencies and keep majors reviewed", () => {
   // group:all sets separateMajorMinor to false, which forces majors into the same
   // branch as every other update. A single pending major would then hold back the
   // whole automergeable bundle, so the preset must stay out of extends.
@@ -1032,13 +1032,19 @@ test("major updates never join the automergeable non-major bundle", () => {
   assert.equal(RENOVATE_CONFIG.separateMajorMinor, true);
   assert.equal(RENOVATE_CONFIG.separateMultipleMajor, true);
 
-  const bundle = RENOVATE_CONFIG.packageRules.find(
-    ({groupName}) => groupName === "all non-major dependencies",
+  const automaticUpdates = RENOVATE_CONFIG.packageRules.find(
+    (rule) => rule.automerge === true && !matchesMajor(rule),
   );
 
-  assert.ok(bundle, "a non-major bundle rule must exist");
-  assert.equal(bundle?.automerge, true);
-  assert.ok(!matchesMajor(bundle!));
+  assert.ok(automaticUpdates, "eligible non-major updates must retain automerge");
+  assert.equal(automaticUpdates.groupName, undefined);
+  assert.equal(automaticUpdates.groupSlug, undefined);
+  assert.ok(
+    RENOVATE_CONFIG.packageRules.every(
+      ({groupName}) => groupName !== "all non-major dependencies",
+    ),
+    "unrelated public updates must not share a broad bundle",
+  );
 
   // Renovate applies package rules in order and the last match wins, so the
   // invariant is not "no automergeable rule matches a major" but "the last rule
@@ -1057,12 +1063,9 @@ test("major updates never join the automergeable non-major bundle", () => {
   );
 });
 
-test("a manual-merge package is excluded from the automergeable bundle", () => {
-  // An automerge:false package that still carries the bundle's groupName would drag
-  // the entire bundle out of automerge, which is the same failure mode as group:all.
-  // A rule that matches any non-major type can reach the bundle, including one that
-  // matches major AND minor, so the filter is on matchesNonMajor rather than on the
-  // absence of "major".
+test("manual-merge exceptions remain independent of compatibility groups", () => {
+  // Quarkus and vendored guidance need their own migration work. Keep their
+  // review-required updates independent of automatic compatibility groups.
   for (const rule of RENOVATE_CONFIG.packageRules) {
     if (rule.automerge !== false || !matchesNonMajor(rule)) {
       continue;
@@ -1070,7 +1073,7 @@ test("a manual-merge package is excluded from the automergeable bundle", () => {
     assert.equal(
       rule.groupName,
       null,
-      "a manual-merge package rule must leave the shared bundle via groupName: null",
+      "manual-merge exceptions must clear inherited compatibility groups",
     );
   }
 });
