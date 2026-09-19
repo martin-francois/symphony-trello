@@ -269,7 +269,7 @@ final class ContinuousFuzzingWorkflowTest {
                 .containsSubsequence(
                         "uses: actions/setup-java@",
                         "distribution: temurin",
-                        "java-version: \"25\"",
+                        "java-version: \"25.0.4+7.0.LTS\"",
                         "scripts/run-clusterfuzzlite-coverage");
     }
 
