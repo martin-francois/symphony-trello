@@ -32,7 +32,7 @@
     ]
   },
   "lockFileMaintenance": {
-    "description": "Refresh the committed lockfiles on a schedule so transitive advisories get fixed. Renovate only proposes updates for the direct declarations it manages, so a vulnerable package that no manifest names is never reached by an ordinary update or by a vulnerability alert, and its advisory stays open until the lockfile is regenerated. The Friday early-morning window matches the maintainer's preference for scheduled dependency work, and automerge matches the non-major bundle policy: required status checks still gate the merge, so a refresh that breaks a check stays open for review.",
+    "description": "Refresh the committed lockfiles on a schedule so transitive advisories get fixed. Renovate only proposes updates for the direct declarations it manages, so a vulnerable package that no manifest names is never reached by an ordinary update or by a vulnerability alert, and its advisory stays open until the lockfile is regenerated. The Friday early-morning window matches the maintainer's preference for scheduled dependency work, and automerge matches the non-major automerge policy: required status checks still gate the merge, so a refresh that breaks a check stays open for review.",
     "enabled": true,
     "schedule": [
       "* 0-4 * * 5"
@@ -122,7 +122,7 @@
   },
   "packageRules": [
     {
-      "description": "Bundle every non-major update into one automergeable pull request. Major updates are deliberately excluded so that a pending major never holds back the bundle.",
+      "description": "Public repository: merge eligible non-major updates after checks pass. Group only dependencies that need coordinated updates; keep unrelated updates separate.",
       "matchUpdateTypes": [
         "minor",
         "patch",
@@ -130,8 +130,6 @@
         "pinDigest",
         "digest"
       ],
-      "groupName": "all non-major dependencies",
-      "groupSlug": "all-non-major",
       "automerge": true
     },
     {
@@ -192,7 +190,7 @@
       ]
     },
     {
-      "description": "Major updates land one at a time and require a human merge after review of the migration notes. This rule deliberately sets no groupName: majors are already ungrouped because the bundle rule matches non-major types only, and forcing a groupName here would split lockstep groups whose members must move together across a major boundary.",
+      "description": "Major updates require human review of migration notes. Preserve compatibility groups whose members must move together across a major boundary.",
       "matchUpdateTypes": [
         "major"
       ],
