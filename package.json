@@ -9,7 +9,7 @@
     "verify:scripts": "pnpm run check:scripts && pnpm run test:scripts"
   },
   "devDependencies": {
-    "@types/node": "24.13.3",
+    "@types/node": "24.13.4",
     "typescript": "7.0.2",
     "yaml": "2.9.0"
   }
