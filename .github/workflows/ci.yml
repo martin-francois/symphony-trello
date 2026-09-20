@@ -44,7 +44,7 @@ jobs:
       - name: Enable pnpm
         run: |
           corepack enable
-          corepack prepare pnpm@11.26.0 --activate
+          corepack prepare pnpm@11.27.0 --activate
       - name: Validate Renovate config
         run: pnpm dlx --allow-build=core-js-pure --allow-build=dtrace-provider --allow-build=protobufjs --allow-build=re2 --package renovate@44.82.5 renovate-config-validator renovate.json --strict
 
@@ -63,7 +63,7 @@ jobs:
       - name: Enable pnpm
         run: |
           corepack enable
-          corepack prepare pnpm@11.26.0 --activate
+          corepack prepare pnpm@11.27.0 --activate
       - name: Install script tooling
         run: pnpm install --frozen-lockfile
       - name: Type-check and test scripts
