@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-image="docker.io/semgrep/semgrep:1.176.1@sha256:34ab619bf1391a24bfda3f05debd0d8a6ce3093c2d5f9d39cfc00f83c1397823"
+image="docker.io/semgrep/semgrep:1.177.0@sha256:acaac22ffc7b7cc5926de0751b223bce0b2491c33d18422fa72f632c78d81198"
 repo_root="$(git rev-parse --show-toplevel)"
 git_dir="$(git -C "$repo_root" rev-parse --absolute-git-dir)"
 git_common_dir="$(git -C "$repo_root" rev-parse --path-format=absolute --git-common-dir)"
