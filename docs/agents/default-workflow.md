@@ -35,6 +35,9 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
   discovers `#!/bin/bash` and `#!/usr/bin/env bash` and includes every matching file in the
   repository's `bash -n`, ShellCheck, and shfmt checks.
 
+- When a change adds, updates, or removes a dependency or a tool version pin, apply
+  [Dependency updates](dependency-updates.md#proving-renovate-ownership) before finishing: every
+  declaration needs a Renovate owner, and the local extraction dry run is the proof.
 - Prefer TDD when the behavior can be isolated. If TDD is impractical, make sure the final tests
   would have failed for the bug or missing behavior.
 - When starting implementation work for a specific GitHub issue, assign that issue to the
