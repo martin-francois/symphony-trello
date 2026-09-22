@@ -46,7 +46,7 @@ jobs:
           corepack enable
           corepack prepare pnpm@11.27.0 --activate
       - name: Validate Renovate config
-        run: pnpm dlx --allow-build=core-js-pure --allow-build=dtrace-provider --allow-build=protobufjs --allow-build=re2 --package renovate@44.90.3 renovate-config-validator renovate.json --strict
+        run: pnpm dlx --allow-build=core-js-pure --allow-build=dtrace-provider --allow-build=protobufjs --allow-build=re2 --package renovate@44.91.0 renovate-config-validator renovate.json --strict
 
   script-tests:
     if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}
