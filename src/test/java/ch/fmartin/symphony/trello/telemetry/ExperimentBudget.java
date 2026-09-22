@@ -45,6 +45,19 @@ final class ExperimentBudget {
         }
     }
 
+    /// Charges time already spent waiting on I/O against the same wait budget as polling sleeps.
+    void chargeElapsed(Duration duration, String reason) {
+        long total = waitedMillis.addAndGet(Math.max(0, duration.toMillis()));
+        if (total > maxWait.toMillis()) {
+            throw new BudgetExhaustedException("wait budget of " + maxWait + " exhausted while " + reason);
+        }
+    }
+
+    /// How long this invocation may still wait; a request may not block longer than this.
+    Duration remainingWait() {
+        return Duration.ofMillis(Math.max(0, maxWait.toMillis() - waitedMillis.get()));
+    }
+
     int requests() {
         return requests.get();
     }

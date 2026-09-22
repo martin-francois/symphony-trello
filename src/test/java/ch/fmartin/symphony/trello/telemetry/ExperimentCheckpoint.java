@@ -39,6 +39,7 @@ record ExperimentCheckpoint(
         RESET_B_DONE,
         REUSE_B_SENT,
         REUSE_OBSERVED,
+        REPAIR_AWAITING_HEARTBEAT,
         REPAIR_DONE,
         CLEANUP_REQUESTED,
         COMPLETE

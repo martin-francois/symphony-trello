@@ -29,6 +29,25 @@ Three synthetic installations take part:
 | B | Deletion, then `reset_person_distinct_id` before the first new event, then reuse |
 | C | Control: one event that must stay visible while A and B are erased |
 
+After the erasure is verified and A and B are re-enabled, the harness treats two questions
+separately. First, ingestion: the new event UUIDs must become queryable, and until they do the run
+is pending. Second, reuse: after a bounded propagation window it records, for each subject on its
+own, whether the person API shows a profile and whether analytics resolve the new events to a
+profile in the persons table. A missing mapping is an observation, not a reason to wait longer.
+Only a subject whose mapping is missing then gets the after-event `reset_person_distinct_id`
+call, once (the request time is checkpointed first, so a resumed run observes instead of resetting
+again). If the reset does not resolve the mapping within its window, the subject needs one more
+heartbeat, which the application's daily gate allows only on a later UTC day; the run parks in the
+`REPAIR_AWAITING_HEARTBEAT` phase and a later invocation sends it. Cleanup starts only after every
+subject has a recorded repair outcome.
+
+Deletion evidence is strict. A deletion counts as complete only when the status row for the
+profile UUID has status `completed`, a parseable `delete_verified_at`, and a `created_at` no
+earlier than the recorded request time (minus a five-minute skew allowance); the timestamp in the
+evidence comes from that row. An older completed row on a reused profile, a row for another person,
+a missing or blank timestamp, an empty listing, a malformed answer, or a query that only reports
+its status is never treated as completion.
+
 The harness drives the real application components: the state store, `telemetry disable` and
 `telemetry enable` through `TelemetryService`, the worker's `HeartbeatReporter` with an injected
 clock, the single serializer, and the real capture client. Only the platform, the board count, and
@@ -148,7 +167,8 @@ PASS, row 3 PENDING, rows 4 to 8 NOT RUN.
 
 Run the exact command above again with the same experiment directory. The harness reloads
 `checkpoint.json`, polls the deletion status and the event queries, and continues through the reuse
-phases, the conditional repair, and the cleanup when PostHog reports the deletion verified. Each
+phases, the conditional repair (including a run parked for a next-day heartbeat), and the cleanup
+when PostHog reports the deletion verified. Each
 resumed invocation appends to `evidence.jsonl` and rewrites `summary.md`; copy the new rows into
 the table above and update the runbook's "Re-enabling after an erasure" section with what rows 4
 to 6 show. The cleanup at the end of the experiment is itself a second erasure of the reused IDs
