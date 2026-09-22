@@ -91,6 +91,18 @@ the old project before the new one can be created; the entry point offers `retir
 - Bad, because three settings live outside the plan until the provider learns them; the supplement
   has its own diff, apply, read-back, and tests, and the exit path is a provider release.
 - Bad, because the bootstrap uses `-target` once; OpenTofu warns about it on every first apply.
+- Good, because each state directory carries its own OpenTofu data directory, so selecting a
+  state directory selects a whole deployment and every state command refuses a data directory
+  bound to another state file; a second review found that a data directory shared under the
+  configuration would have followed the first state it was initialized for, including into the
+  release-token handoff.
+- Good, because the verification outcome is `verified` only when every required check passed
+  and could be read; a required value the API omits makes the deployment `incomplete`, not
+  verified, and public sharing is checked on every dashboard and insight, not only the managed
+  dashboard. The expected values are the definition's own `privacy_policy` output.
+- Neutral, because the fixture check gives each run its own installation ids and event uuids and
+  scopes the canonical queries to that cohort, so other data in the test project neither satisfies
+  nor disturbs it; the cohort's deletion is queued afterwards and completes in PostHog's batch.
 - Bad, because state is on one machine. Handing management to another person means handing over
   the directory; two directories would mean two owners of the same projects.
 - Neutral, because the provider sends the deprecated `dashboards` field when creating an insight;
@@ -122,6 +134,14 @@ Executed on 2026-09-22 against the maintainer's EU organization with OpenTofu 1.
   repeated. The release secret `POSTHOG_PROJECT_TOKEN` was set from the cycle-2 production token
   through `release-token`, which GitHub confirms by name and time only; the packaging script's own
   check verified that a locally packaged application carries that value.
+- Second review repairs, 2026-09-22, each with a regression: per-state OpenTofu data directory
+  and bound-state guard (`scripts/posthog-infra.wrapper.test.ts` runs the real `tofu` against two
+  state directories and a crossed data directory); required-versus-advisory verification with the
+  `verified`/`drift`/`incomplete` outcome, sharing on every dashboard and insight, and
+  organization scoping (`scripts/posthog-infra.test.ts`); run-owned fixture cohorts with exact
+  event waiting and cohort-scoped canonical queries; bounded response reading, pagination limits,
+  and key redaction in the supplement; the dashboard rows now place half-width panels side by
+  side (the earlier layout stacked them) and were reapplied to both projects.
 - Semantic comparison of the retired projects with the rebuilt ones: identical privacy settings;
   deliberate differences are the emptied internal-user filter and the explicit empty replay-domain
   list.

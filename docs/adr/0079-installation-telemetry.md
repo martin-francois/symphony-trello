@@ -238,8 +238,10 @@ tokens, the shared lock budget (`TelemetryStateStoreTest` blocks one transaction
 state invariants (`TelemetryStateStoreTest` mutates a valid file into eight inconsistent shapes),
 quota deferral, the privacy answer returning to the question, truthful review outcomes, tolerant
 loading of an invalid endpoint override, the explicit manifest path for the board count, clock
-rollback, the worker notice after setup disclosure, and the runbook's erasure procedure (disable
-first, verify event deletion by query, no local reset). A stored disable is tested to survive
+rollback, the worker notice after setup disclosure, the runbook's erasure procedure (disable
+first, verify event deletion by query, no local reset), and, after a second review, the capture
+response reading: an unreadable, truncated, oversized, or unparseable body is a failed attempt
+that keeps the pending event for a retry rather than an accepted report. A stored disable is tested to survive
 restarts and checks beyond the grace period, and enable is tested to keep the identity and
 counters without replaying a discarded report.
 
