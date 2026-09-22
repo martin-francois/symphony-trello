@@ -942,6 +942,10 @@ This Java implementation provides:
   shown in a `board_hash` or `key_hash` row, or a `<path:...>` token. It is valid only with
   `--show-private-context`. That output is for local troubleshooting only and MUST NOT be pasted into
   public issue reports.
+- `telemetry status|preview|privacy|enable|disable [--yes]|debug`: shows, previews, or changes the
+  optional installation usage reporting defined in Section 19.6. `preview`, `status`, and `privacy`
+  are read-only; `disable` reviews the exact report body in an interactive terminal before changing
+  the stored preference.
 
 During guided `setup-local` board creation or import, when `--max-agents` is omitted, the Java
 implementation prompts for the per-board concurrency value before writing the workflow. A blank
@@ -964,7 +968,7 @@ later.
 
 The installed Bash and PowerShell wrappers dispatch `--help`, `-h`, `--version`, `setup-local`,
 `new-board`, `import-board`, `list-workspaces`, `start`, `stop`, `status`, `logs`, `diagnostics`,
-and unknown commands to this Java command boundary. The wrappers bootstrap paths, classpath, managed
+`telemetry`, and unknown commands to this Java command boundary. The wrappers bootstrap paths, classpath, managed
 Codex/npm paths, dotenv defaults, config/workspace/state locations, and caller directory context;
 Java owns managed worker process selection, PID/log files, health checks, start/stop/status/logs,
 diagnostics behavior, and usage errors. Unknown commands MUST fail through Java command usage
@@ -1363,6 +1367,12 @@ implemented.
   turn sandbox policy to `dangerFullAccess`
 - `SYMPHONY_TRELLO_DOTENV`: implementation environment extension that selects the ignored dotenv
   file loaded for local runs instead of the project-root `.env`
+- `SYMPHONY_TRELLO_TELEMETRY_DISABLED`: implementation environment extension that turns off
+  installation usage reporting and its counters for the inheriting process (Section 19.6)
+- `SYMPHONY_TRELLO_TELEMETRY_DEBUG`: implementation environment extension that switches the
+  inheriting process to local-only reporting; it cannot override a stored disable (Section 19.6)
+- `SYMPHONY_TRELLO_TELEMETRY_LOG`: implementation environment extension that logs actual report
+  requests and outcomes; it affects output only (Section 19.6)
 - `codex.turn_timeout_ms`: integer, default `3600000`
 - `codex.read_timeout_ms`: integer, default `5000`
 - `codex.stall_timeout_ms`: integer, default `300000`
@@ -3701,6 +3711,64 @@ network access, or external service permissions are unavailable.
 - If a real-integration profile is explicitly enabled in CI or release validation, failures SHOULD
   fail that job.
 
+### 17.10 Installation Telemetry (Extension Conformance)
+
+These checks are REQUIRED only when the installation telemetry profile in Section 19.6 is shipped.
+
+- If installation telemetry is implemented, the serialized report contains exactly the allowlisted
+  envelope fields and properties of Section 19.6, in a stable order, with the fixed protocol flags,
+  and representative Windows, macOS, Linux, and unknown-platform fixtures serialize to the
+  documented vocabulary; `null` stays distinct from `0`, installed-version strings that are not a
+  plain release become `null`, and contaminated fixture inputs never appear in the output
+- If installation telemetry is implemented, `preview` prints the complete report body immediately,
+  before and after an identity exists, and performs no request, creates no identity, and changes no
+  schedule or preference
+- If installation telemetry is implemented, debug mode prints a preview immediately and again only
+  when a field other than the report ID or timestamp changes, sends nothing, and the environment
+  precedence rules of Section 19.6 hold for every combination of stored mode and override
+- If installation telemetry is implemented, the first successful import or create during setup is
+  counted before the first heartbeat; failed, cancelled, validation-only, and re-persisted
+  operations are not counted; repeated persistence of the same board is not counted twice;
+  disconnecting keeps the totals; and no counter accrues while reporting is disabled
+- If installation telemetry is implemented, the notice is shown before the first eligible operation,
+  the shared five-minute deadline starts once at the first ready worker and survives restarts,
+  concurrent first workers create one identity and one deadline, explicit `enable` needs no new
+  grace period, the disable environment variable is honored from unattended installation on, an
+  installer rerun leaves the stored preference untouched, and shutdown sends nothing
+- If installation telemetry is implemented, at most one report is accepted per active UTC day,
+  brief sessions report on eligible startup, the recurring check attempts promptly once the
+  deadline has passed, transient failures use
+  bounded backoff with a valid bounded `Retry-After`, a report pending across midnight is replaced
+  by a fresh observation, retries keep the report ID and timestamp, and no offline backlog exists
+- If installation telemetry is implemented, separate JVM processes create one identity, share one
+  daily claim and the counters, recover from a dead claim owner, ignore late completions after a
+  preference change, tolerate lock contention, refuse to report on invalid state, and preserve the
+  preference across upgrades
+- If installation telemetry is implemented, the interactive disable review accepts `yes`, `no`,
+  Enter, `privacy`, `y`, `n`, and `p`, defaults to No, repeats on invalid input, returns to the
+  question after `privacy`, leaves the preference unchanged on Enter, end of input, cancellation,
+  or a crash before confirmation, keeps a persisted disable across a later crash, does not
+  overwrite a concurrent preference change on cancellation and reports that change in its outcome,
+  succeeds without a review when already disabled, disables directly for non-interactive input and
+  `--yes`, reports overrides truthfully, stays disabled across restarts and checks beyond the grace
+  period, and `enable` resumes with the existing identity and counters
+- If installation telemetry is implemented, a confirmed disable discards pending work and blocks
+  later attempts, an in-flight request is described as not retractable, and a failed preference
+  write is reported as an error instead of success
+- If installation telemetry is implemented, transport tests cover acceptance, quota-limited
+  responses recorded as deferrals rather than acceptance, validation failures, transient errors,
+  header and body timeouts within one budget, bounded response reading, refused redirects, the
+  absence of leaked headers, credentials, and host metadata, a missing token, an invalid endpoint
+  override that leaves preference commands working, and no test contacts the production endpoint
+- If installation telemetry is implemented, platform normalization distinguishes Windows 10, 11,
+  and Server releases by build, macOS product releases from Darwin versions, fixed and rolling Linux
+  releases, and runtime architectures, and treats malformed local strings and detector failures as
+  unknown
+- If installation telemetry is implemented, the installed wrappers dispatch the `telemetry`
+  commands with documented help and exit codes on the supported platforms, the dashboard fixture
+  produces the documented results, the bundled privacy text is readable offline, and the field list
+  in the schema, the notice, and the privacy text stay synchronized by test
+
 ## 18. Implementation Checklist (Definition of Done)
 
 Use the same validation profiles as Section 17:
@@ -3783,6 +3851,8 @@ Required when the workflow expects the agent to perform Trello handoff transitio
 - Local installer and onboarding commands follow Section 19.4 when this repository's one-liner
   scripts or `setup-local` command are used.
 - Java repository quality gates follow Section 19.5 for this repository's maintained implementation.
+- Installation usage reporting follows Section 19.6 when this repository's installed copies report
+  daily heartbeats.
 - `trello_rest` client-side tool extension exposes scoped Trello REST access through the app-server
   session using configured Symphony auth.
 - `trello_rest` client-side tool extension disallows destructive operations by default.
@@ -4199,6 +4269,94 @@ When this profile is used:
 - Renovate SHOULD keep Maven dependencies, GitHub Actions, and pinned tool versions current
 - GitHub Actions SHOULD be pinned to full commit SHAs, with Renovate allowed to update non-major
   action pins after the configured release-age delay
+
+### 19.6 Installation Telemetry Profile (OPTIONAL)
+
+This Java repository ships optional installation usage reporting so the maintainer can see how many
+installations report, which releases and platforms are in use, and whether the board import and
+create flows are used. It is not a runtime conformance requirement for other implementations.
+
+When this profile is used:
+
+- reporting is enabled by default for installed copies and MUST be persistently switched off by
+  `telemetry disable`; the choice MUST survive updates and restarts
+- there MUST be exactly one event type, `installation_heartbeat`, delivered as one HTTPS `POST` to
+  the dedicated PostHog EU project endpoint with the body fields `api_key`, `event`, `distinct_id`,
+  `uuid`, and `timestamp`, and a `properties` object containing exactly
+  `telemetry_schema_version`, `registered_on`, `app_version`, `os_family`, `os_release`,
+  `linux_distribution`, `runtime_arch`, `connected_board_count`, `board_imports_total`,
+  `board_creations_total`, `$geoip_disable`, and `$process_person_profile`. No other event type,
+  property, SDK metadata, identifier, name, path, credential, prompt, or error text MAY be sent, in
+  plain or hashed form
+- `distinct_id` MUST be a random UUID created locally and stored in the state home. It MUST NOT be
+  derived from hardware, hostname, user name, machine identifiers, or Trello identity. One
+  installation's workers MUST share it. It MUST be created only in an installed, enabled, token
+  configured context, never by help, status, privacy, preview, or a disabled run
+- `registered_on` MUST be the UTC date the identity was created and MUST be repeated in every
+  report. `app_version` MUST come from the installer's `install-context.properties` in the state
+  home and MUST be `null` when that value is not a plain release. `connected_board_count` MUST be
+  the number of distinct boards in a readable manifest and `null` otherwise. The counters MUST
+  count only successful import or create operations that register a board that was not connected
+  before, MUST be frozen while reporting is disabled, and MUST NOT decrease on disconnect
+- `os_family` MUST be one of `windows`, `macos`, `linux`, `other`, `unknown`; `os_release` MUST be
+  a coarse product release (`10`, `11`, `server_YYYY`; the macOS major release; a support-relevant
+  Linux release or `rolling`) or `unknown`; `linux_distribution` MUST be an allowlisted ID,
+  `other`, or `unknown` on Linux and `null` elsewhere; `runtime_arch` MUST be `x64`, `arm64`,
+  `x86`, `other`, or `unknown`. Detection failures MUST degrade to `unknown` and MUST NOT affect
+  startup
+- a short notice MUST be printed during guided setup, before a direct `new-board` or `import-board`
+  operation, and by the first ready worker; the shared five-minute first-report deadline MUST start
+  once at the first ready worker, MUST be persisted, and MUST NOT be reset by later restarts. No
+  report MAY be sent before that deadline. `telemetry enable` MUST print the notice, MUST remove
+  the need for a new grace period, and MUST NOT send anything itself
+- workers MUST check on readiness and about once per minute, MUST accept at most one report per
+  active UTC calendar day for the installation, MUST keep at most one immutable pending report
+  whose UUID, timestamp, and properties are reused on retries, MUST retry transient failures with
+  bounded backoff and honor a bounded `Retry-After`, MUST NOT retry permanent failures or
+  quota-limited responses before the next UTC day, MUST record only a documented success response
+  as an accepted report, MUST bound every delivery attempt in time and response size including the
+  response body, MUST keep at most one delivery attempt in flight per worker, MUST replace a
+  pending report from an earlier UTC day with a fresh observation, MUST NOT send a second report
+  for a day already covered when the clock moves backwards, and MUST NOT send at shutdown, backfill
+  missed days, or run a process only for reporting
+- state MUST live in `telemetry.json` next to a stable `telemetry.lock` in the state home. Changes
+  MUST be short transactions under an OS file lock plus a same-process lock, followed by atomic
+  replacement. The lock MUST NOT be held across a network request or a console prompt. A report
+  MUST be claimed with an expiring owner entry carrying a per-attempt token, sent asynchronously,
+  and recorded only when the claim, its attempt token, and the preference revision still match.
+  Waiting for either lock MUST share one bounded time budget. Unreadable, corrupt, newer-format, or
+  inconsistent state (an id without a registration date, negative counters, a claim without its
+  pending report, or a pending report outside the field contract) MUST turn reporting off without
+  regenerating an identity or re-enabling reporting, and MUST leave the file untouched
+- `SYMPHONY_TRELLO_TELEMETRY_DISABLED` MUST turn off reporting and counting for the inheriting
+  process and MUST NOT be defeated by `telemetry enable`; `SYMPHONY_TRELLO_TELEMETRY_DEBUG` MUST
+  switch the inheriting process to local-only mode and MUST NOT override a stored disable;
+  `SYMPHONY_TRELLO_TELEMETRY_LOG` MUST affect output only. `status` MUST show both the stored and
+  the effective mode when they differ. `enable`, `disable`, and `debug` MUST change nothing outside
+  an installed context, and `debug` MUST refuse to replace a stored disable
+- `preview` MUST print the complete pretty-printed body built by the same serializer as transmission
+  and MUST NOT send, create an identity, or change any preference, counter, or deadline. `debug` MUST
+  persistently switch the installation to local-only mode and print a preview; debug workers MUST
+  print a preview at startup and on a meaningful change, and MUST NOT send or queue anything
+- in an interactive terminal, `disable` without `--yes` MUST show the complete report body and ask
+  `Disable telemetry? [yes/No/privacy]`, accepting full words and `y`, `n`, `p`. Enter, `no`, end
+  of input, and any exit before confirmation MUST leave the stored preference unchanged; `privacy`
+  MUST print the bundled text and return to the same question without a change; `yes` MUST
+  atomically store the disabled mode, increment the preference revision, and discard pending work.
+  Non-interactive input and `--yes` MUST disable directly. An already disabled installation MUST
+  succeed without a review. A failed write MUST be reported as an error. The outcome printed after
+  No or cancellation MUST describe the mode that applies at that moment, including a concurrent
+  change or an environment override
+- the application MUST NOT rotate, retire, or delete an installation id on its own or through a
+  command. A stored disable MUST remain in force across restarts, updates, and worker starts.
+  `enable` MUST resume with the existing id, registration date, and counters, MUST NOT replay a
+  report discarded by the disable, and MUST NOT backfill the disabled period; erasure on the
+  provider side is a maintainer process that needs no local action
+- reports MAY leave the machine only when the state home contains the installer-written
+  `install-context.properties` and the build carries a configured project token. Source
+  checkouts, tests, CI, and development runs MUST NOT send production telemetry, and tests MUST use
+  a local endpoint
+- telemetry failures MUST NOT fail setup, worker startup, or any Trello or Codex operation
 
 ## Appendix A. SSH Worker Extension (OPTIONAL)
 
