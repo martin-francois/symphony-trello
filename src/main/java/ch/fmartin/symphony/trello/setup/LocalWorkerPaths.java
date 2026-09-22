@@ -6,9 +6,9 @@ import java.util.Optional;
 
 record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path stateHome) {
     private static final String APP_HOME_PROPERTY = "symphony.trello.app.home";
-    private static final String CONFIG_DIR_ENV = "SYMPHONY_TRELLO_CONFIG_DIR";
+    static final String CONFIG_DIR_ENV = "SYMPHONY_TRELLO_CONFIG_DIR";
     private static final String WORKSPACE_ROOT_ENV = "SYMPHONY_TRELLO_WORKSPACE_ROOT";
-    private static final String STATE_HOME_ENV = "SYMPHONY_TRELLO_STATE_HOME";
+    static final String STATE_HOME_ENV = "SYMPHONY_TRELLO_STATE_HOME";
     private static final String APP_HOME_ENV = "SYMPHONY_TRELLO_APP_HOME";
 
     static LocalWorkerPaths from(
@@ -44,6 +44,13 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
         CliInputValidation.rejectExistingNonDirectoryPath("--state-home", resolvedStateHome);
         CliInputValidation.rejectExistingNonDirectoryPath("--app-home", resolvedAppHome);
         return new LocalWorkerPaths(resolvedAppHome, resolvedConfigDir, resolvedWorkspaceRoot, resolvedStateHome);
+    }
+
+    /// Managed workers inherit both directories from `LocalWorkerManager`; a process without them is
+    /// a development or test run rather than part of an installation.
+    static boolean managedWorkerEnvironmentPresent(Map<String, String> environment) {
+        return envPath(environment, CONFIG_DIR_ENV).isPresent()
+                && envPath(environment, STATE_HOME_ENV).isPresent();
     }
 
     Path manifestPath() {
