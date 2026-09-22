@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars (ignored by Git) and fill in your own values. No key belongs here:
+# the personal API key is read from a file by scripts/posthog-infra.
+repository      = "your-github-account/symphony-trello"
+release_version = "1.3.0"
+release_date    = "2026-10-01"
+
+# organization_id = "@current"   # or the UUID or slug of the organization that should own the projects
+# project_names = {
+#   production = "Symphony for Trello"
+#   test       = "Symphony for Trello (test)"
+# }

@@ -124,6 +124,20 @@
       ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/ci\\.yml$/"
+      ],
+      "matchStrings": [
+        "tofu_version:\\s*(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "opentofu/opentofu",
+      "extractVersionTemplate": "^v(?<version>.+)$",
+      "versioningTemplate": "semver",
+      "description": "The OpenTofu version the CI validation job installs through setup-opentofu. The action input is not read by any built-in manager; the mise manager owns the same version in infra/posthog/mise.toml, and both must move together so CI validates with the tested release."
     }
   ],
   "customDatasources": {

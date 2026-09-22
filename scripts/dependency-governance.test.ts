@@ -118,3 +118,26 @@ test("Renovate validation is reproducible and permits only required builds", () 
   // then
   assert.equal(validationCommand, expectedCommand);
 });
+
+test("the OpenTofu version is pinned once per owner and the owners agree", () => {
+  // given
+  const ciWorkflow = parse(CI_WORKFLOW) as {
+    jobs?: {"posthog-infra"?: {steps?: Array<{uses?: unknown; with?: {tofu_version?: unknown}}>}};
+  };
+  const miseConfig = readFileSync("infra/posthog/mise.toml", "utf8");
+  const renovateConfig = JSON.parse(readFileSync("renovate.json", "utf8")) as {
+    customManagers?: Array<{depNameTemplate?: string; matchStrings?: string[]; datasourceTemplate?: string}>;
+  };
+
+  // when
+  const workflowVersion = ciWorkflow.jobs?.["posthog-infra"]?.steps?.find(
+    ({uses}) => typeof uses === "string" && uses.startsWith("opentofu/setup-opentofu@"),
+  )?.with?.tofu_version;
+  const miseVersion = /opentofu\s*=\s*"([^"]+)"/.exec(miseConfig)?.[1];
+  const manager = renovateConfig.customManagers?.find(({depNameTemplate}) => depNameTemplate === "opentofu/opentofu");
+
+  // then
+  assert.equal(workflowVersion, miseVersion);
+  assert.equal(manager?.datasourceTemplate, "github-releases");
+  assert.ok(manager?.matchStrings?.some((pattern) => new RegExp(pattern).test(`tofu_version: ${String(workflowVersion)}`)));
+});

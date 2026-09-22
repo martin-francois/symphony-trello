@@ -1,0 +1,4 @@
+# The OpenTofu release the PostHog infrastructure is tested with. `mise install` in this
+# directory provides exactly this version; Renovate's mise manager proposes updates.
+[tools]
+opentofu = "1.12.6"

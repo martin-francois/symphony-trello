@@ -69,6 +69,26 @@ jobs:
       - name: Type-check and test scripts
         run: pnpm run verify:scripts
 
+  posthog-infra:
+    # Secret-free validation of the PostHog infrastructure definition (ADR 0080). Credentialed
+    # plan and apply run only from a maintainer's machine; see docs/posthog-infrastructure.md.
+    if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_version: 1.12.6
+          tofu_wrapper: false
+      - name: Check formatting
+        run: scripts/posthog-infra fmt -check -diff
+      - name: Validate configuration
+        run: scripts/posthog-infra validate
+
   test:
     # ADR 0048 keeps this job on 2 vCPU and matches hosted JUnit parallelism
     # to the runner's vCPU count to minimize normalized Blacksmith cost.
