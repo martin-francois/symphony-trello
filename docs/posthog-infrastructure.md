@@ -32,13 +32,16 @@ server-created resource that must be adopted (GeoIP) is looked up by scope durin
 
 | Tool | Version | Pinned in |
 | --- | --- | --- |
-| OpenTofu | 1.12.6 | `infra/posthog/mise.toml`, `versions.tf` (`~> 1.12.0`), CI `setup-opentofu` |
+| OpenTofu | 1.12.6 | `infra/posthog/mise.toml` and the CI `setup-opentofu` step (exact, both Renovate-owned); `versions.tf` keeps a `>= 1.12.0` floor |
 | Provider `PostHog/posthog` (registry.opentofu.org/posthog/posthog) | 1.0.21 | `versions.tf`, `infra/posthog/.terraform.lock.hcl` |
 | Node | 24 | `package.json` engines through mise |
 | GitHub CLI | any current | for the secret handoff only |
 
-Renovate proposes updates for all of them. After a provider update run `scripts/posthog-infra
-validate`, then `plan`; the lock file changes with the provider version.
+Renovate proposes updates for all of them; provider lookups and lock hashes come from the OpenTofu
+registry through a package rule in `renovate.json`, and the `required_version` floor is excluded so
+Renovate never proposes Terraform releases for it. After a provider update run
+`scripts/posthog-infra validate`, then `plan`; the lock file changes with the provider version, and
+the CI job's `init` fails on a lock file whose hashes do not match.
 
 ## Prerequisites
 

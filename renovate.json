@@ -226,6 +226,26 @@
       "addLabels": [
         "major update"
       ]
+    },
+    {
+      "description": "infra/posthog is applied with OpenTofu, so provider lookups and lock-file hashes must come from the OpenTofu registry, not registry.terraform.io.",
+      "matchDatasources": [
+        "terraform-provider",
+        "terraform-module"
+      ],
+      "registryUrls": [
+        "https://registry.opentofu.org"
+      ]
+    },
+    {
+      "description": "required_version in infra/posthog is an OpenTofu floor; Renovate would otherwise propose Terraform releases for it. The mise pin and the CI action pin (both OpenTofu releases) carry the tested version.",
+      "matchManagers": [
+        "terraform"
+      ],
+      "matchDepTypes": [
+        "required_version"
+      ],
+      "enabled": false
     }
   ]
 }
