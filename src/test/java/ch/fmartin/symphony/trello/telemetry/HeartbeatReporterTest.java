@@ -228,6 +228,48 @@ final class HeartbeatReporterTest {
     }
 
     @Test
+    void anUnreadableResponseBodyIsRetriedWithTheSameEventAndAdvancesNothing() throws IOException {
+        // given
+        when(client.capture(anyString()))
+                .thenReturn(
+                        CaptureOutcome.transientFailure(Optional.of(200), Optional.empty(), "response body unreadable"))
+                .thenReturn(CaptureOutcome.accepted(200));
+        HeartbeatReporter reporter = readyReporter();
+
+        // when
+        Instant firstAttempt = clock.instant();
+        reporter.check();
+        TelemetryState afterFailure = store.read().stateOrInitial();
+        clock.advance(Duration.ofSeconds(61));
+        reporter.check();
+        TelemetryState afterRetry = store.read().stateOrInitial();
+        ArgumentCaptor<String> bodies = ArgumentCaptor.forClass(String.class);
+        verify(client, times(2)).capture(bodies.capture());
+        List<JsonNode> sent = new ArrayList<>();
+        for (String body : bodies.getAllValues()) {
+            sent.add(JSON.readTree(body));
+        }
+
+        // then
+        assertThat(afterFailure.lastReported())
+                .as("a body that never arrived whole proves nothing")
+                .isEmpty();
+        assertThat(afterFailure.pending())
+                .map(pending -> pending.eventUuid().toString())
+                .contains(sent.getFirst().get("uuid").asText());
+        assertThat(afterFailure.retry()).satisfies(retry -> {
+            assertThat(retry.reason()).isEqualTo("response body unreadable");
+            assertThat(retry.attempts()).isEqualTo(1);
+            assertThat(retry.notBefore()).isEqualTo(firstAttempt.plus(HeartbeatReporter.RETRY_BACKOFF.getFirst()));
+        });
+        assertThat(sent)
+                .extracting(node -> node.get("uuid").asText())
+                .containsOnly(sent.getFirst().get("uuid").asText());
+        assertThat(afterRetry.lastReportedDate()).isEqualTo(LocalDate.of(2026, 9, 22));
+        assertThat(afterRetry.pending()).isEmpty();
+    }
+
+    @Test
     void stalePendingReportIsReplacedByAFreshSnapshotOnTheNextDay() throws IOException {
         // given
         when(client.capture(anyString()))

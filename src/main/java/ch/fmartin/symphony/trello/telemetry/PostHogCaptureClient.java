@@ -71,9 +71,10 @@ public final class PostHogCaptureClient {
         return Map.of("Content-Type", "application/json", "User-Agent", USER_AGENT);
     }
 
-    /// Sends the body and reads at most [#MAX_RESPONSE_BYTES] of the answer inside one time budget.
-    /// The JDK request timeout covers only the response headers, so the body read runs on its own
-    /// thread against the same deadline; on timeout the exchange is cancelled and the stream closed.
+    /// Sends the body and reads the answer, bounded to [#MAX_RESPONSE_BYTES], inside one time
+    /// budget. The JDK request timeout covers only the response headers, so the body read runs on
+    /// its own thread against the same deadline; on timeout the exchange is cancelled and the
+    /// stream closed.
     public CaptureOutcome capture(String body) {
         HttpRequest.Builder request = HttpRequest.newBuilder(endpoint)
                 .timeout(requestTimeout)
@@ -98,39 +99,48 @@ public final class PostHogCaptureClient {
             Thread.currentThread().interrupt();
             return CaptureOutcome.transientFailure(Optional.empty(), Optional.empty(), "interrupted");
         }
-        return readBounded(response.body(), deadline)
-                .map(bodyPrefix -> classify(response, bodyPrefix))
-                .orElseGet(() -> CaptureOutcome.transientFailure(
-                        Optional.of(response.statusCode()), Optional.empty(), "response body timed out"));
+        return switch (readBounded(response.body(), deadline)) {
+            case BodyRead.Complete complete -> classify(response, complete.text());
+            case BodyRead.Failed failed -> classify(response, failed);
+        };
     }
 
     private static long remaining(long deadline) {
         return Math.max(0, deadline - System.nanoTime());
     }
 
-    /// Reads the bounded body prefix on a virtual thread so a stalled body cannot hold the caller
-    /// past the deadline. Empty means the read did not finish in time; the stream is closed, which
-    /// cancels the exchange. A body that fails mid-read yields the bytes read so far.
-    private static Optional<byte[]> readBounded(InputStream body, long deadline) {
-        var read = new CompletableFuture<byte[]>();
+    /// Reads the whole body on a virtual thread so a stalled body cannot hold the caller past the
+    /// deadline. One byte more than the bound is requested: a read that fills it means the answer
+    /// is larger than any documented response, and no prefix of it is trusted. A read that fails,
+    /// times out, or is interrupted is a failed attempt, never an empty answer; the stream is closed
+    /// on those paths, which cancels the exchange.
+    private static BodyRead readBounded(InputStream body, long deadline) {
+        var read = new CompletableFuture<BodyRead>();
         Thread.startVirtualThread(() -> {
             try (InputStream stream = body) {
-                read.complete(stream.readNBytes(MAX_RESPONSE_BYTES));
+                byte[] bytes = stream.readNBytes(MAX_RESPONSE_BYTES + 1);
+                read.complete(
+                        bytes.length > MAX_RESPONSE_BYTES
+                                ? new BodyRead.Failed("response too large")
+                                : new BodyRead.Complete(new String(bytes, StandardCharsets.UTF_8)));
             } catch (IOException exception) {
-                read.complete(new byte[0]);
+                read.complete(new BodyRead.Failed("response body unreadable"));
             }
         });
         try {
-            return Optional.of(read.get(remaining(deadline), TimeUnit.NANOSECONDS));
+            return read.get(remaining(deadline), TimeUnit.NANOSECONDS);
         } catch (TimeoutException exception) {
+            read.cancel(true);
             closeQuietly(body);
-            return Optional.empty();
+            return new BodyRead.Failed("response body timed out");
         } catch (ExecutionException exception) {
-            return Optional.of(new byte[0]);
+            closeQuietly(body);
+            return new BodyRead.Failed("response body unreadable");
         } catch (InterruptedException exception) {
+            read.cancel(true);
             closeQuietly(body);
             Thread.currentThread().interrupt();
-            return Optional.empty();
+            return new BodyRead.Failed("interrupted");
         }
     }
 
@@ -143,10 +153,20 @@ public final class PostHogCaptureClient {
         }
     }
 
-    private CaptureOutcome classify(HttpResponse<InputStream> response, byte[] bodyPrefix) {
+    /// A body that never arrived whole cannot prove acceptance: on a 200 the attempt is retried.
+    /// Any other status is classified by the status alone, which the headers already settled.
+    private CaptureOutcome classify(HttpResponse<InputStream> response, BodyRead.Failed failed) {
         int status = response.statusCode();
         if (status == HTTP_OK) {
-            return quotaLimited(bodyPrefix) ? CaptureOutcome.quotaLimited(status) : CaptureOutcome.accepted(status);
+            return CaptureOutcome.transientFailure(Optional.of(status), Optional.empty(), failed.summary());
+        }
+        return classify(response, "");
+    }
+
+    private CaptureOutcome classify(HttpResponse<InputStream> response, String body) {
+        int status = response.statusCode();
+        if (status == HTTP_OK) {
+            return classifyOk(body);
         }
         if (status == HTTP_TOO_MANY_REQUESTS || status == HTTP_REQUEST_TIMEOUT || status >= HTTP_SERVER_ERROR_START) {
             return CaptureOutcome.transientFailure(
@@ -164,14 +184,24 @@ public final class PostHogCaptureClient {
         return CaptureOutcome.permanentFailure(status, "unexpected HTTP " + status);
     }
 
-    private static boolean quotaLimited(byte[] bodyPrefix) {
-        try {
-            JsonNode node = JSON.readTree(bodyPrefix);
-            JsonNode quota = node == null ? null : node.get(QUOTA_LIMITED_FIELD);
-            return quota != null && quota.isArray() && !quota.isEmpty();
-        } catch (IOException | RuntimeException exception) {
-            return false;
+    /// PostHog documents the 200 status as the success signal and leaves the body form
+    /// undocumented, so a complete empty body counts as accepted. A body that is present must be
+    /// JSON: a non-empty `quota_limited` array is a drop, anything unparseable is not a proof of
+    /// acceptance and is retried.
+    private static CaptureOutcome classifyOk(String body) {
+        if (body.isEmpty()) {
+            return CaptureOutcome.accepted(HTTP_OK);
         }
+        JsonNode node;
+        try {
+            node = JSON.readTree(body);
+        } catch (IOException | RuntimeException exception) {
+            return CaptureOutcome.transientFailure(Optional.of(HTTP_OK), Optional.empty(), "unrecognized response");
+        }
+        JsonNode quota = node == null ? null : node.get(QUOTA_LIMITED_FIELD);
+        return quota != null && quota.isArray() && !quota.isEmpty()
+                ? CaptureOutcome.quotaLimited(HTTP_OK)
+                : CaptureOutcome.accepted(HTTP_OK);
     }
 
     static Optional<Duration> retryAfter(Map<String, List<String>> headers) {
@@ -195,5 +225,12 @@ public final class PostHogCaptureClient {
             // HTTP-date forms are ignored; the bounded backoff applies instead.
             return null;
         }
+    }
+
+    /// What the body read produced: every byte of a bounded answer, or the reason it is not one.
+    private sealed interface BodyRead {
+        record Complete(String text) implements BodyRead {}
+
+        record Failed(String summary) implements BodyRead {}
     }
 }
