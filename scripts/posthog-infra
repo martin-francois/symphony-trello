@@ -14,6 +14,11 @@ STATE_DIR="${SYMPHONY_TRELLO_POSTHOG_STATE_DIR:-$HOME/.local/state/symphony-trel
 HOST="${SYMPHONY_TRELLO_POSTHOG_HOST:-https://eu.posthog.com}"
 STATE_FILE="$STATE_DIR/terraform.tfstate"
 OUTPUTS_FILE="$STATE_DIR/outputs.json"
+# OpenTofu keeps the initialized backend in its data directory. Keeping that directory inside the
+# selected state directory binds every command to that deployment; a shared .terraform under the
+# configuration would keep pointing at whichever state was initialized first.
+DATA_DIR="${TF_DATA_DIR:-$STATE_DIR/.terraform}"
+BACKEND_RECORD="$DATA_DIR/terraform.tfstate"
 ROLES=(production test)
 
 usage() {
@@ -39,7 +44,12 @@ With the personal API key (read from SYMPHONY_TRELLO_POSTHOG_KEY_FILE, default ~
                         Delete one project that is not managed by this state, after checking its name.
   destroy [-auto-approve]
                         Destroy everything in the state.
-  tofu <args...>        Run any OpenTofu command against the configuration with credentials set.
+  tofu <args...>        Run any OpenTofu command against the selected state with credentials set.
+  state-path            Print the state file the selected data directory is bound to.
+
+Each state directory (SYMPHONY_TRELLO_POSTHOG_STATE_DIR) holds its own OpenTofu data directory, so
+switching the variable switches the whole deployment; commands refuse to run against a data
+directory bound to another state file.
 USAGE
 }
 
@@ -64,7 +74,31 @@ with_credentials() {
 }
 
 tofu_cmd() {
-  with_credentials tofu -chdir="$INFRA_DIR" "$@"
+  TF_DATA_DIR="$DATA_DIR" with_credentials tofu -chdir="$INFRA_DIR" "$@"
+}
+
+# The backend path OpenTofu recorded at init, or empty when this data directory was never
+# initialized. The check reads the record itself instead of trusting that a directory exists.
+bound_state_path() {
+  if [[ ! -f "$BACKEND_RECORD" ]]; then
+    return
+  fi
+  node -e '
+    const record = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+    process.stdout.write(String((record.backend && record.backend.config && record.backend.config.path) || ""));
+  ' "$BACKEND_RECORD"
+}
+
+# Every command that reads or changes state runs only when the data directory is bound to the
+# selected state file; a mismatch names both paths and stops before any request.
+require_bound_state() {
+  local bound
+  bound="$(bound_state_path)"
+  if [[ "$bound" != "$STATE_FILE" ]]; then
+    echo "posthog-infra: data directory $DATA_DIR is bound to ${bound:-no state}, not to $STATE_FILE" >&2
+    echo "  Run scripts/posthog-infra init with the same SYMPHONY_TRELLO_POSTHOG_STATE_DIR first." >&2
+    exit 2
+  fi
 }
 
 supplement() {
@@ -79,12 +113,14 @@ ensure_state_dir() {
 cmd_init() {
   ensure_state_dir
   tofu_cmd init -input=false -backend-config="path=$STATE_FILE" "$@"
+  require_bound_state
 }
 
 require_initialized() {
-  if [[ ! -d "$INFRA_DIR/.terraform" ]]; then
+  if [[ -z "$(bound_state_path)" ]]; then
     cmd_init
   fi
+  require_bound_state
 }
 
 write_outputs() {
@@ -102,6 +138,7 @@ state_has() {
 # GeoIP function is ever created.
 bootstrap() {
   local role targets=() missing=()
+  local apply_args=("$@")
   for role in "${ROLES[@]}"; do
     if ! state_has "module.$role.posthog_hog_function.geoip"; then
       missing+=("$role")
@@ -112,7 +149,7 @@ bootstrap() {
     return
   fi
   echo "posthog-infra: bootstrap for roles: ${missing[*]}"
-  tofu_cmd apply -input=false -auto-approve "${targets[@]}"
+  tofu_cmd apply -input=false -auto-approve "${targets[@]}" "${apply_args[@]}"
   for role in "${missing[@]}"; do
     local project_id function_id
     project_id="$(project_id_from_state "$role")"
@@ -135,11 +172,27 @@ project_id_from_state() {
 
 cmd_apply() {
   require_initialized
-  bootstrap
+  reject_partial_apply_args "$@"
+  bootstrap "${@//-auto-approve/}"
   tofu_cmd apply -input=false "$@"
   write_outputs
   supplement gaps apply --outputs "$OUTPUTS_FILE"
   cmd_verify
+}
+
+# Inputs must reach every phase (bootstrap, import, full apply, supplements); only these three
+# options are known to, so anything else is refused before the bootstrap can mutate.
+reject_partial_apply_args() {
+  local argument
+  for argument in "$@"; do
+    case "$argument" in
+    -auto-approve | -var-file=* | -no-color) ;;
+    *)
+      echo "posthog-infra: apply accepts only -auto-approve, -var-file=<file>, and -no-color; got $argument" >&2
+      exit 2
+      ;;
+    esac
+  done
 }
 
 cmd_verify() {
@@ -169,6 +222,7 @@ cmd_release_token() {
   fi
   require_initialized
   write_outputs
+  echo "posthog-infra: production token from state $STATE_FILE (project $(node -e 'const o=require(process.argv[1]); console.log(o.projects.value.production.id)' "$OUTPUTS_FILE"))"
   # The token travels from the outputs file into gh's stdin; it never becomes an argument.
   node -e 'const o=require(process.argv[1]); process.stdout.write(o.capture_tokens.value.production)' "$OUTPUTS_FILE" |
     gh secret set POSTHOG_PROJECT_TOKEN --repo "$repository"
@@ -200,18 +254,35 @@ verify) cmd_verify "$@" ;;
 fixture)
   require_initialized
   write_outputs
-  supplement fixture --outputs "$OUTPUTS_FILE" --role test
+  supplement fixture --outputs "$OUTPUTS_FILE" --role test --run-file "$STATE_DIR/fixture-$(date -u +%Y%m%dT%H%M%SZ).json"
   ;;
 release-token) cmd_release_token "$@" ;;
-retire-project) supplement retire-project --id "${1:?project id}" --name "${2:?expected name}" ;;
+retire-project)
+  # A project this state manages is retired through destroy, never through this command.
+  if [[ -n "$(bound_state_path)" ]] && tofu_cmd state list 2>/dev/null | grep -q '^module\.'; then
+    write_outputs
+    if node -e 'const o=require(process.argv[1]); process.exit(Object.values(o.projects.value).some((p) => String(p.id) === process.argv[2]) ? 0 : 1)' "$OUTPUTS_FILE" "${1:?project id}"; then
+      echo "posthog-infra: project $1 is managed by $STATE_FILE; use destroy instead of retire-project" >&2
+      exit 2
+    fi
+  fi
+  supplement retire-project --id "${1:?project id}" --name "${2:?expected name}"
+  ;;
 destroy)
   require_initialized
+  echo "posthog-infra: destroying everything in $STATE_FILE"
   tofu_cmd destroy -input=false "$@"
   rm -f "$OUTPUTS_FILE"
   ;;
 tofu)
+  # Any OpenTofu command against the selected, bound state; the same guard applies.
   require_initialized
   tofu_cmd "$@"
+  ;;
+state-path)
+  # Which state file the selected data directory is bound to (empty when not initialized).
+  bound_state_path
+  echo
   ;;
 -h | --help | help | "") usage ;;
 *)

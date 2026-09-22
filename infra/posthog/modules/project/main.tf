@@ -93,15 +93,28 @@ locals {
     )
   }
 
-  # Row-major placement: a full-width panel starts its own row, half-width panels pair up.
-  panel_positions = {
-    for index, panel in local.panels : panel.key => {
-      x = panel.width == 12 ? 0 : (index % 2 == 0 ? 0 : 6)
-      y = sum(concat([0], [for earlier in slice(local.panels, 0, index) : earlier.height]))
-      w = panel.width
-      h = panel.height
+  # Dashboard rows: a full-width panel takes a row alone, half-width panels share one. Row height
+  # is the tallest panel in it, so a panel's y is the sum of the heights of the rows above.
+  panel_rows = [
+    ["active-installations"],
+    ["latest-version-distribution", "os-family-and-release-distribution"],
+    ["runtime-architecture-distribution", "current-board-distribution"],
+    ["import-and-create-adoption", "registration-cohorts"],
+    ["release-adoption-and-delay"],
+    ["inactive-installations", "reactivated-installations"],
+  ]
+  panel_by_key = { for panel in local.panels : panel.key => panel }
+  row_heights  = [for row in local.panel_rows : max([for key in row : local.panel_by_key[key].height]...)]
+  panel_positions = merge([
+    for row_index, row in local.panel_rows : {
+      for column, key in row : key => {
+        x = column * 6
+        y = sum(concat([0], slice(local.row_heights, 0, row_index)))
+        w = local.panel_by_key[key].width
+        h = local.panel_by_key[key].height
+      }
     }
-  }
+  ]...)
 }
 
 resource "posthog_project" "this" {
