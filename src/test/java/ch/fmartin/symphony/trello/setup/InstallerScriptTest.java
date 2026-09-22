@@ -4610,7 +4610,8 @@ final class InstallerScriptTest {
 
         // when
         int javaGuard = installer.indexOf("if (-not (Get-Command java -ErrorAction SilentlyContinue))");
-        int javaLaunch = installer.indexOf("& java \"-Dsymphony.trello.app.home=", javaGuard);
+        int javaLaunch = installer.indexOf(
+                "& java \"--enable-native-access=ALL-UNNAMED\" \"-Dsymphony.trello.app.home=", javaGuard);
 
         // then
         assertThat(javaGuard)

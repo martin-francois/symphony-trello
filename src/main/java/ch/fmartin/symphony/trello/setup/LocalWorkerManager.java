@@ -28,6 +28,7 @@ import java.util.function.Function;
 final class LocalWorkerManager {
     private static final int STARTUP_LOG_BYTE_LIMIT = 128 * 1024;
     private static final Striped<Lock> PROCESS_LOCKS = Striped.lazyWeakLock(1024);
+    static final String ENABLE_NATIVE_ACCESS_FLAG = "--enable-native-access=ALL-UNNAMED";
 
     private final Map<String, String> environment;
     private final WorkflowConfigEditor workflowConfig;
@@ -331,6 +332,9 @@ final class LocalWorkerManager {
 
         List<String> command = List.of(
                 javaExecutable(),
+                // Telemetry platform detection uses the Foreign Function and Memory API; without this
+                // flag the JDK prints a restricted-method warning into the worker log.
+                ENABLE_NATIVE_ACCESS_FLAG,
                 "-Dsymphony.trello.managed.app_home=" + paths.appHome(),
                 "-jar",
                 paths.appHome().resolve("target/quarkus-app/quarkus-run.jar").toString(),

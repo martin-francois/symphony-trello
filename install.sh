@@ -2743,7 +2743,7 @@ exec_setup_cli() {
     echo "  \$BIN_DIR/symphony-trello" >&2
     exit 2
   fi
-  exec java -Dsymphony.trello.app.home="\$APP_HOME" -Dsymphony.trello.config.dir="\$CONFIG_DIR" -Dsymphony.trello.installed.app.home="\$INSTALLED_APP_HOME" -Dsymphony.trello.installed.config.dir="\$INSTALLED_CONFIG_DIR" -Dsymphony.trello.installed.workspace.root="\$INSTALLED_WORKSPACE_ROOT" -Dsymphony.trello.installed.state.home="\$INSTALLED_STATE_HOME" -Dsymphony.trello.shell=posix -Dsymphony.trello.command="\$SYMPHONY_TRELLO_COMMAND" -cp "\$classpath" ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain "\$@"
+  exec java --enable-native-access=ALL-UNNAMED -Dsymphony.trello.app.home="\$APP_HOME" -Dsymphony.trello.config.dir="\$CONFIG_DIR" -Dsymphony.trello.installed.app.home="\$INSTALLED_APP_HOME" -Dsymphony.trello.installed.config.dir="\$INSTALLED_CONFIG_DIR" -Dsymphony.trello.installed.workspace.root="\$INSTALLED_WORKSPACE_ROOT" -Dsymphony.trello.installed.state.home="\$INSTALLED_STATE_HOME" -Dsymphony.trello.shell=posix -Dsymphony.trello.command="\$SYMPHONY_TRELLO_COMMAND" -cp "\$classpath" ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain "\$@"
 }
 exec_setup_cli "\$@"
 EOF
