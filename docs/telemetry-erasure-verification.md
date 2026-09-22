@@ -71,7 +71,7 @@ deletion status, a deletion error, a cached query answer, a resumed run, and sec
 
 ```bash
 SYMPHONY_TRELLO_TELEMETRY_LIVE_EXPERIMENT=1 \
-SYMPHONY_TRELLO_TELEMETRY_LIVE_EXPERIMENT_DIR=/var/tmp/symphony-telemetry/erasure-experiment \
+SYMPHONY_TRELLO_TELEMETRY_LIVE_EXPERIMENT_DIR="$HOME/.local/state/symphony-trello/erasure-experiment" \
 SYMPHONY_TRELLO_POSTHOG_PERSONAL_API_KEY_FILE="$HOME/posthog-personal-api-key" \
 SYMPHONY_TRELLO_POSTHOG_TEST_PROJECT_ID=281083 \
 SYMPHONY_TRELLO_POSTHOG_TEST_PROJECT_NAME='Symphony for Trello (test)' \

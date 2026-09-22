@@ -9,7 +9,7 @@ without the named evidence.
 
 ## Provider setup
 
-PostHog EU, organization "François's Organization". The two projects, their privacy settings, the
+PostHog EU, in the maintainer's organization. The two projects, their privacy settings, the
 disabled GeoIP transformation, the dashboard, and its insights are defined as code under
 `infra/posthog/` and applied with OpenTofu; [docs/posthog-infrastructure.md](posthog-infrastructure.md)
 is the operating guide and [ADR 0080](adr/0080-posthog-infrastructure-as-code.md) the decision.

@@ -47,6 +47,11 @@ AssertJ can express the expectation directly.
 Follow the compatibility and migration rules in
 [Compatibility discipline](docs/agents/default-workflow.md#compatibility-discipline).
 
+Whenever a change adds, updates, or removes a dependency or a tool version pin in any file
+(Maven, pnpm, GitHub Actions, mise, OpenTofu, Renovate itself, or a version inside a script or
+workflow), prove that Renovate owns the declaration before finishing, as described in
+[Dependency updates](docs/agents/dependency-updates.md#proving-renovate-ownership).
+
 For normal code changes, run `./mvnw -q spotless:check verify` before finishing (use
 `spotless:apply` first when formatting changed). Static-analysis and lint gates must be clean; give
 every suppression the narrowest possible scope and a documented reason.

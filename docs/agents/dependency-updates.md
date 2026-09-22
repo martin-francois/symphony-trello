@@ -54,6 +54,28 @@ requirements.
   changes. Choose the fastest repeatably passing configuration; do not trade away determinism or
   coverage for a higher worker count.
 
+## Proving Renovate ownership
+
+Before finishing a change that adds, updates, or removes a dependency or a tool version pin, run
+Renovate's local extraction against the checkout and read which manager claimed the file:
+
+```bash
+LOG_LEVEL=info pnpm dlx --allow-build=core-js-pure --allow-build=dtrace-provider \
+  --allow-build=protobufjs --allow-build=re2 --package renovate@44.86.0 \
+  renovate --platform=local --dry-run=extract --require-config=ignored
+```
+
+The "Extracted dependencies" block lists every manager, package file, and `depName`. A declaration
+that does not appear there has no owner: add a built-in manager's file to its expected location,
+or a regex custom manager in `renovate.json` plus a regression test in
+`scripts/dependency-governance.test.ts`, and run the Renovate config validator (the `renovate` CI
+job's command). Known nonstandard declarations and their owners: the pnpm version in the workflow
+run steps, the Renovate validator version, the commitlint versions, the container images in the
+`*-docker.sh` scripts, the Tessl tile, and the OpenTofu version in the `posthog-infra` CI job
+(paired with the mise pin in `infra/posthog/mise.toml` by a governance test). Enforcement: the
+validator in CI, the governance tests in `pnpm run verify:scripts`, and this dry run cited in the
+pull request when a declaration changed.
+
 ## References
 
 - [Static analysis policy](static-analysis.md)
