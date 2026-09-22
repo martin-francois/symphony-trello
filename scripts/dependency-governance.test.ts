@@ -136,7 +136,12 @@ test("the OpenTofu version is pinned once per owner and the owners agree", () =>
   const miseVersion = /opentofu\s*=\s*"([^"]+)"/.exec(miseConfig)?.[1];
   const manager = renovateConfig.customManagers?.find(({depNameTemplate}) => depNameTemplate === "opentofu/opentofu");
 
+  const registryRule = (renovateConfig as {packageRules?: Array<{matchDatasources?: string[]; registryUrls?: string[]}>}).packageRules?.find(
+    ({matchDatasources}) => matchDatasources?.includes("terraform-provider"),
+  );
+
   // then
+  assert.deepEqual(registryRule?.registryUrls, ["https://registry.opentofu.org"]);
   assert.equal(workflowVersion, miseVersion);
   assert.equal(manager?.datasourceTemplate, "github-releases");
   assert.ok(manager?.matchStrings?.some((pattern) => new RegExp(pattern).test(`tofu_version: ${String(workflowVersion)}`)));
