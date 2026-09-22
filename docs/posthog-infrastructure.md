@@ -6,9 +6,15 @@ for anyone running a fork with their own PostHog account. It explains what the d
 a few API calls own because the provider cannot express them yet, what stays manual, and the exact
 commands for a fresh setup, a change, a drift repair, and a deliberate rebuild. The rationale is in
 [ADR 0080](adr/0080-posthog-infrastructure-as-code.md); the runtime telemetry design is in
-[ADR 0079](adr/0079-installation-telemetry.md) and is not changed by anything here.
+[ADR 0079](adr/0079-installation-telemetry.md) with the erasure extension in [ADR 0082](adr/0082-authenticated-erasure-with-reporting-periods.md).
 
 ## What is owned where
+
+The [native erasure trial](telemetry-native-erasure-trial.md) stopped at
+`BLOCKED_NATIVE_CAPABILITY`. Its `hog-probe` command uses this wrapper and selected private state,
+requires `SYMPHONY_TRELLO_POSTHOG_LIVE_PROBE=1`, and tests unsaved code with asynchronous calls
+mocked. It installs no handler and changes no managed resource. Automated erasure is defined but defaults to disabled for both roles; [ADR 0081](adr/0081-gate-automated-erasure-on-hosted-verification.md)
+records the gate for any future definition.
 
 | Item | Owner | Where |
 | --- | --- | --- |
@@ -217,3 +223,31 @@ PASS.
 
 Per-installation erasure is an operational procedure, not infrastructure; it stays in
 [docs/telemetry-maintainer-runbook.md](telemetry-maintainer-runbook.md).
+
+## Native erasure deployment
+
+The optional resources live in `modules/project/erasure.tf`. Both `erasure_enabled` role values
+default to false. The canonical handler is `erasure-service.hog.tftpl`; the lifecycle test renders
+the same file. The provider stores inputs as secrets. Its local state and variable files still
+require owner-only permissions and a protected backup.
+
+A private variable file supplies `erasure_secrets.<role>` with `active_key`, `master_keys`, and
+`api_key`. Generate each master from 32 cryptographically random bytes encoded as lowercase hex.
+Never replace or discard a key version while installations still use it. The API credential must
+be restricted to the intended project with `person:read`, `person:write`, `feature_flag:read` and
+`feature_flag:write` and `query:read`. It must not be the infrastructure administrator's credential.
+
+Follow the normal plan, gaps diff, apply and verify sequence. Do not enable production until
+[the lifecycle gate](telemetry-erasure-implementation.md) passes. Verification compares the
+managed handler hash, enabled state and merge filter with the canonical configuration.
+
+After production activation, the public release variables `POSTHOG_ERASURE_ENDPOINT` and
+`POSTHOG_ERASURE_AUDIENCE` carry the managed webhook URL and `symphony:<project-id>` audience.
+Packaging validates and checks both in the application archive. They contain no credential.
+Leaving both variables empty preserves the original profile. Setting only one fails packaging.
+Do not publish these variables before the deployment gate passes.
+
+Operational status flags are not configuration resources. Monitor their count against PostHog's
+2,000-flag limit. Clients request archival after saving completion; if an acknowledgment is lost,
+verify the bound person deletion and archive that flag through the maintainer runbook. Never
+interpret a missing flag as proof of completion.

@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: "superseded by [ADR 0082](0082-authenticated-erasure-with-reporting-periods.md)"
 date: 2026-09-22
 decision-makers: [François Martin]
 consulted:
@@ -12,6 +12,9 @@ informed: [Future maintainers, Contributors]
 ---
 
 # Report Installation Heartbeats To A Dedicated PostHog EU Project
+
+[ADR 0082](0082-authenticated-erasure-with-reporting-periods.md) updates identity and erasure
+behavior. The other telemetry requirements and production verification gate still apply.
 
 ## Context and Problem Statement
 

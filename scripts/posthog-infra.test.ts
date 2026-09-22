@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {createServer, type IncomingMessage, type Server, type ServerResponse} from "node:http";
-import {mkdtempSync, writeFileSync} from "node:fs";
+import {mkdtempSync, readFileSync, statSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {after, before, beforeEach, test} from "node:test";
@@ -15,6 +15,7 @@ import {
   newFixtureRun,
   outcomeOf,
   PostHogApi,
+  probeHogRuntime,
   readKey,
   readRoles,
   renderQuery,
@@ -22,6 +23,7 @@ import {
   scopeQuery,
   timeDependentExpectations,
   verify,
+  verifyProbeTarget,
   type Fixture,
   type Json,
 } from "./posthog-infra.ts";
@@ -76,6 +78,7 @@ function healthyEnvironment(): Record<string, Json> {
     id: PROJECT_ID,
     name: "Symphony for Trello (test)",
     organization: ORGANIZATION,
+    api_token: TOKEN,
     ...POLICY,
     autocapture_opt_out: true,
     capture_console_log_opt_in: false,
@@ -237,7 +240,27 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     respond(response, 200, paginated(state.insights));
     return;
   }
-  if (path === `/api/organizations/${ORGANIZATION}/`) {
+  if (path === `/api/projects/${PROJECT_ID}/hog_functions/new/invocations/` && request.method === "POST") {
+    const body = await readBody(request);
+    const configuration = body["configuration"] as Record<string, Json>;
+    const hog = String(configuration["hog"]);
+    if (body["mock_async_functions"] !== true) {
+      respond(response, 400, {detail: "probe must mock async functions"});
+      return;
+    }
+    if (hog.includes("sha256Hex('abc')")) {
+      respond(response, 200, {status: "success", errors: [], logs: [{message: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"}, {message: "Function completed in 0.3ms"}]});
+      return;
+    }
+    if (/typeof\((sha256HmacChainHex|md5Hex|jsonParse|generateUUIDv4)\)/.test(hog) || hog.includes("base64Decode")) {
+      respond(response, 200, {status: "success", errors: [], logs: [{message: hog.includes("base64Decode") ? "abc" : "function"}]});
+      return;
+    }
+    const name = /typeof\((\w+)\)/.exec(hog)?.[1] ?? "?";
+    respond(response, 200, {status: "error", errors: [`Global variable not found: ${name}`], logs: [{message: `Error executing function: HogVMException: Global variable not found: ${name}`}]});
+    return;
+  }
+  if (path === `/api/organizations/${ORGANIZATION}/` || path === "/api/organizations/@current/") {
     respond(response, 200, state.organization);
     return;
   }
@@ -534,3 +557,76 @@ test("canonical queries are scoped to the cohort without a second copy of their 
   assert.equal(comparePanel("p", [["a", 1]], [["a", 2]]).pass, false);
   assert.equal(comparePanel("cohorts", [["2026-07-01", 2]], [["2026-07-01", 3]]).pass, false);
 });
+
+test("the Hog capability probe reports present, absent, and unexpected primitives without saving anything", async () => {
+  const results = await probeHogRuntime(api(), PROJECT_ID);
+  assert.equal(results.find((result) => result.name === "sha256Hex")?.status, "present");
+  assert.equal(results.find((result) => result.name === "ecdsaVerify")?.status, "absent");
+  assert.equal(results.find((result) => result.name === "jwtVerify")?.status, "absent");
+  const surprising = await probeHogRuntime(api(), PROJECT_ID, [{name: "sha256Hex", hog: "print(sha256Hex('abc'))", expect: "other"}]);
+  assert.equal(surprising[0]?.status, "unexpected");
+  assert.ok(state.requests.every((request) => !request.startsWith("POST /api/projects/4242/hog_functions/") || request.includes("/new/invocations/")));
+});
+
+function probeState(overrides: Record<string, Json> = {}): string {
+  const file = join(tempDir, "probe-state.json");
+  writeFileSync(file, JSON.stringify({resources: [{module: "module.test", mode: "managed", type: "posthog_project", name: "this", instances: [{attributes: {id: String(PROJECT_ID), name: "Symphony for Trello (test)", organization_id: ORGANIZATION, api_token: TOKEN, ...overrides}}]}]}));
+  return file;
+}
+
+test("Hog probing binds the selected test resource, live environment, organization, and token", async () => {
+  assert.deepEqual(await verifyProbeTarget(api(), roles(), probeState()), {projectId: PROJECT_ID, organizationId: ORGANIZATION});
+  assert.ok(state.requests.every((request) => request.startsWith("GET ")));
+});
+
+for (const [field, value] of Object.entries({id: "9999", organization_id: "wrong-org", api_token: "wrong-token", name: "wrong-name"})) {
+  test(`Hog probing rejects a mismatched state ${field} before invocation`, async () => {
+    await assert.rejects(verifyProbeTarget(api(), roles(), probeState({[field]: value})), InfraError);
+    assert.ok(state.requests.every((request) => request.startsWith("GET ")));
+  });
+}
+
+test("Hog probing rejects missing opt-in before contacting the API", async () => {
+  await assert.rejects(main(["hog-probe", "--outputs", outputsFile, "--state", probeState(), "--host", host], {POSTHOG_API_KEY: KEY}), /explicit live opt-in/);
+  assert.deepEqual(state.requests, []);
+});
+
+test("Hog probing rejects a production alias before contacting the API", async () => {
+  const testRole = roles()[0]!;
+  await assert.rejects(verifyProbeTarget(api(), [testRole, {...testRole, name: "production"}], probeState()), /distinct test role/);
+  assert.deepEqual(state.requests, []);
+});
+
+test("Hog probing resolves the provider's organization alias and still checks the pinned project", async () => {
+  assert.deepEqual(await verifyProbeTarget(api(), roles(), probeState({organization_id: "@current"})), {projectId: PROJECT_ID, organizationId: ORGANIZATION});
+  state.organization["id"] = "another-current-organization";
+  await assert.rejects(verifyProbeTarget(api(), roles(), probeState({organization_id: "@current"})), /binding differs/);
+  assert.ok(state.requests.every((request) => request.startsWith("GET ")));
+});
+
+test("the explicit local probe writes a credential-free ledger and refuses to overwrite it", async () => {
+  const report = join(tempDir, "probe-ledger.json");
+  const args = ["hog-probe", "--outputs", outputsFile, "--state", probeState(), "--report", report, "--host", host];
+  const environment = {POSTHOG_API_KEY: KEY, SYMPHONY_TRELLO_POSTHOG_LIVE_PROBE: "1"};
+  assert.equal(await main(args, environment), 0);
+  const raw = readFileSync(report, "utf8");
+  const ledger = JSON.parse(raw) as Record<string, unknown>;
+  assert.equal(ledger["status"], "observed");
+  assert.equal(ledger["projectId"], PROJECT_ID);
+  assert.deepEqual(ledger["createdResources"], []);
+  assert.deepEqual(ledger["capturedEvents"], []);
+  assert.deepEqual(ledger["deletions"], []);
+  assert.ok(!raw.includes(KEY) && !raw.includes(TOKEN));
+  if (process.platform !== "win32") assert.equal(statSync(report).mode & 0o777, 0o600);
+  const invocations = state.requests.filter((request) => request.includes("/new/invocations/")).length;
+  await assert.rejects(main(args, environment), /EEXIST/);
+  assert.equal(state.requests.filter((request) => request.includes("/new/invocations/")).length, invocations);
+});
+
+for (const field of ["id", "name", "organization", "api_token"]) {
+  test(`Hog probing rejects a changed live ${field} before invocation`, async () => {
+    state.environment[field] = field === "id" ? PROJECT_ID + 1 : "changed";
+    await assert.rejects(verifyProbeTarget(api(), roles(), probeState()), /binding differs/);
+    assert.ok(state.requests.every((request) => request.startsWith("GET ")));
+  });
+}

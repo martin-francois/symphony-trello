@@ -5,6 +5,10 @@ This note records the live experiment that backs the erasure procedure in
 against PostHog, what was observed, and what is still pending. The runbook holds the procedure;
 this page holds the evidence and how to reproduce or resume it.
 
+The later [native erasure trial](telemetry-native-erasure-trial.md) is a separate capability
+investigation. It stopped before installing a privileged handler and did not advance this
+maintainer-driven experiment. Neither report proves unattended native completion or same-ID reuse.
+
 Everything here runs against the dedicated test project "Symphony for Trello (test)"; the
 production project is passed to the harness as forbidden and receives nothing. The projects were
 rebuilt from the OpenTofu definition on 2026-09-22 (see
@@ -79,6 +83,11 @@ on PostHog Cloud at weekends; the source of the single-person endpoint says the 
 batched and runs at 05:00 UTC on Sundays. The persons page states that a deleted `distinct_id`
 should not be reused while the deletion is being processed and points at the "Reset deleted
 person" tool for reuse.
+
+The source's Sunday time is not a guaranteed completion deadline. Current public documentation
+promises asynchronous off-peak processing, on weekends in Cloud. Resume based on verified deletion
+status and event absence, not merely because Sunday has passed. Ownership verification does not
+depend on that batch, and an accepted automated job must not require the client to remain online.
 
 ## Running the harness
 

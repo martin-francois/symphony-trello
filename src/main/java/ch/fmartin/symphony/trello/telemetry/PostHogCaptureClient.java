@@ -62,6 +62,10 @@ public final class PostHogCaptureClient {
         this.requestTimeout = requestTimeout;
     }
 
+    Duration requestTimeout() {
+        return requestTimeout;
+    }
+
     public URI endpoint() {
         return endpoint;
     }
@@ -114,7 +118,7 @@ public final class PostHogCaptureClient {
     /// is larger than any documented response, and no prefix of it is trusted. A read that fails,
     /// times out, or is interrupted is a failed attempt, never an empty answer; the stream is closed
     /// on those paths, which cancels the exchange.
-    private static BodyRead readBounded(InputStream body, long deadline) {
+    static BodyRead readBounded(InputStream body, long deadline) {
         var read = new CompletableFuture<BodyRead>();
         Thread.startVirtualThread(() -> {
             try (InputStream stream = body) {
@@ -228,7 +232,7 @@ public final class PostHogCaptureClient {
     }
 
     /// What the body read produced: every byte of a bounded answer, or the reason it is not one.
-    private sealed interface BodyRead {
+    sealed interface BodyRead {
         record Complete(String text) implements BodyRead {}
 
         record Failed(String summary) implements BodyRead {}

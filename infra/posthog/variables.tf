@@ -46,3 +46,16 @@ variable "release_date" {
     error_message = "release_date must be YYYY-MM-DD."
   }
 }
+
+variable "erasure_enabled" {
+  description = "Per-role activation. Production remains false until the hosted lifecycle gate passes."
+  type        = object({ production = bool, test = bool })
+  default     = { production = false, test = false }
+}
+
+variable "erasure_secrets" {
+  description = "Private per-role erasure credentials, supplied through a protected variable file."
+  sensitive   = true
+  type        = map(object({ active_key = string, master_keys = map(string), api_key = string }))
+  default     = {}
+}

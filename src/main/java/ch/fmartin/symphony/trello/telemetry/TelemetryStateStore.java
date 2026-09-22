@@ -116,7 +116,7 @@ public final class TelemetryStateStore {
         try {
             state = TelemetryStateJson.read(json);
         } catch (IOException | RuntimeException exception) {
-            return StateRead.unreadable("telemetry state is not valid: " + exception.getMessage());
+            return StateRead.unreadable("telemetry state is not valid JSON or contains invalid values");
         }
         if (state.formatVersion() != TelemetryState.FORMAT_VERSION) {
             return StateRead.unreadable("telemetry state format version " + state.formatVersion()
@@ -180,16 +180,20 @@ public final class TelemetryStateStore {
     }
 
     private void write(TelemetryState state) throws IOException {
-        Path temporary = stateFile.resolveSibling(STATE_FILE + ".tmp");
-        Files.writeString(temporary, TelemetryStateJson.write(state));
-        if (posix()) {
-            Files.setPosixFilePermissions(temporary, OWNER_ONLY);
-        }
+        Path temporary = posix()
+                ? Files.createTempFile(
+                        directory, "telemetry-", ".tmp", PosixFilePermissions.asFileAttribute(OWNER_ONLY))
+                : Files.createTempFile(directory, "telemetry-", ".tmp");
         try {
+            Files.writeString(temporary, TelemetryStateJson.write(state));
+            try (FileChannel written = FileChannel.open(temporary, StandardOpenOption.WRITE)) {
+                written.force(true);
+            }
             Files.move(temporary, stateFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } catch (AtomicMoveNotSupportedException exception) {
-            Files.deleteIfExists(temporary);
             throw new IOException("atomic replacement of telemetry.json is not supported here", exception);
+        } finally {
+            Files.deleteIfExists(temporary);
         }
     }
 

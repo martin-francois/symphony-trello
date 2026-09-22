@@ -1505,7 +1505,10 @@ sent last, `symphony-trello telemetry preview` prints the exact JSON body withou
 disable` and `symphony-trello telemetry enable` change the setting for the whole installation, and
 `symphony-trello telemetry debug` makes workers print reports instead of sending them. Details are
 in [docs/telemetry-privacy.md](docs/telemetry-privacy.md) and
-[docs/operations.md](docs/operations.md).
+[docs/operations.md](docs/operations.md). When automatic erasure is configured,
+`symphony-trello telemetry erase` disables reporting and requests deletion;
+`symphony-trello telemetry erase-status` checks progress. Production activation awaits the
+[hosted lifecycle gate](docs/telemetry-erasure-implementation.md).
 
 Important environment variables:
 

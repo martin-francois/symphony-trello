@@ -77,7 +77,7 @@ public final class HeartbeatSnapshots {
         return new HeartbeatEvent(
                 token,
                 HeartbeatEvent.EVENT_NAME,
-                state.installation().map(UUID::toString).orElse(null),
+                state.analyticsId().orElse(null),
                 eventUuid.toString(),
                 // Whole seconds are enough for a daily report and keep the wire value short.
                 timestamp.truncatedTo(ChronoUnit.SECONDS).toString(),

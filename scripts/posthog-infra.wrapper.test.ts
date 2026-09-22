@@ -66,3 +66,12 @@ test("apply refuses arguments that would reach only some phases", {skip: !HAS_TO
   assert.equal(result.status, 2);
   assert.ok(result.stderr.includes("apply accepts only"), result.stderr);
 });
+
+test("the Hog probe requires opt-in before initializing state or loading credentials", () => {
+  const root = mkdtempSync(join(tmpdir(), "posthog-probe-opt-in-"));
+  const stateDir = join(root, "state");
+  const result = run(stateDir, join(root, "missing-key"), ["hog-probe"], {SYMPHONY_TRELLO_POSTHOG_LIVE_PROBE: ""});
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /SYMPHONY_TRELLO_POSTHOG_LIVE_PROBE=1/);
+  assert.equal(existsSync(stateDir), false);
+});

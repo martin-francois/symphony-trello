@@ -259,9 +259,34 @@ API contract until then:
 
 ## Local diagnostics
 
+The separate [PostHog-native erasure trial](telemetry-native-erasure-trial.md) found no supported
+hosted asymmetric verifier and stopped before deploying an erasure handler. It does not replace
+the maintainer procedure above or establish automatic same-ID reuse. The current application's
+identity, commands and disabled-state preservation remain unchanged.
+
 - `symphony-trello telemetry status` prints the stored and effective mode, the installation ID, the
   state file path, the next allowed report time, and whether the state file is unreadable.
 - A corrupt, foreign, or newer-format `telemetry.json` turns reporting off; it never regenerates an
   ID or re-enables reporting on its own. The status output names the problem.
 - `SYMPHONY_TRELLO_TELEMETRY_LOG=1` on a worker prints every request body and the response summary
   into the worker log without changing whether anything is sent.
+
+## Authenticated erasure extension
+
+The [implementation and activation gate](telemetry-erasure-implementation.md) describe the native
+service and its durable TEST lifecycle runner. Production remains disabled until that gate passes.
+Use `symphony-trello telemetry erase` and `symphony-trello telemetry erase-status` only when the
+installed release carries the service configuration. Legacy IDs use the manual procedure above.
+Never ask a user to send `telemetry.json`; it contains the ownership secret.
+
+For automatic erasure, inspect the exact bound person UUID and its `persons/deletion_status/`
+record. "Accepted" and profile disappearance alone do not prove event deletion. After provider
+verification, query exact raw distinct-ID events and preserve an unrelated canary during tests.
+Do not reset a retired distinct ID or reuse its completed deletion queue key.
+
+Status flags whose private names start with `symphony-erasure-v1|` belong to deletion operations.
+Archive a leftover flag only after checking its bound person's completed deletion record and
+profile absence. The client already saves completion before requesting archival. A user whose
+local state predates that acknowledgment needs maintainer assistance if the status flag is gone.
+Keep the non-deleted flag count below PostHog's 2,000 limit. Preserve every signing-key version
+still used by installations and back up provider configuration outside analytics retention.

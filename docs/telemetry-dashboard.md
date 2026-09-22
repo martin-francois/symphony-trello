@@ -11,9 +11,9 @@ for project setup.
 
 ## Rules every panel follows
 
-- Every report is one `installation_heartbeat` event. `distinct_id` is the installation ID.
+- Every report is one `installation_heartbeat` event. `distinct_id` contains the installation ID and optional reporting period.
 - Current-state panels use one latest coherent snapshot per installation: a single `argMax` over a
-  tuple of all fields, ordered by `(timestamp, uuid)`, grouped by `distinct_id`. One winning event
+  tuple of all fields, ordered by `(timestamp, uuid)`, grouped by `splitByChar('.', distinct_id)[1]`. One winning event
   supplies every field, nulls included. A separate `argMax` per field would skip null arguments and
   could pair today's version with last week's board count.
 - `board_imports_total` and `board_creations_total` are cumulative counters repeated in every daily
@@ -44,7 +44,7 @@ when the whole argument is `null`, and a tuple never is.
 
 ```sql
 SELECT
-    distinct_id,
+    splitByChar('.', distinct_id)[1] AS installation_id,
     max(timestamp) AS last_seen,
     argMax(tuple(
         properties.app_version,
@@ -59,7 +59,7 @@ SELECT
 FROM events
 WHERE event = 'installation_heartbeat'
   AND timestamp >= now() - interval 30 day
-GROUP BY distinct_id
+GROUP BY installation_id
 ```
 
 Fields are read back positionally: `latest.1` is `app_version`, `latest.2` `os_family`, `latest.3`

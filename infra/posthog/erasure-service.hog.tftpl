@@ -1,0 +1,122 @@
+
+if (request.method != 'POST') { return {'httpResponse': {'status': 405, 'body': {'status': 'rejected'}}}; }
+if (length(request.stringBody) > 1200 or typeof(request.body.payload) != 'string') { return {'httpResponse': {'status': 401, 'body': {'status': 'rejected'}}}; }
+let p := request.body.payload;
+if (request.stringBody != concat('{"payload":"', p, '"}')) { return {'httpResponse': {'status': 401, 'body': {'status': 'rejected'}}}; }
+let keys := {${master_key_references}};
+if (p == 'issue-v1') {
+    let installation := toString(generateUUIDv4());
+    let subject := concat('h1-', '${active_key}', '-', installation);
+    let secret := sha256HmacChainHex([keys['${active_key}'], concat('symphony-trello/owner/v1|${scope}|', subject)]);
+    return {'httpResponse': {'status': 200, 'body': {'status': 'issued', 'installation_id': installation, 'key_version': '${active_key}', 'secret': secret}}};
+}
+let parts := splitByString('|', p);
+if (length(parts) != 9) { return {'httpResponse': {'status': 401, 'body': {'status': 'rejected'}}}; }
+if (parts[1] != 'h2' or (parts[2] != 'erase' and parts[2] != 'status' and parts[2] != 'ack') or parts[3] != '${scope}') { return {'httpResponse': {'status': 401, 'body': {'status': 'rejected'}}}; }
+if (not match(parts[4], '^h1-k[1-9][0-9]{0,3}-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$') or not match(parts[5], '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$') or not match(parts[6], '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')) { return {'httpResponse': {'status': 401, 'body': {'status': 'rejected'}}}; }
+if (not match(parts[7], '^[0-9]{10}$') or not match(parts[8], '^[0-9]{10}$') or not match(parts[9], '^[0-9a-f]{64}$')) { return {'httpResponse': {'status': 401, 'body': {'status': 'rejected'}}}; }
+let issued := toInt(parts[7]);
+let expires := toInt(parts[8]);
+let current := toUnixTimestamp(now());
+if (expires <= issued or expires - issued > 900 or issued > current + 60 or expires < current - 60) { return {'httpResponse': {'status': 401, 'body': {'status': 'rejected'}}}; }
+let version := splitByString('-', parts[4])[2];
+if (typeof(keys[version]) != 'string') { return {'httpResponse': {'status': 401, 'body': {'status': 'rejected'}}}; }
+let key := sha256HmacChainHex([keys[version], concat('symphony-trello/owner/v1|${scope}|', parts[4])]);
+let unsigned := arrayStringConcat([parts[1], parts[2], parts[3], parts[4], parts[5], parts[6], parts[7], parts[8]], '|');
+let expected := sha256HmacChainHex([key, unsigned]);
+if (sha256HmacChainHex([keys[version], expected]) != sha256HmacChainHex([keys[version], parts[9]])) { return {'httpResponse': {'status': 401, 'body': {'status': 'rejected'}}}; }
+let installation := substring(parts[4], length(version) + 5);
+let target := concat(installation, '.', parts[5]);
+let mailbox := concat('erasure-', sha256HmacChainHex([key, concat('symphony-trello/status/v1|${scope}|', parts[5])]));
+let headers := {'Authorization': concat('Bearer ', inputs.api_key), 'Content-Type': 'application/json'};
+let flagsResponse := fetch(concat('https://eu.posthog.com/api/projects/${project}/feature_flags/?search=', mailbox), {'method': 'GET', 'headers': headers});
+if (flagsResponse.status != 200) { return; }
+let flags := flagsResponse.body;
+if (typeof(flags.results) != 'array' or flags.next != null) { return; }
+let flag := null;
+for (let candidate in flags.results) {
+    if (candidate.key == mailbox and candidate.deleted != true) {
+        if (flag != null) { return; }
+        flag := candidate;
+    }
+}
+let peopleResponse := fetch(concat('https://eu.posthog.com/api/projects/${project}/persons/?distinct_id=', target), {'method': 'GET', 'headers': headers});
+if (peopleResponse.status != 200) { return; }
+let people := peopleResponse.body;
+if (typeof(people.results) != 'array' or people.next != null or length(people.results) > 1) { return; }
+let person := null;
+if (length(people.results) == 1) { person := people.results[1]; }
+if (flag == null) {
+    if (parts[2] != 'erase') { return; }
+    if (person == null) {
+        let emptyResponse := fetch('https://eu.posthog.com/api/projects/${project}/query/', {'method': 'POST', 'headers': headers, 'body': jsonStringify({
+            'query': {'kind': 'HogQLQuery', 'query': 'SELECT count() FROM events WHERE distinct_id = {id}', 'values': {'id': target}}, 'refresh': 'force_blocking'
+        })});
+        if (emptyResponse.status != 200) { return; }
+        let empty := emptyResponse.body;
+        if (empty.is_cached == true or typeof(empty.results) != 'array' or length(empty.results) != 1) { return; }
+        if (length(empty.results[1]) != 1 or empty.results[1][1] != 0) { return; }
+        fetch('https://eu.posthog.com/api/projects/${project}/feature_flags/', {'method': 'POST', 'headers': headers, 'body': jsonStringify({
+            'key': mailbox, 'name': 'symphony-erasure-empty-v1', 'active': true,
+            'filters': {'groups': [{'properties': [], 'rollout_percentage': 100}], 'multivariate': {'variants': [{'key': 'complete', 'rollout_percentage': 100}]}}
+        })});
+        return;
+    }
+    let create := fetch('https://eu.posthog.com/api/projects/${project}/feature_flags/', {'method': 'POST', 'headers': headers, 'body': jsonStringify({
+        'key': mailbox, 'name': concat('symphony-erasure-v1|', person.id), 'active': true,
+        'filters': {'groups': [{'properties': [], 'rollout_percentage': 100}], 'multivariate': {'variants': [{'key': 'pending', 'rollout_percentage': 100}]}}
+    })});
+    if (create.status != 201) { return; }
+    // Queue events while retaining the profile. A later request must observe admission before removing it.
+    if (length(person.distinct_ids) == 1 and person.distinct_ids[1] == target) {
+        fetch('https://eu.posthog.com/api/projects/${project}/persons/bulk_delete/', {'method': 'POST', 'headers': headers, 'body': jsonStringify({'ids': [person.id], 'keep_person': true, 'delete_events': true, 'delete_recordings': true})});
+    }
+    return;
+}
+if (flag.name == 'symphony-erasure-empty-v1') {
+    if (parts[2] == 'ack') {
+        fetch(concat('https://eu.posthog.com/api/projects/${project}/feature_flags/', toString(flag.id), '/'), {'method': 'PATCH', 'headers': headers, 'body': jsonStringify({'active': false, 'deleted': true})});
+    }
+    return;
+}
+let binding := splitByString('|', flag.name);
+if (length(binding) != 2 or binding[1] != 'symphony-erasure-v1' or not match(binding[2], '^[0-9a-f-]{36}$')) { return; }
+let personId := binding[2];
+let statusResponse := fetch(concat('https://eu.posthog.com/api/projects/${project}/persons/deletion_status/?person_uuid=', personId, '&status=all'), {'method': 'GET', 'headers': headers});
+if (statusResponse.status != 200) { return; }
+let deletions := statusResponse.body;
+if (typeof(deletions.results) != 'array' or deletions.next != null or length(deletions.results) > 1) { return; }
+let state := 'pending';
+let inconsistent := false;
+if (person != null) {
+    inconsistent := person.id != personId or length(person.distinct_ids) != 1 or person.distinct_ids[1] != target;
+}
+if (inconsistent) {
+    state := 'refused';
+} else if (length(deletions.results) == 1) {
+    let deletion := deletions.results[1];
+    if (deletion.person_uuid != personId) { return; }
+    if (person != null) {
+        // Admission is durable. Remove only the checked profile without moving the event cutoff on retries.
+        fetch('https://eu.posthog.com/api/projects/${project}/persons/bulk_delete/', {'method': 'POST', 'headers': headers, 'body': jsonStringify({'ids': [personId], 'delete_events': false, 'delete_recordings': true})});
+        return;
+    }
+    state := 'accepted';
+    if (deletion.status == 'completed' and deletion.delete_verified_at != null and person == null) { state := 'complete'; }
+} else if (person != null and parts[2] == 'erase') {
+    let result := fetch('https://eu.posthog.com/api/projects/${project}/persons/bulk_delete/', {'method': 'POST', 'headers': headers, 'body': jsonStringify({'ids': [personId], 'keep_person': true, 'delete_events': true, 'delete_recordings': true})});
+    if (result.status != 202) { return; }
+    let deletion := result.body;
+    if (typeof(deletion.deletion_errors) != 'array' or length(deletion.deletion_errors) != 0) { return; }
+    // A subsequent provider status read establishes acceptance, including lost-response retries.
+    return;
+}
+if (parts[2] == 'ack') {
+    if (state == 'complete') {
+        fetch(concat('https://eu.posthog.com/api/projects/${project}/feature_flags/', toString(flag.id), '/'), {'method': 'PATCH', 'headers': headers, 'body': jsonStringify({'active': false, 'deleted': true})});
+    }
+    return;
+}
+fetch(concat('https://eu.posthog.com/api/projects/${project}/feature_flags/', toString(flag.id), '/'), {'method': 'PATCH', 'headers': headers, 'body': jsonStringify({
+    'filters': {'groups': [{'properties': [], 'rollout_percentage': 100}], 'multivariate': {'variants': [{'key': state, 'rollout_percentage': 100}]}}
+})});
