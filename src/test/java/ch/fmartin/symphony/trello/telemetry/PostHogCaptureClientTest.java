@@ -9,6 +9,7 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
@@ -20,6 +21,8 @@ import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -140,7 +143,7 @@ final class PostHogCaptureClientTest {
     }
 
     @Test
-    void oversizedResponsesAreReadOnlyUpToTheBound() {
+    void anOversizedTwoHundredIsAFailedAttemptNotAnAcceptedReport() {
         // given
         respondWith(200, "{\"status\":1,\"padding\":\"" + "x".repeat(200_000) + "\"}", Map.of());
         PostHogCaptureClient client = new PostHogCaptureClient(endpoint("/i/v0/e/"));
@@ -149,9 +152,36 @@ final class PostHogCaptureClientTest {
         CaptureOutcome outcome = client.capture(BODY);
 
         // then
-        assertThat(outcome.accepted())
-                .as("a 200 with an oversized body still counts as accepted")
-                .isTrue();
+        assertThat(outcome.kind()).isEqualTo(CaptureOutcome.Kind.TRANSIENT);
+        assertThat(outcome.summary()).isEqualTo("response too large");
+        assertThat(outcome.statusCode()).contains(200);
+    }
+
+    @Test
+    void aCompleteEmptyTwoHundredIsAccepted() {
+        // given
+        respondWith(200, "", Map.of());
+        PostHogCaptureClient client = new PostHogCaptureClient(endpoint("/i/v0/e/"));
+
+        // when
+        CaptureOutcome outcome = client.capture(BODY);
+
+        // then
+        assertThat(outcome.kind()).isEqualTo(CaptureOutcome.Kind.ACCEPTED);
+    }
+
+    @Test
+    void aCompleteTwoHundredThatIsNotJsonIsRetriedNotAccepted() {
+        // given
+        respondWith(200, "<html>maintenance</html>", Map.of());
+        PostHogCaptureClient client = new PostHogCaptureClient(endpoint("/i/v0/e/"));
+
+        // when
+        CaptureOutcome outcome = client.capture(BODY);
+
+        // then
+        assertThat(outcome.kind()).isEqualTo(CaptureOutcome.Kind.TRANSIENT);
+        assertThat(outcome.summary()).isEqualTo("unrecognized response");
     }
 
     @Test
@@ -202,7 +232,7 @@ final class PostHogCaptureClientTest {
     }
 
     @Test
-    void aTruncatedBodyIsNotMistakenForAQuotaAnswer() {
+    void aBodyCutOffInsideTheQuotaAnswerIsAFailedAttempt() {
         // given
         server.createContext("/broken", exchange -> {
             exchange.sendResponseHeaders(200, 200);
@@ -217,8 +247,106 @@ final class PostHogCaptureClientTest {
         CaptureOutcome outcome = client.capture(BODY);
 
         // then
-        assertThat(outcome.kind()).isEqualTo(CaptureOutcome.Kind.ACCEPTED);
+        assertThat(outcome.kind()).isEqualTo(CaptureOutcome.Kind.TRANSIENT);
+        assertThat(outcome.summary()).isEqualTo("response body unreadable");
         assertThat(outcome.statusCode()).contains(200);
+    }
+
+    @Test
+    void anImmediateEndOfStreamAgainstAnAdvertisedLengthIsAFailedAttempt() {
+        // given
+        server.createContext("/eof", exchange -> {
+            exchange.sendResponseHeaders(200, 50);
+            exchange.getResponseBody().flush();
+            exchange.close();
+        });
+        PostHogCaptureClient client = new PostHogCaptureClient(endpoint("/eof"));
+
+        // when
+        CaptureOutcome outcome = client.capture(BODY);
+
+        // then
+        assertThat(outcome.kind()).isEqualTo(CaptureOutcome.Kind.TRANSIENT);
+        assertThat(outcome.summary()).isEqualTo("response body unreadable");
+    }
+
+    @Test
+    void aChunkedBodyThatBreaksMidwayIsAFailedAttempt() throws Exception {
+        // given
+        try (ServerSocket raw = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            Thread.startVirtualThread(() -> {
+                try (Socket connection = raw.accept()) {
+                    connection.getInputStream().read(new byte[1024]);
+                    connection
+                            .getOutputStream()
+                            .write(("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n"
+                                            + "40\r\n{\"status\":\"Ok\",\"quota_lim")
+                                    .getBytes(StandardCharsets.UTF_8));
+                    connection.getOutputStream().flush();
+                } catch (IOException ignored) {
+                    // the client sees the broken body either way
+                }
+            });
+            PostHogCaptureClient client =
+                    new PostHogCaptureClient(URI.create("http://127.0.0.1:" + raw.getLocalPort() + "/i/v0/e/"));
+
+            // when
+            CaptureOutcome outcome = client.capture(BODY);
+
+            // then
+            assertThat(outcome.kind()).isEqualTo(CaptureOutcome.Kind.TRANSIENT);
+            assertThat(outcome.summary()).isEqualTo("response body unreadable");
+            assertThat(outcome.statusCode()).contains(200);
+        }
+    }
+
+    @Test
+    void anInterruptedCallerGetsAFailedAttemptAndReleasesTheConnection() throws Exception {
+        // given
+        var release = new CountDownLatch(1);
+        var handlerFinished = new CountDownLatch(1);
+        server.createContext("/interrupt", exchange -> {
+            exchange.sendResponseHeaders(200, 20);
+            exchange.getResponseBody().flush();
+            try {
+                release.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
+            try (OutputStream out = exchange.getResponseBody()) {
+                out.write("{\"status\":\"Ok\"}     ".getBytes(StandardCharsets.UTF_8));
+            } catch (IOException ignored) {
+                // the client already closed the stream
+            }
+            handlerFinished.countDown();
+        });
+        PostHogCaptureClient client = new PostHogCaptureClient(endpoint("/interrupt"));
+        var outcome = new AtomicReference<CaptureOutcome>();
+        var interruptedFlag = new AtomicBoolean();
+        Thread caller = new Thread(() -> {
+            outcome.set(client.capture(BODY));
+            interruptedFlag.set(Thread.currentThread().isInterrupted());
+        });
+
+        // when
+        caller.start();
+        Thread.sleep(200);
+        caller.interrupt();
+        caller.join(5_000);
+        release.countDown();
+
+        // then
+        assertThat(caller.isAlive())
+                .as("the caller returns promptly after the interrupt")
+                .isFalse();
+        assertThat(outcome.get().kind()).isEqualTo(CaptureOutcome.Kind.TRANSIENT);
+        assertThat(outcome.get().summary()).isEqualTo("interrupted");
+        assertThat(interruptedFlag)
+                .as("the interrupt flag is restored for the caller")
+                .isTrue();
+        assertThat(handlerFinished.await(5, TimeUnit.SECONDS))
+                .as("the server side unblocks after the client closes the stream")
+                .isTrue();
     }
 
     @Test
