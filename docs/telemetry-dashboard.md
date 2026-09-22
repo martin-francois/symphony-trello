@@ -1,10 +1,13 @@
 # Usage reporting dashboard
 
-This page holds the PostHog SQL queries behind the maintainer dashboard for installation telemetry,
-one query per panel. The queries are the version-controlled definition of each panel; the dashboard
-in PostHog is a copy of them. Read
-[docs/telemetry-privacy.md](telemetry-privacy.md) first for what a report contains and
-[docs/telemetry-maintainer-runbook.md](telemetry-maintainer-runbook.md) for project setup.
+This page explains the maintainer dashboard for installation telemetry, one section per panel. The
+queries themselves are the files under `infra/posthog/queries/`: OpenTofu creates each saved insight
+from its file (see [docs/posthog-infrastructure.md](posthog-infrastructure.md)), and
+`scripts/posthog-infra fixture` runs the same files against the test project and compares the
+results with `infra/posthog/fixtures/dashboard-fixture.json`. Change a query in its file, apply,
+then update the explanation here. Read [docs/telemetry-privacy.md](telemetry-privacy.md) first for
+what a report contains and [docs/telemetry-maintainer-runbook.md](telemetry-maintainer-runbook.md)
+for project setup.
 
 ## Rules every panel follows
 
@@ -67,37 +70,14 @@ say so.
 
 ## Panel: active installations over 1, 7, and 30 days
 
-```sql
-SELECT
-    uniqIf(distinct_id, timestamp >= now() - interval 1 day) AS active_1d,
-    uniqIf(distinct_id, timestamp >= now() - interval 7 day) AS active_7d,
-    uniqIf(distinct_id, timestamp >= now() - interval 30 day) AS active_30d
-FROM events
-WHERE event = 'installation_heartbeat'
-  AND timestamp >= now() - interval 30 day
-```
+Query file: [`infra/posthog/queries/active-installations.sql`](../infra/posthog/queries/active-installations.sql)
 
 Read "active" as "sent at least one accepted report in the period". A laptop that was closed for a
 week is not active for that week and is not uninstalled.
 
 ## Panel: latest version distribution
 
-```sql
-SELECT
-    coalesce(latest.1, 'unknown') AS app_version,
-    count() AS installations
-FROM (
-    SELECT
-        distinct_id,
-        argMax(tuple(properties.app_version), tuple(timestamp, uuid)) AS latest
-    FROM events
-    WHERE event = 'installation_heartbeat'
-      AND timestamp >= now() - interval 30 day
-    GROUP BY distinct_id
-)
-GROUP BY app_version
-ORDER BY installations DESC
-```
+Query file: [`infra/posthog/queries/latest-version-distribution.sql`](../infra/posthog/queries/latest-version-distribution.sql)
 
 Grouping all historical events by version would count the same installation once per version it
 ran; the snapshot subquery avoids that. `unknown` is the `null` bucket for source builds and missing
@@ -108,69 +88,17 @@ release was adopted; that is the adoption panel below.
 
 Operating system family and release:
 
-```sql
-SELECT
-    latest.1 AS os_family,
-    latest.2 AS os_release,
-    coalesce(latest.3, '-') AS linux_distribution,
-    count() AS installations
-FROM (
-    SELECT
-        distinct_id,
-        argMax(tuple(properties.os_family, properties.os_release, properties.linux_distribution), tuple(timestamp, uuid)) AS latest
-    FROM events
-    WHERE event = 'installation_heartbeat'
-      AND timestamp >= now() - interval 30 day
-    GROUP BY distinct_id
-)
-GROUP BY os_family, os_release, linux_distribution
-ORDER BY installations DESC
-```
+Query file: [`infra/posthog/queries/os-family-and-release-distribution.sql`](../infra/posthog/queries/os-family-and-release-distribution.sql)
 
 Runtime architecture:
 
-```sql
-SELECT
-    latest.1 AS runtime_arch,
-    count() AS installations
-FROM (
-    SELECT
-        distinct_id,
-        argMax(tuple(properties.runtime_arch), tuple(timestamp, uuid)) AS latest
-    FROM events
-    WHERE event = 'installation_heartbeat'
-      AND timestamp >= now() - interval 30 day
-    GROUP BY distinct_id
-)
-GROUP BY runtime_arch
-ORDER BY installations DESC
-```
+Query file: [`infra/posthog/queries/runtime-architecture-distribution.sql`](../infra/posthog/queries/runtime-architecture-distribution.sql)
 
 `other` and `unknown` are real buckets; do not fold them into the largest platform.
 
 ## Panel: current board distribution
 
-```sql
-SELECT
-    multiIf(
-        latest.1 IS NULL, 'unknown',
-        toInt(latest.1) = 0, '0',
-        toInt(latest.1) = 1, '1',
-        toInt(latest.1) <= 5, '2-5',
-        '6+') AS boards,
-    count() AS installations
-FROM (
-    SELECT
-        distinct_id,
-        argMax(tuple(properties.connected_board_count), tuple(timestamp, uuid)) AS latest
-    FROM events
-    WHERE event = 'installation_heartbeat'
-      AND timestamp >= now() - interval 30 day
-    GROUP BY distinct_id
-)
-GROUP BY boards
-ORDER BY boards
-```
+Query file: [`infra/posthog/queries/current-board-distribution.sql`](../infra/posthog/queries/current-board-distribution.sql)
 
 The buckets are a display choice; the reported value is the exact count. `unknown` means the
 manifest was unreadable when the newest report was built, which is different from zero boards, and
@@ -178,26 +106,7 @@ it is not replaced by an older known count.
 
 ## Panel: import and create adoption
 
-```sql
-SELECT
-    multiIf(
-        toInt(latest.1) > 0 AND toInt(latest.2) > 0, 'both',
-        toInt(latest.1) > 0, 'import only',
-        toInt(latest.2) > 0, 'create only',
-        'neither') AS adoption,
-    count() AS installations
-FROM (
-    SELECT
-        distinct_id,
-        argMax(tuple(properties.board_imports_total, properties.board_creations_total), tuple(timestamp, uuid)) AS latest
-    FROM events
-    WHERE event = 'installation_heartbeat'
-      AND timestamp >= now() - interval 30 day
-    GROUP BY distinct_id
-)
-GROUP BY adoption
-ORDER BY installations DESC
-```
+Query file: [`infra/posthog/queries/import-and-create-adoption.sql`](../infra/posthog/queries/import-and-create-adoption.sql)
 
 This counts installations, not operations. `neither` means no successful import or create was
 observed while reporting was enabled; boards connected before telemetry existed, or while it was
@@ -206,22 +115,7 @@ attempts, because failed attempts are not reported.
 
 ## Panel: registration cohorts
 
-```sql
-SELECT
-    toStartOfMonth(toDateTime(toString(latest.1))) AS cohort_month,
-    count() AS installations
-FROM (
-    SELECT
-        distinct_id,
-        argMax(tuple(properties.registered_on), tuple(timestamp, uuid)) AS latest
-    FROM events
-    WHERE event = 'installation_heartbeat'
-      AND timestamp >= now() - interval 365 day
-    GROUP BY distinct_id
-)
-GROUP BY cohort_month
-ORDER BY cohort_month
-```
+Query file: [`infra/posthog/queries/registration-cohorts.sql`](../infra/posthog/queries/registration-cohorts.sql)
 
 `registered_on` is the date the installation ID was created, during setup or at the first ready
 worker, not the original install date, so installations that predate telemetry all register in the
@@ -233,38 +127,11 @@ window; earlier churned installations are not reconstructed.
 For one release, this panel answers two questions per installation: could it have upgraded
 (cohort), and when was it first observed on the release (adoption). The first observation on the
 target release is kept even if the installation later moved to another release, so a later upgrade
-or downgrade never erases an adoption. Replace the two literals for each release: the release date
-and the exact version string.
+or downgrade never erases an adoption. The release date and the exact version string are the
+`release_date` and `release_version` inputs of the OpenTofu configuration; the template file renders
+them into the saved insight.
 
-```sql
-SELECT
-    multiIf(
-        registered_on >= toDateTime('2026-10-01 00:00:00'), 'registered after release',
-        first_seen < toDateTime('2026-10-01 00:00:00'), 'observed before release',
-        'first observed after release') AS cohort,
-    multiIf(
-        first_on_target IS NULL, 'not observed on 1.3.0',
-        dateDiff('day', toDateTime('2026-10-01 00:00:00'), first_on_target) <= 3, 'within 3 days',
-        dateDiff('day', toDateTime('2026-10-01 00:00:00'), first_on_target) <= 7, 'within 7 days',
-        dateDiff('day', toDateTime('2026-10-01 00:00:00'), first_on_target) <= 30, 'within 30 days',
-        'later') AS adoption,
-    count() AS installations
-FROM (
-    SELECT
-        distinct_id,
-        min(timestamp) AS first_seen,
-        if(countIf(properties.app_version = '1.3.0') > 0,
-           minIf(timestamp, properties.app_version = '1.3.0'),
-           null) AS first_on_target,
-        toDateTime(toString(argMax(properties.registered_on, tuple(timestamp, uuid)))) AS registered_on
-    FROM events
-    WHERE event = 'installation_heartbeat'
-      AND timestamp >= now() - interval 365 day
-    GROUP BY distinct_id
-)
-GROUP BY cohort, adoption
-ORDER BY cohort, adoption
-```
+Query file: [`infra/posthog/queries/release-adoption-and-delay.sql.tftpl`](../infra/posthog/queries/release-adoption-and-delay.sql.tftpl)
 
 How to read it:
 
@@ -285,37 +152,12 @@ How to read it:
 
 Installations that were active in the retained history but sent nothing in the last 30 days:
 
-```sql
-SELECT
-    count() AS inactive_installations
-FROM (
-    SELECT distinct_id, max(timestamp) AS last_seen
-    FROM events
-    WHERE event = 'installation_heartbeat'
-      AND timestamp >= now() - interval 365 day
-    GROUP BY distinct_id
-)
-WHERE last_seen < now() - interval 30 day
-```
+Query file: [`infra/posthog/queries/inactive-installations.sql`](../infra/posthog/queries/inactive-installations.sql)
 
 Reactivations in the last 30 days, defined as a report that follows a gap of more than 30 days for
 the same installation:
 
-```sql
-SELECT count() AS reactivated_installations
-FROM (
-    SELECT
-        distinct_id,
-        arraySort(groupUniqArray(toDate(timestamp))) AS report_days
-    FROM events
-    WHERE event = 'installation_heartbeat'
-      AND timestamp >= now() - interval 365 day
-    GROUP BY distinct_id
-)
-WHERE arrayExists(
-    i -> i > 1 AND report_days[i] >= today() - 30 AND dateDiff('day', report_days[i - 1], report_days[i]) > 30,
-    arrayEnumerate(report_days))
-```
+Query file: [`infra/posthog/queries/reactivated-installations.sql`](../infra/posthog/queries/reactivated-installations.sql)
 
 Inactive is a reporting definition. It includes installations that were uninstalled, that turned
 reporting off, that are blocked by a firewall, and that simply have no worker running. The panel
@@ -323,31 +165,21 @@ cannot say which.
 
 ## Creating the insights and the dashboard
 
-Creating or changing dashboards in the production project is a maintainer action; do it only with
-the maintainer's authorization and in the project the maintainer names. Validate new queries in the
-test project (id 280817) first.
-
-1. In PostHog EU, open the project "Symphony for Trello" (id 280816).
-2. Open "Product analytics", choose "New insight", and pick the "SQL" insight type.
-3. Paste one query from this page, run it, and check the result against the fixture expectations
-   below when using the test project.
-4. Save the insight with the panel name used as the heading on this page, so the dashboard and this
-   document use the same names.
-5. Open "Dashboards", create or open "Symphony for Trello installations", and add each saved
-   insight with "Add insight".
-6. Set the dashboard's default date range to "Last 30 days"; the panels that need a longer window
-   carry it inside the query.
-
-When a query changes, change it here first, then update the saved insight.
+The dashboard "Symphony for Trello installations" and its ten insights are created and updated by
+OpenTofu from the query files; the panel names, descriptions, and tile layout are in
+`infra/posthog/modules/project/main.tf`. Never edit an insight or the dashboard in the PostHog UI:
+the next apply restores the definition. To change a panel, edit its query file, run
+`scripts/posthog-infra plan` and `apply`, then `scripts/posthog-infra fixture` against the test
+project, and update this page.
 
 ## Fixture results for the test project
 
-Send these synthetic events to the test project (id 280817) with its own project token, never to
-the production project. Use the real capture endpoint format from
-[docs/telemetry-privacy.md](telemetry-privacy.md) with the properties below; `uuid` and `timestamp`
-change per event, everything else is fixed per installation unless a cell says otherwise. Use dates
-relative to the day you run the check; the table uses "D" for today. Reports are sent at 09:15 UTC
-unless a cell names a later time.
+`scripts/posthog-infra fixture` sends these synthetic events to the test project with its own token,
+never to the production project, waits for ingestion, and checks every panel. The events and the
+expected results are `infra/posthog/fixtures/dashboard-fixture.json`; this table explains them.
+`uuid` and `timestamp` change per event, everything else is fixed per installation unless a cell
+says otherwise. Dates are relative to the day of the run; the table uses "D" for today. Reports are
+sent at 09:15 UTC unless a cell names a later time.
 
 | Installation | Reports on | app_version | os_family | os_release | linux_distribution | runtime_arch | connected_board_count | imports | creations | registered_on |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -377,6 +209,7 @@ Expected panel results, for a release date of D-10 and target version `1.3.0`:
 | Inactive installations | 1 (installation 3) |
 | Reactivated installations | 1 (installation 2 returned after a 45-day gap; installation 5's 11-day gap does not count) |
 
-These results were produced against the test project on 2026-09-22 with exactly these queries. If
-a `null` bucket ever shows an empty string instead of `unknown`, the property definition changed
-and the `multiIf` conditions need `OR latest.1 = ''` before the panel is trusted.
+These results were produced against the rebuilt test project on 2026-09-22 with exactly these
+query files. If a `null` bucket ever shows an empty string instead of `unknown`, the property
+definition changed and the `multiIf` conditions need `OR latest.1 = ''` before the panel is
+trusted.
