@@ -7,12 +7,12 @@ SELECT
     count() AS installations
 FROM (
     SELECT
-        distinct_id,
+        splitByChar('.', distinct_id)[1] AS installation_id,
         argMax(tuple(properties.board_imports_total, properties.board_creations_total), tuple(timestamp, uuid)) AS latest
     FROM events
     WHERE event = 'installation_heartbeat'
       AND timestamp >= now() - interval 30 day
-    GROUP BY distinct_id
+    GROUP BY installation_id
 )
 GROUP BY adoption
 ORDER BY installations DESC

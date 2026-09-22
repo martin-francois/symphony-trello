@@ -400,6 +400,14 @@ restore_telemetry_properties() {
 
 inject_telemetry_token() {
   local token="${SYMPHONY_TRELLO_POSTHOG_PROJECT_TOKEN:-}"
+  local erasure_url="${SYMPHONY_TRELLO_ERASURE_ENDPOINT:-}"
+  local erasure_audience="${SYMPHONY_TRELLO_ERASURE_AUDIENCE:-}"
+  if [[ -n "$erasure_url$erasure_audience" ]]; then
+    if [[ ! "$erasure_url" =~ ^https://webhooks\.eu\.posthog\.com/public/webhooks/[0-9a-f-]{36}$ || ! "$erasure_audience" =~ ^symphony:[1-9][0-9]*$ || -z "$token" ]]; then
+      echo "Erasure packaging requires a native EU webhook, its project audience, and the capture token." >&2
+      exit 2
+    fi
+  fi
   if [[ -z "$token" ]]; then
     echo "  NOTE  SYMPHONY_TRELLO_POSTHOG_PROJECT_TOKEN is not set; this release archive never sends usage reports."
     return
@@ -417,6 +425,9 @@ inject_telemetry_token() {
   local injected
   injected="$(sed "s|^$TELEMETRY_TOKEN_KEY=$TELEMETRY_TOKEN_PLACEHOLDER\$|$TELEMETRY_TOKEN_KEY=$token|" "$ROOT/$TELEMETRY_PROPERTIES")"
   printf '%s\n' "$injected" >"$ROOT/$TELEMETRY_PROPERTIES"
+  if [[ -n "$erasure_url" ]]; then
+    printf 'posthog.erasure-endpoint=%s\nposthog.erasure-audience=%s\n' "$erasure_url" "$erasure_audience" >>"$ROOT/$TELEMETRY_PROPERTIES"
+  fi
   echo "  OK  Usage-reporting token injected for this release archive"
 }
 
@@ -431,6 +442,16 @@ verify_packaged_telemetry_token() {
     echo "packaged application does not carry the injected usage-reporting token." >&2
     exit 2
   fi
+  if [[ -n "${SYMPHONY_TRELLO_ERASURE_ENDPOINT:-}" ]]; then
+    local entry
+    for entry in "posthog.erasure-endpoint=$SYMPHONY_TRELLO_ERASURE_ENDPOINT" "posthog.erasure-audience=$SYMPHONY_TRELLO_ERASURE_AUDIENCE"; do
+      if ! unzip -p "$app_jar" "$(basename "$TELEMETRY_PROPERTIES")" | grep -Fxq "$entry"; then
+        echo "packaged application does not carry the erasure configuration." >&2
+        exit 2
+      fi
+    done
+  fi
+
 }
 
 cd "$ROOT"

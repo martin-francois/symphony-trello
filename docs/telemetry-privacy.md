@@ -22,8 +22,10 @@ Envelope fields:
 - `api_key`: the public PostHog project token of the Symphony for Trello project. It only lets a
   client add events to that project; it cannot read anything.
 - `event`: always `installation_heartbeat`.
-- `distinct_id`: the random installation ID. It is created locally on first use, is shared by all
-  workers of one installation, and is not derived from hardware, hostname, user name, or Trello
+- `distinct_id`: a random installation ID and, when automatic erasure is configured, a random
+  reporting-period ID separated by a dot. PostHog issues the installation ID for this mode; the
+  application creates the period locally. Existing installations keep their original UUID.
+  Workers share the stored ID. Neither part comes from hardware, hostname, user name, or Trello
   identity.
 - `uuid`: a random ID for this one report. Retries of the same report reuse it.
 - `timestamp`: the UTC time the report was built. Retries keep the original time.
@@ -110,21 +112,33 @@ not try to recognize a machine across such changes.
 
 ## Access and erasure
 
-To ask what has been received for your installation, or to have it erased, first run
-`symphony-trello telemetry disable` so no further report is sent while the request is handled, then
-send your installation ID (from `symphony-trello telemetry status`) to the maintainer through the
-private "Report a vulnerability" advisory form linked in the repository's `SECURITY.md`. That form
-is private to you and the maintainer even though it is named after security reports; a public issue
-is not required and you should not post your installation ID publicly. The maintainer then deletes
-the PostHog person profile for that ID together with its events. PostHog performs that deletion
-asynchronously and it covers the reports received before the deletion request, which is why you
-disable first; the maintainer confirms it by querying the events for that ID afterwards, not only
-by the profile disappearing. Backups and infrastructure logs follow PostHog's own schedules, which
-the maintainer cannot shorten. You have nothing further to do locally: your installation keeps its
-ID, registration date, and counters in `telemetry.json`, and reporting stays off across restarts
-and updates. If you later run `symphony-trello telemetry enable`, reporting resumes with that same
-ID and registration date and the counters as they were when you disabled; nothing from the disabled
-period is reconstructed, and no report that was pending at the time of disabling is sent later.
+When the installed release has automatic erasure configured, run
+`symphony-trello telemetry erase`. It turns reporting off and saves the request locally.
+`symphony-trello telemetry erase-status` checks progress; running workers also retry.
+"Accepted" means PostHog has queued deletion. "Complete" means PostHog verified event deletion
+and the person profile is absent, or a fresh check found no profile or retained events. Deletion is asynchronous, so completion can take days.
+Reporting stays off across restarts and updates. Explicit `symphony-trello telemetry enable`
+after completion starts a new reporting period while preserving the installation ID,
+registration date and counters. Ordinary disable/enable keeps the current period.
+
+Ownership uses a secret stored in `telemetry.json`. Keep this file and its backups private.
+The secret is issued over HTTPS before the first report. Erasure requests send a signature,
+never the secret. PostHog stores versioned signing keys separately from analytics events, so
+ownership does not depend on an enrollment event or one-year event retention. An opaque status
+flag records deletion progress and is archived after completion is saved locally. Do not
+restore a pre-erasure backup to resume reporting under an erased period.
+
+If automatic erasure is unavailable, the installation predates ownership credentials, or its
+state was lost, disable reporting and send the installation and analytics IDs from
+`symphony-trello telemetry status` through the private "Report a vulnerability" form linked in
+`SECURITY.md`. Do not post the IDs or state file publicly. The maintainer checks the matching
+profile and confirms event deletion separately. A profile containing unexpected IDs requires
+manual investigation. Merge filtering reduces the risk of deleting another installation's
+merged data but does not eliminate it during provider filter failures.
+
+Backups and infrastructure logs follow PostHog's own schedules. Disabling reporting alone does
+not erase reports already received. The automatic path remains disabled in production until
+its hosted lifecycle checks pass.
 
 ## Retention
 

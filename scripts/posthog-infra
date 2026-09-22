@@ -40,6 +40,8 @@ With the personal API key (read from SYMPHONY_TRELLO_POSTHOG_KEY_FILE, default ~
   fixture               Send the dashboard fixture to the test project and check every panel query.
   release-token <owner/repo>
                         Store the production capture token in that repository's POSTHOG_PROJECT_TOKEN secret.
+  hog-probe             Unsaved mocked invocations in the test role. Requires
+                        SYMPHONY_TRELLO_POSTHOG_LIVE_PROBE=1; saves a private result ledger.
   retire-project <id> "<name>"
                         Delete one project that is not managed by this state, after checking its name.
   destroy [-auto-approve]
@@ -257,6 +259,16 @@ fixture)
   supplement fixture --outputs "$OUTPUTS_FILE" --role test --run-file "$STATE_DIR/fixture-$(date -u +%Y%m%dT%H%M%SZ).json"
   ;;
 release-token) cmd_release_token "$@" ;;
+hog-probe)
+  if [[ "${SYMPHONY_TRELLO_POSTHOG_LIVE_PROBE:-}" != 1 ]]; then
+    echo "posthog-infra: hog-probe requires SYMPHONY_TRELLO_POSTHOG_LIVE_PROBE=1" >&2
+    exit 2
+  fi
+  # No deployed function or capture: only unsaved code with mocked asynchronous calls.
+  require_initialized
+  write_outputs
+  supplement hog-probe --outputs "$OUTPUTS_FILE" --state "$STATE_FILE" --role test --report "$STATE_DIR/hog-probe-$(date -u +%Y%m%dT%H%M%SZ).json"
+  ;;
 retire-project)
   # A project this state manages is retired through destroy, never through this command.
   if [[ -n "$(bound_state_path)" ]] && tofu_cmd state list 2>/dev/null | grep -q '^module\.'; then

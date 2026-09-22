@@ -8,6 +8,9 @@ module "production" {
   repository      = var.repository
   release_version = var.release_version
   release_date    = var.release_date
+  erasure_enabled = var.erasure_enabled.production
+  erasure_secrets = lookup(var.erasure_secrets, "production", { active_key = "k1", master_keys = {}, api_key = "" })
+
 }
 
 module "test" {
@@ -18,4 +21,7 @@ module "test" {
   repository      = var.repository
   release_version = var.release_version
   release_date    = var.release_date
+  erasure_enabled = var.erasure_enabled.test
+  erasure_secrets = lookup(var.erasure_secrets, "test", { active_key = "k1", master_keys = {}, api_key = "" })
+
 }

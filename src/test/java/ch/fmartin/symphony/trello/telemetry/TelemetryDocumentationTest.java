@@ -124,6 +124,6 @@ final class TelemetryDocumentationTest {
 
         // then
         assertThat(ids).allSatisfy(id -> assertThat(adr).contains(id));
-        assertThat(adr).contains("status: accepted").contains("## Pros and Cons of the Options");
+        assertThat(adr).contains("superseded by [ADR 0082]").contains("## Pros and Cons of the Options");
     }
 }

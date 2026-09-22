@@ -30,7 +30,16 @@ public record HeartbeatEvent(
         if (!EVENT_NAME.equals(event)) {
             throw new IllegalStateException("unexpected telemetry event name");
         }
-        requireUuid(Names.DISTINCT_ID, distinctId);
+        if (distinctId == null) {
+            throw new IllegalStateException("telemetry distinct_id is missing");
+        }
+        String[] identityParts = distinctId.split("\\.", -1);
+        if (identityParts.length > 2) {
+            throw new IllegalStateException("telemetry distinct_id is malformed");
+        }
+        for (String identityPart : identityParts) {
+            requireUuid(Names.DISTINCT_ID, identityPart);
+        }
         requireUuid(Names.UUID, uuid);
         if (timestamp == null) {
             throw new IllegalStateException("telemetry timestamp is missing");

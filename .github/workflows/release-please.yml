@@ -56,6 +56,8 @@ jobs:
           RELEASE_VERSION: ${{ steps.release-assets.outputs.version }}
           # Public PostHog capture token for installation usage reporting; only release archives carry it.
           SYMPHONY_TRELLO_POSTHOG_PROJECT_TOKEN: ${{ secrets.POSTHOG_PROJECT_TOKEN }}
+          SYMPHONY_TRELLO_ERASURE_ENDPOINT: ${{ vars.POSTHOG_ERASURE_ENDPOINT }}
+          SYMPHONY_TRELLO_ERASURE_AUDIENCE: ${{ vars.POSTHOG_ERASURE_AUDIENCE }}
         run: scripts/build-release-assets
       - name: Attest release assets
         id: attest-release-assets

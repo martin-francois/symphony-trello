@@ -14,11 +14,17 @@ import org.jspecify.annotations.Nullable;
 /// project. The endpoint is fixed here; the token comes from a classpath resource that the release
 /// workflow fills in. Tests and development runs may override both values through system
 /// properties, and a missing or placeholder token suppresses delivery instead of failing.
-public record TelemetryDistribution(URI endpoint, Optional<String> projectToken, Optional<String> problem) {
+public record TelemetryDistribution(
+        URI endpoint,
+        Optional<String> projectToken,
+        Optional<String> problem,
+        Optional<TelemetryErasureEndpoint> erasure) {
     public static final URI PRODUCTION_ENDPOINT = URI.create("https://eu.i.posthog.com/i/v0/e/");
     public static final String RESOURCE = "symphony-trello-telemetry.properties";
     public static final String ENDPOINT_PROPERTY = "symphony.trello.telemetry.endpoint";
     public static final String TOKEN_PROPERTY = "symphony.trello.telemetry.project-token";
+    public static final String ERASURE_ENDPOINT_PROPERTY = "symphony.trello.telemetry.erasure-endpoint";
+    public static final String ERASURE_AUDIENCE_PROPERTY = "symphony.trello.telemetry.erasure-audience";
     static final String TOKEN_KEY = "posthog.project-token";
     static final String TOKEN_PLACEHOLDER = "<unset>";
     private static final String PROJECT_TOKEN_PREFIX = "phc_";
@@ -30,7 +36,7 @@ public record TelemetryDistribution(URI endpoint, Optional<String> projectToken,
             CharMatcher.inRange('a', 'z').or(CharMatcher.inRange('A', 'Z')).or(CharMatcher.inRange('0', '9'));
 
     public TelemetryDistribution(URI endpoint, Optional<String> projectToken) {
-        this(endpoint, projectToken, Optional.empty());
+        this(endpoint, projectToken, Optional.empty(), Optional.empty());
     }
 
     public TelemetryDistribution {
@@ -40,7 +46,7 @@ public record TelemetryDistribution(URI endpoint, Optional<String> projectToken,
     /// A configuration that can never send, with the reason `telemetry status` shows. Preference
     /// and preview commands keep working; nothing falls back to the production endpoint.
     static TelemetryDistribution invalid(String problem) {
-        return new TelemetryDistribution(PRODUCTION_ENDPOINT, Optional.empty(), Optional.of(problem));
+        return new TelemetryDistribution(PRODUCTION_ENDPOINT, Optional.empty(), Optional.of(problem), Optional.empty());
     }
 
     public static TelemetryDistribution load() {
@@ -60,9 +66,21 @@ public record TelemetryDistribution(URI endpoint, Optional<String> projectToken,
         String endpoint =
                 firstNonBlank(systemProperties.apply(ENDPOINT_PROPERTY), null).orElseGet(PRODUCTION_ENDPOINT::toString);
         Optional<String> token = firstNonBlank(systemProperties.apply(TOKEN_PROPERTY), bundled.getProperty(TOKEN_KEY));
+        Optional<String> erasureUrl = firstNonBlank(
+                systemProperties.apply(ERASURE_ENDPOINT_PROPERTY), bundled.getProperty("posthog.erasure-endpoint"));
+        Optional<String> erasureAudience = firstNonBlank(
+                systemProperties.apply(ERASURE_AUDIENCE_PROPERTY), bundled.getProperty("posthog.erasure-audience"));
         try {
+            if (erasureUrl.isPresent() != erasureAudience.isPresent()) {
+                return invalid("erasure endpoint and audience must be configured together");
+            }
+            Optional<TelemetryErasureEndpoint> erasure = erasureUrl.flatMap(
+                    url -> erasureAudience.map(scope -> new TelemetryErasureEndpoint(URI.create(url), scope)));
             return new TelemetryDistribution(
-                    URI.create(endpoint.strip()), token.flatMap(TelemetryDistribution::validToken));
+                    URI.create(endpoint.strip()),
+                    token.flatMap(TelemetryDistribution::validToken),
+                    Optional.empty(),
+                    erasure);
         } catch (IllegalArgumentException exception) {
             // An invalid explicit override must not break startup or setup, and must not silently
             // send to production instead; the value itself is not echoed.
@@ -91,7 +109,7 @@ public record TelemetryDistribution(URI endpoint, Optional<String> projectToken,
         return Optional.of(value);
     }
 
-    private static void requireHttpsOrLoopback(URI endpoint) {
+    static void requireHttpsOrLoopback(URI endpoint) {
         String scheme = endpoint.getScheme();
         String host = endpoint.getHost();
         if (host == null || host.isBlank()) {

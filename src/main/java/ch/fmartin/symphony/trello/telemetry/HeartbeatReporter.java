@@ -70,6 +70,36 @@ public final class HeartbeatReporter {
             reportUnreadable(read);
             return CheckResult.UNREADABLE;
         }
+        TelemetryState current = read.stateOrInitial();
+        TelemetryErasure erasure = new TelemetryErasure(installation, clock);
+        boolean graceEnded = current.firstWorkerDeadlineAt()
+                .filter(deadline -> !deadline.isAfter(clock.instant()))
+                .isPresent();
+        if (installation.networkEligible()
+                && erasure.needsMaintenance(current)
+                && (current.ownership() != null || graceEnded)) {
+            if (deliveryInFlight.compareAndSet(false, true)) {
+                try {
+                    executor.execute(() -> {
+                        try {
+                            erasure.maintain(store);
+                        } catch (TelemetryStateException exception) {
+                            output.info("telemetry ownership request deferred: " + exception.getMessage());
+                        } finally {
+                            deliveryInFlight.set(false);
+                        }
+                    });
+                } catch (RuntimeException exception) {
+                    deliveryInFlight.set(false);
+                    throw exception;
+                }
+            }
+            return CheckResult.WAITING;
+        }
+        TelemetryOwnership ownership = current.ownership();
+        if (ownership != null && ownership.blocksReporting()) {
+            return CheckResult.WAITING;
+        }
         EffectiveTelemetry effective =
                 installation.effective(read.stateOrInitial().mode());
         if (effective.effective() == TelemetryMode.DEBUG) {
@@ -119,7 +149,7 @@ public final class HeartbeatReporter {
         }
         TelemetryState state = stored;
         boolean printNotice = false;
-        if (!state.hasIdentity()) {
+        if (!state.hasIdentity() && installation.distribution().erasure().isEmpty()) {
             state = state.withIdentity(UUID.randomUUID(), today);
         }
         if (state.noticeRevision() < TelemetryNotice.REVISION) {
@@ -135,6 +165,13 @@ public final class HeartbeatReporter {
         state = state.withFirstWorkerDeadline(deadline);
         if (deadline.isAfter(now)) {
             return Update.write(state, new Decision(CheckResult.GRACE, printNotice, deadline, null));
+        }
+        if (!state.hasIdentity()) {
+            return Update.write(state, new Decision(CheckResult.WAITING, printNotice, deadline, null));
+        }
+        TelemetryOwnership ownership = state.ownership();
+        if (ownership != null && ownership.blocksReporting()) {
+            return Update.unchanged(Decision.of(CheckResult.WAITING));
         }
         // A clock that moved backwards must not produce a second report for a day already covered:
         // anything observed on or after today counts as done or still pending.
@@ -167,6 +204,9 @@ public final class HeartbeatReporter {
         // A fresh report starts its own bounded backoff; only a retry of the same report keeps it.
         RetryState retry = pending.isPresent() ? state.retry() : null;
         TelemetryState claimed = state.withReporting(state.lastReportedDate(), retry, report, claim);
+        if (ownership != null) {
+            claimed = claimed.withOwnership(ownership.markDispatched(claim.expiresAt()));
+        }
         Dispatch dispatch = new Dispatch(claimed, report, claim);
         return Update.write(claimed, new Decision(CheckResult.DISPATCHED, printNotice, deadline, dispatch));
     }
@@ -182,8 +222,7 @@ public final class HeartbeatReporter {
     private void dispatch(TelemetryStateStore store, Dispatch dispatch) {
         // Permission is rechecked right before any bytes leave: a disable that landed between the
         // claim and this point must win.
-        StateRead latest = store.read();
-        if (latest.unreadable() || !stillOurs(latest.stateOrInitial(), dispatch)) {
+        if (!canStartRequest(store, dispatch)) {
             return;
         }
         HeartbeatEvent event = snapshots.event(
@@ -204,6 +243,10 @@ public final class HeartbeatReporter {
             output.info("telemetry request POST " + client.endpoint() + " headers="
                     + PostHogCaptureClient.requestHeaders() + "\n" + body);
         }
+        // Serialization and logging can be delayed. Require the full transport budget immediately before IO.
+        if (!canStartRequest(store, dispatch)) {
+            return;
+        }
         CaptureOutcome outcome = client.capture(body);
         if (log) {
             output.info("telemetry response " + outcome.summary()
@@ -213,6 +256,13 @@ public final class HeartbeatReporter {
                             .orElse(""));
         }
         record(store, dispatch, outcome);
+    }
+
+    private boolean canStartRequest(TelemetryStateStore store, Dispatch dispatch) {
+        StateRead latest = store.read();
+        return !latest.unreadable()
+                && stillOurs(latest.stateOrInitial(), dispatch)
+                && dispatch.claim().expiresAt().isAfter(clock.instant().plus(client.requestTimeout()));
     }
 
     private void record(TelemetryStateStore store, Dispatch dispatch, CaptureOutcome outcome) {
@@ -268,7 +318,9 @@ public final class HeartbeatReporter {
         if (claim == null) {
             return false;
         }
-        return installation.effective(state.mode()).sendsReports()
+        TelemetryOwnership ownership = state.ownership();
+        return (ownership == null || !ownership.blocksReporting())
+                && installation.effective(state.mode()).sendsReports()
                 && state.preferenceRevision() == dispatch.report().preferenceRevision()
                 && owner.equals(claim.owner())
                 && dispatch.claim().attempt().equals(claim.attempt())

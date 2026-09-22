@@ -29,6 +29,10 @@ output "privacy_policy" {
     app_urls                      = posthog_project_settings.this.app_urls
     recording_domains             = posthog_project_settings.this.recording_domains
     test_account_filters          = jsondecode(posthog_project_settings.this.test_account_filters)
+    erasure_hog_sha256            = var.erasure_enabled ? nonsensitive(sha256(trimspace(local.erasure_hog))) : null
+    erasure_function_id           = try(posthog_hog_function.erasure[0].id, null)
+    erasure_filter_id             = try(posthog_hog_function.merge_filter[0].id, null)
+    erasure_audience              = var.erasure_enabled ? local.erasure_scope : null
     geoip_enabled                 = posthog_hog_function.geoip.enabled
   }
 }

@@ -65,6 +65,12 @@ public final class TelemetryService {
         }
         out.println(
                 "  Installation ID: " + state.installation().map(UUID::toString).orElse("not registered yet"));
+        out.println("  Analytics ID: " + state.analyticsId().orElse("not registered yet"));
+        TelemetryOwnership ownership = state.ownership();
+        TelemetryOwnership.Erasure erasure = ownership == null ? null : ownership.erasure();
+        if (erasure != null) {
+            out.println("  Erasure: " + erasure.phase());
+        }
         out.println("  Registered on: "
                 + state.registration().map(LocalDate::toString).orElse("-"));
         out.println("  Installed context: " + (installation.installed() ? "yes" : "no (development or test run)"));
@@ -149,6 +155,15 @@ public final class TelemetryService {
                         .withNotice(TelemetryNotice.REVISION, now)
                         // Explicit enabling is an affirmative action; no further grace period applies.
                         .withFirstWorkerDeadline(now);
+                TelemetryOwnership ownership = state.ownership();
+                if (ownership != null) {
+                    TelemetryOwnership.Erasure erasure = ownership.erasure();
+                    if (erasure != null && erasure.phase() != TelemetryOwnership.Phase.COMPLETE) {
+                        throw new TelemetryStateException(
+                                "erasure is still pending or refused; check `symphony-trello telemetry erase-status`");
+                    }
+                    enabled = enabled.withOwnership(ownership.resume());
+                }
                 // Register only where a report can ever leave; an unconfigured build keeps no identity.
                 return Update.write(installation.networkEligible() ? registered(enabled) : enabled, true);
             });
@@ -204,6 +219,66 @@ public final class TelemetryService {
             }
         }
         return persistDisabled(store, out, err);
+    }
+
+    public int erase(PrintStream out, PrintStream err) {
+        return erasureCommand(true, out, err);
+    }
+
+    public int erasureStatus(PrintStream out, PrintStream err) {
+        return erasureCommand(false, out, err);
+    }
+
+    private int erasureCommand(boolean request, PrintStream out, PrintStream err) {
+        try {
+            if (!installation.networkEligible()
+                    || installation.distribution().erasure().isEmpty()) {
+                if (request) {
+                    installation
+                            .installedStore()
+                            .ifPresent(store -> store.update(state -> state.mode() == TelemetryMode.DISABLED
+                                    ? Update.unchanged(null)
+                                    : Update.write(state.withMode(TelemetryMode.DISABLED), null)));
+                }
+                err.println(
+                        "Automatic erasure is not configured for this installation; use maintainer-assisted erasure.");
+                return EXIT_FAILURE;
+            }
+            TelemetryStateStore store = installation.installedStore().orElseThrow();
+            TelemetryErasure service = new TelemetryErasure(installation, clock);
+            if (request) {
+                service.request(store);
+            } else {
+                TelemetryState before = TelemetryErasure.readable(store);
+                TelemetryOwnership ownership = before.ownership();
+                if (ownership != null && ownership.erasure() != null) {
+                    service.maintain(store);
+                }
+            }
+            TelemetryState state = TelemetryErasure.readable(store);
+            TelemetryOwnership ownership = state.ownership();
+            TelemetryOwnership.Erasure erasure = ownership == null ? null : ownership.erasure();
+            if (erasure == null) {
+                out.println("No erasure has been requested.");
+                return EXIT_OK;
+            }
+            String message =
+                    switch (erasure.phase()) {
+                        case REQUESTED ->
+                            "Erasure is not yet confirmed as accepted. Reporting is off. Retry with `symphony-trello telemetry erase-status`; running workers also retry.";
+                        case ACCEPTED ->
+                            "Erasure accepted. PostHog continues deletion after this command exits. Physical deletion is still pending.";
+                        case COMPLETE ->
+                            "Erasure complete. Reporting remains off until you run `symphony-trello telemetry enable`.";
+                        case REFUSED ->
+                            "Automatic erasure refused because the provider identity is inconsistent. Reporting is off; contact the maintainer.";
+                    };
+            out.println(message);
+            return erasure.phase() == TelemetryOwnership.Phase.REFUSED ? EXIT_FAILURE : EXIT_OK;
+        } catch (TelemetryStateException exception) {
+            err.println("Erasure could not be confirmed: " + exception.getMessage());
+            return EXIT_FAILURE;
+        }
     }
 
     public int debug(PrintStream out, PrintStream err) {
@@ -308,7 +383,7 @@ public final class TelemetryService {
     }
 
     private TelemetryState registered(TelemetryState state) {
-        if (state.hasIdentity()) {
+        if (state.hasIdentity() || installation.distribution().erasure().isPresent()) {
             return state;
         }
         return state.withIdentity(UUID.randomUUID(), LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC));

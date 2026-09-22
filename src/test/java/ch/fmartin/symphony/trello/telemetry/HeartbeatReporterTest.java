@@ -53,6 +53,7 @@ final class HeartbeatReporterTest {
         stateDir = TelemetryFixture.installedStateDir(tempDir);
         store = new TelemetryStateStore(stateDir);
         when(client.endpoint()).thenReturn(TelemetryFixture.LOOPBACK_ENDPOINT);
+        when(client.requestTimeout()).thenReturn(PostHogCaptureClient.REQUEST_TIMEOUT);
     }
 
     @Test
@@ -431,21 +432,23 @@ final class HeartbeatReporterTest {
     @Test
     void anInFlightDeliveryBlocksFurtherClaimsUntilItFinishes() {
         // given
-        when(client.capture(anyString())).thenReturn(CaptureOutcome.accepted(200));
         HeartbeatReporter reporter = reporterReady(TelemetryEnvironment.none(), deferred);
+        when(client.capture(anyString())).thenAnswer(invocation -> {
+            // The request has already started. Advancing the clock must not queue another behind it.
+            clock.advance(HeartbeatReporter.CLAIM_LIFETIME.plusSeconds(1));
+            assertThat(reporter.check())
+                    .as("no second attempt is queued while capture is running")
+                    .isEqualTo(CheckResult.WAITING);
+            return CaptureOutcome.accepted(200);
+        });
 
         // when
         CheckResult claimed = reporter.check();
-        clock.advance(HeartbeatReporter.CLAIM_LIFETIME.plusSeconds(1));
-        CheckResult whileStalled = reporter.check();
         queued.forEach(Runnable::run);
         CheckResult afterwards = reporter.check();
 
         // then
         assertThat(claimed).isEqualTo(CheckResult.DISPATCHED);
-        assertThat(whileStalled)
-                .as("no second attempt is queued behind a stalled one")
-                .isEqualTo(CheckResult.WAITING);
         assertThat(queued).hasSize(1);
         assertThat(afterwards).isEqualTo(CheckResult.DONE_TODAY);
         verify(client).capture(anyString());

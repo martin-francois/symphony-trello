@@ -634,7 +634,9 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 TelemetryPrivacyCommand.class,
                 TelemetryEnableCommand.class,
                 TelemetryDisableCommand.class,
-                TelemetryDebugCommand.class
+                TelemetryDebugCommand.class,
+                TelemetryEraseCommand.class,
+                TelemetryEraseStatusCommand.class
             })
     static final class TelemetryCommand implements Callable<Integer> {
         @ParentCommand
@@ -768,6 +770,36 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         @Override
         public Integer call() {
             return telemetry.service().debug(telemetry.parent.out, telemetry.parent.err);
+        }
+    }
+
+    @Command(
+            name = "erase",
+            description = "Disable reporting and request deletion of this installation's analytics.",
+            versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
+            mixinStandardHelpOptions = true)
+    static final class TelemetryEraseCommand implements Callable<Integer> {
+        @ParentCommand
+        TelemetryCommand telemetry;
+
+        @Override
+        public Integer call() {
+            return telemetry.service().erase(telemetry.parent.out, telemetry.parent.err);
+        }
+    }
+
+    @Command(
+            name = "erase-status",
+            description = "Check or retry a pending analytics deletion.",
+            versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
+            mixinStandardHelpOptions = true)
+    static final class TelemetryEraseStatusCommand implements Callable<Integer> {
+        @ParentCommand
+        TelemetryCommand telemetry;
+
+        @Override
+        public Integer call() {
+            return telemetry.service().erasureStatus(telemetry.parent.out, telemetry.parent.err);
         }
     }
 

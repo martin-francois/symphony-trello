@@ -3769,6 +3769,52 @@ These checks are REQUIRED only when the installation telemetry profile in Sectio
   produces the documented results, the bundled privacy text is readable offline, and the field list
   in the schema, the notice, and the privacy text stay synchronized by test
 
+Automated erasure is an activation-gated extension of the installed profile. The authorization-only
+PoC MUST NOT capture or delete events. The lifecycle runner MAY delete its own synthetic TEST data.
+Ordinary validation MUST remain offline. A live capability probe MUST require explicit opt-in,
+verify its test target against selected infrastructure state and live metadata, and record results
+without credentials. Local signature verification and authenticated test invocations MUST NOT be
+reported as successful public ingress, durable admission, or unattended erasure. The trial evidence
+and remaining gates are recorded in [native erasure verification](docs/telemetry-native-erasure-trial.md).
+
+Before a future automated-erasure implementation is accepted, ownership verification MUST work
+when no enrollment event exists and when every event older than one year is unavailable. Public
+capture events and mutable person properties MUST NOT establish or replace erasure authority.
+Any required credential binding and operation state MUST have a lifetime independent of analytics
+retention and person deletion. Enrollment MUST recover from a lost request, a lost response and a
+client restart without allowing knowledge of an installation ID to recover or replace its secret.
+For a design requiring enrollment, the client MUST persist its credential and confirm durable
+enrollment before reporting under that identity. A lost acknowledgment MUST NOT strand reported
+data or permit a second owner to claim the identity. These are release gates. Production activation MUST remain off until hosted lifecycle verification passes.
+
+Prefer supported PostHog-native proof of possession without revealing the credential on each
+erasure request when it is simple to implement and maintain. Otherwise, within the same constraints,
+a fallback trial MAY use a per-installation bearer secret over HTTPS, with the public
+installation ID derived from a domain-separated SHA-256 hash of that secret. The client MUST
+generate 32 random bytes using a cryptographically secure generator and persist them before
+reporting. Routine analytics MUST contain only the derived ID. The erasure service MUST derive
+the target from the credential and MUST NOT accept caller-selected deletion scopes. Knowledge of
+the public ID alone MUST NOT authorize erasure. Missing or malformed credentials MUST NOT produce
+an unfiltered deletion. The service MUST remain entirely PostHog-hosted. Accepting this credential
+model does not waive the scoped-deletion, retry, retention or unattended-completion gates.
+Both designs MUST preserve ownership verification beyond the one-year analytics window without
+requiring periodic credential or public-key retransmission.
+
+The development-only [ownership PoC](docs/telemetry-ownership-poc.md) demonstrates public native
+HMAC and bearer authentication. HMAC is the selected ownership component for implementation.
+Its live runner MUST require explicit opt-in, verify the managed TEST binding, and create only
+authorization-only functions with no capture or deletion capability. It MUST record cleanup
+results. Its stateless verification and accepted concurrent replays MUST NOT be reported as durable
+job admission or completed erasure. Lost HMAC issuance responses MAY be abandoned before any client
+report uses that ID; the client MUST persist the replacement credential before reporting.
+
+Automated erasure validation MUST cover concurrent disable during issuance, atomic credential
+persistence, secret redaction, pending/accepted/complete/refused status, restart retries, prevention
+of enable before completion, stable installation identity after resumption and fresh reporting
+periods. Ordinary CI uses loopback endpoints. The hosted TEST lifecycle runner MUST record physical
+completion separately from acceptance, verify exact old-period event absence and unrelated canary
+survival, then repeat under a second period and replay the first request.
+
 ## 18. Implementation Checklist (Definition of Done)
 
 Use the same validation profiles as Section 17:
@@ -4288,10 +4334,13 @@ When this profile is used:
   `board_creations_total`, `$geoip_disable`, and `$process_person_profile`. No other event type,
   property, SDK metadata, identifier, name, path, credential, prompt, or error text MAY be sent, in
   plain or hashed form
-- `distinct_id` MUST be a random UUID created locally and stored in the state home. It MUST NOT be
-  derived from hardware, hostname, user name, machine identifiers, or Trello identity. One
-  installation's workers MUST share it. It MUST be created only in an installed, enabled, token
-  configured context, never by help, status, privacy, preview, or a disabled run
+- when automated erasure is configured, `distinct_id` MUST contain an issuer-selected random
+  installation UUID, a dot, and a locally generated random reporting-period UUID. The client MUST
+  persist its ownership credential before the first heartbeat. Lost issuance responses MAY be
+  abandoned before reporting. Unconfigured and pre-existing installations retain the original
+  locally generated UUID profile. Neither identity MUST be derived from hardware, hostname,
+  user name, machine identifiers, or Trello identity. Workers MUST share the stored identity.
+  Help, status, privacy, preview and disabled runs MUST NOT create an identity
 - `registered_on` MUST be the UTC date the identity was created and MUST be repeated in every
   report. `app_version` MUST come from the installer's `install-context.properties` in the state
   home and MUST be `null` when that value is not a plain release. `connected_board_count` MUST be
@@ -4347,11 +4396,33 @@ When this profile is used:
   succeed without a review. A failed write MUST be reported as an error. The outcome printed after
   No or cancellation MUST describe the mode that applies at that moment, including a concurrent
   change or an environment override
-- the application MUST NOT rotate, retire, or delete an installation id on its own or through a
-  command. A stored disable MUST remain in force across restarts, updates, and worker starts.
-  `enable` MUST resume with the existing id, registration date, and counters, MUST NOT replay a
-  report discarded by the disable, and MUST NOT backfill the disabled period; erasure on the
-  provider side is a maintainer process that needs no local action
+- the application MUST preserve the installation ID, registration date and counters across disable
+  and enable. Ordinary disable/enable MUST preserve the reporting period. `telemetry erase` MUST
+  persistently disable reporting and save the erasure operation before network IO. It MUST wait
+  for a dispatched heartbeat's drain deadline before submitting deletion. Disable MUST preserve
+  that deadline. A delayed delivery MUST NOT start without enough remaining time for its bounded
+  transport attempt. The ownership HMAC MUST
+  bind action, audience, installation, reporting period, operation and a bounded validity window.
+  Known installation IDs, capture events and mutable person properties MUST NOT authorize erasure.
+- `telemetry erase-status` and existing workers MUST retry pending requests with the same period
+  and operation. A webhook receipt MUST NOT mean accepted or complete. Acceptance requires a
+  matching provider deletion record. Status retries MUST recover an outstanding profile deletion
+  when event deletion was queued but profile deletion failed. Completion requires provider-verified event deletion and
+  profile absence, or a fresh uncached query proving no retained events when no profile exists. Missing, invalid or unavailable status MUST preserve the disabled state.
+  Once complete, explicit `telemetry enable` MUST create a new reporting period with the same
+  installation credential. The erased distinct ID MUST NOT be reused by that state. Existing
+  credentials remain valid independently of event retention. Multi-ID persons MUST be refused.
+  The merge filter and pre-delete check mitigate, but do not eliminate, the accepted merge race.
+- server status MUST use HMAC-derived opaque feature flag keys and management-only writes.
+  Public flag evaluation MUST expose no credential or installation ID. Private metadata MUST
+  bind the target person UUID before deletion. After saving completion, the client SHOULD request
+  flag cleanup; failed cleanup retains the flag for an operator to archive after verification.
+  Flag and API quotas MUST fail without authorizing additional deletion. Local state backups
+  MUST be protected as credentials and MUST NOT restore an erased reporting period.
+- legacy installations without credentials MUST use maintainer-assisted erasure. The public issuer
+  MUST NOT claim their existing IDs. No disabled period is backfilled and no discarded report is
+  replayed. Production deployment and release configuration MUST remain off until two successive
+  reporting-period erasures, lost-response retries and an unrelated canary pass hosted checks.
 - reports MAY leave the machine only when the state home contains the installer-written
   `install-context.properties` and the build carries a configured project token. Source
   checkouts, tests, CI, and development runs MUST NOT send production telemetry, and tests MUST use

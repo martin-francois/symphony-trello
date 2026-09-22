@@ -23,13 +23,28 @@ public record TelemetryState(
         @JsonProperty("last_reported_date") @Nullable LocalDate lastReportedDate,
         @JsonProperty("retry") @Nullable RetryState retry,
         @JsonProperty("pending_report") @Nullable PendingHeartbeat pendingReport,
-        @JsonProperty("claim") @Nullable ReportClaim claim) {
+        @JsonProperty("claim") @Nullable ReportClaim claim,
+        @JsonProperty("ownership") @Nullable TelemetryOwnership ownership) {
 
     public static final int FORMAT_VERSION = 1;
 
     public static TelemetryState initial() {
         return new TelemetryState(
-                FORMAT_VERSION, 0, TelemetryMode.ENABLED, null, null, 0, null, null, 0, 0, null, null, null, null);
+                FORMAT_VERSION,
+                0,
+                TelemetryMode.ENABLED,
+                null,
+                null,
+                0,
+                null,
+                null,
+                0,
+                0,
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 
     public boolean hasIdentity() {
@@ -79,7 +94,8 @@ public record TelemetryState(
                 lastReportedDate,
                 retry,
                 pendingReport,
-                claim);
+                claim,
+                ownership);
     }
 
     public TelemetryState withNotice(int noticeRevision, Instant shownAt) {
@@ -97,7 +113,8 @@ public record TelemetryState(
                 lastReportedDate,
                 retry,
                 pendingReport,
-                claim);
+                claim,
+                ownership);
     }
 
     public TelemetryState withFirstWorkerDeadline(@Nullable Instant deadline) {
@@ -115,7 +132,8 @@ public record TelemetryState(
                 lastReportedDate,
                 retry,
                 pendingReport,
-                claim);
+                claim,
+                ownership);
     }
 
     /// A preference change bumps the revision and discards any pending report, claim, and retry
@@ -135,7 +153,8 @@ public record TelemetryState(
                 lastReportedDate,
                 null,
                 null,
-                null);
+                null,
+                ownership);
     }
 
     /// The invariants a stored file must satisfy beyond its JSON shape. A file that breaks one is
@@ -149,6 +168,9 @@ public record TelemetryState(
         }
         if (preferenceRevision < 0 || noticeRevision < 0 || boardImportsTotal < 0 || boardCreationsTotal < 0) {
             return Optional.of("a revision or counter is negative");
+        }
+        if (ownership != null && !ownership.credential().installationId().equals(installationId)) {
+            return Optional.of("ownership credential does not match installation identity");
         }
         if (retry != null && (retry.attempts() < 1 || retry.notBefore() == null || retry.reason() == null)) {
             return Optional.of("retry schedule is incomplete");
@@ -188,7 +210,8 @@ public record TelemetryState(
                 lastReportedDate,
                 retry,
                 pendingReport,
-                claim);
+                claim,
+                ownership);
     }
 
     public TelemetryState withReporting(
@@ -210,7 +233,33 @@ public record TelemetryState(
                 lastReportedDate,
                 retry,
                 pendingReport,
-                claim);
+                claim,
+                ownership);
+    }
+
+    public TelemetryState withOwnership(TelemetryOwnership next) {
+        return new TelemetryState(
+                formatVersion,
+                preferenceRevision,
+                mode,
+                installationId,
+                registeredOn,
+                noticeRevision,
+                noticeShownAt,
+                firstWorkerDeadline,
+                boardImportsTotal,
+                boardCreationsTotal,
+                lastReportedDate,
+                retry,
+                pendingReport,
+                claim,
+                next);
+    }
+
+    public Optional<String> analyticsId() {
+        return Optional.ofNullable(ownership)
+                .map(TelemetryOwnership::analyticsId)
+                .or(() -> installation().map(UUID::toString));
     }
 
     /// The immutable report waiting for delivery. Retries reuse the UUID, timestamp, and properties.
