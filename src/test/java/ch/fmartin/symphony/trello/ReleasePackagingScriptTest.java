@@ -11,7 +11,9 @@ import java.nio.file.StandardCopyOption;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.function.UnaryOperator;
+import java.util.jar.JarFile;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -22,6 +24,11 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 final class ReleasePackagingScriptTest {
     private static final String VERSION = "1.2.3";
+
+    private static final String TELEMETRY_PROPERTIES = "src/main/resources/symphony-trello-telemetry.properties";
+    private static final String TELEMETRY_PROPERTIES_SOURCE = "# public capture token\nposthog.project-token=<unset>\n";
+    private static final String TELEMETRY_TOKEN_VARIABLE = "SYMPHONY_TRELLO_POSTHOG_PROJECT_TOKEN";
+    private static final String SYNTHETIC_TOKEN = "phc_" + "0".repeat(44);
 
     @TempDir
     Path tempDir;
@@ -38,6 +45,75 @@ final class ReleasePackagingScriptTest {
         assertThat(result.exitCode()).as(result.output()).isZero();
         assertExpectedAssets(project.root().resolve("dist/release-assets"));
         assertThat(project.mvnwLog()).contains("-q -DskipTests clean package");
+    }
+
+    @Test
+    void injectsTheUsageReportingTokenOnlyIntoThePackagedApplication() throws Exception {
+        // given
+        TestProject project = createProject();
+        Path properties = project.root().resolve(TELEMETRY_PROPERTIES);
+        Files.createDirectories(properties.getParent());
+        Files.writeString(properties, TELEMETRY_PROPERTIES_SOURCE);
+        project.writeMavenWrapper(
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                echo "$*" >> mvnw.log
+                rm -rf target
+                mkdir -p target/quarkus-app/app
+                printf 'app' > target/quarkus-app/application.txt
+                jar --create --file target/quarkus-app/app/symphony-trello.jar --no-manifest -C src/main/resources symphony-trello-telemetry.properties
+                """);
+
+        // when
+        ProcessResult result = project.run(Map.of(TELEMETRY_TOKEN_VARIABLE, SYNTHETIC_TOKEN), VERSION);
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isZero();
+        assertThat(result.output()).contains("Usage-reporting token injected for this release archive");
+        assertThat(properties).content().isEqualTo(TELEMETRY_PROPERTIES_SOURCE);
+        try (JarFile jar = new JarFile(project.root()
+                .resolve("target/quarkus-app/app/symphony-trello.jar")
+                .toFile())) {
+            String packaged = new String(
+                    jar.getInputStream(jar.getEntry("symphony-trello-telemetry.properties"))
+                            .readAllBytes(),
+                    StandardCharsets.UTF_8);
+            assertThat(packaged)
+                    .contains("posthog.project-token=" + SYNTHETIC_TOKEN)
+                    .doesNotContain("<unset>");
+        }
+    }
+
+    @Test
+    void refusesAMalformedUsageReportingTokenBeforeBuilding() throws Exception {
+        // given
+        TestProject project = createProject();
+        Path properties = project.root().resolve(TELEMETRY_PROPERTIES);
+        Files.createDirectories(properties.getParent());
+        Files.writeString(properties, TELEMETRY_PROPERTIES_SOURCE);
+
+        // when
+        ProcessResult result = project.run(Map.of(TELEMETRY_TOKEN_VARIABLE, "phx_personal-key"), VERSION);
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.output()).contains("is not a PostHog project token");
+        assertThat(project.mvnwLogPath()).doesNotExist();
+        assertThat(properties).content().isEqualTo(TELEMETRY_PROPERTIES_SOURCE);
+    }
+
+    @Test
+    void buildsWithoutATokenAndSaysTheArchiveNeverSends() throws Exception {
+        // given
+        TestProject project = createProject();
+
+        // when
+        ProcessResult result = project.run(VERSION);
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isZero();
+        assertThat(result.output()).contains("this release archive never sends usage reports");
     }
 
     @Test
@@ -648,6 +724,11 @@ final class ReleasePackagingScriptTest {
         }
 
         ProcessResult run(String... arguments) throws IOException, InterruptedException {
+            return run(Map.of(), arguments);
+        }
+
+        ProcessResult run(Map<String, String> environment, String... arguments)
+                throws IOException, InterruptedException {
             String[] command = new String[arguments.length + 2];
             command[0] = "bash";
             command[1] = root.resolve("scripts/package-release-assets.sh").toString();
@@ -659,6 +740,8 @@ final class ReleasePackagingScriptTest {
                     .put(
                             "PATH",
                             root.resolve("test-tools") + System.getProperty("path.separator") + System.getenv("PATH"));
+            processBuilder.environment().remove(TELEMETRY_TOKEN_VARIABLE);
+            processBuilder.environment().putAll(environment);
             Process process = processBuilder.start();
             var output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             return new ProcessResult(process.waitFor(), output);

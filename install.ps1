@@ -684,6 +684,31 @@ function Get-InstalledSourceCommit {
   return ""
 }
 
+# Honor a disable request from the beginning of an unattended installation: the stored preference
+# covers every later worker, not only processes that inherit the variable. The truthy values repeat
+# TelemetryEnvironment in Java because the installer must decide whether to run Java at all, also in
+# dry runs and before Java is verified.
+function Set-TelemetryEnvironmentPreference {
+  $requested = "$env:SYMPHONY_TRELLO_TELEMETRY_DISABLED".Trim().ToLowerInvariant()
+  if ($requested -notin @("1", "true", "yes", "on")) {
+    return
+  }
+  if ($DryRun) {
+    Write-Host "  WOULD run: $BinDir\symphony-trello.ps1 telemetry disable --yes"
+    return
+  }
+  try {
+    & "$BinDir\symphony-trello.ps1" telemetry disable --yes | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+      Write-Host "  OK  Usage reporting disabled (SYMPHONY_TRELLO_TELEMETRY_DISABLED)"
+      return
+    }
+  } catch {
+    # fall through to the warning below
+  }
+  Write-Host "  WARN  Could not store the usage-reporting preference; processes that inherit SYMPHONY_TRELLO_TELEMETRY_DISABLED stay disabled."
+}
+
 function Write-InstallContext {
   if ($DryRun) {
     return
@@ -1356,6 +1381,7 @@ if ($DryRun) {
     Write-Host "  WOULD unpack release archive to: $Prefix"
   }
   Write-Host "  WOULD install CLI executable: $BinDir\symphony-trello.ps1"
+  Set-TelemetryEnvironmentPreference
   Offer-PathSetup
   if (-not $NoOnboard) {
     Write-Host
@@ -1514,6 +1540,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0symphony-trello.ps
 }
 Write-Host "  OK  Command installed: $BinDir\symphony-trello.ps1"
 Write-InstallContext
+Set-TelemetryEnvironmentPreference
 
 Offer-PathSetup
 

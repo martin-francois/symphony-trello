@@ -729,6 +729,10 @@ final class InstallerScriptFixture {
                         ;;
                     esac
                   fi
+	                if [[ "${effective_cli_args[0]:-}" == "telemetry" ]]; then
+	                  echo "telemetry ${effective_cli_args[*]:1}" >> "${SYMPHONY_FAKE_LOG:?}"
+	                  exit 0
+	                fi
 	                if [[ -n "${SYMPHONY_FAKE_START_ALL_FAILURE:-}" && "${effective_cli_args[0]:-}" == "start" && " ${effective_cli_args[*]} " == *" --all "* ]]; then
 	                  echo "managed start --all failed" >&2
 	                  exit 29

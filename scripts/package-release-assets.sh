@@ -382,6 +382,57 @@ publish_assets() {
   fi
 }
 
+# The public PostHog capture token is not stored in the repository, so builds from a checkout never
+# send usage reports. The release workflow passes it through this variable; the packaged archive is
+# the only build that carries it. The source file is restored after packaging.
+TELEMETRY_PROPERTIES="src/main/resources/symphony-trello-telemetry.properties"
+TELEMETRY_TOKEN_KEY="posthog.project-token"
+TELEMETRY_TOKEN_PLACEHOLDER="<unset>"
+TELEMETRY_TOKEN_PATTERN='^phc_[A-Za-z0-9]{40,64}$'
+TELEMETRY_PROPERTIES_BACKUP=""
+
+restore_telemetry_properties() {
+  if [[ -n "$TELEMETRY_PROPERTIES_BACKUP" && -f "$TELEMETRY_PROPERTIES_BACKUP" ]]; then
+    cp "$TELEMETRY_PROPERTIES_BACKUP" "$ROOT/$TELEMETRY_PROPERTIES"
+    rm -f "$TELEMETRY_PROPERTIES_BACKUP"
+  fi
+}
+
+inject_telemetry_token() {
+  local token="${SYMPHONY_TRELLO_POSTHOG_PROJECT_TOKEN:-}"
+  if [[ -z "$token" ]]; then
+    echo "  NOTE  SYMPHONY_TRELLO_POSTHOG_PROJECT_TOKEN is not set; this release archive never sends usage reports."
+    return
+  fi
+  if [[ ! "$token" =~ $TELEMETRY_TOKEN_PATTERN ]]; then
+    echo "SYMPHONY_TRELLO_POSTHOG_PROJECT_TOKEN is not a PostHog project token (expected phc_ followed by 40 to 64 letters or digits)." >&2
+    exit 2
+  fi
+  if ! grep -q "^$TELEMETRY_TOKEN_KEY=$TELEMETRY_TOKEN_PLACEHOLDER\$" "$ROOT/$TELEMETRY_PROPERTIES"; then
+    echo "$TELEMETRY_PROPERTIES does not contain the $TELEMETRY_TOKEN_KEY placeholder; refusing to inject the usage-reporting token." >&2
+    exit 2
+  fi
+  TELEMETRY_PROPERTIES_BACKUP="$(mktemp "${TMPDIR:-/tmp}/symphony-trello-telemetry.XXXXXX")"
+  cp "$ROOT/$TELEMETRY_PROPERTIES" "$TELEMETRY_PROPERTIES_BACKUP"
+  local injected
+  injected="$(sed "s|^$TELEMETRY_TOKEN_KEY=$TELEMETRY_TOKEN_PLACEHOLDER\$|$TELEMETRY_TOKEN_KEY=$token|" "$ROOT/$TELEMETRY_PROPERTIES")"
+  printf '%s\n' "$injected" >"$ROOT/$TELEMETRY_PROPERTIES"
+  echo "  OK  Usage-reporting token injected for this release archive"
+}
+
+verify_packaged_telemetry_token() {
+  local token="${SYMPHONY_TRELLO_POSTHOG_PROJECT_TOKEN:-}"
+  if [[ -z "$token" ]]; then
+    return
+  fi
+  local app_jar
+  app_jar="$(find "$ROOT/target/quarkus-app/app" -maxdepth 1 -name '*.jar' | head -1)"
+  if [[ -z "$app_jar" ]] || ! unzip -p "$app_jar" "$(basename "$TELEMETRY_PROPERTIES")" 2>/dev/null | grep -q "^$TELEMETRY_TOKEN_KEY=$token\$"; then
+    echo "packaged application does not carry the injected usage-reporting token." >&2
+    exit 2
+  fi
+}
+
 cd "$ROOT"
 
 ROOT_REAL="$(canonical_path "$ROOT")"
@@ -391,10 +442,14 @@ TARGET_REAL="$(canonical_path "$ROOT/target")"
 validate_destination "$ROOT_REAL" "$DIST_REAL" "$TARGET_REAL"
 validate_installer_templates
 
+trap 'restore_telemetry_properties' EXIT
+inject_telemetry_token
 ./mvnw -q -DskipTests clean package
+restore_telemetry_properties
+verify_packaged_telemetry_token
 
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/symphony-trello-release.XXXXXX")"
-trap 'rm -rf "$WORK_DIR"' EXIT
+trap 'restore_telemetry_properties; rm -rf "$WORK_DIR"' EXIT
 ASSET_DIR="$WORK_DIR/assets"
 STAGING_PARENT="$WORK_DIR/staging"
 STAGING="$STAGING_PARENT/$ARCHIVE_BASE"

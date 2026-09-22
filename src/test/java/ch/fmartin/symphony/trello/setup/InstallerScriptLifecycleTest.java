@@ -69,6 +69,7 @@ final class InstallerScriptLifecycleTest {
                 "TRELLO_API_TOKEN",
                 "runtime-token"));
         environment.put("SYMPHONY_TRELLO_INSTALLER_COMPLETION", "preexisting");
+        environment.put("SYMPHONY_TRELLO_TELEMETRY_DISABLED", "1");
 
         // when
         ProcessResult install = runWithPseudoTerminal(
@@ -158,6 +159,9 @@ final class InstallerScriptLifecycleTest {
                 "status",
                 "--config-dir",
                 isolatedConfigArgument.toString());
+        Path telemetryState = stateHome.resolve("telemetry.json");
+        String telemetryPreference = "{\"format_version\":1,\"mode\":\"DISABLED\",\"preference_revision\":1}\n";
+        Files.writeString(telemetryState, telemetryPreference);
         ProcessResult update = run(
                 environment, "bash", installScript.toString(), "--no-onboard", "--bin-dir", binDirectory.toString());
         addSourceRepositoryCommit(sourceRepository, "UPGRADE_MARKER", "updated\n");
@@ -184,6 +188,8 @@ final class InstallerScriptLifecycleTest {
         // then
         assertThat(install.exitCode()).isZero();
         assertThat(installedCommandContent).contains("exec java --enable-native-access=ALL-UNNAMED ");
+        assertThat(install.output()).contains("Usage reporting disabled (SYMPHONY_TRELLO_TELEMETRY_DISABLED)");
+        assertThat(Files.readString(fakeLog)).contains("telemetry disable --yes");
         assertThat(install.output())
                 .contains(
                         "Codex CLI is installed but not logged in.",
@@ -254,6 +260,10 @@ final class InstallerScriptLifecycleTest {
                 .isZero();
         assertThat(update.exitCode()).isZero();
         assertThat(secondUpdate.exitCode()).isZero();
+        assertThat(telemetryState)
+                .as("an installer rerun leaves the stored usage-reporting preference untouched")
+                .content()
+                .isEqualTo(telemetryPreference);
         assertThat(markerContentAfterUpdate).isEqualTo("updated\n");
         assertThat(statusWhileRunning.output())
                 .contains("running WORKFLOW.lifecycle-board.md pid=")

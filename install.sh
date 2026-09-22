@@ -219,6 +219,27 @@ print_installer_completion() {
   run "$BIN_DIR/symphony-trello" setup-local
 }
 
+# Honor a disable request from the beginning of an unattended installation: the stored preference
+# covers every later worker, not only processes that inherit the variable. The truthy values repeat
+# TelemetryEnvironment in Java because the installer must decide whether to run Java at all, also in
+# dry runs and before Java is verified.
+apply_telemetry_environment_preference() {
+  # Case patterns instead of a lowercase expansion: macOS ships Bash 3, which lacks case conversion.
+  case "${SYMPHONY_TRELLO_TELEMETRY_DISABLED:-}" in
+  1 | [Tt][Rr][Uu][Ee] | [Yy][Ee][Ss] | [Oo][Nn]) ;;
+  *) return ;;
+  esac
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "  WOULD run: $BIN_DIR/symphony-trello telemetry disable --yes"
+    return
+  fi
+  if "$BIN_DIR/symphony-trello" telemetry disable --yes </dev/null >/dev/null 2>&1; then
+    echo "  OK  Usage reporting disabled (SYMPHONY_TRELLO_TELEMETRY_DISABLED)"
+  else
+    echo "  WARN  Could not store the usage-reporting preference; processes that inherit SYMPHONY_TRELLO_TELEMETRY_DISABLED stay disabled."
+  fi
+}
+
 write_install_context() {
   if [[ "$DRY_RUN" == true ]]; then
     return
@@ -2626,6 +2647,7 @@ if [[ "$DRY_RUN" == true ]]; then
     echo "  WOULD unpack release archive into: $APP_DIR"
   fi
   echo "  WOULD install command: $BIN_DIR/symphony-trello"
+  apply_telemetry_environment_preference
   offer_path_setup
   if [[ "$NO_ONBOARD" == false ]]; then
     echo "  WOULD run guided setup and start Symphony automatically."
@@ -2751,6 +2773,7 @@ EOF
 fi
 echo "  OK  Command installed: $BIN_DIR/symphony-trello"
 write_install_context
+apply_telemetry_environment_preference
 
 offer_path_setup
 

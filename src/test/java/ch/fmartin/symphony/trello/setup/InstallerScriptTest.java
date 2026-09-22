@@ -295,6 +295,37 @@ final class InstallerScriptTest {
     }
 
     @Test
+    void posixInstallerDryRunPlansTheTelemetryDisableWhenTheVariableIsSet() throws Exception {
+        // given
+        assumeFalse(isWindows());
+        assumeTrue(commandExists("bash"));
+        var processBuilder = new ProcessBuilder("bash", "install.sh", "--dry-run", "--no-onboard");
+
+        // when
+        ProcessResult result = run(Map.of("SYMPHONY_TRELLO_TELEMETRY_DISABLED", "TRUE"), processBuilder);
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output()).contains("WOULD run: ").contains("symphony-trello telemetry disable --yes");
+        assertThat(regularFilesUnder(temporaryDirectory)).isEmpty();
+    }
+
+    @Test
+    void posixInstallerDryRunSkipsTheTelemetryDisableWhenTheVariableIsUnsetOrFalse() throws Exception {
+        // given
+        assumeFalse(isWindows());
+        assumeTrue(commandExists("bash"));
+        var processBuilder = new ProcessBuilder("bash", "install.sh", "--dry-run", "--no-onboard");
+
+        // when
+        ProcessResult result = run(Map.of("SYMPHONY_TRELLO_TELEMETRY_DISABLED", "0"), processBuilder);
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output()).doesNotContain("telemetry disable");
+    }
+
+    @Test
     void posixPublicInstallerDryRunUsesDefaultsInsteadOfInheritedRepositoryControls() throws Exception {
         // given
         assumeFalse(isWindows());

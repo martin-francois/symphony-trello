@@ -54,6 +54,8 @@ jobs:
           ASSET_DIR: ${{ steps.release-assets.outputs.asset_dir }}
           RELEASE_SOURCE_ROOT: ${{ steps.release-assets.outputs.source_root }}
           RELEASE_VERSION: ${{ steps.release-assets.outputs.version }}
+          # Public PostHog capture token for installation usage reporting; only release archives carry it.
+          SYMPHONY_TRELLO_POSTHOG_PROJECT_TOKEN: ${{ secrets.POSTHOG_PROJECT_TOKEN }}
         run: scripts/build-release-assets
       - name: Attest release assets
         id: attest-release-assets
