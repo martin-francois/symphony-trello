@@ -68,6 +68,7 @@ final class LocalWorkerManagerTest {
         verify(fixture.platform)
                 .start(
                         argThat(command -> command.contains("-jar")
+                                && command.contains(LocalWorkerManager.ENABLE_NATIVE_ACCESS_FLAG)
                                 && command.contains(fixture.paths
                                         .appHome()
                                         .resolve("target/quarkus-app/quarkus-run.jar")

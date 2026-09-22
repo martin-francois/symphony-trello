@@ -78,6 +78,7 @@ final class InstallerScriptLifecycleTest {
         String userServiceContentAfterInstall = Files.readString(userService);
         String autostartEnvironmentAfterInstall = Files.readString(autostartEnvironment);
         Path installedCommand = binDirectory.resolve("symphony-trello");
+        String installedCommandContent = Files.readString(installedCommand);
         Path callerDirectory = temporaryDirectory.resolve("posix caller");
         Files.createDirectories(callerDirectory);
         List<ProcessResult> picocliHelpResults = new ArrayList<>();
@@ -182,6 +183,7 @@ final class InstallerScriptLifecycleTest {
 
         // then
         assertThat(install.exitCode()).isZero();
+        assertThat(installedCommandContent).contains("exec java --enable-native-access=ALL-UNNAMED ");
         assertThat(install.output())
                 .contains(
                         "Codex CLI is installed but not logged in.",
