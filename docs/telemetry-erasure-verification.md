@@ -5,8 +5,12 @@ This note records the live experiment that backs the erasure procedure in
 against PostHog, what was observed, and what is still pending. The runbook holds the procedure;
 this page holds the evidence and how to reproduce or resume it.
 
-Everything here ran against the dedicated test project 280817 "Symphony for Trello (test)".
-Production project 280816 was passed to the harness as forbidden and received nothing.
+Everything here runs against the dedicated test project "Symphony for Trello (test)"; the
+production project is passed to the harness as forbidden and receives nothing. The projects were
+rebuilt from the OpenTofu definition on 2026-09-22 (see
+[docs/posthog-infrastructure.md](posthog-infrastructure.md)), so the first run below targets the
+retired test project 280817 and is historical: its pending rows can never complete there. The
+current run targets the rebuilt test project 281083 with production 281084 forbidden.
 
 ## What is tested
 
@@ -69,9 +73,9 @@ deletion status, a deletion error, a cached query answer, a resumed run, and sec
 SYMPHONY_TRELLO_TELEMETRY_LIVE_EXPERIMENT=1 \
 SYMPHONY_TRELLO_TELEMETRY_LIVE_EXPERIMENT_DIR=/var/tmp/symphony-telemetry/erasure-experiment \
 SYMPHONY_TRELLO_POSTHOG_PERSONAL_API_KEY_FILE="$HOME/posthog-personal-api-key" \
-SYMPHONY_TRELLO_POSTHOG_TEST_PROJECT_ID=280817 \
+SYMPHONY_TRELLO_POSTHOG_TEST_PROJECT_ID=281083 \
 SYMPHONY_TRELLO_POSTHOG_TEST_PROJECT_NAME='Symphony for Trello (test)' \
-SYMPHONY_TRELLO_POSTHOG_FORBIDDEN_PROJECT_IDS=280816 \
+SYMPHONY_TRELLO_POSTHOG_FORBIDDEN_PROJECT_IDS=281084 \
 ./mvnw test-compile failsafe:integration-test failsafe:verify \
   -Dit.test=TelemetryErasureExperimentIT -Djacoco.skip=true -Dfailsafe.failIfNoSpecifiedTests=false
 ```
@@ -85,10 +89,12 @@ from the checkpoint; it never reseeds, repeats a deletion, or resets before the 
 verified. Per invocation the harness sends at most 150 management requests and waits at most 15
 minutes; when PostHog has not finished it stops with `PENDING` and the phase to resume from.
 
-## Run erasure-e40e8ff7 on 2026-09-22
+## Historical run erasure-e40e8ff7 on 2026-09-22 (retired project 280817)
 
 Worktree at commit `c9b5fe07` plus the harness itself, which lands in the commit that adds this
-page. All times UTC.
+page. All times UTC. The project was retired the same day and is pending deletion, so rows 3 to 8
+of this run stay as they were; the current run in the next section replaces it. Its state directory
+was archived as `erasure-experiment-project-280817-retired` beside the current one.
 
 | Row | Status | Evidence |
 | --- | --- | --- |
@@ -118,6 +124,25 @@ and precedes event deletion by days, so during that window an installation ID ha
 its events still exist and still carry the old profile UUID. A missing profile is therefore not
 evidence that the events are gone, and the `deletion_status` row is the only signal that ties the
 event deletion to the profile that was deleted.
+
+## Current run erasure-b000c2f3 on 2026-09-22 (rebuilt project 281083)
+
+Worktree at the commit that adds the PostHog infrastructure (the harness unchanged since the
+historical run). All times UTC. The sequence and outcome match the historical run: rows 1 and 2
+PASS, row 3 PENDING, rows 4 to 8 NOT RUN.
+
+| Row | Status | Evidence |
+| --- | --- | --- |
+| 1. Old event/profile baseline established | PASS | Five heartbeats accepted from 10:11:00; every event UUID queryable by raw `distinct_id`, one profile per ID mapped only to that ID, events' `person_id` equal to the profile UUID present in the persons table. |
+| 2. Local disable preserves UUID and prevents transmission | PASS | Same ID, registration date, and counters after disable; simulated restarts past the grace period returned `DISABLED` and issued no request. |
+| 3. Old event deletion completed and independently verified | PENDING | `bulk_delete` at 10:12:06: 202, `persons_found` 2, `persons_queued_for_deletion` 2, `events_queued_for_deletion` true, no errors. By 10:15:13 the profiles were gone from the person API while the old events remained queryable; `deletion_status` pending. |
+| 4. to 8. | NOT RUN | Wait for row 3; resume with the command above after PostHog's next deletion batch (Sunday 05:00 UTC). |
+
+| Subject | Installation ID (`distinct_id`) | Profile UUID before erasure | Old event UUIDs |
+| --- | --- | --- | --- |
+| A | `837ca992-d8a3-45da-8265-4be9d59ac223` | `c3eea7d9-7e7f-5c41-8e54-1928997d8a8f` | `880462ec-b6f6-45a0-85e6-5f02f6f02a2f`, `93e2b50f-75a9-4d3b-9fe8-0dc50cd16b0e` |
+| B | `5def6e20-dd13-46cb-af16-792e5f0d950a` | `b19a5ec2-d056-5379-8131-dbb8cfc032d1` | `29c28799-07c7-43ce-9a85-0e9ebf55d035`, `9e30e168-226d-400e-a6ef-703547fcd5b8` |
+| C | `5903a3d7-6998-4383-85fe-eb0a9e726276` | `None` | `3066215a-e605-4dba-8275-67b0f629aba5` |
 
 ## Resuming
 

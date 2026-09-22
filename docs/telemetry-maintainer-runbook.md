@@ -7,35 +7,44 @@ dashboard queries are in [docs/telemetry-dashboard.md](telemetry-dashboard.md).
 Every checklist item below is either done with evidence, open, or unknown. Do not tick an item
 without the named evidence.
 
-## Provider setup as of 2026-09-22
+## Provider setup
 
-PostHog EU, organization "François's Organization". Two projects were created through the API on
-2026-09-22, separate from the `fmartin.ch` website project so installation IDs can never be joined
-with website visitors:
+PostHog EU, organization "François's Organization". The two projects, their privacy settings, the
+disabled GeoIP transformation, the dashboard, and its insights are defined as code under
+`infra/posthog/` and applied with OpenTofu; [docs/posthog-infrastructure.md](posthog-infrastructure.md)
+is the operating guide and [ADR 0080](adr/0080-posthog-infrastructure-as-code.md) the decision.
+Change the definition first, apply, and read back with `scripts/posthog-infra verify`; do not
+change these projects in the PostHog UI. The projects are separate from the `fmartin.ch` website
+project so installation IDs can never be joined with website visitors.
 
-| Project | Id | Purpose |
-| --- | --- | --- |
-| Symphony for Trello | 280816 | Production reports from installed copies |
-| Symphony for Trello (test) | 280817 | Synthetic events for query validation and wire checks |
+Current deployment, rebuilt from the definition on 2026-09-22 (the projects created by hand that
+morning, ids 280816 and 280817, were retired the same day and are pending deletion):
 
-Settings applied to both projects on that day, verified from the API response:
+| Role | Project | Id | Dashboard | Purpose |
+| --- | --- | --- | --- | --- |
+| production | Symphony for Trello | 281084 | 967446 | Reports from installed copies; its token is in the release secret |
+| test | Symphony for Trello (test) | 281083 | 967445 | Synthetic events for the fixture check and the erasure harness |
 
-- `anonymize_ips = true` ("Discard client IP data"): the client IP is not stored with events.
-- The default "GeoIP" transformation was disabled. Discarding the IP and disabling GeoIP are separate
-  settings; PostHog applies transformations before discarding the IP, so both are needed.
-- Autocapture, session replay, surveys, heatmaps, console log capture, exception capture, web vitals,
-  and performance capture are off. The application never sends those events anyway; the settings
-  keep the project from expecting them.
-- Timezone `UTC`.
+What the definition enforces on both projects, verified by the report on that day (53 checks
+passed, 4 unknown, 0 failed): client IP discarding on; the GeoIP transformation present and
+disabled; cookieless hashing off; session replay, performance, exception, web-vitals, heatmap, and
+survey capture off; autocapture, console-log capture, and dead-click capture off; no destinations,
+batch exports, or sharing; timezone UTC. The retention fields are reported as unknown because the
+API returns none for these projects.
 
-Do not change these settings from the application side. Re-check them after any PostHog project
-setting change and after PostHog product changes.
+Shared organization controls the definition does not own, read on 2026-09-22 and reported by
+`verify` as informational: `is_ai_training_opted_in` is false (the organization is not opted in
+to model training), `is_ai_data_processing_approved` is true (PostHog's AI features may process
+data), and `allow_publicly_shared_resources` is true (sharing stays off per dashboard). They apply
+to every project in the organization, including `fmartin.ch`, so a change there is an
+organization decision, not a Symphony one.
 
 ## Release prerequisites
 
 - [x] Activation: the production project's public token (Project settings, "Project API key",
       starts with `phc_`) is stored as the GitHub repository secret `POSTHOG_PROJECT_TOKEN`, set on
-      2026-09-22 from project 280816. The release workflow passes it to
+      2026-09-22 from project 281084 by `scripts/posthog-infra release-token` after the rebuild
+      (an earlier value from the retired project 280816 was replaced). The release workflow passes it to
       `scripts/package-release-assets.sh` as `SYMPHONY_TRELLO_POSTHOG_PROJECT_TOKEN`, which writes it
       into the `posthog.project-token` key of `src/main/resources/symphony-trello-telemetry.properties`
       only while packaging the release
@@ -53,37 +62,36 @@ setting change and after PostHog product changes.
       and note the date read. The DPA references the EU-US, UK, and Swiss-US Data Privacy Framework
       and Standard Contractual Clauses for transfers; confirm that covers the maintainer's Swiss
       obligations. Status: unknown, needs the maintainer's review or advice.
-- [ ] Product and model development opt-out: PostHog's privacy policy states customer content may be
+- [x] Product and model development opt-out: PostHog's privacy policy states customer content may be
       used for product and model development unless the customer opts out through the service
-      settings, and the DPA states no third party may use it to train AI models. Locate the current
-      opt-out setting in the organization or project settings, apply it, and record where it is.
-      Status: unknown; the setting was not located through the API on 2026-09-22.
+      settings, and the DPA states no third party may use it to train AI models. The control is the
+      organization field `is_ai_training_opted_in`, read as false on 2026-09-22 (not opted in);
+      `verify` reports it. It is an organization-wide setting; keep it false.
 - [ ] Collection basis review: the design is opt-out with a notice and a five-minute first-worker
       grace period. That is a product decision, not a legal finding. Whether Swiss, EU, or other
       rules on device access and consent apply to this globally published tool has not been settled.
       Record the maintainer's decision and any advice obtained. Status: open.
 - [ ] Dashboard access: only the maintainer's account has access to the organization. Keep it that
       way, or restrict the project with PostHog's access control if more members join.
-- [ ] Retention: the API returned `event_retention_months = null` and
-      `events_retention_enforced = null` for both projects on 2026-09-22, so the effective retention
-      window is unknown. Read both fields again from `GET /api/projects/280816/` before release and
-      record them here with the date. PostHog documents that a retention window hides events from
+- [ ] Retention: the API returned no `event_retention_months` or `events_retention_enforced`
+      value for either project on 2026-09-22 (the verification report marks them UNKNOWN), so the
+      effective retention window is unknown. Read both fields again from
+      `GET /api/projects/281084/` before release and record them here with the date. PostHog documents that a retention window hides events from
       queries; it is not evidence of physical deletion of events, profiles, backups, or
       infrastructure logs. The privacy page promises analysis of at most one year of detailed
       events, not a deletion deadline.
 - [ ] Person profiles: reports set `$process_person_profile: true` so each installation ID has a
       minimal profile. Confirm in the test project that no profile property other than the ID
       appears, and document the profile lifetime separately from the event window. Status: open.
-- [x] Wire check in the test project only: done on 2026-09-22 by the erasure harness, which sent
-      real heartbeats through the application's own serializer and client with the test project's
-      token (see [docs/telemetry-erasure-verification.md](telemetry-erasure-verification.md)). The
-      stored control event `7a2ae1a3-76dd-4ccc-bc65-8c82e6dc210d` carries exactly the documented
-      properties plus `$geoip_disable`; `$process_person_profile` is consumed at ingestion, and no
-      `$ip` or `$geoip_*` property was added. Repeat after a schema change with the same harness or
-      a development build started with `-Dsymphony.trello.telemetry.project-token=<test project
-      token>` (the endpoint can be overridden the same way with
-      `-Dsymphony.trello.telemetry.endpoint=` for a local fake). Never send synthetic events to
-      project 280816.
+- [x] Wire check in the test project only: `scripts/posthog-infra fixture` sends the documented
+      synthetic installations to the test project through the documented event shape and checks
+      every panel; it passed on the rebuilt test project (id 281083) on 2026-09-22. The erasure
+      harness (see [docs/telemetry-erasure-verification.md](telemetry-erasure-verification.md))
+      sends heartbeats through the application's own serializer and client with that project's
+      token; a read-only query of one of its stored events on the same day showed exactly the
+      documented properties plus `$geoip_disable`, with `$process_person_profile` consumed at
+      ingestion and no `$ip` or `$geoip_*` property added. Repeat both after a schema change.
+      Never send synthetic events to the production project.
 - [ ] Quota: the organization is on the pay-as-you-go tier with the free monthly allowance of one
       million events. One report per installation per day is far below that, but check "Billing"
       for dropped or quota-limited events before reading any decline in activity as real. A
@@ -118,8 +126,9 @@ Four identifiers take part, and they are not interchangeable:
 - the deletion status is keyed by that profile `uuid`, not by the installation ID.
 
 The steps below were executed against the test project with the harness described in
-[docs/telemetry-erasure-verification.md](telemetry-erasure-verification.md); steps 1 to 5 are
-verified there, step 6 was still pending on 2026-09-22 because PostHog batches event deletion.
+[docs/telemetry-erasure-verification.md](telemetry-erasure-verification.md); steps 1 to 4 are
+verified there, steps 5 and 6 were still pending on 2026-09-22 because PostHog batches event
+deletion.
 Replace `<installation uuid>` with the user's ID and keep `$POSTHOG_PERSONAL_API_KEY` in the
 maintainer's shell only; the key needs `person:read`, `person:write`, and `query:read`.
 
@@ -133,7 +142,7 @@ maintainer's shell only; the key needs `person:read`, `person:write`, and `query
 
    ```bash
    curl -sS -H "Authorization: Bearer $POSTHOG_PERSONAL_API_KEY" \
-     "https://eu.posthog.com/api/projects/280816/persons/?distinct_id=<installation uuid>"
+     "https://eu.posthog.com/api/projects/281084/persons/?distinct_id=<installation uuid>"
    ```
 
    Expect one result whose `distinct_ids` is exactly `["<installation uuid>"]`. Note its `uuid`;
@@ -146,7 +155,7 @@ maintainer's shell only; the key needs `person:read`, `person:write`, and `query
    curl -sS -X POST -H "Authorization: Bearer $POSTHOG_PERSONAL_API_KEY" \
      -H "Content-Type: application/json" \
      -d '{"distinct_ids": ["<installation uuid>"], "delete_events": true}' \
-     "https://eu.posthog.com/api/projects/280816/persons/bulk_delete/"
+     "https://eu.posthog.com/api/projects/281084/persons/bulk_delete/"
    ```
 
    Read the body, not only the 202: `persons_found` 1, `persons_queued_for_deletion` 1,
@@ -161,7 +170,7 @@ maintainer's shell only; the key needs `person:read`, `person:write`, and `query
 
    ```bash
    curl -sS -H "Authorization: Bearer $POSTHOG_PERSONAL_API_KEY" \
-     "https://eu.posthog.com/api/projects/280816/persons/deletion_status/?status=all&person_uuid=<profile uuid>"
+     "https://eu.posthog.com/api/projects/281084/persons/deletion_status/?status=all&person_uuid=<profile uuid>"
    ```
 
    Expect a row with `status` `completed` and a `delete_verified_at` timestamp. A `pending` row
@@ -208,7 +217,7 @@ Whether PostHog then builds a new profile for the reused ID without maintainer w
 to 6 of the verification note test, and they were pending on 2026-09-22. What is known from the
 API contract until then:
 
-- `POST /api/projects/280816/persons/reset_person_distinct_id/` with body
+- `POST /api/projects/281084/persons/reset_person_distinct_id/` with body
   `{"distinct_id": "<installation uuid>"}` answers 202 whenever the ID exists. Its implementation
   does nothing when the ID has no current profile, which is the case right after an erasure and
   before the first new event. A 202 at that point is not a successful preparation, so do not run

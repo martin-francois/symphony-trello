@@ -160,6 +160,24 @@ lives in [Testing](testing.md).
   Real environment variables still take precedence over `.env`. Do not print secret values in command
   output.
 
+## PostHog infrastructure is code-first
+
+- PostHog setup is owned by `infra/posthog` (OpenTofu) and the named API supplements in
+  `scripts/posthog-infra.ts`. For an authorized configuration change: inspect the scope, update the
+  canonical definition first, review `scripts/posthog-infra plan` and `gaps diff`, apply, read back
+  with `verify`, and update [docs/posthog-infrastructure.md](../posthog-infrastructure.md) or the
+  ADR in the same task. Do not finish with a UI-only or API-only configuration change; reconcile an
+  emergency manual change into the definition immediately. Enforcement: CI validates formatting and
+  the configuration without credentials; the credentialed plan, apply, and report run only from a
+  maintainer's machine, and pull-request review checks that the report or plan output is cited.
+- Operational data actions are not configuration resources: synthetic fixture events, the erasure
+  of one installation's data, and the per-installation reset procedure stay in the maintainer
+  runbook and its harness, never in the OpenTofu definition.
+- The permission to discard pre-release Symphony project data that ADR 0080 records was specific to
+  that rebuild. Deleting a released project's real data or rotating its capture token needs an
+  explicit maintainer decision recorded in an ADR; do not treat a routine `apply` or `destroy` as
+  that decision.
+
 ## Installer and onboarding lifecycle coverage
 
 - For installer/onboarding changes, do not rely on syntax checks or dry runs alone. Add or update
