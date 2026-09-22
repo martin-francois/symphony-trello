@@ -65,10 +65,19 @@ the CI job's `init` fails on a lock file whose hashes do not match.
 
 State lives outside the repository in `~/.local/state/symphony-trello/posthog/` (override with
 `SYMPHONY_TRELLO_POSTHOG_STATE_DIR`), mode 700, with OpenTofu's local lock file and `.backup`
-copy. The same directory holds `outputs.json` (contains the capture tokens; private) and the
-latest `verification-report.md`. Back the directory up before a destroy; restoring it restores
-management of the same resources. Two people must not manage the same projects from two state
-directories; hand the directory over instead.
+copy. The same directory holds OpenTofu's data directory `.terraform/` with the initialized
+backend, `outputs.json` (contains the capture tokens; private), the fixture run files, and the
+latest `verification-report.md`. Because the data directory sits inside the state directory,
+selecting another state directory selects another deployment entirely; every state command first
+reads the backend recorded in that data directory and refuses to run when it names a different
+state file (`scripts/posthog-infra state-path` prints it). Back the directory up before a
+destroy; restoring it restores management of the same resources. Two people must not manage the
+same projects from two state directories; hand the directory over instead.
+
+A checkout initialized before this layout kept the data directory under `infra/posthog/.terraform`
+and would have followed the first state it was initialized for. Run `scripts/posthog-infra init`
+once per state directory to bind the new location; the state file itself does not move, no cloud
+resource changes, and the old `infra/posthog/.terraform` directory can be deleted.
 
 ## Fresh setup, as tested
 
@@ -79,7 +88,7 @@ scripts/posthog-infra plan                # exit 2: everything to create
 scripts/posthog-infra apply -auto-approve # bootstrap, adopt GeoIP, full apply, gaps, verify
 scripts/posthog-infra plan                # exit 0: converged
 scripts/posthog-infra gaps diff           # exit 0: converged
-scripts/posthog-infra fixture             # test role only: 13 synthetic heartbeats, 10 panels checked
+scripts/posthog-infra fixture             # test role only: a fresh run-owned cohort, 10 panels checked
 scripts/posthog-infra release-token <owner/name>   # production token into that repo's POSTHOG_PROJECT_TOKEN
 ```
 
@@ -96,11 +105,13 @@ What `apply` does, in order:
 3. `gaps apply`: reads each environment, patches only the differing fields among the three settings
    the provider lacks, and reads back until the server shows them (five attempts, two seconds
    apart); a setting the server accepts but does not honor fails the run.
-4. `verify`: the read-only report described below; a FAIL exits nonzero.
+4. `verify`: the read-only report described below; anything but the outcome `verified` exits
+   nonzero.
 
-Then hand the production token to the release path with `release-token`. The token travels from
-the private outputs file into `gh secret set` on stdin; GitHub confirms the secret's name and update
-time only, so the command prints those. To check that a build consumes it, run the packaging test
+Then hand the production token to the release path with `release-token`. The command first
+prints which state file and production project the token comes from, then the token travels from
+the private outputs file into `gh secret set` on stdin; GitHub confirms the secret's name and
+update time only, so the command prints those. To check that a build consumes it, run the packaging test
 in `ReleasePackagingScriptTest` or `scripts/package-release-assets.sh` with
 `SYMPHONY_TRELLO_POSTHOG_PROJECT_TOKEN` set from the same file; source builds and CI stay
 non-sending because the repository keeps the placeholder.
@@ -141,14 +152,35 @@ one-line way to enforce that decision once it is taken.
 
 ## Verification report
 
-`scripts/posthog-infra verify [path]` writes a Markdown table with one row per check: expected
-value, observed value, PASS, FAIL, UNKNOWN (null or absent), or INFO, and the owner of the item. It
-covers the settings above for each role, the GeoIP transformation, other transformations (none
-expected), destinations and batch exports (none expected), the managed dashboard and its tiles,
-sharing (off), duplicate dashboards or insights, untracked dashboards, and two organization-level
-controls. The report names the OpenTofu and provider versions and the Git revision, marking a dirty
-working tree. It is a point-in-time read-back by the maintainer, not independent attestation, and
-it does not show what the client sends: `symphony-trello telemetry preview` does that.
+`scripts/posthog-infra verify [path]` writes a Markdown table with one row per check: whether the
+check is required, expected value, observed value, PASS, FAIL, UNKNOWN (null, absent, or the wrong
+type), or INFO, and the owner of the item. The outcome at the top is `verified` only when every
+required check passed; `drift` when any check failed; `incomplete` when a required value could
+not be read. Only `verified` exits 0, so a missing `anonymize_ips` field can never pass silently.
+Advisory rows (the retention fields, which no resource manages, and the organization controls)
+are recorded but never make a deployment verified on their own. The expected privacy values come
+from the `privacy_policy` output of the definition, so the report compares the live project with
+the applied declaration rather than with a second list. It covers each role's settings, the GeoIP
+transformation, other transformations (none expected), destinations and batch exports (none
+expected), the managed dashboard and its tiles, public sharing on every dashboard and every
+insight of the project (untracked ones included), duplicates, and the organization that owns the
+projects, read by its id rather than by listing every organization the key can reach. The report
+names the OpenTofu and provider versions and the Git revision, marking a dirty working tree. It
+is a point-in-time read-back by the maintainer, not independent attestation, and it does not show
+what the client sends: `symphony-trello telemetry preview` does that.
+
+### Fixture runs
+
+`scripts/posthog-infra fixture` creates a run file under the state directory with fresh
+installation ids for the documented installations and a fixed event uuid per report, sends the
+events, waits for exactly those uuids to be queryable, runs each canonical query file scoped to
+that cohort (the heartbeat filter gains `AND distinct_id IN (...)`; nothing else in the query
+changes), compares with the expected results (the activity windows and registration months are
+computed from the run's reference time), and finally queues deletion of the cohort's profiles and
+events. Old fixture events from earlier runs, the erasure harness, or anything else in the test
+project cannot satisfy or disturb a run. A run that stopped before its events became visible is
+retried with the same run file and resends the same events; a finished run file is never reused.
+Cleanup completes in PostHog's deletion batch, separately from the panel result.
 
 ## Troubleshooting
 
@@ -169,6 +201,9 @@ it does not show what the client sends: `symphony-trello telemetry preview` does
   compare with the API schema and the provider issue tracker before forcing anything.
 - `tofu` cannot find the state: `init` again with the same `SYMPHONY_TRELLO_POSTHOG_STATE_DIR`; the
   backend path is passed at init time and is not stored in Git.
+- `data directory ... is bound to ..., not to ...`: the selected state directory's data directory
+  was initialized for another state file, or `TF_DATA_DIR` in the environment points elsewhere.
+  Run `init` for the selected state directory, or unset `TF_DATA_DIR`.
 - The secret went to the wrong repository: `release-token` takes the repository explicitly; set it
   again for the right one and remove it from the wrong one with `gh secret delete`.
 

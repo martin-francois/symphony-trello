@@ -14,8 +14,9 @@ disabled GeoIP transformation, the dashboard, and its insights are defined as co
 `infra/posthog/` and applied with OpenTofu; [docs/posthog-infrastructure.md](posthog-infrastructure.md)
 is the operating guide and [ADR 0080](adr/0080-posthog-infrastructure-as-code.md) the decision.
 Change the definition first, apply, and read back with `scripts/posthog-infra verify`; do not
-change these projects in the PostHog UI. The projects are separate from the `fmartin.ch` website
-project so installation IDs can never be joined with website visitors.
+change these projects in the PostHog UI. The projects are separate from the maintainer's website
+project so that no analytics query joins installation IDs with website visitors; that separation
+is a configuration the organization's administrator could undo, not a technical impossibility.
 
 Current deployment, rebuilt from the definition on 2026-09-22 (the projects created by hand that
 morning, ids 280816 and 280817, were retired the same day and are pending deletion):
@@ -25,12 +26,15 @@ morning, ids 280816 and 280817, were retired the same day and are pending deleti
 | production | Symphony for Trello | 281084 | 967446 | Reports from installed copies; its token is in the release secret |
 | test | Symphony for Trello (test) | 281083 | 967445 | Synthetic events for the fixture check and the erasure harness |
 
-What the definition enforces on both projects, verified by the report on that day (53 checks
-passed, 4 unknown, 0 failed): client IP discarding on; the GeoIP transformation present and
-disabled; cookieless hashing off; session replay, performance, exception, web-vitals, heatmap, and
-survey capture off; autocapture, console-log capture, and dead-click capture off; no destinations,
-batch exports, or sharing; timezone UTC. The retention fields are reported as unknown because the
-API returns none for these projects.
+What the definition enforces on both projects, read back by the report on that day (outcome
+verified; the retention fields are advisory and unknown because the API returns none for these
+projects): client IP discarding on; the GeoIP transformation present and disabled; cookieless
+hashing off; session replay, performance, exception, web-vitals, heatmap, and survey capture off;
+autocapture, console-log capture, and dead-click capture off; no destinations, batch exports, or
+public sharing on any dashboard or insight; timezone UTC. The capture toggles govern what the
+PostHog SDKs send and what the project expects; they do not make the ingestion endpoint reject an
+arbitrary event posted with the public token, which is why the application sends one custom event
+and the dashboard queries filter on it.
 
 Shared organization controls the definition does not own, read on 2026-09-22 and reported by
 `verify` as informational: `is_ai_training_opted_in` is false (the organization is not opted in

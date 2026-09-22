@@ -175,8 +175,11 @@ project, and update this page.
 ## Fixture results for the test project
 
 `scripts/posthog-infra fixture` sends these synthetic events to the test project with its own token,
-never to the production project, waits for ingestion, and checks every panel. The events and the
-expected results are `infra/posthog/fixtures/dashboard-fixture.json`; this table explains them.
+never to the production project, as a run-owned cohort with fresh installation ids, waits for
+exactly those events, and checks every panel with the canonical query files scoped to the cohort.
+The events and the static expected results are `infra/posthog/fixtures/dashboard-fixture.json`;
+the activity windows and registration months are computed from the run's reference time. This
+table explains them with the template ids.
 `uuid` and `timestamp` change per event, everything else is fixed per installation unless a cell
 says otherwise. Dates are relative to the day of the run; the table uses "D" for today. Reports are
 sent at 09:15 UTC unless a cell names a later time.
