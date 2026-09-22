@@ -233,6 +233,44 @@ warning includes the workflow file and current `polling.interval_ms`. Repeated w
 the workflow should poll less often, especially when more than 5-10 boards share the same Trello
 token.
 
+## Usage Reporting
+
+Installed copies send one small `installation_heartbeat` report per day while a managed worker is
+running. What it contains, who receives it, and the limits are in
+[docs/telemetry-privacy.md](telemetry-privacy.md).
+
+Controls:
+
+- `symphony-trello telemetry status`: stored and effective mode, installation ID, registration
+  date, next allowed report, last accepted report, and the state file path.
+- `symphony-trello telemetry preview`: the complete JSON body a report would have now. It sends,
+  stores, and registers nothing.
+- `symphony-trello telemetry privacy`: the bundled privacy text, readable offline.
+- `symphony-trello telemetry enable`: turn reporting on again with the existing installation ID,
+  registration date, and counters. The next report comes from a running worker and describes the
+  current state; the command itself sends nothing, and nothing from the disabled period is
+  reconstructed.
+- `symphony-trello telemetry disable [--yes]`: turn reporting off for the whole installation. In a
+  terminal the command shows the JSON first and asks for confirmation; Enter keeps reporting on and
+  `privacy` shows the privacy text and asks again. Piped input or `--yes` disables directly.
+- `symphony-trello telemetry debug`: local-only mode. Workers print reports and send nothing. It is
+  refused while reporting is disabled; run `telemetry enable` first.
+
+Environment variables for one process and its children:
+
+- `SYMPHONY_TRELLO_TELEMETRY_DISABLED=1`: no reports and no counting. It also cannot be undone by
+  `telemetry enable` inside that process.
+- `SYMPHONY_TRELLO_TELEMETRY_DEBUG=1`: local-only mode for that process. It cannot override a stored
+  disable.
+- `SYMPHONY_TRELLO_TELEMETRY_LOG=1`: log every actual request and its outcome. It never enables
+  sending.
+
+In the worker log, debug mode prints a `telemetry debug preview` block with the JSON body when a
+worker starts and again when the body changes for a reason other than the report ID or time. With
+`SYMPHONY_TRELLO_TELEMETRY_LOG=1` the log shows `telemetry request POST <endpoint>` with the headers
+and the exact body, followed by `telemetry response` with the outcome and HTTP status. A `telemetry
+reporting is off` line names an unreadable state file.
+
 ## Common States
 
 - A card in `Ready for Codex` is queued.

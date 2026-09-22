@@ -49,6 +49,14 @@ curl -fsSL https://symphony-trello.fmartin.ch/install.sh | bash
 For Windows, WSL2 is recommended. Run the Linux installer inside WSL2.
 Native Windows PowerShell is best effort; see [Installer Reference](#installer-reference).
 
+Installed copies send one small usage report per day while a worker runs: a random installation ID,
+the registration date, the app version, OS family, release and architecture, and how many boards
+are connected, imported, and created. It goes to the maintainer's PostHog EU project and is used only
+to improve Symphony for Trello. The first report is sent at the earliest five minutes after the
+first worker starts. `symphony-trello telemetry disable` turns it off, and setting
+`SYMPHONY_TRELLO_TELEMETRY_DISABLED=1` before installing keeps it off from the start. See
+[docs/telemetry-privacy.md](docs/telemetry-privacy.md) for the exact fields and your choices.
+
 Follow the prompts. When setup finishes, create a Trello card and move it to `Ready for Codex`.
 Symphony should move the card to `In Progress`, add or update one `## Codex Workpad` Trello comment
 with what Codex is doing, then move the card to the next review, blocked, merge, or done list when
@@ -731,6 +739,9 @@ The installer writes an install context in the selected config and state directo
 default context locations under `$HOME`, so future updates and uninstall can find the selected paths
 without the original flags. Durable data is config and state/logs. Large generated data is app
 files, workspaces, and cache/dependency stores.
+
+An update that introduces usage reporting (see [Quick Start](#quick-start)) shows the notice on the
+next setup run and in the first worker log; `symphony-trello telemetry disable` turns it off.
 
 The installer writes the command to `$HOME/.local/bin/symphony-trello` on macOS, Linux, and WSL2, or
 `$HOME\.local\bin\symphony-trello.ps1` on native Windows PowerShell. If that directory is not on
@@ -1488,6 +1499,14 @@ paths. It does not include credential values or worker log contents.
 [`WORKFLOW.md`](#workflow-contract) is watched for changes and also checked defensively on each
 scheduler tick. Invalid reloads are logged and the last known good configuration remains active.
 
+Usage reporting: `symphony-trello telemetry status` shows whether daily reports are on and what was
+sent last, `symphony-trello telemetry preview` prints the exact JSON body without sending it,
+`symphony-trello telemetry privacy` prints the privacy text offline, `symphony-trello telemetry
+disable` and `symphony-trello telemetry enable` change the setting for the whole installation, and
+`symphony-trello telemetry debug` makes workers print reports instead of sending them. Details are
+in [docs/telemetry-privacy.md](docs/telemetry-privacy.md) and
+[docs/operations.md](docs/operations.md).
+
 Important environment variables:
 
 - `SYMPHONY_WORKFLOW_PATH`: workflow file path, default `WORKFLOW.md`.
@@ -1502,6 +1521,12 @@ Important environment variables:
   paths.
 - `SYMPHONY_CODEX_DANGER_FULL_ACCESS`: set `true` only with an intentionally broad deployment
   sandbox.
+- `SYMPHONY_TRELLO_TELEMETRY_DISABLED`: set `1` to turn usage reporting and its counters off for
+  that process and its children; the stored preference is unchanged.
+- `SYMPHONY_TRELLO_TELEMETRY_DEBUG`: set `1` to make that process print reports instead of sending
+  them; it cannot override a stored disable.
+- `SYMPHONY_TRELLO_TELEMETRY_LOG`: set `1` to log every actual report request and its outcome; it
+  never turns reporting on.
 
 For local runs, the same names can be placed in ignored `.env`; real environment variables take
 precedence.

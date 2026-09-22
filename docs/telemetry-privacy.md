@@ -117,11 +117,14 @@ private "Report a vulnerability" advisory form linked in the repository's `SECUR
 is private to you and the maintainer even though it is named after security reports; a public issue
 is not required and you should not post your installation ID publicly. The maintainer then deletes
 the PostHog person profile for that ID together with its events. PostHog performs that deletion
-asynchronously; the maintainer confirms it by querying the events for that ID afterwards, not only
+asynchronously and it covers the reports received before the deletion request, which is why you
+disable first; the maintainer confirms it by querying the events for that ID afterwards, not only
 by the profile disappearing. Backups and infrastructure logs follow PostHog's own schedules, which
-the maintainer cannot shorten. After an erasure, `symphony-trello telemetry reset --yes` retires the
-old ID locally while keeping reporting off; only a later `symphony-trello telemetry enable` creates
-a new ID.
+the maintainer cannot shorten. You have nothing further to do locally: your installation keeps its
+ID, registration date, and counters in `telemetry.json`, and reporting stays off across restarts
+and updates. If you later run `symphony-trello telemetry enable`, reporting resumes with that same
+ID and registration date and the counters as they were when you disabled; nothing from the disabled
+period is reconstructed, and no report that was pending at the time of disabling is sent later.
 
 ## Retention
 
