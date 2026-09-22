@@ -9,7 +9,7 @@
 // scripts/posthog-infra is the normal entry point and sets the environment.
 
 import {randomUUID} from "node:crypto";
-import {readFileSync, writeFileSync} from "node:fs";
+import {existsSync, readFileSync, writeFileSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
 
@@ -19,21 +19,22 @@ export const ENVIRONMENT_GAP_SETTINGS = {
   capture_dead_clicks: false,
 } as const;
 
-export const EXPECTED_ENVIRONMENT_SETTINGS = {
-  timezone: "UTC",
-  anonymize_ips: true,
-  cookieless_server_hash_mode: 0,
-  session_recording_opt_in: false,
-  capture_performance_opt_in: false,
-  autocapture_exceptions_opt_in: false,
-  autocapture_web_vitals_opt_in: false,
-  heatmaps_opt_in: false,
-  surveys_opt_in: false,
-  app_urls: [] as readonly string[],
-  recording_domains: [] as readonly string[],
-  test_account_filters: [] as readonly unknown[],
-  ...ENVIRONMENT_GAP_SETTINGS,
-} as const;
+/** Settings the OpenTofu definition exports per role (`privacy_policy` output); the verifier reads
+ * the expected values from there so the definition stays the single source. */
+export const POLICY_SETTINGS = [
+  "timezone",
+  "anonymize_ips",
+  "cookieless_server_hash_mode",
+  "session_recording_opt_in",
+  "capture_performance_opt_in",
+  "autocapture_exceptions_opt_in",
+  "autocapture_web_vitals_opt_in",
+  "heatmaps_opt_in",
+  "surveys_opt_in",
+  "app_urls",
+  "recording_domains",
+  "test_account_filters",
+] as const;
 
 export const GEOIP_TEMPLATE_ID = "template-geoip";
 export const DESTINATION_TYPES = "destination,site_destination,internal_destination,source_webhook,site_app";
@@ -41,6 +42,10 @@ export const HEARTBEAT_EVENT = "installation_heartbeat";
 export const DEFAULT_CAPTURE_ENDPOINT = "https://eu.i.posthog.com/i/v0/e/";
 const PERSONAL_KEY_PREFIX = "phx_";
 const PAGE_LIMIT = 100;
+const MAX_PAGES = 50;
+const REQUEST_TIMEOUT_MS = 60_000;
+const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
+const REDACTED = "[redacted]";
 const READ_BACK_ATTEMPTS = 5;
 const READ_BACK_DELAY_MS = 2000;
 const INGESTION_ATTEMPTS = 20;
@@ -55,10 +60,14 @@ export interface Role {
   readonly dashboardId: number;
   readonly insights: ReadonlyMap<string, {readonly id: number; readonly name: string}>;
   readonly captureToken: string;
+  /** Declared privacy settings from the definition, including `geoip_enabled`. */
+  readonly policy: JsonObject;
 }
 
 export type CheckStatus = "PASS" | "FAIL" | "UNKNOWN" | "INFO";
 
+/** `required` checks decide the outcome: a required FAIL is drift, a required UNKNOWN is
+ * incomplete evidence, and neither is a verified deployment. Advisory checks are reported only. */
 export interface Check {
   readonly role: string;
   readonly item: string;
@@ -66,6 +75,19 @@ export interface Check {
   readonly observed: string;
   readonly status: CheckStatus;
   readonly owner: string;
+  readonly required: boolean;
+}
+
+export type Outcome = "verified" | "drift" | "incomplete";
+
+export function outcomeOf(checks: readonly Check[]): Outcome {
+  if (checks.some((check) => check.status === "FAIL")) {
+    return "drift";
+  }
+  if (checks.some((check) => check.required && check.status === "UNKNOWN")) {
+    return "incomplete";
+  }
+  return "verified";
 }
 
 export class InfraError extends Error {}
@@ -104,12 +126,26 @@ export class PostHogApi {
     await this.#send("DELETE", path);
   }
 
-  /** Follows `next` links and refuses a listing whose `count` the pages do not add up to. */
+  /** The key never appears in anything this client returns or throws, even when a server echoes it. */
+  #redact(text: string): string {
+    return this.#key === "" ? text : text.split(this.#key).join(REDACTED);
+  }
+
+  /** Follows `next` links, bounded by page count and by never revisiting a link, and refuses a
+   * listing whose `count` the pages do not add up to. */
   async listAll(path: string): Promise<readonly JsonObject[]> {
     const results: JsonObject[] = [];
+    const visited = new Set<string>();
     let next: string | null = path;
     let count: number | undefined;
     while (next !== null) {
+      if (visited.has(next)) {
+        throw new InfraError(`${path}: pagination repeats ${next}`);
+      }
+      if (visited.size >= MAX_PAGES) {
+        throw new InfraError(`${path}: more than ${MAX_PAGES} pages, refusing`);
+      }
+      visited.add(next);
       const page = asObject(await this.get(next), next);
       const pageResults = page["results"];
       if (!Array.isArray(pageResults)) {
@@ -144,14 +180,16 @@ export class PostHogApi {
         headers,
         body: body === undefined ? undefined : JSON.stringify(body),
         redirect: "manual",
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
     } catch (error) {
       throw new InfraError(`${method} ${path} failed: ${error instanceof Error ? error.name : "network error"}`);
     }
     if (response.status >= 300 && response.status < 400) {
+      await response.body?.cancel();
       throw new InfraError(`${method} ${path} answered a redirect (${response.status}), refused`);
     }
-    const text = await response.text();
+    const text = this.#redact(await readBounded(response, `${method} ${path}`));
     if (!response.ok) {
       throw new InfraError(`${method} ${path} answered HTTP ${response.status}: ${detailOf(text)}`);
     }
@@ -164,6 +202,37 @@ export class PostHogApi {
       throw new InfraError(`${method} ${path} answered non-JSON content`);
     }
   }
+}
+
+/** Reads at most MAX_RESPONSE_BYTES within the request's deadline; more is refused, not truncated. */
+export async function readBounded(response: Response, context: string): Promise<string> {
+  const reader = response.body?.getReader();
+  if (reader === undefined) {
+    return "";
+  }
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const {done, value} = await reader.read();
+      if (done) {
+        break;
+      }
+      total += value.byteLength;
+      if (total > MAX_RESPONSE_BYTES) {
+        throw new InfraError(`${context} answered more than ${MAX_RESPONSE_BYTES} bytes, refused`);
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    if (error instanceof InfraError) {
+      throw error;
+    }
+    throw new InfraError(`${context} body failed: ${error instanceof Error ? error.name : "read error"}`);
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 function detailOf(text: string): string {
@@ -207,6 +276,7 @@ export function readRoles(outputsFile: string): readonly Role[] {
   const outputs = asObject(JSON.parse(readFileSync(outputsFile, "utf8")) as Json, outputsFile);
   const projects = asObject(asObject(outputs["projects"] ?? null, "projects")["value"] ?? null, "projects.value");
   const tokens = asObject(asObject(outputs["capture_tokens"] ?? null, "capture_tokens")["value"] ?? null, "capture_tokens.value");
+  const policies = asObject(asObject(outputs["privacy_policy"] ?? null, "privacy_policy")["value"] ?? null, "privacy_policy.value");
   return Object.entries(projects).map(([name, value]) => {
     const project = asObject(value, `projects.${name}`);
     const insights = new Map<string, {id: number; name: string}>();
@@ -218,12 +288,19 @@ export function readRoles(outputsFile: string): readonly Role[] {
     if (typeof token !== "string" || token === "") {
       throw new InfraError(`outputs carry no capture token for role ${name}`);
     }
+    const policy = asObject(policies[name] ?? null, `privacy_policy.${name}`);
+    for (const setting of [...POLICY_SETTINGS, "geoip_enabled"]) {
+      if (!(setting in policy)) {
+        throw new InfraError(`privacy_policy.${name} lacks ${setting}`);
+      }
+    }
     return {
       name,
       projectId: Number(project["id"]),
       dashboardId: Number(project["dashboard_id"]),
       insights,
       captureToken: token,
+      policy,
     };
   });
 }
@@ -297,42 +374,49 @@ export async function gapApply(api: PostHogApi, roles: readonly Role[], sleep: S
   return changes;
 }
 
-export interface VerifyOptions {
-  readonly organizationChecks?: boolean;
-}
-
-/** Read-only checks; nothing here writes. Nulls and missing fields are UNKNOWN, never PASS. */
-export async function verify(api: PostHogApi, roles: readonly Role[], options: VerifyOptions = {}): Promise<readonly Check[]> {
+/** Read-only checks; nothing here writes. A required value that is null, absent, or of the wrong
+ * type is UNKNOWN, which keeps the deployment unverified; only advisory items may stay unknown. */
+export async function verify(api: PostHogApi, roles: readonly Role[]): Promise<readonly Check[]> {
   const checks: Check[] = [];
+  const organizations = new Map<string, string[]>();
   for (const role of roles) {
+    const project = asObject(await api.get(`/api/projects/${role.projectId}/`), `project ${role.projectId}`);
+    const organization = typeof project["organization"] === "string" ? project["organization"] : "";
+    organizations.set(organization, [...(organizations.get(organization) ?? []), role.name]);
     const environment = asObject(await api.get(`/api/environments/${role.projectId}/`), `environment ${role.projectId}`);
-    for (const [setting, expected] of Object.entries(EXPECTED_ENVIRONMENT_SETTINGS)) {
-      const observed = environment[setting];
-      const owner = setting in ENVIRONMENT_GAP_SETTINGS ? "scripts/posthog-infra gaps" : setting === "timezone" ? "posthog_project" : "posthog_project_settings";
-      checks.push(compare(role.name, `environment.${setting}`, expected as Json, observed, owner));
+    for (const setting of POLICY_SETTINGS) {
+      checks.push(compare(role.name, `environment.${setting}`, role.policy[setting] as Json, environment[setting], setting === "timezone" ? "posthog_project" : "posthog_project_settings", true));
     }
-    for (const setting of ["event_retention_months", "events_retention_enforced", "is_demo", "access_control"] as const) {
+    for (const [setting, expected] of Object.entries(ENVIRONMENT_GAP_SETTINGS)) {
+      checks.push(compare(role.name, `environment.${setting}`, expected, environment[setting], "scripts/posthog-infra gaps", true));
+    }
+    checks.push(compare(role.name, "environment.is_demo", false, environment["is_demo"], "provider-managed / read-only", true));
+    checks.push(compare(role.name, "environment.access_control", false, environment["access_control"], "provider-managed / read-only", true));
+    for (const setting of ["event_retention_months", "events_retention_enforced"] as const) {
       const observed = environment[setting];
       checks.push({
         role: role.name,
         item: `environment.${setting}`,
-        expected: setting === "is_demo" || setting === "access_control" ? "false" : "read-only, recorded as observed",
+        expected: "advisory: recorded as observed, no retention resource exists",
         observed: observed === undefined ? "absent" : JSON.stringify(observed),
-        status: setting === "is_demo" || setting === "access_control" ? (observed === false ? "PASS" : observed === undefined || observed === null ? "UNKNOWN" : "FAIL") : observed === undefined || observed === null ? "UNKNOWN" : "INFO",
+        status: observed === undefined || observed === null ? "UNKNOWN" : "INFO",
         owner: "provider-managed / read-only",
+        required: false,
       });
     }
 
     const transformations = await api.listAll(`/api/projects/${role.projectId}/hog_functions/?type=transformation&limit=${PAGE_LIMIT}`);
     const geoip = transformations.filter((entry) => templateIdOf(entry) === GEOIP_TEMPLATE_ID);
     const others = transformations.filter((entry) => templateIdOf(entry) !== GEOIP_TEMPLATE_ID);
+    const geoipExpected = role.policy["geoip_enabled"];
     checks.push({
       role: role.name,
       item: "transformations.geoip",
-      expected: "exactly one, enabled=false",
+      expected: `exactly one, enabled=${String(geoipExpected)}`,
       observed: geoip.length === 1 ? `one, enabled=${String((geoip[0] as JsonObject)["enabled"])}` : `${geoip.length} functions`,
-      status: geoip.length === 1 && (geoip[0] as JsonObject)["enabled"] === false ? "PASS" : "FAIL",
+      status: geoip.length === 1 && typeof (geoip[0] as JsonObject)["enabled"] === "boolean" ? ((geoip[0] as JsonObject)["enabled"] === geoipExpected ? "PASS" : "FAIL") : geoip.length === 1 ? "UNKNOWN" : "FAIL",
       owner: "posthog_hog_function (adopted by bootstrap)",
+      required: true,
     });
     const enabledOthers = others.filter((entry) => entry["enabled"] === true);
     checks.push({
@@ -342,6 +426,7 @@ export async function verify(api: PostHogApi, roles: readonly Role[], options: V
       observed: others.length === 0 ? "none" : `${others.length} (${enabledOthers.length} enabled): ${others.map((entry) => String(entry["name"])).join(", ")}`,
       status: others.length === 0 ? "PASS" : "FAIL",
       owner: "untracked; remove by hand and record why",
+      required: true,
     });
 
     const destinations = await api.listAll(`/api/projects/${role.projectId}/hog_functions/?type=${DESTINATION_TYPES}&limit=${PAGE_LIMIT}`);
@@ -359,6 +444,7 @@ export async function verify(api: PostHogApi, roles: readonly Role[], options: V
       observed: managed.length === 1 ? `present${sameName.length === 0 ? "" : `, ${sameName.length} duplicate(s)`}` : "missing",
       status: managed.length === 1 && sameName.length === 0 ? "PASS" : "FAIL",
       owner: "posthog_dashboard",
+      required: true,
     });
     const untrackedDashboards = dashboards.filter((entry) => entry["id"] !== role.dashboardId);
     checks.push({
@@ -368,7 +454,16 @@ export async function verify(api: PostHogApi, roles: readonly Role[], options: V
       observed: untrackedDashboards.length === 0 ? "none" : untrackedDashboards.map((entry) => `${String(entry["name"])} (${String(entry["id"])})`).join(", "),
       status: "INFO",
       owner: "untracked (PostHog creates a starter dashboard per project)",
+      required: false,
     });
+    // Sharing is checked on every dashboard of the project, managed or not: an untracked public
+    // dashboard exposes the same data as a managed one would.
+    for (const entry of dashboards) {
+      const id = Number(entry["id"]);
+      const sharing = asObject(await api.get(`/api/projects/${role.projectId}/dashboards/${id}/sharing/`), `sharing of dashboard ${id}`);
+      checks.push(compare(role.name, `dashboard.${id}.sharing.enabled`, false, sharing["enabled"], "read-only; never enabled", true));
+      checks.push(compare(role.name, `dashboard.${id}.is_shared`, false, entry["is_shared"], "read-only; never enabled", true));
+    }
     const dashboard = asObject(await api.get(`/api/projects/${role.projectId}/dashboards/${role.dashboardId}/`), "dashboard");
     const tiles = Array.isArray(dashboard["tiles"]) ? dashboard["tiles"].map((tile) => asObject(tile, "tile")) : [];
     const tileInsightIds = tiles.map((tile) => (isObject(tile["insight"]) ? Number(tile["insight"]["id"]) : NaN));
@@ -381,10 +476,8 @@ export async function verify(api: PostHogApi, roles: readonly Role[], options: V
       observed: `${tiles.length} tiles${sameSet(expectedIds, observedIds) ? "" : ", insight set differs"}`,
       status: sameSet(expectedIds, observedIds) && tiles.length === expectedIds.length ? "PASS" : "FAIL",
       owner: "posthog_insight.dashboard_ids + posthog_dashboard_layout",
+      required: true,
     });
-    const sharing = asObject(await api.get(`/api/projects/${role.projectId}/dashboards/${role.dashboardId}/sharing/`), "sharing");
-    checks.push(compare(role.name, "dashboard.sharing.enabled", false, sharing["enabled"], "read-only; never enabled"));
-    checks.push(compare(role.name, "dashboard.is_shared", false, dashboard["is_shared"], "read-only; never enabled"));
 
     const insights = await api.listAll(`/api/projects/${role.projectId}/insights/?limit=${PAGE_LIMIT}&saved=true`);
     const managedNames = new Map<string, number>();
@@ -402,41 +495,78 @@ export async function verify(api: PostHogApi, roles: readonly Role[], options: V
       observed: `${managedNames.size} present${duplicates.length === 0 ? "" : `, duplicated: ${duplicates.join(", ")}`}${missing.length === 0 ? "" : `, missing: ${missing.join(", ")}`}`,
       status: duplicates.length === 0 && missing.length === 0 ? "PASS" : "FAIL",
       owner: "posthog_insight",
+      required: true,
+    });
+    // Insights have their own public-link control, independent of the dashboards they sit on.
+    const sharedInsights: string[] = [];
+    let unknownInsightSharing = 0;
+    for (const insight of insights) {
+      const sharing = asObject(await api.get(`/api/projects/${role.projectId}/insights/${String(insight["id"])}/sharing/`), `sharing of insight ${String(insight["id"])}`);
+      if (sharing["enabled"] === true) {
+        sharedInsights.push(String(insight["name"]));
+      } else if (sharing["enabled"] !== false) {
+        unknownInsightSharing++;
+      }
+    }
+    checks.push({
+      role: role.name,
+      item: "insights.sharing.enabled",
+      expected: "false on every insight",
+      observed: sharedInsights.length === 0 ? (unknownInsightSharing === 0 ? `false on ${insights.length} insights` : `${unknownInsightSharing} insight(s) without a readable sharing state`) : `enabled: ${sharedInsights.join(", ")}`,
+      status: sharedInsights.length > 0 ? "FAIL" : unknownInsightSharing > 0 ? "UNKNOWN" : "PASS",
+      owner: "read-only; never enabled",
+      required: true,
     });
   }
-  if (options.organizationChecks !== false) {
-    const organizations = await api.listAll(`/api/organizations/?limit=${PAGE_LIMIT}`);
-    for (const organization of organizations) {
-      const name = "organization";
-      checks.push({
-        role: name,
-        item: "organization.is_ai_training_opted_in",
-        expected: "false (shared control, affects every project)",
-        observed: organization["is_ai_training_opted_in"] === undefined ? "absent" : JSON.stringify(organization["is_ai_training_opted_in"]),
-        status: organization["is_ai_training_opted_in"] === false ? "PASS" : organization["is_ai_training_opted_in"] === undefined ? "UNKNOWN" : "FAIL",
-        owner: "manual, organization settings",
-      });
-      checks.push({
-        role: name,
-        item: "organization.allow_publicly_shared_resources",
-        expected: "recorded; sharing stays off per dashboard",
-        observed: JSON.stringify(organization["allow_publicly_shared_resources"] ?? null),
-        status: organization["allow_publicly_shared_resources"] === undefined ? "UNKNOWN" : "INFO",
-        owner: "manual, organization settings",
-      });
+  // Only the organization that owns the selected projects is read; other organizations the key
+  // can reach are unrelated to this deployment.
+  if (organizations.size !== 1) {
+    checks.push({
+      role: "organization",
+      item: "organization.single",
+      expected: "both roles in one organization",
+      observed: [...organizations.entries()].map(([id, names]) => `${id === "" ? "unknown" : id.slice(0, 8)}: ${names.join(", ")}`).join("; "),
+      status: "FAIL",
+      owner: "posthog_project.organization_id",
+      required: true,
+    });
+  }
+  for (const organizationId of organizations.keys()) {
+    if (organizationId === "") {
+      continue;
     }
+    const organization = asObject(await api.get(`/api/organizations/${organizationId}/`), "organization");
+    checks.push({
+      role: "organization",
+      item: "organization.is_ai_training_opted_in",
+      expected: "false (shared control, affects every project of the organization)",
+      observed: organization["is_ai_training_opted_in"] === undefined ? "absent" : JSON.stringify(organization["is_ai_training_opted_in"]),
+      status: organization["is_ai_training_opted_in"] === false ? "PASS" : organization["is_ai_training_opted_in"] === undefined || organization["is_ai_training_opted_in"] === null ? "UNKNOWN" : "FAIL",
+      owner: "manual, organization settings",
+      required: false,
+    });
+    checks.push({
+      role: "organization",
+      item: "organization.allow_publicly_shared_resources",
+      expected: "advisory: recorded; sharing is checked per dashboard and insight above",
+      observed: JSON.stringify(organization["allow_publicly_shared_resources"] ?? null),
+      status: organization["allow_publicly_shared_resources"] === undefined ? "UNKNOWN" : "INFO",
+      owner: "manual, organization settings",
+      required: false,
+    });
   }
   return checks;
 }
 
-function compare(role: string, item: string, expected: Json, observed: Json | undefined, owner: string): Check {
+function compare(role: string, item: string, expected: Json, observed: Json | undefined, owner: string, required: boolean): Check {
   const observedText = observed === undefined ? "absent" : JSON.stringify(observed);
-  const status: CheckStatus = observed === undefined || observed === null ? "UNKNOWN" : JSON.stringify(observed) === JSON.stringify(expected) ? "PASS" : "FAIL";
-  return {role, item, expected: JSON.stringify(expected), observed: observedText, status, owner};
+  const sameType = observed !== undefined && observed !== null && (Array.isArray(expected) ? Array.isArray(observed) : typeof observed === typeof expected);
+  const status: CheckStatus = !sameType ? "UNKNOWN" : JSON.stringify(observed) === JSON.stringify(expected) ? "PASS" : "FAIL";
+  return {role, item, expected: JSON.stringify(expected), observed: observedText, status, owner, required};
 }
 
 function countCheck(role: string, item: string, count: number, owner: string): Check {
-  return {role, item, expected: "0", observed: String(count), status: count === 0 ? "PASS" : "FAIL", owner};
+  return {role, item, expected: "0", observed: String(count), status: count === 0 ? "PASS" : "FAIL", owner, required: true};
 }
 
 function sameSet(left: readonly number[], right: readonly number[]): boolean {
@@ -444,24 +574,26 @@ function sameSet(left: readonly number[], right: readonly number[]): boolean {
 }
 
 export function renderReport(checks: readonly Check[], context: {readonly observedAt: string; readonly configRevision: string; readonly tofuVersion: string; readonly providerVersion: string}): string {
+  const outcome = outcomeOf(checks);
   const lines = [
     "# PostHog configuration verification",
     "",
-    `Observed at ${context.observedAt} (UTC) with OpenTofu ${context.tofuVersion} and provider posthog/posthog ${context.providerVersion}; configuration revision ${context.configRevision}.`,
+    `Outcome: **${outcome}**. Observed at ${context.observedAt} (UTC) with OpenTofu ${context.tofuVersion} and provider posthog/posthog ${context.providerVersion}; configuration revision ${context.configRevision}.`,
     "",
-    "A maintainer-generated point-in-time read-back of the deployed configuration. It shows what the API reported when asked; it is not proof that a setting cannot be changed later, that historical data was physically erased, or that PostHog's own infrastructure never sees a source address.",
+    "A maintainer-generated point-in-time read-back of the deployed configuration. `verified` means every required check passed; `drift` means a check failed; `incomplete` means a required value could not be read. It is not proof that a setting cannot be changed later, that historical data was physically erased, or that PostHog's own infrastructure never sees a source address. Advisory rows (required = no) record what was observed and never make the outcome verified on their own.",
     "",
-    "| Role | Item | Expected | Observed | Status | Owner |",
-    "| --- | --- | --- | --- | --- | --- |",
+    "| Role | Item | Required | Expected | Observed | Status | Owner |",
+    "| --- | --- | --- | --- | --- | --- | --- |",
   ];
   for (const check of checks) {
-    lines.push(`| ${check.role} | ${check.item} | ${cell(check.expected)} | ${cell(check.observed)} | ${check.status} | ${cell(check.owner)} |`);
+    lines.push(`| ${check.role} | ${check.item} | ${check.required ? "yes" : "no"} | ${cell(check.expected)} | ${cell(check.observed)} | ${check.status} | ${cell(check.owner)} |`);
   }
   const counts = {PASS: 0, FAIL: 0, UNKNOWN: 0, INFO: 0};
   for (const check of checks) {
     counts[check.status]++;
   }
-  lines.push("", `Totals: ${counts.PASS} pass, ${counts.FAIL} fail, ${counts.UNKNOWN} unknown, ${counts.INFO} informational.`, "");
+  const requiredUnknown = checks.filter((check) => check.required && check.status === "UNKNOWN").length;
+  lines.push("", `Totals: ${counts.PASS} pass, ${counts.FAIL} fail, ${counts.UNKNOWN} unknown (${requiredUnknown} required), ${counts.INFO} informational.`, "");
   return lines.join("\n");
 }
 
@@ -469,8 +601,9 @@ function cell(text: string): string {
   return text.replace(/\|/g, "\\|").replace(/\n/g, " ");
 }
 
-// Dashboard fixture: the documented synthetic installations, sent to one role and checked panel
-// by panel with the canonical query files.
+// Dashboard fixture: the documented synthetic installations, sent as a run-owned cohort with fresh
+// installation IDs, waited for by exact event UUID, checked panel by panel with the canonical query
+// files scoped to that cohort, and then queued for deletion.
 
 interface FixtureReport {
   readonly days_ago: number;
@@ -485,17 +618,46 @@ interface FixtureInstallation {
   readonly reports: readonly FixtureReport[];
 }
 
-interface Fixture {
+export interface Fixture {
   readonly release_version: string;
   readonly release_date_days_ago: number;
   readonly installations: readonly FixtureInstallation[];
   readonly expected: Readonly<Record<string, Json>>;
 }
 
-export function fixtureEvents(fixture: Fixture, token: string, today: Date): readonly JsonObject[] {
-  const events: JsonObject[] = [];
+/** One run's cohort: the identities are fixed at creation so a retry resends the same events. */
+export interface FixtureRun {
+  readonly run_id: string;
+  readonly reference_time: string;
+  readonly cohort: Readonly<Record<string, string>>;
+  readonly event_uuids: readonly string[];
+  readonly cleanup?: Json;
+}
+
+export function newFixtureRun(fixture: Fixture, referenceTime: Date): FixtureRun {
+  const cohort: Record<string, string> = {};
   for (const installation of fixture.installations) {
-    const registeredOn = isoDate(daysBefore(today, installation.registered_days_ago));
+    cohort[installation.distinct_id] = randomUUID();
+  }
+  const eventCount = fixture.installations.reduce((sum, installation) => sum + installation.reports.length, 0);
+  return {
+    run_id: `fixture-${randomUUID().slice(0, 8)}`,
+    reference_time: referenceTime.toISOString(),
+    cohort,
+    event_uuids: Array.from({length: eventCount}, () => randomUUID()),
+  };
+}
+
+export function fixtureEvents(fixture: Fixture, run: FixtureRun, token: string): readonly JsonObject[] {
+  const reference = new Date(run.reference_time);
+  const events: JsonObject[] = [];
+  let index = 0;
+  for (const installation of fixture.installations) {
+    const distinctId = run.cohort[installation.distinct_id];
+    if (distinctId === undefined) {
+      throw new InfraError(`run has no cohort id for ${installation.distinct_id}`);
+    }
+    const registeredOn = isoDate(daysBefore(reference, installation.registered_days_ago));
     for (const report of installation.reports) {
       const properties: Record<string, Json> = {
         telemetry_schema_version: 1,
@@ -508,11 +670,12 @@ export function fixtureEvents(fixture: Fixture, token: string, today: Date): rea
       events.push({
         api_key: token,
         event: HEARTBEAT_EVENT,
-        distinct_id: installation.distinct_id,
-        uuid: randomUUID(),
-        timestamp: `${isoDate(daysBefore(today, report.days_ago))}T${report.time}:00Z`,
+        distinct_id: distinctId,
+        uuid: run.event_uuids[index] ?? randomUUID(),
+        timestamp: `${isoDate(daysBefore(reference, report.days_ago))}T${report.time}:00Z`,
         properties,
       });
+      index++;
     }
   }
   return events;
@@ -536,6 +699,18 @@ export function renderQuery(sql: string, values: Readonly<Record<string, string>
   });
 }
 
+const EVENT_FILTER = `WHERE event = '${HEARTBEAT_EVENT}'`;
+
+/** The canonical query, restricted to the run's cohort by extending its event filter. The canonical
+ * text is otherwise untouched, so what runs is the deployed logic, not a second copy. */
+export function scopeQuery(sql: string, cohortIds: readonly string[]): string {
+  if (!sql.includes(EVENT_FILTER)) {
+    throw new InfraError("canonical query lacks the heartbeat event filter; cannot scope it to the cohort");
+  }
+  const list = cohortIds.map((id) => `'${id}'`).join(", ");
+  return sql.split(EVENT_FILTER).join(`${EVENT_FILTER} AND distinct_id IN (${list})`);
+}
+
 export async function runQuery(api: PostHogApi, projectId: number, sql: string): Promise<readonly Json[]> {
   const response = asObject(
     await api.post(`/api/projects/${projectId}/query/`, {query: {kind: "HogQLQuery", query: sql}, refresh: "force_blocking"}),
@@ -546,7 +721,7 @@ export async function runQuery(api: PostHogApi, projectId: number, sql: string):
   }
   const results = response["results"];
   if (!Array.isArray(results)) {
-    throw new InfraError("query answered without results");
+    throw new InfraError("query answered without a results array");
   }
   return results;
 }
@@ -558,17 +733,32 @@ export interface PanelOutcome {
   readonly pass: boolean;
 }
 
+/** Expected rows for the panels whose result depends on the reference time: the activity windows
+ * count reports inside each window as of the reference instant, and the registration cohorts group
+ * the registration dates by calendar month. */
+export function timeDependentExpectations(fixture: Fixture, referenceTime: Date): Readonly<Record<string, Json>> {
+  const windows = [1, 7, 30].map((days) => referenceTime.getTime() - days * 86_400_000);
+  const active = windows.map((start) =>
+    fixture.installations.filter((installation) =>
+      installation.reports.some((report) => {
+        const at = Date.parse(`${isoDate(daysBefore(referenceTime, report.days_ago))}T${report.time}:00Z`);
+        return at >= start && at <= referenceTime.getTime();
+      }),
+    ).length,
+  );
+  const months = new Map<string, number>();
+  for (const installation of fixture.installations) {
+    const registered = daysBefore(referenceTime, installation.registered_days_ago);
+    const month = `${registered.toISOString().slice(0, 7)}-01`;
+    months.set(month, (months.get(month) ?? 0) + 1);
+  }
+  return {
+    "active-installations": [active],
+    "registration-cohorts": [...months.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([month, count]) => [month, count]),
+  };
+}
+
 export function comparePanel(panel: string, expected: Json, rows: readonly Json[]): PanelOutcome {
-  if (isObject(expected) && "row_count" in expected) {
-    const total = rows.reduce<number>((sum, row) => sum + (Array.isArray(row) ? Number(row[row.length - 1]) : 0), 0);
-    const pass = rows.length === expected["row_count"] && total === expected["installations_total"];
-    return {panel, expected: JSON.stringify(expected), observed: `${rows.length} rows, ${total} installations`, pass};
-  }
-  if (isObject(expected) && "after_0915_utc" in expected) {
-    const alternatives = [expected["after_0915_utc"], expected["before_0915_utc"]];
-    const pass = alternatives.some((alternative) => sameRows(alternative as Json[], rows));
-    return {panel, expected: alternatives.map((alternative) => JSON.stringify(alternative)).join(" or "), observed: JSON.stringify(rows), pass};
-  }
   return {panel, expected: JSON.stringify(expected), observed: JSON.stringify(rows), pass: sameRows(expected as Json[], rows)};
 }
 
@@ -658,11 +848,14 @@ export async function main(argv: readonly string[], environment: NodeJS.ProcessE
       } else {
         console.log(report);
       }
-      const failures = checks.filter((check) => check.status === "FAIL");
-      for (const failure of failures) {
-        console.error(`FAIL ${failure.role} ${failure.item}: expected ${failure.expected}, observed ${failure.observed}`);
+      const outcome = outcomeOf(checks);
+      for (const check of checks) {
+        if (check.status === "FAIL" || (check.required && check.status === "UNKNOWN")) {
+          console.error(`${check.status} ${check.role} ${check.item}: expected ${check.expected}, observed ${check.observed}`);
+        }
       }
-      return failures.length === 0 ? 0 : 1;
+      console.log(`verify: ${outcome}`);
+      return outcome === "verified" ? 0 : 1;
     }
     case "fixture": {
       const roles = readRoles(requireFlag(options, "outputs"));
@@ -677,41 +870,63 @@ export async function main(argv: readonly string[], environment: NodeJS.ProcessE
       const fixturePath = options.flags.get("fixture") ?? join(infraDir(), "fixtures", "dashboard-fixture.json");
       const fixture = JSON.parse(readFileSync(fixturePath, "utf8")) as Fixture;
       const captureEndpoint = options.flags.get("capture") ?? DEFAULT_CAPTURE_ENDPOINT;
-      const today = new Date();
-      const events = fixtureEvents(fixture, role.captureToken, today);
+      const runFile = requireFlag(options, "run-file");
+      // A run file from an interrupted attempt keeps its identities so the retry resends the same
+      // events; a new attempt gets a new cohort, so old fixtures never satisfy the new check.
+      const run: FixtureRun = existsSync(runFile) ? (JSON.parse(readFileSync(runFile, "utf8")) as FixtureRun) : newFixtureRun(fixture, new Date());
+      if (run.cleanup !== undefined) {
+        throw new InfraError(`${runFile} belongs to a finished run; remove it or choose another run file`);
+      }
+      writeFileSync(runFile, JSON.stringify(run, null, 2), {mode: 0o600});
+      const reference = new Date(run.reference_time);
+      const events = fixtureEvents(fixture, run, role.captureToken);
       for (const event of events) {
-        const response = await fetch(captureEndpoint, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(event)});
+        const response = await fetch(captureEndpoint, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(event),
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        });
+        await response.body?.cancel();
         if (!response.ok) {
           throw new InfraError(`capture answered HTTP ${response.status}`);
         }
       }
-      console.log(`fixture: sent ${events.length} events to role ${roleName}`);
-      const distinctIds = fixture.installations.map((installation) => `'${installation.distinct_id}'`).join(", ");
-      const countSql = `SELECT count() FROM events WHERE event = '${HEARTBEAT_EVENT}' AND distinct_id IN (${distinctIds}) AND timestamp >= now() - interval 400 day`;
-      let ingested = 0;
+      console.log(`fixture ${run.run_id}: sent ${events.length} events to role ${roleName}`);
+      const cohortIds = Object.values(run.cohort);
+      const uuidList = run.event_uuids.map((uuid) => `'${uuid}'`).join(", ");
+      const visibleSql = scopeQuery(`SELECT toString(uuid) FROM events ${EVENT_FILTER} AND uuid IN (${uuidList}) AND timestamp >= now() - interval 400 day`, cohortIds);
+      let visible = new Set<string>();
       for (let attempt = 1; attempt <= INGESTION_ATTEMPTS; attempt++) {
-        const rows = await runQuery(api, role.projectId, countSql);
-        ingested = Number((rows[0] as Json[])[0]);
-        if (ingested >= events.length) {
+        visible = new Set((await runQuery(api, role.projectId, visibleSql)).map((row) => String((row as Json[])[0])));
+        if (run.event_uuids.every((uuid) => visible.has(uuid))) {
           break;
         }
         await sleep(INGESTION_DELAY_MS);
       }
-      if (ingested < events.length) {
-        throw new InfraError(`fixture: only ${ingested} of ${events.length} events queryable after waiting`);
+      const missing = run.event_uuids.filter((uuid) => !visible.has(uuid));
+      if (missing.length > 0) {
+        throw new InfraError(`fixture ${run.run_id}: ${missing.length} of ${events.length} events not queryable after waiting; rerun with the same run file to retry`);
       }
-      const releaseDate = isoDate(daysBefore(today, fixture.release_date_days_ago));
+      const releaseDate = isoDate(daysBefore(reference, fixture.release_date_days_ago));
+      const expectations = {...fixture.expected, ...timeDependentExpectations(fixture, reference)};
       let failures = 0;
-      for (const [panel, expected] of Object.entries(fixture.expected)) {
-        const sql = panel === "release-adoption-and-delay"
+      for (const [panel, expected] of Object.entries(expectations)) {
+        const canonical = panel === "release-adoption-and-delay"
           ? renderQuery(readFileSync(join(infraDir(), "queries", `${panel}.sql.tftpl`), "utf8"), {release_date: releaseDate, release_version: fixture.release_version})
           : readFileSync(join(infraDir(), "queries", `${panel}.sql`), "utf8");
-        const outcome = comparePanel(panel, expected, await runQuery(api, role.projectId, sql));
+        const outcome = comparePanel(panel, expected, await runQuery(api, role.projectId, scopeQuery(canonical, cohortIds)));
         console.log(`${outcome.pass ? "PASS" : "FAIL"} ${panel}: ${outcome.observed}${outcome.pass ? "" : ` (expected ${outcome.expected})`}`);
         if (!outcome.pass) {
           failures++;
         }
       }
+      // Cleanup is queued, never awaited: PostHog deletes events in a later batch. Its status is
+      // recorded in the run file and reported separately from the panel result.
+      const cleanup = await api.post(`/api/projects/${role.projectId}/persons/bulk_delete/`, {distinct_ids: cohortIds, delete_events: true});
+      writeFileSync(runFile, JSON.stringify({...run, cleanup: {requested_at: new Date().toISOString(), response: cleanup}}, null, 2), {mode: 0o600});
+      const cleanupBody = isObject(cleanup) ? cleanup : {};
+      console.log(`fixture ${run.run_id}: cleanup queued (persons_found ${String(cleanupBody["persons_found"])}, events_queued_for_deletion ${String(cleanupBody["events_queued_for_deletion"])}); panels ${failures === 0 ? "all pass" : `${failures} failing`}`);
       return failures === 0 ? 0 : 1;
     }
     case "retire-project": {

@@ -6,6 +6,14 @@ output "projects" {
   }
 }
 
+output "privacy_policy" {
+  description = "Declared privacy settings per role, read by scripts/posthog-infra verify as the expected values."
+  value = {
+    production = module.production.privacy_policy
+    test       = module.test.privacy_policy
+  }
+}
+
 output "capture_tokens" {
   description = "Public capture tokens per role. Sensitive so they never print; scripts/posthog-infra hands the production token to the release secret."
   value = {
