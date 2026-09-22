@@ -15,7 +15,12 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
+import org.jboss.logging.Logger;
 import org.jspecify.annotations.Nullable;
 
 /// Test-only client for the PostHog management API, pinned to one numeric project. It never
@@ -31,13 +36,16 @@ final class PostHogManagementClient {
     private static final int HTTP_CLIENT_ERROR_START = 400;
     private static final Duration DEFAULT_RETRY_AFTER = Duration.ofSeconds(5);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(120);
+    private static final String REDACTED = "[redacted]";
     private static final ObjectMapper JSON = new ObjectMapper();
+    private static final Logger LOG = Logger.getLogger(PostHogManagementClient.class);
 
     private final HttpClient http;
     private final URI host;
     private final long projectId;
     private final Supplier<String> key;
     private final ExperimentBudget budget;
+    private final Duration requestTimeout;
 
     PostHogManagementClient(URI host, long projectId, Supplier<String> key, ExperimentBudget budget) {
         this(
@@ -52,11 +60,22 @@ final class PostHogManagementClient {
     }
 
     PostHogManagementClient(HttpClient http, URI host, long projectId, Supplier<String> key, ExperimentBudget budget) {
+        this(http, host, projectId, key, budget, REQUEST_TIMEOUT);
+    }
+
+    PostHogManagementClient(
+            HttpClient http,
+            URI host,
+            long projectId,
+            Supplier<String> key,
+            ExperimentBudget budget,
+            Duration requestTimeout) {
         this.http = http;
         this.host = host;
         this.projectId = projectId;
         this.key = key;
         this.budget = budget;
+        this.requestTimeout = requestTimeout;
     }
 
     long projectId() {
@@ -118,9 +137,17 @@ final class PostHogManagementClient {
         }
     }
 
+    /// One exchange bounded in time and bytes. The deadline is the smaller of the request timeout
+    /// and the wait budget the invocation has left; it covers headers and body. The body is read on
+    /// a virtual thread so a stalled server cannot hold the caller past the deadline, the stream is
+    /// closed on every path, an oversized answer is refused, and the key never reaches a message.
     private Response exchange(String method, String path, @Nullable Object body) {
+        Duration allowance = min(requestTimeout, budget.remainingWait());
+        if (allowance.isZero()) {
+            throw new ExperimentBudget.BudgetExhaustedException("wait budget exhausted before " + method + " " + path);
+        }
         HttpRequest.Builder request = HttpRequest.newBuilder(host.resolve(path))
-                .timeout(REQUEST_TIMEOUT)
+                .timeout(allowance)
                 .header("Authorization", "Bearer " + key.get())
                 .header("Accept", "application/json")
                 .header("User-Agent", USER_AGENT);
@@ -130,10 +157,13 @@ final class PostHogManagementClient {
             request.header("Content-Type", "application/json")
                     .method(method, HttpRequest.BodyPublishers.ofString(serialize(body), StandardCharsets.UTF_8));
         }
+        long started = System.nanoTime();
+        long deadline = started + allowance.toNanos();
         HttpResponse<InputStream> response;
         try {
             response = http.send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
         } catch (IOException exception) {
+            charge(started, method, path);
             throw new ManagementException(
                     method + " " + path + " failed: " + exception.getClass().getSimpleName(), exception);
         } catch (InterruptedException exception) {
@@ -142,21 +172,74 @@ final class PostHogManagementClient {
         }
         int status = response.statusCode();
         if (status >= HTTP_REDIRECT_START && status < HTTP_CLIENT_ERROR_START) {
+            closeQuietly(response.body());
+            charge(started, method, path);
             throw new ManagementException(method + " " + path + " answered a redirect (" + status + "), refused");
         }
-        String text;
-        try (InputStream stream = response.body()) {
-            text = new String(stream.readNBytes(MAX_BODY_BYTES), StandardCharsets.UTF_8);
-        } catch (IOException exception) {
-            throw new ManagementException(
-                    method + " " + path + " body unreadable: "
-                            + exception.getClass().getSimpleName(),
-                    exception);
+        byte[] bytes;
+        try {
+            bytes = readBounded(response.body(), deadline, method + " " + path);
+        } finally {
+            charge(started, method, path);
         }
+        if (bytes.length > MAX_BODY_BYTES) {
+            throw new ManagementException(
+                    method + " " + path + " answered more than " + MAX_BODY_BYTES + " bytes, refused");
+        }
+        String text = redact(new String(bytes, StandardCharsets.UTF_8));
         Optional<Duration> retryAfter = response.headers().firstValueAsLong("Retry-After").stream()
                 .mapToObj(Duration::ofSeconds)
                 .findFirst();
         return new Response(status, text, retryAfter);
+    }
+
+    private void charge(long startedNanos, String method, String path) {
+        budget.chargeElapsed(Duration.ofNanos(System.nanoTime() - startedNanos), "waiting for " + method + " " + path);
+    }
+
+    private byte[] readBounded(InputStream stream, long deadline, String what) {
+        var read = new CompletableFuture<byte[]>();
+        Thread.startVirtualThread(() -> {
+            try (InputStream body = stream) {
+                read.complete(body.readNBytes(MAX_BODY_BYTES + 1));
+            } catch (IOException exception) {
+                read.completeExceptionally(exception);
+            }
+        });
+        try {
+            return read.get(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+        } catch (TimeoutException exception) {
+            closeQuietly(stream);
+            throw new ManagementException(what + " body timed out", exception);
+        } catch (ExecutionException exception) {
+            throw new ManagementException(
+                    what + " body unreadable: "
+                            + exception.getCause().getClass().getSimpleName(),
+                    exception);
+        } catch (InterruptedException exception) {
+            closeQuietly(stream);
+            Thread.currentThread().interrupt();
+            throw new ManagementException(what + " interrupted", exception);
+        }
+    }
+
+    private static void closeQuietly(InputStream stream) {
+        try {
+            stream.close();
+        } catch (IOException exception) {
+            // Closing only abandons the exchange; a failure to close changes nothing.
+            LOG.debugf(exception, "management response stream close failed");
+        }
+    }
+
+    /// The key is the only secret this client holds; a body that echoes it is never kept verbatim.
+    private String redact(String text) {
+        String secret = key.get();
+        return secret.isEmpty() ? text : text.replace(secret, REDACTED);
+    }
+
+    private static Duration min(Duration left, Duration right) {
+        return left.compareTo(right) <= 0 ? left : right;
     }
 
     private static String serialize(Object body) {

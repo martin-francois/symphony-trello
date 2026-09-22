@@ -149,10 +149,14 @@ maintainer's shell only; the key needs `person:read`, `person:write`, and `query
      "https://eu.posthog.com/api/projects/281084/persons/?distinct_id=<installation uuid>"
    ```
 
-   Expect one result whose `distinct_ids` is exactly `["<installation uuid>"]`. Note its `uuid`;
-   the deletion status in step 5 is keyed by it. An empty result means no profile exists now,
-   which does not mean the events are gone: continue with step 3, which deletes by installation
-   ID, and verify by step 6.
+   Expect one result whose `distinct_ids` is exactly `["<installation uuid>"]`. Record its `uuid`
+   and the time of this lookup privately before going on: the deletion status in step 5 is keyed by
+   that `uuid`, and the request time is what tells this deletion's status row apart from an older
+   one on the same profile. An empty result means no profile exists now, which does not mean the
+   events are gone. `bulk_delete` queues event deletion only for the persons it finds
+   (`persons_found`), so with no profile there is no verified self-service way to delete the
+   remaining events; skip to step 6 to measure what remains, then follow "When the profile is
+   already gone" below.
 3. Delete the profile together with its events:
 
    ```bash
@@ -177,9 +181,14 @@ maintainer's shell only; the key needs `person:read`, `person:write`, and `query
      "https://eu.posthog.com/api/projects/281084/persons/deletion_status/?status=all&person_uuid=<profile uuid>"
    ```
 
-   Expect a row with `status` `completed` and a `delete_verified_at` timestamp. A `pending` row
-   means wait; no row at all means the deletion was not queued for that profile, so go back to
-   step 3.
+   Expect a row for that `person_uuid` with `status` `completed`, a non-empty `delete_verified_at`
+   timestamp, and a `created_at` no earlier than your step 3 request; that row is the evidence,
+   and its timestamp goes into the confirmation. A `pending` row means wait. An older `completed`
+   row on the same profile belongs to an earlier deletion and proves nothing about this one. No
+   row at all is inaccessible or incomplete evidence, not proof that nothing was queued: check
+   that the key has `person:read`, that the listing was not paginated past the row, and that step
+   3's response reported `persons_queued_for_deletion` 1; if it did, wait and query again, and if
+   the row never appears, treat the case as unresolved below.
 6. Verify the events independently of the status row. Run this in the project (SQL insight, or the
    query API with `"refresh": "force_blocking"` so a cached answer cannot mislead) over the full
    retained window and expect zero:
@@ -204,6 +213,17 @@ maintainer's shell only; the key needs `person:read`, `person:write`, and `query
    > PostHog's own backups and infrastructure logs expire on PostHog's schedules, which the
    > maintainer cannot shorten. Reporting on your installation stays off until you run
    > `symphony-trello telemetry enable`.
+
+When the profile is already gone but step 6 still returns events, or step 5 never shows a row for
+a deletion that step 3 reported as queued, the case is unresolved: no supported call has been
+verified to delete events that no longer belong to a findable person, and repeating `bulk_delete`
+by installation ID finds nothing to queue. Do not loop on it. Keep the step 2 profile `uuid`, the
+step 3 response, and the request time privately, tell the user what remains and that it is being
+escalated, and open a PostHog support request with the project id, the installation ID, the
+profile `uuid` if known, and the request time, asking for deletion of the remaining events and a
+confirmation. Confirm to the user only after step 6 returns zero. The harness in
+[docs/telemetry-erasure-verification.md](telemetry-erasure-verification.md) records the same
+identifiers for its synthetic subjects so its own cleanup can be handed over the same way.
 
 Keep the personal API key on the maintainer's machine only. It is never part of the application,
 the repository, or the CI configuration.

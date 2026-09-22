@@ -21,6 +21,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -51,6 +52,9 @@ final class ErasureExperiment {
     static final Duration INGESTION_WAIT = Duration.ofMinutes(5);
     static final Duration DELETION_WAIT = Duration.ofMinutes(3);
     static final Duration REPAIR_WAIT = Duration.ofMinutes(3);
+    static final Duration PROPAGATION_WAIT = Duration.ofMinutes(3);
+    /// How far a status row's creation may precede the recorded request time and still belong to it.
+    static final Duration CLOCK_SKEW = Duration.ofMinutes(5);
     private static final Duration WINDOW_BEFORE_START = Duration.ofDays(3);
     private static final Duration TWO_DAYS = Duration.ofDays(2);
     private static final Duration ONE_DAY = Duration.ofDays(1);
@@ -63,6 +67,10 @@ final class ErasureExperiment {
     private static final String FACT_PERSON_UUID = "reuse.person_uuid";
     private static final String FACT_RESET_BEFORE = "reset.before_reuse";
     private static final String FACT_REPAIR = "repair";
+    private static final String FACT_REPAIR_RESET_AT = "repair.reset_requested_at";
+    private static final String FACT_REPAIR_AWAITING = "repair.awaiting_heartbeat";
+    private static final String CLEANUP_PERSON_UUID = "cleanup.person_uuid";
+    private static final String EVIDENCE_UNAVAILABLE = "evidence unavailable: ";
     private static final String RESOLVED = "resolved";
     private static final String MISSING = "missing";
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -166,6 +174,7 @@ final class ErasureExperiment {
             case RESET_B_DONE -> reuse(SUBJECT_B, Phase.REUSE_B_SENT);
             case REUSE_B_SENT -> observeReuse();
             case REUSE_OBSERVED -> repairIfNeeded();
+            case REPAIR_AWAITING_HEARTBEAT -> repairAfterHeartbeat();
             case REPAIR_DONE -> cleanup();
             case CLEANUP_REQUESTED -> verifyCleanup();
             case COMPLETE -> throw new IllegalStateException("already complete");
@@ -311,7 +320,8 @@ final class ErasureExperiment {
         Observation observation = awaitObservation("event deletion", DELETION_WAIT, current -> erased.stream()
                 .allMatch(subject -> current.eventsFor(subject).isEmpty()
                         && current.personsFor(subject).isEmpty()
-                        && current.deletionCompleted(subject)));
+                        && current.completionOf(subject.baselinePersonUuid(), requireErasure(subject))
+                                .isPresent()));
         require(
                 observation
                         .uuidsFor(checkpoint.subject(CONTROL))
@@ -319,7 +329,9 @@ final class ErasureExperiment {
                 "control event disappeared during the erasure");
         ExperimentCheckpoint updated = checkpoint;
         for (Subject subject : erased) {
-            String verifiedAt = observation.deletionVerifiedAt(subject);
+            String verifiedAt = observation
+                    .completionOf(subject.baselinePersonUuid(), requireErasure(subject))
+                    .orElseThrow(() -> new ExperimentFailure(subject.name() + " completion row vanished"));
             updated = updated.withSubject(
                     subject.withErasure(requireErasure(subject).verified(verifiedAt)), now());
             record(
@@ -361,8 +373,8 @@ final class ErasureExperiment {
         Subject subject = checkpoint.subject(SUBJECT_B);
         Response response = client.resetPersonDistinctId(subject.distinctId());
         Response persons = client.persons(subject.distinctId());
-        String outcome = "HTTP " + response.status() + ", persons after reset: "
-                + persons.json().path("results").size();
+        int personsAfterReset = resultsOf(persons, "person lookup after reset").size();
+        String outcome = "HTTP " + response.status() + ", persons after reset: " + personsAfterReset;
         record(
                 "reset",
                 "B reset before any new event",
@@ -371,25 +383,36 @@ final class ErasureExperiment {
                         "distinct_id", subject.distinctId(),
                         "http_status", response.status(),
                         "detail", response.detail(),
-                        "persons_after_reset", persons.json().path("results").size()));
+                        "persons_after_reset", personsAfterReset));
         require(response.success(), "reset before reuse failed: " + outcome);
         save(checkpoint
                 .withSubject(subject.withFact(FACT_RESET_BEFORE, outcome), now())
                 .withPhase(Phase.RESET_B_DONE, now()));
     }
 
+    /// Ingestion readiness and profile reuse are separate questions. The new events must become
+    /// queryable (a provider that is still ingesting is pending); whether PostHog then exposes a
+    /// profile for the reused ID is the observation this experiment exists to record, resolved or
+    /// not, after a bounded propagation window.
     private void observeReuse() {
         List<Subject> reused = List.of(checkpoint.subject(SUBJECT_A), checkpoint.subject(SUBJECT_B));
-        Observation observation = awaitObservation("reuse ingestion", INGESTION_WAIT, current -> reused.stream()
-                .allMatch(subject -> current.uuidsFor(subject).containsAll(subject.newEventUuids())
-                        && !current.personsFor(subject).isEmpty()
-                        && current.eventsFor(subject).stream()
-                                .allMatch(row -> current.personsTable().contains(row.personId()))));
+        awaitObservation("reuse ingestion", INGESTION_WAIT, current -> reused.stream()
+                .allMatch(subject -> current.uuidsFor(subject).containsAll(subject.newEventUuids())));
+        Observation observation =
+                awaitObservationOrLast("reuse profile propagation", PROPAGATION_WAIT, current -> reused.stream()
+                        .allMatch(subject -> mappingResolved(current, subject)));
         ExperimentCheckpoint updated = checkpoint;
         for (Subject subject : reused) {
             updated = updated.withSubject(recordReuse(subject, observation), now());
         }
         save(updated.withPhase(Phase.REUSE_OBSERVED, now()));
+    }
+
+    private static boolean mappingResolved(Observation observation, Subject subject) {
+        List<EventRow> rows = observation.eventsFor(subject);
+        return !observation.personsFor(subject).isEmpty()
+                && !rows.isEmpty()
+                && rows.stream().allMatch(row -> observation.personsTable().contains(row.personId()));
     }
 
     private Subject recordReuse(Subject subject, Observation observation) {
@@ -434,13 +457,16 @@ final class ErasureExperiment {
 
     // Phase 4: conditional repair after a real new event.
 
+    /// Resets only a subject whose reuse left the profile or its analytics mapping missing, once,
+    /// after its new event exists. A reset that does not resolve within the window gets one more
+    /// heartbeat when a new UTC day allows it; otherwise the run parks in
+    /// [Phase#REPAIR_AWAITING_HEARTBEAT] and a later invocation sends it.
     private void repairIfNeeded() {
         ExperimentCheckpoint updated = checkpoint;
+        boolean awaiting = false;
         for (String name : List.of(SUBJECT_A, SUBJECT_B)) {
-            Subject subject = checkpoint.subject(name);
-            boolean broken =
-                    !RESOLVED.equals(subject.fact(FACT_PERSON_API)) || !RESOLVED.equals(subject.fact(FACT_ANALYTICS));
-            if (!broken) {
+            Subject subject = updated.subject(name);
+            if (mappingFacts(subject)) {
                 updated = updated.withSubject(subject.withFact(FACT_REPAIR, "not needed"), now());
                 record(
                         "repair",
@@ -449,43 +475,95 @@ final class ErasureExperiment {
                         Map.of("distinct_id", subject.distinctId()));
                 continue;
             }
-            Response response = client.resetPersonDistinctId(subject.distinctId());
-            require(response.success(), name + " reset after the new event failed with HTTP " + response.status());
-            Observation observation = awaitObservationOrLast(
-                    "repair of " + name,
-                    REPAIR_WAIT,
-                    current -> !current.personsFor(subject).isEmpty()
-                            && current.eventsFor(subject).stream()
-                                    .allMatch(row -> current.personsTable().contains(row.personId())));
-            Subject repaired = recordReuse(subject, observation);
-            boolean resolved =
-                    RESOLVED.equals(repaired.fact(FACT_PERSON_API)) && RESOLVED.equals(repaired.fact(FACT_ANALYTICS));
-            String summary = resolved
-                    ? "reset after the new event resolved the profile"
-                    : "reset after the new event did not resolve the profile within " + REPAIR_WAIT;
-            if (!resolved
-                    && LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC).isAfter(lastReportedDate(subject))) {
-                String eventUuid = sendHeartbeat(subject, NEW_VERSION, clock.instant());
-                repaired = repaired.withNewEvent(eventUuid);
-                Observation again = awaitObservationOrLast(
-                        "repair of " + name + " after one more event",
-                        REPAIR_WAIT,
-                        current -> !current.personsFor(subject).isEmpty()
-                                && current.uuidsFor(subject).contains(eventUuid));
-                repaired = recordReuse(repaired, again);
-                summary += "; one more heartbeat after the reset: person_api=" + repaired.fact(FACT_PERSON_API)
-                        + ", analytics=" + repaired.fact(FACT_ANALYTICS);
-            } else if (!resolved) {
-                summary += "; a further heartbeat is due only on a later UTC day, resume then";
+            Subject repaired = resetAfterEvent(subject);
+            if (mappingFacts(repaired)) {
+                repaired = repaired.withFact(FACT_REPAIR, "reset after the new event resolved the profile");
+            } else if (heartbeatDue(repaired)) {
+                repaired = heartbeatAfterReset(repaired);
+            } else {
+                repaired = repaired.withFact(FACT_REPAIR_AWAITING, "true")
+                        .withFact(
+                                FACT_REPAIR,
+                                "reset after the new event did not resolve the profile within " + REPAIR_WAIT
+                                        + "; one more heartbeat is due on a later UTC day");
+                awaiting = true;
             }
             record(
                     "repair",
                     name + " reset after a new event",
                     Status.OBSERVED,
-                    Map.of("distinct_id", subject.distinctId(), "http_status", response.status(), "result", summary));
-            updated = updated.withSubject(repaired.withFact(FACT_REPAIR, summary), now());
+                    Map.of("distinct_id", subject.distinctId(), "result", repaired.fact(FACT_REPAIR)));
+            updated = updated.withSubject(repaired, now());
+        }
+        if (awaiting) {
+            save(updated.withPhase(Phase.REPAIR_AWAITING_HEARTBEAT, now()));
+            throw new PendingException("a repair needs one more heartbeat on a later UTC day; resume then");
         }
         save(updated.withPhase(Phase.REPAIR_DONE, now()));
+    }
+
+    /// The parked continuation of [#repairIfNeeded]: on a new UTC day, one more heartbeat per
+    /// waiting subject, then the observation; on the same day the run stays pending.
+    private void repairAfterHeartbeat() {
+        ExperimentCheckpoint updated = checkpoint;
+        for (String name : List.of(SUBJECT_A, SUBJECT_B)) {
+            Subject subject = updated.subject(name);
+            if (!"true".equals(subject.fact(FACT_REPAIR_AWAITING))) {
+                continue;
+            }
+            if (!heartbeatDue(subject)) {
+                throw new PendingException(name + " needs a heartbeat on a later UTC day than its last report");
+            }
+            Subject repaired = heartbeatAfterReset(subject);
+            record(
+                    "repair",
+                    name + " heartbeat after the reset",
+                    Status.OBSERVED,
+                    Map.of("distinct_id", subject.distinctId(), "result", repaired.fact(FACT_REPAIR)));
+            updated = updated.withSubject(repaired, now());
+            save(updated);
+        }
+        save(updated.withPhase(Phase.REPAIR_DONE, now()));
+    }
+
+    /// One reset per subject: the request time is checkpointed before the call so a resumed run
+    /// observes instead of resetting again.
+    private Subject resetAfterEvent(Subject subject) {
+        Subject requested = subject;
+        if (subject.fact(FACT_REPAIR_RESET_AT).isEmpty()) {
+            Response response = client.resetPersonDistinctId(subject.distinctId());
+            require(
+                    response.success(),
+                    subject.name() + " reset after the new event failed with HTTP " + response.status());
+            requested = subject.withFact(FACT_REPAIR_RESET_AT, now());
+            save(checkpoint.withSubject(requested, now()));
+        }
+        Observation observation = awaitObservationOrLast(
+                "repair of " + subject.name(), REPAIR_WAIT, current -> mappingResolved(current, subject));
+        return recordReuse(requested, observation);
+    }
+
+    private Subject heartbeatAfterReset(Subject subject) {
+        String eventUuid = sendHeartbeat(subject, NEW_VERSION, clock.instant());
+        Subject sent = subject.withNewEvent(eventUuid).withFact(FACT_REPAIR_AWAITING, "");
+        save(checkpoint.withSubject(sent, now()));
+        Observation again = awaitObservationOrLast(
+                "repair of " + subject.name() + " after one more event",
+                PROPAGATION_WAIT,
+                current -> current.uuidsFor(subject).contains(eventUuid) && mappingResolved(current, sent));
+        Subject observed = recordReuse(sent, again);
+        return observed.withFact(
+                FACT_REPAIR,
+                "reset after the new event, then one more heartbeat: person_api=" + observed.fact(FACT_PERSON_API)
+                        + ", analytics=" + observed.fact(FACT_ANALYTICS));
+    }
+
+    private boolean heartbeatDue(Subject subject) {
+        return LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC).isAfter(lastReportedDate(subject));
+    }
+
+    private static boolean mappingFacts(Subject subject) {
+        return RESOLVED.equals(subject.fact(FACT_PERSON_API)) && RESOLVED.equals(subject.fact(FACT_ANALYTICS));
     }
 
     private LocalDate lastReportedDate(Subject subject) {
@@ -535,8 +613,7 @@ final class ErasureExperiment {
             String personUuid = observation.personsFor(subject).isEmpty()
                     ? ""
                     : observation.personsFor(subject).getFirst().path("uuid").asText();
-            updated =
-                    updated.withSubject(subject.withCleanup(record).withFact("cleanup.person_uuid", personUuid), now());
+            updated = updated.withSubject(subject.withCleanup(record).withFact(CLEANUP_PERSON_UUID, personUuid), now());
             if (personUuid.isEmpty()) {
                 updated = updated.withNote(
                         name + " had no resolvable profile at cleanup; deletion by distinct_id " + subject.distinctId()
@@ -553,13 +630,16 @@ final class ErasureExperiment {
         Observation observation = awaitObservation("cleanup deletion", DELETION_WAIT, current -> all.stream()
                 .allMatch(subject -> current.eventsFor(subject).isEmpty()
                         && current.personsFor(subject).isEmpty()
-                        && (subject.fact("cleanup.person_uuid").isEmpty()
-                                || current.deletionCompleted(subject.fact("cleanup.person_uuid")))));
+                        && (subject.fact(CLEANUP_PERSON_UUID).isEmpty()
+                                || current.completionOf(subject.fact(CLEANUP_PERSON_UUID), requireCleanup(subject))
+                                        .isPresent())));
         ExperimentCheckpoint updated = checkpoint;
         for (Subject subject : all) {
-            String verifiedAt = subject.fact("cleanup.person_uuid").isEmpty()
+            String verifiedAt = subject.fact(CLEANUP_PERSON_UUID).isEmpty()
                     ? "no profile to verify"
-                    : observation.deletionVerifiedAt(subject.fact("cleanup.person_uuid"));
+                    : observation
+                            .completionOf(subject.fact(CLEANUP_PERSON_UUID), requireCleanup(subject))
+                            .orElseThrow(() -> new ExperimentFailure(subject.name() + " completion row vanished"));
             updated = updated.withSubject(
                     subject.withCleanup(requireCleanup(subject).verified(verifiedAt)), now());
             record(
@@ -584,7 +664,7 @@ final class ErasureExperiment {
             require(
                     persons.success(),
                     "person lookup before deletion failed with HTTP " + persons.status() + ": " + persons.detail());
-            for (JsonNode person : persons.json().path("results")) {
+            for (JsonNode person : resultsOf(persons, "person lookup before deletion")) {
                 requireOwnedPerson(person, subjectByDistinctId(target));
             }
         }
@@ -793,9 +873,14 @@ final class ErasureExperiment {
                 + " FROM events WHERE event = '" + HeartbeatEvent.EVENT_NAME + "' AND distinct_id IN (" + quoted(ids)
                 + ")"
                 + " AND timestamp >= toDateTime('" + window + "') ORDER BY timestamp LIMIT 100");
-        require(events.success(), "event query failed with HTTP " + events.status() + ": " + events.detail());
         List<EventRow> rows = new ArrayList<>();
-        for (JsonNode row : events.json().path("results")) {
+        for (JsonNode row : resultsOf(events, "event query")) {
+            require(
+                    row.isArray()
+                            && row.size() == 4
+                            && row.get(0).isTextual()
+                            && row.get(1).isTextual(),
+                    EVIDENCE_UNAVAILABLE + "event query row has an unexpected shape");
             rows.add(new EventRow(
                     row.get(0).asText(),
                     row.get(1).asText(),
@@ -812,32 +897,45 @@ final class ErasureExperiment {
         List<String> personsTable = new ArrayList<>();
         if (!personIds.isEmpty()) {
             Response persons = client.query("SELECT toString(id) FROM persons WHERE id IN (" + quoted(personIds) + ")");
-            require(persons.success(), "persons query failed with HTTP " + persons.status() + ": " + persons.detail());
-            persons.json()
-                    .path("results")
-                    .forEach(row -> personsTable.add(row.get(0).asText()));
+            for (JsonNode row : resultsOf(persons, "persons query")) {
+                require(
+                        row.isArray() && row.size() == 1,
+                        EVIDENCE_UNAVAILABLE + "persons query row has an unexpected shape");
+                personsTable.add(row.get(0).asText());
+            }
         }
         Map<String, List<JsonNode>> personApi = new LinkedHashMap<>();
         Map<String, JsonNode> deletions = new LinkedHashMap<>();
         for (Subject subject : checkpoint.subjects().values()) {
             Response persons = client.persons(subject.distinctId());
-            require(persons.success(), "person lookup failed with HTTP " + persons.status() + ": " + persons.detail());
             List<JsonNode> results = new ArrayList<>();
-            persons.json().path("results").forEach(results::add);
+            resultsOf(persons, "person lookup").forEach(results::add);
             personApi.put(subject.distinctId(), results);
             for (String personUuid :
-                    List.of(String.valueOf(subject.baselinePersonUuid()), subject.fact("cleanup.person_uuid"))) {
+                    List.of(String.valueOf(subject.baselinePersonUuid()), subject.fact(CLEANUP_PERSON_UUID))) {
                 if (personUuid.isEmpty() || "null".equals(personUuid) || deletions.containsKey(personUuid)) {
                     continue;
                 }
                 Response status = client.deletionStatus(personUuid);
-                require(
-                        status.success(),
-                        "deletion status failed with HTTP " + status.status() + ": " + status.detail());
-                deletions.put(personUuid, status.json().path("results"));
+                deletions.put(personUuid, resultsOf(status, "deletion status"));
             }
         }
         return new Observation(rows, personsTable, personApi, deletions);
+    }
+
+    /// A listing or query answer is evidence only when it is a successful, well-formed answer with
+    /// a real `results` array. A missing array, a non-array value, malformed JSON, or a query that
+    /// only reports its status is unavailable evidence, never an empty result.
+    private static JsonNode resultsOf(Response response, String context) {
+        require(response.success(), context + " failed with HTTP " + response.status() + ": " + response.detail());
+        JsonNode json = response.json();
+        require(json.isObject(), EVIDENCE_UNAVAILABLE + context + " answered malformed or empty JSON");
+        JsonNode results = json.get("results");
+        require(
+                results != null && results.isArray(),
+                EVIDENCE_UNAVAILABLE + context + " answered without a results array"
+                        + (json.has("query_status") ? " (query still running)" : ""));
+        return results;
     }
 
     private static String quoted(List<String> values) {
@@ -866,37 +964,48 @@ final class ErasureExperiment {
             return personApi.getOrDefault(subject.distinctId(), List.of());
         }
 
-        boolean deletionCompleted(Subject subject) {
-            return subject.baselinePersonUuid() != null && deletionCompleted(subject.baselinePersonUuid());
-        }
-
-        /// Completed means PostHog itself set `delete_verified_at`; an absent status row is not
-        /// completion.
-        boolean deletionCompleted(String personUuid) {
+        /// The verification timestamp of the status row that belongs to this deletion request: same
+        /// profile UUID, status `completed`, a parseable `delete_verified_at`, and a `created_at` no
+        /// earlier than the request time minus the skew allowance. A row from an earlier operation
+        /// on a reused profile, a row for another person, a missing or blank timestamp, and an absent
+        /// row are all "not complete".
+        Optional<String> completionOf(@Nullable String personUuid, DeletionRecord request) {
+            if (personUuid == null) {
+                return Optional.empty();
+            }
             JsonNode rows = deletions.get(personUuid);
-            if (rows == null || rows.isEmpty()) {
-                return false;
+            if (rows == null) {
+                return Optional.empty();
             }
+            Instant requestedAt = Instant.parse(request.requestedAt()).minus(CLOCK_SKEW);
             for (JsonNode row : rows) {
-                if ("completed".equals(row.path("status").asText())
-                        && !row.path("delete_verified_at").isNull()) {
-                    return true;
+                if (!row.isObject()
+                        || !personUuid.equals(row.path("person_uuid").asText(""))) {
+                    continue;
+                }
+                if (!"completed".equals(row.path("status").asText(""))) {
+                    continue;
+                }
+                Optional<Instant> createdAt = instantOf(row.get("created_at"));
+                Optional<Instant> verifiedAt = instantOf(row.get("delete_verified_at"));
+                if (createdAt.isPresent()
+                        && verifiedAt.isPresent()
+                        && !createdAt.get().isBefore(requestedAt)) {
+                    return Optional.of(row.get("delete_verified_at").asText());
                 }
             }
-            return false;
+            return Optional.empty();
         }
 
-        String deletionVerifiedAt(Subject subject) {
-            return deletionVerifiedAt(String.valueOf(subject.baselinePersonUuid()));
-        }
-
-        String deletionVerifiedAt(String personUuid) {
-            for (JsonNode row : deletions.getOrDefault(personUuid, JSON.createArrayNode())) {
-                if (!row.path("delete_verified_at").isNull()) {
-                    return row.path("delete_verified_at").asText();
-                }
+        private static Optional<Instant> instantOf(@Nullable JsonNode node) {
+            if (node == null || !node.isTextual() || node.asText().isBlank()) {
+                return Optional.empty();
             }
-            return "";
+            try {
+                return Optional.of(Instant.parse(node.asText()));
+            } catch (DateTimeParseException exception) {
+                return Optional.empty();
+            }
         }
 
         Map<String, Object> summary(ExperimentCheckpoint checkpoint) {
@@ -1050,14 +1159,16 @@ final class ErasureExperiment {
             return current.compareTo(sentAt) >= 0 ? "PENDING" : "NOT RUN";
         }
         Subject subject = checkpoint.subject(name);
-        boolean resolved =
-                RESOLVED.equals(subject.fact(FACT_PERSON_API)) && RESOLVED.equals(subject.fact(FACT_ANALYTICS));
+        boolean resolved = mappingFacts(subject);
         return (resolved ? "PASS" : "FAIL") + " (person_api=" + subject.fact(FACT_PERSON_API) + ", analytics="
                 + subject.fact(FACT_ANALYTICS)
                 + (SUBJECT_B.equals(name) ? ", reset before reuse: " + subject.fact(FACT_RESET_BEFORE) : "") + ")";
     }
 
     private String repairRow(Phase current) {
+        if (current == Phase.REPAIR_AWAITING_HEARTBEAT) {
+            return "PENDING (waiting for a heartbeat on a later UTC day)";
+        }
         if (current.compareTo(Phase.REPAIR_DONE) < 0) {
             return "NOT RUN";
         }
