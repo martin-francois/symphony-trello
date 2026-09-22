@@ -1012,7 +1012,14 @@ final class InstallerScriptFixture {
                 new String[] {"stop", "--help"},
                 new String[] {"status", "--help"},
                 new String[] {"logs", "--help"},
-                new String[] {"diagnostics", "--help"});
+                new String[] {"diagnostics", "--help"},
+                new String[] {"telemetry", "--help"},
+                new String[] {"telemetry", "status", "--help"},
+                new String[] {"telemetry", "preview", "--help"},
+                new String[] {"telemetry", "privacy", "--help"},
+                new String[] {"telemetry", "enable", "--help"},
+                new String[] {"telemetry", "disable", "--help"},
+                new String[] {"telemetry", "debug", "--help"});
     }
 
     static String[] commandWithPrefix(String executable, String[] arguments) {

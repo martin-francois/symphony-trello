@@ -24,6 +24,12 @@ record ConnectedBoardManifest(List<ConnectedBoard> boards) {
                 .toList();
     }
 
+    /// A replaced row with the same board id means the board was already connected; replacing only a
+    /// workflow-path collision or nothing at all is a new registration.
+    static boolean isNewRegistration(ConnectedBoard board, List<ConnectedBoard> replacedBoards) {
+        return replacedBoards.stream().noneMatch(replaced -> replaced.boardId().equals(board.boardId()));
+    }
+
     ConnectedBoardManifest withoutBoard(String boardId) {
         return new ConnectedBoardManifest(boards.stream()
                 .filter(board -> !board.boardId().equals(boardId))

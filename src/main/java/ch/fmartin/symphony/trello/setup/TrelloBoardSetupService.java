@@ -4,6 +4,8 @@ import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.GitHubIntegration;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.ImportBoardRequest;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.NewBoardRequest;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.WorkspaceListRequest;
+import ch.fmartin.symphony.trello.telemetry.BoardOperation;
+import ch.fmartin.symphony.trello.telemetry.TelemetryService;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
@@ -139,8 +141,11 @@ final class TrelloBoardSetupService {
             Path manifestPath,
             PrintStream out)
             throws IOException {
-        persistConnectedBoard(
+        boolean newRegistration = persistConnectedBoard(
                 ConnectedBoard.from(result, envPath, workspaceRoot, githubIntegration), manifestPath, out);
+        if (newRegistration) {
+            telemetry(manifestPath, workspaceRoot).recordSuccessfulOperation(BoardOperation.CREATE);
+        }
     }
 
     void persistConnectedBoard(
@@ -151,8 +156,28 @@ final class TrelloBoardSetupService {
             Path manifestPath,
             PrintStream out)
             throws IOException {
-        persistConnectedBoard(
+        boolean newRegistration = persistConnectedBoard(
                 ConnectedBoard.from(result, envPath, workspaceRoot, githubIntegration), manifestPath, out);
+        if (newRegistration) {
+            telemetry(manifestPath, workspaceRoot).recordSuccessfulOperation(BoardOperation.IMPORT);
+        }
+    }
+
+    /// Prints the one-time usage-reporting notice and registers the installation before a board
+    /// operation, so the operation's success can be counted.
+    void prepareTelemetry(Path manifestPath, Path workspaceRoot, PrintStream out) {
+        telemetry(manifestPath, workspaceRoot).prepareForSetup(out);
+    }
+
+    TelemetryService telemetry(LocalWorkerPaths paths) {
+        return TelemetryInstallations.service(paths, environment);
+    }
+
+    private TelemetryService telemetry(Path manifestPath, Path workspaceRoot) {
+        return TelemetryInstallations.service(
+                localWorkerPaths(manifestPath, workspaceRoot),
+                manifestPath.toAbsolutePath().normalize(),
+                environment);
     }
 
     Map<String, String> environment() {
@@ -163,12 +188,16 @@ final class TrelloBoardSetupService {
         printWorkspaces(out, setup.listWorkspaces(request));
     }
 
-    private void persistConnectedBoard(ConnectedBoard board, Path manifestPath, PrintStream out) throws IOException {
+    /// Returns true when the board was not connected before, as opposed to a re-import or regenerated
+    /// workflow for an already connected board. Only such new registrations count as operations.
+    private boolean persistConnectedBoard(ConnectedBoard board, Path manifestPath, PrintStream out) throws IOException {
         boolean restartReplacedWorker;
+        boolean newRegistration;
         var boards = new ConnectedBoardRepository(manifestPath);
         try {
             ConnectedBoardManifest manifest = boards.loadForLifecycle();
             List<ConnectedBoard> replacedBoards = manifest.boardsReplacedBy(board);
+            newRegistration = ConnectedBoardManifest.isNewRegistration(board, replacedBoards);
             restartReplacedWorker = replacedBoards.stream()
                     .anyMatch(replacedBoard -> canStopRunningWorker(manifestPath, replacedBoard));
             stopReplacedBoards(manifestPath, board.workspaceRoot(), replacedBoards);
@@ -184,6 +213,7 @@ final class TrelloBoardSetupService {
         if (restartReplacedWorker) {
             restartUpdatedBoardWorker(board, manifestPath, out);
         }
+        return newRegistration;
     }
 
     private void restartUpdatedBoardWorker(ConnectedBoard board, Path manifestPath, PrintStream out) {

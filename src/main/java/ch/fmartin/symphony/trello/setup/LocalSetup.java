@@ -7,6 +7,8 @@ import ch.fmartin.symphony.trello.CliExitCodes;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.GitHubIntegration;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
 import ch.fmartin.symphony.trello.setup.TrelloCredentialStore.CredentialSelection;
+import ch.fmartin.symphony.trello.telemetry.BoardOperation;
+import ch.fmartin.symphony.trello.telemetry.TelemetryService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.CharMatcher;
 import java.io.BufferedReader;
@@ -162,6 +164,7 @@ public final class LocalSetup {
                 printDryRun(out, options, prerequisites);
                 return 0;
             }
+            telemetry(options).prepareForSetup(out);
             ConnectedBoardRepository boards = connectedBoards(options);
             ConnectedBoardManifest manifest = boards.loadForLifecycle();
             rejectInvalidUnconnectedBoardSelector(manifest, options);
@@ -238,6 +241,13 @@ public final class LocalSetup {
             workerManager.rotateLogsForReplacedBoards(localWorkerPaths(options), connectedBoard, replacedBoards);
             manifest = manifest.withBoard(connectedBoard);
             boards.save(manifest);
+            if (ConnectedBoardManifest.isNewRegistration(connectedBoard, replacedBoards)) {
+                telemetry(options)
+                        .recordSuccessfulOperation(
+                                boardSetupChoice == TrelloBoardConnector.BoardSetupChoice.NEW
+                                        ? BoardOperation.CREATE
+                                        : BoardOperation.IMPORT);
+            }
 
             out.println();
             out.println("Trello board");
@@ -297,6 +307,10 @@ public final class LocalSetup {
         } catch (IOException e) {
             return new ConnectedBoardManifest(List.of());
         }
+    }
+
+    private TelemetryService telemetry(Options options) {
+        return TelemetryInstallations.service(localWorkerPaths(options), environment);
     }
 
     private LocalWorkerPaths localWorkerPaths(Options options) {

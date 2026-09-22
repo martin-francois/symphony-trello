@@ -37,6 +37,29 @@ final class InstalledCliDefaultsTest {
     }
 
     @Test
+    void telemetryCommandsReceiveTheInstalledStateHome() {
+        // given
+        InstalledCliDefaults.InstalledPaths paths = installedPaths();
+
+        // when
+        List<String> args = InstalledCliDefaults.apply(List.of("telemetry", "status"), paths);
+
+        // then
+        assertThat(args)
+                .containsExactly(
+                        "telemetry",
+                        "--config-dir",
+                        configDir.toString(),
+                        "--workspace-root",
+                        workspaceRoot.toString(),
+                        "--state-home",
+                        stateHome.toString(),
+                        "--app-home",
+                        appHome.toString(),
+                        "status");
+    }
+
+    @Test
     void derivesIsolatedLifecycleDefaultsFromExplicitConfigDir() {
         // given
         InstalledCliDefaults.InstalledPaths paths = installedPaths();
