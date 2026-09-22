@@ -1,0 +1,27 @@
+SELECT
+    multiIf(
+        registered_on >= toDateTime('${release_date} 00:00:00'), 'registered after release',
+        first_seen < toDateTime('${release_date} 00:00:00'), 'observed before release',
+        'first observed after release') AS cohort,
+    multiIf(
+        first_on_target IS NULL, 'not observed on ${release_version}',
+        dateDiff('day', toDateTime('${release_date} 00:00:00'), first_on_target) <= 3, 'within 3 days',
+        dateDiff('day', toDateTime('${release_date} 00:00:00'), first_on_target) <= 7, 'within 7 days',
+        dateDiff('day', toDateTime('${release_date} 00:00:00'), first_on_target) <= 30, 'within 30 days',
+        'later') AS adoption,
+    count() AS installations
+FROM (
+    SELECT
+        distinct_id,
+        min(timestamp) AS first_seen,
+        if(countIf(properties.app_version = '${release_version}') > 0,
+           minIf(timestamp, properties.app_version = '${release_version}'),
+           null) AS first_on_target,
+        toDateTime(toString(argMax(properties.registered_on, tuple(timestamp, uuid)))) AS registered_on
+    FROM events
+    WHERE event = 'installation_heartbeat'
+      AND timestamp >= now() - interval 365 day
+    GROUP BY distinct_id
+)
+GROUP BY cohort, adoption
+ORDER BY cohort, adoption

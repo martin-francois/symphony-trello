@@ -1,0 +1,11 @@
+# Provider binaries, state, plans, and private inputs never enter Git. State lives outside the
+# repository (see docs/posthog-infrastructure.md); these patterns guard against accidents.
+.terraform/
+.terraform-validate/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+crash.log
