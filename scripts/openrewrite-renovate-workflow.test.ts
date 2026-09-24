@@ -51,11 +51,19 @@ const WORKFLOW = readFileSync(
   "utf8",
 );
 const CI_WORKFLOW = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
+const COMMITLINT_WORKFLOW = readFileSync(
+  new URL("../.github/workflows/commitlint.yml", import.meta.url),
+  "utf8",
+);
 const DEPENDENCY_SUBMISSION_WORKFLOW = readFileSync(
   new URL("../.github/workflows/dependency-submission.yml", import.meta.url),
   "utf8",
 );
 const RENOVATE = readFileSync(new URL("../renovate.json", import.meta.url), "utf8");
+const PACKAGE = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+) as {readonly packageManager?: string};
+const PNPM_LOCK = readFileSync(new URL("../pnpm-lock.yaml", import.meta.url), "utf8");
 const PNPM_WORKSPACE = parse(
   readFileSync(new URL("../pnpm-workspace.yaml", import.meta.url), "utf8"),
 ) as {
@@ -64,6 +72,7 @@ const PNPM_WORKSPACE = parse(
   // test below can assert they stay unset; see "Nothing quietly exempts a package".
   readonly minimumReleaseAgeIgnoreMissingTime?: boolean;
   readonly minimumReleaseAgeStrict?: boolean;
+  readonly pmOnFail?: string;
   readonly trustLockfile?: boolean;
 };
 const SCRIPTS = new URL("./", import.meta.url);
@@ -1164,6 +1173,35 @@ test("The lockfile refresh path enforces the same seven-day cooldown", () => {
   assert.ok(cooldown, "renovate.json must state the cooldown as a whole number of days");
   assert.equal(PNPM_WORKSPACE.minimumReleaseAge, Number(cooldown) * 24 * 60);
   assert.equal(PNPM_WORKSPACE.minimumReleaseAge, 10_080);
+});
+
+test("pnpm keeps GitHub's dependency graph readable while Corepack pins its version", () => {
+  assert.equal(
+    PNPM_WORKSPACE.pmOnFail,
+    "ignore",
+    "pnpm must not prepend its package-manager environment document to pnpm-lock.yaml",
+  );
+  assert.doesNotMatch(
+    PNPM_LOCK,
+    /^---$/mu,
+    "pnpm-lock.yaml must remain one YAML document for GitHub's dependency graph parser",
+  );
+  assert.doesNotMatch(
+    PNPM_LOCK,
+    /^\s*packageManagerDependencies:/mu,
+    "the project lockfile must not contain pnpm's environment-only package graph",
+  );
+
+  const pinnedPnpm = PACKAGE.packageManager;
+  assert.match(pinnedPnpm ?? "", /^pnpm@\d+\.\d+\.\d+$/u);
+  const workflowPins = `${CI_WORKFLOW}\n${COMMITLINT_WORKFLOW}`
+    .match(/corepack prepare (pnpm@\d+\.\d+\.\d+) --activate/gu)
+    ?.map((command) => command.split(" ")[2]);
+  assert.deepEqual(
+    workflowPins,
+    [pinnedPnpm, pinnedPnpm, pinnedPnpm],
+    "every pnpm workflow entry point must use Corepack's exact packageManager pin",
+  );
 });
 
 test("Nothing quietly exempts a package from the seven-day cooldown", () => {

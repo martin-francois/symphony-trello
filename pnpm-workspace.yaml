@@ -18,3 +18,9 @@ minimumReleaseAge: 10080
 # It is the exact counterpart of minimumReleaseAgeBehaviour: "timestamp-required" in
 # renovate.json, which makes the same decision on Renovate's side of the fence.
 minimumReleaseAgeIgnoreMissingTime: false
+
+# pnpm 12 otherwise prepends a package-manager environment document to pnpm-lock.yaml. GitHub's
+# static dependency-graph parser currently reads that document instead of the project graph and can
+# silently stop reporting vulnerable project dependencies. Corepack pins the exact packageManager
+# version from package.json, and every CI entry point prepares that same version explicitly.
+pmOnFail: ignore
