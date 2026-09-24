@@ -55,7 +55,7 @@ Properties:
 - `board_creations_total`: the same for board creations.
 - `$geoip_disable`: always `true`. It asks PostHog not to add location data derived from the
   connection.
-- `$process_person_profile`: always `true`. It keeps a minimal PostHog profile per installation ID
+- `$process_person_profile`: always `true`. It keeps a minimal PostHog profile per analytics ID
   so the maintainer can find and erase one installation's reports on request.
 
 Not included, in any form: Trello card, list, or board names and IDs, Trello or GitHub credentials,
@@ -88,9 +88,10 @@ sends, not that no metadata exists on the network path.
 - `symphony-trello telemetry enable` turns it back on. The next report is sent by a running worker.
 - `symphony-trello telemetry debug` keeps everything local: workers print what they would send and
   send nothing. It does not replace a disabled setting; enable first if you want that.
-- `symphony-trello telemetry status` shows the stored and effective mode, the installation ID, and
-  the last accepted report. `symphony-trello telemetry preview` prints the JSON body without
-  sending, storing, or registering anything.
+- `symphony-trello telemetry status` shows the stored and effective mode, the installation and
+  analytics IDs, the erasure state when one exists, and the last accepted report.
+  `symphony-trello telemetry preview` prints the JSON body without sending, storing, or
+  registering anything.
 - `SYMPHONY_TRELLO_TELEMETRY_DISABLED=1` in a process's environment disables reporting for that
   process and its children, including counting. `SYMPHONY_TRELLO_TELEMETRY_DEBUG=1` switches those
   processes to local-only mode and cannot override a stored disable. `SYMPHONY_TRELLO_TELEMETRY_LOG=1`
@@ -114,9 +115,14 @@ not try to recognize a machine across such changes.
 
 When the installed release has automatic erasure configured, run
 `symphony-trello telemetry erase`. It turns reporting off and saves the request locally.
-`symphony-trello telemetry erase-status` checks progress; running workers also retry.
-"Accepted" means PostHog has queued deletion. "Complete" means PostHog verified event deletion
-and the person profile is absent, or a fresh check found no profile or retained events. Deletion is asynchronous, so completion can take days.
+`symphony-trello telemetry erase-status` checks progress; running workers also retry, less often
+as the request ages, and at least every six hours. If this installation never sent a report,
+`erase` only turns reporting off because there is nothing to erase.
+"Accepted" means PostHog has queued deletion. "Complete" means one of three things. PostHog
+verified event deletion and the person profile is absent. Or a fresh check found no profile and
+no retained events. Or the current reporting period never started sending a report, so the
+command marks erasure complete locally without contacting PostHog. Deletion is asynchronous, so
+completion can take days.
 Reporting stays off across restarts and updates. Explicit `symphony-trello telemetry enable`
 after completion starts a new reporting period while preserving the installation ID,
 registration date and counters. Ordinary disable/enable keeps the current period.
@@ -125,16 +131,30 @@ Ownership uses a secret stored in `telemetry.json`. Keep this file and its backu
 The secret is issued over HTTPS before the first report. Erasure requests send a signature,
 never the secret. PostHog stores versioned signing keys separately from analytics events, so
 ownership does not depend on an enrollment event or one-year event retention. An opaque status
-flag records deletion progress and is archived after completion is saved locally. Do not
-restore a pre-erasure backup to resume reporting under an erased period.
+flag records deletion progress. After the client saves completion locally, it sends one
+best-effort request to archive the flag and ignores a failure. The maintainer archives leftover
+flags. Do not restore a pre-erasure backup to resume reporting under an erased period.
 
-If automatic erasure is unavailable, the installation predates ownership credentials, or its
-state was lost, disable reporting and send the installation and analytics IDs from
+If automatic erasure is unavailable or the installation predates ownership credentials,
+disable reporting and send the installation and analytics IDs from
 `symphony-trello telemetry status` through the private "Report a vulnerability" form linked in
 `SECURITY.md`. Do not post the IDs or state file publicly. The maintainer checks the matching
 profile and confirms event deletion separately. A profile containing unexpected IDs requires
 manual investigation. Merge filtering reduces the risk of deleting another installation's
 merged data but does not eliminate it during provider filter failures.
+
+Automatic erasure can be refused when PostHog's profile for the analytics ID is in an
+unexpected state, for example when it holds other IDs after a merge. `erase-status` then says so.
+The installation stays disabled: `symphony-trello telemetry enable` refuses while the erasure is
+refused, and no command clears that state. Send the installation and analytics IDs from
+`symphony-trello telemetry status` through the same private form. The maintainer investigates
+the merge, then deletes the data manually or asks PostHog support to delete it.
+
+If `telemetry.json` was lost, `symphony-trello telemetry status` shows "not registered yet" and
+the old IDs cannot be recovered from the installation. Send them from earlier status output if
+you still have it. Without the IDs, the maintainer cannot tell which reports came from your
+installation and cannot erase them on request. They stay subject to the retention described
+below.
 
 Backups and infrastructure logs follow PostHog's own schedules. Disabling reporting alone does
 not erase reports already received. The automatic path remains disabled in production until

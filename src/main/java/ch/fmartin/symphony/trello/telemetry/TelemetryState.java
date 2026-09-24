@@ -256,6 +256,15 @@ public record TelemetryState(
                 next);
     }
 
+    /// The erasure requested for the current reporting period, if any.
+    public TelemetryOwnership.@Nullable Erasure erasure() {
+        return ownership == null ? null : ownership.erasure();
+    }
+
+    public boolean blocksReporting() {
+        return ownership != null && ownership.blocksReporting();
+    }
+
     public Optional<String> analyticsId() {
         return Optional.ofNullable(ownership)
                 .map(TelemetryOwnership::analyticsId)

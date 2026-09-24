@@ -112,48 +112,69 @@ organization decision, not a Symphony one.
 
 ## Erasure requests
 
-The user-facing side is three steps: run `symphony-trello telemetry disable`, send the installation
-ID through the private "Report a vulnerability" advisory form (private vulnerability reporting is
+This manual procedure covers installations without automatic erasure: legacy installations
+without an ownership credential, releases without the erasure configuration, and refused
+automatic erasures. The user-facing side is three steps: run `symphony-trello telemetry disable`,
+send the installation and analytics IDs from `symphony-trello telemetry status` through the
+private "Report a vulnerability" advisory form (private vulnerability reporting is
 enabled on the repository; verified through the GitHub API on 2026-09-22), and wait for the
 confirmation. GitHub has no private direct messages, so do not point users anywhere else. The user
 has no local step after that: no reset command, no ID rotation, no file edit, no reinstallation.
 Never tell a user to delete `telemetry.json` or the state directory; an absent file initializes as
 enabled and the next worker start registers a new ID after the grace period.
 
-Four identifiers take part, and they are not interchangeable:
+Five identifiers take part, and they are not interchangeable:
 
-- the installation ID, a UUID from `telemetry.json`, is what the application sends as
-  `distinct_id`;
+- the installation ID, a UUID from `telemetry.json`;
+- the analytics ID, which the application sends as `distinct_id`. A legacy installation sends its
+  plain installation UUID. An installation with an ownership credential sends
+  `<installation uuid>.<period uuid>`, and each completed automatic erasure starts a new period,
+  so one installation can have several analytics IDs over time;
 - each report carries its own event UUID (`uuid` in the body);
 - PostHog gives the profile a numeric `id` and a profile `uuid` of its own, both returned by the
   person API;
-- the deletion status is keyed by that profile `uuid`, not by the installation ID.
+- the deletion status is keyed by that profile `uuid`, not by the analytics ID.
 
 The steps below were executed against the test project with the harness described in
 [docs/telemetry-erasure-verification.md](telemetry-erasure-verification.md); steps 1 to 4 are
 verified there, steps 5 and 6 were still pending on 2026-09-22 because PostHog batches event
 deletion.
-Replace `<installation uuid>` with the user's ID and keep `$POSTHOG_PERSONAL_API_KEY` in the
-maintainer's shell only; the key needs `person:read`, `person:write`, and `query:read`.
+Replace `<analytics id>` with one analytics ID from step 1 and keep `$POSTHOG_PERSONAL_API_KEY`
+in the maintainer's shell only; the key needs `person:read`, `person:write`, and `query:read`.
 
-1. Confirm the request contains a UUID and nothing else that identifies a person. Do not ask for
-   more identifying data. Ask the user to confirm that reporting is disabled on that installation.
-   Disabling discards any report that was pending locally, but a report that was already on the
-   wire when the user disabled can still arrive, and PostHog deletes only events captured before
-   the deletion request. If the user disabled the same day, wait a day before step 3, and treat any
-   event received after the request as a separate deletion.
-2. Find the profile and check that it is mapped to this installation ID only:
+1. Confirm the request contains an installation ID or analytics ID and nothing else that
+   identifies a person. An analytics ID is either one UUID or two UUIDs joined by a dot; the part
+   before the dot is the installation ID. Do not ask for more identifying data. Find every
+   analytics ID of the installation with this query (see step 6 for how to run it), and repeat
+   steps 2 to 6 for each returned `distinct_id`:
+
+   ```sql
+   SELECT DISTINCT distinct_id
+   FROM events
+   WHERE event = 'installation_heartbeat'
+     AND (distinct_id = '<installation uuid>' OR distinct_id LIKE '<installation uuid>.%')
+     AND timestamp >= now() - interval 400 day
+   ```
+
+   The query finds only periods with retained events. Always include the analytics ID the user
+   sent, even when the query does not return it. Ask the user to confirm that reporting is disabled
+   on that installation. Disabling discards any report that was pending locally, but a report that
+   was already on the wire when the user disabled can still arrive, and PostHog deletes only events
+   captured before the deletion request. If the user disabled the same day, wait a day before step
+   3, and treat any event received after the request as a separate deletion.
+2. Find the profile and check that it is mapped to this analytics ID only:
 
    ```bash
    curl -sS -H "Authorization: Bearer $POSTHOG_PERSONAL_API_KEY" \
-     "https://eu.posthog.com/api/projects/281084/persons/?distinct_id=<installation uuid>"
+     "https://eu.posthog.com/api/projects/281084/persons/?distinct_id=<analytics id>"
    ```
 
-   Expect one result whose `distinct_ids` is exactly `["<installation uuid>"]`. Record its `uuid`
-   and the time of this lookup privately before going on: the deletion status in step 5 is keyed by
-   that `uuid`, and the request time is what tells this deletion's status row apart from an older
-   one on the same profile. An empty result means no profile exists now, which does not mean the
-   events are gone. `bulk_delete` queues event deletion only for the persons it finds
+   Expect one result whose `distinct_ids` is exactly `["<analytics id>"]`. If the profile holds any
+   other ID, stop and follow [Refused automatic erasure](#refused-automatic-erasure). Record the
+   profile `uuid` and the time of this lookup privately before going on: the deletion status in step
+   5 is keyed by that `uuid`, and the request time is what tells this deletion's status row apart
+   from an older one on the same profile. An empty result means no profile exists now, which does
+   not mean the events are gone. `bulk_delete` queues event deletion only for the persons it finds
    (`persons_found`), so with no profile there is no verified self-service way to delete the
    remaining events; skip to step 6 to measure what remains, then follow "When the profile is
    already gone" below.
@@ -162,7 +183,7 @@ maintainer's shell only; the key needs `person:read`, `person:write`, and `query
    ```bash
    curl -sS -X POST -H "Authorization: Bearer $POSTHOG_PERSONAL_API_KEY" \
      -H "Content-Type: application/json" \
-     -d '{"distinct_ids": ["<installation uuid>"], "delete_events": true}' \
+     -d '{"distinct_ids": ["<analytics id>"], "delete_events": true}' \
      "https://eu.posthog.com/api/projects/281084/persons/bulk_delete/"
    ```
 
@@ -197,19 +218,20 @@ maintainer's shell only; the key needs `person:read`, `person:write`, and `query
    SELECT count() AS remaining_events
    FROM events
    WHERE event = 'installation_heartbeat'
-     AND distinct_id = '<installation uuid>'
+     AND distinct_id = '<analytics id>'
      AND timestamp >= now() - interval 400 day
    ```
 
    Do not filter by person: after step 4 the events still exist for days, still carry the deleted
    profile's UUID, and a person-based filter would hide them. Between steps 4 and 6 the events are
    queryable by `distinct_id` and nothing else about them has changed.
-7. Confirm to the user only when step 5 shows `completed` and step 6 returns zero. Template:
+7. Confirm to the user only when step 5 shows `completed` and step 6 returns zero for every
+   analytics ID from step 1. Template:
 
-   > The PostHog person profile for installation ID `<installation uuid>` and every
-   > `installation_heartbeat` event stored under it were deleted. PostHog verified the event
+   > The PostHog person profiles for analytics IDs `<analytics ids>` and every
+   > `installation_heartbeat` event stored under them were deleted. PostHog verified the event
    > deletion on `<delete_verified_at>`, and a query over the full retained window returns no
-   > event for that ID as of `<date>`. This covers the analytics data the maintainer controls;
+   > event for those IDs as of `<date>`. This covers the analytics data the maintainer controls;
    > PostHog's own backups and infrastructure logs expire on PostHog's schedules, which the
    > maintainer cannot shorten. Reporting on your installation stays off until you run
    > `symphony-trello telemetry enable`.
@@ -217,9 +239,9 @@ maintainer's shell only; the key needs `person:read`, `person:write`, and `query
 When the profile is already gone but step 6 still returns events, or step 5 never shows a row for
 a deletion that step 3 reported as queued, the case is unresolved: no supported call has been
 verified to delete events that no longer belong to a findable person, and repeating `bulk_delete`
-by installation ID finds nothing to queue. Do not loop on it. Keep the step 2 profile `uuid`, the
+by analytics ID finds nothing to queue. Do not loop on it. Keep the step 2 profile `uuid`, the
 step 3 response, and the request time privately, tell the user what remains and that it is being
-escalated, and open a PostHog support request with the project id, the installation ID, the
+escalated, and open a PostHog support request with the project id, the analytics ID, the
 profile `uuid` if known, and the request time, asking for deletion of the remaining events and a
 confirmation. Confirm to the user only after step 6 returns zero. The harness in
 [docs/telemetry-erasure-verification.md](telemetry-erasure-verification.md) records the same
@@ -228,21 +250,52 @@ identifiers for its synthetic subjects so its own cleanup can be handed over the
 Keep the personal API key on the maintainer's machine only. It is never part of the application,
 the repository, or the CI configuration.
 
+### Refused automatic erasure
+
+The native service refuses an automatic erasure when the PostHog profile bound to the operation
+holds any ID other than the period's analytics ID, or when another profile now holds that ID.
+`symphony-trello telemetry erase-status` then reports the refusal and exits with an error. The
+client has no automatic way out. `symphony-trello telemetry enable` refuses while the erasure is
+refused, and no command clears it, so the installation stays disabled. Tell the user this
+plainly.
+
+The user sends the installation and analytics IDs from `symphony-trello telemetry status`
+through the private form described above. Then:
+
+1. Run step 2 for the analytics ID. Record the profile `uuid` and every ID on the profile.
+2. Investigate how the other IDs reached the profile. The merge filter drops identity-changing
+   events, so a merge means the filter failed or an event reached PostHog another way.
+3. Delete with steps 3 to 7 only when every ID on the profile belongs to the requesting
+   installation. `bulk_delete` removes the whole profile and the events of every merged ID.
+   Otherwise, escalate to PostHog support as in the unresolved case above, and ask for deletion of
+   this analytics ID's events only.
+4. After the case is resolved, archive the refused status flag. Its private name ends with the
+   bound profile `uuid`.
+
 ## Re-enabling after an erasure
 
-The application never rotates or deletes an installation ID. If the user later runs
-`symphony-trello telemetry enable`, the next reports carry the same ID, the same registration date,
-and the counters frozen at the time of disabling; nothing from the disabled period is backfilled
+The application never rotates or deletes an installation ID. What
+`symphony-trello telemetry enable` does to the analytics ID depends on how the data was erased:
+
+- After a completed automatic erasure, an installation with an ownership credential starts a new
+  reporting period. Its next reports use `<installation uuid>.<new period uuid>`, and the erased
+  analytics ID is never used again. Ordinary disable and enable keep the current period.
+- After a manual erasure, the analytics ID does not change. A legacy installation keeps its plain
+  UUID, so its next reports reuse the erased ID.
+
+In both cases the next reports carry the same registration date and the counters frozen at the
+time of disabling; nothing from the disabled period is backfilled
 and no report discarded by the disable is replayed. Those new snapshots do not restore the erased
 events, but they do repeat the registration date and the cumulative counters, so the user should
 know that enabling again shares those summary facts again.
 
-Whether PostHog then builds a new profile for the reused ID without maintainer work is what rows 4
+The rest of this section concerns an analytics ID reused after a manual erasure. Whether PostHog
+then builds a new profile for the reused ID without maintainer work is what rows 4
 to 6 of the verification note test, and they were pending on 2026-09-22. What is known from the
 API contract until then:
 
 - `POST /api/projects/281084/persons/reset_person_distinct_id/` with body
-  `{"distinct_id": "<installation uuid>"}` answers 202 whenever the ID exists. Its implementation
+  `{"distinct_id": "<analytics id>"}` answers 202 whenever the ID exists. Its implementation
   does nothing when the ID has no current profile, which is the case right after an erasure and
   before the first new event. A 202 at that point is not a successful preparation, so do not run
   it during erasure handling and do not report it as done.
@@ -253,19 +306,25 @@ API contract until then:
   only for an ID whose deletion status is `completed`, and record here the date and what it
   changed. Never send a heartbeat yourself or create a profile to make the reset work; the user's
   own reports are the only activity that may exist for their ID.
-- Do not build any of this into the client. If the tested sequence turns out to need a maintainer
-  step after re-enabling, that is a limitation to document in the privacy page, not a reason for
-  a reset command or a new identity.
+- Do not build a reset into the client. Installations with an ownership credential avoid reuse
+  through reporting periods, as
+  [ADR 0082](adr/0082-authenticated-erasure-with-reporting-periods.md) records. If the tested
+  sequence for a reused ID turns out to need a maintainer step after re-enabling, that is a
+  limitation to document in the privacy page, not a reason for a reset command or a new
+  installation ID.
 
 ## Local diagnostics
 
 The separate [PostHog-native erasure trial](telemetry-native-erasure-trial.md) found no supported
-hosted asymmetric verifier and stopped before deploying an erasure handler. It does not replace
-the maintainer procedure above or establish automatic same-ID reuse. The current application's
-identity, commands and disabled-state preservation remain unchanged.
+hosted asymmetric verifier and stopped before deploying an erasure handler.
+[ADR 0082](adr/0082-authenticated-erasure-with-reporting-periods.md) later chose HMAC ownership
+with reporting periods, described under "Authenticated erasure extension" below. Legacy
+installations still use the maintainer procedure above. No path reuses an erased analytics ID
+automatically.
 
-- `symphony-trello telemetry status` prints the stored and effective mode, the installation ID, the
-  state file path, the next allowed report time, and whether the state file is unreadable.
+- `symphony-trello telemetry status` prints the stored and effective mode, the installation and
+  analytics IDs, the erasure phase when one exists, the state file path, the next allowed report
+  time, and whether the state file is unreadable.
 - A corrupt, foreign, or newer-format `telemetry.json` turns reporting off; it never regenerates an
   ID or re-enables reporting on its own. The status output names the problem.
 - `SYMPHONY_TRELLO_TELEMETRY_LOG=1` on a worker prints every request body and the response summary
@@ -285,8 +344,12 @@ verification, query exact raw distinct-ID events and preserve an unrelated canar
 Do not reset a retired distinct ID or reuse its completed deletion queue key.
 
 Status flags whose private names start with `symphony-erasure-v1|` belong to deletion operations.
-Archive a leftover flag only after checking its bound person's completed deletion record and
-profile absence. The client already saves completion before requesting archival. A user whose
-local state predates that acknowledgment needs maintainer assistance if the status flag is gone.
-Keep the non-deleted flag count below PostHog's 2,000 limit. Preserve every signing-key version
-still used by installations and back up provider configuration outside analytics retention.
+Archive a leftover flag only after checking its bound person's completed deletion record and profile
+absence. The client already saves completion before requesting archival. A user whose local state
+predates that acknowledgment needs maintainer assistance if the status flag is gone. `ack` archives
+only complete flags. Refused flags, flags of abandoned pending operations and unacknowledged
+`symphony-erasure-empty-v1` flags stay until the maintainer archives them; the
+[known risks](telemetry-erasure-implementation.md#known-risks-before-production-activation)
+explain why they matter. Keep the non-deleted flag count below PostHog's 2,000 limit. Preserve
+every signing-key version still used by installations and back up provider configuration outside
+analytics retention.

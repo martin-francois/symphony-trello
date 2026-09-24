@@ -4338,7 +4338,7 @@ When this profile is used:
   installation UUID, a dot, and a locally generated random reporting-period UUID. The client MUST
   persist its ownership credential before the first heartbeat. Lost issuance responses MAY be
   abandoned before reporting. Unconfigured and pre-existing installations retain the original
-  locally generated UUID profile. Neither identity MUST be derived from hardware, hostname,
+  locally generated UUID profile. Neither identity MAY be derived from hardware, hostname,
   user name, machine identifiers, or Trello identity. Workers MUST share the stored identity.
   Help, status, privacy, preview and disabled runs MUST NOT create an identity
 - `registered_on` MUST be the UTC date the identity was created and MUST be repeated in every
@@ -4404,21 +4404,28 @@ When this profile is used:
   transport attempt. The ownership HMAC MUST
   bind action, audience, installation, reporting period, operation and a bounded validity window.
   Known installation IDs, capture events and mutable person properties MUST NOT authorize erasure.
-- `telemetry erase-status` and existing workers MUST retry pending requests with the same period
-  and operation. A webhook receipt MUST NOT mean accepted or complete. Acceptance requires a
-  matching provider deletion record. Status retries MUST recover an outstanding profile deletion
-  when event deletion was queued but profile deletion failed. Completion requires provider-verified event deletion and
-  profile absence, or a fresh uncached query proving no retained events when no profile exists. Missing, invalid or unavailable status MUST preserve the disabled state.
-  Once complete, explicit `telemetry enable` MUST create a new reporting period with the same
-  installation credential. The erased distinct ID MUST NOT be reused by that state. Existing
-  credentials remain valid independently of event retention. Multi-ID persons MUST be refused.
-  The merge filter and pre-delete check mitigate, but do not eliminate, the accepted merge race.
+- `telemetry erase-status` and existing workers MUST retry pending requests with the same period and
+  operation. Workers MUST space these retries by half the time since the request, at least one
+  minute and at most six hours; `erase-status` MAY check at once after the drain deadline. Failed
+  credential issuance MUST use the heartbeat retry backoff. A webhook receipt MUST NOT mean accepted
+  or complete. Acceptance requires a matching provider deletion record. Status retries MUST recover
+  an outstanding profile deletion when event deletion was queued but profile deletion failed.
+  Completion requires provider-verified event deletion and profile absence, or a fresh uncached
+  query proving no retained events when no profile exists. A period that never dispatched a
+  heartbeat MAY complete locally without contacting the service, and `telemetry erase` before any
+  identity exists MUST disable reporting and succeed without a request. Missing, invalid or
+  unavailable status MUST preserve the disabled state. Once complete, explicit `telemetry enable`
+  MUST create a new reporting period with the same installation credential. The erased distinct ID
+  MUST NOT be reused by that state. Existing credentials remain valid independently of event
+  retention. Multi-ID persons MUST be refused. The merge filter and pre-delete check mitigate, but
+  do not eliminate, the accepted merge race.
 - server status MUST use HMAC-derived opaque feature flag keys and management-only writes.
   Public flag evaluation MUST expose no credential or installation ID. Private metadata MUST
   bind the target person UUID before deletion. After saving completion, the client SHOULD request
   flag cleanup; failed cleanup retains the flag for an operator to archive after verification.
   Flag and API quotas MUST fail without authorizing additional deletion. Local state backups
-  MUST be protected as credentials and MUST NOT restore an erased reporting period.
+  MUST be protected as credentials. Restoring one taken before erasure is unsupported: the client
+  cannot detect it and would report under the erased ID again, so it needs maintainer-assisted erasure.
 - legacy installations without credentials MUST use maintainer-assisted erasure. The public issuer
   MUST NOT claim their existing IDs. No disabled period is backfilled and no discarded report is
   replayed. Production deployment and release configuration MUST remain off until two successive

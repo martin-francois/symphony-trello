@@ -108,10 +108,10 @@ project/organization IDs, observations and empty resource/event/deletion lists. 
 ledger remains `started`; a new probe run is safe because no persistent handler or operation exists.
 Keep these local operational identifiers out of public evidence exports.
 
-The resumed observation is run `59e0927d-083e-415f-9acc-e477306921bb`, ledger
-`hog-probe-20260922T135626Z.json`. No native deletion job is pending. The older maintainer-driven
-experiment `erasure-b000c2f3` remains at its saved `ERASURE_REQUESTED` checkpoint; this trial
-did not poll it or change its subjects. Its last provider evidence, pending rows and exact command
+The maintainer's private run ledger records the resumed observation on 2026-09-22 at 13:56 UTC.
+No native deletion job is pending. The older maintainer-driven experiment `erasure-b000c2f3`
+remains at its saved `ERASURE_REQUESTED` checkpoint; this trial did not poll it or change its
+subjects. Its last provider evidence, pending rows and exact command
 template remain in [erasure verification](telemetry-erasure-verification.md). Reuse its original
 experiment directory when resuming; creating another directory creates another experiment.
 
@@ -154,9 +154,12 @@ For the hash-derived bearer candidate, demonstrate these additional cases, all `
   heartbeats, application logs and URLs contain no secret. Do not claim end-to-end log redaction
   solely because application logging omits it.
 
-This clarification changes SPEC's future integration gates and ADR 0081's design constraints.
-It adds no runtime behavior, dependency, deployment resource, CLI command, release artifact or
-companion-repository change. Existing user and operator erasure instructions remain applicable.
+This clarification changed SPEC's future integration gates and ADR 0081's design constraints.
+Apart from the development-only `jose` dependency of the protocol reference, the trial itself
+added no runtime behavior, other dependency, deployment resource, CLI command, release artifact or
+companion-repository change. [ADR 0082](adr/0082-authenticated-erasure-with-reporting-periods.md)
+later added the `erase` and `erase-status` commands, persisted ownership state and the native
+deployment resources.
 
 ### Remaining native capabilities
 
@@ -169,5 +172,6 @@ still need their own live tests. The installed provider supports `source_webhook
 inputs; workflows currently require API-supplement ownership if this gate later passes.
 
 No external service, public webhook password, event-membership authorization, handwritten crypto,
-or client-side-only verifier was substituted. Existing Java identity, CLI, persistence, telemetry
-schema, privacy text and user erasure procedure remain unchanged. Production activation is disabled.
+or client-side-only verifier was substituted. The trial left the Java identity, CLI, persistence,
+telemetry schema, privacy text and user erasure procedure unchanged. ADR 0082 changed them later.
+Production activation is disabled.

@@ -66,8 +66,7 @@ public final class TelemetryService {
         out.println(
                 "  Installation ID: " + state.installation().map(UUID::toString).orElse("not registered yet"));
         out.println("  Analytics ID: " + state.analyticsId().orElse("not registered yet"));
-        TelemetryOwnership ownership = state.ownership();
-        TelemetryOwnership.Erasure erasure = ownership == null ? null : ownership.erasure();
+        TelemetryOwnership.Erasure erasure = state.erasure();
         if (erasure != null) {
             out.println("  Erasure: " + erasure.phase());
         }
@@ -247,17 +246,16 @@ public final class TelemetryService {
             TelemetryStateStore store = installation.installedStore().orElseThrow();
             TelemetryErasure service = new TelemetryErasure(installation, clock);
             if (request) {
-                service.request(store);
-            } else {
-                TelemetryState before = TelemetryErasure.readable(store);
-                TelemetryOwnership ownership = before.ownership();
-                if (ownership != null && ownership.erasure() != null) {
-                    service.maintain(store);
+                if (service.request(store) == TelemetryErasure.Request.NOTHING_SENT) {
+                    out.println(
+                            "Reporting is off. This installation never sent a report, so there is nothing to erase.");
+                    return EXIT_OK;
                 }
+            } else {
+                service.refresh(store);
             }
-            TelemetryState state = TelemetryErasure.readable(store);
-            TelemetryOwnership ownership = state.ownership();
-            TelemetryOwnership.Erasure erasure = ownership == null ? null : ownership.erasure();
+            TelemetryOwnership.Erasure erasure =
+                    TelemetryErasure.readable(store).erasure();
             if (erasure == null) {
                 out.println("No erasure has been requested.");
                 return EXIT_OK;
