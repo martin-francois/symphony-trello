@@ -8,6 +8,7 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import org.jspecify.annotations.Nullable;
 
 /// An installation's ownership credential. Only the issuer sends the secret over the network;
 /// subsequent requests carry a signature. Diagnostic rendering deliberately omits the secret.
@@ -17,10 +18,13 @@ public record TelemetryCredential(
         @JsonProperty("secret") String secret) {
     private static final Pattern KEY_VERSION = Pattern.compile("k[1-9][0-9]{0,3}");
     private static final Pattern SECRET = Pattern.compile("[0-9a-f]{64}");
+    // PostHog Hog offers only SHA-256 HMAC (`sha256HmacChainHex`), so the protocol cannot use SHA3.
     private static final String ALGORITHM = "HmacSHA256";
+    private static final int RANDOM_UUID_VERSION = 4;
+    private static final int IETF_UUID_VARIANT = 2;
 
     public TelemetryCredential {
-        if (installationId == null || installationId.version() != 4 || installationId.variant() != 2) {
+        if (!isRandom(installationId)) {
             throw new IllegalArgumentException("ownership credential requires a random installation UUID");
         }
         if (keyVersion == null || !KEY_VERSION.matcher(keyVersion).matches()) {
@@ -29,6 +33,10 @@ public record TelemetryCredential(
         if (secret == null || !SECRET.matcher(secret).matches()) {
             throw new IllegalArgumentException("ownership credential has an invalid secret");
         }
+    }
+
+    static boolean isRandom(@Nullable UUID value) {
+        return value != null && value.version() == RANDOM_UUID_VERSION && value.variant() == IETF_UUID_VARIANT;
     }
 
     public String subject() {

@@ -72,11 +72,10 @@ the method name missed that downstream behavior. Token secrecy, rotation and a f
 therefore do not establish the proposed protection.
 [Lookup implementation](https://github.com/PostHog/posthog/blob/e6fddf2700753989840cdae6c4e8a1cb4dc534dc/nodejs/src/common/utils/team-manager.ts#L114).
 
-The private ledger is `ingestion-5808ae56-cd5f-4941-9f33-62abf4ef69c0.json` in the task evidence
-directory. The source trial ran at 15:44:04-15:44:06 UTC; independent observations through
-15:46:53 UTC confirmed five stored events and the shared person. Its initial status remains
-`FAILED` because the proposed token boundary failed. The source function was disabled and
-soft-deleted, with GET 404 verified.
+The maintainer's private run ledger records the source trial at 15:44:04-15:44:06 UTC.
+Independent observations through 15:46:53 UTC confirmed five stored events and the shared
+person. The trial's status remains `FAILED` because the proposed token boundary failed. The
+source function was disabled and soft-deleted, with GET 404 verified.
 
 ### Merge filter, including an execution failure
 
@@ -98,8 +97,7 @@ to be stored and combined both IDs into one person. This confirms the executor's
 fail-open behavior in the hosted TEST path.
 [Executor behavior](https://github.com/PostHog/posthog/blob/e6fddf2700753989840cdae6c4e8a1cb4dc534dc/nodejs/src/cdp/hog-transformations/hog-transformer.service.ts#L209).
 
-The final ledger is `merge-filter-b86c9e1b-5cc9-4073-9f10-d144ca1c0d65-resume.json`, observed
-15:52:08-15:53:03 UTC. All six assertions passed with verdict `FILTER_WORKS_BUT_FAILS_OPEN`.
+The maintainer's private run ledger records the resumed trial at 15:52:08-15:53:03 UTC. All six assertions passed with verdict `FILTER_WORKS_BUT_FAILS_OPEN`.
 Across the initial and resumed filter trials, fourteen capture requests produced eleven observed
 stored events, including the deliberately permitted merge. Both functions were disabled and
 soft-deleted, with GET 404 verified. The six total synthetic installation IDs and their test events
@@ -118,15 +116,14 @@ Setting schema enforcement mode to "reject" requires the schema-enforcement-reje
 Readback remained `allow`. No real identity definition, schema group, schema binding or provider
 feature flag changed, and this trial captured no events. Definition deletion was acknowledged.
 The subsequent detail GET returned HTTP 500; listing by its unique name confirmed absence.
-The private ledger is `schema-53d6f236-508b-481d-9edb-1cf609ff8479.json`, recorded at 15:54 UTC.
+The maintainer's private run ledger records this trial at 15:54 UTC.
 The detail-read error remains a provider API observation, not evidence that schema rejection works.
 
 ## Reproduction and decision boundary
 
-The bounded trial scripts and credential-free ledgers are grouped under
-`/var/tmp/symphony-ownership-poc`. They are experiment artifacts, not application components.
-The source trial intentionally retains its failing token-boundary assertion. Reproduction must
-use fresh run-owned subjects or the explicit filter resume path, verify the TEST binding, and
+The bounded trial scripts and their credential-free ledgers were one-off experiment artifacts
+outside this repository. They are not application components. The source trial kept its failing
+token-boundary assertion on purpose. A reproduction must use fresh run-owned subjects or the explicit filter resume path, verify the TEST binding, and
 record cleanup. Do not repeat it against production or unrelated identities.
 
 The provider question is concrete: can the project reject identity-changing events before every

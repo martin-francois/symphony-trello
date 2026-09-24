@@ -1,9 +1,9 @@
 # Private capture token behind a native webhook
 
-Research date: 2026-09-22. This report combines source review with the root agent's bounded
-TEST evidence. The source review itself read no credentials and made no live requests. The
-TEST trial used two synthetic installations and executed no deletion. There is no user-facing
-contract change.
+Research date: 2026-09-22. This report combines source review with a bounded TEST trial whose
+results are in the maintainer's private run ledger. The source review itself read no
+credentials and made no live requests. The TEST trial used two synthetic installations and
+executed no deletion. There is no user-facing contract change.
 
 ## Finding
 
@@ -11,7 +11,8 @@ Reject private capture-token storage as the merge-prevention boundary. A native 
 authenticate heartbeats and capture them without exposing the project token, but an attacker
 can bypass that webhook using the numeric team ID as `api_key` on the capture API. The TEST
 trial stored a synthetic `$merge_dangerously` event sent this way and merged both owned
-fixture IDs. The reviewed ledger records the observation at 2026-09-22 15:46:53 UTC.
+fixture IDs. The maintainer's private run ledger records the observation at 2026-09-22
+15:46:53 UTC.
 
 The root cause is in `TeamManager`. `getTeamByToken` and ID lookup share one loader. That
 loader interprets positive decimal strings of up to ten digits, within the signed 32-bit range,
@@ -122,7 +123,7 @@ by this research.
 ## Assessment and next proof
 
 The authenticated webhook itself passed valid-heartbeat, invalid-signature, raw-merge-payload,
-and pre-capture-exception checks in the root agent's TEST trial. Those results establish the
+and pre-capture-exception checks in the same TEST trial. Those results establish the
 behavior of that endpoint. The numeric capture route bypasses it. Creating another project
 or rotating its project token does not fix the shared numeric lookup in the inspected code.
 

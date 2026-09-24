@@ -12,7 +12,7 @@ SELECT
     count() AS installations
 FROM (
     SELECT
-        distinct_id,
+        splitByChar('.', distinct_id)[1] AS installation_id,
         min(timestamp) AS first_seen,
         if(countIf(properties.app_version = '${release_version}') > 0,
            minIf(timestamp, properties.app_version = '${release_version}'),
@@ -21,7 +21,7 @@ FROM (
     FROM events
     WHERE event = 'installation_heartbeat'
       AND timestamp >= now() - interval 365 day
-    GROUP BY distinct_id
+    GROUP BY installation_id
 )
 GROUP BY cohort, adoption
 ORDER BY cohort, adoption

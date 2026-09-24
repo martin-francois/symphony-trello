@@ -15,6 +15,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.LongSupplier;
 import org.jspecify.annotations.Nullable;
 
@@ -41,6 +42,10 @@ public final class HeartbeatReporter {
     /// pile up further attempts behind it on the delivery executor.
     private final AtomicBoolean deliveryInFlight = new AtomicBoolean();
     private @Nullable HeartbeatProperties lastDebugPreview;
+    /// Credential issuance has no durable state before it succeeds, so its backoff lives with this
+    /// worker and restarts with it.
+    private final AtomicInteger issuanceFailures = new AtomicInteger();
+    private volatile @Nullable Instant issuanceNotBefore;
 
     public HeartbeatReporter(
             TelemetryInstallation installation,
@@ -78,12 +83,26 @@ public final class HeartbeatReporter {
         if (installation.networkEligible()
                 && erasure.needsMaintenance(current)
                 && (current.ownership() != null || graceEnded)) {
+            boolean issuing = !current.hasIdentity();
+            Instant issuanceDue = issuanceNotBefore;
+            if (issuing && issuanceDue != null && issuanceDue.isAfter(clock.instant())) {
+                return CheckResult.WAITING;
+            }
             if (deliveryInFlight.compareAndSet(false, true)) {
                 try {
                     executor.execute(() -> {
                         try {
                             erasure.maintain(store);
+                            if (issuing) {
+                                issuanceFailures.set(0);
+                                issuanceNotBefore = null;
+                            }
                         } catch (TelemetryStateException exception) {
+                            if (issuing) {
+                                int failures = issuanceFailures.incrementAndGet();
+                                issuanceNotBefore = clock.instant()
+                                        .plus(RETRY_BACKOFF.get(Math.min(failures, RETRY_BACKOFF.size()) - 1));
+                            }
                             output.info("telemetry ownership request deferred: " + exception.getMessage());
                         } finally {
                             deliveryInFlight.set(false);
@@ -96,8 +115,7 @@ public final class HeartbeatReporter {
             }
             return CheckResult.WAITING;
         }
-        TelemetryOwnership ownership = current.ownership();
-        if (ownership != null && ownership.blocksReporting()) {
+        if (current.blocksReporting()) {
             return CheckResult.WAITING;
         }
         EffectiveTelemetry effective =
@@ -169,10 +187,10 @@ public final class HeartbeatReporter {
         if (!state.hasIdentity()) {
             return Update.write(state, new Decision(CheckResult.WAITING, printNotice, deadline, null));
         }
-        TelemetryOwnership ownership = state.ownership();
-        if (ownership != null && ownership.blocksReporting()) {
+        if (state.blocksReporting()) {
             return Update.unchanged(Decision.of(CheckResult.WAITING));
         }
+        TelemetryOwnership ownership = state.ownership();
         // A clock that moved backwards must not produce a second report for a day already covered:
         // anything observed on or after today counts as done or still pending.
         Optional<PendingHeartbeat> pending =
@@ -318,8 +336,7 @@ public final class HeartbeatReporter {
         if (claim == null) {
             return false;
         }
-        TelemetryOwnership ownership = state.ownership();
-        return (ownership == null || !ownership.blocksReporting())
+        return !state.blocksReporting()
                 && installation.effective(state.mode()).sendsReports()
                 && state.preferenceRevision() == dispatch.report().preferenceRevision()
                 && owner.equals(claim.owner())

@@ -56,9 +56,9 @@ and cleanup checks and two local simulated-age cases. It is not a count of 49 en
 tests. The local reference separately covers malformed input, target binding and retention-independent
 credential reuse in the ordinary script test suite.
 
-The final authentication run lasted from 15:01:11 to 15:01:16 UTC on 2026-09-22. Its private ledger
-is `live-fdbb26f0-5534-465e-a879-dd973723d88c.json` in the task evidence directory. It records the
-actual TEST project binding; production was not invoked.
+The final authentication run lasted from 15:01:11 to 15:01:16 UTC on 2026-09-22. The
+maintainer's private run ledger records the actual TEST project binding. Production was not
+invoked.
 
 The final live run demonstrated:
 
@@ -105,8 +105,8 @@ they did not advance the workflow.
 
 The first attempt stopped too early on an initial results-API 404 and was cancelled and removed.
 The second treated 404 as not yet observable within a bounded poll. Its result appeared after
-about twelve seconds and reported completion at 15:09:01 UTC. Its private ledger is
-`workflow-aab28c57-637d-43db-b223-f84b515caf07.json`. Both run-owned workflows were deactivated,
+about twelve seconds and reported completion at 15:09:01 UTC, as recorded in the maintainer's
+private run ledger. Both run-owned workflows were deactivated,
 cancellation was requested, and removal was verified with GET 404. Cancellation alone does not
 prove every parked job has stopped; the second run's terminal result proves that run completed.
 
@@ -194,10 +194,13 @@ Explicit, bounded live TEST trial using existing protected credentials and selec
 SYMPHONY_TRELLO_OWNERSHIP_POC=1 node scripts/erasure-ownership-live-poc.mjs
 ```
 
-The runner defaults to a private task directory under `/var/tmp`. Its credential-free JSON ledger
-records the run, resource IDs, assertion results and cleanup readbacks. The optional
-`SYMPHONY_TRELLO_OWNERSHIP_POC_DIR` selects another private evidence directory. Both functions and
+The runner writes a credential-free JSON ledger to its default private directory. The ledger
+records the run, resource IDs, assertion results and cleanup readbacks. Set
+`SYMPHONY_TRELLO_OWNERSHIP_POC_DIR` to use another private directory. Both functions and
 requests are authorization-only. Ordinary CI has no live opt-in.
 
-This work changes development proofs, SPEC's evidence gate and ADR 0081. It adds no dependency,
-application behavior, production resource, release artifact or companion-repository requirement.
+The proof work itself changed only development proofs, SPEC's evidence gate and ADR 0081. It
+added no dependency, application behavior, production resource, release artifact or
+companion-repository requirement. [ADR 0082](adr/0082-authenticated-erasure-with-reporting-periods.md)
+later added the application behavior and deployment resources described in the
+[implementation and activation gate](telemetry-erasure-implementation.md).

@@ -60,13 +60,35 @@ SYMPHONY_TRELLO_ERASURE_LIFECYCLE=1 node scripts/erasure-lifecycle-live.mjs --re
 ```
 
 The runner verifies the selected managed TEST project before any mutation. It stores a private
-ledger in `/var/tmp/symphony-erasure-lifecycle`; set
-`SYMPHONY_TRELLO_ERASURE_LIFECYCLE_DIR` to another protected directory to retain it across host
-cleanup. The ledger contains synthetic ownership credentials and must not be published. Do not
-start again over an existing ledger; resume it. Temporary sources use the canonical handler and
-are archived after each invocation of the runner. Cleanup failures are recorded separately
-from lifecycle success; resume retries cleanup without repeating completed validation. Status flags and synthetic data are retained
-while their deletion and canary checks are pending.
+ledger in the script's default ledger directory. Set `SYMPHONY_TRELLO_ERASURE_LIFECYCLE_DIR` to
+another protected directory to keep the ledger across temporary-file cleanup, and set the same value
+for every `--resume` run. The ledger contains synthetic ownership credentials and must not be
+published. Do not start again over an existing ledger; resume it. Temporary sources use the
+canonical handler and are archived after each invocation of the runner. Cleanup failures are
+recorded separately from lifecycle success; resume retries cleanup without repeating completed
+validation. Status flags and synthetic data are retained while their deletion and canary checks are
+pending.
+
+### Known risks before production activation
+
+Review found these risks. None is mitigated yet. The maintainer must resolve each one or accept
+it explicitly before production activation.
+
+- Flag-limit exhaustion. `issue-v1` issues a credential to any caller. With a self-issued
+  credential, each `erase` for a new random period without a person or events creates a
+  permanent `symphony-erasure-empty-v1` flag unless the caller sends `ack`. About 2,000 such
+  requests reach PostHog's limit of 2,000 non-deleted flags per project. After that, every real
+  erasure stays pending. Each such request also runs a forced HogQL query against the management
+  key's quota.
+- Flags that `ack` never archives. `ack` archives only complete flags. Refused flags and flags of
+  abandoned pending operations stay and count toward the same limit. Their names contain the
+  person UUID, which PostHog derives from the team and the distinct ID.
+- Late ingestion. If PostHog ingests a period's first heartbeat after the drain wait, the
+  empty-person path records `complete` permanently and never deletes the late event. The client
+  stores no marker for the empty path, and `ack` archives the only flag that shows it.
+- Unchecked activation. Only the OpenTofu default `erasure_enabled.production = false` and the
+  unset release variables `POSTHOG_ERASURE_ENDPOINT` and `POSTHOG_ERASURE_AUDIENCE` keep
+  production off. Nothing checks for a `TWO_PERIOD_LIFECYCLE_PASS` ledger result.
 
 Ordinary CI uses loopback HTTP and no PostHog credential. It covers persisted credentials,
 concurrent disable during issuance, disable followed by erasure during a dispatched heartbeat, delivery without enough remaining transport time, late status responses after a new period starts, retries,

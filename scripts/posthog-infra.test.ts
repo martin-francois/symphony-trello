@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {createServer, type IncomingMessage, type Server, type ServerResponse} from "node:http";
-import {mkdtempSync, readFileSync, statSync, writeFileSync} from "node:fs";
+import {mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {after, before, beforeEach, test} from "node:test";
@@ -547,6 +547,17 @@ test("time-dependent expectations follow the reference instant across day and mo
   assert.deepEqual(timeDependentExpectations(SMALL_FIXTURE, new Date("2026-09-22T12:00:00Z"))["registration-cohorts"], [["2026-08-01", 1], ["2026-09-01", 1]]);
   assert.deepEqual(timeDependentExpectations(SMALL_FIXTURE, new Date("2026-10-01T12:00:00Z"))["registration-cohorts"], [["2026-08-01", 1], ["2026-09-01", 1]]);
   assert.deepEqual(timeDependentExpectations(SMALL_FIXTURE, new Date("2026-10-15T12:00:00Z"))["registration-cohorts"], [["2026-09-01", 1], ["2026-10-01", 1]]);
+});
+
+test("every dashboard query counts installations, not reporting periods", () => {
+  // After erasure an installation reports under `<installation>.<period>`; a bare distinct_id
+  // would count each period as a separate installation.
+  const installationPart = "splitByChar('.', distinct_id)[1]";
+  const queries = join(import.meta.dirname, "..", "infra", "posthog", "queries");
+  for (const file of readdirSync(queries)) {
+    const sql = readFileSync(join(queries, file), "utf8");
+    assert.ok(!sql.replaceAll(installationPart, "").includes("distinct_id"), `${file} uses a bare distinct_id`);
+  }
 });
 
 test("canonical queries are scoped to the cohort without a second copy of their logic", () => {

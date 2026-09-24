@@ -26,6 +26,8 @@ public record TelemetryDistribution(
     public static final String ERASURE_ENDPOINT_PROPERTY = "symphony.trello.telemetry.erasure-endpoint";
     public static final String ERASURE_AUDIENCE_PROPERTY = "symphony.trello.telemetry.erasure-audience";
     static final String TOKEN_KEY = "posthog.project-token";
+    static final String ERASURE_ENDPOINT_KEY = "posthog.erasure-endpoint";
+    static final String ERASURE_AUDIENCE_KEY = "posthog.erasure-audience";
     static final String TOKEN_PLACEHOLDER = "<unset>";
     private static final String PROJECT_TOKEN_PREFIX = "phc_";
     /// PostHog project tokens are `phc_` plus 43 letters and digits; the range leaves room for change
@@ -67,9 +69,9 @@ public record TelemetryDistribution(
                 firstNonBlank(systemProperties.apply(ENDPOINT_PROPERTY), null).orElseGet(PRODUCTION_ENDPOINT::toString);
         Optional<String> token = firstNonBlank(systemProperties.apply(TOKEN_PROPERTY), bundled.getProperty(TOKEN_KEY));
         Optional<String> erasureUrl = firstNonBlank(
-                systemProperties.apply(ERASURE_ENDPOINT_PROPERTY), bundled.getProperty("posthog.erasure-endpoint"));
+                systemProperties.apply(ERASURE_ENDPOINT_PROPERTY), bundled.getProperty(ERASURE_ENDPOINT_KEY));
         Optional<String> erasureAudience = firstNonBlank(
-                systemProperties.apply(ERASURE_AUDIENCE_PROPERTY), bundled.getProperty("posthog.erasure-audience"));
+                systemProperties.apply(ERASURE_AUDIENCE_PROPERTY), bundled.getProperty(ERASURE_AUDIENCE_KEY));
         try {
             if (erasureUrl.isPresent() != erasureAudience.isPresent()) {
                 return invalid("erasure endpoint and audience must be configured together");

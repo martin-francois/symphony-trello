@@ -31,12 +31,16 @@ public record TelemetryOwnership(
     }
 
     public TelemetryOwnership markDispatched(Instant expiresAt) {
-        Instant deadline = drainUntil != null && drainUntil.isAfter(expiresAt) ? drainUntil : expiresAt;
-        return new TelemetryOwnership(credential, period, true, deadline, erasure);
+        return new TelemetryOwnership(credential, period, true, drainedAt(expiresAt), erasure);
     }
 
-    public Instant drainedAt(Instant now) {
-        return drainUntil != null && drainUntil.isAfter(now) ? drainUntil : now;
+    /// The later of the stored drain deadline and the given instant.
+    public Instant drainedAt(Instant instant) {
+        return drainUntil != null && drainUntil.isAfter(instant) ? drainUntil : instant;
+    }
+
+    public boolean drained(Instant now) {
+        return !drainedAt(now).isAfter(now);
     }
 
     public TelemetryOwnership withErasure(Erasure next) {
@@ -82,7 +86,7 @@ public record TelemetryOwnership(
     }
 
     private static void requireRandom(UUID value) {
-        if (value == null || value.version() != 4 || value.variant() != 2) {
+        if (!TelemetryCredential.isRandom(value)) {
             throw new IllegalArgumentException("ownership state requires a random UUID");
         }
     }

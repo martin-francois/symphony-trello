@@ -13,7 +13,11 @@ informed: [Future maintainers, Contributors]
 # Gate automated erasure on hosted verification
 
 [ADR 0082](0082-authenticated-erasure-with-reporting-periods.md) updates identity and erasure
-behavior. The other telemetry requirements and production verification gate still apply.
+behavior. It replaces this ADR's constraint to keep the Java CLI, state schema, heartbeat fields
+and OpenTofu deployed resources unchanged. The CLI gains erasure commands, the state gains
+ownership fields, `distinct_id` gains a reporting-period part, and OpenTofu gains optional
+erasure resources. The other telemetry requirements and production verification gate still
+apply.
 
 ## Context and Problem Statement
 

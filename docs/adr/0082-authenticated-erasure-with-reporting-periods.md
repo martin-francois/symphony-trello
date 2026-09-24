@@ -22,18 +22,20 @@ ID after completed erasure.
 
 - Prevent random requests from deleting another installation's analytics.
 - Keep ownership independent of one-year event retention and first-message delivery.
-- Complete accepted deletion without keeping the client running.
+- Let PostHog finish accepted event deletion without keeping the client running.
 - Keep the installation identity and dashboard counts stable across reporting periods.
 - Use PostHog-managed facilities and the Java client, without another backend.
 
 ## Considered Options
 
-- HMAC ownership with permanently retired analytics IDs after erasure
-- Reusing one PostHog distinct ID and resetting its mapping
+- HMAC ownership with reporting periods
+- Reuse one distinct ID and reset its mapping
 - Bearer ownership credentials
-- Another hosted database and deletion service
+- Separate hosted deletion service
 
 ## Decision Outcome
+
+Chosen option: "HMAC ownership with reporting periods".
 
 Use the proven server-derived HMAC credential. The issuer selects the installation UUID;
 the client persists the credential before its first report. An unanswered issuance can be
@@ -47,7 +49,10 @@ part. No secret, signature, or operation receipt is included in an analytics eve
 An erase request disables reporting and durably records its operation before contacting
 the service. Each dispatch persists its drain deadline independently of the report claim,
 so disable cannot remove the wait for an in-flight heartbeat. Signed requests bind the action, audience, installation, period and operation.
-Retries keep the same period. Accepted work continues within PostHog. Acceptance is not
+Retries keep the same period. Workers wait half the time since the request between retries,
+at least one minute and at most six hours, because provider deletion can take days;
+`erase-status` checks at once after the drain deadline. Failed credential issuance uses the
+heartbeat retry backoff. Accepted work continues within PostHog. Acceptance is not
 completion; status must establish provider deletion completion. Resuming after completion
 creates a new period and never resets or reuses the erased ID. Ordinary disable/enable
 preserves the period. Explicit enable is still required after erase.
@@ -95,6 +100,29 @@ verified event deletion.
 - Repeated erasure uses separate provider queue keys and cannot target a later period by replay.
 - Losing the credential requires maintainer assistance for old data.
 - Provider deletion remains asynchronous; the CLI must report pending work honestly.
+- The driver to finish deletion without the client is only partly met. PostHog finishes queued
+  event deletion without the client. The first `erase` queues it with `keep_person: true`. The
+  service removes the profile record only on a later signed request from the client, sent by
+  `erase-status` or a running worker's retry.
+
+Review found four risks that are not mitigated yet. The maintainer must resolve each one or
+accept it explicitly before production activation. The
+[activation gate](../telemetry-erasure-implementation.md#known-risks-before-production-activation)
+lists the details.
+
+- Flag-limit exhaustion. `issue-v1` issues a credential to any caller. Each `erase` with a
+  self-issued credential for a new empty period creates a permanent `symphony-erasure-empty-v1`
+  flag unless the caller sends `ack`. About 2,000 such requests reach PostHog's per-project limit
+  of 2,000 non-deleted flags, and every real erasure then stays pending. Each request also runs a
+  forced HogQL query against the management key's quota.
+- `ack` archives only complete flags. Refused and abandoned pending flags accumulate toward the
+  same limit. Their names contain the person UUID, which PostHog derives from the team and the
+  distinct ID.
+- A first heartbeat that PostHog ingests after the drain wait can leave the empty-person path
+  recording `complete` permanently. The late event is never deleted, and nothing durable records
+  which completions took the empty path.
+- Only the OpenTofu default `erasure_enabled.production = false` and the unset release variables
+  keep production off. Nothing checks for a `TWO_PERIOD_LIFECYCLE_PASS` ledger result.
 
 ### Confirmation
 
@@ -106,25 +134,44 @@ managed TEST project for live verification before production activation.
 
 ## Pros and Cons of the Options
 
-### HMAC with reporting periods
+### HMAC ownership with reporting periods
 
 Keep a stable credential and use a separate analytics ID for each post-erasure period.
-This avoids provider reset and deletion-key reuse at the cost of more local state.
+Signed requests authorize erasure, and a PostHog webhook runs the deletion. Status: selected.
 
-### Reuse and reset
+- Good, because requests carry a signature, never the credential, and bind action, audience,
+  installation, period and operation.
+- Good, because each period has its own person UUID and deletion queue key, so a replay cannot
+  reach a later period.
+- Good, because it runs inside PostHog and needs no other backend.
+- Bad, because the local state holds a secret and more fields that must stay private and atomic.
+- Bad, because dashboards must group analytics IDs by their installation part.
+- Bad, because status flags count toward PostHog's flag limit and need operator cleanup.
 
-Keep one distinct ID and reset PostHog's mapping after deletion. The inspected reset does
-not create a different deterministic UUID or remove the old deletion queue key.
+### Reuse one distinct ID and reset its mapping
 
-### Bearer credentials
+Keep one distinct ID and reset PostHog's mapping after deletion.
 
-Send a secret to authorize each erasure. This is an accepted fallback, but the hosted HMAC
-implementation already avoids exposing that secret on subsequent requests.
+- Good, because the analytics ID and dashboard grouping stay unchanged.
+- Bad, because the inspected reset does not create a different deterministic person UUID.
+- Bad, because the reset does not remove the old deletion queue key, so a second erasure of the
+  same ID does not get a separate deletion record.
 
-### Separate service
+### Bearer ownership credentials
 
-Run another backend with its own durable operation store. The maintainer excludes this
-operational cost, and it does not itself narrow PostHog's person-wide deletion scope.
+Send the stored secret to authorize each erasure. The service compares it with the derived value.
+
+- Good, because the server check is a plain comparison without request signing.
+- Bad, because every erasure request exposes the secret to the webhook and its logs.
+- Neutral, because it remains an accepted fallback if the hosted HMAC check stops working.
+
+### Separate hosted deletion service
+
+Run another backend with its own durable operation store.
+
+- Good, because operation records could live outside PostHog's flag limit.
+- Bad, because the maintainer excludes the operational cost of another backend.
+- Bad, because it does not itself narrow PostHog's person-wide deletion scope.
 
 ## More Information
 
