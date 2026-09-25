@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM eclipse-temurin:25.0.4_7-jdk@sha256:e787e08ef76f4c16866108cd7f9fcd96a68eef3ac6cc76866897d4d02d5a2262 AS jdk
+FROM eclipse-temurin:25.0.4_7-jdk@sha256:97014c4b396021f9ddb7d592a7dbedb0c4e4215c29e03dc01c393558aefb71c2 AS jdk
 
 FROM gcr.io/oss-fuzz-base/base-builder-jvm@sha256:6d8d75febebc2fe98d2ecb426eba503afdd9e310bdb249c37470ce4950c0d83b
 
