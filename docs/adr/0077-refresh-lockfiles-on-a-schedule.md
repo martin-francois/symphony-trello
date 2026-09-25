@@ -9,6 +9,8 @@ consulted:
   - "[Renovate vulnerabilityAlerts documentation](https://docs.renovatebot.com/configuration-options/#vulnerabilityalerts)"
   - "[Renovate minimum release age documentation](https://docs.renovatebot.com/key-concepts/minimum-release-age/)"
   - "[pnpm minimumReleaseAge setting](https://pnpm.io/settings#minimumreleaseage)"
+  - "[pnpm issue 13805](https://github.com/pnpm/pnpm/issues/13805)"
+  - "[dependabot-core issue 15904](https://github.com/dependabot/dependabot-core/issues/15904)"
 informed: [Future maintainers, Contributors]
 ---
 
@@ -37,6 +39,14 @@ produces. `minimumReleaseAge` in `renovate.json` filters the updates Renovate co
 reaches that resolution. The repository's seven-day release-age rule is therefore silently absent
 from exactly the path that moves the most versions at once, and with automatic merge on that path a
 package published minutes ago could reach the default branch without a human ever seeing it.
+
+pnpm 12 creates another security problem when it manages the version from `packageManager`: it
+prepends a package-manager environment document to `pnpm-lock.yaml`. GitHub's static dependency-graph
+parser currently reads that first document as the complete graph. It then sees pnpm's own binaries
+and none of the project dependencies, which can silently close or suppress vulnerability alerts.
+The dependabot-core grapher learned to read the final document, but the static parser still reproduced
+the defect on 2026-09-23. pnpm documents `pmOnFail: ignore` as the supported way to keep a
+single-document lockfile, at the cost of disabling pnpm's own package-manager version switch.
 
 ## Decision Drivers
 
@@ -86,6 +96,14 @@ covers the refresh, is wrong: that setting filters the updates Renovate computes
 maintenance branch is not one of them. The two values are kept in step by a script test that derives
 the pnpm minutes from the Renovate days rather than asserting them independently.
 
+`pnpm-workspace.yaml` also sets `pmOnFail: ignore`. This keeps the project dependency graph in one
+YAML document until GitHub's static parser supports pnpm's stream format. The repository does not
+accept an unpinned package manager in exchange: `package.json` keeps an exact `packageManager` value,
+Corepack selects it for local use, and every CI entry point explicitly prepares that same exact
+version before invoking pnpm. A script test checks the setting, lockfile shape, manifest pin, and all
+workflow pins together. `pmOnFail: download`, `warn`, and `error` were rejected because they retain
+the two-document lockfile; leaving `pmOnFail` unset has the same result.
+
 `minimumReleaseAgeExclude` is deliberately left unset. It exists for the case where a specific
 version must be admitted before its cooldown expires, typically a security fix, and it should be
 added with the version pinned and a comment naming the advisory rather than kept open as a standing
@@ -112,11 +130,15 @@ value of the rule is that it is in place before the first transitive advisory, n
 * Good, because the refresh consumes no maintainer attention while every check passes.
 * Good, because the seven-day release age now also covers a plain `pnpm install` and any future
   automation, not only the updates Renovate computes.
+* Good, because GitHub's dependency graph continues to see project dependencies and can report
+  vulnerable transitive packages.
 * Bad, because a recurring refresh adds pull requests and CI runs that nobody asked for.
 * Bad, because the cooldown is now stated twice, in two files and two units. The script test that
   derives one from the other is what keeps that from drifting into a lie.
 * Bad, because the gate belongs to pnpm. A different package manager would need its own gate, and
   one that has none, such as npm or bun, would leave `automerge: false` as the only safe setting.
+* Bad, because pnpm no longer switches versions itself. Corepack and the exact workflow pins now own
+  that enforcement, so every new pnpm entry point must join the regression-tested pin set.
 * Neutral, because a refresh can resolve a slightly older version than the newest published one.
   That is the cooldown working, not the refresh failing; the newer version arrives the following
   week.
@@ -140,7 +162,9 @@ This decision remains implemented when:
   rejects each of the preceding conditions;
 * `pnpm-workspace.yaml` sets `minimumReleaseAge` to the repository cooldown in minutes, currently
   `10080`, and `package.json` keeps `packageManager` on a pnpm that enforces it, verified against
-  pnpm 11.19.0; and
+  the current exact pnpm release;
+* `pnpm-workspace.yaml` sets `pmOnFail: ignore`, `pnpm-lock.yaml` has one YAML document, and every CI
+  pnpm entry point prepares the exact `packageManager` version through Corepack; and
 * the script test `The lockfile refresh path enforces the same seven-day cooldown` derives that
   value from `renovate.json` and fails if either side moves alone.
 

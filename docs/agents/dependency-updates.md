@@ -36,6 +36,12 @@ requirements.
   manager holds the release-age line the refresh would otherwise cross; see
   [ADR 0077](../adr/0077-refresh-lockfiles-on-a-schedule.md). The script test `Renovate refreshes
   lockfiles on a schedule so transitive advisories are fixed` asserts the rule.
+- Keep pnpm's `pmOnFail: ignore` while GitHub's static dependency-graph parser cannot read pnpm 12's
+  leading package-manager environment document. This preserves a single-document project lockfile
+  so vulnerability alerts continue to see transitive dependencies. Because that setting disables
+  pnpm's internal version switch, keep `packageManager` exact and make every CI pnpm entry point use
+  Corepack to prepare that same version. The script test `pnpm keeps GitHub's dependency graph
+  readable while Corepack pins its version` asserts the complete contract.
 - Automatic merge MUST occur only through a pull request after required checks pass. Major updates,
   Quarkus migrations, generated source changes, and vendored guidance remain review-required under
   their owning rules. The `Required merge checks` ruleset on the default branch enforces the
