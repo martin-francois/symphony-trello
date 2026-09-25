@@ -25,18 +25,32 @@ interrupted work without moving the event-deletion cutoff. Subsequent status req
 the public status flag. A 201 receipt means queued, not accepted or complete.
 When no profile exists, a fresh uncached exact-ID query must prove there are no retained events
 before the service records completion. An unsuccessful first capture therefore does not strand
-the installation indefinitely.
+the installation indefinitely. The flag for such an empty result has the private name
+`symphony-erasure-empty-v2|<analytics id>`, so cleanup can query that ID again for late events.
+Flags named `symphony-erasure-empty-v1` come from the earlier handler and carry no ID. A `status`
+request whose flag is missing takes the same path as `erase`. Archiving an empty or complete flag
+therefore never strands a client: its next request recreates the result. The handler skips the
+flag update when the status has not changed.
 
 The flag key is `erasure-` followed by HMAC-SHA-256 over
 `symphony-trello/status/v1|<audience>|<period>`, using the installation credential. Public
 `/flags?v=2` evaluation returns only the opaque key and status. Management credentials alone
 write it. A completed result is saved locally before one best-effort flag archival request. The client then stops maintenance traffic.
-Failure to archive does not undo completion; operators remove verified leftovers before
-PostHog's 2,000 non-deleted flag limit. Missing status never authorizes resume.
+Failure to archive does not undo completion. `scripts/posthog-infra erasure-flags` removes
+leftovers before PostHog's 2,000 non-deleted flag limit (see
+[Deployment and operations](#deployment-and-operations)). Missing status never authorizes resume.
+
+The client waits until one hour after a dispatched heartbeat's drain deadline before its first
+profile lookup, so a first heartbeat that PostHog is still ingesting is not taken for an empty
+period. Workers then retry at half the time since the request, between one minute and six hours.
+`erase-status` checks immediately after the heartbeat has settled. After a refusal, `enable` starts a
+new reporting period and leaves the refused data to the maintainer.
 
 The installation keeps its credential and registration date. Explicit enable after completion
 creates a fresh period. Ordinary disable/enable preserves it. An old request cannot address
-that new period. Restoring an old state backup does not restore a valid reporting period.
+that new period. Restoring a state backup taken before erasure is unsupported: the client
+cannot detect it and would report under the erased analytics ID again, which then needs
+maintainer-assisted erasure.
 Existing UUID-only installations retain their state and use maintainer assistance.
 
 ## Evidence and remaining gate
@@ -55,44 +69,59 @@ queues deletion with `keep_person=true`, then verifies that the native service r
 remaining profile. This tests the failure postcondition without causing a provider outage.
 
 ```bash
-SYMPHONY_TRELLO_ERASURE_LIFECYCLE=1 node scripts/erasure-lifecycle-live.mjs
-SYMPHONY_TRELLO_ERASURE_LIFECYCLE=1 node scripts/erasure-lifecycle-live.mjs --resume
+SYMPHONY_TRELLO_ERASURE_LIFECYCLE=1 node scripts/erasure-lifecycle-live.ts
+SYMPHONY_TRELLO_ERASURE_LIFECYCLE=1 node scripts/erasure-lifecycle-live.ts --resume
 ```
 
 The runner verifies the selected managed TEST project before any mutation. It stores a private
-ledger in the script's default ledger directory. Set `SYMPHONY_TRELLO_ERASURE_LIFECYCLE_DIR` to
-another protected directory to keep the ledger across temporary-file cleanup, and set the same value
+ledger in `~/.local/state/symphony-trello/erasure-lifecycle/ledger.json`. Set
+`SYMPHONY_TRELLO_ERASURE_LIFECYCLE_DIR` to use another protected directory, and set the same value
 for every `--resume` run. The ledger contains synthetic ownership credentials and must not be
 published. Do not start again over an existing ledger; resume it. Temporary sources use the
 canonical handler and are archived after each invocation of the runner. Cleanup failures are
 recorded separately from lifecycle success; resume retries cleanup without repeating completed
 validation. Status flags and synthetic data are retained while their deletion and canary checks are
-pending.
+pending, so do not run `erasure-flags --archive` against the test role during a run.
 
-### Known risks before production activation
+A pass authorizes only the handler that ran every stage. The ledger records the SHA-256 of
+`infra/posthog/erasure-service.hog.tftpl` when a run starts. A resume on a different template, or a
+ledger written before this field existed, is marked `handlerMixed` and can never authorize
+production. The run that started on 2026-09-23 used an earlier handler. Resuming it still shows
+whether PostHog physically deletes the data, but production needs a new full run on the current
+handler.
 
-Review found these risks. None is mitigated yet. The maintainer must resolve each one or accept
-it explicitly before production activation.
+### Risks and how they are handled
 
-- Flag-limit exhaustion. `issue-v1` issues a credential to any caller. With a self-issued
-  credential, each `erase` for a new random period without a person or events creates a
-  permanent `symphony-erasure-empty-v1` flag unless the caller sends `ack`. About 2,000 such
-  requests reach PostHog's limit of 2,000 non-deleted flags per project. After that, every real
-  erasure stays pending. Each such request also runs a forced HogQL query against the management
-  key's quota.
-- Flags that `ack` never archives. `ack` archives only complete flags. Refused flags and flags of
-  abandoned pending operations stay and count toward the same limit. Their names contain the
-  person UUID, which PostHog derives from the team and the distinct ID.
-- Late ingestion. If PostHog ingests a period's first heartbeat after the drain wait, the
-  empty-person path records `complete` permanently and never deletes the late event. The client
-  stores no marker for the empty path, and `ack` archives the only flag that shows it.
-- Unchecked activation. Only the OpenTofu default `erasure_enabled.production = false` and the
-  unset release variables `POSTHOG_ERASURE_ENDPOINT` and `POSTHOG_ERASURE_AUDIENCE` keep
-  production off. Nothing checks for a `TWO_PERIOD_LIFECYCLE_PASS` ledger result.
+Review found four risks. Their handling:
+
+- Flag-limit exhaustion is an accepted residual risk. `issue-v1` issues a credential to any
+  caller, and each `erase` for a new empty period creates a status flag. About 2,000 such requests
+  reach PostHog's limit of 2,000 non-deleted flags, after which every real erasure stays pending.
+  PostHog alone offers no rate limit that could stop this. The attacker cannot delete another
+  installation's data, and the manual procedure keeps working. `verify` fails its advisory
+  `erasure.status_flags` check at 500 flags. Once the requests stop, `erasure-flags --archive`
+  restores capacity. Each such request also runs a forced HogQL query against the management key's
+  quota.
+- Flags that `ack` never archives: `erasure-flags` archives empty and complete results older than
+  a day. It reports refused operations, and pending or accepted ones older than 14 days, for the
+  maintainer.
+- Late ingestion: the client waits an hour after a heartbeat's drain deadline before its first
+  lookup. An empty result names its analytics ID, and `erasure-flags` counts that ID's events
+  again before archiving. A late event is reported as `late-events`; delete it with the
+  [manual procedure](telemetry-maintainer-runbook.md#erasure-requests), then archive the flag.
+- Unchecked activation: the root `erasure_enabled` variable refuses `production = true` unless
+  `erasure_lifecycle_pass` equals the `filesha256` of the current handler template.
+  `scripts/posthog-infra` supplies that value only from a `TWO_PERIOD_LIFECYCLE_PASS` ledger that
+  is not `handlerMixed`. The offline tests in `infra/posthog/tests` prove the refusal. Release
+  packaging refuses an erasure audience other than `symphony:<id>` with the ID in
+  `infra/posthog/production-project-id`, and `verify` checks that file against the production
+  project.
 
 Ordinary CI uses loopback HTTP and no PostHog credential. It covers persisted credentials,
 concurrent disable during issuance, disable followed by erasure during a dispatched heartbeat, delivery without enough remaining transport time, late status responses after a new period starts, retries,
-unknown status, legacy identity refusal and explicit resume after completion.
+unknown status, legacy identity refusal, explicit resume after completion or refusal, retry
+backoff, the ingestion wait, the wire contract between the client and the handler template, flag
+review, the activation refusal and the release audience check.
 
 ## Deployment and operations
 
@@ -101,11 +130,24 @@ The optional OpenTofu resources default to disabled for both roles. Follow
 project-scoped service credential, protected versioned master keys and the normal plan/readback
 workflow. The release URL and audience remain unset until production activation.
 
+Activation order: pass the lifecycle on the TEST role with the current handler, apply with
+`erasure_enabled.production = true` (the wrapper reads the pass from the ledger), run `verify`,
+then set the release variables described there. Review status flags regularly, and at once when
+`verify` reports `erasure.status_flags`:
+
+```bash
+scripts/posthog-infra erasure-flags production            # dry run: what would be archived
+scripts/posthog-infra erasure-flags production --archive  # archive settled results
+```
+
+The command exits 1 when a flag needs the maintainer: `late-events` (delete that analytics ID's
+events manually), `refused` (see the runbook) or `stale`.
+
 The merge filter drops `$identify`, `$create_alias` and `$merge_dangerously`. A multi-ID person
 fails the deletion precheck. The maintainer accepts the remaining merge race for the stated
 low-value analytics threat model. This is not an atomic provider guarantee of deletion scope.
-Delayed ingestion or restoring an old client backup requires maintainer investigation; the
-service does not claim to erase future captures under a retired ID.
+Restoring an old client backup requires maintainer investigation, and late ingestion is handled
+as described above. The service does not claim to erase future captures under a retired ID.
 
 Contract impact: Section 19.6, CLI commands, state, privacy text, dashboard grouping, release
 packaging and managed PostHog definitions change together. Trello and Codex workflows, event

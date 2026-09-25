@@ -6,6 +6,7 @@ import {join} from "node:path";
 import {after, before, beforeEach, test} from "node:test";
 import {
   comparePanel,
+  ERASURE_FLAG_WARNING,
   fixtureEvents,
   findGeoipFunction,
   gapApply,
@@ -20,6 +21,7 @@ import {
   readRoles,
   renderQuery,
   renderReport,
+  reviewErasureFlags,
   scopeQuery,
   timeDependentExpectations,
   verify,
@@ -55,6 +57,8 @@ interface FakeState {
   echoKeyInError: boolean;
   requests: string[];
   deleted: string[];
+  flags: Record<string, Json>[];
+  eventCounts: Record<string, number>;
 }
 
 const POLICY: Record<string, Json> = {
@@ -115,6 +119,8 @@ function freshState(): FakeState {
     echoKeyInError: false,
     requests: [],
     deleted: [],
+    flags: [],
+    eventCounts: {},
   };
 }
 
@@ -258,6 +264,27 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     }
     const name = /typeof\((\w+)\)/.exec(hog)?.[1] ?? "?";
     respond(response, 200, {status: "error", errors: [`Global variable not found: ${name}`], logs: [{message: `Error executing function: HogVMException: Global variable not found: ${name}`}]});
+    return;
+  }
+  if (path === `/api/projects/${PROJECT_ID}/feature_flags/` && request.method === "GET") {
+    respond(response, 200, paginated(state.flags));
+    return;
+  }
+  const flagMatch = path.match(new RegExp(`^/api/projects/${PROJECT_ID}/feature_flags/(\\d+)/$`));
+  if (flagMatch !== null && request.method === "PATCH") {
+    const flag = state.flags.find((entry) => entry["id"] === Number(flagMatch[1]));
+    if (flag === undefined) {
+      respond(response, 404, {detail: "Not found."});
+      return;
+    }
+    Object.assign(flag, await readBody(request));
+    respond(response, 200, flag);
+    return;
+  }
+  if (path === `/api/projects/${PROJECT_ID}/query/` && request.method === "POST") {
+    const query = (await readBody(request))["query"] as Record<string, Json>;
+    const target = /distinct_id = '([^']+)'/.exec(String(query["query"]))?.[1] ?? "";
+    respond(response, 200, {is_cached: false, results: [[state.eventCounts[target] ?? 0]]});
     return;
   }
   if (path === `/api/organizations/${ORGANIZATION}/` || path === "/api/organizations/@current/") {
@@ -641,3 +668,64 @@ for (const field of ["id", "name", "organization", "api_token"]) {
     assert.ok(state.requests.every((request) => request.startsWith("GET ")));
   });
 }
+
+const REVIEWED_AT = new Date("2026-09-25T12:00:00Z");
+const PERIOD_ID = "5095b32f-dbe1-4704-a625-5a241d331cd6.8f14e45f-ceea-467a-9575-5d0c5e5f3b8a";
+const LATE_ID = "5095b32f-dbe1-4704-a625-5a241d331cd6.c9f0f895-fb98-4b7a-8e0f-2f3a1b2c3d4e";
+
+function statusFlag(id: number, name: string, state: string, createdAt: string): Record<string, Json> {
+  return {id, key: `erasure-${String(id).padStart(64, "0")}`, name, deleted: false, active: true, created_at: createdAt,
+    filters: {groups: [{properties: [], rollout_percentage: 100}], multivariate: {variants: [{key: state, rollout_percentage: 100}]}}};
+}
+
+function erasureFlagFixture(): Record<string, Json>[] {
+  return [
+    statusFlag(1, `symphony-erasure-empty-v2|${PERIOD_ID}`, "complete", "2026-09-23T00:00:00Z"),
+    statusFlag(2, `symphony-erasure-empty-v2|${LATE_ID}`, "complete", "2026-09-23T00:00:00Z"),
+    statusFlag(3, `symphony-erasure-empty-v2|${PERIOD_ID}`, "complete", "2026-09-25T11:00:00Z"),
+    statusFlag(4, "symphony-erasure-empty-v1", "complete", "2026-09-23T00:00:00Z"),
+    statusFlag(5, "symphony-erasure-v1|0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b", "complete", "2026-09-23T00:00:00Z"),
+    statusFlag(6, "symphony-erasure-v1|0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c", "refused", "2026-09-24T00:00:00Z"),
+    statusFlag(7, "symphony-erasure-v1|0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5d", "accepted", "2026-09-01T00:00:00Z"),
+    statusFlag(8, "symphony-erasure-v1|0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5e", "pending", "2026-09-25T11:00:00Z"),
+  ];
+}
+
+test("erasure flag review archives only settled results and reports what needs the maintainer", async () => {
+  state.flags = erasureFlagFixture();
+  state.eventCounts = {[LATE_ID]: 2};
+  const dryRun = await reviewErasureFlags(api(), PROJECT_ID, REVIEWED_AT, false);
+  assert.deepEqual(dryRun.map((review) => [review.id, review.action]), [
+    [1, "archive"], [2, "late-events"], [3, "keep"], [4, "archive"], [5, "archive"], [6, "refused"], [7, "stale"], [8, "keep"],
+  ]);
+  assert.equal(dryRun.find((review) => review.id === 2)?.remainingEvents, 2);
+  assert.ok(!state.requests.some((request) => request.startsWith("PATCH")));
+
+  await reviewErasureFlags(api(), PROJECT_ID, REVIEWED_AT, true);
+  assert.deepEqual(state.flags.filter((flag) => flag["deleted"] === true).map((flag) => flag["id"]), [1, 4, 5]);
+});
+
+test("erasure flag review refuses an empty result whose name carries no valid analytics ID", async () => {
+  state.flags = [statusFlag(9, "symphony-erasure-empty-v2|x' OR 1=1 --", "complete", "2026-09-23T00:00:00Z")];
+  await assert.rejects(reviewErasureFlags(api(), PROJECT_ID, REVIEWED_AT, true), InfraError);
+  assert.ok(!state.requests.some((request) => request.includes("/query/") || request.startsWith("PATCH")));
+});
+
+test("verification fails when the production project differs from the committed production project", async () => {
+  const production = roles().map((role) => ({...role, name: "production"}));
+  const mismatch = await verify(api(), production, PROJECT_ID + 1);
+  const match = await verify(api(), production, PROJECT_ID);
+  assert.equal(mismatch.find((check) => check.item === "project.id")?.status, "FAIL");
+  assert.equal(match.find((check) => check.item === "project.id")?.status, "PASS");
+});
+
+test("verification flags a status flag count near PostHog's flag limit", async () => {
+  const erasureRoles = roles().map((role) => ({...role, policy: {...role.policy, erasure_function_id: "erasure-uuid"}}));
+  state.flags = Array.from({length: ERASURE_FLAG_WARNING}, (_, index) => statusFlag(index + 1, "symphony-erasure-empty-v1", "complete", "2026-09-23T00:00:00Z"));
+  const crowded = (await verify(api(), erasureRoles)).find((check) => check.item === "erasure.status_flags");
+  state.flags = state.flags.slice(1);
+  const below = (await verify(api(), erasureRoles)).find((check) => check.item === "erasure.status_flags");
+  assert.equal(crowded?.status, "FAIL");
+  assert.equal(crowded?.required, false);
+  assert.equal(below?.status, "PASS");
+});

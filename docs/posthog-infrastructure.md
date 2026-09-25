@@ -10,7 +10,7 @@ commands for a fresh setup, a change, a drift repair, and a deliberate rebuild. 
 
 ## What is owned where
 
-The [native erasure trial](telemetry-native-erasure-trial.md) stopped at
+The [native erasure trial](telemetry-erasure-research.md#es256-and-jose-rejected) stopped at
 `BLOCKED_NATIVE_CAPABILITY`. Its `hog-probe` command uses this wrapper and selected private state,
 requires `SYMPHONY_TRELLO_POSTHOG_LIVE_PROBE=1`, and tests unsaved code with asynchronous calls
 mocked. It installs no handler and changes no managed resource. Automated erasure is defined but defaults to disabled for both roles; [ADR 0081](adr/0081-gate-automated-erasure-on-hosted-verification.md)
@@ -238,16 +238,25 @@ be restricted to the intended project with `person:read`, `person:write`, `featu
 `feature_flag:write` and `query:read`. It must not be the infrastructure administrator's credential.
 
 Follow the normal plan, gaps diff, apply and verify sequence. Do not enable production until
-[the lifecycle gate](telemetry-erasure-implementation.md) passes. Verification compares the
+[the lifecycle gate](telemetry-erasure-implementation.md) passes. OpenTofu enforces this: a
+validation on `erasure_enabled` refuses `production = true` unless `erasure_lifecycle_pass` equals
+the SHA-256 of the current `erasure-service.hog.tftpl`. `scripts/posthog-infra plan` and `apply`
+pass that value only from a lifecycle ledger whose status is `TWO_PERIOD_LIFECYCLE_PASS` and whose
+every stage ran on this handler, so any handler change needs a new hosted run.
+`scripts/posthog-infra validate` runs the offline tests in `infra/posthog/tests` that prove the
+refusal against a mocked provider. Verification compares the
 managed handler hash, enabled state and merge filter with the canonical configuration.
 
 After production activation, the public release variables `POSTHOG_ERASURE_ENDPOINT` and
 `POSTHOG_ERASURE_AUDIENCE` carry the managed webhook URL and `symphony:<project-id>` audience.
-Packaging validates and checks both in the application archive. They contain no credential.
+Packaging validates and checks both in the application archive, and refuses an audience other
+than `symphony:<id>` with the ID in `infra/posthog/production-project-id`. `verify` checks that
+file against the production project. They contain no credential.
 Leaving both variables empty preserves the original profile. Setting only one fails packaging.
 Do not publish these variables before the deployment gate passes.
 
-Operational status flags are not configuration resources. Monitor their count against PostHog's
-2,000-flag limit. Clients request archival after saving completion; if an acknowledgment is lost,
-verify the bound person deletion and archive that flag through the maintainer runbook. Never
-interpret a missing flag as proof of completion.
+Operational status flags are not configuration resources. `verify` fails its advisory
+`erasure.status_flags` check at 500 non-deleted flags, well below PostHog's 2,000-flag limit.
+Clients request archival after saving completion; `scripts/posthog-infra erasure-flags <role>
+[--archive]` reviews and archives the rest as the maintainer runbook describes. Never interpret a
+missing flag as proof of completion.

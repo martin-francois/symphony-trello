@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.telemetry;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
@@ -17,6 +18,11 @@ public record TelemetryOwnership(
         Objects.requireNonNull(credential, "credential");
         requireRandom(period);
     }
+
+    /// PostHog can store an accepted capture well after answering it. An erasure lookup waits this
+    /// long after the drain deadline, so a first heartbeat still in ingestion is not mistaken for an
+    /// empty period that completes without deleting it.
+    static final Duration INGESTION_GRACE = Duration.ofHours(1);
 
     public static TelemetryOwnership issued(TelemetryCredential credential) {
         return new TelemetryOwnership(credential, UUID.randomUUID(), false, null, null);
@@ -39,8 +45,17 @@ public record TelemetryOwnership(
         return drainUntil != null && drainUntil.isAfter(instant) ? drainUntil : instant;
     }
 
-    public boolean drained(Instant now) {
-        return !drainedAt(now).isAfter(now);
+    /// The earliest time an erasure may look up this period's profile.
+    public Instant settledAt(Instant now) {
+        if (drainUntil == null) {
+            return now;
+        }
+        Instant settled = drainUntil.plus(INGESTION_GRACE);
+        return settled.isAfter(now) ? settled : now;
+    }
+
+    public boolean settled(Instant now) {
+        return !settledAt(now).isAfter(now);
     }
 
     public TelemetryOwnership withErasure(Erasure next) {
@@ -55,8 +70,8 @@ public record TelemetryOwnership(
         if (erasure == null) {
             return this;
         }
-        if (erasure.phase() != Phase.COMPLETE) {
-            throw new IllegalStateException("erasure is not complete");
+        if (erasure.phase() != Phase.COMPLETE && erasure.phase() != Phase.REFUSED) {
+            throw new IllegalStateException("erasure is still in progress");
         }
         return issued(credential);
     }

@@ -3,8 +3,8 @@ status: accepted
 date: 2026-09-22
 decision-makers: [François Martin, Codex]
 consulted:
-  - "[Ownership proof](../telemetry-ownership-poc.md)"
-  - "[Source investigation](../telemetry-source-issue-followup.md)"
+  - "[Ownership proof](../telemetry-erasure-research.md#ownership-proof-options)"
+  - "[Source investigation](../telemetry-erasure-research.md#cutoff-queue-key-and-identity-reuse)"
 informed: [Contributors, Maintainers]
 ---
 
@@ -51,11 +51,13 @@ the service. Each dispatch persists its drain deadline independently of the repo
 so disable cannot remove the wait for an in-flight heartbeat. Signed requests bind the action, audience, installation, period and operation.
 Retries keep the same period. Workers wait half the time since the request between retries,
 at least one minute and at most six hours, because provider deletion can take days;
-`erase-status` checks at once after the drain deadline. Failed credential issuance uses the
-heartbeat retry backoff. Accepted work continues within PostHog. Acceptance is not
+`erase-status` checks immediately once a dispatched heartbeat has settled: its drain deadline
+plus one hour for PostHog ingestion. Failed credential issuance uses the heartbeat retry backoff. Accepted work continues within PostHog. Acceptance is not
 completion; status must establish provider deletion completion. Resuming after completion
 creates a new period and never resets or reuses the erased ID. Ordinary disable/enable
-preserves the period. Explicit enable is still required after erase.
+preserves the period. Explicit enable is still required after erase. After a refused erasure,
+enable also starts a new period; the refused period's data stays with the maintainer, and the
+new analytics ID cannot join the merged profile.
 
 PostHog incoming webhooks return before their first external fetch completes. The client
 therefore treats HTTP acceptance only as receipt. A background invocation writes a per-period
@@ -105,24 +107,27 @@ verified event deletion.
   service removes the profile record only on a later signed request from the client, sent by
   `erase-status` or a running worker's retry.
 
-Review found four risks that are not mitigated yet. The maintainer must resolve each one or
-accept it explicitly before production activation. The
-[activation gate](../telemetry-erasure-implementation.md#known-risks-before-production-activation)
-lists the details.
+Review found four risks. The maintainer accepted the first as a residual risk; the other three
+are mitigated. The
+[implementation document](../telemetry-erasure-implementation.md#risks-and-how-they-are-handled)
+has the details.
 
-- Flag-limit exhaustion. `issue-v1` issues a credential to any caller. Each `erase` with a
-  self-issued credential for a new empty period creates a permanent `symphony-erasure-empty-v1`
-  flag unless the caller sends `ack`. About 2,000 such requests reach PostHog's per-project limit
-  of 2,000 non-deleted flags, and every real erasure then stays pending. Each request also runs a
-  forced HogQL query against the management key's quota.
-- `ack` archives only complete flags. Refused and abandoned pending flags accumulate toward the
-  same limit. Their names contain the person UUID, which PostHog derives from the team and the
-  distinct ID.
-- A first heartbeat that PostHog ingests after the drain wait can leave the empty-person path
-  recording `complete` permanently. The late event is never deleted, and nothing durable records
-  which completions took the empty path.
-- Only the OpenTofu default `erasure_enabled.production = false` and the unset release variables
-  keep production off. Nothing checks for a `TWO_PERIOD_LIFECYCLE_PASS` ledger result.
+- Flag-limit exhaustion. `issue-v1` issues a credential to any caller, so about 2,000 `erase`
+  requests for new empty periods can fill PostHog's limit of 2,000 non-deleted flags and leave
+  every real erasure pending. PostHog alone offers no way to rate-limit this. It blocks automatic
+  erasure but cannot delete another installation's data, and the manual procedure keeps working.
+  `verify` warns at 500 flags, and `scripts/posthog-infra erasure-flags --archive` restores
+  capacity after the requests stop. Archiving is safe because a `status` request recreates a
+  missing empty or complete result.
+- Flags that `ack` never archives. `erasure-flags` archives settled results older than a day and
+  reports refused and stale operations.
+- Late ingestion. The client waits an hour after a heartbeat's drain deadline before its first
+  lookup. Empty results name their analytics ID, and `erasure-flags` counts its events again
+  before archiving and reports any late event for manual deletion.
+- Unchecked activation. A validation on `erasure_enabled` refuses production unless
+  `erasure_lifecycle_pass` matches the current handler template's hash, which the wrapper reads
+  only from a passing lifecycle ledger bound to that handler. Release packaging requires the
+  production project's audience from `infra/posthog/production-project-id`.
 
 ### Confirmation
 

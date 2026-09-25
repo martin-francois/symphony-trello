@@ -27,8 +27,3 @@ when the row naming that artifact leaves its primary failure surface or required
 The repository also pins and tests Node script tooling, GitHub Actions, and tool-container images.
 Their manifests, custom Renovate managers, config validation, and script tests are the confidence
 map for those non-Maven dependencies.
-
-The development-only `jose` dependency supplies ES256 and RFC 7638 operations for the local erasure
-protocol reference. `pnpm run verify:scripts` checks its public vectors, valid signatures and
-rejection cases on every required script-test run. It is not packaged with Java or executed inside
-PostHog. Renovate's npm manager owns its exact version in `package.json` and `pnpm-lock.yaml`.

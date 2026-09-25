@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -29,6 +30,15 @@ final class ReleasePackagingScriptTest {
     private static final String TELEMETRY_PROPERTIES_SOURCE = "# public capture token\nposthog.project-token=<unset>\n";
     private static final String TELEMETRY_TOKEN_VARIABLE = "SYMPHONY_TRELLO_POSTHOG_PROJECT_TOKEN";
     private static final String SYNTHETIC_TOKEN = "phc_" + "0".repeat(44);
+    private static final String PRODUCTION_PROJECT_FILE = "infra/posthog/production-project-id";
+    private static final String SYNTHETIC_PRODUCTION_PROJECT = "12345";
+    private static final Map<String, String> ERASURE_FOR_ANOTHER_PROJECT = Map.of(
+            TELEMETRY_TOKEN_VARIABLE,
+            SYNTHETIC_TOKEN,
+            "SYMPHONY_TRELLO_ERASURE_ENDPOINT",
+            "https://webhooks.eu.posthog.com/public/webhooks/00000000-0000-4000-8000-000000000001",
+            "SYMPHONY_TRELLO_ERASURE_AUDIENCE",
+            "symphony:54321");
 
     @TempDir
     Path tempDir;
@@ -101,6 +111,67 @@ final class ReleasePackagingScriptTest {
         assertThat(result.output()).contains("is not a PostHog project token");
         assertThat(project.mvnwLogPath()).doesNotExist();
         assertThat(properties).content().isEqualTo(TELEMETRY_PROPERTIES_SOURCE);
+    }
+
+    @Test
+    void refusesAnErasureAudienceForAnyProjectButProductionBeforeBuilding() throws Exception {
+        // given
+        TestProject project = createProject();
+        Path properties = project.root().resolve(TELEMETRY_PROPERTIES);
+        Files.createDirectories(properties.getParent());
+        Files.writeString(properties, TELEMETRY_PROPERTIES_SOURCE);
+        Path productionProject = project.root().resolve(PRODUCTION_PROJECT_FILE);
+        Files.createDirectories(productionProject.getParent());
+        Files.writeString(productionProject, SYNTHETIC_PRODUCTION_PROJECT + "\n");
+
+        // when
+        ProcessResult result = project.run(ERASURE_FOR_ANOTHER_PROJECT, VERSION);
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.output())
+                .contains("must name the production project", "symphony:" + SYNTHETIC_PRODUCTION_PROJECT);
+        assertThat(project.mvnwLogPath()).doesNotExist();
+        assertThat(properties).content().isEqualTo(TELEMETRY_PROPERTIES_SOURCE);
+    }
+
+    @Test
+    void packagesTheErasureConfigurationForTheProductionProject() throws Exception {
+        // given
+        TestProject project = createProject();
+        Path properties = project.root().resolve(TELEMETRY_PROPERTIES);
+        Files.createDirectories(properties.getParent());
+        Files.writeString(properties, TELEMETRY_PROPERTIES_SOURCE);
+        Path productionProject = project.root().resolve(PRODUCTION_PROJECT_FILE);
+        Files.createDirectories(productionProject.getParent());
+        Files.writeString(productionProject, SYNTHETIC_PRODUCTION_PROJECT + "\n");
+        project.writeMavenWrapper(
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                echo "$*" >> mvnw.log
+                rm -rf target
+                mkdir -p target/quarkus-app/app
+                printf 'app' > target/quarkus-app/application.txt
+                jar --create --file target/quarkus-app/app/symphony-trello.jar --no-manifest -C src/main/resources symphony-trello-telemetry.properties
+                """);
+        var environment = new HashMap<>(ERASURE_FOR_ANOTHER_PROJECT);
+        environment.put("SYMPHONY_TRELLO_ERASURE_AUDIENCE", "symphony:" + SYNTHETIC_PRODUCTION_PROJECT);
+
+        // when
+        ProcessResult result = project.run(environment, VERSION);
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isZero();
+        try (JarFile jar = new JarFile(project.root()
+                .resolve("target/quarkus-app/app/symphony-trello.jar")
+                .toFile())) {
+            String packaged = new String(
+                    jar.getInputStream(jar.getEntry("symphony-trello-telemetry.properties"))
+                            .readAllBytes(),
+                    StandardCharsets.UTF_8);
+            assertThat(packaged).contains("posthog.erasure-audience=symphony:" + SYNTHETIC_PRODUCTION_PROJECT);
+        }
     }
 
     @Test

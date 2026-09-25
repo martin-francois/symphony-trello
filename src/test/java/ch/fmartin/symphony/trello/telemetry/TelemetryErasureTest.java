@@ -272,7 +272,7 @@ final class TelemetryErasureTest {
     }
 
     @Test
-    void disableThenErasePreservesTheDispatchedHeartbeatDrainDeadline() {
+    void disableThenEraseWaitsForTheDispatchedHeartbeatToDrainAndBeIngested() {
         // given
         // Deliveries run later in FIFO order, like the worker executor, so the test controls timing.
         var deliveries = new ArrayDeque<Runnable>();
@@ -290,7 +290,7 @@ final class TelemetryErasureTest {
 
         // then
         assertThat(store.read().stateOrInitial().ownership().erasure().notBefore())
-                .isEqualTo(drainUntil);
+                .isEqualTo(drainUntil.plus(TelemetryOwnership.INGESTION_GRACE));
         assertThat(requests).containsExactly(ISSUE_REQUEST);
     }
 
@@ -360,7 +360,7 @@ final class TelemetryErasureTest {
     }
 
     @Test
-    void manualStatusSkipsTheBackgroundBackoffButNotTheHeartbeatDrain() {
+    void manualStatusSkipsTheBackgroundBackoffButWaitsForTheHeartbeatToSettle() {
         // given
         var deliveries = new ArrayDeque<Runnable>();
         HeartbeatReporter worker = worker(deliveries::add);
@@ -378,12 +378,16 @@ final class TelemetryErasureTest {
         long duringDrain = signedRequests();
         clock.advance(HeartbeatReporter.CLAIM_LIFETIME);
         service.erasureStatus(out, out);
+        long duringIngestion = signedRequests();
+        clock.advance(TelemetryOwnership.INGESTION_GRACE);
+        service.erasureStatus(out, out);
         long afterDrain = signedRequests();
         service.erasureStatus(out, out);
         long repeated = signedRequests();
 
         // then
         assertThat(duringDrain).isZero();
+        assertThat(duringIngestion).isZero();
         assertThat(afterDrain).isOne();
         assertThat(repeated).isEqualTo(2);
     }
@@ -422,6 +426,34 @@ final class TelemetryErasureTest {
         assertThat(output.toString(StandardCharsets.UTF_8)).contains("nothing to erase");
         assertThat(store.read().stateOrInitial().mode()).isEqualTo(TelemetryMode.DISABLED);
         assertThat(requests).isEmpty();
+    }
+
+    @Test
+    void enableAfterARefusedErasureResumesUnderANewPeriodAndLeavesTheOldOneToTheMaintainer() {
+        // given
+        erasure.maintain(store);
+        store.update(state -> Update.write(state.withOwnership(state.ownership().markUsed()), null));
+        status.set("refused");
+        erasure.request(store);
+        TelemetryState refused = store.read().stateOrInitial();
+        TelemetryService service = new TelemetryService(installation, TelemetryFixture.snapshots(installation), clock);
+        var output = new ByteArrayOutputStream();
+        var out = new PrintStream(output, true, StandardCharsets.UTF_8);
+
+        // when
+        int result = service.enable(out, out);
+        TelemetryState resumed = store.read().stateOrInitial();
+
+        // then
+        assertThat(refused.erasure().phase()).isEqualTo(Phase.REFUSED);
+        assertThat(result).isEqualTo(TelemetryService.EXIT_OK);
+        assertThat(resumed.mode()).isEqualTo(TelemetryMode.ENABLED);
+        assertThat(resumed.ownership().credential())
+                .isEqualTo(refused.ownership().credential());
+        assertThat(resumed.ownership().period())
+                .isNotEqualTo(refused.ownership().period());
+        assertThat(resumed.erasure()).isNull();
+        assertThat(output.toString(StandardCharsets.UTF_8)).contains("not deleted yet", "new analytics ID");
     }
 
     private long signedRequests() {
