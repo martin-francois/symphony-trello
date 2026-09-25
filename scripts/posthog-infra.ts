@@ -12,6 +12,7 @@ import {createHash, randomUUID} from "node:crypto";
 import {existsSync, readFileSync, writeFileSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
+import {isEntryPoint} from "./entry-point.ts";
 
 export const ENVIRONMENT_GAP_SETTINGS = {
   autocapture_opt_out: true,
@@ -1221,7 +1222,7 @@ function infraDir(): string {
   return join(dirname(fileURLToPath(import.meta.url)), "..", "infra", "posthog");
 }
 
-if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (isEntryPoint(import.meta.url)) {
   main(process.argv.slice(2), process.env)
     .then((code) => {
       process.exitCode = code;

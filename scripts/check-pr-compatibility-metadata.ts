@@ -1,5 +1,5 @@
 import {execFileSync} from "node:child_process";
-import {pathToFileURL} from "node:url";
+import {isEntryPoint} from "./entry-point.ts";
 
 type CompatibilityKind = "breaking" | "compatible" | "unsure";
 export type CommitHistoryMode = "combine" | "keep";
@@ -308,7 +308,7 @@ export function evaluateCompatibilityMetadata(title: string, body: string): stri
   return errors;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isEntryPoint(import.meta.url)) {
   const title = process.env.PR_TITLE ?? "";
   const body = process.env.PR_BODY ?? "";
   const base = process.env.PR_BASE_SHA ?? "";

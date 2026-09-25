@@ -1,5 +1,6 @@
 import {readFileSync, writeFileSync} from "node:fs";
 import {basename} from "node:path";
+import {isEntryPoint} from "./entry-point.ts";
 
 export const OPENREWRITE_VERSION_PROPERTIES = [
   "error-prone.version",
@@ -372,7 +373,7 @@ function main(arguments_: readonly string[]): void {
   throw new Error(`unknown command: ${command ?? basename(import.meta.filename)}`);
 }
 
-if (process.argv[1] && import.meta.filename === process.argv[1]) {
+if (isEntryPoint(import.meta.url)) {
   try {
     main(process.argv.slice(2));
   } catch (error) {
