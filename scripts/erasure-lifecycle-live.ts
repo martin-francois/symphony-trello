@@ -1,9 +1,9 @@
 // Explicit TEST-only lifecycle gate. Credentials stay in its owner-only ledger, never in output.
 import {randomBytes, randomUUID, createHmac} from "node:crypto";
 import {mkdirSync, readFileSync, writeFileSync, renameSync, chmodSync} from "node:fs";
-import {resolve, join} from "node:path";
-import {fileURLToPath} from "node:url";
+import {join} from "node:path";
 import {PostHogApi, readKey, readRoles, verifyProbeTarget, type Json} from "./posthog-infra.ts";
+import {isEntryPoint} from "./entry-point.ts";
 import {erasureService, handlerTemplateSha256} from "./erasure-service.ts";
 
 /** Seconds between a signed operation's issue and expiry times. The native handler in
@@ -508,6 +508,6 @@ function checkNoIdentifiers(body: string, owner: Owner, distinct: string): void 
   if ([owner.secret, owner.installation_id, distinct].some(value => body.includes(value))) throw new Error("Public status exposed an identifier or credential");
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isEntryPoint(import.meta.url)) {
   main().catch(() => {console.error("Lifecycle gate failed; inspect the protected ledger. Production remains disabled."); process.exitCode = 1;});
 }

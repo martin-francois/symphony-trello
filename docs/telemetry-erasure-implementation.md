@@ -90,6 +90,14 @@ production. The run that started on 2026-09-23 used an earlier handler. Resuming
 whether PostHog physically deletes the data, but production needs a new full run on the current
 handler.
 
+On 2026-09-25 a new run started on the current handler. Every admission check passed: issuance and
+key derivation, the empty-period path, partial-failure recovery, forgery rejection, lost-response
+retry, provider-backed acceptance and canary survival. It stopped at
+`ACCEPTED_PHYSICAL_COMPLETION_PENDING` and needs `--resume` after PostHog's deletion batch; it keeps
+its ledger in a separate `SYMPHONY_TRELLO_ERASURE_LIFECYCLE_DIR`. Unsaved Hog probes in the TEST
+project confirmed that `typeof` returns `object` for a dictionary and `null` for a missing field,
+that the nested status check and the flag-name split work, and that the rendered handler runs.
+
 ### Risks and how they are handled
 
 Review found four risks. Their handling:
