@@ -387,6 +387,7 @@ publish_assets() {
 # the only build that carries it. The source file is restored after packaging.
 TELEMETRY_PROPERTIES="src/main/resources/symphony-trello-telemetry.properties"
 TELEMETRY_TOKEN_KEY="posthog.project-token"
+PRODUCTION_PROJECT_FILE="infra/posthog/production-project-id"
 TELEMETRY_TOKEN_PLACEHOLDER="<unset>"
 TELEMETRY_TOKEN_PATTERN='^phc_[A-Za-z0-9]{40,64}$'
 TELEMETRY_PROPERTIES_BACKUP=""
@@ -405,6 +406,16 @@ inject_telemetry_token() {
   if [[ -n "$erasure_url$erasure_audience" ]]; then
     if [[ ! "$erasure_url" =~ ^https://webhooks\.eu\.posthog\.com/public/webhooks/[0-9a-f-]{36}$ || ! "$erasure_audience" =~ ^symphony:[1-9][0-9]*$ || -z "$token" ]]; then
       echo "Erasure packaging requires a native EU webhook, its project audience, and the capture token." >&2
+      exit 2
+    fi
+    # A release pointing at another project's handler would find no events there and report every
+    # erasure complete without deleting anything in production.
+    local production_project=""
+    if [[ -r "$ROOT/$PRODUCTION_PROJECT_FILE" ]]; then
+      production_project="$(tr -d '[:space:]' <"$ROOT/$PRODUCTION_PROJECT_FILE")"
+    fi
+    if [[ "$erasure_audience" != "symphony:$production_project" ]]; then
+      echo "Erasure audience must name the production project from $PRODUCTION_PROJECT_FILE (symphony:${production_project:-<missing>})." >&2
       exit 2
     fi
   fi

@@ -254,10 +254,10 @@ the repository, or the CI configuration.
 
 The native service refuses an automatic erasure when the PostHog profile bound to the operation
 holds any ID other than the period's analytics ID, or when another profile now holds that ID.
-`symphony-trello telemetry erase-status` then reports the refusal and exits with an error. The
-client has no automatic way out. `symphony-trello telemetry enable` refuses while the erasure is
-refused, and no command clears it, so the installation stays disabled. Tell the user this
-plainly.
+`symphony-trello telemetry erase-status` then reports the refusal and exits with an error.
+Reporting stays off until the user runs `symphony-trello telemetry enable`, which starts a new
+reporting period under a new analytics ID. The refused period's data is not deleted by that; it
+waits for this procedure. Tell the user this plainly.
 
 The user sends the installation and analytics IDs from `symphony-trello telemetry status`
 through the private form described above. Then:
@@ -315,7 +315,7 @@ API contract until then:
 
 ## Local diagnostics
 
-The separate [PostHog-native erasure trial](telemetry-native-erasure-trial.md) found no supported
+The separate [PostHog-native erasure trial](telemetry-erasure-research.md#es256-and-jose-rejected) found no supported
 hosted asymmetric verifier and stopped before deploying an erasure handler.
 [ADR 0082](adr/0082-authenticated-erasure-with-reporting-periods.md) later chose HMAC ownership
 with reporting periods, described under "Authenticated erasure extension" below. Legacy
@@ -343,13 +343,22 @@ record. "Accepted" and profile disappearance alone do not prove event deletion. 
 verification, query exact raw distinct-ID events and preserve an unrelated canary during tests.
 Do not reset a retired distinct ID or reuse its completed deletion queue key.
 
-Status flags whose private names start with `symphony-erasure-v1|` belong to deletion operations.
-Archive a leftover flag only after checking its bound person's completed deletion record and profile
-absence. The client already saves completion before requesting archival. A user whose local state
-predates that acknowledgment needs maintainer assistance if the status flag is gone. `ack` archives
-only complete flags. Refused flags, flags of abandoned pending operations and unacknowledged
-`symphony-erasure-empty-v1` flags stay until the maintainer archives them; the
-[known risks](telemetry-erasure-implementation.md#known-risks-before-production-activation)
-explain why they matter. Keep the non-deleted flag count below PostHog's 2,000 limit. Preserve
+Status flags whose private names start with `symphony-erasure-v1|` belong to deletion operations
+bound to a person; `symphony-erasure-empty-v2|<analytics id>` and the older
+`symphony-erasure-empty-v1` mark periods that had no profile. `ack` archives only complete flags,
+so review the rest with `scripts/posthog-infra erasure-flags production` and archive settled ones
+with `--archive`. The command archives empty and complete results older than a day. Before
+archiving an empty result it counts that analytics ID's events again. It reports, and never
+archives, three cases:
+
+- `late-events`: an event arrived after the empty result. Delete that analytics ID's events with
+  the procedure under [Erasure requests](#erasure-requests), then run the command again.
+- `refused`: follow [Refused automatic erasure](#refused-automatic-erasure).
+- `stale`: a pending or accepted operation older than 14 days. Check the bound person's
+  `persons/deletion_status/` record; escalate to PostHog support if deletion never completed.
+
+Archiving a settled result never strands a client, because its next `status` request recreates
+the result. The [risk notes](telemetry-erasure-implementation.md#risks-and-how-they-are-handled)
+explain why the count matters. Keep the non-deleted flag count below PostHog's 2,000 limit. Preserve
 every signing-key version still used by installations and back up provider configuration outside
 analytics retention.

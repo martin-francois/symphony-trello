@@ -50,6 +50,16 @@ const READ_BACK_ATTEMPTS = 5;
 const READ_BACK_DELAY_MS = 2000;
 const INGESTION_ATTEMPTS = 20;
 const INGESTION_DELAY_MS = 15000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Clients read their result within hours. An archived empty or complete flag is recreated by the
+ * owner's next request, so archiving one never strands a client; the age only avoids churn. */
+export const ERASURE_FLAG_MIN_AGE_MS = DAY_MS;
+/** A pending or accepted operation this old has lost its client or is stuck at PostHog. */
+export const ERASURE_FLAG_STALE_MS = 14 * DAY_MS;
+/** Well below PostHog's limit of 2,000 non-deleted flags per project. */
+export const ERASURE_FLAG_WARNING = 500;
+const RANDOM_UUID = "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+const PERIOD_ANALYTICS_ID = new RegExp(`^${RANDOM_UUID}\\.${RANDOM_UUID}$`);
 
 export type Json = null | boolean | number | string | Json[] | {readonly [key: string]: Json};
 type JsonObject = {readonly [key: string]: Json};
@@ -376,11 +386,15 @@ export async function gapApply(api: PostHogApi, roles: readonly Role[], sleep: S
 
 /** Read-only checks; nothing here writes. A required value that is null, absent, or of the wrong
  * type is UNKNOWN, which keeps the deployment unverified; only advisory items may stay unknown. */
-export async function verify(api: PostHogApi, roles: readonly Role[]): Promise<readonly Check[]> {
+export async function verify(api: PostHogApi, roles: readonly Role[], productionProjectId?: number): Promise<readonly Check[]> {
   const checks: Check[] = [];
   const organizations = new Map<string, string[]>();
   for (const role of roles) {
     const project = asObject(await api.get(`/api/projects/${role.projectId}/`), `project ${role.projectId}`);
+    if (role.name === "production" && productionProjectId !== undefined) {
+      // Release packaging checks the erasure audience against the same file.
+      checks.push(compare(role.name, "project.id", productionProjectId, role.projectId, "infra/posthog/production-project-id", true));
+    }
     const organization = typeof project["organization"] === "string" ? project["organization"] : "";
     organizations.set(organization, [...(organizations.get(organization) ?? []), role.name]);
     const environment = asObject(await api.get(`/api/environments/${role.projectId}/`), `environment ${role.projectId}`);
@@ -446,6 +460,16 @@ export async function verify(api: PostHogApi, roles: readonly Role[]): Promise<r
       checks.push(compare(role.name, "erasure.source", true,
         services.length === 1 && service?.["enabled"] === true && service?.["type"] === "source_webhook"
           && hash === role.policy["erasure_hog_sha256"], "posthog_hog_function", true));
+      const flags = await erasureFlagList(api, role.projectId);
+      checks.push({
+        role: role.name,
+        item: "erasure.status_flags",
+        expected: `fewer than ${ERASURE_FLAG_WARNING} non-deleted`,
+        observed: String(flags.length),
+        status: flags.length < ERASURE_FLAG_WARNING ? "PASS" : "FAIL",
+        owner: "scripts/posthog-infra erasure-flags",
+        required: false,
+      });
     }
     checks.push(countCheck(role.name, "destinations", destinations.filter(entry => entry["id"] !== serviceId).length, "untracked; none expected"));
     const batchExports = await api.listAll(`/api/projects/${role.projectId}/batch_exports/?limit=${PAGE_LIMIT}`);
@@ -728,6 +752,88 @@ export function scopeQuery(sql: string, cohortIds: readonly string[]): string {
   return sql.split(EVENT_FILTER).join(`${EVENT_FILTER} AND distinct_id IN (${list})`);
 }
 
+export type ErasureFlagAction = "archive" | "late-events" | "refused" | "stale" | "keep";
+
+export interface ErasureFlagReview {
+  readonly id: number;
+  readonly name: string;
+  readonly state: string;
+  readonly createdAt: string;
+  readonly action: ErasureFlagAction;
+  readonly remainingEvents?: number;
+}
+
+/** Non-deleted status flags written by infra/posthog/erasure-service.hog.tftpl. */
+export async function erasureFlagList(api: PostHogApi, projectId: number): Promise<readonly JsonObject[]> {
+  const flags = await api.listAll(`/api/projects/${projectId}/feature_flags/?search=erasure-&limit=${PAGE_LIMIT}`);
+  return flags.filter((flag) => typeof flag["key"] === "string" && flag["key"].startsWith("erasure-")
+    && typeof flag["name"] === "string" && flag["name"].startsWith("symphony-erasure-") && flag["deleted"] !== true);
+}
+
+function flagVariant(flag: JsonObject): string {
+  const filters = isObject(flag["filters"]) ? flag["filters"] : {};
+  const multivariate = isObject(filters["multivariate"]) ? filters["multivariate"] : {};
+  const variants = Array.isArray(multivariate["variants"]) ? multivariate["variants"] : [];
+  const first = variants[0];
+  return isObject(first) && typeof first["key"] === "string" ? first["key"] : "unknown";
+}
+
+/** Classifies every status flag and, when asked, archives the ones that are safe to archive:
+ * empty results and completed deletions older than a day. An empty result that names its analytics
+ * ID is archived only after a fresh query still finds no event for it; a late event is reported
+ * for manual deletion instead. Refused and stale operations are reported, never archived. */
+export async function reviewErasureFlags(api: PostHogApi, projectId: number, now: Date, archive: boolean): Promise<readonly ErasureFlagReview[]> {
+  const reviews: ErasureFlagReview[] = [];
+  for (const flag of await erasureFlagList(api, projectId)) {
+    const name = String(flag["name"]);
+    const createdAt = typeof flag["created_at"] === "string" ? flag["created_at"] : "";
+    const age = now.getTime() - Date.parse(createdAt);
+    const state = flagVariant(flag);
+    const [kind, binding = ""] = name.split("|");
+    let action: ErasureFlagAction = "keep";
+    let remainingEvents: number | undefined;
+    if (!(age >= 0)) {
+      action = "keep";
+    } else if (kind === "symphony-erasure-empty-v2") {
+      if (!PERIOD_ANALYTICS_ID.test(binding)) {
+        throw new InfraError(`status flag ${String(flag["id"])} names no valid analytics ID`);
+      }
+      if (age >= ERASURE_FLAG_MIN_AGE_MS) {
+        const rows = await runQuery(api, projectId, `SELECT count() FROM events WHERE distinct_id = '${binding}'`);
+        const first = rows[0];
+        remainingEvents = Array.isArray(first) ? Number(first[0]) : NaN;
+        if (!Number.isInteger(remainingEvents)) {
+          throw new InfraError(`status flag ${String(flag["id"])}: unreadable event count`);
+        }
+        action = remainingEvents === 0 ? "archive" : "late-events";
+      }
+    } else if (kind === "symphony-erasure-empty-v1") {
+      action = age >= ERASURE_FLAG_MIN_AGE_MS ? "archive" : "keep";
+    } else if (kind === "symphony-erasure-v1") {
+      if (state === "refused") {
+        action = "refused";
+      } else if (state === "complete") {
+        action = age >= ERASURE_FLAG_MIN_AGE_MS ? "archive" : "keep";
+      } else if (age >= ERASURE_FLAG_STALE_MS) {
+        action = "stale";
+      }
+    }
+    if (action === "archive" && archive) {
+      await api.patch(`/api/projects/${projectId}/feature_flags/${String(flag["id"])}/`, {active: false, deleted: true});
+    }
+    reviews.push({id: Number(flag["id"]), name, state, createdAt, action, ...(remainingEvents === undefined ? {} : {remainingEvents})});
+  }
+  return reviews;
+}
+
+export function readProductionProjectId(): number {
+  const text = readFileSync(join(infraDir(), "production-project-id"), "utf8").trim();
+  if (!/^[1-9][0-9]*$/.test(text)) {
+    throw new InfraError("infra/posthog/production-project-id must hold one project number");
+  }
+  return Number(text);
+}
+
 export async function runQuery(api: PostHogApi, projectId: number, sql: string): Promise<readonly Json[]> {
   const response = asObject(
     await api.post(`/api/projects/${projectId}/query/`, {query: {kind: "HogQLQuery", query: sql}, refresh: "force_blocking"}),
@@ -959,7 +1065,7 @@ export async function main(argv: readonly string[], environment: NodeJS.ProcessE
     }
     case "verify": {
       const roles = readRoles(requireFlag(options, "outputs"));
-      const checks = await verify(api, roles);
+      const checks = await verify(api, roles, readProductionProjectId());
       const report = renderReport(checks, {
         observedAt: new Date().toISOString(),
         configRevision: options.flags.get("config-revision") ?? "unknown",
@@ -1076,6 +1182,23 @@ export async function main(argv: readonly string[], environment: NodeJS.ProcessE
         console.log(`| ${result.name} | ${result.status} | ${result.detail.replace(/\|/g, "\\|")} |`);
       }
       return results.some((result) => result.status === "unexpected") ? 1 : 0;
+    }
+    case "erasure-flags": {
+      const roles = readRoles(requireFlag(options, "outputs"));
+      const roleName = requireFlag(options, "role");
+      const role = roles.find((candidate) => candidate.name === roleName);
+      if (role === undefined) {
+        throw new InfraError(`no role ${roleName} in outputs`);
+      }
+      const archive = options.flags.get("archive") === "true";
+      const reviews = await reviewErasureFlags(api, role.projectId, new Date(), archive);
+      for (const review of reviews) {
+        const events = review.remainingEvents === undefined ? "" : `, ${review.remainingEvents} event(s) remain`;
+        console.log(`${review.action}${review.action === "archive" && !archive ? " (dry run)" : ""} flag ${review.id} ${review.name} [${review.state}, created ${review.createdAt}${events}]`);
+      }
+      const attention = reviews.filter((review) => review.action === "late-events" || review.action === "refused" || review.action === "stale");
+      console.log(`erasure-flags: ${reviews.length} flag(s), ${reviews.filter((review) => review.action === "archive").length} ${archive ? "archived" : "archivable"}, ${attention.length} need the maintainer`);
+      return attention.length === 0 ? 0 : 1;
     }
     case "retire-project": {
       const id = Number(requireFlag(options, "id"));

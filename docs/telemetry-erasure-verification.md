@@ -5,7 +5,7 @@ This note records the live experiment that backs the erasure procedure in
 against PostHog, what was observed, and what is still pending. The runbook holds the procedure;
 this page holds the evidence and how to reproduce or resume it.
 
-The later [native erasure trial](telemetry-native-erasure-trial.md) is a separate capability
+The later [native erasure trial](telemetry-erasure-research.md#es256-and-jose-rejected) is a separate capability
 investigation. It stopped before installing a privileged handler and did not advance this
 maintainer-driven experiment. Neither report proves unattended native completion or same-ID reuse.
 

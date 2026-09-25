@@ -20,6 +20,7 @@ OUTPUTS_FILE="$STATE_DIR/outputs.json"
 DATA_DIR="${TF_DATA_DIR:-$STATE_DIR/.terraform}"
 BACKEND_RECORD="$DATA_DIR/terraform.tfstate"
 ROLES=(production test)
+LIFECYCLE_LEDGER="${SYMPHONY_TRELLO_ERASURE_LIFECYCLE_DIR:-$HOME/.local/state/symphony-trello/erasure-lifecycle}/ledger.json"
 
 usage() {
   cat <<'USAGE'
@@ -27,7 +28,8 @@ Usage: scripts/posthog-infra <command> [options]
 
 Offline (no credentials):
   fmt [-check]          Format the configuration, or check it in CI.
-  validate              Initialize without a backend and validate the configuration.
+  validate              Initialize without a backend, validate the configuration, and run the
+                        offline OpenTofu tests in infra/posthog/tests.
 
 With the personal API key (read from SYMPHONY_TRELLO_POSTHOG_KEY_FILE, default ~/posthog-personal-api-key):
   init                  Initialize with the private state path (SYMPHONY_TRELLO_POSTHOG_STATE_DIR).
@@ -42,6 +44,9 @@ With the personal API key (read from SYMPHONY_TRELLO_POSTHOG_KEY_FILE, default ~
                         Store the production capture token in that repository's POSTHOG_PROJECT_TOKEN secret.
   hog-probe             Unsaved mocked invocations in the test role. Requires
                         SYMPHONY_TRELLO_POSTHOG_LIVE_PROBE=1; saves a private result ledger.
+  erasure-flags <role> [--archive]
+                        Review the erasure status flags; with --archive, archive empty and complete
+                        results older than a day. Exits 1 when a flag needs the maintainer.
   retire-project <id> "<name>"
                         Delete one project that is not managed by this state, after checking its name.
   destroy [-auto-approve]
@@ -172,11 +177,26 @@ project_id_from_state() {
   ' "$1"
 }
 
+# The hosted lifecycle ledger is the only source of the production activation pass. OpenTofu
+# compares it with the current handler template, so a changed handler needs a new pass.
+lifecycle_pass_args() {
+  if [[ -r "$LIFECYCLE_LEDGER" ]]; then
+    node -e '
+      const ledger = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+      if (ledger.status === "TWO_PERIOD_LIFECYCLE_PASS" && ledger.handlerMixed !== true && /^[0-9a-f]{64}$/.test(ledger.handlerSha256 ?? "")) {
+        console.log("-var=erasure_lifecycle_pass=" + ledger.handlerSha256);
+      }
+    ' "$LIFECYCLE_LEDGER"
+  fi
+}
+
 cmd_apply() {
   require_initialized
   reject_partial_apply_args "$@"
-  bootstrap "${@//-auto-approve/}"
-  tofu_cmd apply -input=false "$@"
+  local pass_args
+  mapfile -t pass_args < <(lifecycle_pass_args)
+  bootstrap "${@//-auto-approve/}" "${pass_args[@]}"
+  tofu_cmd apply -input=false "$@" "${pass_args[@]}"
   write_outputs
   supplement gaps apply --outputs "$OUTPUTS_FILE"
   cmd_verify
@@ -240,11 +260,14 @@ validate)
   # A separate data directory keeps the backend-less init from disturbing the credentialed one.
   TF_DATA_DIR="$INFRA_DIR/.terraform-validate" tofu -chdir="$INFRA_DIR" init -input=false -backend=false >/dev/null
   TF_DATA_DIR="$INFRA_DIR/.terraform-validate" tofu -chdir="$INFRA_DIR" validate "$@"
+  # Plan-only tests against a mocked provider: no credentials, nothing applied.
+  TF_DATA_DIR="$INFRA_DIR/.terraform-validate" tofu -chdir="$INFRA_DIR" test "$@"
   ;;
 init) cmd_init "$@" ;;
 plan)
   require_initialized
-  tofu_cmd plan -input=false -detailed-exitcode "$@"
+  mapfile -t pass_args < <(lifecycle_pass_args)
+  tofu_cmd plan -input=false -detailed-exitcode "$@" "${pass_args[@]}"
   ;;
 apply) cmd_apply "$@" ;;
 gaps)
@@ -268,6 +291,15 @@ hog-probe)
   require_initialized
   write_outputs
   supplement hog-probe --outputs "$OUTPUTS_FILE" --state "$STATE_FILE" --role test --report "$STATE_DIR/hog-probe-$(date -u +%Y%m%dT%H%M%SZ).json"
+  ;;
+erasure-flags)
+  if [[ -z "${1:-}" || ! "${2:-}" =~ ^(--archive)?$ || $# -gt 2 ]]; then
+    echo "posthog-infra: usage: erasure-flags <role> [--archive]" >&2
+    exit 2
+  fi
+  require_initialized
+  write_outputs
+  supplement erasure-flags --outputs "$OUTPUTS_FILE" --role "$1" ${2:+"$2"}
   ;;
 retire-project)
   # A project this state manages is retired through destroy, never through this command.

@@ -117,7 +117,8 @@ When the installed release has automatic erasure configured, run
 `symphony-trello telemetry erase`. It turns reporting off and saves the request locally.
 `symphony-trello telemetry erase-status` checks progress; running workers also retry, less often
 as the request ages, and at least every six hours. If this installation never sent a report,
-`erase` only turns reporting off because there is nothing to erase.
+`erase` only turns reporting off because there is nothing to erase. If a report left within the
+last hour, the first check waits until an hour after it, so that report is included.
 "Accepted" means PostHog has queued deletion. "Complete" means one of three things. PostHog
 verified event deletion and the person profile is absent. Or a fresh check found no profile and
 no retained events. Or the current reporting period never started sending a report, so the
@@ -145,8 +146,9 @@ merged data but does not eliminate it during provider filter failures.
 
 Automatic erasure can be refused when PostHog's profile for the analytics ID is in an
 unexpected state, for example when it holds other IDs after a merge. `erase-status` then says so.
-The installation stays disabled: `symphony-trello telemetry enable` refuses while the erasure is
-refused, and no command clears that state. Send the installation and analytics IDs from
+Reporting stays off until you run `symphony-trello telemetry enable`, which starts a new
+reporting period under a new analytics ID. That does not delete the refused data. Send the
+installation and analytics IDs from
 `symphony-trello telemetry status` through the same private form. The maintainer investigates
 the merge, then deletes the data manually or asks PostHog support to delete it.
 

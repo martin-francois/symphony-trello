@@ -25,7 +25,7 @@ final class TelemetryErasureClient implements AutoCloseable {
     private static final Duration TIMEOUT = Duration.ofSeconds(20);
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
     // The erasure handler (infra/posthog/erasure-service.hog.tftpl) rejects longer validity windows.
-    private static final Duration SIGNATURE_LIFETIME = Duration.ofSeconds(900);
+    static final Duration SIGNATURE_LIFETIME = Duration.ofSeconds(900);
     private final TelemetryErasureEndpoint endpoint;
     private final TelemetryDistribution distribution;
     private final HttpClient http = HttpClient.newBuilder()

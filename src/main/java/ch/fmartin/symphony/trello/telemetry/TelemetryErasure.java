@@ -53,13 +53,13 @@ final class TelemetryErasure {
         run(store, this::needsMaintenance);
     }
 
-    /// Status check a person asked for. It skips the background backoff but still waits for the
-    /// drain deadline of a dispatched heartbeat.
+    /// Status check a person asked for. It skips the background backoff but still waits until a
+    /// dispatched heartbeat has settled.
     void refresh(TelemetryStateStore store) {
         run(store, state -> {
             Erasure job = state.erasure();
             TelemetryOwnership ownership = state.ownership();
-            return job != null && ownership != null && active(job) && ownership.drained(clock.instant());
+            return job != null && ownership != null && active(job) && ownership.settled(clock.instant());
         });
     }
 
@@ -122,8 +122,8 @@ final class TelemetryErasure {
                 return Update.write(disabled, Claim.OWNED);
             }
             Instant now = clock.instant();
-            // Allow an already dispatched heartbeat's bounded transport to finish before looking up its profile.
-            Instant notBefore = owner.drainedAt(now);
+            // Let a dispatched heartbeat finish its transport and ingestion before looking up its profile.
+            Instant notBefore = owner.settledAt(now);
             Phase phase = owner.used() ? Phase.REQUESTED : Phase.COMPLETE;
             Erasure job = new Erasure(UUID.randomUUID(), now, notBefore, phase);
             return Update.write(disabled.withOwnership(owner.withErasure(job)), Claim.OWNED);

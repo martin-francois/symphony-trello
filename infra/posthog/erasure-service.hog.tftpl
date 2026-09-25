@@ -47,7 +47,8 @@ if (typeof(people.results) != 'array' or people.next != null or length(people.re
 let person := null;
 if (length(people.results) == 1) { person := people.results[1]; }
 if (flag == null) {
-    if (parts[2] != 'erase') { return; }
+    // A status request may recreate an archived result; archiving a settled flag never strands a client.
+    if (parts[2] == 'ack') { return; }
     if (person == null) {
         let emptyResponse := fetch('https://eu.posthog.com/api/projects/${project}/query/', {'method': 'POST', 'headers': headers, 'body': jsonStringify({
             'query': {'kind': 'HogQLQuery', 'query': 'SELECT count() FROM events WHERE distinct_id = {id}', 'values': {'id': target}}, 'refresh': 'force_blocking'
@@ -57,7 +58,7 @@ if (flag == null) {
         if (empty.is_cached == true or typeof(empty.results) != 'array' or length(empty.results) != 1) { return; }
         if (length(empty.results[1]) != 1 or empty.results[1][1] != 0) { return; }
         fetch('https://eu.posthog.com/api/projects/${project}/feature_flags/', {'method': 'POST', 'headers': headers, 'body': jsonStringify({
-            'key': mailbox, 'name': 'symphony-erasure-empty-v1', 'active': true,
+            'key': mailbox, 'name': concat('symphony-erasure-empty-v2|', target), 'active': true,
             'filters': {'groups': [{'properties': [], 'rollout_percentage': 100}], 'multivariate': {'variants': [{'key': 'complete', 'rollout_percentage': 100}]}}
         })});
         return;
@@ -73,7 +74,9 @@ if (flag == null) {
     }
     return;
 }
-if (flag.name == 'symphony-erasure-empty-v1') {
+// Version 1 empty results carry no target; version 2 names it so cleanup can recheck for late events.
+let kind := splitByString('|', flag.name)[1];
+if (kind == 'symphony-erasure-empty-v1' or kind == 'symphony-erasure-empty-v2') {
     if (parts[2] == 'ack') {
         fetch(concat('https://eu.posthog.com/api/projects/${project}/feature_flags/', toString(flag.id), '/'), {'method': 'PATCH', 'headers': headers, 'body': jsonStringify({'active': false, 'deleted': true})});
     }
@@ -116,6 +119,19 @@ if (parts[2] == 'ack') {
         fetch(concat('https://eu.posthog.com/api/projects/${project}/feature_flags/', toString(flag.id), '/'), {'method': 'PATCH', 'headers': headers, 'body': jsonStringify({'active': false, 'deleted': true})});
     }
     return;
+}
+// Skip an unchanged status. Nested checks, because both sides of a Hog boolean are evaluated.
+let filters := flag.filters;
+if (typeof(filters) == 'object') {
+    let multivariate := filters.multivariate;
+    if (typeof(multivariate) == 'object') {
+        let variants := multivariate.variants;
+        if (typeof(variants) == 'array') {
+            if (length(variants) == 1) {
+                if (variants[1].key == state) { return; }
+            }
+        }
+    }
 }
 fetch(concat('https://eu.posthog.com/api/projects/${project}/feature_flags/', toString(flag.id), '/'), {'method': 'PATCH', 'headers': headers, 'body': jsonStringify({
     'filters': {'groups': [{'properties': [], 'rollout_percentage': 100}], 'multivariate': {'variants': [{'key': state, 'rollout_percentage': 100}]}}

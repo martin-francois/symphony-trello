@@ -3,8 +3,8 @@ status: "superseded by [ADR 0082](0082-authenticated-erasure-with-reporting-peri
 date: 2026-09-22
 decision-makers: [François Martin, Codex]
 consulted:
-  - "[Native capability research](../telemetry-native-erasure-capabilities.md)"
-  - "[Native trial evidence](../telemetry-native-erasure-trial.md)"
+  - "[Native capability research](../telemetry-erasure-research.md#posthog-native-execution)"
+  - "[Native trial evidence](../telemetry-erasure-research.md#es256-and-jose-rejected)"
   - "[PostHog Hog documentation](https://posthog.com/docs/hog)"
   - "[jose](https://github.com/panva/jose)"
 informed: [Future maintainers, Contributors]
@@ -67,7 +67,7 @@ proof of possession without revealing the credential on each request when implem
 maintenance remain simple. Stronger authentication is a preference, not a requirement that
 justifies extra infrastructure or disproportionate complexity for installation analytics.
 Neither candidate may require periodic credential or public-key uploads to outlive event retention.
-The subsequent [ownership proofs of concept](../telemetry-ownership-poc.md) demonstrated native HMAC
+The subsequent [ownership proofs of concept](../telemetry-erasure-research.md#ownership-proof-options) demonstrated native HMAC
 issuance and verification through public TEST webhooks. Select server-derived HMAC for ownership;
 keep hash-derived bearer authentication as the accepted fallback. Both passed authentication tests,
 and neither has passed the complete erasure lifecycle.
@@ -79,7 +79,7 @@ remaining lifecycle gates before changing application identity or enabling produ
 
 ### Merge alternatives and proportionality
 
-The [alternatives investigation](../telemetry-erasure-alternatives.md) separates the maintainer's
+The [alternatives investigation](../telemetry-erasure-research.md#identity-merges-and-the-merge-filter) separates the maintainer's
 primary blind-guessing threat from an attacker who already knows another installation ID. Keep
 HMAC ownership and unpredictable installation IDs. Prefer a native identity-event drop filter
 as additional protection over a second hidden ID or a heartbeat proxy introduced only to prevent
@@ -146,14 +146,17 @@ ID knowledge cannot recover it. Existing random-UUID installations need a separa
 migration and cannot be claimed by presenting their public ID. Provider deletion scope, person
 merges, unattended completion, retries and reuse remain separate live acceptance gates.
 
-The development-only reference uses `jose` for JWK thumbprints and JOSE signing/verification,
-with Node's SHA-256 for the fixed namespace derivation. It accepts a fixed JSON representation:
+The development-only reference used `jose` for JWK thumbprints and JOSE signing/verification,
+with Node's SHA-256 for the fixed namespace derivation. It accepted a fixed JSON representation:
 header members `alg`, `typ`, `jwk`; JWK members `kty`, `crv`, `x`, `y`; claims `action`, `sub`,
 `aud`, `jti`, `iat`, `exp`, in those orders. Segments use canonical unpadded base64url. Exact
 reserialization rejects duplicate fields, alternate escaping and extra targets without a custom
 JSON parser. This narrows general JOSE JSON and would need matching Java vectors before adoption.
-It does not implement RFC 8785. Admission remains absent; a valid replay passes the stateless
-reference deliberately, and a test records that limitation.
+It does not implement RFC 8785. Admission remained absent; a valid replay passed the stateless
+reference deliberately, and a test recorded that limitation. The reference, its tests and `jose`
+were removed after [ADR 0082](0082-authenticated-erasure-with-reporting-periods.md) chose HMAC
+credentials. Commit `15760c9f` still contains `scripts/erasure-protocol-reference.ts` and
+`scripts/erasure-protocol-reference.test.ts`.
 
 ### Binding lifetime and enrollment recovery
 
@@ -205,8 +208,8 @@ does not establish that rule.
   tooling, with target verification and a credential-free private result ledger.
 - Good, because local attack cases expose parser and binding mistakes before any deployment.
 - Bad, because automated erasure remains unavailable and the existing maintainer procedure remains.
-- Bad, because the reference adds a development dependency and a stricter encoding contract to
-  maintain. Renovate owns `jose`, and required script tests exercise its relevant behavior.
+- Bad, because the reference added a development dependency and a stricter encoding contract to
+  maintain. Renovate owned `jose` until the reference and `jose` were removed after ADR 0082.
 - Neutral, because the provider already supports incoming webhook functions, but a future workflow
   definition needs an API supplement unless the provider gains that resource.
 
@@ -214,15 +217,18 @@ does not establish that rule.
 
 - Repeat the explicitly opted-in `hog-probe` command from the trial report. Check selected backend,
   managed test project, live project/environment, organization and token before invoking code.
-- Run `pnpm run verify:scripts`. The local reference tests cover fixed vectors, signature and
-  subject substitution, duplicate fields, caller targets, encodings, algorithm confusion and time.
-  Probe tests cover wrong targets, opt-in, private ledgers and existing-ledger preservation.
+- Run `pnpm run verify:scripts`. Probe tests cover wrong targets, opt-in, private ledgers and
+  existing-ledger preservation. The removed local reference tests covered fixed vectors, signature
+  and subject substitution, duplicate fields, caller targets, encodings, algorithm confusion and
+  time; restore them from commit `15760c9f` to rerun them.
 - Keep public ingress, concurrent admission, merge races, unattended completion, same-ID reuse
   and a second erasure marked `NOT_RUN` until actual hosted evidence exists.
 - Require the applicable retention and enrollment-loss cases in the trial report before accepting
   an asymmetric, per-installation HMAC or hash-derived bearer implementation.
-- Repeat the ownership PoC only with explicit TEST opt-in. Its successful authentication checks
-  and accepted concurrent replays are not evidence of safe deletion or durable job admission.
+- Repeat the ownership PoC only with explicit TEST opt-in, after restoring its removed scripts as
+  the [research log](../telemetry-erasure-research.md#ownership-proof-of-concept) describes. Its successful
+  authentication checks and accepted concurrent replays are not evidence of safe deletion or
+  durable job admission.
 - Keep the Java CLI, state schema, heartbeat fields and OpenTofu deployed resources unchanged.
   SPEC Sections 17.10 and 19.6 continue to govern the shipped behavior.
 
@@ -292,10 +298,10 @@ Keep the current client and infrastructure while checking capabilities and testi
 
 ## More Information
 
-- [Executed ownership proofs of concept](../telemetry-ownership-poc.md)
-- [Deletion and native-state investigation](../telemetry-native-erasure-lifecycle-research.md)
+- [Executed ownership proofs of concept](../telemetry-erasure-research.md#ownership-proof-options)
+- [Deletion and native-state investigation](../telemetry-erasure-research.md#posthog-deletion-api-behavior)
 - [PostHog event retention](https://posthog.com/docs/data/events-retention)
-- [Trial report and resume commands](../telemetry-native-erasure-trial.md)
-- [Pinned source research](../telemetry-native-erasure-capabilities.md)
+- [Trial report and resume commands](../telemetry-erasure-research.md#hog-runtime-probe)
+- [Pinned source research](../telemetry-erasure-research.md#posthog-native-execution)
 - [ADR 0079](0079-installation-telemetry.md)
 - [ADR 0080](0080-posthog-infrastructure-as-code.md)

@@ -11,9 +11,6 @@ importers:
       '@types/node':
         specifier: 24.13.4
         version: 24.13.4
-      jose:
-        specifier: 6.2.12
-        version: 6.2.12
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -146,9 +143,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  jose@6.2.12:
-    resolution: {integrity: sha512-9NiFmJEex0sy2Dk58j2UGBSHgUs2ypF9eZSu4L6vjOX3Dp96Sw1F3uL+H+D1sx02jZZdzUT0HgvCy59CuvXcWw==}
-
   typescript@7.0.2:
     resolution: {integrity: sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA==}
     engines: {node: '>=16.20.0'}
@@ -227,8 +221,6 @@ snapshots:
 
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
-
-  jose@6.2.12: {}
 
   typescript@7.0.2:
     optionalDependencies:

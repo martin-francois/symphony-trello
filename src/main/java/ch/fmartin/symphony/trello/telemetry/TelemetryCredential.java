@@ -16,8 +16,8 @@ public record TelemetryCredential(
         @JsonProperty("installation_id") UUID installationId,
         @JsonProperty("key_version") String keyVersion,
         @JsonProperty("secret") String secret) {
-    private static final Pattern KEY_VERSION = Pattern.compile("k[1-9][0-9]{0,3}");
-    private static final Pattern SECRET = Pattern.compile("[0-9a-f]{64}");
+    static final Pattern KEY_VERSION = Pattern.compile("k[1-9][0-9]{0,3}");
+    static final Pattern SECRET = Pattern.compile("[0-9a-f]{64}");
     // PostHog Hog offers only SHA-256 HMAC (`sha256HmacChainHex`), so the protocol cannot use SHA3.
     private static final String ALGORITHM = "HmacSHA256";
     private static final int RANDOM_UUID_VERSION = 4;

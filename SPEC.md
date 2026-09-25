@@ -3775,7 +3775,7 @@ Ordinary validation MUST remain offline. A live capability probe MUST require ex
 verify its test target against selected infrastructure state and live metadata, and record results
 without credentials. Local signature verification and authenticated test invocations MUST NOT be
 reported as successful public ingress, durable admission, or unattended erasure. The trial evidence
-and remaining gates are recorded in [native erasure verification](docs/telemetry-native-erasure-trial.md).
+and remaining gates are recorded in [native erasure verification](docs/telemetry-erasure-research.md#es256-and-jose-rejected).
 
 Before a future automated-erasure implementation is accepted, ownership verification MUST work
 when no enrollment event exists and when every event older than one year is unavailable. Public
@@ -3800,7 +3800,7 @@ model does not waive the scoped-deletion, retry, retention or unattended-complet
 Both designs MUST preserve ownership verification beyond the one-year analytics window without
 requiring periodic credential or public-key retransmission.
 
-The development-only [ownership PoC](docs/telemetry-ownership-poc.md) demonstrates public native
+The development-only [ownership PoC](docs/telemetry-erasure-research.md#ownership-proof-options) demonstrates public native
 HMAC and bearer authentication. HMAC is the selected ownership component for implementation.
 Its live runner MUST require explicit opt-in, verify the managed TEST binding, and create only
 authorization-only functions with no capture or deletion capability. It MUST record cleanup
@@ -4398,38 +4398,46 @@ When this profile is used:
   change or an environment override
 - the application MUST preserve the installation ID, registration date and counters across disable
   and enable. Ordinary disable/enable MUST preserve the reporting period. `telemetry erase` MUST
-  persistently disable reporting and save the erasure operation before network IO. It MUST wait
-  for a dispatched heartbeat's drain deadline before submitting deletion. Disable MUST preserve
-  that deadline. A delayed delivery MUST NOT start without enough remaining time for its bounded
-  transport attempt. The ownership HMAC MUST
-  bind action, audience, installation, reporting period, operation and a bounded validity window.
-  Known installation IDs, capture events and mutable person properties MUST NOT authorize erasure.
+  persistently disable reporting and save the erasure operation before network IO. It MUST wait for
+  a dispatched heartbeat's drain deadline plus one hour for provider ingestion before its first
+  profile lookup. Disable MUST preserve that deadline. A delayed delivery MUST NOT start without
+  enough remaining time for its bounded transport attempt. The ownership HMAC MUST bind action,
+  audience, installation, reporting period, operation and a bounded validity window. Known
+  installation IDs, capture events and mutable person properties MUST NOT authorize erasure.
 - `telemetry erase-status` and existing workers MUST retry pending requests with the same period and
   operation. Workers MUST space these retries by half the time since the request, at least one
-  minute and at most six hours; `erase-status` MAY check at once after the drain deadline. Failed
-  credential issuance MUST use the heartbeat retry backoff. A webhook receipt MUST NOT mean accepted
-  or complete. Acceptance requires a matching provider deletion record. Status retries MUST recover
-  an outstanding profile deletion when event deletion was queued but profile deletion failed.
+  minute and at most six hours; `erase-status` MAY check at once after that wait. Failed credential
+  issuance MUST use the heartbeat retry backoff. A webhook receipt MUST NOT mean accepted or
+  complete. Acceptance requires a matching provider deletion record. Status retries MUST recover an
+  outstanding profile deletion when event deletion was queued but profile deletion failed.
   Completion requires provider-verified event deletion and profile absence, or a fresh uncached
   query proving no retained events when no profile exists. A period that never dispatched a
   heartbeat MAY complete locally without contacting the service, and `telemetry erase` before any
   identity exists MUST disable reporting and succeed without a request. Missing, invalid or
-  unavailable status MUST preserve the disabled state. Once complete, explicit `telemetry enable`
-  MUST create a new reporting period with the same installation credential. The erased distinct ID
-  MUST NOT be reused by that state. Existing credentials remain valid independently of event
-  retention. Multi-ID persons MUST be refused. The merge filter and pre-delete check mitigate, but
-  do not eliminate, the accepted merge race.
-- server status MUST use HMAC-derived opaque feature flag keys and management-only writes.
-  Public flag evaluation MUST expose no credential or installation ID. Private metadata MUST
-  bind the target person UUID before deletion. After saving completion, the client SHOULD request
-  flag cleanup; failed cleanup retains the flag for an operator to archive after verification.
-  Flag and API quotas MUST fail without authorizing additional deletion. Local state backups
-  MUST be protected as credentials. Restoring one taken before erasure is unsupported: the client
-  cannot detect it and would report under the erased ID again, so it needs maintainer-assisted erasure.
+  unavailable status MUST preserve the disabled state. Once complete or refused, explicit `telemetry
+  enable` MUST create a new reporting period with the same installation credential; a refused
+  period's data remains for maintainer-assisted erasure. The erased distinct ID MUST NOT be reused
+  by that state. Existing credentials remain valid independently of event retention. Multi-ID
+  persons MUST be refused. The merge filter and pre-delete check mitigate, but do not eliminate, the
+  accepted merge race.
+- server status MUST use HMAC-derived opaque feature flag keys and management-only writes. Public
+  flag evaluation MUST expose no credential or installation ID. Private metadata MUST bind the
+  target person UUID before deletion. An empty result's private name MUST carry its analytics ID so
+  cleanup can count its events again. A `status` request whose flag is missing MUST recreate the
+  result as `erase` does, so archiving a settled flag never strands a client. Maintainer tooling
+  MUST archive only empty or complete results and MUST report late events, refused and stale
+  operations. After saving completion, the client SHOULD request flag cleanup; failed cleanup
+  retains the flag for an operator to archive after verification. Flag and API quotas MUST fail
+  without authorizing additional deletion. Local state backups MUST be protected as credentials.
+  Restoring one taken before erasure is unsupported: the client cannot detect it and would report
+  under the erased ID again, so it needs maintainer-assisted erasure.
 - legacy installations without credentials MUST use maintainer-assisted erasure. The public issuer
   MUST NOT claim their existing IDs. No disabled period is backfilled and no discarded report is
   replayed. Production deployment and release configuration MUST remain off until two successive
   reporting-period erasures, lost-response retries and an unrelated canary pass hosted checks.
+  OpenTofu MUST refuse production activation without a lifecycle pass for the exact handler
+  template, and packaging MUST refuse an erasure audience for any project other than the committed
+  production project.
 - reports MAY leave the machine only when the state home contains the installer-written
   `install-context.properties` and the build carries a configured project token. Source
   checkouts, tests, CI, and development runs MUST NOT send production telemetry, and tests MUST use
