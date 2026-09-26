@@ -9,10 +9,10 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 final class InstalledCliDefaultsTest {
-    private final Path configDir = Path.of("/opt/symphony/config");
-    private final Path workspaceRoot = Path.of("/opt/symphony/workspaces");
-    private final Path stateHome = Path.of("/opt/symphony/state");
-    private final Path appHome = Path.of("/opt/symphony/app");
+    private final Path configDir = Path.of("/home/test/.config/symphony-trello");
+    private final Path workspaceRoot = Path.of("/home/test/.local/share/symphony-trello/workspaces");
+    private final Path stateHome = Path.of("/home/test/.local/state/symphony-trello");
+    private final Path appHome = Path.of("/home/test/.local/share/symphony-trello/app");
 
     @Test
     void addsInstalledDefaultsForLifecycleCommands() {
@@ -70,6 +70,7 @@ final class InstalledCliDefaultsTest {
                 Optional.of(environmentWorkspaceRoot.toString()),
                 Optional.of(environmentStateHome.toString()),
                 Optional.of(appHome.toString()),
+                Optional.of(configDir.toString()),
                 Optional.of(workspaceRoot.toString()),
                 Optional.of(stateHome.toString()));
 
@@ -103,7 +104,7 @@ final class InstalledCliDefaultsTest {
     }
 
     @Test
-    void setupLocalSetupReceivesWorkspaceRootDefault() {
+    void setupLocalSetupReceivesWorkspaceRootAndStateHomeDefaults() {
         // given
         InstalledCliDefaults.InstalledPaths paths = installedPaths();
 
@@ -118,8 +119,89 @@ final class InstalledCliDefaultsTest {
                         configDir.toString(),
                         "--workspace-root",
                         workspaceRoot.toString(),
+                        "--state-home",
+                        stateHome.toString(),
                         "--board",
                         "SYNTH001");
+    }
+
+    @Test
+    void explicitInstalledConfigDirKeepsInstalledSetupLocalDefaults() {
+        // given
+        InstalledCliDefaults.InstalledPaths paths = installedPaths();
+
+        // when
+        List<String> args =
+                InstalledCliDefaults.apply(List.of("setup-local", "--config-dir", configDir.toString()), paths);
+
+        // then
+        assertThat(args)
+                .containsExactly(
+                        "setup-local",
+                        "--workspace-root",
+                        workspaceRoot.toString(),
+                        "--state-home",
+                        stateHome.toString(),
+                        "--config-dir",
+                        configDir.toString());
+    }
+
+    @Test
+    void derivesIsolatedSetupLocalDefaultsFromExplicitConfigDir() {
+        // given
+        InstalledCliDefaults.InstalledPaths paths = installedPaths();
+        Path isolatedConfigDir = Path.of("/tmp/isolated-config");
+
+        // when
+        List<String> args =
+                InstalledCliDefaults.apply(List.of("setup-local", "--config-dir", isolatedConfigDir.toString()), paths);
+
+        // then
+        assertThat(args)
+                .containsExactly(
+                        "setup-local",
+                        "--workspace-root",
+                        isolatedConfigDir.resolve("workspaces").toString(),
+                        "--state-home",
+                        isolatedConfigDir.resolveSibling("state").toString(),
+                        "--config-dir",
+                        isolatedConfigDir.toString());
+    }
+
+    @Test
+    void environmentConfigOverrideDoesNotMasqueradeAsInstalledConfigDir() {
+        // given
+        Path customConfigDir = Path.of("/tmp/environment-config");
+        Map<String, String> environment = Map.of(
+                "SYMPHONY_TRELLO_CONFIG_DIR",
+                customConfigDir.toString(),
+                "SYMPHONY_TRELLO_WORKSPACE_ROOT",
+                workspaceRoot.toString(),
+                "SYMPHONY_TRELLO_STATE_HOME",
+                stateHome.toString());
+        InstalledCliDefaults.InstalledPaths paths = InstalledCliDefaults.InstalledPaths.from(
+                environment,
+                Map.of(
+                        InstalledCliDefaults.INSTALLED_CONFIG_DIR_PROPERTY,
+                        configDir.toString(),
+                        InstalledCliDefaults.INSTALLED_WORKSPACE_ROOT_PROPERTY,
+                        workspaceRoot.toString(),
+                        InstalledCliDefaults.INSTALLED_STATE_HOME_PROPERTY,
+                        stateHome.toString()));
+
+        // when
+        List<String> args = InstalledCliDefaults.apply(List.of("setup-local"), paths);
+
+        // then
+        assertThat(args)
+                .containsExactly(
+                        "setup-local",
+                        "--config-dir",
+                        customConfigDir.toString(),
+                        "--workspace-root",
+                        customConfigDir.resolve("workspaces").toString(),
+                        "--state-home",
+                        customConfigDir.resolveSibling("state").toString());
     }
 
     @Test
@@ -186,6 +268,7 @@ final class InstalledCliDefaultsTest {
                 Optional.of(workspaceRoot.toString()),
                 Optional.of(stateHome.toString()),
                 Optional.of(appHome.toString()),
+                Optional.of(configDir.toString()),
                 Optional.of(workspaceRoot.toString()),
                 Optional.of(stateHome.toString()));
     }

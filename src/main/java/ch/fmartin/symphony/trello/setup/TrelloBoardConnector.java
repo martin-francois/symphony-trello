@@ -560,12 +560,7 @@ final class TrelloBoardConnector {
     }
 
     private LocalWorkerPaths localWorkerPaths(LocalSetup.Options options) {
-        return LocalWorkerPaths.from(
-                Optional.empty(),
-                Optional.of(options.configDir()),
-                Optional.of(options.workspaceRoot()),
-                Optional.empty(),
-                environment);
+        return LocalWorkerPaths.from(options, environment);
     }
 
     private static Set<Integer> reservedWorkflowServerPorts(
