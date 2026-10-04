@@ -636,6 +636,7 @@ Fields:
 - `root` (path string or `$VAR`)
   - Default: `<system-temp>/symphony_workspaces`
   - `~` is expanded.
+  - A `$VAR` whose variable is unset or blank fails configuration, as described in Section 6.1.
   - Relative paths are resolved relative to the directory containing `WORKFLOW.md`.
   - The effective workspace root is normalized to an absolute path before use.
 
@@ -1245,6 +1246,12 @@ Value coercion semantics:
   - `$VAR` expansion for env-backed path values
   - Apply expansion only to values intended to be local filesystem paths; do not rewrite URIs or
     arbitrary shell command strings.
+  - When a path value starts with `$VAR` and the variable is unset or blank, the value MUST NOT be
+    kept as literal text. In this Java implementation, `workspace.root`,
+    `codex.additional_writable_roots` entries, `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS` entries,
+    and `file:` secret paths fail configuration with a `missing_path_environment_variable` error
+    that names the setting and the variable. `repository.default_path` is optional with no default,
+    so it resolves to absent instead, like `repository.default_url`.
 - Relative `workspace.root` values resolve relative to the directory containing the selected
   `WORKFLOW.md`.
 
@@ -1290,6 +1297,8 @@ Validation checks:
 - `tracker.kind` is present and supported.
 - `tracker.api_key` is present after `$` resolution.
 - `tracker.api_token` is present after `$` resolution.
+- Path values whose leading `$VAR` is unset or blank follow Section 6.1 and are never used as
+  literal paths.
 - `tracker.board_id` is present when REQUIRED by the selected tracker kind.
 - For Trello, `tracker.board_id` resolves to a Trello board ID and that board is not closed.
 - `codex.command` is present and non-empty.
@@ -1335,12 +1344,13 @@ implemented.
 - `tracker.api_retry_base_delay_ms`: integer, default `1000`
 - `polling.interval_ms`: integer, must be positive, runtime fallback default `30000`; generated
   workflows write `5000`
-- `workspace.root`: path resolved to absolute, default `<system-temp>/symphony_workspaces`
+- `workspace.root`: path resolved to absolute, default `<system-temp>/symphony_workspaces`; an
+  unset or blank `$VAR` fails configuration
 - `repository.default_url`: optional repository URL string or null, default null
 - `repository.default_path`: optional local repository path or null, resolved like other workflow
-  paths relative to the workflow file, default null; when both repository defaults are present, the
-  URL remains the selected fallback identity and the path remains available as its first checkout
-  candidate, subject to Git-remote identity matching
+  paths relative to the workflow file, default null; an unset or blank `$VAR` resolves to absent;
+  when both repository defaults are present, the URL remains the selected fallback identity and the
+  path remains available as its first checkout candidate, subject to Git-remote identity matching
 - `hooks.after_create`: shell script or null
 - `hooks.before_run`: shell script or null
 - `hooks.after_run`: shell script or null
@@ -1356,7 +1366,8 @@ implemented.
 - `codex.approval_policy`: Codex `AskForApproval` value, default implementation-defined
 - `codex.thread_sandbox`: Codex `SandboxMode` value, default implementation-defined
 - `codex.turn_sandbox_policy`: Codex `SandboxPolicy` value, default implementation-defined
-- `codex.additional_writable_roots`: list of path strings, default `[]`
+- `codex.additional_writable_roots`: list of path strings, default `[]`; an entry with an unset or
+  blank `$VAR` fails configuration
 - `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`: implementation environment extension that appends
   host-managed allowed roots to `codex.additional_writable_roots`
 - `SYMPHONY_CODEX_DANGER_FULL_ACCESS`: implementation environment extension that forces the Codex
@@ -3485,6 +3496,11 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - `tracker.api_key` works, including `$VAR` indirection
 - `tracker.api_token` works, including `$VAR` indirection
 - `$VAR` resolution works for tracker API key, tracker API token, and path values
+- A path value whose leading `$VAR` is unset or blank is never kept as literal text
+- If fail-fast path variables are implemented, an unset or blank leading `$VAR` in
+  `workspace.root`, `codex.additional_writable_roots`, `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`,
+  or a `file:` secret path fails configuration and names the setting and the variable, and in
+  `repository.default_path` it resolves to absent
 - `~` path expansion works
 - `tracker.blocker_enforced_states` defaults and normalization work
 - Tracker list-role overlap validation rejects one Trello list used by two roles and allows the

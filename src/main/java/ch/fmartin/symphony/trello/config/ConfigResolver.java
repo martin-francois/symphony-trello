@@ -28,6 +28,11 @@ public class ConfigResolver {
     private static final Splitter PATH_SEPARATOR = Splitter.on(File.pathSeparator);
     private static final String FILE_SECRET_PREFIX = "file:";
     private static final int MAX_SECRET_BYTES = 64 * 1024;
+    static final String ADDITIONAL_WRITABLE_ROOTS_ENVIRONMENT = "SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS";
+
+    /// Separates the setting name from the variable name in a `missing_path_environment_variable`
+    /// message, so setup can show the setting without the variable.
+    public static final String MISSING_PATH_ENVIRONMENT_MARKER = " references missing environment variable ";
 
     private final Function<String, Optional<String>> environmentResolver;
 
@@ -114,8 +119,8 @@ public class ConfigResolver {
                                 ConfigDefaults.DEFAULT_TRACKER_API_RETRY_BASE_DELAY_MS)),
                 new EffectiveConfig.PollingConfig(positiveMillis(
                         typedWorkflow.pollingIntervalMs(), "interval_ms", ConfigDefaults.DEFAULT_POLLING_INTERVAL_MS)),
-                new EffectiveConfig.WorkspaceConfig(
-                        path(workflow.path().getParent(), string(workspace, "root", systemTempRoot()))),
+                new EffectiveConfig.WorkspaceConfig(pathFailingOnMissingVariable(
+                        workflow.path().getParent(), "workspace.root", string(workspace, "root", systemTempRoot()))),
                 repositoryConfig(workflow.path().getParent(), repository),
                 new EffectiveConfig.HooksConfig(
                         string(hooks, "after_create", null),
@@ -298,7 +303,7 @@ public class ConfigResolver {
     }
 
     private String fileSecret(Path workflowDirectory, String displayName, String configuredPath) {
-        Path secretPath = path(workflowDirectory, configuredPath);
+        Path secretPath = pathFailingOnMissingVariable(workflowDirectory, displayName + " secret file", configuredPath);
         try {
             long size = Files.size(secretPath);
             if (size > MAX_SECRET_BYTES) {
@@ -390,17 +395,36 @@ public class ConfigResolver {
 
     private List<Path> additionalWritableRoots(Path workflowDirectory, Map<String, Object> codex) {
         Stream<Path> configuredRoots = list(codex, "additional_writable_roots", List.of()).stream()
-                .map(value -> path(workflowDirectory, value));
-        Stream<Path> environmentRoots = environmentValue("SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS").stream()
+                .map(value ->
+                        pathFailingOnMissingVariable(workflowDirectory, "codex.additional_writable_roots", value));
+        Stream<Path> environmentRoots = environmentValue(ADDITIONAL_WRITABLE_ROOTS_ENVIRONMENT).stream()
                 .flatMap(PATH_SEPARATOR::splitToStream)
                 .map(String::trim)
                 .filter(value -> !value.isBlank())
-                .map(value -> path(workflowDirectory, value));
+                .map(value ->
+                        pathFailingOnMissingVariable(workflowDirectory, ADDITIONAL_WRITABLE_ROOTS_ENVIRONMENT, value));
         return Stream.concat(configuredRoots, environmentRoots).distinct().toList();
     }
 
-    private Path path(Path workflowDirectory, String value) {
-        String expanded = expandPath(value);
+    /// Resolves a path setting that has no absent state. An unset or blank leading variable fails
+    /// configuration because keeping the reference text would create a literal `$NAME` directory.
+    /// `repository.default_path` resolves such a variable to absent instead; see
+    /// docs/adr/0112-fail-path-settings-on-missing-environment-variables.md.
+    private Path pathFailingOnMissingVariable(Path workflowDirectory, String setting, String value) {
+        return absolutePath(
+                workflowDirectory,
+                expandPath(value, environmentName -> Optional.of(requiredPathVariable(setting, environmentName))));
+    }
+
+    private String requiredPathVariable(String setting, String environmentName) {
+        return environmentValue(environmentName)
+                .filter(value -> !blank(value))
+                .orElseThrow(() -> new ConfigException(
+                        "missing_path_environment_variable",
+                        setting + MISSING_PATH_ENVIRONMENT_MARKER + environmentName));
+    }
+
+    private static Path absolutePath(Path workflowDirectory, String expanded) {
         Path path = Path.of(expanded);
         if (!path.isAbsolute()) {
             path = workflowDirectory.resolve(path);
@@ -411,7 +435,7 @@ public class ConfigResolver {
     private Path optionalPath(Path workflowDirectory, Map<String, Object> root, String key) {
         String configured = optionalString(root, key);
         String resolved = optionalEnvironmentPathValue(configured);
-        return resolved == null ? null : path(workflowDirectory, resolved);
+        return resolved == null ? null : absolutePath(workflowDirectory, expandPath(resolved));
     }
 
     private Path optionalRepositoryPath(Path workflowDirectory, Map<String, Object> repository) {
