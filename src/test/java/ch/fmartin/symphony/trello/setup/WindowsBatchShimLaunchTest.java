@@ -16,7 +16,6 @@ import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.FieldSource;
-import org.junit.jupiter.params.provider.ValueSource;
 
 /// Starts a real batch shim shaped like the one npm writes for Codex. Only Windows has `cmd.exe`,
 /// so the windows-powershell CI lane runs this class.
@@ -49,38 +48,6 @@ final class WindowsBatchShimLaunchTest {
     void runPassesArgumentAndExitStatusThroughTheShimUnchanged(String argument) throws Exception {
         // given
         Path recordFile = tempDir.resolve("run-arguments.txt");
-        var runner = runnerFindingShimIn(npmStyleShim(recordFile));
-
-        // when
-        CommandResult result = runner.run(SHIM_NAME, argument);
-
-        // then
-        assertThat(result.exitCode())
-                .as("exit status of the shim; its output was: %s", result.output())
-                .isEqualTo(ArgumentRecorder.EXIT_CODE);
-        assertThat(readAllLines(recordFile)).containsExactly(argument);
-    }
-
-    @ParameterizedTest(name = "[{index}] metacharacter probe <{0}>")
-    @ValueSource(
-            strings = {
-                "a&b",
-                "a|b",
-                "a<b",
-                "a>b",
-                "a^b",
-                "(a)",
-                "a)b",
-                "C:\\Program Files (x86)\\tool",
-                "RUNNER~1",
-                "a;b",
-                "[x]{y}#$'",
-                "a b&c",
-                "x & y"
-            })
-    void metacharacterProbe(String argument) throws Exception {
-        // given
-        Path recordFile = tempDir.resolve("probe-arguments.txt");
         var runner = runnerFindingShimIn(npmStyleShim(recordFile));
 
         // when

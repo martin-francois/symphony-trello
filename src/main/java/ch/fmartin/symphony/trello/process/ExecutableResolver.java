@@ -26,10 +26,11 @@ public final class ExecutableResolver {
     private static final List<String> DEFAULT_WINDOWS_PATH_EXTENSIONS = List.of(".COM", ".EXE", ".BAT", ".CMD");
     private static final List<String> WINDOWS_BATCH_EXTENSIONS = List.of(".cmd", ".bat");
 
-    /// `cmd.exe` expands `%` and, with delayed expansion, `!` even inside double quotes, and a quote
-    /// or line break ends the quoted argument, so an argument with one of these cannot reach a batch
-    /// shim unchanged.
-    private static final CharMatcher CMD_UNSAFE_CHARACTERS = CharMatcher.anyOf("\"%!\r\n");
+    /// `cmd.exe` expands `%` and, with delayed expansion, `!` inside double quotes, and a quote or
+    /// line break ends the quoted argument. On a Windows CI runner it also split quoted arguments at
+    /// `&`, `|`, `<`, `>` and `^`. An argument with any of these cannot reach a batch shim unchanged;
+    /// ADR 0114 lists the characters that were shown to pass.
+    private static final CharMatcher CMD_UNSAFE_CHARACTERS = CharMatcher.anyOf("\"%!&|<>^\r\n");
 
     private static final CharMatcher BACKSLASH = CharMatcher.is('\\');
 
@@ -150,8 +151,8 @@ public final class ExecutableResolver {
 
     private static String quoteForCmd(String value) throws IOException {
         if (CMD_UNSAFE_CHARACTERS.matchesAnyOf(value)) {
-            throw new IOException("cannot pass an argument with a double quote, percent sign, exclamation mark, "
-                    + "or line break to a Windows batch file through cmd.exe");
+            throw new IOException("cannot pass an argument containing any of \" % ! & | < > ^ or a line break "
+                    + "to a Windows batch file through cmd.exe");
         }
         // The program reads `\"` as a literal quote, so trailing backslashes are doubled to keep
         // them in front of the closing quote.

@@ -59,12 +59,19 @@ path itself, is a `.cmd` or `.bat` file, `launchCommand` returns
 returns the command unchanged. On other platforms it always returns the command unchanged.
 
 Each argument is wrapped in double quotes. Trailing backslashes are doubled so the program does not
-read the closing quote as a literal quote. `cmd.exe` treats `&`, `|`, `<`, `>`, `^`, and parentheses
-inside double quotes as text. It still expands `%name%`, and with delayed expansion `!name!`, inside
-double quotes, and a double quote or line break ends the quoted text. No quoting keeps those
-characters unchanged on the `cmd /c` command line, so `launchCommand` throws an `IOException` for an
-argument that contains `"`, `%`, `!`, a carriage return, or a line feed. Callers already treat an
-`IOException` from `ProcessBuilder.start` as a launch failure, so the refusal surfaces the same way.
+read the closing quote as a literal quote. `cmd.exe` still expands `%name%`, and with delayed
+expansion `!name!`, inside double quotes, and a double quote or line break ends the quoted text. On
+the `windows-powershell` CI runner (Windows Server 2025, Java 25), `cmd.exe` also split quoted
+arguments at `&`, `|`, `<`, `>`, and `^`: the argument `"a&b"` ran `b"` as a second command. Java
+passed the quoted argument through unchanged in that run, because its legacy argument handling does
+not re-quote an argument that already starts and ends with a quote. The exact `cmd.exe` parsing step
+that drops the quotes was not identified. `launchCommand` therefore throws an `IOException` for an
+argument that contains `"`, `%`, `!`, `&`, `|`, `<`, `>`, `^`, a carriage return, or a line feed.
+Callers already treat an `IOException` from `ProcessBuilder.start` as a launch failure, so the
+refusal surfaces the same way.
+
+The same CI run showed that spaces, `(`, `)`, `~`, `;`, `,`, `=`, `:`, `[`, `]`, `{`, `}`, `#`,
+`$`, `'`, a trailing backslash, and an empty argument reach the program unchanged.
 
 `ProcessCommandRunner` (setup prerequisite probes and the interactive `codex login`),
 `CodexModelDefaultsResolver` (`codex app-server` for model defaults), and setup diagnostics use the
@@ -77,8 +84,9 @@ resolves the command there and the worker does not use the resolver.
 * Good, because one class owns `PATH`/`PATHEXT` lookup and batch quoting. Diagnostics and launches
   can no longer disagree about whether Codex exists.
 * Good, because Linux, macOS, and Windows `.exe` launches keep their exact previous command.
-* Bad, because an argument with `"`, `%`, `!`, or a line break cannot reach a batch shim. Current
-  callers pass fixed arguments, and the developer instructions planned for
+* Bad, because an argument with `"`, `%`, `!`, `&`, `|`, `<`, `>`, `^`, or a line break cannot reach
+  a batch shim. This includes an executable path with one of these characters. Current callers pass
+  fixed arguments, and the developer instructions planned for
   [GitHub PR #790](https://github.com/martin-francois/symphony-trello/pull/790) already limit
   themselves to letters, digits, spaces, and `-_.,:/+@`.
 * Neutral, because the tool runs as a child of `cmd.exe`. When a setup probe times out,
@@ -90,9 +98,10 @@ resolves the command there and the worker does not use the resolver.
 ### Confirmation
 
 * `ExecutableResolverTest` checks the command built for a simulated Windows host: an npm shim found
-  through `PATH`, the `ComSpec` interpreter, quoting of spaces, `cmd.exe` metacharacters, trailing
-  backslashes and empty arguments, refusal of the unsafe characters, a `.exe` that comes first in
-  `PATHEXT`, a missing tool, and an unchanged command on POSIX.
+  through `PATH`, the `ComSpec` interpreter, quoting of spaces, parentheses and other punctuation,
+  trailing backslashes and empty arguments, refusal of the unsafe characters, a `.exe` that comes
+  first in `PATHEXT`, a missing tool, and an unchanged command on POSIX. It runs on Linux in the
+  `test` job and on Windows in the `windows-powershell` job.
 * `ProcessCommandRunnerTest` checks that a refused argument becomes a launch failure and that a
   timed-out command's child processes stop too.
 * `CodexModelDefaultsResolverTest` checks on a simulated Windows host that `codex app-server` starts
@@ -100,8 +109,8 @@ resolves the command there and the worker does not use the resolver.
 * `WindowsBatchShimLaunchTest` runs only on Windows, in the `windows-powershell` CI job. It writes a
   shim with npm's structure, shows that `ProcessBuilder` cannot start it by bare name from a JVM
   whose `PATH` contains only the shim directory, and shows that the resolver starts it. It also
-  checks that `run` and `runInteractive` pass arguments and the exit status through the shim
-  unchanged.
+  checks that `run` passes each argument from `WindowsShimFixtures.CMD_SAFE_ARGUMENTS`, and
+  `runInteractive` its arguments, through the shim unchanged with the tool's exit status.
 
 ## Pros and Cons of the Options
 
@@ -112,7 +121,7 @@ and refusing characters that `cmd.exe` would change.
 
 * Good, because Symphony controls the full command line that `cmd.exe` parses.
 * Good, because it reuses the lookup that diagnostics already had.
-* Bad, because a small set of characters cannot be passed.
+* Bad, because ten characters, listed above, cannot be passed.
 
 ### Pass the resolved `.cmd` path straight to `ProcessBuilder`
 
