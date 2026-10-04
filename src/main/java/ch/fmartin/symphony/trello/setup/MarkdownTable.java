@@ -6,6 +6,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+/// Renders the GitHub-flavored Markdown tables in diagnostics reports.
+///
+/// Cell values get only the table-syntax escaping in [#escape(Object)], and headers are fixed
+/// literals written as given, because users paste the report as plain text and readers and tests
+/// match column names and redaction markers literally. Callers redact values before adding a row.
+/// commonmark-java's renderer changes those bytes, so it was rejected; see
+/// docs/adr/0120-keep-local-diagnostics-markdown-table-helper.md.
 final class MarkdownTable {
     private final List<String> headers;
     private final List<Alignment> alignments;

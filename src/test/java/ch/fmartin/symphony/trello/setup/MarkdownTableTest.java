@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 final class MarkdownTableTest {
     @Test
@@ -44,11 +46,12 @@ final class MarkdownTableTest {
         assertThat(body.toString()).contains("| --- | --- | --- |");
     }
 
-    @Test
-    void rendersRightAlignmentMarker() {
+    @CsvSource({"RIGHT, '| --- | ---: |'", "CENTER, '| --- | :---: |'"})
+    @ParameterizedTest
+    void rendersAlignmentMarker(MarkdownTable.Alignment alignment, String separatorRow) {
         // given
         MarkdownTable table = MarkdownTable.of(
-                        List.of("name", "count"), List.of(MarkdownTable.Alignment.LEFT, MarkdownTable.Alignment.RIGHT))
+                        List.of("name", "count"), List.of(MarkdownTable.Alignment.LEFT, alignment))
                 .row("boards", 3);
         var body = new StringBuilder();
 
@@ -56,7 +59,44 @@ final class MarkdownTableTest {
         table.appendTo(body);
 
         // then
-        assertThat(body.toString()).contains("| --- | ---: |");
+        assertThat(body).contains(separatorRow);
+    }
+
+    @Test
+    void rendersNullAndEmptyValuesAsEmptyCells() {
+        // given
+        MarkdownTable table = MarkdownTable.leftAligned(List.of("board_hash", "key_hash", "port"))
+                .row(null, "", 19301);
+        var body = new StringBuilder();
+
+        // when
+        table.appendTo(body);
+
+        // then
+        assertThat(body).endsWith("|  |  | 19301 |\n");
+    }
+
+    @Test
+    void keepsMarkdownCharactersOtherThanPipesVerbatim() {
+        // given
+        String cell = "Bearer <redacted> `corepack` *_draft_* [x] & C:\\work";
+        MarkdownTable table = MarkdownTable.leftAligned(List.of("danger_full_access", "detail"))
+                .row(false, cell);
+        var body = new StringBuilder();
+
+        // when
+        table.appendTo(body);
+
+        // then
+        assertThat(body)
+                .as("diagnostics reports are pasted as plain text, so only table syntax may be escaped")
+                .hasToString(
+                        """
+                | danger_full_access | detail |
+                | --- | --- |
+                | false | %s |
+                """
+                                .formatted(cell));
     }
 
     @Test
