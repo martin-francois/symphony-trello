@@ -296,7 +296,7 @@ final class CodexModelDefaultsResolver {
         return value == null || value.isBlank();
     }
 
-    private static String implementationVersion() {
+    static String implementationVersion() {
         String version = CodexModelDefaultsResolver.class.getPackage().getImplementationVersion();
         return blank(version) ? DEVELOPMENT_VERSION : version;
     }

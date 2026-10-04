@@ -12,13 +12,22 @@ final class PrerequisiteChecker {
     Prerequisites check() {
         ToolStatus git = commands.available("git", "--version");
         ToolStatus java = javaStatus();
-        ToolStatus codex = commands.available("codex", "--version");
-        ToolStatus codexAuth =
-                codex.available() ? commands.available("codex", "login", "status") : ToolStatus.unavailable();
+        ToolStatus codex = codexInstalled();
+        ToolStatus codexAuth = codex.available() ? codexLoggedIn() : ToolStatus.unavailable();
         ToolStatus githubCli = commands.available("gh", "--version");
         ToolStatus githubAuth =
                 githubCli.available() ? commands.available("gh", "auth", "status") : ToolStatus.unavailable();
         return new Prerequisites(git, java, codex, codexAuth, githubCli, githubAuth);
+    }
+
+    ToolStatus codexInstalled() {
+        return commands.available("codex", "--version");
+    }
+
+    /// Asks the installed Codex CLI whether the user is logged in. Only the exit status is used, so
+    /// Codex's own auth file location never reaches Symphony output.
+    ToolStatus codexLoggedIn() {
+        return commands.available("codex", "login", "status");
     }
 
     private ToolStatus javaStatus() {

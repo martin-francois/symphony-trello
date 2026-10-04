@@ -8,6 +8,7 @@ import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import ch.fmartin.symphony.trello.tracker.TrelloException;
 import ch.fmartin.symphony.trello.tracker.TrelloMoveTargets;
+import ch.fmartin.symphony.trello.tracker.TrelloToolRefusal;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -158,10 +159,10 @@ public class TrelloHandoffToolHandler {
             return failure("unsupported_tool", "Unsupported Trello handoff tool: " + tool);
         }
         if (!config.trelloTools().enabled()) {
-            return failure("trello_tools_disabled", "Trello handoff tools are disabled by trello_tools.enabled.");
+            return refusal(TrelloToolRefusal.TOOLS_DISABLED);
         }
         if (!config.trelloTools().allowWrites()) {
-            return failure("trello_writes_disabled", "Trello writes are disabled by trello_tools.allow_writes.");
+            return refusal(TrelloToolRefusal.WRITES_DISABLED);
         }
         if (blank(card.id())) {
             return failure("missing_card_context", "The active worker session has no Trello card id.");
@@ -187,7 +188,7 @@ public class TrelloHandoffToolHandler {
 
     private ObjectNode addComment(EffectiveConfig config, Card card, JsonNode arguments) {
         if (!config.trelloTools().allowComments()) {
-            return failure("trello_comments_disabled", "Trello comments are disabled by trello_tools.allow_comments.");
+            return refusal(TrelloToolRefusal.COMMENTS_DISABLED);
         }
         String text = TrelloMarkdown.escapeLeadingHashtags(requiredText(arguments, "text"));
         trello.addComment(config, card.id(), text);
@@ -196,8 +197,7 @@ public class TrelloHandoffToolHandler {
 
     private ObjectNode upsertChecklistItem(EffectiveConfig config, Card card, JsonNode arguments) {
         if (!config.trelloTools().allowChecklists()) {
-            return failure(
-                    "trello_checklists_disabled", "Trello checklists are disabled by trello_tools.allow_checklists.");
+            return refusal(TrelloToolRefusal.CHECKLISTS_DISABLED);
         }
         String checklistName = requiredText(arguments, "checklist_name").strip();
         String itemName = requiredText(arguments, "item_name").strip();
@@ -222,7 +222,7 @@ public class TrelloHandoffToolHandler {
 
     private ObjectNode updateBlockerRecheckStatus(EffectiveConfig config, Card card, JsonNode arguments) {
         if (!config.trelloTools().allowComments()) {
-            return failure("trello_comments_disabled", "Trello comments are disabled by trello_tools.allow_comments.");
+            return refusal(TrelloToolRefusal.COMMENTS_DISABLED);
         }
         String requestedStatus = requiredText(arguments, "status");
         if (!RECHECK_STATUS_CHECKING.equals(requestedStatus) && !RECHECK_STATUS_RESUMED.equals(requestedStatus)) {
@@ -601,9 +601,7 @@ public class TrelloHandoffToolHandler {
 
     private ObjectNode addUrlAttachment(EffectiveConfig config, Card card, JsonNode arguments) {
         if (!config.trelloTools().allowUrlAttachments()) {
-            return failure(
-                    "trello_url_attachments_disabled",
-                    "Trello URL attachments are disabled by trello_tools.allow_url_attachments.");
+            return refusal(TrelloToolRefusal.URL_ATTACHMENTS_DISABLED);
         }
         String url = requiredText(arguments, "url").strip();
         if (!validAttachmentUrl(url)) {
@@ -626,7 +624,7 @@ public class TrelloHandoffToolHandler {
 
     private ObjectNode upsertWorkpad(EffectiveConfig config, Card card, JsonNode arguments) {
         if (!config.trelloTools().allowComments()) {
-            return failure("trello_comments_disabled", "Trello comments are disabled by trello_tools.allow_comments.");
+            return refusal(TrelloToolRefusal.COMMENTS_DISABLED);
         }
         String proposedText = requiredText(arguments, "text");
         if (CodexUsageWorkpadSection.hasMalformedManagedSectionMarkers(proposedText)) {
@@ -987,9 +985,7 @@ public class TrelloHandoffToolHandler {
 
     private ObjectNode moveCurrentCard(EffectiveConfig config, Card card, JsonNode arguments) {
         if (!moveAllowlistConfigured(config)) {
-            return failure(
-                    "trello_move_allowlist_required",
-                    "Trello card moves require trello_tools.allowed_move_list_ids or allowed_move_list_names.");
+            return refusal(TrelloToolRefusal.MOVE_ALLOWLIST_REQUIRED);
         }
         String listId = text(arguments, "list_id");
         String listName = text(arguments, "list_name");
@@ -1048,6 +1044,10 @@ public class TrelloHandoffToolHandler {
         ObjectNode result = object("success", true);
         result.set("contentItems", json.createArrayNode().add(inputText(toJson(payload))));
         return result;
+    }
+
+    private ObjectNode refusal(TrelloToolRefusal refusal) {
+        return failure(refusal.code(), refusal.message());
     }
 
     private ObjectNode failure(String code, String message) {
