@@ -4,7 +4,10 @@ import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_BYTE_ORDE
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
+import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
+import ch.fmartin.symphony.trello.setup.TrelloCredentialResolver.CredentialSelection;
+import ch.fmartin.symphony.trello.setup.TrelloCredentialResolver.CredentialValue;
 import ch.fmartin.symphony.trello.testsupport.RecordingTerminal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -32,8 +35,7 @@ final class TrelloCredentialStoreTest {
         var terminal = new RecordingTerminal();
 
         // when
-        TrelloCredentialStore.CredentialSelection credentials =
-                new TrelloCredentialStore(Map.of()).loadOrPrompt(options, env, terminal);
+        CredentialSelection credentials = new TrelloCredentialStore(Map.of()).loadOrPrompt(options, env, terminal);
         new TrelloCredentialStore(Map.of()).write(credentials, env, terminal);
 
         // then
@@ -51,14 +53,15 @@ final class TrelloCredentialStoreTest {
         var store = new TrelloCredentialStore(Map.of("TRELLO_API_KEY", "env-key", "TRELLO_API_TOKEN", "env-token"));
 
         // when
-        TrelloCredentialStore.CredentialSelection credentials =
-                store.loadOrPrompt(options, env, new RecordingTerminal());
+        CredentialSelection credentials = store.loadOrPrompt(options, env, new RecordingTerminal());
 
         // then
         assertThat(credentials)
-                .isEqualTo(new TrelloCredentialStore.CredentialSelection(
-                        TrelloCredentialStore.CredentialValue.environment("env-key"),
-                        TrelloCredentialStore.CredentialValue.environment("env-token")));
+                .isEqualTo(new CredentialSelection(
+                        new CredentialValue(
+                                TrelloEnvironment.API_KEY, "env-key", TrelloCredentialSource.SHELL_ENVIRONMENT),
+                        new CredentialValue(
+                                TrelloEnvironment.API_TOKEN, "env-token", TrelloCredentialSource.SHELL_ENVIRONMENT)));
         assertThat(env).doesNotExist();
     }
 
@@ -70,14 +73,16 @@ final class TrelloCredentialStoreTest {
         LocalSetup.Options options = SetupOptionFactory.options(tempDir);
 
         // when
-        TrelloCredentialStore.CredentialSelection credentials =
+        CredentialSelection credentials =
                 new TrelloCredentialStore(Map.of()).loadOrPrompt(options, env, new RecordingTerminal());
 
         // then
         assertThat(credentials)
-                .isEqualTo(new TrelloCredentialStore.CredentialSelection(
-                        TrelloCredentialStore.CredentialValue.dotenv("dotenv-key"),
-                        TrelloCredentialStore.CredentialValue.dotenv("dotenv-token")));
+                .isEqualTo(new CredentialSelection(
+                        new CredentialValue(
+                                TrelloEnvironment.API_KEY, "dotenv-key", TrelloCredentialSource.DOTENV_FILE),
+                        new CredentialValue(
+                                TrelloEnvironment.API_TOKEN, "dotenv-token", TrelloCredentialSource.DOTENV_FILE)));
     }
 
     @Test
@@ -131,9 +136,10 @@ final class TrelloCredentialStoreTest {
                 env,
                 UNICODE_BYTE_ORDER_MARK
                         + "TRELLO_API_KEY=old-example-key\nTRELLO_API_TOKEN=stored-example-token\nOTHER=keep-me\n");
-        var credentials = new TrelloCredentialStore.CredentialSelection(
-                TrelloCredentialStore.CredentialValue.direct("new-example-key"),
-                TrelloCredentialStore.CredentialValue.dotenv("stored-example-token"));
+        var credentials = new CredentialSelection(
+                CredentialValue.directInput(TrelloEnvironment.API_KEY, "new-example-key"),
+                new CredentialValue(
+                        TrelloEnvironment.API_TOKEN, "stored-example-token", TrelloCredentialSource.DOTENV_FILE));
 
         // when
         new TrelloCredentialStore(Map.of()).write(credentials, env, new RecordingTerminal());

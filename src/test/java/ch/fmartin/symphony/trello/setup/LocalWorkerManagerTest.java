@@ -1885,10 +1885,8 @@ final class LocalWorkerManagerTest {
         // then
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
             assertThat(failure.code()).isEqualTo("trello_auth_failed");
-            assertThat(failure.trelloApiKeyCredentialSource())
-                    .hasValue(TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT);
-            assertThat(failure.trelloApiTokenCredentialSource())
-                    .hasValue(TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT);
+            assertThat(failure.trelloApiKeyCredentialSource()).hasValue(TrelloCredentialSource.SHELL_ENVIRONMENT);
+            assertThat(failure.trelloApiTokenCredentialSource()).hasValue(TrelloCredentialSource.SHELL_ENVIRONMENT);
             assertThat(failure.dotenvPath()).hasValue(board.envPath());
         });
     }
