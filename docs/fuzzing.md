@@ -212,8 +212,8 @@ deeper than 1,000 levels, and `WorkflowLoaderFuzzTest` keeps a 4,000-level seed 
 No target may touch files, the network, or user configuration. `WorkflowLoaderFuzzer` calls
 `WorkflowLoader.parse(Path, byte[])` instead of writing each input to a temporary file.
 `StandaloneFuzzerIsolationTest` records file and socket reads and writes with Java Flight Recorder
-while the seeds replay and fails on any that happen inside a target execution, apart from class
-loading. During ClusterFuzzLite and OSS-Fuzz runs, Jazzer's `ServerSideRequestForgery` detector
+while the seeds replay and fails on any that happen inside a target execution. It ignores class
+loading and writes to standard output or error, such as log lines. During ClusterFuzzLite and OSS-Fuzz runs, Jazzer's `ServerSideRequestForgery` detector
 reports every network connection as a finding. The same test fails if the fuzzing build files
 disable that detector. In JUnit regression mode the detector loads but does not fail on a
 connection, which is why the replay test records socket I/O itself.

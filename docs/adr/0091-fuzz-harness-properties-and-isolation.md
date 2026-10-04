@@ -72,7 +72,9 @@ and an in-memory parse of every seed give the same result.
 `StandaloneFuzzerIsolationTest` replays each `oss-fuzz/corpora/<Fuzzer>` directory through the
 target's `fuzzerTestOneInput`. Each execution is wrapped in a custom Flight Recorder event, and the
 test fails on any `jdk.FileRead`, `jdk.FileWrite`, `jdk.FileForce`, `jdk.SocketRead`, or
-`jdk.SocketWrite` event on the same thread inside it, except class and jar reads from class loading.
+`jdk.SocketWrite` event on the same thread inside it. It ignores class and jar reads from class
+loading and file events without a path, which are writes to standard output or error. Production
+code that logs a warning for a malformed input writes to stderr, which leaves no state behind.
 Against the old `WorkflowLoaderFuzzer` it reported the temporary file writes and reads. During
 ClusterFuzzLite and OSS-Fuzz runs, Jazzer's network detector reports any connection attempt, and the
 test fails if the fuzzing build files disable it.
