@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.run;
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.shellQuote;
+import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.withEnvironment;
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.writeExecutable;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -141,6 +142,25 @@ final class ContainerRuntimeScriptTest {
         // then
         result.assertSuccess();
         assertThat(recordedRuntimeHome()).content(StandardCharsets.UTF_8).isEqualTo(testHome.toString());
+    }
+
+    @Test
+    void powerShellWrapperForwardsOutputColorControls() throws Exception {
+        // given
+        Path invocation = installRecordingRuntime("podman");
+        Map<String, String> environment = withEnvironment(
+                runtimeEnvironment("podman"),
+                Map.of("NO_COLOR", "1", "CLICOLOR", "0", "CLICOLOR_FORCE", "1", "UNRELATED_HOST_CONTROL", "unrelated"));
+
+        // when
+        ProcessResult result = runWrapper("pwsh-docker.sh", environment);
+
+        // then
+        result.assertSuccess();
+        assertThat(invocation)
+                .content(StandardCharsets.UTF_8)
+                .contains("-e\nNO_COLOR\n", "-e\nCLICOLOR\n", "-e\nCLICOLOR_FORCE\n")
+                .doesNotContain("UNRELATED_HOST_CONTROL");
     }
 
     @MethodSource("containerRuntimeRequirements")
