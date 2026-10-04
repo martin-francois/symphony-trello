@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.setup;
 
 import java.io.IOException;
 import java.util.Locale;
+import org.jspecify.annotations.Nullable;
 
 final class PromptSupport {
     private PromptSupport() {}
@@ -12,7 +13,11 @@ final class PromptSupport {
     }
 
     static boolean yesDefaultTrue(Terminal terminal, String prompt) throws IOException {
-        String answer = terminal.readLine(prompt);
+        return yesDefaultTrue(terminal.readLine(prompt));
+    }
+
+    /// Reads an answer to a `[Y/n]` prompt. A blank answer or end of input (null) means yes.
+    static boolean yesDefaultTrue(@Nullable String answer) {
         return answer == null
                 || answer.isBlank()
                 || answer.trim().toLowerCase(Locale.ROOT).startsWith("y");
