@@ -55,6 +55,11 @@ if [ "$container_runtime" = "podman" ]; then
   container_user_namespace+=(--userns=keep-id)
 fi
 
+# Rootless Podman stores images under HOME, so ignore a test's throwaway HOME here (ADR 0054).
+if account_home="$(getent passwd "$(id -u)" 2>/dev/null | cut -d: -f6)" && [ -n "$account_home" ]; then
+  export HOME="$account_home"
+fi
+
 exec "$container_runtime" run --rm --security-opt label=disable \
   "${container_user_namespace[@]}" \
   --user "$(id -u):$(id -g)" \
