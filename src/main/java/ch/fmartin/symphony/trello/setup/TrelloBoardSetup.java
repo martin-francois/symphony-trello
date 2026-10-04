@@ -1066,6 +1066,8 @@ public final class TrelloBoardSetup {
 
                 You are working on {{ card.identifier }}: {{ card.title }}.
 
+                Current Trello list: {{ card.state }}
+
                 ## Description
 
                 {{ card.description }}
@@ -1488,7 +1490,7 @@ public final class TrelloBoardSetup {
                 Work autonomously end to end unless the card is blocked by missing requirements, permissions,
                 credentials, tools, or unsafe repository state.
 
-                Start by determining the current Trello list and route from that list. %s
+                Start from the current Trello list shown under Trello Card and route from that list. %s
                 Spend extra effort up front on planning and validation design before implementation. Reproduce bugs
                 or capture a concrete current-state signal before changing behavior. When meaningful out-of-scope
                 improvements are discovered, record them as separate follow-up work instead of expanding this card.
@@ -1884,39 +1886,42 @@ public final class TrelloBoardSetup {
                         + "unverifiable changes, move back to\n  " + quote(reviewState)
                         + " with the reason and ask for renewed approval.";
         return """
-                ## Merge From %s
+                ## Merge From %1$s
 
-                %s is human approval for merging. Only run the merge helper when the current Trello list is %s. Do not
-                merge from %s, and do not call `gh pr merge` directly from the workflow prompt. Open
-                `%s` and follow it.
+                %1$s is human approval for merging. Only run the merge helper when the current Trello list is %1$s. Do not
+                merge from %2$s, and do not call `gh pr merge` directly from the workflow prompt. Open
+                `%3$s` and follow it.
 
                 Before merging, identify the PR, run the PR feedback sweep, run current card-specific validation,
                 check mergeability, branch state, required reviews, and CI/check status, and follow the repository's
                 merge policy. Do not enable auto-merge unless the repository policy explicitly requires it.
 
                 Deterministic merge decisions:
-                - If the card moved from %s to %s with no new feedback and the PR is clean, merge it.
-                - If exact, unambiguous feedback added before the card entered %s was addressed with current
+                - If no PR for this card's work is linked from the card description, Trello comments, or workpad, no
+                  open PR exists for the card's branch, and the completed work did not need one, there is nothing to
+                  merge. This covers question-only, repository-independent, and explicitly local-only or no-push
+                  work. Record in the workpad that no merge was needed, and move the card to %4$s. Do not move it back to %2$s
+                  and do not block it.
+                - If the card moved from %2$s to %1$s with no new feedback and the PR is clean, merge it.
+                - If exact, unambiguous feedback added before the card entered %1$s was addressed with current
                   validation and clean checks, merge it.
-                - %s
-                - If PR discovery, checks, auth, branch state, merge policy, required reviews, or actionable review
-                  feedback is unresolved, update the workpad and %s.
+                - %5$s
+                - If the work needs a PR and PR discovery, checks, auth, branch state, merge policy, required reviews,
+                  or actionable review feedback is unresolved, update the workpad and %6$s.
 
                 After successful merge, update the workpad with merge evidence, add a concise completion comment
-                when useful, and move the card to %s.
+                when useful, and move the card to %4$s.
+
+                %1$s is only for pull requests. When you hand off work with nothing to merge, say in the handoff
+                comment that a human can move the card straight to %4$s after review.
                 """
                 .formatted(
                         quote(mergingState),
-                        quote(mergingState),
-                        quote(mergingState),
                         reviewHandoff,
                         skillPath("land"),
-                        reviewHandoff,
-                        quote(mergingState),
-                        quote(mergingState),
+                        doneDestination,
                         fixupDecision,
-                        blockedText,
-                        doneDestination)
+                        blockedText)
                 .stripTrailing();
     }
 
