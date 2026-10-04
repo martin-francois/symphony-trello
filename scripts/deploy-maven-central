@@ -5,11 +5,11 @@
 set -euo pipefail
 
 case "${JRELEASER_MAVENCENTRAL_STAGE:-}" in
-  UPLOAD | FULL) ;;
-  *)
-    echo "MAVEN_CENTRAL_STAGE must be UPLOAD or FULL, got '${JRELEASER_MAVENCENTRAL_STAGE:-}'." >&2
-    exit 2
-    ;;
+UPLOAD | FULL) ;;
+*)
+  echo "MAVEN_CENTRAL_STAGE must be UPLOAD or FULL, got '${JRELEASER_MAVENCENTRAL_STAGE:-}'." >&2
+  exit 2
+  ;;
 esac
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
