@@ -336,6 +336,33 @@ with path-safe guidance instead of guessing.
 Do not leave completed work unchecked in the workpad. Do not create duplicate progress comments when
 the workpad contains the details.
 
+## GitHub Issue Assignment
+
+After the initial `checking` call succeeds and no stale blocker stops this card, and before you
+implement the change, assign the GitHub issues this card implements to the authenticated GitHub
+account so other contributors can see that the work is taken. Do not assign anything when the card
+is blocked. An issue qualifies only when the card clearly asks to implement it and the issue belongs
+to the repository selected for this card under Repository Source Precedence. It can appear in the
+card title, description, or Trello comments as a full GitHub issue URL, as `owner/repository#123`,
+or as a bare `#123` when the selected repository is already known. Do not assign pull requests,
+issues from other repositories, issues the card mentions only as context or related work, or
+issue-like text that does not resolve to an issue. An API-only action on an issue, such as
+commenting or labeling, is not implementation and needs no assignment.
+
+For each qualifying issue, use the existing GitHub CLI auth. Run
+`gh api repos/<owner>/<repository>/issues/<number>` first and skip the number when the response has
+a `pull_request` field. Then run
+`gh issue edit <number> --repo <owner>/<repository> --add-assignee @me`. GitHub can drop an
+assignee without an error when the account lacks permission, so confirm with
+`gh issue view <number> --repo <owner>/<repository> --json assignees` that the login from
+`gh api user --jq .login` is listed. Do not add credentials, tokens, or another GitHub access path
+for this step, and do not remove existing assignees.
+
+Assignment is best effort. If GitHub CLI is not authenticated, the account lacks permission, the
+issue cannot be resolved, a command fails, or the login is missing from the assignees afterwards,
+continue the implementation and record in the workpad which issue was not assigned and why. Do not
+treat a failed assignment as a blocker.
+
 ## Acceptance Criteria And Validation
 
 Before changing code, extract the card-specific acceptance criteria from the title, description, and
