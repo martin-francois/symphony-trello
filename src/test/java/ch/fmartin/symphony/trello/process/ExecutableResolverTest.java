@@ -67,13 +67,26 @@ final class ExecutableResolverTest {
                 .last()
                 .isEqualTo("\"\"" + codexShim + "\" \"-c\""
                         + " \"developer_instructions=Selected board: Team board, short link abc123.\""
-                        + " \"a & b | c < d > e ^ (f)\""
+                        + " \"C:\\Program Files (x86)\\RUNNER~1\\tool\""
+                        + " \"a;b [x]{y}#$'\""
                         + " \"C:\\work dir\\\\\""
                         + " \"\"\"");
     }
 
     @ParameterizedTest(name = "[{index}] argument <{0}> is refused")
-    @ValueSource(strings = {"say \"hi\"", "%PATH%", "wow!", "two\nlines", "carriage\rreturn"})
+    @ValueSource(
+            strings = {
+                "say \"hi\"",
+                "%PATH%",
+                "wow!",
+                "a&b",
+                "a|b",
+                "a<b",
+                "a>b",
+                "a^b",
+                "two\nlines",
+                "carriage\rreturn"
+            })
     void windowsRefusesBatchArgumentsThatCmdWouldChange(String argument) throws Exception {
         // given
         tool("codex.CMD");

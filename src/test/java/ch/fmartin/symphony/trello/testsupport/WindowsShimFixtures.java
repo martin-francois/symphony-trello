@@ -12,11 +12,13 @@ public final class WindowsShimFixtures {
     public static final String NPM_PATHEXT = ".COM;.EXE;.BAT;.CMD";
 
     /// Arguments that must reach a batch shim unchanged: Codex-style developer instructions with
-    /// spaces, `cmd.exe` metacharacters, a trailing backslash, and an empty argument.
+    /// spaces, a path with parentheses and a short-name tilde, other punctuation `cmd.exe` leaves
+    /// alone inside quotes, a trailing backslash, and an empty argument.
     public static final List<String> CMD_SAFE_ARGUMENTS = List.of(
             "-c",
             "developer_instructions=Selected board: Team board, short link abc123.",
-            "a & b | c < d > e ^ (f)",
+            "C:\\Program Files (x86)\\RUNNER~1\\tool",
+            "a;b [x]{y}#$'",
             "C:\\work dir\\",
             "");
 
