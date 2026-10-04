@@ -6,10 +6,48 @@ consulted:
   - "[GitHub issue #378](https://github.com/martin-francois/symphony-trello/issues/378)"
   - "[GitHub issue #377](https://github.com/martin-francois/symphony-trello/issues/377)"
   - "[GitHub issue #373](https://github.com/martin-francois/symphony-trello/issues/373)"
+  - "[GitHub issue #393](https://github.com/martin-francois/symphony-trello/issues/393)"
 informed: ["repository contributors"]
 ---
 
 # Sleep-Based Waits Kept As Polling Boundaries
+
+## `PORT_USED` re-probe amendment, 4 October 2026
+
+The `PORT_USED` re-probe and its 150 ms delay stay. The measurement below confirms the
+extra pause tolerance, and the other four wait sites keep the decision below
+([GitHub issue #393](https://github.com/martin-francois/symphony-trello/issues/393)).
+
+The measurement used real loopback sockets. A stand-in worker process answered
+`/api/v1/local-status`, and `SIGSTOP` and `SIGCONT` froze it for a set time, the way a
+stop-the-world GC pause or CPU starvation freezes a JVM: the kernel still accepts the connection,
+but no answer comes. Each case ran 10 times. A single probe reported `PORT_USED` for every pause
+longer than the 500 ms probe timeout (550 ms and up). Probe, 150 ms sleep, probe answered
+`SAME_WORKFLOW` up to a 1,100 ms pause. Probe, then an immediate second probe, answered
+`SAME_WORKFLOW` up to an 850 ms pause and failed at 1,000 ms. The second probe's own 500 ms
+timeout gives the frozen worker its second chance. The sleep only moves that window 150 ms later,
+and for a 550 ms pause the delayed variant answered after 653 ms where the immediate one answered
+after 553 ms.
+
+On ports owned by another process, 20 probes each, medians:
+
+| Foreign listener | Single probe | Probe, 150 ms sleep, probe | Immediate re-probe |
+| --- | --- | --- | --- |
+| HTTP server answering 404 | 0 ms | 156 ms | 2 ms |
+| Listener that accepts and closes | 1 ms | 156 ms | 2 ms |
+| Listener that accepts and never answers | 501 ms | 1,152 ms | 1,002 ms |
+
+Removing the re-probe was rejected. A false `PORT_USED` is not only a wrong `status` line: when the
+managed pid is alive, `start` treats any answer other than `SAME_WORKFLOW` as a broken worker and
+restarts it, which ends the runs that worker had in flight. The 150 ms delay stays because the
+delayed variant recovered from measured pauses up to 1,100 ms, while the immediate variant failed
+at 1,000 ms. The extra 150 ms on foreign-port failures is accepted to avoid restarting a busy
+worker. A longer probe timeout
+was rejected because every probe of a foreign port that accepts connections but never answers would
+wait the full longer timeout, the reason the option "Longer probe timeouts or client-side probe
+retries only" in [ADR 0051](0051-orchestrator-operation-lock-and-state-monitor.md) gives. How often a real worker pauses for more than
+500 ms was not measured; the re-probe is defense in depth for that case, not a fix for a known
+defect in this project's code.
 
 ## Context and Problem Statement
 
@@ -56,9 +94,9 @@ Per wait site:
 
 - `waitForSameWorkflow`: poll kept; the readiness-marker alternative is deferred (see its option
   below). The wait is bounded by process liveness, so a dead worker returns immediately.
-- `PORT_USED` delayed re-probe: kept for genuine GC and CPU pauses. A worker can miss the short
-  health-probe timeout even when it is still the intended process, and one cheap re-probe avoids
-  transiently reporting that local port as occupied by an unrelated process.
+- `PORT_USED` re-probe: kept with the 150 ms delay for GC and CPU pauses. A worker can miss the
+  short health-probe timeout even when it is still the intended process, and the delayed re-probe
+  gives it the measured pause tolerance described above.
 - `TrelloClient` retry backoff: inherent. Trello publishes no event when a rate-limit window or
   outage ends; the client honors `Retry-After` when given and otherwise uses exponential backoff
   with jitter.
@@ -77,8 +115,9 @@ Per wait site:
   tests.
 - Bad, because the managed start wait keeps up to 200 ms of avoidable latency per start or
   restart, and `logs --follow` shows new lines up to 500 ms late.
-- Bad, because the `PORT_USED` re-probe adds 150 ms to every probe of a genuinely foreign port
-  until deployed workers all carry the lock split and the re-probe can be revisited.
+- Bad, because the `PORT_USED` re-probe doubles the probe time of a foreign port that accepts
+  connections but never answers, from 500 ms to 1,000 ms. Foreign ports that fail fast pay 1 to
+  2 ms more.
 
 ### Confirmation
 
@@ -87,8 +126,10 @@ Each wait site carries a comment naming the rationale or pointing to this ADR:
 `TrelloClient.sleep`, `LocalLogTailer.follow`, and `wait_for_exit` in `uninstall.sh`. The wait
 behavior is pinned by existing tests: `LocalHealthCheckerTest.waitForSameWorkflow*` proves the
 start wait returns immediately for a dead process and outlasts a slow startup,
-`workflowHealthRetriesTransientLocalStatusFailureBeforeReportingPortUsed` proves the single
-delayed re-probe, `TrelloClientTest` exercises 429 retry handling, and
+`workflowHealthReprobesOnceWhenABusyWorkerMissesTheLocalStatusTimeout` proves that a worker which
+misses the first probe timeout is still found by the single re-probe,
+`workflowHealthReportsPortUsedForAForeignHttpServerAfterOneReprobe` proves the re-probe happens
+only once, `TrelloClientTest` exercises 429 retry handling, and
 `InstallerScriptLifecycleTest` drives the uninstall process-stop path.
 
 ## Pros and Cons of the Options
@@ -101,7 +142,7 @@ document at the wait site why polling is the right mechanism there.
 - Good, because one mechanism per wait keeps the code and the test surface small.
 - Good, because polling behaves identically on local disks, network filesystems, and all
   supported platforms.
-- Neutral, because the poll intervals (150-500 ms) are already chosen per site to be invisible
+- Neutral, because the poll intervals (200-500 ms) are already chosen per site to be invisible
   next to the external latencies they wait on.
 - Bad, because each wait can wake up to one interval later than the event it waits for.
 
@@ -142,13 +183,14 @@ events arrive, instead of polling each log file every 500 ms.
 
 Delete the 150 ms delayed re-probe in `workflowHealth`.
 
-- Good, because probes of genuinely foreign ports would answer 150 ms faster and the probe logic
-  would lose a branch.
+- Good, because a foreign port that accepts connections but never answers would be reported after
+  500 ms instead of 1,000 ms, and the probe logic would lose a branch. Foreign ports that fail fast
+  would save only 1 to 2 ms.
 - Bad, because even fixed workers can miss the 500 ms probe timeout during a GC or CPU pause; one
   cheap re-probe avoids misreporting a healthy worker.
 
-Whether the re-probe can be removed or reduced is tracked in
-[GitHub issue #393](https://github.com/martin-francois/symphony-trello/issues/393).
+[GitHub issue #393](https://github.com/martin-francois/symphony-trello/issues/393) measured this
+option and rejected it. The measurement at the top of this record also supports keeping the 150 ms delay.
 
 ### Schedule probes instead of blocking, or rely on virtual-thread parking
 
