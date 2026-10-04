@@ -44,35 +44,37 @@ public final class TrelloBoardSetup {
     public static final String DEFAULT_CODEX_MODEL = "gpt-5.5";
     public static final String DEFAULT_CODEX_REASONING_EFFORT = "medium";
     private static final String CODEX_MODEL_DEFAULTS_LABEL = "codexModelDefaults";
+    public static final String RECOMMENDED_INBOX_LIST = "Inbox";
     public static final String RECOMMENDED_ACTIVE_STATE = "Ready for Codex";
     public static final String RECOMMENDED_IN_PROGRESS_STATE = "In Progress";
     public static final String RECOMMENDED_BLOCKED_STATE = "Blocked";
     public static final String RECOMMENDED_REVIEW_STATE = "Human Review";
     public static final String RECOMMENDED_MERGING_STATE = "Merging";
+    public static final String RECOMMENDED_DONE_STATE = "Done";
     // "Review" is a common review-list name on existing user boards, and import-board has no
     // option to pick the review list explicitly, so detection falls back to it when no
     // "Human Review" list exists.
     public static final String FALLBACK_REVIEW_STATE = "Review";
     public static final List<String> RECOMMENDED_LISTS = List.of(
-            "Inbox",
+            RECOMMENDED_INBOX_LIST,
             RECOMMENDED_ACTIVE_STATE,
             RECOMMENDED_IN_PROGRESS_STATE,
             RECOMMENDED_BLOCKED_STATE,
             RECOMMENDED_REVIEW_STATE,
             RECOMMENDED_MERGING_STATE,
-            "Done");
+            RECOMMENDED_DONE_STATE);
     public static final List<String> RECOMMENDED_NON_GITHUB_LISTS = List.of(
-            "Inbox",
+            RECOMMENDED_INBOX_LIST,
             RECOMMENDED_ACTIVE_STATE,
             RECOMMENDED_IN_PROGRESS_STATE,
             RECOMMENDED_BLOCKED_STATE,
             RECOMMENDED_REVIEW_STATE,
-            "Done");
+            RECOMMENDED_DONE_STATE);
     public static final List<String> RECOMMENDED_ACTIVE_STATES =
             List.of(RECOMMENDED_ACTIVE_STATE, RECOMMENDED_IN_PROGRESS_STATE, RECOMMENDED_MERGING_STATE);
     public static final List<String> RECOMMENDED_NON_GITHUB_ACTIVE_STATES =
             List.of(RECOMMENDED_ACTIVE_STATE, RECOMMENDED_IN_PROGRESS_STATE);
-    public static final List<String> RECOMMENDED_TERMINAL_STATES = List.of("Done");
+    public static final List<String> RECOMMENDED_TERMINAL_STATES = List.of(RECOMMENDED_DONE_STATE);
 
     private static final List<String> SYSTEM_TERMINAL_STATES =
             List.of("Archived", "ArchivedList", "ArchivedBoard", "Deleted");
@@ -213,11 +215,7 @@ public final class TrelloBoardSetup {
         List<String> recommendedLists = recommendedLists(githubEnabled, request.detectInProgressState());
         for (String listName : recommendedLists) {
             trello.postMap(
-                    request.endpoint(),
-                    "lists",
-                    orderedMap("name", listName, "idBoard", boardId, "pos", "bottom"),
-                    request.credentials(),
-                    "id");
+                    request.endpoint(), "lists", listCreationQuery(listName, boardId), request.credentials(), "id");
             createdLists.add(listName);
         }
 
@@ -478,7 +476,7 @@ public final class TrelloBoardSetup {
             trello.postMap(
                     request.endpoint(),
                     "lists",
-                    orderedMap("name", RECOMMENDED_MERGING_STATE, "idBoard", resolvedBoardId, "pos", "bottom"),
+                    listCreationQuery(RECOMMENDED_MERGING_STATE, resolvedBoardId),
                     request.credentials(),
                     "id");
             openListNames.add(RECOMMENDED_MERGING_STATE);
@@ -2295,7 +2293,13 @@ public final class TrelloBoardSetup {
         return requiredString(board, "id");
     }
 
-    private static Map<String, String> createBoardQuery(String boardName, String workspaceId) {
+    /// Adds the list at the end of the board, so lists appear in the order they are created.
+    static Map<String, String> listCreationQuery(String listName, String boardId) {
+        return orderedMap("name", listName, "idBoard", boardId, "pos", "bottom");
+    }
+
+    /// Creates an empty board: Trello's default lists and labels would clutter the recommended layout.
+    static Map<String, String> createBoardQuery(String boardName, String workspaceId) {
         Map<String, String> query = orderedMap("name", boardName, "defaultLists", "false", "defaultLabels", "false");
         if (!blank(workspaceId)) {
             query.put("idOrganization", workspaceId);

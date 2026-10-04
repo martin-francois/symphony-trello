@@ -51,7 +51,8 @@ import picocli.CommandLine.Spec;
             TrelloBoardSetupMain.StopCommand.class,
             TrelloBoardSetupMain.StatusCommand.class,
             TrelloBoardSetupMain.LogsCommand.class,
-            TrelloBoardSetupMain.DiagnosticsCommand.class
+            TrelloBoardSetupMain.DiagnosticsCommand.class,
+            TrelloBoardSetupMain.TutorialCommand.class
         })
 public final class TrelloBoardSetupMain implements Callable<Integer> {
     private static final String CONFIG_DIR_PROPERTY = "symphony.trello.config.dir";
@@ -376,13 +377,12 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                         new WorkspaceListRequest(TrelloApiEndpoint.normalize(endpoint), auth.credentials(dotenv)),
                         parent.out);
             } catch (TrelloBoardSetupException exception) {
-                throw withListWorkspaceEnvHint(exception, dotenv);
+                throw withCredentialEnvHint(exception, dotenv);
             }
             return 0;
         }
 
-        private static TrelloBoardSetupException withListWorkspaceEnvHint(
-                TrelloBoardSetupException exception, Path dotenv) {
+        static TrelloBoardSetupException withCredentialEnvHint(TrelloBoardSetupException exception, Path dotenv) {
             return switch (exception.code()) {
                 case "setup_missing_api_key", "setup_missing_api_token", "setup_missing_trello_credentials" ->
                     exception.withDotenvPath(dotenv);
@@ -613,6 +613,91 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 Files.createDirectories(parent);
             }
             Files.writeString(absolute, body);
+        }
+    }
+
+    @Command(
+            name = GuidedTutorial.COMMAND,
+            description = "Practice the Symphony card flow on a temporary Trello board.",
+            versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
+            mixinStandardHelpOptions = true)
+    static final class TutorialCommand implements Callable<Integer> {
+        @ParentCommand
+        TrelloBoardSetupMain parent;
+
+        @Mixin
+        TrelloAuthOptions auth = new TrelloAuthOptions();
+
+        @Option(names = "--endpoint", description = "Trello API endpoint.")
+        URI endpoint = TrelloBoardSetup.DEFAULT_ENDPOINT;
+
+        @Option(names = "--env", description = "Dotenv file with Trello credentials. Defaults to the installed .env.")
+        Optional<Path> envPath = Optional.empty();
+
+        @Option(
+                names = "--config-dir",
+                description = "Directory whose .env file and connected-board manifest the tutorial reads."
+                        + " --env wins for credentials when both are set.")
+        Optional<Path> configDir = Optional.empty();
+
+        @Option(names = "--workspace-id", description = "Trello Workspace id for the temporary tutorial board.")
+        Optional<String> workspaceId = Optional.empty();
+
+        @Option(
+                names = "--github",
+                description = "Include the GitHub pull request part. Default: included when a connected board uses"
+                        + " GitHub integration.")
+        boolean github;
+
+        @Option(names = "--no-github", description = "Leave out the GitHub pull request part.")
+        boolean noGithub;
+
+        @Option(
+                names = "--no-cleanup",
+                description = "Keep the temporary tutorial board at the end instead of offering to archive it.")
+        boolean noCleanup;
+
+        @Spec
+        CommandSpec spec;
+
+        @Override
+        public Integer call() throws IOException {
+            if (github && noGithub) {
+                throw new ParameterException(spec.commandLine(), "--github and --no-github cannot be used together.");
+            }
+            TrelloCredentialStore.validateEnvPathOption(envPath);
+            CliInputValidation.rejectBlankPath("--config-dir", configDir, "--config-dir must not be empty.");
+            CliInputValidation.rejectControlCharacters("--config-dir", configDir);
+            CliInputValidation.rejectExistingNonDirectoryPath("--config-dir", configDir);
+            CliInputValidation.rejectBlankText("--workspace-id", workspaceId);
+            CliInputValidation.rejectControlCharactersInText("--workspace-id", workspaceId);
+            Path dotenv = envPath.or(() -> configDir.map(dir -> dir.resolve(".env")))
+                    .map(path -> path.toAbsolutePath().normalize())
+                    .orElseGet(LocalEnvironment::defaultDotenv);
+            TrelloCredentials credentials;
+            try {
+                credentials = auth.credentials(dotenv);
+            } catch (TrelloBoardSetupException exception) {
+                throw ListWorkspacesCommand.withCredentialEnvHint(exception, dotenv);
+            }
+            var options = new GuidedTutorial.Options(
+                    github || (!noGithub && connectedBoardUsesGithub()),
+                    !noCleanup,
+                    workspaceId.map(String::strip),
+                    shellCommand(installedCliCommand()));
+            GuidedTutorial.forCli(
+                            TrelloApiEndpoint.normalize(endpoint),
+                            credentials,
+                            new StreamTerminal(parent.input, parent.out, parent.err))
+                    .run(options);
+            return 0;
+        }
+
+        private boolean connectedBoardUsesGithub() throws IOException {
+            Path manifest = configDir
+                    .map(dir -> dir.toAbsolutePath().normalize().resolve(ConnectedBoardManifest.FILE_NAME))
+                    .orElseGet(() -> LocalWorkerPaths.defaultManifestPath(System.getenv()));
+            return GuidedTutorial.connectedBoardUsesGithub(manifest);
         }
     }
 

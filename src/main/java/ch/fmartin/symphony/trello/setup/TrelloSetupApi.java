@@ -51,7 +51,7 @@ final class TrelloSetupApi {
             Map<String, String> query,
             TrelloCredentials credentials,
             String... requiredKeys) {
-        Map<String, Object> payload = request(TrelloRequestKind.WRITE, endpoint, path, query, credentials, MAP_TYPE);
+        Map<String, Object> payload = request(TrelloRequestKind.CREATE, endpoint, path, query, credentials, MAP_TYPE);
         if (payload == null) {
             throw unknownTrelloWriteOutcome(
                     new TrelloBoardSetupException("trello_unknown_payload", "Trello payload is empty"));
@@ -64,6 +64,10 @@ final class TrelloSetupApi {
             }
         }
         return payload;
+    }
+
+    Map<String, Object> putMap(URI endpoint, String path, Map<String, String> query, TrelloCredentials credentials) {
+        return request(TrelloRequestKind.UPDATE, endpoint, path, query, credentials, MAP_TYPE);
     }
 
     static String encodeSegment(String value) {
@@ -85,8 +89,10 @@ final class TrelloSetupApi {
             HttpRequest request =
                     switch (requestKind) {
                         case READ -> builder.GET().build();
-                        case WRITE ->
+                        case CREATE ->
                             builder.POST(HttpRequest.BodyPublishers.noBody()).build();
+                        case UPDATE ->
+                            builder.PUT(HttpRequest.BodyPublishers.noBody()).build();
                     };
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (isSuccessfulStatus(response.statusCode())) {
@@ -107,20 +113,17 @@ final class TrelloSetupApi {
 
     private static TrelloBoardSetupException trelloPayloadException(
             TrelloRequestKind requestKind, JsonProcessingException cause) {
-        return switch (requestKind) {
-            case READ ->
-                new TrelloBoardSetupException(
+        return requestKind.write()
+                ? unknownTrelloWriteOutcome(cause)
+                : new TrelloBoardSetupException(
                         "trello_unknown_payload", "Trello response payload could not be parsed", cause);
-            case WRITE -> unknownTrelloWriteOutcome(cause);
-        };
     }
 
     private static TrelloBoardSetupException trelloTransportException(
             TrelloRequestKind requestKind, String message, Exception cause) {
-        return switch (requestKind) {
-            case READ -> new TrelloBoardSetupException("trello_api_request", message, cause);
-            case WRITE -> unknownTrelloWriteOutcome(cause);
-        };
+        return requestKind.write()
+                ? unknownTrelloWriteOutcome(cause)
+                : new TrelloBoardSetupException("trello_api_request", message, cause);
     }
 
     private static TrelloBoardSetupException unknownTrelloWriteOutcome(Exception cause) {
@@ -148,7 +151,7 @@ final class TrelloSetupApi {
                 ? ""
                 : ": " + responseBody.strip().lines().findFirst().orElse("");
         Status status = Status.fromStatusCode(statusCode);
-        if (requestKind == TrelloRequestKind.WRITE && Family.SERVER_ERROR == Family.familyOf(statusCode)) {
+        if (requestKind.write() && Family.SERVER_ERROR == Family.familyOf(statusCode)) {
             return unknownTrelloWriteOutcome(new TrelloBoardSetupException(
                     "trello_api_status", "Trello returned HTTP " + statusCode + detail, statusCode));
         }
@@ -185,6 +188,12 @@ final class TrelloSetupApi {
 
     private enum TrelloRequestKind {
         READ,
-        WRITE
+        CREATE,
+        UPDATE;
+
+        /// A failed write may still have changed Trello, so its outcome is reported as unknown.
+        boolean write() {
+            return this != READ;
+        }
     }
 }

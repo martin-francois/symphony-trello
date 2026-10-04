@@ -166,6 +166,7 @@ final class SetupDiagnosticReporter {
             "setup_server_port_conflict",
             "setup_server_port_unavailable",
             "setup_trello_board_limit",
+            "setup_tutorial_card_missing",
             "setup_workflow_invalid",
             "setup_worker_board_already_managed",
             "setup_worker_board_ambiguous",

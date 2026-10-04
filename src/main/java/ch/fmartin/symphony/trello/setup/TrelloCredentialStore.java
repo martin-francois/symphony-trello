@@ -53,8 +53,7 @@ final class TrelloCredentialStore {
             terminal.info("Open Trello Power-Ups admin to create an API key for your Workspace:");
             terminal.info("  https://trello.com/power-ups/admin");
             terminal.info("Detailed step-by-step guide:");
-            terminal.info(
-                    "  https://github.com/martin-francois/symphony-trello#one-time-browser-setup-workspace-api-key-token");
+            terminal.info("  " + ProjectDocs.BROWSER_SETUP_URL);
             key = CredentialValue.direct(terminal.readLine("Trello API key: "));
         }
         if (blank(token)) {

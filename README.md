@@ -57,6 +57,9 @@ the workflow says to.
 If the card does not move or the workpad comment does not appear, run `symphony-trello status` and
 `symphony-trello logs`. For issue reports, see [Operations](#operations).
 
+To practice the card flow first, run `symphony-trello tutorial`. It uses a temporary Trello board
+and archives it at the end. See [Guided Tutorial](#guided-tutorial).
+
 ## How It Works
 
 1. You put a Trello card in a configured active list such as `Ready for Codex`.
@@ -92,6 +95,8 @@ If the card does not move or the workpad comment does not appear, run `symphony-
 All Symphony for Trello features work with Trello's Free plan.
 
 - Guided local setup that can create a Trello board for you or connect an existing board.
+- An optional [guided tutorial](#guided-tutorial) that lets you practice the card flow on a
+  temporary Trello board.
 - A repeatable Trello flow from `Ready for Codex` to active work, human review, blocked, merge, and
   done lists.
 - One local workspace per Trello card so Codex work is separated by task.
@@ -458,6 +463,49 @@ finding on the Trello card or, when there is a linked PR, on the PR. Then move t
 `Ready for Codex`. Codex treats that as rework, rereads the card, comments, workpad, PR feedback,
 and checks, and normally updates the existing PR instead of starting over.
 
+### Guided Tutorial
+
+The guided tutorial lets you practice the card flow before you use your own board. It creates a
+temporary Trello board named `Symphony for Trello tutorial (temporary)` with the recommended lists
+and one sample card. You move the card in Trello. The tutorial checks the board through the Trello
+API, and when the card is not where it should be, it prints the expected state and the board URL.
+
+Guided `setup-local` asks whether you want to try it right after setup. The installer and
+non-interactive setup print the command instead. You can run it any time:
+
+```bash
+symphony-trello tutorial
+```
+
+The walkthrough covers:
+
+- Moving a card to `Ready for Codex`.
+- Symphony moving the card to `In Progress` and writing the `## Codex Workpad` comment.
+- The handoff to `Human Review`.
+- Rework: you add a Trello comment and move the card back to `Ready for Codex`.
+- The default of one card per board at a time and `agent.max_concurrent_agents`.
+- `Done`, or `Merging` and the merge step when GitHub integration is configured.
+
+The tutorial plays Symphony's part itself. It does not connect the board to a worker, so no Codex
+work runs and no pull request is created. It does not change your connected boards, workflow files,
+or repositories.
+
+Each step checks the board every 5 seconds for up to 3 minutes. Press Enter to check right away, type
+`s` to let the tutorial do the step for you, or type `q` to stop. After 3 minutes, the tutorial checks
+only when you press Enter.
+
+At the end, the tutorial asks `Archive the temporary tutorial board now? [Y/n]`. Archiving is the
+default. The tutorial also archives the board when it stops because of an error or when you press
+Ctrl+C. It only archives the board it created in that run.
+
+Options:
+
+- `--github` includes the GitHub pull request part and `--no-github` leaves it out. Without either
+  option, the tutorial includes it when one of your connected boards uses GitHub integration.
+- `--no-cleanup` keeps the temporary board instead of asking whether to archive it.
+- `--workspace-id ID` picks the Trello Workspace for the temporary board. Without it, the tutorial
+  uses your only Workspace or asks which one to use.
+
 ### One Workflow For One Repository
 
 When every card in a workflow belongs to the same repository, set the workflow repository
@@ -704,8 +752,9 @@ The installer prints its final good-to-go handoff only after worker startup, aut
 lingering notes, and any direct-start fallback have finished successfully. The handoff names each
 connected Trello board with its normalized workflow path and ends with useful checks:
 `symphony-trello status` plus one shell-quoted `symphony-trello logs --workflow PATH` command for
-each connected workflow. If setup or managed worker startup fails, the installer exits without
-printing that completion block.
+each connected workflow. Before those checks, it names `symphony-trello tutorial`, which starts the
+[guided tutorial](#guided-tutorial). If setup or managed worker startup fails, the installer exits
+without printing that completion block.
 
 Setup saves Trello credentials that you type or pass directly. If credentials already come from real
 environment variables or an existing `.env` file, setup uses them without copying them into another
@@ -773,6 +822,7 @@ powershell -c "& ([scriptblock]::Create((irm https://symphony-trello.fmartin.ch/
 Useful commands after install:
 
 ```bash
+symphony-trello tutorial
 symphony-trello setup-local check
 symphony-trello setup-local repair-port --board "My Board Name"
 symphony-trello status --board "My Board Name"
