@@ -628,6 +628,8 @@ Fields:
     implementation's generated workflow, so default Trello card pickup stays responsive.
   - MUST be positive; configuration resolution rejects zero or negative values.
   - Changes SHOULD be re-applied at runtime and affect future tick scheduling without restart.
+  - Is the shortest effective poll interval. Trello rate-limit pressure can lengthen the effective
+    interval as described in Section 8.1.
 
 #### 5.3.3 `workspace` (object)
 
@@ -1513,6 +1515,29 @@ then repeats every `polling.interval_ms`.
 
 The effective poll interval SHOULD be updated when workflow config changes are re-applied.
 
+Adaptive poll scheduling (Trello adaptation):
+
+- `polling.interval_ms` is the shortest effective poll interval.
+- The implementation SHOULD add random jitter to each scheduled tick delay so workers that share a
+  Trello token do not poll in step. Jitter MUST NOT shorten the delay. This Java implementation adds
+  between 0 and 10 percent of the delay.
+- When a tick observes Trello `429` responses, the implementation SHOULD lengthen the effective poll
+  interval for that worker. This includes responses that a read retried successfully and responses
+  to writes or agent tool calls in the same process. This Java implementation doubles the effective
+  interval for each tick that observed at least one `429`.
+- The slowed effective interval MUST stay bounded. This Java implementation caps it at `30000 ms`, so
+  a configured interval of `30000 ms` or more is not slowed.
+- After a quiet period without `429` responses, the effective interval SHOULD recover gradually
+  toward `polling.interval_ms`. This Java implementation checks at the end of each tick and halves
+  the interval once 60 seconds passed since the last tick that observed a `429` or since the last
+  halving.
+- Except for a manual refresh request, the next tick MUST NOT start while a `Retry-After` wait is
+  still ahead when a tick finishes. A wait that a request already sat out MUST NOT delay the next
+  tick again.
+- A manual refresh request (Section 13.7.2) still schedules an immediate tick.
+- If a runtime snapshot is implemented, it exposes the configured and the effective interval
+  (Section 13.3).
+
 Tick sequence:
 
 1. Reconcile running cards.
@@ -2317,6 +2342,11 @@ Trello-specific requirements for `tracker.kind == "trello"`:
 - The adapter SHOULD use bounded exponential backoff with jitter for retryable Trello transport
   errors and `429` responses
 - The adapter SHOULD honor response retry hints such as `Retry-After` if Trello provides them
+  - This Java implementation honors `Retry-After` in seconds and as an HTTP date and bounds it at
+    `30000 ms`, the same bound as the slowed poll interval in Section 8.1. A longer value is
+    treated as `30000 ms`, a past date as no wait, and an unparseable value as a missing header.
+- The adapter SHOULD make every `429` response and its `Retry-After` deadline available to poll
+  scheduling (Section 8.1), including responses that a retry recovered from.
 - The adapter SHOULD avoid unnecessary `/1/members/` calls because member-related endpoints can be
   more constrained than board/card reads
 
@@ -2609,6 +2639,9 @@ SHOULD return:
 - `dispatch_pause` (`null` while idle, otherwise a stable code plus detection and deadline
   timestamps; it MUST NOT include raw account or provider payloads or the configured command
   string)
+- `polling` (`null` before the workflow is loaded, otherwise `configured_interval_ms`,
+  `effective_interval_ms`, `slowdown_reason` (`null` or the stable code `trello_rate_limited`),
+  and `last_rate_limited_at` (`null` until Trello first answers `429`))
 
 RECOMMENDED snapshot error modes:
 
@@ -2767,7 +2800,13 @@ Minimum endpoints:
         "seconds_running": 1834.2
       },
       "dispatch_pause": null,
-      "rate_limits": null
+      "rate_limits": null,
+      "polling": {
+        "configured_interval_ms": 5000,
+        "effective_interval_ms": 20000,
+        "slowdown_reason": "trello_rate_limited",
+        "last_rate_limited_at": "2026-02-24T20:15:02Z"
+      }
     }
     ```
 
@@ -2933,6 +2972,7 @@ API design notes:
   - Log a warning that names the current `polling.interval_ms`, the workflow file, and recommends
     increasing the interval when rate limiting happens often, especially with more than 5-10 boards
     sharing one Trello token.
+  - Lengthen the effective poll interval and recover after a quiet period as Section 8.1 describes.
 
 - Status page/log failures:
   - Do not crash the orchestrator.
@@ -3532,6 +3572,9 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - If proactive local Trello rate limiting is implemented, it tracks API-key and API-token buckets
   independently
 - `429` rate-limit responses are retried within configured bounds
+- If adaptive poll scheduling is implemented, every `429` response, retried or not and from reads or
+  writes, reaches poll scheduling with its `Retry-After` deadline
+- `Retry-After` waits stay bounded
 - Archived cards normalize to terminal state `Archived` when configured
 - Cards in archived lists normalize to `ArchivedList` when list metadata is available
 - Cards in archived boards normalize to `ArchivedBoard` when board metadata is available
@@ -3587,6 +3630,11 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
   launch config; old-target retries retire instead of becoming attempts for same-ID new-target cards
 - Stall detection kills stalled sessions and schedules retry
 - Slot exhaustion requeues retries with explicit error reason
+- Poll scheduling adds jitter that never shortens the delay
+- A tick that observed Trello `429` responses lengthens the effective poll interval up to its bound,
+  and quiet periods recover it stepwise to `polling.interval_ms`
+- The next tick waits for the rest of a pending `Retry-After` and does not wait out a `Retry-After`
+  that a request already sat out
 - If a snapshot API is implemented, it returns running rows, retry rows, token totals, and rate
   limits
 - If a snapshot API is implemented, timeout/unavailable cases are surfaced
@@ -3651,6 +3699,8 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
   physical card, workpad, and workspace ownership in the originating endpoint/board scope
 - If a snapshot API is implemented, `dispatch_pause` is either null or exactly the stable code and
   timestamps, without raw account/provider data or the configured command string
+- If a snapshot API is implemented, `polling` shows the configured and the effective poll interval
+  and the slowdown reason
 - If managed usage workpad sections are implemented, marker ownership, duplicate handling, cleanup,
   restart staleness, and agent/orchestrator serialization follow Section 10.5
 - If a human-readable status surface is implemented, it is driven from orchestrator state and does

@@ -1280,6 +1280,12 @@ To check for rate limits, search the service logs for `Trello rate limit reached
 warnings can happen during bursts; repeated warnings mean the interval is too aggressive for the
 current board count and token.
 
+`polling.interval_ms` is the shortest wait between polls. When Trello answers with a rate limit, the
+worker polls less often on its own, up to every 30 seconds, and returns to `polling.interval_ms`
+after a few quiet minutes. Polls also get a little random jitter so boards sharing a token do not
+poll at the same moment. The status page and `/api/v1/state` show the configured and the current
+interval; see [Trello rate limits](docs/operations.md#trello-rate-limits).
+
 ### Codex Command
 
 A generated Codex section can look like this when Terra is available:

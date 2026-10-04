@@ -20,6 +20,7 @@ import ch.fmartin.symphony.trello.agent.AgentRunResult;
 import ch.fmartin.symphony.trello.agent.AgentRunner;
 import ch.fmartin.symphony.trello.domain.BlockerRef;
 import ch.fmartin.symphony.trello.domain.Card;
+import ch.fmartin.symphony.trello.tracker.RateLimitPressure;
 import ch.fmartin.symphony.trello.workflow.WorkflowException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
@@ -34,6 +35,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -694,6 +696,37 @@ final class SymphonyOrchestratorTest {
                 .as("a refresh at the tick completion boundary must schedule the next tick "
                         + "immediately instead of waiting for the 60s polling interval")
                 .isGreaterThanOrEqualTo(2);
+    }
+
+    @Test
+    void trelloRateLimitDuringATickSlowsTheNextTickAndShowsInTheSnapshot() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Duration configured = Duration.ofSeconds(5);
+        writeWorkflow(workflow, String.valueOf(configured.toMillis()));
+        var tracker = new FakeTracker(List.of());
+        Instant rateLimitedAt = Instant.parse("2026-10-04T10:00:00Z");
+        tracker.rateLimitPressure.set(new RateLimitPressure(1, Optional.of(rateLimitedAt), Optional.empty()));
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, mock());
+        Duration slowed = configured.multipliedBy(AdaptivePollInterval.SLOWDOWN_FACTOR);
+
+        // when
+        orchestrator.start();
+        waitUntil(() -> orchestrator.snapshot().polling().effectiveInterval().equals(slowed));
+        RuntimeSnapshot snapshot = orchestrator.snapshot();
+        Duration nextTickDelay = orchestrator.scheduledTickDelayForTests();
+        orchestrator.stop();
+
+        // then
+        assertThat(snapshot.polling())
+                .isEqualTo(new RuntimeSnapshot.Polling(
+                        configured,
+                        slowed,
+                        Optional.of(AdaptivePollInterval.TRELLO_RATE_LIMITED),
+                        Optional.of(rateLimitedAt)));
+        assertThat(nextTickDelay)
+                .as("the tick after a Trello 429 waits longer than the configured %s", configured)
+                .isGreaterThan(configured);
     }
 
     @Test

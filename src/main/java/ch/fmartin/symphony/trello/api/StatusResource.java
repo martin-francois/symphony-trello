@@ -16,9 +16,11 @@ import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import java.math.BigDecimal;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.BooleanSupplier;
@@ -30,6 +32,8 @@ public class StatusResource {
     // the resource class in Allow, which wrongly offers POST on the read-only routes.
     private static final String READ_ONLY_ALLOW = "GET, HEAD, OPTIONS";
     private static final String REFRESH_ALLOW = "OPTIONS, POST";
+    /// Decimal places that turn a millisecond count into seconds.
+    private static final int MILLIS_SCALE = 3;
 
     private final SymphonyOrchestrator orchestrator;
     private final BooleanSupplier loopbackClient;
@@ -79,6 +83,7 @@ public class StatusResource {
                   <h1>Symphony for Trello</h1>
                   <p><code>%s</code> running, <code>%s</code> retrying.</p>
                   %s
+                  %s
                   <table>
                     <thead><tr><th>Card</th><th>State</th><th>Session</th><th>Last event</th><th>Turns</th></tr></thead>
                     <tbody>%s</tbody>
@@ -89,6 +94,7 @@ public class StatusResource {
                 .formatted(
                         snapshot.counts().running(),
                         snapshot.counts().retrying(),
+                        pollingLine(snapshot.polling()),
                         dispatchPauseBanner(snapshot.dispatchPause()),
                         snapshot.running().stream()
                                 .map(row -> "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"
@@ -99,6 +105,26 @@ public class StatusResource {
                                                 escape(row.lastEvent()),
                                                 row.turnCount()))
                                 .collect(Collectors.joining()));
+    }
+
+    private static String pollingLine(RuntimeSnapshot.Polling polling) {
+        if (polling == null) {
+            return "";
+        }
+        String configured = seconds(polling.configuredInterval());
+        return polling.slowdownReason()
+                .map(ignoredReason ->
+                        "<p role=\"status\">Polling: configured <code>%s</code>, currently <code>%s</code> because Trello asked Symphony to slow down.</p>"
+                                .formatted(configured, seconds(polling.effectiveInterval())))
+                .orElseGet(() -> "<p>Polling: every <code>%s</code> (<code>polling.interval_ms</code>).</p>"
+                        .formatted(configured));
+    }
+
+    private static String seconds(Duration interval) {
+        return BigDecimal.valueOf(interval.toMillis(), MILLIS_SCALE)
+                        .stripTrailingZeros()
+                        .toPlainString()
+                + "s";
     }
 
     private static String dispatchPauseBanner(RuntimeSnapshot.DispatchPause pause) {
