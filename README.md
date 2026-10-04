@@ -649,8 +649,9 @@ need one mapping. Do not paste private-context output into public issues.
 
 ## Installer Reference
 
-The installer downloads the latest GitHub Release archive, verifies its SHA3-256 checksum, and
-unpacks it into the local app directory. It installs or updates Symphony for Trello, then runs guided
+The installer downloads the latest GitHub Release archive and checks its SHA3-256 checksum. When
+GitHub CLI is installed, it also checks the release signature. Then it unpacks the archive into the
+local app directory. It installs or updates Symphony for Trello, then runs guided
 setup and starts the managed local worker unless you pass `--no-onboard`.
 
 For Windows, WSL2 is the recommended setup path. Run the Linux installer inside WSL2, keep Codex CLI
@@ -811,6 +812,64 @@ bash uninstall.sh --yes --yes-local-data --remove-all-local-data
 
 `--yes` only skips the prompt for installer-managed app files. Add `--yes-local-data` only when you
 also want unattended deletion of local `.env` files, workflows, workspaces, state, and logs.
+
+### Verify Release Downloads
+
+The release workflow signs every release asset, including the installer scripts and archives. The
+signature is a GitHub artifact attestation signed through Sigstore with a short-lived certificate for
+that workflow run, so there is no long-lived signing key. Each release publishes the signature bundle
+as `symphony-trello-<version>.intoto.jsonl` next to `checksums.txt`. Releases before 1.2.0 are not
+signed.
+
+The installer always checks the archive's SHA3-256 hash against `checksums.txt`. That catches broken
+or mismatched downloads. If GitHub CLI (`gh`) 2.49 or newer is installed, the installer also checks
+the archive's signature, which proves that this repository's release workflow on `main` built it.
+You do not need to log in to GitHub CLI for this check. Without GitHub CLI, the installer prints a
+note and continues with the checksum check.
+
+If the signature check fails, the installer stops before it unpacks the archive. When the `gh` lines
+in the error say that it could not reach Sigstore, fix the network or proxy access and rerun the
+installer. If you cannot allow access to Sigstore, run the installer in a shell where `gh` is not on
+`PATH`. It then checks only the SHA3-256 checksum, as it does for users without GitHub CLI. When the
+error is not about the network, do not install that download, and report it through
+[private vulnerability reporting](https://github.com/martin-francois/symphony-trello/security/advisories/new).
+
+To check a file yourself, for example the installer script before you run it, download it together
+with the signature bundle of the same release and run `gh attestation verify`:
+
+```bash
+version=1.2.0
+base="https://github.com/martin-francois/symphony-trello/releases/download/v$version"
+curl -fsSLO "$base/install.sh"
+curl -fsSLO "$base/symphony-trello-$version.intoto.jsonl"
+gh attestation verify install.sh --bundle "symphony-trello-$version.intoto.jsonl" \
+  --repo martin-francois/symphony-trello \
+  --cert-identity https://github.com/martin-francois/symphony-trello/.github/workflows/release-please.yml@refs/heads/main
+bash install.sh
+```
+
+```powershell
+$version = "1.2.0"
+$base = "https://github.com/martin-francois/symphony-trello/releases/download/v$version"
+Invoke-WebRequest "$base/install.ps1" -OutFile install.ps1
+Invoke-WebRequest "$base/symphony-trello-$version.intoto.jsonl" -OutFile "symphony-trello-$version.intoto.jsonl"
+gh attestation verify install.ps1 --bundle "symphony-trello-$version.intoto.jsonl" `
+  --repo martin-francois/symphony-trello `
+  --cert-identity https://github.com/martin-francois/symphony-trello/.github/workflows/release-please.yml@refs/heads/main
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+Replace `1.2.0` with the release you want. A versioned `install.sh` or `install.ps1` installs its own
+release by default. The same command works for the archives and `checksums.txt`. With cosign 3 or
+newer, check the same identity and the GitHub Actions certificate issuer:
+
+```bash
+cosign verify-blob-attestation --bundle "symphony-trello-$version.intoto.jsonl" \
+  --type slsaprovenance1 \
+  --certificate-identity https://github.com/martin-francois/symphony-trello/.github/workflows/release-please.yml@refs/heads/main \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  install.sh
+```
 
 ## Advanced Setup
 

@@ -69,6 +69,12 @@ jobs:
           PROVENANCE_BUNDLE: ${{ steps.attest-release-assets.outputs.bundle-path }}
           RELEASE_VERSION: ${{ steps.release-assets.outputs.version }}
         run: scripts/add-release-provenance
+      - name: Verify release signatures
+        if: ${{ steps.release-assets.outputs.upload_assets == 'true' }}
+        env:
+          ASSET_DIR: ${{ steps.release-assets.outputs.asset_dir }}
+          RELEASE_VERSION: ${{ steps.release-assets.outputs.version }}
+        run: scripts/verify-release-signatures
       - name: Upload release assets
         if: ${{ steps.release-assets.outputs.upload_assets == 'true' }}
         env:

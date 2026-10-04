@@ -365,9 +365,21 @@ automatically from GitHub pull request history.
 
 When Release Please creates a GitHub release, the release workflow checks out the tag, builds the
 packaged Quarkus app, uploads `install.sh`, `install.ps1`, `uninstall.sh`, `uninstall.ps1`, Linux
-and Windows release archives, and a SHA3-256 `checksums.txt` file. Release assets are not replaced
-in place; if a public release is wrong or incomplete, publish a new patch release after fixing the
-release pipeline. To validate the packaging step locally, run:
+and Windows release archives, a SHA3-256 `checksums.txt` file, and the signature bundle
+`symphony-trello-<version>.intoto.jsonl`. Release assets are not replaced in place; if a public
+release is wrong or incomplete, publish a new patch release after fixing the release pipeline.
+
+Release signing needs no key or secret. The `actions/attest` step signs every asset through Sigstore
+with the workflow's GitHub OIDC token, which is why the release job has `id-token: write` and
+`attestations: write`. There is nothing to rotate. The certificate identity is
+`https://github.com/martin-francois/symphony-trello/.github/workflows/release-please.yml@refs/heads/main`
+with issuer `https://token.actions.githubusercontent.com`. `install.sh`, `install.ps1`, and
+`scripts/verify-release-signatures` pin that identity, and the workflow runs that script before
+upload. Renaming the workflow file or running releases from another ref changes the identity, so
+update all three in the same pull request. [ADR 0103](docs/adr/0103-verify-release-signatures-with-github-attestations.md)
+explains the choice, and the README section "Verify Release Downloads" has the manual check.
+
+To validate the packaging step locally, run:
 
 ```bash
 scripts/package-release-assets.sh 0.2.0

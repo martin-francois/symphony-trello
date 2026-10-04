@@ -2,8 +2,14 @@ package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.sun.net.httpserver.HttpServer;
+import com.sun.net.httpserver.SimpleFileServer;
 import java.io.File;
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
@@ -12,7 +18,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.security.MessageDigest;
 import java.time.Duration;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -21,6 +29,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 final class InstallerScriptFixture {
     private static final int PROCESS_DESCENDANT_DISCOVERY_MILLIS = 1_000;
@@ -874,6 +884,119 @@ final class InstallerScriptFixture {
                 echo 'javac 25.0.1'
                 """);
         return fakeBin;
+    }
+
+    /// Writes the release assets this platform's installer downloads: the archive with a placeholder
+    /// app, SHA3-256 `checksums.txt`, and optionally a placeholder signature bundle for the fake
+    /// GitHub CLI. PowerShell installs the zip and the POSIX installer the tar.gz archive.
+    static Path createReleaseAssets(Path temporaryDirectory, String version, boolean withSignatureBundle)
+            throws Exception {
+        String rootName = "symphony-trello-" + version;
+        Path staging = temporaryDirectory.resolve("release-staging-" + version);
+        Path assets = temporaryDirectory.resolve("release-assets-" + version);
+        Path quarkusApp = staging.resolve(rootName).resolve("target/quarkus-app");
+        Files.createDirectories(quarkusApp);
+        Files.createDirectories(assets);
+        Files.writeString(quarkusApp.resolve("quarkus-run.jar"), "placeholder app\n");
+        Path archive;
+        if (isWindows()) {
+            archive = assets.resolve(rootName + ".zip");
+            try (var zip = new ZipOutputStream(Files.newOutputStream(archive))) {
+                zip.putNextEntry(new ZipEntry(rootName + "/target/quarkus-app/quarkus-run.jar"));
+                zip.write(Files.readAllBytes(quarkusApp.resolve("quarkus-run.jar")));
+                zip.closeEntry();
+            }
+        } else {
+            archive = assets.resolve(rootName + ".tar.gz");
+            run(Map.of(), "tar", "-czf", archive.toString(), "-C", staging.toString(), rootName)
+                    .assertSuccess();
+        }
+        Files.writeString(assets.resolve("checksums.txt"), sha3Hex(archive) + "  " + archive.getFileName() + "\n");
+        if (withSignatureBundle) {
+            Files.writeString(assets.resolve(rootName + ".intoto.jsonl"), "{\"placeholder\":\"bundle\"}\n");
+        }
+        return assets;
+    }
+
+    private static String sha3Hex(Path file) throws Exception {
+        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA3-256").digest(Files.readAllBytes(file)));
+    }
+
+    /// Serves release assets over HTTP because PowerShell 7 cannot download `file:` URLs.
+    static HttpServer serveReleaseAssets(Path assets) throws IOException {
+        HttpServer server = SimpleFileServer.createFileServer(
+                new InetSocketAddress(InetAddress.getLoopbackAddress(), 0),
+                assets.toAbsolutePath(),
+                SimpleFileServer.OutputLevel.NONE);
+        server.start();
+        return server;
+    }
+
+    static String releaseAssetsUrl(HttpServer server) throws URISyntaxException {
+        InetSocketAddress address = server.getAddress();
+        return new URI("http", null, address.getAddress().getHostAddress(), address.getPort(), null, null, null)
+                .toString();
+    }
+
+    /// Writes a GitHub CLI double for release signature checks. `SYMPHONY_FAKE_GH_ATTESTATION`
+    /// selects `verified`, `rejected`, or `unsupported` (a gh without attestation
+    /// support). Calls go to `SYMPHONY_FAKE_LOG` with the `GH_HOST` they saw.
+    static Path createFakeGitHubCli(Path temporaryDirectory) throws IOException {
+        Path fakeBin = temporaryDirectory.resolve("fake-gh-bin");
+        Files.createDirectories(fakeBin);
+        if (isWindows()) {
+            writeFakeWindowsGitHubCli(fakeBin);
+            return fakeBin;
+        }
+        writeExecutable(
+                fakeBin.resolve("gh"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                echo "gh GH_HOST=${GH_HOST:-} $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                mode="${SYMPHONY_FAKE_GH_ATTESTATION:-verified}"
+                if [[ "${1:-} ${2:-}" != "attestation verify" ]]; then
+                  exit 0
+                fi
+                if [[ "${3:-}" == "--help" ]]; then
+                  [[ "$mode" != "unsupported" ]]
+                  exit $?
+                fi
+                if [[ "$mode" == "verified" && -f "${5:-}" ]]; then
+                  exit 0
+                fi
+                echo
+                echo 'Error: verifying with issuer "sigstore.dev"' >&2
+                exit 1
+                """);
+        return fakeBin;
+    }
+
+    private static void writeFakeWindowsGitHubCli(Path fakeBin) throws IOException {
+        Files.writeString(
+                fakeBin.resolve("gh.cmd"),
+                """
+                @echo off
+                pwsh -NoProfile -File "%~dp0fake-gh.ps1" %*
+                exit /b %ERRORLEVEL%
+                """);
+        Files.writeString(
+                fakeBin.resolve("fake-gh.ps1"),
+                """
+                Add-Content -Path $env:SYMPHONY_FAKE_LOG -Value ("gh GH_HOST=$env:GH_HOST " + ($args -join " "))
+                $mode = if ($env:SYMPHONY_FAKE_GH_ATTESTATION) { $env:SYMPHONY_FAKE_GH_ATTESTATION } else { "verified" }
+                if ($args.Count -lt 2 -or $args[0] -ne "attestation" -or $args[1] -ne "verify") {
+                  exit 0
+                }
+                if ($args.Count -ge 3 -and $args[2] -eq "--help") {
+                  exit $(if ($mode -eq "unsupported") { 1 } else { 0 })
+                }
+                if ($mode -eq "verified" -and $args.Count -ge 5 -and (Test-Path -LiteralPath $args[4] -PathType Leaf)) {
+                  exit 0
+                }
+                [Console]::Error.WriteLine('Error: verifying with issuer "sigstore.dev"')
+                exit 1
+                """);
     }
 
     static Path createFakeWindowsToolchain(Path temporaryDirectory) throws IOException {
