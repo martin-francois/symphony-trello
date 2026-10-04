@@ -1,16 +1,21 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.testsupport.WindowsShimFixtures.NPM_PATHEXT;
+import static ch.fmartin.symphony.trello.testsupport.WindowsShimFixtures.WINDOWS_OS_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import ch.fmartin.symphony.trello.process.ExecutableResolver;
 import com.google.common.base.CharMatcher;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
@@ -49,6 +54,22 @@ final class ProcessCommandRunnerTest {
     }
 
     @Test
+    void runStopsGrandchildProcessesWhenTheCommandTimesOut(@TempDir Path workDirectory) throws Exception {
+        // given
+        Path pidFile = workDirectory.resolve("grandchild.pid");
+        var runner = new ProcessCommandRunner(Duration.ofMillis(500));
+
+        // when
+        CommandResult result = runner.run(BASH, "-c", "sleep 60 & echo $! > " + shellQuote(pidFile) + "; wait");
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(CommandResult.TIMED_OUT_EXIT_CODE);
+        assertThat(processIsAlive(waitForPid(pidFile)))
+                .as("a timed-out command also stops its children, as cmd.exe has for a batch shim's tool")
+                .isFalse();
+    }
+
+    @Test
     void runDestroysChildProcessWhenInterrupted() throws Exception {
         // given
         Path pidFile = Files.createTempFile("symphony-trello-command-pid-", ".txt");
@@ -77,6 +98,25 @@ final class ProcessCommandRunnerTest {
         } finally {
             Files.deleteIfExists(pidFile);
         }
+    }
+
+    @Test
+    void runInteractiveReportsLaunchFailureInsteadOfPassingAChangedArgumentToABatchShim(@TempDir Path npmPrefix)
+            throws Exception {
+        // given
+        Files.writeString(npmPrefix.resolve("codex.CMD"), "");
+        var runner = new ProcessCommandRunner(
+                Duration.ofSeconds(2),
+                new ExecutableResolver(Map.of("PATH", npmPrefix.toString(), "PATHEXT", NPM_PATHEXT), WINDOWS_OS_NAME));
+
+        // when
+        CommandResult result = runner.runInteractive("codex", "-c", "note=100%");
+
+        // then
+        assertThat(result.launchFailed())
+                .as("an argument cmd.exe would expand fails the launch instead of reaching Codex changed")
+                .isTrue();
+        assertThat(result.output()).contains("Windows batch file");
     }
 
     @CsvSource(

@@ -2,7 +2,6 @@ package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.HTTPS;
 import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.SSH;
-import static java.util.stream.Collectors.joining;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.api.Assumptions.abort;
@@ -26,7 +25,6 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -763,7 +761,7 @@ final class SetupDiagnosticReporterTest {
             if ("sh".equals(command[0]) || "cmd".equals(command[0])) {
                 throw new AssertionError("diagnostics tool probe must not call a helper shell");
             }
-            if (List.of(command).equals(List.of(windowsBatchCommand(codexShim, "--version")))) {
+            if (List.of(command).equals(List.of(codexShim.toString(), "--version"))) {
                 return new CommandResult(0, "codex-cli 9.9\n");
             }
             return new CommandResult(CommandResult.COMMAND_NOT_FOUND_EXIT_CODE, "");
@@ -796,8 +794,8 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(toolDirectory);
         Files.writeString(codexShim, "");
         FakeCommandRunner commands = new FakeCommandRunner()
-                .returns(0, "codex-cli 9.9\n", windowsBatchCommand(codexShim, "--version"))
-                .returns(0, "Logged in\n", windowsBatchCommand(codexShim, "login", "status"));
+                .returns(0, "codex-cli 9.9\n", codexShim.toString(), "--version")
+                .returns(0, "Logged in\n", codexShim.toString(), "login", "status");
         var reporter = new SetupDiagnosticReporter(
                 Map.of("Path", '"' + toolDirectory.toString() + '"', "PATHEXT", ".CMD;.EXE"),
                 commands,
@@ -824,8 +822,8 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(toolDirectory);
         Files.writeString(codexShim, "");
         FakeCommandRunner commands = new FakeCommandRunner()
-                .returns(0, "codex-cli 9.9\n", windowsBatchCommand(codexShim, "--version"))
-                .returns(1, "not logged in\n", windowsBatchCommand(codexShim, "login", "status"));
+                .returns(0, "codex-cli 9.9\n", codexShim.toString(), "--version")
+                .returns(1, "not logged in\n", codexShim.toString(), "login", "status");
         var reporter = new SetupDiagnosticReporter(
                 Map.of("Path", '"' + toolDirectory.toString() + '"', "PATHEXT", ".CMD;.EXE"),
                 commands,
@@ -852,8 +850,8 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(toolDirectory);
         Files.writeString(ghShim, "");
         FakeCommandRunner commands = new FakeCommandRunner()
-                .returns(0, "gh version 2.70.0\n", windowsBatchCommand(ghShim, "--version"))
-                .returns(0, "github.com\n", windowsBatchCommand(ghShim, "auth", "status"));
+                .returns(0, "gh version 2.70.0\n", ghShim.toString(), "--version")
+                .returns(0, "github.com\n", ghShim.toString(), "auth", "status");
         var reporter = new SetupDiagnosticReporter(
                 Map.of("Path", '"' + toolDirectory.toString() + '"', "PATHEXT", ".CMD;.EXE"),
                 commands,
@@ -880,8 +878,8 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(toolDirectory);
         Files.writeString(ghShim, "");
         FakeCommandRunner commands = new FakeCommandRunner()
-                .returns(0, "gh version 2.70.0\n", windowsBatchCommand(ghShim, "--version"))
-                .returns(1, "not authenticated\n", windowsBatchCommand(ghShim, "auth", "status"));
+                .returns(0, "gh version 2.70.0\n", ghShim.toString(), "--version")
+                .returns(1, "not authenticated\n", ghShim.toString(), "auth", "status");
         var reporter = new SetupDiagnosticReporter(
                 Map.of("Path", '"' + toolDirectory.toString() + '"', "PATHEXT", ".CMD;.EXE"),
                 commands,
@@ -4200,23 +4198,6 @@ final class SetupDiagnosticReporterTest {
             executable.toFile().setExecutable(true);
         }
         return toolDirectory;
-    }
-
-    private static String[] windowsBatchCommand(Path executable, String... arguments) {
-        List<String> parts = new ArrayList<>();
-        parts.add(executable.toString());
-        parts.addAll(List.of(arguments));
-        return new String[] {
-            "cmd.exe",
-            "/d",
-            "/s",
-            "/c",
-            "\"" + parts.stream().map(SetupDiagnosticReporterTest::quoteForCmd).collect(joining(" ")) + "\""
-        };
-    }
-
-    private static String quoteForCmd(String value) {
-        return "\"" + value.replace("%", "%%").replace("\"", "\\\"") + "\"";
     }
 
     private static String pathToken(byte[] key, Path path) {
