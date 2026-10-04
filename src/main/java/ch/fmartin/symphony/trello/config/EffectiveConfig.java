@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.config;
 
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNSAFE_SINGLE_LINE_CHARACTERS;
+
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -90,6 +92,12 @@ public record EffectiveConfig(
 
     @NullMarked
     public record RepositoryConfig(@Nullable String defaultUrl, @Nullable Path defaultPath) {
+        /// The repository source context shows the default path on one prompt line, so a path with a
+        /// control character or a Unicode line or paragraph separator cannot be a default.
+        public static boolean usableDefaultPath(Path path) {
+            return UNSAFE_SINGLE_LINE_CHARACTERS.matchesNoneOf(path.toString());
+        }
+
         public DefaultSource selectedDefaultSource() {
             if (defaultUrl != null) {
                 return DefaultSource.URL;
