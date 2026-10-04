@@ -3878,6 +3878,23 @@ GitHub commit authoring extension:
   default branch, or mixed styles SHOULD be treated as inconclusive and fall back to Conventional
   Commits
 
+GitHub issue assignment extension:
+
+- before implementation starts, and after any stale-blocker check allows the card to continue,
+  GitHub-enabled generated workflows SHOULD tell the agent to assign the GitHub issues the card
+  clearly implements to the authenticated GitHub account
+- the agent SHOULD confirm the assignment by reading the issue's assignees back, because GitHub can
+  drop an assignee without an error when the account lacks permission
+- only issues in the repository selected for the card qualify; pull requests, issues from other
+  repositories, issues mentioned only as context, and issue-like text that does not resolve to an
+  issue SHOULD NOT be assigned
+- assignment SHOULD use the existing GitHub CLI authentication and MUST NOT require new credentials
+  or another GitHub access path
+- a failed or skipped assignment, for example because of missing auth, missing permission, or an
+  unresolvable issue, MUST NOT block the implementation; the workflow SHOULD record which issue was
+  not assigned and why in the workpad, or in the final response when workpad tools are disabled
+- generated workflows without GitHub integration MUST NOT include the assignment instruction
+
 GitHub pull request publication extension:
 
 - generated workflows SHOULD create ready-for-review, non-draft pull requests by default
