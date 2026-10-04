@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.setup;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
+import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.testsupport.RecordingTerminal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -15,6 +16,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 final class TrelloCredentialStoreTest {
     @TempDir
@@ -86,6 +89,37 @@ final class TrelloCredentialStoreTest {
 
         // then
         assertThat(updated).containsExactly("TRELLO_API_TOKEN=\"a b\\\"c\\\\d\"");
+    }
+
+    /// The setup writer and the LocalEnvironment reader must agree on quoting and escaping, so a
+    /// saved credential reads back unchanged. See docs/adr/0100-keep-the-hand-rolled-dotenv-parser.md.
+    @ParameterizedTest(name = "[{index}] {0}")
+    @ValueSource(
+            strings = {
+                "plain-token_1.2:3@4%5+6=7,8/9",
+                "",
+                " leading and trailing spaces ",
+                "double\"quote",
+                "single'quote",
+                "C:\\Users\\Jane Doe",
+                "trailing backslash\\",
+                "tab\tbackspace\bform feed\f",
+                "hash # inside",
+                "#leading-hash",
+                "$TRELLO_API_KEY",
+                "${TRELLO_API_KEY:-fallback}",
+                "non-ASCII \u00e4\u00f6\u00fc \uD835\uDC00"
+            })
+    void writtenDotenvValuesReadBackUnchanged(String value) throws Exception {
+        // given
+        Path env = tempDir.resolve(".env");
+        Files.write(env, TrelloCredentialStore.upsertEnv(List.of(), "TRELLO_API_TOKEN", value));
+
+        // when
+        Map<String, String> values = LocalEnvironment.load(env);
+
+        // then
+        assertThat(values).containsExactly(Map.entry("TRELLO_API_TOKEN", value));
     }
 
     @Test
