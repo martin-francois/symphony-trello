@@ -104,7 +104,7 @@ public final class LocalEnvironment {
         if (!validKey(key)) {
             return Optional.empty();
         }
-        String value = parseValue(line.substring(separator + 1).strip());
+        String value = parseValue(line.substring(separator + 1));
         return Optional.of(new Entry(key, value));
     }
 
@@ -121,14 +121,17 @@ public final class LocalEnvironment {
         return true;
     }
 
-    private static String parseValue(String raw) {
+    /// Takes the text after `=` before stripping, so the whitespace in `KEY= # comment` still marks
+    /// the `#` as the start of a comment and the value reads as empty.
+    private static String parseValue(String afterSeparator) {
+        String raw = afterSeparator.strip();
         if (raw.startsWith("\"")) {
             return parseQuoted(raw, '"', true).orElseGet(() -> unquote(raw));
         }
         if (raw.startsWith("'")) {
             return parseQuoted(raw, '\'', false).orElseGet(() -> unquote(raw));
         }
-        return stripUnquotedTrailingComment(raw);
+        return stripUnquotedTrailingComment(afterSeparator);
     }
 
     /// Parses a quoted value and tolerates a trailing `# comment` after the closing quote.
@@ -163,13 +166,14 @@ public final class LocalEnvironment {
         return -1;
     }
 
-    private static String stripUnquotedTrailingComment(String value) {
-        for (int index = 1; index < value.length(); index++) {
-            if (value.charAt(index) == '#' && Character.isWhitespace(value.charAt(index - 1))) {
-                return value.substring(0, index).strip();
+    /// `#` starts a comment only after whitespace, so `abc#def` and `KEY=#value` keep their `#`.
+    private static String stripUnquotedTrailingComment(String afterSeparator) {
+        for (int index = 1; index < afterSeparator.length(); index++) {
+            if (afterSeparator.charAt(index) == '#' && Character.isWhitespace(afterSeparator.charAt(index - 1))) {
+                return afterSeparator.substring(0, index).strip();
             }
         }
-        return value;
+        return afterSeparator.strip();
     }
 
     private static String unquote(String value) {
