@@ -277,8 +277,9 @@ final class InstallerScriptTest {
                         new String[] {
                             "Symphony for Trello installer",
                             "Dry run: no files changed.",
-                            "Symphony would install the command here:",
-                            "Command PATH setup"
+                            "[2/2] Installing Symphony",
+                            "WOULD install command:",
+                            "to PATH in"
                         }),
                 Arguments.of("uninstall dry-run", new String[] {"bash", "uninstall.sh", "--dry-run"}, new String[] {
                     "Symphony for Trello uninstall", "Trello boards were not deleted or archived."
@@ -301,7 +302,7 @@ final class InstallerScriptTest {
         // then
         runs.assertColorOnlyWhenForced(
                 STYLE_ACCENT + "Symphony for Trello installer" + STYLE_RESET,
-                "  " + STYLE_SUCCESS + "OK" + STYLE_RESET + "      Java 25+ JDK available",
+                "  " + STYLE_SUCCESS + "OK" + STYLE_RESET + "  Java 25+ JDK",
                 "  " + STYLE_ATTENTION + "NOTE" + STYLE_RESET + "  ",
                 "  " + STYLE_ACCENT + "WOULD" + STYLE_RESET + " install command: ");
     }
@@ -504,7 +505,7 @@ final class InstallerScriptTest {
         assertThat(result.output())
                 .contains(
                         "Symphony for Trello installer",
-                        "Install source: release-archive",
+                        "Source: release archive",
                         "Dry run: no files changed.",
                         "WOULD download release archive:")
                 .doesNotContain(
@@ -540,7 +541,7 @@ final class InstallerScriptTest {
         // then
         result.assertSuccess();
         assertThat(result.output())
-                .contains("Install source: release-archive", "Dry run: no files changed.")
+                .contains("Source: release archive", "Dry run: no files changed.")
                 .doesNotContain(
                         "inherited fallback reached child",
                         "inherited-source-sentinel",
@@ -3521,7 +3522,7 @@ final class InstallerScriptTest {
                         "config-overlap",
                         "install-bin-config-link",
                         false,
-                        List.of("WOULD install command", "Command PATH setup")),
+                        List.of("WOULD install command", "to PATH in")),
                 new PosixUnsafeCommandDirectoryScenario(
                         "uninstaller",
                         "uninstall-bin",
@@ -3760,7 +3761,7 @@ final class InstallerScriptTest {
                         List.of("--dry-run", "--no-onboard"),
                         "install-app-link",
                         true,
-                        List.of("Install:", "WOULD clone or update:", "Command PATH setup")),
+                        List.of("Install:", "WOULD clone or update:", "to PATH in")),
                 new PosixUnsafeAppPathScenario(
                         "uninstaller",
                         "uninstall-app",
@@ -3847,7 +3848,7 @@ final class InstallerScriptTest {
             assertThat(result.output())
                     .as(appPath.name())
                     .contains(appPath.expectedMessage())
-                    .doesNotContain("Install:", "WOULD clone or update:", "Command PATH setup");
+                    .doesNotContain("Install:", "WOULD clone or update:", "to PATH in");
         }
     }
 
@@ -4320,7 +4321,7 @@ final class InstallerScriptTest {
         assertThat(result.exitCode()).isZero();
         assertThat(result.output())
                 .contains(
-                        "Install source: release-archive",
+                        "Source: release archive",
                         "Version: " + installerDefaultRef().substring(1),
                         "WOULD download release archive:",
                         "WOULD verify SHA3-256 checksum from:",
@@ -4435,7 +4436,7 @@ final class InstallerScriptTest {
 
         // then
         result.assertSuccess();
-        assertThat(result.output()).doesNotContain("Command PATH setup", "not on PATH");
+        assertThat(result.output()).doesNotContain("to PATH in", "not on PATH");
     }
 
     @Test
@@ -4480,10 +4481,9 @@ final class InstallerScriptTest {
         String expectedLine = "export PATH='" + binDirectory + "':\"$PATH\"";
         assertThat(firstInstall.output())
                 .contains(
-                        "Command PATH setup",
                         "Added " + binDirectory + " to PATH in " + profile,
                         "Added " + binDirectory + " to PATH in " + loginProfile);
-        assertThat(secondInstall.output()).contains("PATH setup already exists in " + profile);
+        assertThat(secondInstall.output()).doesNotContain("to PATH in", "PATH setup already exists");
         assertThat(profile)
                 .content(StandardCharsets.UTF_8)
                 .contains("# >>> Symphony for Trello PATH >>>", expectedLine, "# <<< Symphony for Trello PATH <<<")
@@ -4525,7 +4525,7 @@ final class InstallerScriptTest {
 
         // then
         result.assertSuccess();
-        assertThat(result.output()).contains("Command PATH setup", "Added " + binDirectory + " to PATH");
+        assertThat(result.output()).contains("Added " + binDirectory + " to PATH");
         assertThat(home.resolve(".bashrc"))
                 .content(StandardCharsets.UTF_8)
                 .contains("export PATH='" + binDirectory + "':\"$PATH\"");
@@ -4583,11 +4583,12 @@ final class InstallerScriptTest {
         assertThat(result.exitCode()).as(result.output()).isEqualTo(7);
         assertThat(result.output())
                 .containsSubsequence(
-                        "OK  Command installed: " + binDirectory.resolve("symphony-trello"),
+                        "OK  Command installed",
                         "Added " + binDirectory + " to PATH in " + home.resolve(".bashrc"),
                         "Added " + binDirectory + " to PATH in " + home.resolve(".profile"),
-                        "Starting setup...",
-                        "setup-local failed before PATH test");
+                        "[3/4] Running setup",
+                        "setup-local failed before PATH test",
+                        "Installer stopped during [3/4] Running setup.");
         assertThat(home.resolve(".bashrc"))
                 .content(StandardCharsets.UTF_8)
                 .contains("export PATH='" + binDirectory + "':\"$PATH\"");
@@ -4623,7 +4624,11 @@ final class InstallerScriptTest {
         // then
         assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
         assertThat(result.output())
-                .contains("Starting setup...", "This step needs an interactive terminal.", "pass --no-onboard")
+                .containsSubsequence(
+                        "[3/4] Running setup",
+                        "This step needs an interactive terminal.",
+                        "pass --no-onboard",
+                        "Installer stopped during [3/4] Running setup.")
                 .doesNotContain("install the missing prerequisite manually first");
     }
 
@@ -5194,7 +5199,7 @@ final class InstallerScriptTest {
         assertThat(result.output())
                 .contains(
                         "NEEDED  Java 25+ JDK",
-                        "OK      Codex CLI available",
+                        "OK  Codex CLI",
                         "WOULD offer to install Java 25+ JDK with: apt-get update && apt-get install -y openjdk-25-jdk")
                 .doesNotContain("WOULD offer to install Git");
     }
@@ -5331,7 +5336,7 @@ final class InstallerScriptTest {
                 exit 0
                 """;
         return Stream.of(
-                Arguments.of("existing codex", Map.of("codex", success), Map.of(), "OK      Codex CLI available"),
+                Arguments.of("existing codex", Map.of("codex", success), Map.of(), "OK  Codex CLI"),
                 Arguments.of("npm with node present", Map.of("npm", success), Map.of(), "Node.js/npm installed: yes"),
                 Arguments.of("npm needs node", Map.of(), Map.of(), "Node.js/npm installed: no"));
     }
@@ -5385,9 +5390,7 @@ final class InstallerScriptTest {
 
         // then
         assertThat(result.exitCode()).as(result.output()).isZero();
-        assertThat(result.output())
-                .contains("OK      Codex CLI available")
-                .doesNotContain("WOULD offer to install Codex CLI");
+        assertThat(result.output()).contains("OK  Codex CLI").doesNotContain("WOULD offer to install Codex CLI");
     }
 
     @Test
@@ -5567,7 +5570,8 @@ final class InstallerScriptTest {
                         "WOULD clone or update:",
                         "WOULD build packaged Quarkus app with Maven wrapper",
                         "WOULD install command:",
-                        "WOULD run guided setup and start Symphony automatically.");
+                        "WOULD run guided setup:",
+                        "[2/4]");
     }
 
     @Test
@@ -5605,7 +5609,8 @@ final class InstallerScriptTest {
                         "WOULD clone or update:",
                         "WOULD build packaged Quarkus app with Maven wrapper",
                         "WOULD install command:",
-                        "WOULD run guided setup and start Symphony automatically.");
+                        "WOULD run guided setup:",
+                        "[2/4]");
     }
 
     @Test
@@ -5649,7 +5654,8 @@ final class InstallerScriptTest {
                         "WOULD clone or update:",
                         "WOULD build packaged Quarkus app with Maven wrapper",
                         "WOULD install command:",
-                        "WOULD run guided setup and start Symphony automatically.");
+                        "WOULD run guided setup:",
+                        "[2/4]");
     }
 
     @Test
@@ -5870,10 +5876,10 @@ final class InstallerScriptTest {
         assertThat(result.output())
                 .containsSubsequence(
                         "Dry run: no files changed.",
-                        "Starting setup...",
-                        "WOULD run:",
+                        "[3/4] Running setup",
+                        "WOULD run guided setup:",
                         "symphony-trello.ps1 setup-local",
-                        "Starting managed workers...",
+                        "[4/4] Starting managed workers",
                         "WOULD write autostart environment snapshot:",
                         "WOULD write Windows autostart launcher:",
                         "WOULD create Windows Scheduled Task:",
@@ -6076,7 +6082,12 @@ final class InstallerScriptTest {
 
         // then
         assertUnsafeAppPathFailures(
-                cases, results, OutputStyle.NORMALIZED, "Install:", "WOULD clone or update:", "Command PATH setup");
+                cases,
+                results,
+                OutputStyle.NORMALIZED,
+                "Install:",
+                "WOULD clone or update:",
+                "to the current user PATH");
     }
 
     @Test
@@ -6113,7 +6124,7 @@ final class InstallerScriptTest {
                 .contains(
                         "Install:",
                         app.getFileName().toString(),
-                        "WOULD unpack release archive to:",
+                        "WOULD unpack release archive into:",
                         app.getFileName().toString());
     }
 
@@ -6162,7 +6173,7 @@ final class InstallerScriptTest {
             assertThat(normalizedWhitespace(result.output()))
                     .as(appPath.name())
                     .contains(appPath.expectedMessage())
-                    .doesNotContain("Install:", "WOULD clone or update:", "Command PATH setup");
+                    .doesNotContain("Install:", "WOULD clone or update:", "to the current user PATH");
         }
     }
 
@@ -6218,7 +6229,7 @@ final class InstallerScriptTest {
             assertThat(normalizedWhitespace(result.output()))
                     .as(commandDirectory.name())
                     .contains(commandDirectory.expectedMessage())
-                    .doesNotContain("WOULD install CLI executable", "Command PATH setup");
+                    .doesNotContain("WOULD install command", "to the current user PATH");
         }
     }
 
@@ -6514,10 +6525,10 @@ final class InstallerScriptTest {
                         bin.getFileName() + "\\symphony-trello.ps1",
                         "WOULD clone or update:",
                         "WOULD build packaged Quarkus app with Maven wrapper",
-                        "WOULD install CLI executable:",
+                        "WOULD install command:",
                         bin.getFileName() + "\\symphony-trello.ps1",
                         "Dry run: no files changed.",
-                        "Symphony would install the command here:")
+                        "to the current user PATH.")
                 .doesNotContain("Unknown option");
     }
 
@@ -7411,8 +7422,8 @@ final class InstallerScriptTest {
                         "append_path_setup_to_profile",
                         "TrelloBoardSetupMain",
                         "-DskipTests clean package",
-                        "Stopping managed workers before update",
-                        "Restarting managed workers after update",
+                        "Managed workers stopped for the update",
+                        "Restarting managed workers",
                         "start --all",
                         "systemctl --user show-environment",
                         "symphony-trello.service",
@@ -7464,8 +7475,8 @@ final class InstallerScriptTest {
                         ".symphony-trello-install",
                         "TrelloBoardSetupMain",
                         "-DskipTests clean package",
-                        "Stopping managed workers before update",
-                        "Restarting managed workers after update",
+                        "Managed workers stopped for the update",
+                        "Restarting managed workers",
                         "start --all",
                         "Scheduled Task",
                         "Register-ScheduledTask",
@@ -7917,7 +7928,7 @@ final class InstallerScriptTest {
                         Map.of("SYMPHONY_FAKE_LINGER_FAILURE", "1"),
                         true,
                         List.of(
-                                "Starting managed workers...",
+                                "[4/4] Starting managed workers",
                                 "User systemd service enabled: symphony-trello.service",
                                 "Could not enable user lingering. The service will start when the user session starts.",
                                 "You're good to go - your Trello board is now a queue for Codex work.")),
@@ -7926,7 +7937,7 @@ final class InstallerScriptTest {
                         Map.of("SYMPHONY_FAKE_SYSTEMD_UNAVAILABLE", "1"),
                         true,
                         List.of(
-                                "Starting managed workers...",
+                                "[4/4] Starting managed workers",
                                 "User systemd is unavailable in this session.",
                                 "Autostart service was not configured.",
                                 "start --all",
@@ -7936,7 +7947,7 @@ final class InstallerScriptTest {
                         Map.of("SYMPHONY_FAKE_SYSTEMD_ENABLE_FAILURE", "1"),
                         true,
                         List.of(
-                                "Starting managed workers...",
+                                "[4/4] Starting managed workers",
                                 "Could not enable the user systemd service. Falling back to direct start.",
                                 "Autostart service was not configured.",
                                 "start --all",
@@ -7946,11 +7957,13 @@ final class InstallerScriptTest {
                         Map.of("SYMPHONY_FAKE_START_ALL_FAILURE", "1"),
                         false,
                         List.of(
-                                "Starting managed workers...",
+                                "[4/4] Starting managed workers",
                                 "Could not enable the user systemd service. Falling back to direct start.",
                                 "Autostart service was not configured.",
                                 "start --all",
-                                "managed start --all failed")));
+                                "managed start --all failed",
+                                "Installer stopped during [4/4] Starting managed workers.",
+                                "start --all")));
     }
 
     private record InstallerHandoffScenario(
@@ -8037,11 +8050,14 @@ final class InstallerScriptTest {
             assertThat(install.exitCode()).as(install.output()).isZero();
             assertThat(update.exitCode()).as(update.output()).isZero();
             assertThat(update.output())
-                    .contains(
-                            "Stopping managed workers before update...",
-                            "Restarting managed workers after update...",
+                    .containsSubsequence(
+                            "Update plan",
+                            "[2/4] Updating Symphony",
                             "Stopped WORKFLOW.docs-queue.md",
-                            "Starting setup...");
+                            "OK  Managed workers stopped for the update",
+                            "[3/4] Running setup",
+                            "[4/4] Restarting managed workers",
+                            "You're good to go");
             assertThat(fakeLog)
                     .content(StandardCharsets.UTF_8)
                     .contains("mvnw -q -f " + symphonyHome.resolve("app/pom.xml") + " -DskipTests clean package")
@@ -8098,8 +8114,13 @@ final class InstallerScriptTest {
             assertThat(install.exitCode()).as(install.output()).isZero();
             assertThat(update.exitCode()).as(update.output()).isZero();
             assertThat(update.output())
-                    .contains(
-                            "Stopping managed workers before update...", "Restarting managed workers after update...");
+                    .containsSubsequence(
+                            "[2/3] Updating Symphony",
+                            "OK  Managed workers stopped for the update",
+                            "[3/3] Restarting managed workers",
+                            "Symphony for Trello updated.",
+                            "Next step: check the managed workers with:",
+                            "status");
             assertThat(fakeLog)
                     .content(StandardCharsets.UTF_8)
                     .containsSubsequence("TrelloBoardSetupMain stop", "TrelloBoardSetupMain start", "--all");
@@ -8157,8 +8178,8 @@ final class InstallerScriptTest {
             assertThat(install.exitCode()).as(install.output()).isZero();
             assertThat(update.exitCode()).as(update.output()).isZero();
             assertThat(update.output())
-                    .contains("Removing stale managed worker pid files before update...")
-                    .doesNotContain("Stopping managed workers before update...")
+                    .contains("OK  Removed stale managed worker pid files")
+                    .doesNotContain("Managed workers stopped for the update", "Restarting managed workers")
                     .doesNotContain("Stop the running Symphony worker processes manually");
             assertThat(command).isExecutable();
             assertThat(stalePid).doesNotExist();
@@ -8363,7 +8384,6 @@ final class InstallerScriptTest {
         ProcessResult origin = run(Map.of(), "git", "-C", appHome.toString(), "remote", "get-url", "origin");
         origin.assertSuccess();
         assertThat(origin.output().trim()).isEqualTo(sourceRepository.toUri().toString());
-        assertThat(result.output()).contains("remote set-url origin " + sourceRepository.toUri());
     }
 
     @Test
@@ -8403,7 +8423,11 @@ final class InstallerScriptTest {
         result.assertSuccess();
         assertThat(appHome.resolve(".git")).isDirectory();
         assertThat(appHome.resolve("old-archive-file.txt")).doesNotExist();
-        assertThat(result.output()).contains("rm -rf " + appHome, "git clone");
+        assertThat(result.output())
+                .containsSubsequence(
+                        "[2/2] Updating Symphony",
+                        "NOTE  Replacing the installed release archive app with a Git checkout",
+                        "OK  Source checked out");
     }
 
     @Test
@@ -8477,10 +8501,10 @@ final class InstallerScriptTest {
         assertThat(appHome.resolve(".git")).isDirectory();
         assertThat(appHome.resolve("old-archive-file.txt")).doesNotExist();
         assertThat(result.output())
-                .contains(
-                        "remove existing release archive app",
-                        appHome.getFileName().toString(),
-                        "git clone");
+                .containsSubsequence(
+                        "[2/2] Updating Symphony",
+                        "NOTE  Replacing the installed release archive app with a Git checkout",
+                        "OK  Source checked out");
     }
 
     @Test
@@ -8597,34 +8621,6 @@ final class InstallerScriptTest {
                                 "--bin-dir",
                                 binDirectory.toString())
                         .toArray(String[]::new));
-    }
-
-    private static Path createPowerShellSourceRepository(Path temporaryDirectory) throws Exception {
-        if (isWindows()) {
-            return createWindowsSourceRepository(temporaryDirectory);
-        }
-        Path repository = createSourceRepository(temporaryDirectory);
-        writeExecutable(
-                repository.resolve("mvnw.cmd"),
-                """
-                #!/usr/bin/env bash
-                set -euo pipefail
-                echo "mvnw.cmd $*" >> "${SYMPHONY_FAKE_LOG:?}"
-                app_home="$(cd "$(dirname "$0")" && pwd -P)"
-                mkdir -p "$app_home/target/quarkus-app/app" "$app_home/target/quarkus-app/lib/main" "$app_home/target/quarkus-app/quarkus"
-                : > "$app_home/target/quarkus-app/quarkus-run.jar"
-                """);
-        run(Map.of(), "git", "-C", repository.toString(), "add", "mvnw.cmd").assertSuccess();
-        run(Map.of(), "git", "-C", repository.toString(), "commit", "-m", "Add PowerShell test wrapper")
-                .assertSuccess();
-        return repository;
-    }
-
-    private static Path createPowerShellFakeToolchain(Path temporaryDirectory) throws IOException {
-        if (isWindows()) {
-            return createFakeWindowsToolchain(temporaryDirectory);
-        }
-        return createFakeToolchain(temporaryDirectory);
     }
 
     @Test

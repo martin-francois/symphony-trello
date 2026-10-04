@@ -161,7 +161,7 @@ jobs:
           }
       - name: PowerShell installer option tests
         if: ${{ env.ISOLATE_OPENREWRITE != 'true' }}
-        run: .\mvnw.cmd -q '-Djunit.parallel.enabled=false' '-Dtest=InstallerScriptTest#*powershell*+*powerShell*' test
+        run: .\mvnw.cmd -q '-Djunit.parallel.enabled=false' '-Dtest=InstallerScriptTest#*powershell*+*powerShell*,InstallerProgressOutputTest#powershell*' test
       - name: Diagnostics tool probe tests
         if: ${{ env.ISOLATE_OPENREWRITE != 'true' }}
         run: .\mvnw.cmd -q '-Djunit.parallel.enabled=false' '-Dtest=SetupDiagnosticReporterTest#diagnosticsToolProbeUsesWindowsPathextWithoutHelperShell+diagnosticsRunsNativeWindowsPathextExecutableDirectly+deepDiagnosticsUsesWindowsPathextCodexExecutableForLoginStatus+deepDiagnosticsKeepsWindowsPathextCodexAvailableWhenLoginStatusFails+deepDiagnosticsUsesWindowsPathextGithubExecutableForAuthStatus+deepDiagnosticsKeepsWindowsPathextGithubAvailableWhenAuthStatusFails+diagnosticsMarksFoundToolWithUnavailableVersionAsAvailable+diagnosticsMarksFoundButUnlaunchableToolSeparately' test

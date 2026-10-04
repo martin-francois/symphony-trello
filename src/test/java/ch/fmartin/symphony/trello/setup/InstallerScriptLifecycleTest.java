@@ -183,18 +183,18 @@ final class InstallerScriptLifecycleTest {
         // then
         assertThat(install.exitCode()).isZero();
         assertThat(install.output())
-                .contains(
+                .containsSubsequence(
+                        "Install plan",
+                        "[1/4] Checking prerequisites",
                         "Codex CLI is installed but not logged in.",
                         "Can this machine open a browser for Codex login?",
                         "RUN  codex login --device-auth",
-                        "Starting setup...",
-                        "Command installed",
-                        "User systemd service installed: " + userService,
-                        "User systemd service enabled: symphony-trello.service",
-                        "User lingering enabled for reboot autostart.")
-                .containsSubsequence(
-                        "Starting managed workers...",
-                        "User systemd service installed: " + userService,
+                        "OK  Codex CLI logged in",
+                        "[2/4] Installing Symphony",
+                        "OK  Command installed",
+                        "[3/4] Running setup",
+                        "OK  Setup complete",
+                        "[4/4] Starting managed workers",
                         "User systemd service enabled: symphony-trello.service",
                         "User lingering enabled for reboot autostart.",
                         "You're good to go - your Trello board is now a queue for Codex work.")
