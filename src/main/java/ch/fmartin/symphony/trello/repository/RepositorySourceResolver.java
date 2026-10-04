@@ -253,7 +253,8 @@ public final class RepositorySourceResolver {
         }
         String hostPart = value.substring(0, colon);
         String rawPath = value.substring(colon + 1);
-        if (!hostPart.contains("@")) {
+        int at = hostPart.lastIndexOf('@');
+        if (at < 0) {
             return RepositorySourceSelection.none();
         }
         if (containsWhitespace(hostPart)
@@ -263,18 +264,16 @@ public final class RepositorySourceResolver {
                 || rawPath.isBlank()) {
             return RepositorySourceSelection.none();
         }
-        int at = hostPart.lastIndexOf('@');
-        String user = at >= 0 ? hostPart.substring(0, at) : null;
-        String host = at >= 0 ? hostPart.substring(at + 1) : hostPart;
-        if ((user != null && !simpleName(user)) || !simpleHost(host)) {
+        String user = hostPart.substring(0, at);
+        String host = hostPart.substring(at + 1);
+        if (!simpleName(user) || !simpleHost(host)) {
             return RepositorySourceSelection.none();
         }
         String path = stripSlashes(rawPath);
         try {
-            String prefix = user == null ? "" : user + "@";
             var identity = new RepositoryIdentity(host, path);
             return RepositorySourceSelection.selected(new RepositorySource(
-                    RepositorySource.Kind.REMOTE, origin, prefix + identity.host() + ":" + path, identity, null));
+                    RepositorySource.Kind.REMOTE, origin, user + "@" + identity.host() + ":" + path, identity, null));
         } catch (IllegalArgumentException e) {
             return invalid(
                     "repository_remote_malformed",
