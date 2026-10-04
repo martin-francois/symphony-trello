@@ -1,4 +1,4 @@
-import {randomBytes} from "node:crypto";
+import {randomBytes, randomInt} from "node:crypto";
 import {existsSync, readFileSync, writeFileSync} from "node:fs";
 import {createServer, type IncomingMessage, type Server, type ServerResponse} from "node:http";
 import type {AddressInfo} from "node:net";
@@ -690,8 +690,8 @@ function objectId(): string {
 /** Trello short links are eight alphanumerics; Symphony's reference parser also expects a digit. */
 function shortLinkId(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-  const letters = Array.from(randomBytes(7), (byte) => alphabet[byte % alphabet.length]).join("");
-  return `${letters}${randomBytes(1)[0]! % 10}`;
+  const letters = Array.from({length: 7}, () => alphabet[randomInt(alphabet.length)]).join("");
+  return `${letters}${randomInt(10)}`;
 }
 
 function slug(name: string): string {

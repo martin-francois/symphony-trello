@@ -35,7 +35,7 @@ export function publicText(text: string, privatePaths: readonly PrivatePath[] = 
     .replace(LOCAL_URL_PORT, "$1:<port>");
 }
 
-/** Collapses a value to one Markdown-table-safe line. */
+/** Collapses a value to one Markdown-table-safe line; backslashes are escaped before pipes. */
 export function tableCell(text: string): string {
-  return text.replace(/\r?\n+/g, " ").replace(/\|/g, "\\|").trim();
+  return text.replace(/\r?\n+/g, " ").replace(/\\/g, "\\\\").replace(/\|/g, "\\|").trim();
 }
