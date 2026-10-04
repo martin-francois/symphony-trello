@@ -64,15 +64,17 @@ Chosen option: ClusterFuzzLite code-change, continuous-build, batch, prune, and 
 The repository adds `.clusterfuzzlite/` build integration and
 `.github/workflows/continuous-fuzzing.yml`. ClusterFuzzLite uses Jazzer for JVM projects and reuses
 the OSS-Fuzz build model. The ClusterFuzzLite build script delegates to `oss-fuzz/build.sh`, so
-scheduled and future hosted fuzzing package the same four standalone `fuzzerTestOneInput` targets.
+scheduled and future hosted fuzzing package the same standalone `fuzzerTestOneInput` targets.
 Each target starts with a small checked-in seed corpus covering valid and malformed forms from its
 input grammar. ClusterFuzzLite then persists newly discovered corpus inputs between runs.
 
 Every fuzzing job uses `ubuntu-latest`, not a Blacksmith runner. Batch fuzzing runs on `main` as a
-four-target matrix. Each normal target receives a 4,950-second active budget, for a 19,800-second
-aggregate budget, and each job has a 100-minute timeout. Every fourth continuous cycle gives each
-target 4,500 seconds, for an 18,000-second aggregate budget, so prune and coverage jobs can follow
-before the next batch. Each target's corpus is stored in the dedicated Git storage repository for
+matrix with one job per target, and each job has a 100-minute timeout. A normal cycle has a
+19,800-second aggregate budget of four full shares of 4,950 seconds. Every fourth continuous cycle
+uses 4,500-second shares, for an 18,000-second aggregate budget, so prune and coverage jobs can
+follow before the next batch. `scripts/select-clusterfuzzlite-target` gives each target a full or a
+half share. [ADR 0116](0116-fuzz-trello-card-payload-mapping.md) records why the two
+reference-parsing targets get half a share each. Each target's corpus is stored in the dedicated Git storage repository for
 later runs.
 
 Each successful continuous batch dispatches its successor through the workflow-dispatch API. GitHub
@@ -126,7 +128,7 @@ writer beside the active chain. Manual pruning uses the same concurrency group b
 same corpus branch. Manual smoke batches leave continuation disabled by default; maintainers should
 not dispatch a one-off batch while the continuous chain is active.
 
-Each matrix runner removes the other three standalone fuzzer wrappers before starting batch mode.
+Each matrix runner removes the other standalone fuzzer wrappers before starting batch mode.
 ClusterFuzzLite continues after a nonfinal batch target crashes but writes SARIF only for the final
 target it ran. Selecting one target per action invocation makes every reportable crash the final
 result for that invocation. It also gives each SARIF upload a target-specific category, so parallel
@@ -239,7 +241,7 @@ the repository-owned bridge and continues to use the same fuzz targets.
   should be replaced with a repository-scoped credential when GitHub provides one that the upstream
   Docker action can use non-interactively.
 * Neutral, because the action's upstream container image uses the mutable `v1` tag internally.
-* Bad, because the matrix builds the JVM fuzzers four times per batch instead of once.
+* Bad, because the matrix builds the JVM fuzzers once per target in every batch instead of once.
 * Bad, because serializing storage writers increases batch wall time. It prevents lost corpora until
   ClusterFuzzLite provides atomic concurrent corpus updates or the workflow gains an aggregation job.
 * Good, because a hard-cancelled batch is recovered by the independently queued watchdog.
@@ -266,8 +268,8 @@ pnpm run verify:scripts
 ./mvnw -q spotless:check verify
 ```
 
-After the workflow reaches `main`, dispatch a short hosted batch run and confirm that all four
-standalone fuzz targets build and run:
+After the workflow reaches `main`, dispatch a short hosted batch run and confirm that every
+standalone fuzz target builds and runs:
 
 ```bash
 gh workflow run continuous-fuzzing.yml --ref main \
@@ -291,8 +293,8 @@ index 1. Observe at least one cycle-3 completion and verify that prune and cover
 cycle-0 successor starts.
 
 Then dispatch coverage and inspect the published report. The initial acceptance criterion is that
-all four fuzzer reports exist and each reaches the production parser, classifier, resolver, or
-loader it targets. Record the first report as the baseline. A target that has zero or visibly
+every fuzzer report exists and each reaches the production parser, classifier, resolver, loader,
+or card mapping it targets. Record the first report as the baseline. A target that has zero or visibly
 shallow reach into its intended entry point needs better seeds or another target before the hosted
 setup counts as healthy. Whole-application line coverage is not the target because these fuzzers
 deliberately cover untrusted parsing boundaries, not network and orchestration code.
@@ -342,7 +344,7 @@ failures cannot create an immediate retry loop.
 
 ### One Combined Batch Action for All Fuzz Targets
 
-Build the four targets once and let one ClusterFuzzLite batch invocation divide the budget among
+Build every target once and let one ClusterFuzzLite batch invocation divide the budget among
 them.
 
 * Good, because one build leaves more runner time for fuzzing.
@@ -351,11 +353,11 @@ them.
 
 ### One ClusterFuzzLite Batch Matrix Job per Fuzz Target
 
-Build the same output in four GitHub-hosted jobs, keep one target wrapper in each job, and run the
-official batch action once per target.
+Build the same output in one GitHub-hosted job per target, keep one target wrapper in each job, and
+run the official batch action once per target.
 
 * Good, because every target produces an independent status, crash artifact, and SARIF result.
-* Good, because separate target categories preserve all four code-scanning analyses.
+* Good, because separate target categories preserve every target's code-scanning analysis.
 * Good, because the jobs can run concurrently without enabling libFuzzer worker parallelism.
 * Bad, because repeated image and Maven builds consume more runner minutes.
 

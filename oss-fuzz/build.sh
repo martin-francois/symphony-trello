@@ -37,13 +37,15 @@ mkdir -p "$OUT/test-classes/ch/fmartin/symphony/trello"
 cp -R "$fuzzer_class_dir" "$OUT/test-classes/ch/fmartin/symphony/trello/"
 
 shopt -s nullglob
-fuzzer_helper_classes=("$fuzzer_helper_dir"/TrelloReferenceFuzzInvariants*.class)
-if ((${#fuzzer_helper_classes[@]} == 0)); then
-  echo "No TrelloReferenceFuzzInvariants helper classes found under $fuzzer_helper_dir" >&2
-  exit 1
-fi
 mkdir -p "$OUT/test-classes/ch/fmartin/symphony/trello/tracker"
-cp "${fuzzer_helper_classes[@]}" "$OUT/test-classes/ch/fmartin/symphony/trello/tracker/"
+for fuzzer_helper in TrelloReferenceFuzzInvariants TrelloCardPayloadFuzzInvariants; do
+  fuzzer_helper_classes=("$fuzzer_helper_dir/$fuzzer_helper"*.class)
+  if ((${#fuzzer_helper_classes[@]} == 0)); then
+    echo "No $fuzzer_helper helper classes found under $fuzzer_helper_dir" >&2
+    exit 1
+  fi
+  cp "${fuzzer_helper_classes[@]}" "$OUT/test-classes/ch/fmartin/symphony/trello/tracker/"
+done
 
 repository_helper_classes=("$repository_helper_dir"/TestRepositoryUris*.class)
 if ((${#repository_helper_classes[@]} == 0)); then
