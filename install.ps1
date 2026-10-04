@@ -66,6 +66,62 @@ if ($FromSource -or $ScriptBoundParameters.ContainsKey("Repo") -or $ScriptBoundP
   $InstallSource = "source-checkout"
 }
 
+# >>> output style >>>
+# Colors only accent words that already carry the meaning (OK, NOTE, RUN, ...), so plain output says
+# the same thing. NO_COLOR turns color off, CLICOLOR_FORCE turns it on for any output, and otherwise
+# color needs console output that is not redirected, a host that renders ANSI sequences, CLICOLOR
+# other than 0, and a TERM other than dumb. ADR 0108 records the palette contrast and this
+# precedence. Keep this block identical in install.ps1 and uninstall.ps1.
+function Test-OutputColorEnabled {
+  if (-not [string]::IsNullOrEmpty($env:NO_COLOR)) {
+    return $false
+  }
+  if (-not [string]::IsNullOrEmpty($env:CLICOLOR_FORCE) -and $env:CLICOLOR_FORCE -ne "0") {
+    return $true
+  }
+  if ($env:CLICOLOR -eq "0" -or $env:TERM -eq "dumb") {
+    return $false
+  }
+  try {
+    if ([Console]::IsOutputRedirected) {
+      return $false
+    }
+  } catch {
+    return $false
+  }
+  # Hosts without virtual terminal support, such as the Windows PowerShell ISE, print the escape
+  # sequences literally.
+  $virtualTerminal = $Host.UI.PSObject.Properties["SupportsVirtualTerminal"]
+  return $null -ne $virtualTerminal -and [bool]$virtualTerminal.Value
+}
+
+$OutputStyle = @{ Reset = ""; Accent = ""; Success = ""; Attention = "" }
+if (Test-OutputColorEnabled) {
+  $escape = [char]27
+  $OutputStyle = @{
+    Reset = "${escape}[0m"
+    Accent = "${escape}[1;38;5;32m"
+    Success = "${escape}[1;38;5;64m"
+    Attention = "${escape}[1;38;5;166m"
+  }
+}
+
+function Write-Heading([string]$Text) {
+  Write-Host "$($OutputStyle.Accent)$Text$($OutputStyle.Reset)"
+}
+
+# Writes two spaces, the styled label, then the text unchanged. The text starts with its own
+# separator so the plain output keeps its column layout.
+function Write-Status([string]$Label, [string]$Text) {
+  $style = switch ($Label) {
+    "OK" { $OutputStyle.Success }
+    { $_ -in @("NEEDED", "NOTE", "SKIP", "KILL") } { $OutputStyle.Attention }
+    default { $OutputStyle.Accent }
+  }
+  Write-Host "  $style$Label$($OutputStyle.Reset)$Text"
+}
+# <<< output style <<<
+
 function Apply-PositionalFlag([string]$Token) {
   switch ($Token) {
     { $_ -in @("-dry-run", "--dry-run") } {
@@ -600,7 +656,7 @@ Assert-AppPaths
 Assert-CommandDirectory
 
 function Invoke-Step([string]$Label, [scriptblock]$Action) {
-  Write-Host "  RUN  $Label"
+  Write-Status "RUN" "  $Label"
   if (-not $DryRun) {
     $global:LASTEXITCODE = 0
     & $Action
@@ -752,7 +808,7 @@ function Test-AutostartEnvironmentName([string]$Name) {
 
 function Write-AutostartEnvironmentFile {
   if ($DryRun) {
-    Write-Host "  WOULD write autostart environment snapshot: $AutostartEnvironmentPath"
+    Write-Status "WOULD" " write autostart environment snapshot: $AutostartEnvironmentPath"
     return
   }
   New-Item -ItemType Directory -Force -Path $ConfigDir | Out-Null
@@ -786,7 +842,7 @@ function Protect-PrivateFile([string]$Path) {
 function Write-AutostartLauncher {
   Write-AutostartEnvironmentFile
   if ($DryRun) {
-    Write-Host "  WOULD write Windows autostart launcher: $AutostartScriptPath"
+    Write-Status "WOULD" " write Windows autostart launcher: $AutostartScriptPath"
     return
   }
   New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
@@ -810,7 +866,7 @@ function Install-StartupFolderCommand {
   Write-AutostartLauncher
   $startCommand = Get-StartAllCommand
   if ($DryRun) {
-    Write-Host "  WOULD write Windows Startup command: $StartupCommandPath"
+    Write-Status "WOULD" " write Windows Startup command: $StartupCommandPath"
     return $true
   }
   New-Item -ItemType Directory -Force -Path $StartupFolder | Out-Null
@@ -818,7 +874,7 @@ function Install-StartupFolderCommand {
 @echo off
 $startCommand
 "@ | Set-Content -Encoding ASCII $StartupCommandPath
-  Write-Host "  OK  Windows Startup command installed: $StartupCommandPath"
+  Write-Status "OK" "  Windows Startup command installed: $StartupCommandPath"
   return $true
 }
 
@@ -846,24 +902,24 @@ function Install-ScheduledTaskAutostart {
 function Enable-WindowsAutostart {
   Write-AutostartLauncher
   if ($DryRun) {
-    Write-Host "  WOULD create Windows Scheduled Task: $ScheduledTaskName"
-    Write-Host "  WOULD start managed workers through Windows Scheduled Task"
+    Write-Status "WOULD" " create Windows Scheduled Task: $ScheduledTaskName"
+    Write-Status "WOULD" " start managed workers through Windows Scheduled Task"
     return $true
   }
   $createResult = Install-ScheduledTaskAutostart
   if ([string]::IsNullOrWhiteSpace($createResult)) {
-    Write-Host "  OK  Windows Scheduled Task installed: $ScheduledTaskName"
+    Write-Status "OK" "  Windows Scheduled Task installed: $ScheduledTaskName"
     try {
       Start-ScheduledTask -TaskName $ScheduledTaskName
-      Write-Host "  OK  Windows Scheduled Task started managed workers."
+      Write-Status "OK" "  Windows Scheduled Task started managed workers."
       return $true
     } catch {
-      Write-Host "  NOTE  Scheduled Task was installed but could not be started immediately. It will run at the next user logon."
+      Write-Status "NOTE" "  Scheduled Task was installed but could not be started immediately. It will run at the next user logon."
       Invoke-Step "$BinDir\symphony-trello.ps1 start --all" { & "$BinDir\symphony-trello.ps1" start --all }
       return $true
     }
   }
-  Write-Host "  NOTE  Could not create Windows Scheduled Task: $createResult"
+  Write-Status "NOTE" "  Could not create Windows Scheduled Task: $createResult"
   if (Install-StartupFolderCommand) {
     Invoke-Step "$BinDir\symphony-trello.ps1 start --all" { & "$BinDir\symphony-trello.ps1" start --all }
     return $true
@@ -872,11 +928,11 @@ function Enable-WindowsAutostart {
 }
 
 function Start-ManagedWorkers {
-  Write-Host "Starting managed workers..."
+  Write-Heading "Starting managed workers..."
   if (Enable-WindowsAutostart) {
     return
   }
-  Write-Host "  NOTE  Autostart was not configured. Use '$BinDir\symphony-trello.ps1 start --all' after reboot or login."
+  Write-Status "NOTE" "  Autostart was not configured. Use '$BinDir\symphony-trello.ps1 start --all' after reboot or login."
   Invoke-Step "$BinDir\symphony-trello.ps1 start --all" { & "$BinDir\symphony-trello.ps1" start --all }
 }
 
@@ -918,7 +974,7 @@ function Get-UserPathValue {
 }
 
 function Write-PathSetupInstructions {
-  Write-Host "  NOTE  $BinDir is not on PATH for this PowerShell session."
+  Write-Status "NOTE" "  $BinDir is not on PATH for this PowerShell session."
   Write-Host "        Future PowerShell windows can run symphony-trello after this directory is in the current user PATH:"
   Write-Host "        $BinDir"
 }
@@ -926,12 +982,12 @@ function Write-PathSetupInstructions {
 function Add-BinDirToUserPath {
   $userPath = Get-UserPathValue
   if (Test-PathContains $BinDir $userPath) {
-    Write-Host "  OK  PATH setup already exists for the current user:"
+    Write-Status "OK" "  PATH setup already exists for the current user:"
     Write-Host "      $BinDir"
     return
   }
   if ($DryRun) {
-    Write-Host "  WOULD add $BinDir to the current user PATH."
+    Write-Status "WOULD" " add $BinDir to the current user PATH."
     return
   }
   $separator = [System.IO.Path]::PathSeparator
@@ -939,9 +995,9 @@ function Add-BinDirToUserPath {
   try {
     [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
     Add-PathPrefix $BinDir
-    Write-Host "  OK  Added $BinDir to the current user PATH."
+    Write-Status "OK" "  Added $BinDir to the current user PATH."
   } catch {
-    Write-Host "  NOTE  Could not update the current user PATH."
+    Write-Status "NOTE" "  Could not update the current user PATH."
     Write-PathSetupInstructions
   }
 }
@@ -955,7 +1011,7 @@ function Offer-PathSetup {
     return
   }
   Write-Host
-  Write-Host "Command PATH setup"
+  Write-Heading "Command PATH setup"
   if ($DryRun) {
     Write-Host "Symphony would install the command here:"
   } else {
@@ -1162,20 +1218,20 @@ function Ensure-Prerequisites {
 function Write-DryRunPrerequisitePlan {
   if ($InstallSource -eq "source-checkout" -and -not (Test-Command "git")) {
     $command = Get-WingetPackageCommand "git"
-    Write-Host "  WOULD offer to install Git$(if ($command) { " with: $command" })"
+    Write-Status "WOULD" " offer to install Git$(if ($command) { " with: $command" })"
   }
   if (-not (Test-Java25)) {
     $command = Get-WingetPackageCommand "java"
-    Write-Host "  WOULD offer to install Java 25+ JDK$(if ($command) { " with: $command" })"
+    Write-Status "WOULD" " offer to install Java 25+ JDK$(if ($command) { " with: $command" })"
   }
   if ((-not $NoOnboard) -and (-not (Test-Command "codex"))) {
     $nodeStatus = if (Test-Command "npm") { "yes" } else { "no" }
-    Write-Host "  WOULD offer to install Codex CLI with Symphony-managed npm:"
+    Write-Status "WOULD" " offer to install Codex CLI with Symphony-managed npm:"
     Write-Host "          Install location: $CodexNpmPrefix"
     Write-Host "          Command link: $(Join-Path $BinDir 'codex.cmd')"
     Write-Host "          Node.js/npm installed: $nodeStatus"
   } elseif ($NoOnboard -and (-not (Test-Command "codex"))) {
-    Write-Host "  NOTE   Codex CLI setup is skipped because --no-onboard was passed."
+    Write-Status "NOTE" "   Codex CLI setup is skipped because --no-onboard was passed."
   }
 }
 
@@ -1312,7 +1368,7 @@ function Install-ReleaseArchive {
   }
 }
 
-Write-Host "Symphony for Trello installer"
+Write-Heading "Symphony for Trello installer"
 Write-Host
 Enable-ManagedCodexPath
 Write-Host "Detected $(Get-PlatformLabel)"
@@ -1330,37 +1386,37 @@ if ($InstallSource -eq "source-checkout") {
   Write-Host "Release assets: $ReleaseBaseUrl"
 }
 Write-Host
-Write-Host "Checking prerequisites..."
+Write-Heading "Checking prerequisites..."
 if ($InstallSource -eq "source-checkout") {
-  Write-Host ($(if (Test-Command "git") { "  OK      Git available" } else { "  NEEDED  Git" }))
+  if (Test-Command "git") { Write-Status "OK" "      Git available" } else { Write-Status "NEEDED" "  Git" }
 }
-Write-Host ($(if (Test-Java25) { "  OK      Java 25+ JDK available" } else { "  NEEDED  Java 25+ JDK" }))
-Write-Host ($(if (Test-Command "codex") {
-      "  OK      Codex CLI available"
-    } elseif ($NoOnboard) {
-      "  NEEDED  Codex CLI (only needed for guided setup; skipped by --no-onboard)"
-    } else {
-      "  NEEDED  Codex CLI"
-    }))
+if (Test-Java25) { Write-Status "OK" "      Java 25+ JDK available" } else { Write-Status "NEEDED" "  Java 25+ JDK" }
+if (Test-Command "codex") {
+  Write-Status "OK" "      Codex CLI available"
+} elseif ($NoOnboard) {
+  Write-Status "NEEDED" "  Codex CLI (only needed for guided setup; skipped by --no-onboard)"
+} else {
+  Write-Status "NEEDED" "  Codex CLI"
+}
 
 if ($DryRun) {
   Write-Host
-  Write-Host "Dry run: no files changed."
+  Write-Heading "Dry run: no files changed."
   Write-DryRunPrerequisitePlan
   if ($InstallSource -eq "source-checkout") {
-    Write-Host "  WOULD clone or update: $Prefix"
-    Write-Host "  WOULD build packaged Quarkus app with Maven wrapper"
+    Write-Status "WOULD" " clone or update: $Prefix"
+    Write-Status "WOULD" " build packaged Quarkus app with Maven wrapper"
   } else {
-    Write-Host "  WOULD download release archive: $ReleaseBaseUrl/symphony-trello-$Version.zip"
-    Write-Host "  WOULD verify SHA3-256 checksum with: $ReleaseBaseUrl/checksums.txt"
-    Write-Host "  WOULD unpack release archive to: $Prefix"
+    Write-Status "WOULD" " download release archive: $ReleaseBaseUrl/symphony-trello-$Version.zip"
+    Write-Status "WOULD" " verify SHA3-256 checksum with: $ReleaseBaseUrl/checksums.txt"
+    Write-Status "WOULD" " unpack release archive to: $Prefix"
   }
-  Write-Host "  WOULD install CLI executable: $BinDir\symphony-trello.ps1"
+  Write-Status "WOULD" " install CLI executable: $BinDir\symphony-trello.ps1"
   Offer-PathSetup
   if (-not $NoOnboard) {
     Write-Host
-    Write-Host "Starting setup..."
-    Write-Host "  WOULD run: $BinDir\symphony-trello.ps1 setup-local"
+    Write-Heading "Starting setup..."
+    Write-Status "WOULD" " run: $BinDir\symphony-trello.ps1 setup-local"
     Start-ManagedWorkersWithoutInstallerCompletion
   }
   exit 0
@@ -1401,12 +1457,12 @@ if (-not $NoOnboard) {
 }
 
 Write-Host
-Write-Host "Installing Symphony..."
+Write-Heading "Installing Symphony..."
 $UpdatingExistingApp = Test-Path -LiteralPath $Prefix
 $RestartManagedWorkers = $false
 if ($UpdatingExistingApp -and (Get-ManagedPidFile)) {
   $RestartManagedWorkers = $true
-  Write-Host "Stopping managed workers before update..."
+  Write-Heading "Stopping managed workers before update..."
   Invoke-Step "$BinDir\symphony-trello.ps1 stop" { & "$BinDir\symphony-trello.ps1" stop }
 }
 if ($InstallSource -eq "source-checkout") {
@@ -1512,7 +1568,7 @@ set "SYMPHONY_TRELLO_WRAPPER_COMMAND=%~f0"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0symphony-trello.ps1" %*
 "@ | Set-Content -Encoding ASCII "$BinDir\symphony-trello.cmd"
 }
-Write-Host "  OK  Command installed: $BinDir\symphony-trello.ps1"
+Write-Status "OK" "  Command installed: $BinDir\symphony-trello.ps1"
 Write-InstallContext
 
 Offer-PathSetup
@@ -1520,9 +1576,9 @@ Offer-PathSetup
 if (-not $NoOnboard) {
   Write-Host
   if ($RestartManagedWorkers) {
-    Write-Host "Restarting managed workers after update..."
+    Write-Heading "Restarting managed workers after update..."
   }
-  Write-Host "Starting setup..."
+  Write-Heading "Starting setup..."
   try {
     Set-InstallerCompletionMode "defer"
     try {
@@ -1538,6 +1594,6 @@ if (-not $NoOnboard) {
   }
 } elseif ($RestartManagedWorkers) {
   Write-Host
-  Write-Host "Restarting managed workers after update..."
+  Write-Heading "Restarting managed workers after update..."
   Start-ManagedWorkersWithoutInstallerCompletion
 }

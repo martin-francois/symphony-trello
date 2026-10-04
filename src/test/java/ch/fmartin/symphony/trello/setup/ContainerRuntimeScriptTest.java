@@ -2,14 +2,17 @@ package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.run;
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.shellQuote;
+import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.withEnvironment;
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.writeExecutable;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -83,6 +86,26 @@ final class ContainerRuntimeScriptTest {
                 .contains("SYMPHONY_TRELLO_CONTAINER_RUNTIME must be docker or podman")
                 .doesNotContain(wrapper.imageRepository());
         assertThat(invocation).doesNotExist();
+    }
+
+    @Test
+    void powerShellWrapperForwardsOutputColorControls() throws Exception {
+        // given
+        Path invocation = tempDir.resolve("invocation.txt");
+        installRecordingRuntime("podman", invocation);
+        Map<String, String> environment = withEnvironment(
+                runtimeEnvironment("podman"),
+                Map.of("NO_COLOR", "1", "CLICOLOR", "0", "CLICOLOR_FORCE", "1", "UNRELATED_HOST_CONTROL", "unrelated"));
+
+        // when
+        ProcessResult result = runWrapper("pwsh-docker.sh", environment);
+
+        // then
+        result.assertSuccess();
+        assertThat(invocation)
+                .content(StandardCharsets.UTF_8)
+                .contains("-e\nNO_COLOR\n", "-e\nCLICOLOR\n", "-e\nCLICOLOR_FORCE\n")
+                .doesNotContain("UNRELATED_HOST_CONTROL");
     }
 
     @MethodSource("containerRuntimeRequirements")

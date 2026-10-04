@@ -27,6 +27,9 @@ final class InstallerScriptFixture {
     private static final int PROCESS_TERMINATION_SECONDS = 5;
     private static final int TEMP_FILE_DELETION_SECONDS = 5;
     private static final String REPOSITORY_ENVIRONMENT_PREFIX = "SYMPHONY_";
+    /// The installers decide whether to color their output from these variables. Tests start without
+    /// the developer's or CI runner's values so a transcript does not depend on the host terminal.
+    static final List<String> OUTPUT_COLOR_CONTROLS = List.of("NO_COLOR", "CLICOLOR", "CLICOLOR_FORCE", "TERM");
     private static final Pattern POSIX_INSTALLER_DEFAULT_VERSION =
             Pattern.compile("(?m)^DEFAULT_VERSION=\"([^\"]+)\" # x-release-please-version$");
 
@@ -81,6 +84,7 @@ final class InstallerScriptFixture {
             ProcessBuilder processBuilder, Map<String, String> environment) throws IOException {
         Map<String, String> processEnvironment = processBuilder.environment();
         processEnvironment.keySet().removeIf(InstallerScriptFixture::isRepositoryEnvironmentControl);
+        processEnvironment.keySet().removeIf(InstallerScriptFixture::isOutputColorControl);
         if (!environment.containsKey("PATH")) {
             String inheritedPath = processEnvironment.getOrDefault("PATH", "");
             String javaBin = Path.of(System.getProperty("java.home"), "bin").toString();
@@ -121,6 +125,23 @@ final class InstallerScriptFixture {
 
     static boolean isRepositoryEnvironmentControl(String name) {
         return name.regionMatches(true, 0, REPOSITORY_ENVIRONMENT_PREFIX, 0, REPOSITORY_ENVIRONMENT_PREFIX.length());
+    }
+
+    private static boolean isOutputColorControl(String name) {
+        for (String control : OUTPUT_COLOR_CONTROLS) {
+            if (control.equalsIgnoreCase(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// Returns `base` with `overrides` applied, for a run that differs from a shared environment only
+    /// in a few variables.
+    static Map<String, String> withEnvironment(Map<String, String> base, Map<String, String> overrides) {
+        Map<String, String> environment = new LinkedHashMap<>(base);
+        environment.putAll(overrides);
+        return environment;
     }
 
     private static void applyDeterministicLinuxDistro(Map<String, String> processEnvironment) {

@@ -770,6 +770,11 @@ curl -fsSL https://symphony-trello.fmartin.ch/install.sh | bash -s -- --dry-run
 powershell -c "& ([scriptblock]::Create((irm https://symphony-trello.fmartin.ch/install.ps1))) --dry-run --no-onboard"
 ```
 
+The installer and uninstaller color headings and status words such as `OK`, `NOTE`, and `RUN` when
+they write to a terminal. Redirected output, CI logs, and `TERM=dumb` terminals get plain text. Set
+`NO_COLOR=1` or `CLICOLOR=0` to turn color off, or `CLICOLOR_FORCE=1` to keep it when you pipe the
+output, for example `curl -fsSL https://symphony-trello.fmartin.ch/install.sh | NO_COLOR=1 bash`.
+
 Useful commands after install:
 
 ```bash
