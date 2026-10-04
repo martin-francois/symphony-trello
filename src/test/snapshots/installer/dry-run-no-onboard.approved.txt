@@ -1,0 +1,32 @@
+exitCode: 0
+--- stdout ---
+Symphony for Trello installer
+
+Detected Debian GNU/Linux amd64
+Install: <TEMP>/user-home/.local/share/symphony-trello/app
+Config: <TEMP>/user-home/.config/symphony-trello
+Workspaces: <TEMP>/user-home/.local/share/symphony-trello/workspaces
+State/logs: <TEMP>/user-home/.local/state/symphony-trello
+Command: <TEMP>/user-home/.local/bin/symphony-trello
+Install source: release-archive
+Version: <INSTALLER_VERSION>
+Release assets: https://github.com/martin-francois/symphony-trello/releases/download/v<INSTALLER_VERSION>
+
+Checking prerequisites...
+  OK      Java 25+ JDK available
+  OK      Codex CLI available
+
+Dry run: no files changed.
+  WOULD download release archive: https://github.com/martin-francois/symphony-trello/releases/download/v<INSTALLER_VERSION>/symphony-trello-<INSTALLER_VERSION>.tar.gz
+  WOULD verify SHA3-256 checksum from: https://github.com/martin-francois/symphony-trello/releases/download/v<INSTALLER_VERSION>/checksums.txt
+  WOULD unpack release archive into: <TEMP>/user-home/.local/share/symphony-trello/app
+  WOULD install command: <TEMP>/user-home/.local/bin/symphony-trello
+
+Command PATH setup
+Symphony would install the command here:
+  <TEMP>/user-home/.local/bin/symphony-trello
+  WOULD add <TEMP>/user-home/.local/bin to PATH in <TEMP>/user-home/.bashrc
+        Line: export PATH='<TEMP>/user-home/.local/bin':"$PATH"
+  WOULD add <TEMP>/user-home/.local/bin to PATH in <TEMP>/user-home/.profile
+        Line: export PATH='<TEMP>/user-home/.local/bin':"$PATH"
+--- stderr ---

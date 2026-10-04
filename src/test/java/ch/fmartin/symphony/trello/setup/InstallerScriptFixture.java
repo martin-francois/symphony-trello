@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.google.common.base.Splitter;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -25,6 +26,7 @@ import java.util.stream.Stream;
 final class InstallerScriptFixture {
     private static final int PROCESS_DESCENDANT_DISCOVERY_MILLIS = 1_000;
     private static final int PROCESS_TERMINATION_SECONDS = 5;
+    private static final int PROCESS_TIMEOUT_SECONDS = 60;
     private static final int TEMP_FILE_DELETION_SECONDS = 5;
     private static final String REPOSITORY_ENVIRONMENT_PREFIX = "SYMPHONY_";
     private static final Pattern POSIX_INSTALLER_DEFAULT_VERSION =
@@ -46,10 +48,33 @@ final class InstallerScriptFixture {
                 """.formatted(target));
     }
 
-    static ProcessResult runWithPseudoTerminal(Map<String, String> environment, String input, String command)
+    static PseudoTerminalResult runWithPseudoTerminal(Map<String, String> environment, String input, String command)
             throws IOException, InterruptedException {
-        var processBuilder = new ProcessBuilder("script", "-q", "-e", "-c", command, "/dev/null");
-        return runWithTestEnvironment(environment, processBuilder, input);
+        ProcessResult session = runWithTestEnvironment(environment, pseudoTerminalProcess(command), input);
+        return PseudoTerminalResult.from(session);
+    }
+
+    /// Runs `command` in a pseudo-terminal and types each response only after its prompt appeared,
+    /// the way a person answers prompts. Unlike [#runWithPseudoTerminal], which writes all input
+    /// before the command starts, the terminal echo of each answer then follows its prompt, so the
+    /// transcript order does not depend on scheduling.
+    static PseudoTerminalResult runPseudoTerminalDialog(
+            HostEnvironment hostEnvironment,
+            Map<String, String> environment,
+            Path workingDirectory,
+            String command,
+            List<TerminalAnswer> answers)
+            throws IOException, InterruptedException {
+        ProcessBuilder processBuilder = pseudoTerminalProcess(command);
+        processBuilder.directory(workingDirectory.toFile());
+        hostEnvironment.applyTo(processBuilder);
+        try (AppliedTestEnvironment ignored = applyTestEnvironment(processBuilder, environment)) {
+            return PseudoTerminalResult.from(runDialog(processBuilder, answers, PROCESS_TIMEOUT_SECONDS));
+        }
+    }
+
+    private static ProcessBuilder pseudoTerminalProcess(String command) {
+        return new ProcessBuilder("script", "-q", "-e", "-c", command, "/dev/null");
     }
 
     static ProcessResult run(Map<String, String> environment, String... command)
@@ -69,11 +94,20 @@ final class InstallerScriptFixture {
         return runWithTestEnvironment(environment, processBuilder, "");
     }
 
+    static ProcessResult run(
+            HostEnvironment hostEnvironment, Map<String, String> environment, Path workingDirectory, String... command)
+            throws IOException, InterruptedException {
+        var processBuilder = new ProcessBuilder(command);
+        processBuilder.directory(workingDirectory.toFile());
+        hostEnvironment.applyTo(processBuilder);
+        return run(environment, processBuilder);
+    }
+
     private static ProcessResult runWithTestEnvironment(
             Map<String, String> environment, ProcessBuilder processBuilder, String input)
             throws IOException, InterruptedException {
         try (AppliedTestEnvironment ignored = applyTestEnvironment(processBuilder, environment)) {
-            return run(processBuilder, input, 60);
+            return run(processBuilder, input, PROCESS_TIMEOUT_SECONDS);
         }
     }
 
@@ -171,32 +205,82 @@ final class InstallerScriptFixture {
 
     static ProcessResult run(ProcessBuilder processBuilder, String input, int timeoutSeconds)
             throws IOException, InterruptedException {
+        Path stdin = Files.createTempFile("symphony-trello-installer-stdin-", ".log");
+        try {
+            Files.writeString(stdin, input);
+            processBuilder.redirectInput(stdin.toFile());
+            return runCaptured(processBuilder, timeoutSeconds, (process, stdout, deadline) -> {});
+        } finally {
+            deleteTempFiles(stdin);
+        }
+    }
+
+    private static ProcessResult runDialog(
+            ProcessBuilder processBuilder, List<TerminalAnswer> answers, int timeoutSeconds)
+            throws IOException, InterruptedException {
+        processBuilder.redirectInput(ProcessBuilder.Redirect.PIPE);
+        return runCaptured(processBuilder, timeoutSeconds, (process, stdout, deadline) -> {
+            int answeredUpTo = 0;
+            try (var terminalInput = process.getOutputStream()) {
+                for (TerminalAnswer answer : answers) {
+                    answeredUpTo = awaitPrompt(process, stdout, answer.prompt(), answeredUpTo, deadline);
+                    terminalInput.write((answer.response() + "\n").getBytes(StandardCharsets.UTF_8));
+                    terminalInput.flush();
+                }
+            }
+        });
+    }
+
+    /// Starts the process with captured stdout and stderr, lets `input` interact with it until the
+    /// deadline, and waits for it to exit. Standard input must already be configured.
+    private static ProcessResult runCaptured(ProcessBuilder processBuilder, int timeoutSeconds, ProcessInput input)
+            throws IOException, InterruptedException {
         Path stdout = Files.createTempFile("symphony-trello-installer-stdout-", ".log");
         Path stderr = null;
-        Path stdin = null;
         Process process = null;
         try {
             stderr = Files.createTempFile("symphony-trello-installer-stderr-", ".log");
-            stdin = Files.createTempFile("symphony-trello-installer-stdin-", ".log");
-            Files.writeString(stdin, input);
-            processBuilder.redirectInput(stdin.toFile());
             processBuilder.redirectOutput(stdout.toFile());
             processBuilder.redirectError(stderr.toFile());
             process = processBuilder.start();
-            boolean completed = process.waitFor(Duration.ofSeconds(timeoutSeconds));
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
+            input.interact(process, stdout, deadline);
+            boolean completed = process.waitFor(Duration.ofNanos(Math.max(0, deadline - System.nanoTime())));
             if (!completed) {
                 terminateProcessTree(process);
             }
-            String output = decodeCapturedOutput(stdout) + decodeCapturedOutput(stderr);
+            String capturedStdout = decodeCapturedOutput(stdout);
+            String capturedStderr = decodeCapturedOutput(stderr);
             assertThat(completed)
-                    .as("process timed out: %s output:%n%s", processBuilder.command(), output)
+                    .as("process timed out: %s output:%n%s%s", processBuilder.command(), capturedStdout, capturedStderr)
                     .isTrue();
-            return new ProcessResult(process.exitValue(), output);
+            return new ProcessResult(process.exitValue(), capturedStdout, capturedStderr);
         } finally {
             if (process != null && process.isAlive()) {
                 terminateProcessTreeImmediately(process);
             }
-            deleteTempFiles(stdout, stderr, stdin);
+            deleteTempFiles(stdout, stderr);
+        }
+    }
+
+    @FunctionalInterface
+    private interface ProcessInput {
+        void interact(Process process, Path stdout, long deadlineNanos) throws IOException, InterruptedException;
+    }
+
+    private static int awaitPrompt(Process process, Path transcript, String prompt, int searchFrom, long deadline)
+            throws IOException, InterruptedException {
+        while (true) {
+            String output = decodeCapturedOutput(transcript);
+            int promptStart = output.indexOf(prompt, searchFrom);
+            if (promptStart >= 0) {
+                return promptStart + prompt.length();
+            }
+            if (!process.isAlive() || System.nanoTime() >= deadline) {
+                throw new AssertionError("terminal never showed the prompt %s; transcript so far:%n%s"
+                        .formatted(shellQuote(prompt), output));
+            }
+            pollDelayForBoundedProcessWait();
         }
     }
 
@@ -317,6 +401,34 @@ final class InstallerScriptFixture {
 
     static String shellQuote(String value) {
         return "'" + value.replace("'", "'\"'\"'") + "'";
+    }
+
+    /// Creates a directory that exposes only the named host commands, for a PATH whose output must
+    /// not change with optional tools a host or CI runner happens to have, such as `curl`, `node`,
+    /// or `npm`. A missing command fails the test instead of skipping it, so a runner without it
+    /// cannot silently drop required coverage.
+    static Path hostCommandDirectory(Path directory, List<String> commands) throws IOException {
+        Files.createDirectories(directory);
+        for (String command : commands) {
+            writeCommandProxy(
+                    directory, command, shellQuote(hostExecutable(command).toString()));
+        }
+        return directory;
+    }
+
+    private static Path hostExecutable(String command) {
+        for (String directory : searchPathEntries(System.getenv().getOrDefault("PATH", ""))) {
+            Path candidate = Path.of(directory, command);
+            if (Files.isExecutable(candidate)) {
+                return candidate;
+            }
+        }
+        throw new IllegalStateException(command + " is required on PATH for this test");
+    }
+
+    /// Splits a PATH-style search path, ignoring empty entries.
+    static Iterable<String> searchPathEntries(String searchPath) {
+        return Splitter.on(File.pathSeparatorChar).omitEmptyStrings().split(searchPath);
     }
 
     static boolean commandExists(String name) {
@@ -842,9 +954,23 @@ final class InstallerScriptFixture {
                     exit 0
                   fi
                   mkdir -p "$config_dir"
-                  read -r key
-                  read -r token
-                  read -r board
+                  if [[ -t 0 ]] && command -v stty >/dev/null 2>&1; then
+                    # Like Java's Console.readPassword, hide the echo before showing a secret prompt.
+                    stty -echo
+                    printf 'Trello API key: '
+                    IFS= read -r key
+                    printf '\n'
+                    printf 'Trello API token: '
+                    IFS= read -r token
+                    stty echo
+                    printf '\n'
+                    printf 'Trello board name: '
+                    IFS= read -r board
+                  else
+                    read -r key
+                    read -r token
+                    read -r board
+                  fi
                   slug="$(printf '%s' "$board" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9][^a-z0-9]*/-/g; s/^-//; s/-$//')"
                   workflow="$config_dir/WORKFLOW.${slug:-trello-board}.md"
                   printf 'TRELLO_API_KEY=%s\\nTRELLO_API_TOKEN=%s\\n' "$key" "$token" > "$config_dir/.env"
@@ -1043,9 +1169,47 @@ final class InstallerScriptFixture {
         return "\"" + value.replace("\"", "\"\"") + "\"";
     }
 
-    record ProcessResult(int exitCode, String output) {
+    /// A child process whose standard output and standard error were captured separately.
+    record ProcessResult(int exitCode, String stdout, String stderr) {
+        /// Standard output followed by standard error, for fragment assertions that do not depend
+        /// on stream placement. Use [#stdout()] and [#stderr()] when the stream matters.
+        String output() {
+            return stdout + stderr;
+        }
+
         void assertSuccess() {
-            assertThat(exitCode).as(output).isZero();
+            assertThat(exitCode).as(output()).isZero();
+        }
+    }
+
+    /// A pseudo-terminal session. The terminal merges standard output, standard error, and the
+    /// echo of typed input into one transcript, so this result has no stream split.
+    record PseudoTerminalResult(int exitCode, String transcript) {
+        private static PseudoTerminalResult from(ProcessResult session) {
+            // `script` writes the terminal session to its own stdout; its stderr only carries
+            // diagnostics from `script` itself, kept so a harness failure stays visible.
+            return new PseudoTerminalResult(session.exitCode(), session.stdout() + session.stderr());
+        }
+
+        void assertSuccess() {
+            assertThat(exitCode).as(transcript).isZero();
+        }
+    }
+
+    /// One answer typed into a pseudo-terminal after `prompt` appeared.
+    record TerminalAnswer(String prompt, String response) {}
+
+    /// Whether a child process starts from the test JVM's environment or from an empty one. Use
+    /// [#CLEARED] when output must not depend on the developer's or runner's variables, such as
+    /// locale, terminal type, color settings, shell, or credentials.
+    enum HostEnvironment {
+        INHERITED,
+        CLEARED;
+
+        void applyTo(ProcessBuilder processBuilder) {
+            if (this == CLEARED) {
+                processBuilder.environment().clear();
+            }
         }
     }
 
