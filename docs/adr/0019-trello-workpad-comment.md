@@ -94,3 +94,7 @@ Codex stores structured progress in Trello checklists.
 
 `trello_upsert_workpad` requires `trello_tools.enabled`, `trello_tools.allow_writes`, and
 `trello_tools.allow_comments`.
+
+Since [ADR 0080](0080-shared-symphony-comment-attribution-footer.md), the workpad ends with the
+shared `Managed by Symphony` footer. The `## Codex Workpad` heading remains the only workpad
+identity.

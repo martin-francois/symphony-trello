@@ -22,6 +22,7 @@ import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
+import ch.fmartin.symphony.trello.tracker.SymphonyCommentFooter;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -66,6 +67,8 @@ final class TrelloHandoffToolHandlerTest {
     private static final String NO_BREAK_SPACE = "\u00A0";
     private static final String NUL_IN_USAGE_MESSAGE = "\u0000";
     private static final String ROCKET_EMOJI = "\uD83D\uDE80";
+    private static final String MIDDLE_DOT = "\u00B7";
+    private static final String FOOTER = "\n\n_Managed by Symphony_";
     private static final JsonNode SUCCESS_NODE = JsonNodeFactory.instance.booleanNode(true);
     private static final JsonNode FAILURE_NODE = JsonNodeFactory.instance.booleanNode(false);
 
@@ -267,7 +270,7 @@ final class TrelloHandoffToolHandlerTest {
 
         // then
         assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
-        assertThat(commentText.get()).isEqualTo("Ready for review");
+        assertThat(commentText.get()).isEqualTo("Ready for review" + FOOTER);
     }
 
     @Test
@@ -287,7 +290,7 @@ final class TrelloHandoffToolHandlerTest {
 
         // then
         assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
-        assertThat(commentText.get()).isEqualTo("- \\#2076: Fixed\nSee #2077 for follow-up");
+        assertThat(commentText.get()).isEqualTo("- \\#2076: Fixed\nSee #2077 for follow-up" + FOOTER);
     }
 
     @Test
@@ -552,7 +555,7 @@ final class TrelloHandoffToolHandlerTest {
 
         // then
         assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
-        assertThat(commentText.get()).isEqualTo("## Codex Workpad\n\n\\#2076: Fixed\n- \\#2077: Follow-up");
+        assertThat(commentText.get()).isEqualTo("## Codex Workpad\n\n\\#2076: Fixed\n- \\#2077: Follow-up" + FOOTER);
     }
 
     @Test
@@ -1089,11 +1092,8 @@ final class TrelloHandoffToolHandlerTest {
     void footerLinkForAnotherCardIsNeverTreatedAsManaged() {
         // given
         TrelloHandoffToolHandler handler = handler();
-        String otherCardFooter = TrelloHandoffToolHandler.BLOCKER_RECHECK_FOOTER_PREFIX
-                + "https://trello.com/c/DIFFERENT_CARD#comment-action-human"
-                + TrelloHandoffToolHandler.BLOCKER_RECHECK_FOOTER_SUFFIX;
         cardResponse.set(cardJson(actionsJson(
-                commentAction("action-human", CHECKING_STATUS + "\n\n" + otherCardFooter),
+                commentAction("action-human", managedRecheckText(CHECKING_STATUS, "action-human", "DIFFERENT_CARD")),
                 commentAction(BLOCKER_ACTION_ID, "Blocked: older repository mismatch"))));
 
         // when
@@ -1284,7 +1284,7 @@ final class TrelloHandoffToolHandlerTest {
         assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("workpad_updated", "\"duplicate_workpads_cleanup_status\":\"not_needed\"");
-        assertThat(updatedCommentText.get()).isEqualTo("## Codex Workpad\n\nUpdated plan");
+        assertThat(updatedCommentText.get()).isEqualTo("## Codex Workpad\n\nUpdated plan" + FOOTER);
         assertThat(commentText.get()).isNull();
     }
 
@@ -1314,7 +1314,7 @@ final class TrelloHandoffToolHandlerTest {
         assertThat(orchestratorCleanup)
                 .as("orchestrator cleanup removes the managed usage section")
                 .isTrue();
-        assertThat(updatedCommentText.get()).isEqualTo("## Codex Workpad\n\nUpdated agent plan");
+        assertThat(updatedCommentText.get()).isEqualTo("## Codex Workpad\n\nUpdated agent plan" + FOOTER);
     }
 
     @Test
@@ -1675,7 +1675,9 @@ final class TrelloHandoffToolHandlerTest {
                 .contains(
                         TrelloHandoffToolHandler.DUPLICATE_WORKPADS_NOTE_PREFIX
                                 + "1 other Codex workpad comment exists",
-                        "delete the duplicate workpad comments manually");
+                        "delete the duplicate workpad comments manually")
+                .as("the manual-cleanup note stays above the attribution footer")
+                .endsWith("keep this one." + FOOTER);
         assertThat(deletedActionIds)
                 .as("deleting Trello comments is destructive and needs the explicit opt-in")
                 .isEmpty();
@@ -1716,7 +1718,7 @@ final class TrelloHandoffToolHandlerTest {
         assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(updatedCommentText.get())
                 .as("a stale echoed cleanup note must not survive once the duplicates are gone")
-                .isEqualTo("## Codex Workpad\n\nUpdated plan");
+                .isEqualTo("## Codex Workpad\n\nUpdated plan" + FOOTER);
     }
 
     @Test
@@ -1739,7 +1741,7 @@ final class TrelloHandoffToolHandlerTest {
                         "\"duplicate_workpads_cleanup_status\":\"removed\"");
         assertThat(updatedCommentText.get())
                 .as("the destructive opt-in cleans the card, so no manual-cleanup note is added")
-                .isEqualTo("## Codex Workpad\n\nUpdated plan");
+                .isEqualTo("## Codex Workpad\n\nUpdated plan" + FOOTER);
         assertThat(deletedActionIds).containsExactly("action-workpad-older");
         assertThat(managedCommentCallOrder)
                 .as("the authoritative update must run before any duplicate delete")
@@ -1788,7 +1790,7 @@ final class TrelloHandoffToolHandlerTest {
                         "\"duplicate_workpads_removed\":\"0\"",
                         "\"duplicate_workpads_delete_failed\":\"1\"",
                         "\"duplicate_workpads_cleanup_status\":\"delete_failed\"");
-        assertThat(updatedCommentText.get()).isEqualTo("## Codex Workpad\n\nUpdated plan");
+        assertThat(updatedCommentText.get()).isEqualTo("## Codex Workpad\n\nUpdated plan" + FOOTER);
         assertThat(deletedActionIds).isEmpty();
     }
 
@@ -2079,17 +2081,12 @@ final class TrelloHandoffToolHandlerTest {
                 .contains("resumed_work_confirmed");
         assertThat(writes).extracting(Card.Comment::id).containsExactly("action-workpad", BLOCKER_RECHECK_ACTION_ID);
         assertThat(writes.getFirst().text())
-                .isEqualTo(recheckingWorkpad)
+                .isEqualTo(SymphonyCommentFooter.append(recheckingWorkpad))
                 .contains("- Agent plan: keep this.", CodexUsageWorkpadSection.START_MARKER, recheckingSection)
-                .doesNotContain(
-                        TrelloHandoffToolHandler.BLOCKER_RECHECK_FOOTER_PREFIX,
-                        TrelloHandoffToolHandler.BLOCKER_RECHECK_FOOTER_SUFFIX);
+                .doesNotContain(TrelloHandoffToolHandler.BLOCKER_RECHECK_LINK_TEXT);
         assertThat(writes.get(1).text())
-                .contains(
-                        RESUMED_STATUS_PREFIX,
-                        TrelloHandoffToolHandler.BLOCKER_RECHECK_FOOTER_PREFIX,
-                        "#comment-" + BLOCKER_ACTION_ID,
-                        TrelloHandoffToolHandler.BLOCKER_RECHECK_FOOTER_SUFFIX)
+                .contains(RESUMED_STATUS_PREFIX, TrelloHandoffToolHandler.BLOCKER_RECHECK_LINK_TEXT)
+                .endsWith("#comment-" + BLOCKER_ACTION_ID + ")_")
                 .doesNotContain(
                         CodexUsageWorkpadSection.START_MARKER,
                         CodexUsageWorkpadSection.END_MARKER,
@@ -2199,7 +2196,7 @@ final class TrelloHandoffToolHandlerTest {
                 .doesNotContain("Paused after Codex reported a usage limit.")
                 .containsOnlyOnce(CodexUsageWorkpadSection.START_MARKER);
         assertThat(removed).as("cleanup removes only the managed usage section").isTrue();
-        assertThat(updatedCommentText.get()).isEqualTo(original);
+        assertThat(updatedCommentText.get()).isEqualTo(withFooter(original));
     }
 
     @Test
@@ -2344,7 +2341,9 @@ final class TrelloHandoffToolHandlerTest {
         assertThat(List.of(pausedWorkpad, recheckingWorkpad, cleanedWorkpad)).allSatisfy(workpad -> {
             assertThat(workpad)
                     .contains("- Human plan: keep this.")
-                    .containsOnlyOnce(TrelloHandoffToolHandler.DUPLICATE_WORKPADS_NOTE_PREFIX);
+                    .containsOnlyOnce(TrelloHandoffToolHandler.DUPLICATE_WORKPADS_NOTE_PREFIX)
+                    .containsOnlyOnce(SymphonyCommentFooter.ATTRIBUTION)
+                    .endsWith(FOOTER);
             assertThat(workpad.length()).isLessThan(2_000);
         });
         assertThat(pausedWorkpad).containsOnlyOnce(CodexUsageWorkpadSection.START_MARKER);
@@ -2466,6 +2465,192 @@ final class TrelloHandoffToolHandlerTest {
                 .isFalse();
         assertThat(commentText.get()).isNull();
         assertThat(updatedCommentText.get()).isNull();
+    }
+
+    @Test
+    void addCommentReplacesEchoedOrDuplicatedFootersWithExactlyOneCanonicalFooter() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        String echoed = "Ready for review" + FOOTER + FOOTER + "\n";
+
+        // when
+        JsonNode result = addComment(handler, echoed);
+
+        // then
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
+        assertThat(commentText.get()).isEqualTo("Ready for review" + FOOTER);
+    }
+
+    @Test
+    void addCommentKeepsCopiedFooterTextInsideTheBodyAndStillEndsWithTheCanonicalFooter() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        String quoted = "A person wrote:\n\n> _Managed by Symphony_\n\nManaged by Symphony";
+
+        // when
+        JsonNode result = addComment(handler, quoted);
+
+        // then
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
+        assertThat(commentText.get()).isEqualTo(withFooter(quoted));
+    }
+
+    @Test
+    void workpadUpsertRejectsFooterOnlyTextBeforeReadingOrMutatingTrello() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+
+        // when
+        JsonNode result = upsertWorkpad(handler, "_Managed by Symphony_\n");
+
+        // then
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("invalid_workpad_text");
+        assertThat(cardFetchCount).hasValue(0);
+        assertNoManagedCommentMutation();
+    }
+
+    @Test
+    void addCommentRejectsFooterOnlyTextBeforeTrelloMutation() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+
+        // when
+        JsonNode result = addComment(handler, "_Managed by Symphony_");
+
+        // then
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("invalid_comment_text");
+        assertNoManagedCommentMutation();
+    }
+
+    @Test
+    void workpadUpsertNeverTreatsAFooteredHandoffOrLookalikeCommentAsTheWorkpad() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(actionsJson(
+                commentAction("action-handoff", "Ready for review" + FOOTER),
+                commentAction("action-lookalike", " ## Codex Workpad\n\nHuman copy" + FOOTER))));
+
+        // when
+        JsonNode result = upsertWorkpad(handler);
+
+        // then
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("workpad_created");
+        assertThat(commentText.get()).isEqualTo("## Codex Workpad\n\nUpdated plan" + FOOTER);
+        assertThat(updatedCommentText.get()).isNull();
+        assertThat(deletedActionIds).isEmpty();
+    }
+
+    @Test
+    void workpadUpsertReplacesAnEchoedFooterInsteadOfDuplicatingIt() throws Exception {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJsonWithWorkpad("## Codex Workpad\n\nOld plan" + FOOTER));
+
+        // when
+        JsonNode first = upsertWorkpad(handler, "## Codex Workpad\n\nUpdated plan" + FOOTER);
+        String afterFirst = updatedCommentText.get();
+        cardResponse.set(cardJsonWithWorkpad(afterFirst));
+        JsonNode retry = upsertWorkpad(handler, afterFirst + FOOTER);
+
+        // then
+        assertThat(first.path("success")).isEqualTo(SUCCESS_NODE);
+        assertThat(retry.path("success")).isEqualTo(SUCCESS_NODE);
+        assertThat(afterFirst).isEqualTo("## Codex Workpad\n\nUpdated plan" + FOOTER);
+        assertThat(updatedCommentText.get()).isEqualTo(afterFirst);
+    }
+
+    @Test
+    void codexUsageCleanupLeavesAnUnchangedLegacyWorkpadWithoutFooterUntouched() throws Exception {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        String paused = CodexUsageWorkpadSection.paused("Usage is unavailable.", Instant.parse("2026-07-10T13:00:00Z"));
+        String legacy = CodexUsageWorkpadSection.upsert("## Codex Workpad\n\n- Legacy plan.", paused);
+        cardResponse.set(cardJsonWithWorkpad(legacy));
+
+        // when
+        boolean unchanged = handler.updateCodexUsageSection(config(List.of("Review"), List.of()), "card-1", paused);
+
+        // then
+        assertThat(unchanged)
+                .as("an identical usage section is reported as applied without a Trello write")
+                .isTrue();
+        assertThat(updatedCommentText.get())
+                .as("a legacy workpad gains the footer only when its owning path changes its content")
+                .isNull();
+    }
+
+    @Test
+    void codexUsageUpdateAddsTheFooterAfterTheManagedSectionOfALegacyWorkpad() throws Exception {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJsonWithWorkpad("## Codex Workpad\n\n- Legacy plan."));
+        String rechecking = CodexUsageWorkpadSection.rechecking("Usage is unavailable.");
+
+        // when
+        boolean updated = handler.updateCodexUsageSection(config(List.of("Review"), List.of()), "card-1", rechecking);
+
+        // then
+        assertThat(updated)
+                .as("the usage section is written to the legacy workpad")
+                .isTrue();
+        assertThat(updatedCommentText.get())
+                .isEqualTo(withFooter("## Codex Workpad\n\n- Legacy plan.\n\n" + rechecking));
+    }
+
+    @Test
+    void footeredBlockerHandoffStillQualifiesAndStaysUnchangedWhileTheRecheckStatusIsCreated() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(
+                cardJson(actionsJson(commentAction(BLOCKER_ACTION_ID, "Blocked: repository mismatch" + FOOTER))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("blocker_recheck_started");
+        assertThat(commentText.get()).isEqualTo(managedRecheckText(CHECKING_STATUS, BLOCKER_ACTION_ID));
+        assertThat(updatedCommentText.get())
+                .as("the qualifying blocker comment is never edited")
+                .isNull();
+    }
+
+    @MethodSource("commentsOutsideTheBlockerRecheckFamily")
+    @ParameterizedTest(name = "{0}")
+    void blockerRecheckNeverUpdatesOrDeletesCommentsOutsideItsFamily(String scenario, String text) {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(actionsJson(
+                commentAction("action-other", text),
+                commentAction(BLOCKER_ACTION_ID, "Blocked: repository mismatch"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .as(scenario)
+                .contains("blocker_recheck_not_needed");
+        assertNoManagedCommentMutation();
+    }
+
+    private static Stream<Arguments> commentsOutsideTheBlockerRecheckFamily() {
+        String managed = managedRecheckText(CHECKING_STATUS, BLOCKER_ACTION_ID);
+        String footerLine = managed.substring(managed.lastIndexOf('\n') + 1);
+        return Stream.of(
+                Arguments.of("checking text with the plain footer", withFooter(CHECKING_STATUS)),
+                Arguments.of("handoff comment with the plain footer", withFooter("Ready for review")),
+                Arguments.of("blocker link footer that is not the final paragraph", managed + "\n\nHuman reply"),
+                Arguments.of("blocker link footer in the same paragraph", CHECKING_STATUS + "\n" + footerLine),
+                Arguments.of(
+                        "blocker link footer without emphasis",
+                        CHECKING_STATUS + "\n\n" + footerLine.substring(1, footerLine.length() - 1)),
+                Arguments.of(
+                        "blocker link footer with a different link label",
+                        managed.replace(
+                                "View the comment explaining why this card was previously blocked", "Blocker")));
     }
 
     @Test
@@ -2620,6 +2805,19 @@ final class TrelloHandoffToolHandlerTest {
                 json.createObjectNode()
                         .put("tool", TrelloHandoffToolHandler.MOVE_CURRENT_CARD)
                         .set("arguments", json.createObjectNode().put("list_id", listId)));
+    }
+
+    private static String withFooter(String body) {
+        return body + FOOTER;
+    }
+
+    private JsonNode addComment(TrelloHandoffToolHandler handler, String text) {
+        return handler.handle(
+                config(List.of("Review"), List.of()),
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.ADD_COMMENT)
+                        .set("arguments", json.createObjectNode().put("text", text)));
     }
 
     private void replaceBoardLists(FakeTrelloServer.TrelloListJson... lists) {
@@ -2922,14 +3120,15 @@ final class TrelloHandoffToolHandlerTest {
     }
 
     private static String managedRecheckText(String visibleStatus, String blockerActionId, String cardShortLink) {
+        // Spelled out byte for byte so recheck statuses written before the shared footer stay managed.
         return visibleStatus
-                + "\n\n"
-                + TrelloHandoffToolHandler.BLOCKER_RECHECK_FOOTER_PREFIX
-                + "https://trello.com/c/"
+                + "\n\n_Managed by Symphony "
+                + MIDDLE_DOT
+                + " [View the comment explaining why this card was previously blocked](https://trello.com/c/"
                 + cardShortLink
                 + "#comment-"
                 + blockerActionId
-                + TrelloHandoffToolHandler.BLOCKER_RECHECK_FOOTER_SUFFIX;
+                + ")_";
     }
 
     private static String resumedStatusLine(String comment) {

@@ -150,6 +150,10 @@ final class CodexSkillStructureTest {
                 .contains("create a new branch")
                 .contains("Do not create duplicate progress summary comments")
                 .contains("trello_update_blocker_recheck_status")
+                .containsIgnoringWhitespaces("Every comment these tools write ends with a `Managed by Symphony` footer")
+                .containsIgnoringWhitespaces("Do not type the footer yourself")
+                .containsIgnoringWhitespaces(
+                        "A blocker handoff added through `trello_add_comment` ends with the plain footer and still counts as an ordinary comment for this check")
                 .containsIgnoringWhitespaces("newest ordinary comment")
                 .containsIgnoringWhitespaces("exact `Managed by Symphony` footer")
                 .containsIgnoringWhitespaces("a link to the qualifying blocker comment on the current card")

@@ -157,6 +157,11 @@ final class WorkflowConfigPromptTest {
                 .isEqualTo(Map.of("type", "workspaceWrite", "networkAccess", true));
         assertThat(definition.promptTemplate())
                 .containsIgnoringWhitespaces(
+                        "Every Trello comment Symphony writes ends with a `Managed by Symphony` footer")
+                .containsIgnoringWhitespaces("Do not type the footer yourself")
+                .containsIgnoringWhitespaces(
+                        "A blocker handoff added through trello_add_comment ends with the plain footer and still counts as an ordinary comment for this check")
+                .containsIgnoringWhitespaces(
                         "A Symphony-managed recheck status ends with the exact `Managed by Symphony` footer and a link to the qualifying blocker comment on the current card.")
                 .containsIgnoringWhitespaces(
                         "Similar visible text, or a link to another card, remains an ordinary comment.")

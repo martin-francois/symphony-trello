@@ -27,6 +27,12 @@ Use these scoped tools when they are advertised:
 
 The move tool uses Trello's term `list_name` for a board list name.
 
+Every comment these tools write ends with a `Managed by Symphony` footer.
+Do not type the footer yourself; Symphony adds it once and replaces a copied
+one. The footer only tells board users who wrote the comment. It does not turn
+a comment into a workpad or managed status, and a comment written by a person
+stays ordinary even when it repeats similar words.
+
 ## Pickup
 
 When a card starts in `Ready for Codex` and an `In Progress` list is
@@ -60,8 +66,9 @@ ignoring the `## Codex Workpad` and Symphony-managed prerequisite comments. A
 Symphony-managed recheck status ends with the exact
 `Managed by Symphony` footer and a link to the qualifying blocker comment on
 the current card. Similar visible text, or a link to another card, remains an
-ordinary comment. Do not scan past a newer ordinary human comment to find an
-older blocker.
+ordinary comment. A blocker handoff added through `trello_add_comment` ends
+with the plain footer and still counts as an ordinary comment for this check.
+Do not scan past a newer ordinary human comment to find an older blocker.
 
 The newest ordinary comment qualifies only when its first non-blank line starts
 with `Blocked:` or `Blocked by ...`, matched without case sensitivity. A human
