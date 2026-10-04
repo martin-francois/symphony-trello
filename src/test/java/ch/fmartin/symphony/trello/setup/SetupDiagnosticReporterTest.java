@@ -191,8 +191,7 @@ final class SetupDiagnosticReporterTest {
                 .withDotenvPath(tempDir.resolve(".env"))
                 .withTrelloCredentialEnvironmentNames("TRELLO_API_KEY", "TRELLO_API_TOKEN")
                 .withTrelloCredentialSources(
-                        TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT,
-                        TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT);
+                        TrelloCredentialSource.SHELL_ENVIRONMENT, TrelloCredentialSource.SHELL_ENVIRONMENT);
 
         // when
         Optional<String> hint = SetupDiagnosticReporter.userActionHint(authFailure);
@@ -1341,9 +1340,7 @@ final class SetupDiagnosticReporterTest {
                         "trello_auth_failed", "Trello authentication failed while starting Symphony.")
                 .withDotenvPath(env)
                 .withTrelloCredentialEnvironmentNames("TRELLO_API_KEY", "TRELLO_API_TOKEN")
-                .withTrelloCredentialSources(
-                        TrelloBoardSetupException.TrelloCredentialSource.DOTENV_FILE,
-                        TrelloBoardSetupException.TrelloCredentialSource.DOTENV_FILE);
+                .withTrelloCredentialSources(TrelloCredentialSource.DOTENV_FILE, TrelloCredentialSource.DOTENV_FILE);
 
         // when
         Optional<String> hint = SetupDiagnosticReporter.userActionHint(authFailure);
@@ -1365,8 +1362,7 @@ final class SetupDiagnosticReporterTest {
                 .withDotenvPath(env)
                 .withTrelloCredentialEnvironmentNames("TRELLO_API_KEY", "TRELLO_API_TOKEN")
                 .withTrelloCredentialSources(
-                        TrelloBoardSetupException.TrelloCredentialSource.DOTENV_FILE,
-                        TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT);
+                        TrelloCredentialSource.DOTENV_FILE, TrelloCredentialSource.SHELL_ENVIRONMENT);
 
         // when
         Optional<String> hint = SetupDiagnosticReporter.userActionHint(authFailure);
@@ -1382,13 +1378,32 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void givesActionableHintForAuthFailureFromDirectlyEnteredCredential() {
+        // given
+        var authFailure = new TrelloBoardSetupException(
+                        "trello_auth_failed", "Trello authentication failed while starting Symphony.")
+                .withTrelloCredentialEnvironmentNames("TRELLO_API_KEY", "TRELLO_API_TOKEN")
+                .withTrelloCredentialSources(
+                        TrelloCredentialSource.DIRECT_INPUT, TrelloCredentialSource.SHELL_ENVIRONMENT);
+
+        // when
+        Optional<String> hint = SetupDiagnosticReporter.userActionHint(authFailure);
+
+        // then
+        assertThat(hint).hasValueSatisfying(value -> assertThat(value)
+                .contains(
+                        "Check these Trello credential sources:",
+                        "TRELLO_API_KEY: entered directly with --key, --token, or the setup prompt",
+                        "TRELLO_API_TOKEN: shell environment"));
+    }
+
+    @Test
     void givesActionableHintForWorkerAuthFailureFromWorkflowCredentials() {
         // given
         var authFailure = new TrelloBoardSetupException(
                         "trello_auth_failed", "Trello authentication failed while starting Symphony.")
                 .withTrelloCredentialSources(
-                        TrelloBoardSetupException.TrelloCredentialSource.WORKFLOW_CONFIG,
-                        TrelloBoardSetupException.TrelloCredentialSource.WORKFLOW_CONFIG);
+                        TrelloCredentialSource.WORKFLOW_CONFIG, TrelloCredentialSource.WORKFLOW_CONFIG);
 
         // when
         Optional<String> hint = SetupDiagnosticReporter.userActionHint(authFailure);

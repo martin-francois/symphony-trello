@@ -3,7 +3,7 @@ package ch.fmartin.symphony.trello.setup;
 import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.EnvironmentReferences;
-import ch.fmartin.symphony.trello.config.LocalEnvironment;
+import ch.fmartin.symphony.trello.setup.TrelloCredentialResolver.CredentialValue;
 import com.google.common.util.concurrent.Striped;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -513,34 +513,21 @@ final class LocalWorkerManager {
 
     private WorkerCredentialUsage workerCredentialUsage(
             Path envPath, Optional<String> apiKeyEnvironment, Optional<String> apiTokenEnvironment) {
-        Map<String, String> dotenv = LocalEnvironment.load(envPath);
+        var resolver = new TrelloCredentialResolver(environment, envPath);
         return new WorkerCredentialUsage(
                 envPath,
-                apiKeyEnvironment,
-                apiTokenEnvironment,
-                credentialSource(apiKeyEnvironment, dotenv),
-                credentialSource(apiTokenEnvironment, dotenv),
-                dotenvValue(apiKeyEnvironment, dotenv),
-                dotenvValue(apiTokenEnvironment, dotenv));
+                workerCredential(resolver, apiKeyEnvironment, TrelloEnvironment.API_KEY),
+                workerCredential(resolver, apiTokenEnvironment, TrelloEnvironment.API_TOKEN));
     }
 
-    private static Optional<String> dotenvValue(Optional<String> environmentName, Map<String, String> dotenv) {
-        return environmentName.map(dotenv::get).filter(value -> !TrelloCredentialStore.blank(value));
-    }
-
-    private TrelloBoardSetupException.TrelloCredentialSource credentialSource(
-            Optional<String> environmentName, Map<String, String> dotenv) {
+    /// The worker reads a credential from the shell environment or the credential file only when
+    /// the workflow references an environment variable. Error context then names the default
+    /// variable for a workflow-configured value, as the remediation hints expect.
+    private static CredentialValue workerCredential(
+            TrelloCredentialResolver resolver, Optional<String> environmentName, String defaultEnvironmentName) {
         return environmentName
-                .map(name -> {
-                    if (!TrelloCredentialStore.blank(environment.get(name))) {
-                        return TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT;
-                    }
-                    if (!TrelloCredentialStore.blank(dotenv.get(name))) {
-                        return TrelloBoardSetupException.TrelloCredentialSource.DOTENV_FILE;
-                    }
-                    return TrelloBoardSetupException.TrelloCredentialSource.MISSING;
-                })
-                .orElse(TrelloBoardSetupException.TrelloCredentialSource.WORKFLOW_CONFIG);
+                .map(name -> resolver.resolve(name, Optional.empty()))
+                .orElseGet(() -> CredentialValue.workflowConfig(defaultEnvironmentName));
     }
 
     private void verifyTrelloCredentialsBeforeLaunch(
@@ -584,15 +571,15 @@ final class LocalWorkerManager {
                 .map(usage -> exception
                         .withDotenvPath(usage.envPath())
                         .withTrelloCredentialEnvironmentNames(
-                                usage.apiKeyEnvironment().orElse(TrelloEnvironment.API_KEY),
-                                usage.apiTokenEnvironment().orElse(TrelloEnvironment.API_TOKEN))
-                        .withTrelloCredentialSources(usage.apiKeySource(), usage.apiTokenSource()))
+                                usage.apiKey().name(), usage.apiToken().name())
+                        .withTrelloCredentialSources(
+                                usage.apiKey().source(), usage.apiToken().source()))
                 .orElse(exception);
     }
 
     private void validateWorkerCredentials(WorkerCredentialUsage usage) {
-        boolean hasApiKey = usage.apiKeySource() != TrelloBoardSetupException.TrelloCredentialSource.MISSING;
-        boolean hasApiToken = usage.apiTokenSource() != TrelloBoardSetupException.TrelloCredentialSource.MISSING;
+        boolean hasApiKey = usage.apiKey().source() != TrelloCredentialSource.MISSING;
+        boolean hasApiToken = usage.apiToken().source() != TrelloCredentialSource.MISSING;
         if (!hasApiKey && !hasApiToken) {
             throw missingWorkerCredentialException(
                     "setup_worker_missing_trello_credentials", "Missing Trello credentials for worker start.", usage);
@@ -605,34 +592,21 @@ final class LocalWorkerManager {
             throw missingWorkerCredentialException(
                     "setup_worker_missing_api_token", "Missing Trello API token for worker start.", usage);
         }
-        rejectReferenceLookingDotenvCredential(
-                usage.envPath(), usage.apiKeyEnvironment(), usage.apiKeySource(), usage.apiKeyDotenvValue());
-        rejectReferenceLookingDotenvCredential(
-                usage.envPath(), usage.apiTokenEnvironment(), usage.apiTokenSource(), usage.apiTokenDotenvValue());
+        requireLiteralCredentialFileValue(usage.envPath(), usage.apiKey());
+        requireLiteralCredentialFileValue(usage.envPath(), usage.apiToken());
     }
 
-    /// The worker uses a dotenv value only when the shell environment does not provide the
-    /// variable, so only a value the dotenv file actually contributes is checked against the
-    /// shared credential-file contract in [TrelloCredentialStore#dotenvCredential]. The
-    /// check runs before the Trello credential preflight and before the worker launch, so a
-    /// reference-looking value fails locally instead of reaching Trello as a literal credential.
-    private static void rejectReferenceLookingDotenvCredential(
-            Path envPath,
-            Optional<String> environmentName,
-            TrelloBoardSetupException.TrelloCredentialSource source,
-            Optional<String> dotenvValue) {
-        if (source != TrelloBoardSetupException.TrelloCredentialSource.DOTENV_FILE) {
-            return;
+    /// Runs the shared credential-file check after the missing-credential checks and before the
+    /// Trello credential preflight and the worker launch, so a reference-looking value fails
+    /// locally instead of reaching Trello as a literal credential.
+    private static void requireLiteralCredentialFileValue(Path envPath, CredentialValue credential) {
+        try {
+            credential.requireLiteralCredentialFileValue();
+        } catch (TrelloBoardSetupException e) {
+            // withDotenvPath copies code, message, and cause into a context-enriched copy,
+            // and the fresh trace still names this rejection site.
+            throw e.withDotenvPath(envPath); // NOPMD - PreserveStackTrace: enriched copy
         }
-        environmentName.ifPresent(name -> {
-            try {
-                TrelloCredentialStore.dotenvCredential(name, dotenvValue.orElse(null));
-            } catch (TrelloBoardSetupException e) {
-                // withDotenvPath copies code, message, and cause into a context-enriched copy,
-                // and the fresh trace still names this rejection site.
-                throw e.withDotenvPath(envPath); // NOPMD - PreserveStackTrace: enriched copy
-            }
-        });
     }
 
     private static TrelloBoardSetupException missingWorkerCredentialException(
@@ -640,8 +614,7 @@ final class LocalWorkerManager {
         return new TrelloBoardSetupException(code, message)
                 .withDotenvPath(usage.envPath())
                 .withTrelloCredentialEnvironmentNames(
-                        usage.apiKeyEnvironment().orElse(TrelloEnvironment.API_KEY),
-                        usage.apiTokenEnvironment().orElse(TrelloEnvironment.API_TOKEN));
+                        usage.apiKey().name(), usage.apiToken().name());
     }
 
     private static Optional<String> requiredEnvironmentCredential(
@@ -736,14 +709,7 @@ final class LocalWorkerManager {
         }
     }
 
-    private record WorkerCredentialUsage(
-            Path envPath,
-            Optional<String> apiKeyEnvironment,
-            Optional<String> apiTokenEnvironment,
-            TrelloBoardSetupException.TrelloCredentialSource apiKeySource,
-            TrelloBoardSetupException.TrelloCredentialSource apiTokenSource,
-            Optional<String> apiKeyDotenvValue,
-            Optional<String> apiTokenDotenvValue) {}
+    private record WorkerCredentialUsage(Path envPath, CredentialValue apiKey, CredentialValue apiToken) {}
 
     private record StartupLogSnapshot(long size, long modifiedMillis) {
         private static StartupLogSnapshot snapshot(Path path) {

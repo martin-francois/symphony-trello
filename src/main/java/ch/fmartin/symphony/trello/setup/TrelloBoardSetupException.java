@@ -120,11 +120,4 @@ public class TrelloBoardSetupException extends RuntimeException {
                 apiKeySource,
                 apiTokenSource);
     }
-
-    enum TrelloCredentialSource {
-        SHELL_ENVIRONMENT,
-        DOTENV_FILE,
-        WORKFLOW_CONFIG,
-        MISSING
-    }
 }
