@@ -6,6 +6,11 @@ import org.jspecify.annotations.Nullable;
 /// Parses workflow environment-variable references. Supports the generated `$NAME` form and
 /// the common shell-style `${NAME}` form. Values with other shapes, including shell default
 /// expansions such as `${NAME:-fallback}`, are not references and stay literal text.
+///
+/// This classifies a whole value and never interpolates inside text. Used as they are, the
+/// SmallRye Config and Commons Text `StringSubstitutor` interpolators change which values count as
+/// references, and wrapping them to keep this contract needs more code than this class. See
+/// docs/adr/0099-keep-the-environment-reference-classifier.md.
 public final class EnvironmentReferences {
     private EnvironmentReferences() {}
 
