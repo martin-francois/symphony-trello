@@ -1431,6 +1431,12 @@ read-only scheduler deployment, set `trello_tools.allow_writes: false` and move 
 If the API token is read-only or Trello rejects writes, Codex still runs, but handoff tool calls fail
 and the failures are visible in the Codex session events.
 
+Each tool checks its arguments against the JSON Schema it advertises to Codex before it contacts
+Trello. A call that leaves out a required argument, sends the wrong type or `null`, sends an empty or
+whitespace-only string, uses a value the schema does not list, or adds an argument the schema does
+not declare fails with `invalid_tool_arguments`. The message names the argument and the broken rule
+but not the value Codex sent.
+
 To move cards to workflow lists with different names, set `trello_tools.allowed_move_list_names` to
 those allowed list names and update the pickup and final handoff instructions in
 [`WORKFLOW.md`](#workflow-contract) to match them. Do not tell Codex to leave blocked cards in an

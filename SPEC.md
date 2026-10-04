@@ -2127,6 +2127,15 @@ Optional client-side tool extension:
 - Implementations MAY ship only a subset of typed high-level tools when generated or documented
   workflows need only that subset. Unsupported tool names still MUST return a structured tool
   failure instead of stalling the session.
+- Java implementation extension: each typed tool validates the call's `arguments` against the same
+  JSON Schema object it advertises as `inputSchema`, after the tool, policy-enablement, and
+  current-card checks and before any per-tool policy check or tracker request. Arguments that are
+  not a JSON object, omit a required property, use a wrong JSON type or `null`, use an empty string,
+  use a value outside an `enum`, or contain a property the schema does not declare MUST fail with
+  error code `invalid_tool_arguments`. A required string that contains only whitespace fails with
+  the same code. The message names the argument location, the violated rule, and, for an
+  undeclared property, that property's name. It MUST NOT contain the supplied value. Trello policy, control-character rules, attachment URL policy, move
+  allowlists, and managed-workpad rules remain implementation checks after schema validation.
 - A Trello workpad tool, when implemented, SHOULD maintain one current-card comment whose text starts
   with `## Codex Workpad`, update that comment instead of creating duplicate progress comments, and
   fail visibly if the existing workpad cannot be updated.
@@ -3636,6 +3645,9 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
   - destructive operations are disallowed by default unless explicitly configured
 - If the standardized `trello_rest` tool is implemented but disabled for the session, it is withheld
   or direct invocation fails with a structured disabled-tool error
+- Java implementation extension: every typed Trello tool rejects arguments outside its advertised
+  `inputSchema`, including undeclared properties, with `invalid_tool_arguments` before any per-tool
+  policy check or tracker request, and the failure does not contain the supplied value
 
 ### 17.6 Observability
 

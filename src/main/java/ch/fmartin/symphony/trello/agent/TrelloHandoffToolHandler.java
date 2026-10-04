@@ -15,6 +15,12 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.base.Splitter;
 import com.google.common.collect.Maps;
+import com.networknt.schema.Schema;
+import com.networknt.schema.SchemaRegistry;
+import com.networknt.schema.SchemaRegistryConfig;
+import com.networknt.schema.SpecificationVersion;
+import com.networknt.schema.path.PathType;
+import com.networknt.schema.regex.JDKRegularExpressionFactory;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.net.URI;
 import java.util.ArrayList;
@@ -55,6 +61,19 @@ public class TrelloHandoffToolHandler {
     private static final int MAX_ACTION_ID_LENGTH = 128;
     private static final Splitter LOGICAL_LINE_BREAK = Splitter.onPattern("\\r\\n|[\\n\\r\\x{0085}\\x{2028}\\x{2029}]");
     private static final int WORKPAD_LOCK_STRIPES = 64;
+    // Fail-fast reports the first violation, which is all one tool result needs. English messages
+    // and JSON paths keep results independent of the host locale. The tool schemas hold no $ref or
+    // $schema, so nothing is loaded remotely, and the JDK regex engine needs no optional engine.
+    private static final SchemaRegistry ARGUMENT_SCHEMAS = SchemaRegistry.withDefaultDialect(
+            SpecificationVersion.DRAFT_2020_12,
+            registry -> registry.schemaRegistryConfig(SchemaRegistryConfig.builder()
+                    .failFast(true)
+                    .locale(Locale.ENGLISH)
+                    .pathType(PathType.JSON_PATH)
+                    .regularExpressionFactory(JDKRegularExpressionFactory.getInstance())
+                    .build()));
+    private static final String INPUT_SCHEMA = "inputSchema";
+    private static final String REQUIRED_ARGUMENTS = "required";
     private static final Map<String, ToolDefinition> TOOLS = toolDefinitions();
 
     private final ObjectMapper json;
@@ -95,12 +114,13 @@ public class TrelloHandoffToolHandler {
 
     private static void addToolSpecs(ArrayNode tools, String... names) {
         for (String name : names) {
-            // A copy keeps a caller from editing the shared definition.
+            // A copy keeps a caller from editing the schema node the validator was compiled from.
             tools.add(TOOLS.get(name).spec().deepCopy());
         }
     }
 
-    /// Builds each advertised tool once, so every session and the dispatcher share one definition.
+    /// Builds each advertised tool once. The `inputSchema` node Codex receives is the node compiled
+    /// for runtime validation, so the advertised and enforced argument shapes cannot drift apart.
     private static Map<String, ToolDefinition> toolDefinitions() {
         List<ToolDefinition> definitions = List.of(
                 toolDefinition(
@@ -169,7 +189,8 @@ public class TrelloHandoffToolHandler {
 
     public ObjectNode handle(EffectiveConfig config, Card card, JsonNode params) {
         String tool = params.path("tool").asText("");
-        if (!TOOLS.containsKey(tool)) {
+        ToolDefinition definition = TOOLS.get(tool);
+        if (definition == null) {
             return failure("unsupported_tool", "Unsupported Trello handoff tool: " + tool);
         }
         if (!config.trelloTools().enabled()) {
@@ -181,16 +202,20 @@ public class TrelloHandoffToolHandler {
         if (blank(card.id())) {
             return failure("missing_card_context", "The active worker session has no Trello card id.");
         }
+        JsonNode arguments = params.path("arguments");
+        String violation = definition.argumentViolation(arguments);
+        if (violation != null) {
+            return failure("invalid_tool_arguments", "Invalid " + tool + " arguments: " + violation);
+        }
 
         try {
             return switch (tool) {
-                case ADD_COMMENT -> addComment(config, card, params.path("arguments"));
-                case UPSERT_WORKPAD -> upsertWorkpad(config, card, params.path("arguments"));
-                case UPDATE_BLOCKER_RECHECK_STATUS ->
-                    updateBlockerRecheckStatus(config, card, params.path("arguments"));
-                case MOVE_CURRENT_CARD -> moveCurrentCard(config, card, params.path("arguments"));
-                case UPSERT_CHECKLIST_ITEM -> upsertChecklistItem(config, card, params.path("arguments"));
-                case ADD_URL_ATTACHMENT -> addUrlAttachment(config, card, params.path("arguments"));
+                case ADD_COMMENT -> addComment(config, card, arguments);
+                case UPSERT_WORKPAD -> upsertWorkpad(config, card, arguments);
+                case UPDATE_BLOCKER_RECHECK_STATUS -> updateBlockerRecheckStatus(config, card, arguments);
+                case MOVE_CURRENT_CARD -> moveCurrentCard(config, card, arguments);
+                case UPSERT_CHECKLIST_ITEM -> upsertChecklistItem(config, card, arguments);
+                case ADD_URL_ATTACHMENT -> addUrlAttachment(config, card, arguments);
                 default -> throw new IllegalStateException("unreachable");
             };
         } catch (TrelloException e) {
@@ -204,7 +229,8 @@ public class TrelloHandoffToolHandler {
         if (!config.trelloTools().allowComments()) {
             return failure("trello_comments_disabled", "Trello comments are disabled by trello_tools.allow_comments.");
         }
-        String text = TrelloMarkdown.escapeLeadingHashtags(requiredText(arguments, "text"));
+        String text =
+                TrelloMarkdown.escapeLeadingHashtags(arguments.path("text").textValue());
         trello.addComment(config, card.id(), text);
         return success(Map.of("status", "comment_added", "card_id", card.id()));
     }
@@ -214,14 +240,18 @@ public class TrelloHandoffToolHandler {
             return failure(
                     "trello_checklists_disabled", "Trello checklists are disabled by trello_tools.allow_checklists.");
         }
-        String checklistName = requiredText(arguments, "checklist_name").strip();
-        String itemName = requiredText(arguments, "item_name").strip();
+        String checklistName = arguments.path("checklist_name").textValue().strip();
+        String itemName = arguments.path("item_name").textValue().strip();
         if (unsafeToolLine(checklistName) || unsafeToolLine(itemName)) {
             return failure("invalid_checklist_item", "Checklist names and item names must be one non-control line.");
         }
 
         TrelloClient.ChecklistItemWrite result = trello.upsertChecklistItem(
-                config, card.id(), checklistName, itemName, requiredBoolean(arguments, "complete"));
+                config,
+                card.id(),
+                checklistName,
+                itemName,
+                arguments.path("complete").booleanValue());
         return success(Map.of(
                 "status",
                 "checklist_item_" + result.status(),
@@ -239,10 +269,7 @@ public class TrelloHandoffToolHandler {
         if (!config.trelloTools().allowComments()) {
             return failure("trello_comments_disabled", "Trello comments are disabled by trello_tools.allow_comments.");
         }
-        String requestedStatus = requiredText(arguments, "status");
-        if (!RECHECK_STATUS_CHECKING.equals(requestedStatus) && !RECHECK_STATUS_RESUMED.equals(requestedStatus)) {
-            return failure("invalid_blocker_recheck_status", "Blocker recheck status must be checking or resumed.");
-        }
+        String requestedStatus = arguments.path("status").textValue();
 
         CardLookupResult lookup = trello.fetchCardStateForWorkpad(config, card.id());
         if (lookup instanceof CardLookupResult.Missing) {
@@ -620,13 +647,13 @@ public class TrelloHandoffToolHandler {
                     "trello_url_attachments_disabled",
                     "Trello URL attachments are disabled by trello_tools.allow_url_attachments.");
         }
-        String url = requiredText(arguments, "url").strip();
+        String url = arguments.path("url").textValue().strip();
         if (!validAttachmentUrl(url)) {
             return failure(
                     "invalid_url_attachment",
                     "Provide an http or https URL without credentials, query string, or fragment.");
         }
-        String name = text(arguments, "name");
+        String name = arguments.path("name").textValue();
         if (name != null) {
             name = name.strip();
         }
@@ -643,7 +670,7 @@ public class TrelloHandoffToolHandler {
         if (!config.trelloTools().allowComments()) {
             return failure("trello_comments_disabled", "Trello comments are disabled by trello_tools.allow_comments.");
         }
-        String proposedText = requiredText(arguments, "text");
+        String proposedText = arguments.path("text").textValue();
         if (CodexUsageWorkpadSection.hasMalformedManagedSectionMarkers(proposedText)) {
             return failure(
                     "trello_workpad_managed_section_malformed",
@@ -1006,8 +1033,8 @@ public class TrelloHandoffToolHandler {
                     "trello_move_allowlist_required",
                     "Trello card moves require trello_tools.allowed_move_list_ids or allowed_move_list_names.");
         }
-        String listId = text(arguments, "list_id");
-        String listName = text(arguments, "list_name");
+        String listId = arguments.path("list_id").textValue();
+        String listName = arguments.path("list_name").textValue();
         if (blank(listId) && blank(listName)) {
             return failure("missing_destination_list", "Provide list_name or list_id for the destination list.");
         }
@@ -1109,15 +1136,15 @@ public class TrelloHandoffToolHandler {
                 .put("namespace", "symphony")
                 .put("name", name)
                 .put("description", description);
-        spec.set("inputSchema", inputSchema);
-        return new ToolDefinition(name, spec);
+        spec.set(INPUT_SCHEMA, inputSchema);
+        return new ToolDefinition(name, spec, inputSchema, ARGUMENT_SCHEMAS.getSchema(inputSchema));
     }
 
     private static ObjectNode objectSchema(Map<String, ObjectNode> properties, List<String> required) {
         ObjectNode schema =
                 JsonNodeFactory.instance.objectNode().put("type", "object").put("additionalProperties", false);
         schema.putObject("properties").setAll(properties);
-        required.forEach(schema.putArray("required")::add);
+        required.forEach(schema.putArray(REQUIRED_ARGUMENTS)::add);
         return schema;
     }
 
@@ -1178,28 +1205,6 @@ public class TrelloHandoffToolHandler {
         return node;
     }
 
-    private static String requiredText(JsonNode node, String key) {
-        String value = text(node, key);
-        checkArgument(!blank(value), "Missing required argument: %s", key);
-        return value;
-    }
-
-    private static boolean requiredBoolean(JsonNode node, String key) {
-        JsonNode value = node.path(key);
-        checkArgument(!value.isMissingNode() && !value.isNull(), "Missing required argument: %s", key);
-        checkArgument(value.isBoolean(), "Argument %s must be a boolean", key);
-        return value.asBoolean();
-    }
-
-    private static String text(JsonNode node, String key) {
-        JsonNode value = node.path(key);
-        if (value.isMissingNode() || value.isNull()) {
-            return null;
-        }
-        checkArgument(value.isTextual(), "Argument %s must be a string", key);
-        return value.textValue();
-    }
-
     private static boolean validAttachmentUrl(String value) {
         if (unsafeToolLine(value)) {
             return false;
@@ -1236,7 +1241,26 @@ public class TrelloHandoffToolHandler {
 
     private record BoardListMatch(TrelloClient.BoardList list, String error) {}
 
-    private record ToolDefinition(String name, ObjectNode spec) {}
+    private record ToolDefinition(String name, ObjectNode spec, ObjectNode inputSchema, Schema argumentSchema) {
+        /// Returns the first violation, or null. Library messages name the argument location, an
+        /// undeclared property's name, and the broken rule, never the supplied value. A required
+        /// string that is only whitespace is no usable Trello text either; the schema cannot say so
+        /// portably because `\S` differs between ECMA-262 and JDK regular expressions.
+        @Nullable
+        String argumentViolation(JsonNode arguments) {
+            var errors = argumentSchema.validate(arguments);
+            if (!errors.isEmpty()) {
+                return errors.getFirst().toString();
+            }
+            for (JsonNode required : inputSchema.path(REQUIRED_ARGUMENTS)) {
+                JsonNode value = arguments.path(required.textValue());
+                if (value.isTextual() && blank(value.textValue())) {
+                    return "$." + required.textValue() + ": must not be only whitespace";
+                }
+            }
+            return null;
+        }
+    }
 
     private record BlockerRecheckComments(Card.@Nullable Comment blocker, List<Card.Comment> managedComments) {
         private BlockerRecheckComments {
