@@ -840,6 +840,47 @@ public class TrelloClient implements TrackerClient {
                 .toList();
     }
 
+    /// Open cards on the configured board with their list names, without per-card comments or
+    /// checklists. Used by board-wide interactive sessions that search the whole board.
+    public List<Card> fetchOpenBoardCards(EffectiveConfig config) {
+        BoardContext context = boardContext(config);
+        return getList(
+                        config,
+                        "boards/" + encodeSegment(context.boardId()) + "/cards/open",
+                        Map.of("fields", CARD_FIELDS, "filter", "open"))
+                .stream()
+                .map(payload -> normalize(payload, context, config))
+                .flatMap(Optional::stream)
+                .toList();
+    }
+
+    /// One card, looked up by id or short link, with its recent comments, checklists, and URL
+    /// attachments. The result keeps the card's own board id so callers can reject cards that do
+    /// not belong to the configured board.
+    public CardLookupResult fetchCardDetails(EffectiveConfig config, String cardIdOrShortLink) {
+        return fetchCardStatesByIds(config, List.of(cardIdOrShortLink), true).get(cardIdOrShortLink);
+    }
+
+    public Map<String, Object> createCard(EffectiveConfig config, String listId, String name, String description) {
+        // Keep the list first so request logs mirror the documented Trello card creation call.
+        Map<String, String> query = new LinkedHashMap<>();
+        query.put("idList", listId);
+        query.put("name", name);
+        if (!blank(description)) {
+            query.put("desc", description);
+        }
+        return postMap(config, "cards", query);
+    }
+
+    public Map<String, Object> updateCard(EffectiveConfig config, String cardId, Map<String, String> fields) {
+        return putMap(config, "cards/" + encodeSegment(cardId), fields);
+    }
+
+    /// Archives a card. Trello keeps archived cards and can restore them, so this is not a delete.
+    public Map<String, Object> archiveCard(EffectiveConfig config, String cardId) {
+        return putMap(config, "cards/" + encodeSegment(cardId), Map.of("closed", "true"));
+    }
+
     public Map<String, Object> addComment(EffectiveConfig config, String cardId, String text) {
         return postMap(config, "cards/" + encodeSegment(cardId) + "/actions/comments", Map.of("text", text));
     }

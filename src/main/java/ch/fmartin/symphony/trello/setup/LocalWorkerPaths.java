@@ -65,6 +65,11 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
         return configDir.resolve(".env");
     }
 
+    /// The board's own credential file, or this install's default one when the row has none.
+    Path envPath(ConnectedBoard board) {
+        return board.envPath() == null ? defaultEnvPath() : board.envPath();
+    }
+
     private static Optional<Path> propertyAppHome() {
         String value = System.getProperty(APP_HOME_PROPERTY);
         return value == null || value.isBlank() ? Optional.empty() : Optional.of(Path.of(value));

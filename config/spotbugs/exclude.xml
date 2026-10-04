@@ -3,13 +3,13 @@
   <!-- CDI/service constructors intentionally retain injected collaborators. They are application components, not caller-owned mutable value objects. -->
   <Match>
     <Bug pattern="EI_EXPOSE_REP2"/>
-    <Class name="~ch\.fmartin\.symphony\.trello\.(SymphonyLifecycle|agent\.(CodexAppServerClient|LocalAgentRunner|TrelloHandoffToolHandler)|orchestrator\.SymphonyOrchestrator|tracker\.TrelloClient)"/>
+    <Class name="~ch\.fmartin\.symphony\.trello\.(SymphonyLifecycle|agent\.(CodexAppServerClient|LocalAgentRunner|TrelloHandoffToolHandler)|boardsession\.BoardSessionTools|orchestrator\.SymphonyOrchestrator|tracker\.TrelloClient)"/>
   </Match>
 
   <!-- Running external commands is the product boundary for Codex, hooks, worker startup, and setup probes. Command lists are constructed explicitly and reviewed at call sites. -->
   <Match>
     <Bug pattern="COMMAND_INJECTION"/>
-    <Class name="~ch\.fmartin\.symphony\.trello\.(agent\.CodexAppServerClient|setup\.(CodexModelDefaultsResolver|ProcessCommandRunner|ProcessHandleManagedProcessPlatform|WindowsManagedProcessPlatform)|workspace\.HookRunner)"/>
+    <Class name="~ch\.fmartin\.symphony\.trello\.(agent\.CodexAppServerClient|setup\.(CodexBoardSession|CodexModelDefaultsResolver|ProcessCommandRunner|ProcessHandleManagedProcessPlatform|WindowsManagedProcessPlatform)|workspace\.HookRunner)"/>
   </Match>
 
   <!-- These methods generate stable HTML, Markdown, YAML, or prompt text that must use LF separators independent of the host platform. -->
