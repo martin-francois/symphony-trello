@@ -18,9 +18,13 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 final class ConfigResolverTest {
     private static final String NUL_IN_REPOSITORY_PATH = "\u0000";
+    private static final String PARENT_VARIABLE = "SYMPHONY_PARENT";
+    private static final String PARENT_REFERENCE = "$" + PARENT_VARIABLE;
+    private static final String BRACED_PARENT_REFERENCE = "${" + PARENT_VARIABLE + "}";
 
     @TempDir
     Path tempDir;
@@ -200,26 +204,63 @@ final class ConfigResolverTest {
         assertThat(config.repository().selectedDefaultSource()).isEqualTo(EffectiveConfig.DefaultSource.PATH);
     }
 
-    @Test
-    void resolvesEnvironmentBackedRepositoryDefaultPathWithSuffix() throws Exception {
+    @MethodSource("environmentPrefixedPaths")
+    @ParameterizedTest
+    void expandsEnvironmentReferenceAtStartOfEveryPathSetting(String configuredPath, String expectedRelativePath)
+            throws Exception {
         // given
-        Path repositoryParent = tempDir.resolve("repositories");
+        Path parent = tempDir.resolve("parent");
         Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.repository-path-env-suffix.md",
+                "WORKFLOW.path-env-prefix.md",
                 """
+                workspace:
+                  root: %1$s
                 repository:
-                  default_path: $SYMPHONY_REPOSITORY_PARENT/project
-                """);
-        var resolver = new ConfigResolver(name -> "SYMPHONY_REPOSITORY_PARENT".equals(name)
-                ? Optional.of(repositoryParent.toString())
-                : Optional.empty());
+                  default_path: %1$s
+                codex:
+                  additional_writable_roots:
+                    - %1$s
+                """
+                        .formatted(configuredPath));
+        var resolver = parentResolver(parent);
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
 
         // then
-        assertThat(config.repository().defaultPath())
-                .isEqualTo(repositoryParent.resolve("project").toAbsolutePath().normalize());
+        Path expected = parent.resolve(expectedRelativePath).toAbsolutePath().normalize();
+        assertThat(config)
+                .as("[workspace.root, repository.default_path, codex.additional_writable_roots]")
+                .extracting(
+                        resolved -> resolved.workspace().root(),
+                        resolved -> resolved.repository().defaultPath(),
+                        resolved -> resolved.codex().additionalWritableRoots())
+                .containsExactly(expected, expected, List.of(expected));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {PARENT_REFERENCE, BRACED_PARENT_REFERENCE})
+    void expandsEnvironmentReferenceAtStartOfSecretFilePath(String parentReference) throws Exception {
+        // given
+        Path secrets = Files.createDirectories(tempDir.resolve("secrets"));
+        Files.writeString(secrets.resolve("api-key"), "file-key\n");
+        Path workflow = writeWorkflow(
+                "WORKFLOW.secret-file-env-prefix.md",
+                """
+                tracker:
+                  kind: trello
+                  api_key: file:%s/api-key
+                  api_token: literal-token
+                  board_id: board-1
+                """
+                        .formatted(parentReference));
+        var resolver = parentResolver(secrets);
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.tracker().apiKey()).isEqualTo("file-key");
     }
 
     @Test
@@ -398,6 +439,17 @@ final class ConfigResolverTest {
                         "tracker:\n  max_api_retries: not-a-number",
                         "max_api_retries must be a whole number"),
                 Arguments.of("overflowing-float-port", "server:\n  port: 1e400", "server.port must be a whole number"));
+    }
+
+    private static Stream<Arguments> environmentPrefixedPaths() {
+        return Stream.of(PARENT_REFERENCE, BRACED_PARENT_REFERENCE)
+                .flatMap(reference ->
+                        Stream.of(Arguments.of(reference, ""), Arguments.of(reference + "/workspaces", "workspaces")));
+    }
+
+    private static ConfigResolver parentResolver(Path parent) {
+        return new ConfigResolver(
+                name -> PARENT_VARIABLE.equals(name) ? Optional.of(parent.toString()) : Optional.empty());
     }
 
     private static Stream<Arguments> missingOrBlankUrlWithValidPath() {
