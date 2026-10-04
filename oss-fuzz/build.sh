@@ -37,9 +37,10 @@ mkdir -p "$OUT/test-classes/ch/fmartin/symphony/trello"
 cp -R "$fuzzer_class_dir" "$OUT/test-classes/ch/fmartin/symphony/trello/"
 
 shopt -s nullglob
-fuzzer_helper_classes=("$fuzzer_helper_dir"/TrelloReferenceFuzzInvariants*.class)
+# Standalone fuzzers share their checks with the JUnit fuzz tests through tracker *FuzzInvariants helpers.
+fuzzer_helper_classes=("$fuzzer_helper_dir"/*FuzzInvariants*.class)
 if ((${#fuzzer_helper_classes[@]} == 0)); then
-  echo "No TrelloReferenceFuzzInvariants helper classes found under $fuzzer_helper_dir" >&2
+  echo "No *FuzzInvariants helper classes found under $fuzzer_helper_dir" >&2
   exit 1
 fi
 mkdir -p "$OUT/test-classes/ch/fmartin/symphony/trello/tracker"

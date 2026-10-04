@@ -5,13 +5,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.PathMatcher;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 
@@ -22,6 +27,18 @@ final class ContinuousFuzzingWorkflowTest {
     private static final Path OSS_FUZZ_BUILD = of("oss-fuzz/build.sh");
     private static final String UNSAFE_WORKAROUND_EXPIRY_CHECK =
             ".clusterfuzzlite/check-unsafe-memory-access-workaround";
+    private static final Path STANDALONE_FUZZERS = of("src/test/java/ch/fmartin/symphony/trello/fuzz");
+    private static final Path TARGET_SELECTOR = of("scripts/select-clusterfuzzlite-target");
+    private static final Path COVERAGE_VERIFIER = of("scripts/verify-clusterfuzzlite-coverage");
+    private static final Path TEST_SOURCES = of("src/test/java");
+    private static final Pattern PROJECT_IMPORT =
+            Pattern.compile("^import (?:static )?(ch\\.fmartin\\.symphony\\.trello\\.[\\w.]+);$", Pattern.MULTILINE);
+    // oss-fuzz/build.sh names each helper directory, for example fuzzer_helper_dir=target/test-classes/...
+    private static final Pattern TEST_HELPER_DIRECTORY =
+            Pattern.compile("^(\\w+_helper_dir)=target/test-classes/(\\S+)$", Pattern.MULTILINE);
+    // ...and collects the classes it copies from there, for example ("$fuzzer_helper_dir"/*Helper*.class).
+    private static final Pattern COPIED_TEST_HELPERS =
+            Pattern.compile("\\(\"\\$(\\w+_helper_dir)\"/([^\")]+\\.class)\\)");
     private static final String CLUSTERFUZZLITE_COMMIT = "884713a6c30a92e5e8544c39945cd7cb630abcd1";
     private static final Pattern UNPINNED_ACTION = Pattern.compile("uses: [^\\s]+@(?![0-9a-f]{40}(?:\\s|$))");
     private static final Pattern PINNED_TEMURIN_IMAGE =
@@ -44,14 +61,11 @@ final class ContinuousFuzzingWorkflowTest {
                         "fail-fast: false",
                         "max-parallel: 1",
                         "group: continuous-fuzzing-batch-main-${{ matrix.target }}",
-                        "RepositorySourceFuzzer",
-                        "TrelloCardReferenceParserFuzzer",
-                        "TrelloChecklistClassifierFuzzer",
-                        "WorkflowLoaderFuzzer",
-                        "scripts/select-clusterfuzzlite-target \"${{ matrix.target }}\"",
+                        "CFL_FULL_SHARE_SECONDS: ${{ inputs.fuzz_seconds }}",
+                        "scripts/select-clusterfuzzlite-target \"$CFL_TARGET\" \"$CFL_FULL_SHARE_SECONDS\"",
                         "google/clusterfuzzlite/actions/build_fuzzers@" + CLUSTERFUZZLITE_COMMIT,
                         "google/clusterfuzzlite/actions/run_fuzzers@" + CLUSTERFUZZLITE_COMMIT,
-                        "fuzz-seconds: ${{ inputs.fuzz_seconds }}",
+                        "fuzz-seconds: ${{ steps.target.outputs.fuzz_seconds }}",
                         "language: jvm",
                         "minimize-crashes: true",
                         "mode: batch",
@@ -363,18 +377,60 @@ final class ContinuousFuzzingWorkflowTest {
     }
 
     @Test
+    void everyStandaloneFuzzerIsWiredIntoBatchPruneAndCoverage() throws IOException {
+        // given
+        Set<String> fuzzerNames = standaloneFuzzerNames();
+        String source = workflowSource();
+
+        // when
+        int matrixStart = source.indexOf("      matrix:");
+        String batchMatrix = source.substring(matrixStart, source.indexOf("    concurrency:", matrixStart));
+        String prunedCorpora = source.substring(
+                source.indexOf("          scripts/verify-clusterfuzzlite-storage corpus"),
+                source.indexOf("  coverage:"));
+
+        // then
+        assertThat(fuzzerNames)
+                .as("a standalone fuzzer missing from one place is never fuzzed, pruned, or coverage-checked")
+                .allSatisfy(fuzzer -> {
+                    assertThat(batchMatrix).as("batch matrix").contains("- " + fuzzer + "\n");
+                    assertThat(prunedCorpora).as("pruned corpus verification").contains(" " + fuzzer + "\n");
+                    assertThat(TARGET_SELECTOR)
+                            .as("target budget")
+                            .content(StandardCharsets.UTF_8)
+                            .contains("[" + fuzzer + "]=");
+                    assertThat(COVERAGE_VERIFIER)
+                            .as("coverage contract")
+                            .content(StandardCharsets.UTF_8)
+                            .contains("\"" + fuzzer + "|");
+                });
+    }
+
+    @Test
+    void ossFuzzBuildCopiesEveryTestHelperAStandaloneFuzzerImports() throws IOException {
+        // given
+        Set<String> importedTestHelpers = testClassesImportedByStandaloneFuzzers();
+        String ossFuzzBuild = Files.readString(OSS_FUZZ_BUILD);
+
+        // when
+        List<PathMatcher> copiedTestHelpers = copiedTestHelperGlobs(ossFuzzBuild);
+
+        // then
+        assertThat(importedTestHelpers)
+                .as("a test helper missing from the OSS-Fuzz class path fails its fuzzer when the class loads")
+                .isNotEmpty()
+                .allSatisfy(helper -> assertThat(copiedTestHelpers)
+                        .as("oss-fuzz/build.sh copies %s", helper)
+                        .anyMatch(glob -> glob.matches(of(helper))));
+    }
+
+    @Test
     void everyStandaloneFuzzerHasASeedCorpus() throws IOException {
         // given
         Path corpora = of("oss-fuzz/corpora");
-        Path fuzzers = of("src/test/java/ch/fmartin/symphony/trello/fuzz");
 
         // when
-        Set<String> fuzzerNames = new TreeSet<>();
-        try (var sources = Files.newDirectoryStream(fuzzers, "*Fuzzer.java")) {
-            for (Path source : sources) {
-                fuzzerNames.add(source.getFileName().toString().replace(".java", ""));
-            }
-        }
+        Set<String> fuzzerNames = standaloneFuzzerNames();
         Map<String, Integer> seedCounts = new TreeMap<>();
         try (var directories = Files.newDirectoryStream(corpora)) {
             for (Path directory : directories) {
@@ -394,6 +450,56 @@ final class ContinuousFuzzingWorkflowTest {
         assertThat(seedCounts.keySet())
                 .as("every standalone fuzzer has exactly one corpus directory")
                 .containsExactlyElementsOf(fuzzerNames);
+    }
+
+    private static Set<String> standaloneFuzzerNames() throws IOException {
+        Set<String> fuzzerNames = new TreeSet<>();
+        try (var sources = Files.newDirectoryStream(STANDALONE_FUZZERS, "*Fuzzer.java")) {
+            for (Path source : sources) {
+                fuzzerNames.add(source.getFileName().toString().replace(".java", ""));
+            }
+        }
+        return fuzzerNames;
+    }
+
+    // Class files under target/test-classes, for example ch/fmartin/symphony/trello/tracker/X.class.
+    private static Set<String> testClassesImportedByStandaloneFuzzers() throws IOException {
+        Set<String> testClasses = new TreeSet<>();
+        try (var sources = Files.newDirectoryStream(STANDALONE_FUZZERS, "*Fuzzer.java")) {
+            for (Path source : sources) {
+                Matcher projectImport = PROJECT_IMPORT.matcher(Files.readString(source));
+                while (projectImport.find()) {
+                    testClassOf(projectImport.group(1)).ifPresent(testClasses::add);
+                }
+            }
+        }
+        return testClasses;
+    }
+
+    // A static import names a member, so drop trailing segments until a test source matches.
+    private static Optional<String> testClassOf(String importedName) {
+        for (String name = importedName; name.contains("."); name = name.substring(0, name.lastIndexOf('.'))) {
+            String classPath = name.replace('.', '/');
+            if (Files.isRegularFile(TEST_SOURCES.resolve(classPath + ".java"))) {
+                return Optional.of(classPath + ".class");
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static List<PathMatcher> copiedTestHelperGlobs(String ossFuzzBuild) {
+        Map<String, String> helperDirectories = new TreeMap<>();
+        Matcher directory = TEST_HELPER_DIRECTORY.matcher(ossFuzzBuild);
+        while (directory.find()) {
+            helperDirectories.put(directory.group(1), directory.group(2));
+        }
+        List<PathMatcher> globs = new ArrayList<>();
+        Matcher copy = COPIED_TEST_HELPERS.matcher(ossFuzzBuild);
+        while (copy.find()) {
+            globs.add(FileSystems.getDefault()
+                    .getPathMatcher("glob:" + helperDirectories.get(copy.group(1)) + "/" + copy.group(2)));
+        }
+        return globs;
     }
 
     private static String workflowSource() throws IOException {
