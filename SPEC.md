@@ -2714,6 +2714,14 @@ card has not left an active list. In the Java implementation, that status commen
 with `## Symphony Prerequisite Status` and ends with the `Written by Symphony` attribution footer
 from Section 10.5.
 
+Java implementation extension: the candidate poll reads a Trello card's comments for the managed
+prerequisite status only when the card is active and in a blocker-enforced state. A card without
+waiting prerequisites or prerequisite problems is read only when it has comments. The poll remembers
+the result in memory within the card's canonical tracker endpoint and resolved board namespace.
+It reads the comments again when that namespace, the card's comment count, or its last-activity time
+changes, or after Symphony wrote the status itself. Removing prerequisite
+checklist items still updates a remembered waiting status to resolved on the next poll.
+
 ### 11.5 Error Handling Contract
 
 RECOMMENDED error categories:
@@ -4019,6 +4027,10 @@ that a second formatting pass leaves the source unchanged.
 - Blockers default to empty when no Trello-specific blocker convention is implemented
 - If blocker derivation is implemented, blockers are normalized according to the documented
   convention
+- If the managed prerequisite status is implemented, repeated candidate polls clear a stale waiting
+  status after prerequisite items are removed, do not read comments for it on inactive or terminal
+  cards or on commentless cards without prerequisite state, and do not repeat the comment read while
+  a card's comment activity is unchanged
 - Card state refresh by ID returns minimal normalized cards or typed per-card missing results
 - Card state refresh by ID reports a card whose payload fails normalization as a typed per-card
   failure and still returns the other requested cards

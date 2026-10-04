@@ -306,6 +306,12 @@ Trello asked Symphony to slow down.` The `polling` object in `/api/v1/state` has
 and the logs show each change as `polling outcome=slowed_down` or `polling outcome=recovering`. If
 the slowdown shows up often, raise `polling.interval_ms` instead of relying on it.
 
+The first poll after a start reads comments for active candidate cards with comments in a Trello
+list named in `tracker.blocker_enforced_states`, to check their prerequisite status. Later polls
+reuse that lookup until the card's comment count or last activity changes, its tracker target
+changes, or Symphony invalidates the lookup before a status write. More requests right after a
+restart are expected.
+
 ## Common States
 
 - A card in `Ready for Codex` is queued.
