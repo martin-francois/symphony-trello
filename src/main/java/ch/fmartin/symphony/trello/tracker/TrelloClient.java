@@ -823,10 +823,7 @@ public class TrelloClient implements TrackerClient {
                 config, "boards/" + encodeSegment(config.tracker().boardId()), Map.of("fields", "id,name,closed"));
         String boardId = requiredString(board, "id", "trello_unknown_payload");
         boolean boardClosed = bool(board.get("closed"));
-        Map<String, BoardList> listMap = fetchBoardLists(config.withResolvedBoardId(boardId)).stream()
-                .collect(Collectors.toMap(
-                        BoardList::id, Function.identity(), (left, right) -> left, LinkedHashMap::new));
-        return new BoardContext(boardId, boardClosed, listMap);
+        return BoardContext.of(boardId, boardClosed, fetchBoardLists(config.withResolvedBoardId(boardId)));
     }
 
     public List<BoardList> fetchBoardLists(EffectiveConfig config) {
@@ -1010,7 +1007,9 @@ public class TrelloClient implements TrackerClient {
                 .findAny();
     }
 
-    private Optional<Card> normalize(Map<String, Object> payload, BoardContext context, EffectiveConfig config) {
+    /// Maps one Trello card payload, as Jackson parses it from a card response, to a [Card]. It sends no
+    /// request, so a test in this package can map a parsed payload without HTTP.
+    static Optional<Card> normalize(Map<String, Object> payload, BoardContext context, EffectiveConfig config) {
         String id = string(payload.get("id"));
         String name = string(payload.get("name"));
         String boardId = string(payload.get("idBoard"));
@@ -1507,7 +1506,16 @@ public class TrelloClient implements TrackerClient {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
-    private record BoardContext(String boardId, boolean boardClosed, Map<String, BoardList> lists) {}
+    record BoardContext(String boardId, boolean boardClosed, Map<String, BoardList> lists) {
+        static BoardContext of(String boardId, boolean boardClosed, List<BoardList> lists) {
+            // Board order sets the order of archived-list requests and so of terminal cards. Keep the first
+            // entry if a response repeats a list id.
+            Map<String, BoardList> listsById = lists.stream()
+                    .collect(Collectors.toMap(
+                            BoardList::id, Function.identity(), (left, right) -> left, LinkedHashMap::new));
+            return new BoardContext(boardId, boardClosed, listsById);
+        }
+    }
 
     public record BoardList(String id, String name, boolean closed) {}
 
