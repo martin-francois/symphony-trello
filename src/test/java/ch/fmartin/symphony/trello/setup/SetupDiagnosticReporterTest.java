@@ -2743,6 +2743,78 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void rendersPathWithSpaceBelowCommandOptionDirectoryWithoutLeavingItsTailVisible() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("option-space-config");
+        Path workspaceRoot = tempDir.resolve("option-space-workspaces");
+        Path stateHome = tempDir.resolve("option-space-state");
+        Path existingChild = configDir.resolve("shared repos/output.txt");
+        Files.createDirectories(configDir.resolve("private"));
+        Files.createDirectories(existingChild.getParent());
+        Files.writeString(existingChild, "");
+        Files.createDirectories(workspaceRoot);
+        Files.createDirectories(stateHome);
+        Files.writeString(
+                stateHome.resolve("option-space.log"),
+                """
+                cloned into %s/private client/repo
+                kept in %s/client (old) [archived] notes/repo
+                wrote %s outcome=written
+                unstructured %s trailing text
+                """
+                        .formatted(configDir, configDir, existingChild, existingChild));
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
+
+        // then
+        byte[] key = diagnosticsKey(configDir);
+        assertThat(report)
+                .contains(
+                        "cloned into " + pathToken(key, configDir.resolve("private client/repo")),
+                        "kept in " + pathToken(key, configDir.resolve("client (old) [archived] notes/repo")),
+                        "wrote " + pathToken(key, existingChild) + " outcome=written",
+                        "unstructured " + pathToken(key, Path.of(existingChild + " trailing text")))
+                .doesNotContain("client/repo", "notes/repo", "repos/output.txt", "trailing text", tempDir.toString());
+    }
+
+    @Test
+    void privateContextLookupResolvesSpacedToolPathBelowCommandOptionDirectory() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("option-tool-config");
+        Path stateHome = tempDir.resolve("option-tool-state");
+        Path toolDirectory = fakeToolDirectory(tempDir, "docker");
+        Path privatePath = configDir.resolve("private client [archived]/repo");
+        Files.createDirectories(configDir.resolve("private"));
+        var commands = new FakeCommandRunner()
+                .returns(
+                        0,
+                        "using " + privatePath + " outcome=ready",
+                        toolDirectory.resolve("docker").toString(),
+                        "--version");
+        Map<String, String> environment = Map.of("PATH", toolDirectory.toString());
+
+        // when
+        String report = renderDeepDiagnostics(new SetupDiagnosticReporter(environment, commands), configDir, stateHome);
+        String emittedToken = firstMatch(report, Pattern.compile("using (<path:[0-9a-f]{12}>)"));
+        String lookup = lookupDiagnostics(
+                new SetupDiagnosticReporter(environment, commands),
+                configDir,
+                stateHome,
+                Optional.empty(),
+                emittedToken);
+
+        // then
+        assertThat(report)
+                .contains("using " + pathToken(diagnosticsKey(configDir), privatePath) + " outcome=ready")
+                .doesNotContain("client [archived]/repo", configDir.toString());
+        assertThat(lookup)
+                .contains(
+                        "- **lookup_status:** found", "| tool | docker | " + emittedToken + " | " + privatePath + " |");
+    }
+
+    @Test
     void preservesCommonInstallerRefWordsInRecentLogs() throws Exception {
         // given
         Path configDir = tempDir.resolve("common-ref-config");

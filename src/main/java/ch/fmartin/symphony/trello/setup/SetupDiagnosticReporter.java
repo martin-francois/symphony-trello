@@ -98,6 +98,8 @@ final class SetupDiagnosticReporter {
     private static final Pattern TRELLO_CARD_FIELD = Pattern.compile(
             "(?i)([\"']?(?:card[_-]?id|card[_-]?identifier|cardId|cardIdentifier)[\"']?\\s*[:=]\\s*[\"']?)([^\\s,\"'}]+)");
     private static final Pattern YAML_PARSER_CONTINUATION_LINE = Pattern.compile("(?m)^(\\s*\\.\\.\\.\\s+)[^\\r\\n]+$");
+    /// Child paths contain spaces and brackets; both private-root sources use the same delimiters.
+    private static final String CHILD_PATH_SUFFIX = "(?:[/\\\\][^\\r\\n\"'`<>|]*)?";
     private static final Pattern PATH_ASSIGNMENT = Pattern.compile(
             "(?i)(\\b(?:path|file|directory|dir|workspace|config|state|home)=)(?![\"'`]?<path:[0-9a-f]{12}>[\"'`]?(?=$|\\s+(?=[\\p{L}_][\\p{L}\\p{N}_]*=)))([^\\r\\n]+)");
     private static final Pattern QUOTED_POSIX_PATH = Pattern.compile("([\"'`])(/[^\"'`\\r\\n]+)\\1");
@@ -2512,16 +2514,14 @@ final class SetupDiagnosticReporter {
     /// Replaces a sensitive value. An absolute-path value extends over a following path remainder
     /// and always renders as a path token, so one private path renders as one stable token that
     /// matches the path tokens elsewhere in the report instead of a value token or adjacent value
-    /// and path tokens.
+    /// and path tokens. A child path uses the same end rule as a known root, so spaces and brackets
+    /// do not expose its remainder.
     private String replaceSensitiveValue(String text, String sensitiveValue, BiConsumer<String, String> pathTokens) {
         if (!looksLikeAbsolutePath(sensitiveValue)) {
             return text.replace(sensitiveValue, "<value:" + hash(sensitiveValue) + ">");
         }
-        Pattern sensitivePath =
-                Pattern.compile(Pattern.quote(sensitiveValue) + PATH_ROOT_BOUNDARY + "(?:[/\\\\][^\\s\"'`|)\\]]*)?");
-        return sensitivePath
-                .matcher(text)
-                .replaceAll(match -> Matcher.quoteReplacement(pathToken(match.group(), pathTokens)));
+        Pattern sensitivePath = Pattern.compile(Pattern.quote(sensitiveValue) + PATH_ROOT_BOUNDARY + CHILD_PATH_SUFFIX);
+        return redactPathMatches(text, sensitivePath, pathTokens);
     }
 
     private static boolean looksLikeAbsolutePath(String value) {
@@ -2918,7 +2918,7 @@ final class SetupDiagnosticReporter {
         for (String path : sensitivePaths()) {
             if (!path.isBlank()) {
                 Pattern pathWithChildren =
-                        Pattern.compile(Pattern.quote(path) + PATH_ROOT_BOUNDARY + "(?:[/\\\\][^\\r\\n\"'`<>|]*)?");
+                        Pattern.compile(Pattern.quote(path) + PATH_ROOT_BOUNDARY + CHILD_PATH_SUFFIX);
                 redacted = redactPathMatches(redacted, pathWithChildren, pathTokens);
             }
         }
