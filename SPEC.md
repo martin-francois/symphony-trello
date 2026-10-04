@@ -3595,6 +3595,10 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
   schedules work after shutdown
 - If a snapshot API is implemented, it returns running rows, retry rows, token totals, and rate
   limits
+- If a snapshot API is implemented, snapshot and card-detail reads do not wait for an in-flight
+  orchestrator operation and show the state as of one point of that operation; a change an
+  operation makes to running rows, retry rows, the dispatch pause, or the effective config is
+  visible before that operation's next tracker, workspace, or worker call
 - If a snapshot API is implemented, timeout/unavailable cases are surfaced
 
 ### 17.5 Coding-Agent App-Server Client
