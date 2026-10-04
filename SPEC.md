@@ -830,6 +830,23 @@ Fields:
   - Default: `false`
   - Lets an operator assert that the configured Trello token has write permission when startup cannot
     verify write capability without side effects.
+- `follow_up_cards` (object, OPTIONAL Java implementation extension)
+  - Configures `trello_create_follow_up_card` from Section 11.7. All fields are optional.
+  - `enabled` (boolean): default `false`. When false, the tool MUST NOT be advertised and a direct
+    invocation MUST fail with a structured disabled-tool error.
+  - `list_name` (string): default `Inbox`. Destination list for new follow-up cards. MUST NOT be
+    blank.
+  - `list_id` (string): default unset. When set, it selects the destination list instead of
+    `list_name`.
+  - `label` (string): default `follow-up`. Label added to every follow-up card. An empty string
+    disables it.
+  - `relationship_labels` (map `relationship -> label name`): default `{}`. Keys MUST be one of
+    `related`, `follow_up_waits_for_current`, or `current_waits_for_follow_up`; other keys are a
+    configuration error. A blank value adds no label.
+  - `move_current_card_to_blocked` (boolean): default `false`. Moves the current card to
+    `tracker.blocked_state` when it must wait for the new follow-up card.
+  - `max_cards_per_source_card` (positive integer): default `3`.
+  - `max_cards_per_hour` (positive integer): default `10`.
 
 Move operations MUST be disabled unless at least one move allowlist is configured or the
 implementation documents an equivalent local policy with the same board-local restriction.
@@ -1375,6 +1392,14 @@ implemented.
 - `trello_tools.allow_url_attachments`: boolean, default true when writes are enabled
 - `trello_tools.allow_destructive_operations`: boolean, default `false`
 - `trello_tools.assume_write_scope`: boolean, default `false`
+- `trello_tools.follow_up_cards.enabled`: boolean, default `false`
+- `trello_tools.follow_up_cards.list_name`: Trello list name, default `Inbox`
+- `trello_tools.follow_up_cards.list_id`: Trello list ID, default unset
+- `trello_tools.follow_up_cards.label`: label name, default `follow-up`; empty disables it
+- `trello_tools.follow_up_cards.relationship_labels`: map, default `{}`
+- `trello_tools.follow_up_cards.move_current_card_to_blocked`: boolean, default `false`
+- `trello_tools.follow_up_cards.max_cards_per_source_card`: positive integer, default `3`
+- `trello_tools.follow_up_cards.max_cards_per_hour`: positive integer, default `10`
 
 ## 7. Orchestration State Machine
 
@@ -2123,7 +2148,8 @@ Optional client-side tool extension:
 - For write-capable operations, implementations SHOULD prefer typed high-level tools, for example
   `trello_add_comment`, `trello_upsert_workpad`, `trello_move_current_card`,
   `trello_update_blocker_recheck_status`, `trello_upsert_checklist_item`, and
-  `trello_add_url_attachment`.
+  `trello_add_url_attachment`. The Java implementation also ships the opt-in
+  `trello_create_follow_up_card` tool defined in Section 11.7.
 - Implementations MAY ship only a subset of typed high-level tools when generated or documented
   workflows need only that subset. Unsupported tool names still MUST return a structured tool
   failure instead of stalling the session.
@@ -2504,7 +2530,9 @@ Trello Workflow Conformance:
   links, or other Trello fields, the implementation MUST provide a scoped tool or documented
   equivalent for those writes before claiming conformance for that workflow.
 - Write tools MUST be scoped to the configured board and current card unless an explicit allowlist
-  permits broader access.
+  permits broader access. Java implementation extension: `trello_tools.follow_up_cards.enabled` is
+  the explicit opt-in that lets `trello_create_follow_up_card` create one new card, and board labels
+  for it, on the configured board as defined in Section 11.7.
 - Read-only deployments MAY disable write-capable operations, but then the implementation MUST
   document that the agent cannot perform Trello handoff transitions itself.
 - When Trello Workflow Conformance is enabled and write-capable operations are enabled, startup
@@ -2512,6 +2540,105 @@ Trello Workflow Conformance:
   operator-visible warning if capability verification is not possible without side effects.
 - Implementations MAY verify write capability using a documented non-destructive check, a dedicated
   test card, or `trello_tools.assume_write_scope=true`.
+
+### 11.7 Trello Follow-Up Card Extension (OPTIONAL)
+
+This Java workflow extension lets the coding agent record useful work it finds outside the current
+Trello card's acceptance criteria as a separate actionable Trello card, without expanding the
+current card's scope. It works on Trello Free Workspaces with normal cards, lists, labels, URL
+attachments, checklists, comments, and descriptions. It MUST NOT depend on Trello Custom Fields,
+Advanced Checklists, mirror cards, or another paid Trello feature.
+
+Tool contract:
+
+- The tool name is `trello_create_follow_up_card`. It is advertised only when `trello_tools.enabled`,
+  `trello_tools.allow_writes`, `trello_tools.allow_url_attachments`, and
+  `trello_tools.follow_up_cards.enabled` are all true.
+- Arguments are `title` (one line, at most 200 characters), `description` (Markdown, at most 4000
+  characters), `acceptance_criteria` (1 to 10 one-line strings, each at most 300 characters), and
+  the optional `relationship`, default `related`. The input schema and the tool MUST reject other
+  arguments, so the agent cannot name a card ID, list ID, board, or label.
+- Invalid arguments, including control characters, a multi-line title, or a description line that
+  starts with `_Managed by Symphony`, MUST fail with a structured error before any Trello request.
+- The source card is the current worker session's card. All reads and writes MUST stay on the
+  configured board.
+- The tool requires `trello_tools.allow_url_attachments`. The two prerequisite relationships also
+  require `trello_tools.allow_checklists`. A disabled permission MUST fail before any Trello request.
+- The destination is the open list selected by `follow_up_cards.list_id` or, when unset,
+  `follow_up_cards.list_name`. A missing list, a name that matches more than one open list, or a
+  list that is active or terminal under the tracker configuration MUST fail before any write. This
+  keeps follow-up cards out of dispatch until a person moves them.
+- The tool MUST NOT delete or archive cards, comments, labels, attachments, or checklists.
+
+Created card:
+
+- The new card is placed at the bottom of the destination list. Its name is `title`. Its
+  description is the agent description, an `## Acceptance criteria` section with one bullet per
+  criterion, and the Symphony metadata footer as the last paragraph. Agent-supplied Markdown follows
+  the GitHub issue-number escaping rule from Section 11.6.
+- The card gets the `follow_up_cards.label` label unless that value is empty, plus the configured
+  relationship label for its relationship. A missing label is created on the configured board.
+  Labels are visual helpers only; implementations MUST NOT read relationship meaning from labels.
+- The new card gets a URL attachment to the source card, and the source card gets a URL attachment
+  to the new card, so each card shows a visible link to the other.
+
+Relationship convention:
+
+- The metadata footer is the accepted explicit convention for follow-up relationships. It is the
+  exact last paragraph of the follow-up card description:
+  `_Managed by Symphony · Follow-up of [the source card](https://trello.com/c/<shortLink>) · <relationship text>_`.
+- `<relationship text>` is exactly one of `Related work, no required order` (`related`),
+  `This card must wait for the source card to finish first` (`follow_up_waits_for_current`), or
+  `The source card must wait for this card to finish first` (`current_waits_for_follow_up`).
+- Implementations MUST assign follow-up relationship meaning only from that exact footer. A Trello
+  attachment, a pasted card URL, a manually linked card, a label, or footer text that differs in
+  any character is a plain reference. Implementations MUST NOT assume that Trello card links are
+  bidirectional.
+- The two ordered relationships are true prerequisites and MUST use the Trello prerequisite
+  checklist convention from Section 11.4 with a checklist named `Must finish first`:
+  `follow_up_waits_for_current` adds the source card URL as an exact item on the follow-up card, and
+  `current_waits_for_follow_up` adds the follow-up card URL as an exact item on the source card. A
+  related follow-up gets no prerequisite checklist.
+- An existing `Must finish first` item keeps its checkmark, because prerequisite sync owns it. If
+  the card that receives the item already has a checklist with that name that holds anything other
+  than exact card references, or several checklists with that name, the request MUST fail before
+  that card changes instead of making the checklist ambiguous.
+- When `follow_up_cards.move_current_card_to_blocked` is true, a `current_waits_for_follow_up`
+  request also adds a source-card comment whose first line starts with `Blocked by` and links the
+  follow-up card, then moves the source card to `tracker.blocked_state`. Both happen only in the
+  call that adds the prerequisite item to the source card, so a retry neither repeats the comment
+  nor moves a card that a person has since unblocked. The move MUST pass the same
+  board-local move allowlist as `trello_move_current_card`, and the comment needs
+  `trello_tools.allow_comments`. A missing `tracker.blocked_state`, a disallowed move, or disabled
+  comments MUST fail before any write.
+
+Bounds and idempotency:
+
+- Before creating a card, the tool reads the open cards on the configured board and keeps those
+  whose description ends with a metadata footer naming the source card. A card among them whose
+  name equals `title` after `normalize_state_name` from Section 4.2 is the existing follow-up. The
+  tool MUST NOT create a second card for it. It returns that card and adds any missing label, link,
+  or prerequisite item, with the blocked handoff above when it adds the source card's item.
+- An existing follow-up with a different relationship MUST fail with a structured conflict error
+  without changing either card.
+- A new card MUST fail with a structured error when the source card already has
+  `max_cards_per_source_card` unfinished follow-up cards, or when the process created
+  `max_cards_per_hour` follow-up cards in the last hour. A follow-up is unfinished while it is in
+  an open, non-terminal list. The hourly window MAY be process-local.
+- Concurrent calls in one process MUST NOT both create a card for the same source card and title.
+- Creating labels, cards, links, prerequisite items, comments, and moves is a sequence of separate
+  Trello requests. A failure part way MUST be reported as a tool failure. A later call with the same
+  title completes the remaining writes through the existing-follow-up path above.
+
+Result and workflow use:
+
+- A successful result reports `status` (`follow_up_card_created` or `follow_up_card_exists`), the
+  follow-up card ID and URL, the destination list name, the relationship,
+  `current_card_must_wait`, `current_card_moved_to`, and a one-line `workpad_note`.
+- Generated workflows SHOULD tell the agent to file out-of-scope work with this tool when it is
+  available, to copy `workpad_note` into the workpad, and to stop and hand off as blocked when the
+  current card must wait. When the tool is unavailable or fails, the agent SHOULD list the follow-up
+  work in the workpad or final response instead of expanding the card's scope.
 
 ## 12. Prompt Construction and Context Assembly
 
@@ -3682,6 +3809,10 @@ These checks are REQUIRED when the workflow expects the agent to perform Trello 
 - URL attachment writes are allowed only when `trello_tools.allow_url_attachments` permits them, and
   the attached URL is an HTTP(S) URL without credentials, query string, or fragment.
 - Destructive operations are disabled unless explicitly configured.
+- When the Section 11.7 follow-up card extension ships, the tool is withheld unless
+  `trello_tools.follow_up_cards.enabled` is true, creates cards only in an allowed non-active list on
+  the configured board, records relationships only through the exact metadata footer and Section
+  11.4 prerequisite checklists, and enforces its duplicate, per-card, and hourly bounds.
 - Startup validates write capability or emits an operator-visible warning when verification is not
   possible without side effects.
 
@@ -3786,6 +3917,8 @@ Required when the workflow expects the agent to perform Trello handoff transitio
 - `trello_rest` client-side tool extension exposes scoped Trello REST access through the app-server
   session using configured Symphony auth.
 - `trello_rest` client-side tool extension disallows destructive operations by default.
+- The opt-in follow-up card tool follows Section 11.7 when `trello_tools.follow_up_cards.enabled` is
+  true.
 - TODO: Persist retry queue and session metadata across process restarts.
 - TODO: Make observability settings configurable in workflow front matter without prescribing UI
   implementation details.

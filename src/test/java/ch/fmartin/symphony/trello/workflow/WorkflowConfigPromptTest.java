@@ -7,6 +7,7 @@ import ch.fmartin.symphony.trello.TestCards;
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.config.ConfigException;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
+import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.StateNames;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import java.nio.file.Files;
@@ -155,7 +156,13 @@ final class WorkflowConfigPromptTest {
                         .toList());
         assertThat(config.codex().turnSandboxPolicy())
                 .isEqualTo(Map.of("type", "workspaceWrite", "networkAccess", true));
+        assertThat(config.trelloTools().followUpCards())
+                .as("the example shows the follow-up block but keeps the card-creating tool opt-in")
+                .extracting(EffectiveConfig.FollowUpCardsConfig::enabled, EffectiveConfig.FollowUpCardsConfig::listName)
+                .containsExactly(false, "Inbox");
         assertThat(definition.promptTemplate())
+                .containsIgnoringWhitespaces(
+                        "When the `trello_create_follow_up_card` tool is available, call it once per distinct out-of-scope item")
                 .containsIgnoringWhitespaces(
                         "A Symphony-managed recheck status ends with the exact `Managed by Symphony` footer and a link to the qualifying blocker comment on the current card.")
                 .containsIgnoringWhitespaces(

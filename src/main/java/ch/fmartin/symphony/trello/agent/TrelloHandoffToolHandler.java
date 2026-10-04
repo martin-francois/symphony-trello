@@ -3,8 +3,10 @@ package ch.fmartin.symphony.trello.agent;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
+import ch.fmartin.symphony.trello.config.FollowUpRelationship;
 import ch.fmartin.symphony.trello.config.StateNames;
 import ch.fmartin.symphony.trello.domain.Card;
+import ch.fmartin.symphony.trello.time.ApplicationClock;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import ch.fmartin.symphony.trello.tracker.TrelloException;
@@ -20,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.PrimitiveIterator;
 import java.util.stream.Collectors;
 import org.jboss.logging.Logger;
@@ -35,6 +38,7 @@ public class TrelloHandoffToolHandler {
     static final String MOVE_CURRENT_CARD = "trello_move_current_card";
     static final String UPSERT_CHECKLIST_ITEM = "trello_upsert_checklist_item";
     static final String ADD_URL_ATTACHMENT = "trello_add_url_attachment";
+    static final String CREATE_FOLLOW_UP_CARD = TrelloFollowUpCardTool.NAME;
     static final String WORKPAD_MARKER = TrelloClient.WORKPAD_MARKER;
     static final String DUPLICATE_WORKPADS_NOTE_PREFIX = "> Duplicate Codex workpads found: ";
     static final String DUPLICATE_BLOCKER_RECHECK_NOTE_PREFIX = "> Duplicate Symphony blocker recheck statuses found: ";
@@ -43,7 +47,7 @@ public class TrelloHandoffToolHandler {
     static final String BLOCKER_RECHECK_FOOTER_PREFIX =
             "_Managed by Symphony · [View the comment explaining why this card was previously blocked](";
     static final String BLOCKER_RECHECK_FOOTER_SUFFIX = ")_";
-    private static final String TRELLO_CARD_URL_PREFIX = "https://trello.com/c/";
+    static final String TRELLO_CARD_URL_PREFIX = "https://trello.com/c/";
     private static final String TRELLO_COMMENT_FRAGMENT = "#comment-";
     private static final String RECHECK_STATUS_CHECKING = "checking";
     private static final String RECHECK_STATUS_RESUMED = "resumed";
@@ -57,10 +61,12 @@ public class TrelloHandoffToolHandler {
     private final ObjectMapper json;
     private final TrelloClient trello;
     private final Object[] workpadLocks = new Object[WORKPAD_LOCK_STRIPES];
+    private final TrelloFollowUpCardTool followUpCards;
 
     public TrelloHandoffToolHandler(ObjectMapper json, TrelloClient trello) {
         this.json = json;
         this.trello = trello;
+        this.followUpCards = new TrelloFollowUpCardTool(trello, ApplicationClock.systemUtc());
         for (int index = 0; index < workpadLocks.length; index++) {
             workpadLocks[index] = new Object();
         }
@@ -132,6 +138,31 @@ public class TrelloHandoffToolHandler {
                                     stringSchema("Optional attachment display name.")),
                             List.of("url"))));
         }
+        if (TrelloFollowUpCardTool.advertised(config)) {
+            tools.add(tool(
+                    CREATE_FOLLOW_UP_CARD,
+                    "Create one separate Trello card for useful work that is outside the current card's acceptance criteria, link it to the current card both ways, and record their relationship. Symphony chooses the board, list, and labels; do not include a card id or list id.",
+                    objectSchema(
+                            Map.of(
+                                    "title",
+                                    boundedStringSchema(
+                                            "One-line title for the follow-up card.",
+                                            TrelloFollowUpCardTool.MAX_TITLE_CODE_POINTS),
+                                    "description",
+                                    boundedStringSchema(
+                                            "Markdown context a maintainer needs later: what was found, where, and why it is out of scope for the current card.",
+                                            TrelloFollowUpCardTool.MAX_DESCRIPTION_CODE_POINTS),
+                                    "acceptance_criteria",
+                                    stringArraySchema(
+                                            "One-line acceptance criteria that make the follow-up card actionable.",
+                                            TrelloFollowUpCardTool.MAX_ACCEPTANCE_CRITERION_CODE_POINTS,
+                                            TrelloFollowUpCardTool.MAX_ACCEPTANCE_CRITERIA),
+                                    "relationship",
+                                    enumStringSchema(
+                                            "related when no order is required, follow_up_waits_for_current when the follow-up can start only after the current card is done, or current_waits_for_follow_up when the current card cannot finish until the follow-up is done. Defaults to related.",
+                                            FollowUpRelationship.toolValues())),
+                            List.of("title", "description", "acceptance_criteria"))));
+        }
         if (moveAllowlistConfigured(config)) {
             tools.add(tool(
                     MOVE_CURRENT_CARD,
@@ -154,7 +185,8 @@ public class TrelloHandoffToolHandler {
                 && !UPDATE_BLOCKER_RECHECK_STATUS.equals(tool)
                 && !MOVE_CURRENT_CARD.equals(tool)
                 && !UPSERT_CHECKLIST_ITEM.equals(tool)
-                && !ADD_URL_ATTACHMENT.equals(tool)) {
+                && !ADD_URL_ATTACHMENT.equals(tool)
+                && !CREATE_FOLLOW_UP_CARD.equals(tool)) {
             return failure("unsupported_tool", "Unsupported Trello handoff tool: " + tool);
         }
         if (!config.trelloTools().enabled()) {
@@ -176,6 +208,7 @@ public class TrelloHandoffToolHandler {
                 case MOVE_CURRENT_CARD -> moveCurrentCard(config, card, params.path("arguments"));
                 case UPSERT_CHECKLIST_ITEM -> upsertChecklistItem(config, card, params.path("arguments"));
                 case ADD_URL_ATTACHMENT -> addUrlAttachment(config, card, params.path("arguments"));
+                case CREATE_FOLLOW_UP_CARD -> createFollowUpCard(config, card, params.path("arguments"));
                 default -> throw new IllegalStateException("unreachable");
             };
         } catch (TrelloException e) {
@@ -597,6 +630,19 @@ public class TrelloHandoffToolHandler {
             }
         }
         return true;
+    }
+
+    private ObjectNode createFollowUpCard(EffectiveConfig config, Card card, JsonNode arguments) {
+        TrelloFollowUpCardTool.Outcome outcome = followUpCards.handle(
+                config,
+                card,
+                arguments,
+                listName -> Optional.ofNullable(
+                        resolveAllowedTarget(config, null, listName).list()));
+        return switch (outcome) {
+            case TrelloFollowUpCardTool.Outcome.Success success -> success(success.payload());
+            case TrelloFollowUpCardTool.Outcome.Failure failure -> failure(failure.code(), failure.message());
+        };
     }
 
     private ObjectNode addUrlAttachment(EffectiveConfig config, Card card, JsonNode arguments) {
@@ -1103,6 +1149,18 @@ public class TrelloHandoffToolHandler {
 
     private ObjectNode stringSchema(String description) {
         return object("type", "string", "minLength", 1, "description", description);
+    }
+
+    private ObjectNode boundedStringSchema(String description, int maxLength) {
+        ObjectNode schema = stringSchema(description);
+        schema.put("maxLength", maxLength);
+        return schema;
+    }
+
+    private ObjectNode stringArraySchema(String description, int maxItemLength, int maxItems) {
+        ObjectNode schema = object("type", "array", "minItems", 1, "maxItems", maxItems, "description", description);
+        schema.set("items", boundedStringSchema("One acceptance criterion.", maxItemLength));
+        return schema;
     }
 
     private ObjectNode enumStringSchema(String description, List<String> values) {
