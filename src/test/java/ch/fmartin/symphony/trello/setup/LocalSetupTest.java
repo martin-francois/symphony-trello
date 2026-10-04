@@ -34,6 +34,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -2710,13 +2711,234 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // then
         result.assertSuccess()
                 .stdoutContains(
-                        "Model [gpt-5.6-terra]: ",
+                        "  2. gpt-5.6-terra (recommended)",
+                        "Model [2]: ",
                         "  high (default, current) - Terra recommendation from Codex",
                         "Reasoning effort [high]: ");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("model: \"gpt-5.6-terra\"", "reasoning_effort: \"high\"")
                 .doesNotContain("reasoning_effort: \"medium\"");
+    }
+
+    @MethodSource("catalogPickerScenarios")
+    @ParameterizedTest
+    void guidedSetupWritesTheModelChosenInTheCatalogPicker(CatalogPickerScenario scenario) throws Exception {
+        // given
+        LocalSetup resolverBackedSetup = setupWithCodexAppServer(pickerCatalogAppServer());
+        Path workflow = tempDir.resolve("WORKFLOW.catalog-picker.md");
+        Path env = tempDir.resolve(".env.catalog-picker");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                resolverBackedSetup,
+                "\n" + scenario.modelAnswers() + "\n\n\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Catalog Picker Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThatTranscript(result.stdout())
+                .containsSectionsInOrder(
+                        "Codex model",
+                        "Models listed by the installed Codex CLI:",
+                        "  1. gpt-5.6-terra (recommended)",
+                        "  2. gpt-6.1-sol - Sol Preview",
+                        "  3. Other model ID",
+                        "Model [1]: ",
+                        scenario.reasoningPrompt());
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("model: \"" + scenario.model() + "\"");
+        scenario.reasoningEffort()
+                .ifPresentOrElse(
+                        reasoningEffort -> assertThat(workflow)
+                                .content(StandardCharsets.UTF_8)
+                                .contains("reasoning_effort: \"" + reasoningEffort + "\""),
+                        () -> assertThat(workflow)
+                                .content(StandardCharsets.UTF_8)
+                                .doesNotContain("reasoning_effort:"));
+    }
+
+    @MethodSource("catalogPickerBypassScenarios")
+    @ParameterizedTest
+    void setupSkipsTheCatalogPickerForExplicitModelsAndNonInteractiveRuns(CatalogPickerBypassScenario scenario)
+            throws Exception {
+        // given
+        LocalSetup resolverBackedSetup = setupWithCodexAppServer(pickerCatalogAppServer());
+        Path workflow = tempDir.resolve("WORKFLOW.catalog-picker-bypass.md");
+        Path env = tempDir.resolve(".env.catalog-picker-bypass");
+        List<String> args = new ArrayList<>(scenario.modeArgs());
+        args.addAll(List.of(
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Catalog Picker Bypass Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github"));
+
+        // when
+        SetupRunResult result = runSetupWithInput(resolverBackedSetup, scenario.input(), args.toArray(String[]::new));
+
+        // then
+        result.assertSuccess().stdoutDoesNotContain("Models listed by", "Model [");
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("model: \"" + scenario.model() + "\"");
+    }
+
+    @Test
+    void guidedSetupPreselectsTheExistingWorkflowModelInTheCatalogPicker() throws Exception {
+        // given
+        LocalSetup resolverBackedSetup = setupWithCodexAppServer(pickerCatalogAppServer());
+        Path workflow = tempDir.resolve("WORKFLOW.catalog-picker-existing.md");
+        Path env = tempDir.resolve(".env.catalog-picker-existing");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                codex:
+                  command: codex app-server
+                  model: "gpt-6.1-sol"
+                  reasoning_effort: "ultra"
+                ---
+                Old body
+                """);
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                resolverBackedSetup,
+                "\n\n\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Catalog Picker Existing Queue",
+                "--workflow",
+                workflow.toString(),
+                "--force",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThatTranscript(result.stdout())
+                .containsSectionsInOrder(
+                        "  1. gpt-5.6-terra (recommended)",
+                        "  2. gpt-6.1-sol (current) - Sol Preview",
+                        "Model [2]: ",
+                        "Reasoning effort [ultra]: ");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-6.1-sol\"", "reasoning_effort: \"ultra\"")
+                .doesNotContain("gpt-5.6-terra");
+    }
+
+    @Test
+    void guidedSetupKeepsTheFreeTextModelPromptWhenTheCatalogListsNoModels() throws Exception {
+        // given
+        LocalSetup resolverBackedSetup =
+                setupWithCodexAppServer(CodexModelAppServerFixture.createPaginated(tempDir, "[]", "[]"));
+        Path workflow = tempDir.resolve("WORKFLOW.empty-catalog-free-text.md");
+        Path env = tempDir.resolve(".env.empty-catalog-free-text");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                resolverBackedSetup,
+                "\ngpt-7-preview\n\n\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Empty Catalog Free Text Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess().stdoutContains("Model [gpt-5.5]: ").stdoutDoesNotContain("Models listed by");
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("model: \"gpt-7-preview\"");
+    }
+
+    private Path pickerCatalogAppServer() throws IOException {
+        return CodexModelAppServerFixture.createPaginated(
+                tempDir,
+                """
+                [{"model":"gpt-5.6-terra","displayName":"GPT-5.6-Terra","defaultReasoningEffort":"medium","supportedReasoningEfforts":[{"reasoningEffort":"medium","description":"Balanced Terra"},{"reasoningEffort":"high","description":"Deep Terra"}]}]
+                """,
+                """
+                [{"model":"gpt-6.1-sol","displayName":"Sol Preview","isDefault":true,"defaultReasoningEffort":"low","supportedReasoningEfforts":[{"reasoningEffort":"low","description":"Fast Sol"},{"reasoningEffort":"ultra","description":"Delegating Sol"}]}]
+                """);
+    }
+
+    private static Stream<CatalogPickerScenario> catalogPickerScenarios() {
+        return Stream.of(
+                new CatalogPickerScenario("Enter keeps the recommendation", "", "gpt-5.6-terra", Optional.of("medium")),
+                new CatalogPickerScenario(
+                        "a number selects a listed model and its recommendation",
+                        "2",
+                        "gpt-6.1-sol",
+                        Optional.of("low")),
+                new CatalogPickerScenario(
+                        "the other-model choice accepts an unlisted model",
+                        "3\ngpt-7-preview",
+                        "gpt-7-preview",
+                        Optional.empty()));
+    }
+
+    private static Stream<CatalogPickerBypassScenario> catalogPickerBypassScenarios() {
+        return Stream.of(
+                new CatalogPickerBypassScenario(
+                        "explicit --codex-model",
+                        List.of("--codex-model", "gpt-7-preview"),
+                        "\n\n\n\nn\nn\n",
+                        "gpt-7-preview"),
+                new CatalogPickerBypassScenario(
+                        "non-interactive setup", List.of("--non-interactive"), "", "gpt-5.6-terra"));
+    }
+
+    private record CatalogPickerBypassScenario(String name, List<String> modeArgs, String input, String model) {
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    private record CatalogPickerScenario(
+            String name, String modelAnswers, String model, Optional<String> reasoningEffort) {
+        String reasoningPrompt() {
+            return reasoningEffort
+                    .map(effort -> "Reasoning effort [" + effort + "]: ")
+                    .orElse("Reasoning effort: ");
+        }
+
+        @Override
+        public String toString() {
+            return name;
+        }
     }
 
     @Test
@@ -2755,7 +2977,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // then
         result.assertSuccess()
                 .stdoutContains(
-                        "Model [gpt-5.6-terra]: ",
+                        "  2. gpt-5.6-terra (recommended)",
+                        "Model [2]: ",
                         "  low - Faster Terra reasoning",
                         "  high - Deeper Terra reasoning",
                         "Reasoning effort: ")

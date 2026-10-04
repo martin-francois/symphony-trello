@@ -365,8 +365,9 @@ Common setup command options:
   asks about this when you do not pass the option. Keep `1` until your machine can run several Codex
   sessions, builds, tests, package installs, and network calls at once. If cards depend on other
   cards, add prerequisite checklist items before moving them into `Ready for Codex`.
-- `--codex-model MODEL`: write a Codex model into generated workflows without prompting. Omit it
-  during guided setup to accept or edit the recommended model interactively.
+- `--codex-model MODEL`: write a Codex model into generated workflows without prompting. Any model
+  ID is accepted, including one the installed Codex CLI does not list. Omit it during guided setup to
+  pick a model from the installed Codex model list or to enter another model ID.
 - `--codex-reasoning-effort EFFORT`: write a Codex reasoning effort into generated workflows
   without prompting. When the selected model advertises supported efforts, the value must exactly
   match one of them; setup reports the accepted values when it rejects a choice. If the model does
@@ -1308,6 +1309,30 @@ visible usable model in catalog order. `gpt-5.6-sol` has no special fallback rul
 explicitly, preserved from an existing workflow, or selected through the same generic catalog rules
 as any other model. Explicit setup choices and existing workflow values still take precedence over
 this new-workflow recommendation.
+
+Guided setup shows the visible models from that list as numbered choices, in the order Codex returns
+them, followed by an `Other model ID` choice:
+
+```text
+Codex model
+Models listed by the installed Codex CLI:
+  1. gpt-6.1-sol
+  2. gpt-5.6-terra (recommended)
+  3. gpt-daybreak-blue-latest - Daybreak Blue
+  4. Other model ID
+Press Enter to keep 2, type another number, or type a model ID.
+Model [2]:
+```
+
+Press Enter to keep the preselected model, type a number to pick another one, or type any model ID
+at the same prompt. `Other model ID` asks for the ID on the next line, so a model that the installed
+Codex CLI does not list, such as a newly released one, never blocks setup. When you regenerate a
+workflow, setup preselects the model already in it and marks it `current`; a workflow model that
+Codex does not list gets its own choice. Picking a different model switches the reasoning-effort
+recommendation to that model's catalog entry. If the model list has no visible models, setup shows
+the plain `Model [...]:` prompt instead, which also accepts any model ID. If the installed Codex CLI
+is missing or cannot answer `model/list`, setup follows the unsupported-discovery rules below and
+shows that plain prompt only when you pass `--codex-reasoning-effort`.
 
 Guided setup prints the exact ordered efforts and descriptions advertised for the selected model;
 for example, `xhigh`, `max`, and `ultra` appear when that catalog entry supports them. It marks the

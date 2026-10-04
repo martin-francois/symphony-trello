@@ -245,3 +245,6 @@ In Codex CLI 0.144.0, `ThreadStartParams` and `TurnStartParams` support `model`,
 exposed separately as the model's `defaultReasoningEffort`; the catalog does not expose an effort
 display name or current flag. The schema defines `ReasoningEffort` as a non-empty string rather than
 a closed enum, so the selected model's catalog entry is the source of truth for supported values.
+
+[ADR 0094](0094-codex-catalog-model-picker.md) describes how guided setup shows the visible catalog
+models as a numbered picker with an other-model choice.
