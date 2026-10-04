@@ -502,9 +502,15 @@ public class ConfigResolver {
 
     private Path optionalRepositoryPath(Path workflowDirectory, Map<String, Object> repository) {
         String resolved = optionalEnvironmentPathValue(optionalString(repository, "default_path"));
-        return resolved == null
+        Path path = resolved == null
                 ? null
                 : absolutePath(workflowDirectory, "repository.default_path", expandPath(resolved));
+        if (path != null && !EffectiveConfig.RepositoryConfig.usableDefaultPath(path)) {
+            throw new ConfigException(
+                    "config_value_error",
+                    "repository.default_path must not contain control characters or line separators");
+        }
+        return path;
     }
 
     private String optionalEnvironmentPathValue(String configured) {

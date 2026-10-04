@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.config;
 
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_LINE_SEPARATOR;
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_NEXT_LINE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
@@ -29,6 +31,7 @@ final class ConfigResolverTest {
     private static final String PARENT_REFERENCE = "$" + PARENT_VARIABLE;
     private static final String BRACED_PARENT_REFERENCE = "${" + PARENT_VARIABLE + "}";
     private static final String NUL_IN_PATH = "\u0000";
+    private static final String UNIT_SEPARATOR_IN_REPOSITORY_PATH = "\u001F";
 
     @TempDir
     Path tempDir;
@@ -330,17 +333,15 @@ final class ConfigResolverTest {
         assertThat(config.repository().selectedDefaultSource()).isEqualTo(EffectiveConfig.DefaultSource.URL);
     }
 
-    @Test
-    void repositoryDefaultUrlSuppressesMalformedLowerPriorityPath() {
+    @MethodSource("repositoryPathCharactersThatBreakAPromptLine")
+    @ParameterizedTest(name = "{0}")
+    void repositoryDefaultUrlSuppressesMalformedLowerPriorityPath(String scenario, String character) {
         // given
         var resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
         EffectiveConfig config = resolver.resolve(workflowDefinitionWithRepository(Map.of(
-                "default_url",
-                "https://github.com/example/project.git",
-                "default_path",
-                "bad" + NUL_IN_PATH + "path")));
+                "default_url", "https://github.com/example/project.git", "default_path", "bad" + character + "path")));
 
         // then
         assertThat(config.repository().defaultUrl()).isEqualTo("https://github.com/example/project.git");
@@ -398,8 +399,10 @@ final class ConfigResolverTest {
         assertThat(config.repository().selectedDefaultSource()).isEqualTo(EffectiveConfig.DefaultSource.PATH);
     }
 
-    @Test
-    void malformedSelectedRepositoryDefaultPathFailsAsConfigurationError() {
+    @MethodSource("repositoryPathCharactersThatBreakAPromptLine")
+    @ParameterizedTest(name = "{0}")
+    void malformedSelectedRepositoryDefaultPathFailsAsConfigurationError(
+            String scenario, String character, String expectedMessage) {
         // given
         var resolver = new ConfigResolver(ignored -> Optional.empty());
 
@@ -407,11 +410,24 @@ final class ConfigResolverTest {
         ConfigException error = catchThrowableOfType(
                 ConfigException.class,
                 () -> resolver.resolve(
-                        workflowDefinitionWithRepository(Map.of("default_path", "bad" + NUL_IN_PATH + "path"))));
+                        workflowDefinitionWithRepository(Map.of("default_path", "bad" + character + "path"))));
 
         // then
         assertThat(error.code()).isEqualTo("config_value_error");
-        assertThat(error).hasMessage("repository.default_path must be a valid local path");
+        assertThat(error).hasMessage(expectedMessage);
+    }
+
+    /// The platform rejects only the NUL character in a path. The others form a valid path that the
+    /// repository source context cannot show on one prompt line.
+    private static Stream<Arguments> repositoryPathCharactersThatBreakAPromptLine() {
+        String unusable = "repository.default_path must not contain control characters or line separators";
+        return Stream.of(
+                Arguments.of(
+                        "NUL character", NUL_IN_PATH, "repository.default_path must be a valid local path"),
+                Arguments.of("line feed", "\n", unusable),
+                Arguments.of("other control character", UNIT_SEPARATOR_IN_REPOSITORY_PATH, unusable),
+                Arguments.of("next line", UNICODE_NEXT_LINE, unusable),
+                Arguments.of("line separator", String.valueOf(UNICODE_LINE_SEPARATOR), unusable));
     }
 
     @MethodSource("malformedLocalPathSettings")
