@@ -273,7 +273,8 @@ optional verification. Follow this order:
   PowerShell as skipped only because `pwsh` is missing if a container runtime is available. The
   repository wrappers default to Docker; on a Podman host, set
   `SYMPHONY_TRELLO_CONTAINER_RUNTIME=podman` so verification calls Podman directly without a
-  compatibility-wrapper notice.
+  compatibility-wrapper notice. The Maven installer tests always call `docker`; read the Podman
+  caveats in `CONTRIBUTING.md` before you run them through a podman-docker shim.
 
 - When required verification cannot execute reliably because a tool, dependency, host capability,
   permission, or workflow facility is unavailable, treat that as unresolved friction. An ordinary
