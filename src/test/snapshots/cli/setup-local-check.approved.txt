@@ -1,0 +1,15 @@
+exitCode: 0
+--- stdout ---
+Symphony setup check
+
+Checking prerequisites...
+  OK      Git
+  OK      Java 25+ JDK
+  OK      Codex CLI
+  OK      Codex CLI authenticated
+  OPTIONAL GitHub CLI authenticated
+  OK      Local prerequisites ready
+  OK      Workflow: <TEMP>/config/WORKFLOW.md
+  OK      Trello credentials for "Snapshot Queue" as Alex Example
+  OK    "Snapshot Queue" local server: http://127.0.0.1:<WORKER_PORT> (already running)
+--- stderr ---

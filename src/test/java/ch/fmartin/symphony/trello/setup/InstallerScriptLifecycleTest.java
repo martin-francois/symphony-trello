@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
+import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.PseudoTerminalResult;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
@@ -71,7 +72,7 @@ final class InstallerScriptLifecycleTest {
         environment.put("SYMPHONY_TRELLO_INSTALLER_COMPLETION", "preexisting");
 
         // when
-        ProcessResult install = runWithPseudoTerminal(
+        PseudoTerminalResult install = runWithPseudoTerminal(
                 environment,
                 "n\napi-key\napi-token\nLifecycle Board\n",
                 "bash " + shellQuote(installScript.toString()) + " --bin-dir " + shellQuote(binDirectory.toString()));
@@ -182,7 +183,7 @@ final class InstallerScriptLifecycleTest {
 
         // then
         assertThat(install.exitCode()).isZero();
-        assertThat(install.output())
+        assertThat(install.transcript())
                 .contains(
                         "Codex CLI is installed but not logged in.",
                         "Can this machine open a browser for Codex login?",
@@ -199,9 +200,9 @@ final class InstallerScriptLifecycleTest {
                         "User lingering enabled for reboot autostart.",
                         "You're good to go - your Trello board is now a queue for Codex work.")
                 .doesNotContain("Device auth");
-        assertThat(install.output())
+        assertThat(install.transcript())
                 .containsOnlyOnce("You're good to go - your Trello board is now a queue for Codex work.");
-        assertThat(install.output().stripTrailing())
+        assertThat(install.transcript().stripTrailing())
                 .endsWith("symphony-trello logs --workflow '" + configDirectory.resolve("WORKFLOW.lifecycle-board.md")
                         + "'");
         assertThat(userServiceContentAfterInstall)

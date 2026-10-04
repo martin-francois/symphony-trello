@@ -1,0 +1,5 @@
+exitCode: 0
+--- stdout ---
+Diagnostics written.
+Review it before sharing. It is intended to omit secrets and private context.
+--- stderr ---

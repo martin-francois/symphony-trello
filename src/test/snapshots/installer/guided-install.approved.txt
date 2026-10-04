@@ -1,0 +1,61 @@
+exitCode: 0
+--- terminal ---
+Symphony for Trello installer<CR>
+<CR>
+Detected Debian GNU/Linux amd64<CR>
+Install: <TEMP>/home/app<CR>
+Config: <TEMP>/home/config<CR>
+Workspaces: <TEMP>/home/workspaces<CR>
+State/logs: <TEMP>/home/state<CR>
+Command: <TEMP>/bin/symphony-trello<CR>
+Install source: source-checkout<CR>
+Repository: <TEMP>/source<CR>
+Ref: main<CR>
+<CR>
+Checking prerequisites...<CR>
+  OK      Git available<CR>
+  OK      Java 25+ JDK available<CR>
+  OK      Codex CLI available<CR>
+<CR>
+Codex CLI is installed but not logged in.<CR>
+Can this machine open a browser for Codex login? [Y/n] n<CR>
+  RUN  codex login --device-auth<CR>
+<CR>
+Installing Symphony...<CR>
+  RUN  mkdir -p <TEMP>/home<CR>
+  RUN  git clone --branch main <TEMP>/source <TEMP>/home/app<CR>
+Cloning into '<TEMP>/home/app'...<CR>
+done.<CR>
+  RUN  <TEMP>/home/app/mvnw -q -f <TEMP>/home/app/pom.xml -DskipTests clean package<CR>
+  RUN  mkdir -p <TEMP>/bin <TEMP>/home/config <TEMP>/home/workspaces <TEMP>/home/state<CR>
+  OK  Command installed: <TEMP>/bin/symphony-trello<CR>
+<CR>
+Command PATH setup<CR>
+Symphony installed the command here:<CR>
+  <TEMP>/bin/symphony-trello<CR>
+  OK  Added <TEMP>/bin to PATH in <TEMP>/user-home/.bashrc<CR>
+  OK  Added <TEMP>/bin to PATH in <TEMP>/user-home/.profile<CR>
+<CR>
+Starting setup...<CR>
+  RUN  <TEMP>/bin/symphony-trello setup-local<CR>
+Trello API key: <CR>
+Trello API token: <CR>
+Trello board name: Snapshot Queue<CR>
+Started Symphony for Trello: <TEMP>/home/config/WORKFLOW.snapshot-queue.md<CR>
+Log: <TEMP>/home/state/WORKFLOW.snapshot-queue.md.abcdef123456.log<CR>
+Starting managed workers...<CR>
+  RUN  mkdir -p <TEMP>/home/config<CR>
+  RUN  mkdir -p <TEMP>/user-home/.config/systemd/user<CR>
+  OK  User systemd service installed: <TEMP>/user-home/.config/systemd/user/symphony-trello.service<CR>
+  OK  User systemd service enabled: symphony-trello.service<CR>
+  OK  User lingering enabled for reboot autostart.<CR>
+  RUN  <TEMP>/bin/symphony-trello setup-local<CR>
+You're good to go - your Trello board is now a queue for Codex work.<CR>
+Connected board: Snapshot Queue<CR>
+Workflow: <TEMP>/home/config/WORKFLOW.snapshot-queue.md<CR>
+<CR>
+Create a Trello card with a clear task and move it to this workflow's configured queue list.<CR>
+<CR>
+Useful commands:<CR>
+  symphony-trello status<CR>
+  symphony-trello logs --workflow '<TEMP>/home/config/WORKFLOW.snapshot-queue.md'<CR>

@@ -1,0 +1,5 @@
+exitCode: 0
+--- stdout ---
+Trello workspaces:
+  workspace-1  Engineering
+--- stderr ---

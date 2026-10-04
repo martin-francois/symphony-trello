@@ -169,7 +169,12 @@ final class ContainerRuntimeScriptTest {
                 new ContainerWrapper(
                         "pwsh-docker.sh",
                         "(?m)^mcr\\.microsoft\\.com/dotnet/sdk:[0-9]+\\.[0-9]+" + SHA256_DIGEST_PATTERN,
-                        "mcr.microsoft.com/dotnet/sdk"));
+                        "mcr.microsoft.com/dotnet/sdk"),
+                new ContainerWrapper(
+                        "snapshot-tests-docker.sh",
+                        "(?m)^docker\\.io/library/maven:[0-9]+\\.[0-9]+\\.[0-9]+-eclipse-temurin-25"
+                                + SHA256_DIGEST_PATTERN,
+                        "docker.io/library/maven"));
     }
 
     private static Stream<Arguments> containerRuntimeRequirements() {
@@ -177,8 +182,9 @@ final class ContainerRuntimeScriptTest {
                 Arguments.of("betterleaks-docker.sh", "podman is required to run BetterLeaks in a container"),
                 Arguments.of("semgrep-docker.sh", "podman is required to run Semgrep in a container"),
                 Arguments.of(
-                        "pwsh-docker.sh",
-                        "podman is required to run PowerShell through mcr.microsoft.com/dotnet/sdk:"));
+                        "pwsh-docker.sh", "podman is required to run PowerShell through mcr.microsoft.com/dotnet/sdk:"),
+                Arguments.of(
+                        "snapshot-tests-docker.sh", "podman is required to run the snapshot tests in a container"));
     }
 
     private static Path wrapper(String script) {
