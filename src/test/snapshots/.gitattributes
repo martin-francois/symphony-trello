@@ -1,0 +1,2 @@
+# Snapshot baselines are exact command output; keep LF bytes and trailing spaces.
+* text eol=lf -whitespace

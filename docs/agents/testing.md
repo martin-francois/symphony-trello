@@ -157,6 +157,20 @@ parallel safety. Live end-to-end and deployed-verification rules live in
   coverage; remove only higher-layer validation rows that the owning lower-layer test covers with
   the same option, input, error code, and message.
 
+## Terminal output snapshots
+
+- `TrelloBoardSetupMainSnapshotTest` and `InstallerScriptSnapshotTest` keep one happy-path
+  snapshot per public command and installer path under `src/test/snapshots`
+  ([ADR 0092](../adr/0092-approvaltests-terminal-output-snapshots.md)). When a change alters that
+  output, rerun them with the update command in `CONTRIBUTING.md`, read the baseline diff, and
+  commit it with the change. Never update baselines to make an unexplained difference disappear.
+- Keep failure, validation, and edge-case output in the lower-layer tests that own it (ADR 0055).
+  Add an end-to-end snapshot only when packaging, environment, process, or terminal behavior cannot
+  be shown in-process.
+- Make a scenario deterministic in its fixture before registering a normalization. Register only
+  exact values with `TranscriptNormalizer`, and pass credentials as `CredentialSentinels` values,
+  never as normalized values.
+
 ## What to test and what not to test
 
 - Do not write low-value tests that only restate a constant. Do test parsing, policy enforcement,

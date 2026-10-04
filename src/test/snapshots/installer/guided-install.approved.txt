@@ -1,0 +1,53 @@
+exitCode: 0
+--- terminal ---
+<ESC>[1;38;5;32mSymphony for Trello installer<ESC>[0m<CR>
+Detected Debian GNU/Linux amd64<CR>
+<CR>
+<ESC>[1;38;5;32mInstall plan<ESC>[0m<CR>
+Source: Git checkout<CR>
+Repository: <TEMP>/source<CR>
+Ref: main<CR>
+Install: <TEMP>/home/app<CR>
+Config: <TEMP>/home/config<CR>
+Workspaces: <TEMP>/home/workspaces<CR>
+State/logs: <TEMP>/home/state<CR>
+Command: <TEMP>/bin/symphony-trello<CR>
+<CR>
+<ESC>[1;38;5;32m[1/4] Checking prerequisites<ESC>[0m<CR>
+  <ESC>[1;38;5;64mOK<ESC>[0m  Git<CR>
+  <ESC>[1;38;5;64mOK<ESC>[0m  Java 25+ JDK<CR>
+  <ESC>[1;38;5;64mOK<ESC>[0m  Codex CLI<CR>
+<CR>
+Codex CLI is installed but not logged in.<CR>
+Can this machine open a browser for Codex login? [Y/n] n<CR>
+  <ESC>[1;38;5;32mRUN<ESC>[0m  codex login --device-auth<CR>
+  <ESC>[1;38;5;64mOK<ESC>[0m  Codex CLI logged in<CR>
+<CR>
+<ESC>[1;38;5;32m[2/4] Installing Symphony<ESC>[0m<CR>
+  <ESC>[1;38;5;64mOK<ESC>[0m  Source checked out<CR>
+  <ESC>[1;38;5;64mOK<ESC>[0m  App built with Maven wrapper<CR>
+  <ESC>[1;38;5;64mOK<ESC>[0m  Command installed<CR>
+  <ESC>[1;38;5;64mOK<ESC>[0m  Added <TEMP>/bin to PATH in <TEMP>/user-home/.bashrc<CR>
+  <ESC>[1;38;5;64mOK<ESC>[0m  Added <TEMP>/bin to PATH in <TEMP>/user-home/.profile<CR>
+<CR>
+<ESC>[1;38;5;32m[3/4] Running setup<ESC>[0m<CR>
+  <ESC>[1;38;5;32mRUN<ESC>[0m  <TEMP>/bin/symphony-trello setup-local<CR>
+Trello API key: <CR>
+Trello API token: <CR>
+Trello board name: Snapshot Queue<CR>
+Started Symphony for Trello: <TEMP>/home/config/WORKFLOW.snapshot-queue.md<CR>
+Log: <TEMP>/home/state/WORKFLOW.snapshot-queue.md.abcdef123456.log<CR>
+  <ESC>[1;38;5;64mOK<ESC>[0m  Setup complete<CR>
+<CR>
+<ESC>[1;38;5;32m[4/4] Starting managed workers<ESC>[0m<CR>
+  <ESC>[1;38;5;64mOK<ESC>[0m  User systemd service enabled: symphony-trello.service<CR>
+  <ESC>[1;38;5;64mOK<ESC>[0m  User lingering enabled for reboot autostart.<CR>
+You're good to go - your Trello board is now a queue for Codex work.<CR>
+Connected board: Snapshot Queue<CR>
+Workflow: <TEMP>/home/config/WORKFLOW.snapshot-queue.md<CR>
+<CR>
+Create a Trello card with a clear task and move it to this workflow's configured queue list.<CR>
+<CR>
+Useful commands:<CR>
+  symphony-trello status<CR>
+  symphony-trello logs --workflow '<TEMP>/home/config/WORKFLOW.snapshot-queue.md'<CR>

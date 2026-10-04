@@ -1,0 +1,29 @@
+exitCode: 0
+--- stdout ---
+Symphony for Trello setup
+
+Checking prerequisites...
+  OK      Git
+  OK      Java 25+ JDK
+  OK      Codex CLI
+  OK      Codex CLI authenticated
+  OK      GitHub CLI authenticated
+
+Validating Trello...
+  OK  Connected to Trello as "Alex Example"
+
+Saving Trello credentials...
+  OK  Credentials saved: <TEMP>/config/.env
+  OK  Trello API key: sent***************************************
+  OK  Trello token: sent*****************************************
+
+GitHub integration
+  OK  GitHub CLI authenticated as alex-example
+  OK  GitHub integration configured
+
+GitHub mode needs one more Trello list:
+  Merging
+
+  OK  GitHub workflow enabled for "Snapshot Queue"
+          Restart: symphony-trello start --env <TEMP>/config/.env --workflow <TEMP>/config/WORKFLOW.md
+--- stderr ---

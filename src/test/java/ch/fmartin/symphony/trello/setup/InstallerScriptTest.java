@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.junit.jupiter.api.Named.named;
 
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
+import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.PseudoTerminalResult;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -315,11 +316,11 @@ final class InstallerScriptTest {
         assumePosixPseudoTerminal();
 
         // when
-        ProcessResult result = runUninstallerDryRunInPseudoTerminal(colorEnvironment);
+        PseudoTerminalResult result = runUninstallerDryRunInPseudoTerminal(colorEnvironment);
 
         // then
         result.assertSuccess();
-        assertThat(result.output())
+        assertThat(result.transcript())
                 .contains(
                         STYLE_ACCENT + "Symphony for Trello uninstall" + STYLE_RESET,
                         "  " + STYLE_ACCENT + "APP FILES" + STYLE_RESET + "       ");
@@ -332,11 +333,11 @@ final class InstallerScriptTest {
         assumePosixPseudoTerminal();
 
         // when
-        ProcessResult result = runUninstallerDryRunInPseudoTerminal(colorEnvironment);
+        PseudoTerminalResult result = runUninstallerDryRunInPseudoTerminal(colorEnvironment);
 
         // then
         result.assertSuccess();
-        assertThat(result.output())
+        assertThat(result.transcript())
                 .contains("Symphony for Trello uninstall")
                 .doesNotContain(ANSI_ESCAPE_IN_INSTALLER_OUTPUT);
     }
@@ -363,7 +364,7 @@ final class InstallerScriptTest {
         assumeTrue(commandExists("script"));
     }
 
-    private ProcessResult runUninstallerDryRunInPseudoTerminal(Map<String, String> colorEnvironment)
+    private PseudoTerminalResult runUninstallerDryRunInPseudoTerminal(Map<String, String> colorEnvironment)
             throws IOException, InterruptedException {
         Map<String, String> environment = withEnvironment(
                 Map.of(
@@ -1286,18 +1287,18 @@ final class InstallerScriptTest {
         environment.put("SYMPHONY_TRELLO_TEST_EUID", "1000");
 
         // when
-        ProcessResult result = runWithPseudoTerminal(
+        PseudoTerminalResult result = runWithPseudoTerminal(
                 environment, "\n", "bash " + shellQuote(installScript.toString()) + " --no-onboard");
 
         // then
         result.assertSuccess();
-        assertThat(result.output())
+        assertThat(result.transcript())
                 .contains(
                         "Create command:",
                         "install -d -m 0750 -o 'micro-user' -g 'micro-group' '" + userRoot + "'",
                         "Create this directory now? [Y/n]");
-        assertThat(result.output().indexOf("install -d -m 0750"))
-                .isLessThan(result.output().indexOf("Create this directory now? [Y/n]"));
+        assertThat(result.transcript().indexOf("install -d -m 0750"))
+                .isLessThan(result.transcript().indexOf("Create this directory now? [Y/n]"));
         assertThat(userRoot).isDirectory();
         assertThat(fakeLog)
                 .content(StandardCharsets.UTF_8)
@@ -1352,7 +1353,7 @@ final class InstallerScriptTest {
         environment.put("SYMPHONY_TRELLO_TEST_EUID", "1000");
 
         // when
-        ProcessResult install = runWithPseudoTerminal(
+        PseudoTerminalResult install = runWithPseudoTerminal(
                 environment, "\n", "bash " + shellQuote(installScript.toString()) + " --no-onboard");
 
         // then
@@ -4462,12 +4463,12 @@ final class InstallerScriptTest {
                 "SYMPHONY_FAKE_LOG", fakeLog.toString());
 
         // when
-        ProcessResult firstInstall = runWithPseudoTerminal(
+        PseudoTerminalResult firstInstall = runWithPseudoTerminal(
                 environment,
                 "",
                 "bash " + shellQuote(installScript.toString()) + " --no-onboard --bin-dir "
                         + shellQuote(binDirectory.toString()));
-        ProcessResult secondInstall = runWithPseudoTerminal(
+        PseudoTerminalResult secondInstall = runWithPseudoTerminal(
                 environment,
                 "",
                 "bash " + shellQuote(installScript.toString()) + " --no-onboard --bin-dir "
@@ -4479,11 +4480,11 @@ final class InstallerScriptTest {
         Path profile = home.resolve(".bashrc");
         Path loginProfile = home.resolve(".profile");
         String expectedLine = "export PATH='" + binDirectory + "':\"$PATH\"";
-        assertThat(firstInstall.output())
+        assertThat(firstInstall.transcript())
                 .contains(
                         "Added " + binDirectory + " to PATH in " + profile,
                         "Added " + binDirectory + " to PATH in " + loginProfile);
-        assertThat(secondInstall.output()).doesNotContain("to PATH in", "PATH setup already exists");
+        assertThat(secondInstall.transcript()).doesNotContain("to PATH in", "PATH setup already exists");
         assertThat(profile)
                 .content(StandardCharsets.UTF_8)
                 .contains("# >>> Symphony for Trello PATH >>>", expectedLine, "# <<< Symphony for Trello PATH <<<")
@@ -4517,7 +4518,7 @@ final class InstallerScriptTest {
                 "SYMPHONY_FAKE_LOG", fakeLog.toString());
 
         // when
-        ProcessResult result = runWithPseudoTerminal(
+        PseudoTerminalResult result = runWithPseudoTerminal(
                 environment,
                 "",
                 "/bin/cat " + shellQuote(installScript.toString()) + " | bash -s -- --no-onboard --bin-dir "
@@ -4525,7 +4526,7 @@ final class InstallerScriptTest {
 
         // then
         result.assertSuccess();
-        assertThat(result.output()).contains("Added " + binDirectory + " to PATH");
+        assertThat(result.transcript()).contains("Added " + binDirectory + " to PATH");
         assertThat(home.resolve(".bashrc"))
                 .content(StandardCharsets.UTF_8)
                 .contains("export PATH='" + binDirectory + "':\"$PATH\"");
@@ -4574,14 +4575,14 @@ final class InstallerScriptTest {
                 "SYMPHONY_FAKE_LOG", fakeLog.toString());
 
         // when
-        ProcessResult result = runWithPseudoTerminal(
+        PseudoTerminalResult result = runWithPseudoTerminal(
                 environment,
                 "",
                 "bash " + shellQuote(installScript.toString()) + " --bin-dir " + shellQuote(binDirectory.toString()));
 
         // then
-        assertThat(result.exitCode()).as(result.output()).isEqualTo(7);
-        assertThat(result.output())
+        assertThat(result.exitCode()).as(result.transcript()).isEqualTo(7);
+        assertThat(result.transcript())
                 .containsSubsequence(
                         "OK  Command installed",
                         "Added " + binDirectory + " to PATH in " + home.resolve(".bashrc"),
@@ -4655,7 +4656,7 @@ final class InstallerScriptTest {
                 "SYMPHONY_FAKE_LOG", fakeLog.toString());
 
         // when
-        ProcessResult result = runWithPseudoTerminal(
+        PseudoTerminalResult result = runWithPseudoTerminal(
                 environment,
                 "",
                 "bash " + shellQuote(installScript.toString()) + " --no-onboard --no-update-path --bin-dir "
@@ -4666,7 +4667,7 @@ final class InstallerScriptTest {
         // then
         result.assertSuccess();
         status.assertSuccess();
-        assertThat(result.output())
+        assertThat(result.transcript())
                 .contains(
                         "NOTE  " + binDirectory + " is not on PATH for this shell.",
                         "Suggested profile files:",
@@ -5225,14 +5226,14 @@ final class InstallerScriptTest {
                 "SYMPHONY_TRELLO_TEST_ARCH", "x86_64");
 
         // when
-        ProcessResult result = runWithPseudoTerminal(
+        PseudoTerminalResult result = runWithPseudoTerminal(
                 environment,
                 "n\n",
                 "/bin/bash " + shellQuote(installScript.toString()) + " --no-onboard --from-source");
 
         // then
         assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(result.output())
+        assertThat(result.transcript())
                 .contains("Git is missing.", "Proposed install command:")
                 .contains("  apt-get update && apt-get install -y git")
                 .doesNotContain("sudo apt-get");
@@ -5435,14 +5436,14 @@ final class InstallerScriptTest {
                 "x86_64");
 
         // when
-        ProcessResult result = runWithPseudoTerminal(
+        PseudoTerminalResult result = runWithPseudoTerminal(
                 environment,
                 "y\nn\n",
                 "/bin/bash " + shellQuote(installScript.toString()) + " --no-onboard --from-source");
 
         // then
-        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
-        assertThat(result.output())
+        assertThat(result.exitCode()).as(result.transcript()).isEqualTo(2);
+        assertThat(result.transcript())
                 .contains("  apt-get update && apt-get install -y git", "  apt-get install -y openjdk-25-jdk")
                 .doesNotContain("  apt-get update && apt-get install -y openjdk-25-jdk");
         assertThat(aptLog)
@@ -5497,12 +5498,12 @@ final class InstallerScriptTest {
         environment.put("SYMPHONY_TRELLO_TEST_EUID", "1000");
 
         // when
-        ProcessResult result = runWithPseudoTerminal(
+        PseudoTerminalResult result = runWithPseudoTerminal(
                 environment, "y\n", "/bin/bash " + shellQuote(installScript.toString()) + " --from-source");
 
         // then
         assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(result.output())
+        assertThat(result.transcript())
                 .contains(
                         "Detected openSUSE MicroOS amd64",
                         "Missing prerequisites need OS package installation:",
@@ -5733,7 +5734,7 @@ final class InstallerScriptTest {
                 "SYMPHONY_TRELLO_TEST_ARCH", "x86_64");
 
         // when
-        ProcessResult result = runWithPseudoTerminal(
+        PseudoTerminalResult result = runWithPseudoTerminal(
                 environment,
                 "n\n",
                 "/bin/bash " + shellQuote(installScript.toString()) + " --bin-dir "
@@ -5741,7 +5742,7 @@ final class InstallerScriptTest {
 
         // then
         assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(result.output())
+        assertThat(result.transcript())
                 .contains(
                         "Codex CLI is missing and needs Node.js with npm.",
                         "Install Codex CLI with Symphony-managed npm.",
@@ -7215,7 +7216,7 @@ final class InstallerScriptTest {
         Map<String, String> environment = Map.of("SYMPHONY_HOME", symphonyHome.toString());
 
         // when
-        ProcessResult result = runWithPseudoTerminal(
+        PseudoTerminalResult result = runWithPseudoTerminal(
                 environment,
                 "n\n",
                 "bash " + shellQuote(uninstallScript.toString()) + " --yes-local-data --remove-config --prefix "
@@ -7223,8 +7224,8 @@ final class InstallerScriptTest {
                         + shellQuote(temporaryDirectory.resolve("bin").toString()));
 
         // then
-        assertThat(result.exitCode()).as(result.output()).isZero();
-        assertThat(result.output()).contains("Skipped installer-managed files.", "REMOVE  " + configDirectory);
+        assertThat(result.exitCode()).as(result.transcript()).isZero();
+        assertThat(result.transcript()).contains("Skipped installer-managed files.", "REMOVE  " + configDirectory);
         assertThat(appHome).exists();
         assertThat(configDirectory).doesNotExist();
     }
@@ -7269,7 +7270,7 @@ final class InstallerScriptTest {
         Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
 
         // when
-        ProcessResult result = runWithPseudoTerminal(
+        PseudoTerminalResult result = runWithPseudoTerminal(
                 environment,
                 "n\n",
                 "bash " + shellQuote(uninstallScript.toString()) + " --yes-local-data --remove-all-local-data --prefix "
@@ -7277,8 +7278,8 @@ final class InstallerScriptTest {
                         + shellQuote(binDirectory.toString()));
 
         // then
-        assertThat(result.exitCode()).as(result.output()).isZero();
-        assertThat(result.output())
+        assertThat(result.exitCode()).as(result.transcript()).isZero();
+        assertThat(result.transcript())
                 .contains("Skipped installer-managed files.")
                 .doesNotContain("REMOVE  " + defaultStateContext);
         assertThat(appHome).exists();
@@ -7337,7 +7338,7 @@ final class InstallerScriptTest {
         Map<String, String> environment = Map.of("SYMPHONY_HOME", symphonyHome.toString());
 
         // when
-        ProcessResult result = runWithPseudoTerminal(
+        PseudoTerminalResult result = runWithPseudoTerminal(
                 environment,
                 "y\ny\n",
                 "bash " + shellQuote(uninstallScript.toString()) + " --remove-config --remove-workspaces"
@@ -7346,8 +7347,8 @@ final class InstallerScriptTest {
                         + shellQuote(temporaryDirectory.resolve("bin").toString()));
 
         // then
-        assertThat(result.exitCode()).as(result.output()).isZero();
-        assertThat(result.output()).contains("local data selected for cleanup", "REMOVE  " + symphonyHome);
+        assertThat(result.exitCode()).as(result.transcript()).isZero();
+        assertThat(result.transcript()).contains("local data selected for cleanup", "REMOVE  " + symphonyHome);
         assertThat(symphonyHome).doesNotExist();
     }
 
@@ -7742,7 +7743,7 @@ final class InstallerScriptTest {
                 "SHELL", "/bin/bash");
 
         // when
-        ProcessResult install = runWithPseudoTerminal(
+        PseudoTerminalResult install = runWithPseudoTerminal(
                 environment,
                 "y\napi-key\napi-token\nNpm Codex Board\n\n\n",
                 "bash " + shellQuote(installScript.toString()) + " --bin-dir " + shellQuote(binDirectory.toString()));
@@ -7757,9 +7758,9 @@ final class InstallerScriptTest {
                 binDirectory.toString());
 
         // then
-        assertThat(install.exitCode()).as(install.output()).isZero();
+        assertThat(install.exitCode()).as(install.transcript()).isZero();
         assertThat(uninstall.exitCode()).as(uninstall.output()).isZero();
-        assertThat(install.output())
+        assertThat(install.transcript())
                 .contains(
                         "Install Codex CLI with Symphony-managed npm.",
                         "Install location: " + symphonyHome.resolve("npm"),
@@ -7813,7 +7814,7 @@ final class InstallerScriptTest {
                 fakeLog.toString());
 
         // when
-        ProcessResult install = runWithPseudoTerminal(
+        PseudoTerminalResult install = runWithPseudoTerminal(
                 installEnvironment,
                 "api-key\napi-token\nXDG Systemd Board\n\n\n",
                 "bash " + shellQuote(installScript.toString()) + " --no-update-path --bin-dir "
@@ -7893,25 +7894,25 @@ final class InstallerScriptTest {
         try {
 
             // when
-            ProcessResult result = runWithPseudoTerminal(
+            PseudoTerminalResult result = runWithPseudoTerminal(
                     environment,
                     "api-key\napi-token\nHandoff Queue\n",
                     "bash " + shellQuote(installScript.toString()) + " --no-update-path --bin-dir "
                             + shellQuote(binDirectory.toString()));
 
             // then
-            assertThat(result.output())
+            assertThat(result.transcript())
                     .containsSubsequence(scenario.expectedOutput().toArray(String[]::new));
             if (scenario.success()) {
                 result.assertSuccess();
-                assertThat(result.output())
+                assertThat(result.transcript())
                         .containsOnlyOnce("You're good to go - your Trello board is now a queue for Codex work.");
-                assertThat(result.output().stripTrailing())
+                assertThat(result.transcript().stripTrailing())
                         .endsWith("symphony-trello logs --workflow '"
                                 + symphonyHome.resolve("config/WORKFLOW.handoff-queue.md") + "'");
             } else {
-                assertThat(result.exitCode()).as(result.output()).isNotZero();
-                assertThat(result.output()).doesNotContain("You're good to go", "Useful commands:");
+                assertThat(result.exitCode()).as(result.transcript()).isNotZero();
+                assertThat(result.transcript()).doesNotContain("You're good to go", "Useful commands:");
             }
         } finally {
             Path installedCommand = binDirectory.resolve("symphony-trello");
@@ -8034,22 +8035,22 @@ final class InstallerScriptTest {
         try {
 
             // when
-            ProcessResult install = runWithPseudoTerminal(
+            PseudoTerminalResult install = runWithPseudoTerminal(
                     environment,
                     "api-key\napi-token\nDocs Queue\n\n\n",
                     "bash " + shellQuote(installScript.toString()) + " --bin-dir "
                             + shellQuote(binDirectory.toString()));
             addSourceRepositoryCommit(sourceRepository, "UPDATED", "updated\n");
-            ProcessResult update = runWithPseudoTerminal(
+            PseudoTerminalResult update = runWithPseudoTerminal(
                     environment,
                     "api-key\napi-token\nDocs Queue\n\n\n",
                     "bash " + shellQuote(installScript.toString()) + " --bin-dir "
                             + shellQuote(binDirectory.toString()));
 
             // then
-            assertThat(install.exitCode()).as(install.output()).isZero();
-            assertThat(update.exitCode()).as(update.output()).isZero();
-            assertThat(update.output())
+            assertThat(install.exitCode()).as(install.transcript()).isZero();
+            assertThat(update.exitCode()).as(update.transcript()).isZero();
+            assertThat(update.transcript())
                     .containsSubsequence(
                             "Update plan",
                             "[2/4] Updating Symphony",
@@ -8094,7 +8095,7 @@ final class InstallerScriptTest {
                 "SYMPHONY_FAKE_LOG", fakeLog.toString());
 
         try {
-            ProcessResult install = runWithPseudoTerminal(
+            PseudoTerminalResult install = runWithPseudoTerminal(
                     environment,
                     "n\napi-key\napi-token\nDocs Queue\n",
                     "bash " + shellQuote(installScript.toString()) + " --bin-dir "
@@ -8111,7 +8112,7 @@ final class InstallerScriptTest {
                     binDirectory.toString());
 
             // then
-            assertThat(install.exitCode()).as(install.output()).isZero();
+            assertThat(install.exitCode()).as(install.transcript()).isZero();
             assertThat(update.exitCode()).as(update.output()).isZero();
             assertThat(update.output())
                     .containsSubsequence(

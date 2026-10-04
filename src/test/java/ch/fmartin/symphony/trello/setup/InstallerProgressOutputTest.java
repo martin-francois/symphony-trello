@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
+import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.PseudoTerminalResult;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -70,14 +71,14 @@ final class InstallerProgressOutputTest {
         try {
 
             // when
-            ProcessResult install = runWithPseudoTerminal(environment, setupAnswers, installerCommand);
+            PseudoTerminalResult install = runWithPseudoTerminal(environment, setupAnswers, installerCommand);
             addSourceRepositoryCommit(sourceRepository, "UPDATED", "updated\n");
-            ProcessResult update = runWithPseudoTerminal(environment, setupAnswers, installerCommand);
+            PseudoTerminalResult update = runWithPseudoTerminal(environment, setupAnswers, installerCommand);
 
             // then
             install.assertSuccess();
             update.assertSuccess();
-            assertThat(install.output())
+            assertThat(install.transcript())
                     .containsSubsequence(
                             "Symphony for Trello installer",
                             "Detected ",
@@ -107,7 +108,7 @@ final class InstallerProgressOutputTest {
                     .containsOnlyOnce(RUN_LINE)
                     .containsOnlyOnce(HANDOFF)
                     .doesNotContain("Update plan", "Installer stopped during");
-            assertThat(update.output())
+            assertThat(update.transcript())
                     .containsSubsequence(
                             "Update plan",
                             "[1/4] Checking prerequisites",
@@ -123,7 +124,8 @@ final class InstallerProgressOutputTest {
                     .containsOnlyOnce(RUN_LINE)
                     .containsOnlyOnce(HANDOFF)
                     .doesNotContain("Install plan");
-            assertThat(update.output().stripTrailing()).endsWith("symphony-trello logs --workflow '" + workflow + "'");
+            assertThat(update.transcript().stripTrailing())
+                    .endsWith("symphony-trello logs --workflow '" + workflow + "'");
         } finally {
             if (Files.isExecutable(installedCommand)) {
                 run(environment, installedCommand.toString(), "stop").assertSuccess();
