@@ -22,6 +22,7 @@ Dry run: no files changed.
 [2/2] Installing Symphony
   WOULD download release archive: https://github.com/martin-francois/symphony-trello/releases/download/v<INSTALLER_VERSION>/symphony-trello-<INSTALLER_VERSION>.tar.gz
   WOULD verify SHA3-256 checksum from: https://github.com/martin-francois/symphony-trello/releases/download/v<INSTALLER_VERSION>/checksums.txt
+  WOULD skip release signature check: install GitHub CLI (gh) 2.65 or newer to check it
   WOULD unpack release archive into: <TEMP>/user-home/.local/share/symphony-trello/app
   WOULD install command: <TEMP>/user-home/.local/bin/symphony-trello
   WOULD add <TEMP>/user-home/.local/bin to PATH in <TEMP>/user-home/.bashrc

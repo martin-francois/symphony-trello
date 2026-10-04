@@ -10,8 +10,6 @@ import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.PseudoTerminalRes
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -147,6 +145,7 @@ final class InstallerProgressOutputTest {
 
         // when
         ProcessResult install = runReleaseInstaller(environment, binDirectory);
+        install.assertSuccess();
         Files.writeString(
                 symphonyHome.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME), "{\"boards\":[]}\n");
         ProcessResult update = runReleaseInstaller(environment, binDirectory);
@@ -466,25 +465,14 @@ final class InstallerProgressOutputTest {
     }
 
     private Path createReleaseAssets(boolean validChecksum) throws Exception {
+        Path generatedAssets = InstallerScriptFixture.createReleaseAssets(temporaryDirectory, RELEASE_VERSION, true);
         Path assets = temporaryDirectory.resolve(validChecksum ? "release-assets" : "release-assets-bad-checksum");
-        String rootName = "symphony-trello-" + RELEASE_VERSION;
-        Path quarkusApp = assets.resolve("staging").resolve(rootName).resolve("target/quarkus-app");
-        Files.createDirectories(quarkusApp);
-        Files.writeString(quarkusApp.resolve("quarkus-run.jar"), "fake release jar\n");
-        Path archive = assets.resolve(rootName + ".tar.gz");
-        run(
-                        Map.of(),
-                        "tar",
-                        "-czf",
-                        archive.toString(),
-                        "-C",
-                        assets.resolve("staging").toString(),
-                        rootName)
-                .assertSuccess();
-        String checksum = validChecksum
-                ? HexFormat.of().formatHex(MessageDigest.getInstance("SHA3-256").digest(Files.readAllBytes(archive)))
-                : "0".repeat(SHA3_256_HEX_LENGTH);
-        Files.writeString(assets.resolve("checksums.txt"), checksum + "  " + archive.getFileName() + "\n");
+        Files.move(generatedAssets, assets);
+        if (!validChecksum) {
+            Files.writeString(
+                    assets.resolve("checksums.txt"),
+                    "0".repeat(SHA3_256_HEX_LENGTH) + "  symphony-trello-" + RELEASE_VERSION + ".tar.gz\n");
+        }
         return assets;
     }
 
@@ -503,6 +491,7 @@ final class InstallerProgressOutputTest {
 
     private Map<String, String> releaseEnvironment(Path releaseAssets) throws Exception {
         Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path fakeGitHubCli = createFakeGitHubCli(temporaryDirectory);
         Path checksumBin = temporaryDirectory.resolve("checksum-java-bin");
         Files.createDirectories(checksumBin);
         // The shared fake java only records calls; the installer's SHA3 helper needs a real source launch.
@@ -523,7 +512,13 @@ final class InstallerProgressOutputTest {
         Files.createDirectories(home);
         return Map.of(
                 "PATH",
-                checksumBin + File.pathSeparator + fakeBin + File.pathSeparator + System.getenv("PATH"),
+                checksumBin
+                        + File.pathSeparator
+                        + fakeGitHubCli
+                        + File.pathSeparator
+                        + fakeBin
+                        + File.pathSeparator
+                        + System.getenv("PATH"),
                 "HOME",
                 home.toString(),
                 "SYMPHONY_HOME",

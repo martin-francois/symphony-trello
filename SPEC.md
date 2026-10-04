@@ -4364,6 +4364,14 @@ When this profile is used:
   output. Otherwise the scripts MUST NOT color output when `CLICOLOR=0`, when `TERM` is `dumb`, or
   when output is not an interactive terminal, so redirected logs, CI output, and dry-run captures
   stay free of escape sequences
+- the release workflow MUST publish a Sigstore attestation bundle for the release assets, signed
+  without a long-lived key by the release workflow on the default branch. For releases from the
+  first signed release onward, when GitHub CLI with `gh attestation verify` is installed, the
+  default installer MUST verify the downloaded archive against that bundle with that signer identity
+  before unpacking, and MUST stop without unpacking when the bundle download or the verification
+  fails. When GitHub CLI or `gh attestation verify` is not installed, or the release predates the
+  first signed release, the installer MUST keep the checksum check, print one note that the
+  signature was not checked, and continue
 - the installer MAY support an explicit source-checkout mode for development and testing. In that
   mode it MUST clone or update the configured Git ref, run the Maven wrapper to build the packaged
   Quarkus app, and keep the rest of setup behavior equivalent to release-archive installs
