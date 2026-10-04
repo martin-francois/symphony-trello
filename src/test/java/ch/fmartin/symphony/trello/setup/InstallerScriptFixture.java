@@ -876,6 +876,34 @@ final class InstallerScriptFixture {
         return fakeBin;
     }
 
+    static Path createPowerShellSourceRepository(Path temporaryDirectory) throws Exception {
+        if (isWindows()) {
+            return createWindowsSourceRepository(temporaryDirectory);
+        }
+        Path repository = createSourceRepository(temporaryDirectory);
+        writeExecutable(
+                repository.resolve("mvnw.cmd"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                echo "mvnw.cmd $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                app_home="$(cd "$(dirname "$0")" && pwd -P)"
+                mkdir -p "$app_home/target/quarkus-app/app" "$app_home/target/quarkus-app/lib/main" "$app_home/target/quarkus-app/quarkus"
+                : > "$app_home/target/quarkus-app/quarkus-run.jar"
+                """);
+        run(Map.of(), "git", "-C", repository.toString(), "add", "mvnw.cmd").assertSuccess();
+        run(Map.of(), "git", "-C", repository.toString(), "commit", "-m", "Add PowerShell test wrapper")
+                .assertSuccess();
+        return repository;
+    }
+
+    static Path createPowerShellFakeToolchain(Path temporaryDirectory) throws IOException {
+        if (isWindows()) {
+            return createFakeWindowsToolchain(temporaryDirectory);
+        }
+        return createFakeToolchain(temporaryDirectory);
+    }
+
     static Path createFakeWindowsToolchain(Path temporaryDirectory) throws IOException {
         Path fakeBin = temporaryDirectory.resolve("fake-windows-bin");
         Files.createDirectories(fakeBin);
