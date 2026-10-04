@@ -994,6 +994,27 @@ Setup and lifecycle commands that hide a local object such as a workflow file, w
 PID/state file, or file-backed secret path SHOULD include the same public-safe token and a
 `diagnostics --show-private-context --lookup` hint so operators can resolve only that object locally.
 
+When an unexpected setup or lifecycle failure writes a sanitized troubleshooting report in an
+interactive terminal, the Java implementation MAY offer follow-up steps (Java implementation
+extension). Expected user-correctable failures MUST NOT offer them. Commands run with
+`--non-interactive`, without an attached console, or inside a Codex investigation (the
+`SYMPHONY_TRELLO_CODEX_INVESTIGATION` environment variable is set) MUST NOT start Codex. When Codex
+CLI is on `PATH` and `codex login status` succeeds, the command MAY ask whether Codex should
+investigate the failure locally before offering a GitHub issue. The question MUST default to no and
+MUST say what Codex receives. Codex MUST NOT start without an explicit yes. The prompt Symphony
+sends MUST contain only fixed instructions, the version, the command name, how the command was
+started, the error code, and the sanitized report; it MUST NOT contain raw local paths, Trello names
+or identifiers, account names, or credential values. Codex runs locally and sees its own working
+directory and writable roots, which are the Symphony config directory and, for a source install, the
+source checkout. Symphony MUST NOT commit, push, open pull requests, or post issues on Codex's
+behalf. Every text Codex returns MUST pass through the troubleshooting-report sanitizer before it is
+printed or added to an issue draft. When Codex reports a local configuration problem, the command
+MUST show the next step instead of offering an issue. When Codex reports changed files and every
+reported validation passed, the command MAY offer an issue that describes the failure and the local
+fix. When Codex is unavailable, is declined, times out, exits non-zero, or returns no usable answer,
+the command MUST fall back to the existing GitHub issue offer. Posting an issue MUST always need a
+separate confirmation after the full draft is shown.
+
 Public-safe diagnostics tokens SHOULD be stable for a local installation and SHOULD be generated from
 private values with a local random diagnostics key using a keyed hash such as `HmacSHA3-256`. The
 local diagnostics key MUST NOT be printed in diagnostics output, private-context output, logs, issue
@@ -4077,6 +4098,11 @@ When this profile is used:
   GitHub, Trello, credential-persistence, or workflow-write side effects. A blank answer keeps the
   generated workflow repository-general, and dry-run MUST NOT prompt
 - setup diagnostics MUST redact both `--repository-url URL` and `--repository-url=URL` forms
+- an unexpected setup failure in an interactive terminal MAY offer a local Codex investigation before
+  the GitHub issue offer; the investigation MUST be opt-in with a default of no, MUST receive only
+  sanitized prompt text, MUST fall back to the issue offer when Codex is unavailable or fails, and
+  MUST NOT be offered for expected failures, non-interactive runs, or runs started by a Codex
+  investigation
 - regeneration performed by `setup-local configure-github` MUST preserve existing raw
   `repository.default_url` and `repository.default_path` values, including environment references
 - when `setup-local` chooses a default managed HTTP port, it MUST avoid ports reserved by connected
