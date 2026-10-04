@@ -29,20 +29,30 @@ public class ConfigResolver {
     private static final Splitter PATH_SEPARATOR = Splitter.on(File.pathSeparator);
     private static final String FILE_SECRET_PREFIX = "file:";
     private static final int MAX_SECRET_BYTES = 64 * 1024;
-    static final String ADDITIONAL_WRITABLE_ROOTS_ENVIRONMENT = "SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS";
+    public static final String ADDITIONAL_WRITABLE_ROOTS_ENVIRONMENT = "SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS";
+
+    public static final String DANGER_FULL_ACCESS_ENVIRONMENT = "SYMPHONY_CODEX_DANGER_FULL_ACCESS";
 
     /// Separates the setting name from the variable name in a `missing_path_environment_variable`
     /// message, so setup can show the setting without the variable.
     public static final String MISSING_PATH_ENVIRONMENT_MARKER = " references missing environment variable ";
 
     private final Function<String, Optional<String>> environmentResolver;
+    private final SecretFiles secretFiles;
 
     public ConfigResolver() {
         this(LocalEnvironment::get);
     }
 
     public ConfigResolver(Function<String, Optional<String>> environmentResolver) {
+        this(environmentResolver, SecretFiles.HOST);
+    }
+
+    /// Callers that resolve untrusted front matter pass in-memory [SecretFiles] so resolution never
+    /// reads host files.
+    public ConfigResolver(Function<String, Optional<String>> environmentResolver, SecretFiles secretFiles) {
         this.environmentResolver = environmentResolver;
+        this.secretFiles = secretFiles;
     }
 
     public EffectiveConfig resolve(WorkflowDefinition workflow) {
@@ -53,7 +63,7 @@ public class ConfigResolver {
         Map<String, Object> hooks = object(root, "hooks");
         Map<String, Object> agent = object(root, "agent");
         Map<String, Object> codex = object(root, "codex");
-        boolean codexDangerFullAccess = environmentValue("SYMPHONY_CODEX_DANGER_FULL_ACCESS")
+        boolean codexDangerFullAccess = environmentValue(DANGER_FULL_ACCESS_ENVIRONMENT)
                 .map(Boolean::parseBoolean)
                 .orElse(false);
         try {
@@ -354,12 +364,12 @@ public class ConfigResolver {
     private String fileSecret(Path workflowDirectory, String displayName, String configuredPath) {
         Path secretPath = pathFailingOnMissingVariable(workflowDirectory, displayName + " secret file", configuredPath);
         try {
-            long size = Files.size(secretPath);
+            long size = secretFiles.size(secretPath);
             if (size > MAX_SECRET_BYTES) {
                 throw new ConfigException(
                         "secret_file_too_large", displayName + " secret file is too large: " + secretPath);
             }
-            return stripTrailingLineBreaks(Files.readString(secretPath));
+            return stripTrailingLineBreaks(secretFiles.readString(secretPath));
         } catch (IOException e) {
             throw new ConfigException(
                     "secret_file_read_error", displayName + " secret file cannot be read: " + secretPath, e);
@@ -524,5 +534,24 @@ public class ConfigResolver {
 
     private static boolean blank(String value) {
         return value == null || value.isBlank();
+    }
+
+    /// Reads the files behind `file:` secret references.
+    public interface SecretFiles {
+        SecretFiles HOST = new SecretFiles() {
+            @Override
+            public long size(Path path) throws IOException {
+                return Files.size(path);
+            }
+
+            @Override
+            public String readString(Path path) throws IOException {
+                return Files.readString(path);
+            }
+        };
+
+        long size(Path path) throws IOException;
+
+        String readString(Path path) throws IOException;
     }
 }
