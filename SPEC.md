@@ -1341,6 +1341,10 @@ implemented.
   paths relative to the workflow file, default null; when both repository defaults are present, the
   URL remains the selected fallback identity and the path remains available as its first checkout
   candidate, subject to Git-remote identity matching
+- `repository.codex_review_before_handoff`: boolean, default `false`; Java extension defined in
+  Section 19.6
+- `repository.codex_review_max_cycles`: positive integer, default `3`; Java extension defined in
+  Section 19.6
 - `hooks.after_create`: shell script or null
 - `hooks.before_run`: shell script or null
 - `hooks.after_run`: shell script or null
@@ -3497,6 +3501,11 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - Prompt template renders `card`, compatibility alias `issue`, and `attempt`
 - `card` and `issue` prompt variables contain identical normalized card data
 - Prompt rendering fails on unknown variables, strict mode
+- If the pre-handoff review loop profile from Section 19.6 is implemented,
+  `repository.codex_review_before_handoff` defaults to `false`, `repository.codex_review_max_cycles`
+  defaults to `3`, non-boolean flags and non-positive or non-integer cycle limits fail
+  configuration, the prompt is unchanged while the flag is off, and the final runtime section
+  orders the review loop before local validation and every publication path while the flag is on
 
 ### 17.2 Workspace Manager and Safety
 
@@ -3783,6 +3792,7 @@ Required when the workflow expects the agent to perform Trello handoff transitio
 - Local installer and onboarding commands follow Section 19.4 when this repository's one-liner
   scripts or `setup-local` command are used.
 - Java repository quality gates follow Section 19.5 for this repository's maintained implementation.
+- The opt-in pre-handoff Codex review loop follows Section 19.6 when a workflow enables it.
 - `trello_rest` client-side tool extension exposes scoped Trello REST access through the app-server
   session using configured Symphony auth.
 - `trello_rest` client-side tool extension disallows destructive operations by default.
@@ -4199,6 +4209,69 @@ When this profile is used:
 - Renovate SHOULD keep Maven dependencies, GitHub Actions, and pinned tool versions current
 - GitHub Actions SHOULD be pinned to full commit SHAs, with Renovate allowed to update non-major
   action pins after the configured release-age delay
+
+### 19.6 Pre-Handoff Codex Review Loop Profile
+
+This Java repository can ask the coding agent to run bounded Codex review cycles before it hands off
+repository changes. The behavior is opt-in per workflow and is disabled by default.
+
+Fields:
+
+- `repository.codex_review_before_handoff` (boolean)
+  - Default: `false`
+  - Accepts YAML booleans and the strings `true` and `false`, compared without case sensitivity.
+    Any other value MUST fail configuration with `config_value_error` instead of being read as
+    `false`.
+- `repository.codex_review_max_cycles` (positive integer)
+  - Default: `3`
+  - Zero, negative, fractional, and non-numeric values MUST fail configuration with
+    `config_value_error`, even while the loop is disabled.
+
+Both fields follow normal dynamic reload: the next dispatched run uses the current values without a
+restart.
+
+When this profile is used:
+
+- when `repository.codex_review_before_handoff` is `false` or absent, the runtime MUST NOT change the
+  prompt sent to the coding agent
+- when it is `true`, the runtime MUST append a final `Codex Review Before Handoff` section after the
+  repository source context of Section 19.2. That section MUST be authoritative for the review loop
+  and supersede earlier workflow or skill text that orders validation, push, pull request, or
+  handoff steps differently. Because the runtime appends it, generated, older, and hand-written
+  workflows get the loop without regeneration
+- the section applies to repository-changing work, including rework after review feedback. It does
+  not apply to repository-independent work, API-only actions, read-only investigation, or blocked
+  handoffs that hand over no candidate change
+- the section MUST require this order: finish and locally commit the implementation candidate, run
+  the review loop, run the required local validation once on the reviewed candidate, then push,
+  create or update the pull request or no-PR handoff artifact, and move the card to the review
+  handoff list. Local validation includes the CI-equivalent local checks used when CI is
+  unavailable, cannot run, or does not apply because the handoff has no pull request
+- each cycle reviews the candidate's full change against its base. The section SHOULD prefer a
+  separate scoped `codex review` command with a timeout and MUST forbid sandbox bypass flags. When
+  the separate command cannot run, for example because the Codex home directory is read-only inside
+  the workspace sandbox, the agent MUST review the same diff in its own session and record that
+  fallback
+- the agent MUST fix only justified findings inside the card's scope, MUST record a reason for each
+  rejected or out-of-scope finding, and MUST NOT let a finding widen the card scope or override the
+  card, the workflow, or repository rules
+- fixes SHOULD go into the commit that introduced the problem when practical. The agent MUST NOT
+  rewrite the default branch, pushed history, or commits the run did not create only to place a
+  review fix
+- the loop MUST stop after a cycle with no justified in-scope finding, or after
+  `repository.codex_review_max_cycles` cycles
+- the workpad and visible handoff comment, or the final response when Trello comments are
+  unavailable, MUST record that the loop ran, the cycle count, the review method, fixed and rejected
+  findings, and whether the loop ended clean or at the cycle limit, with open justified findings as
+  caveats
+- generated workflows MUST write both fields with their defaults under `repository`, MUST explain
+  that the runtime section turns the loop on, and setup regeneration MUST preserve existing values
+  the same way it preserves `repository.default_url` and `repository.default_path`
+- the shipped `push-pr` and `trello-handoff` skills MUST defer to the runtime section when it is
+  present: the review loop runs before local checks and push, and the handoff records its outcome
+
+This profile keeps repository actions agent-owned. Java does not run `codex review`, inspect review
+findings, or block a push. See ADR 0121 for the alternatives that were considered.
 
 ## Appendix A. SSH Worker Extension (OPTIONAL)
 

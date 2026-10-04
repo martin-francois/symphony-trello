@@ -89,7 +89,12 @@ public record EffectiveConfig(
     public record WorkspaceConfig(Path root) {}
 
     @NullMarked
-    public record RepositoryConfig(@Nullable String defaultUrl, @Nullable Path defaultPath) {
+    public record RepositoryConfig(
+            @Nullable String defaultUrl, @Nullable Path defaultPath, CodexReviewConfig codexReview) {
+        public RepositoryConfig(@Nullable String defaultUrl, @Nullable Path defaultPath) {
+            this(defaultUrl, defaultPath, CodexReviewConfig.disabled());
+        }
+
         public DefaultSource selectedDefaultSource() {
             if (defaultUrl != null) {
                 return DefaultSource.URL;
@@ -98,6 +103,14 @@ public record EffectiveConfig(
                 return DefaultSource.PATH;
             }
             return DefaultSource.NONE;
+        }
+    }
+
+    /// Optional review loop that the agent runs before it hands off repository changes.
+    public record CodexReviewConfig(boolean enabled, int maxCycles) {
+        public static CodexReviewConfig disabled() {
+            return new CodexReviewConfig(
+                    ConfigDefaults.DEFAULT_CODEX_REVIEW_BEFORE_HANDOFF, ConfigDefaults.DEFAULT_CODEX_REVIEW_MAX_CYCLES);
         }
     }
 

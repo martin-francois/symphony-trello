@@ -14,6 +14,7 @@ import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
+import ch.fmartin.symphony.trello.repository.CodexReviewPrompt;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.TrackerClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
@@ -86,6 +87,66 @@ final class LocalAgentRunnerTest {
         assertThat(expectedWorkspace.resolve(CodexSkillInstaller.installedSkillPath("commit")))
                 .content()
                 .contains("configure it from the authenticated GitHub login");
+    }
+
+    @Test
+    void leavesCodexReviewLoopOutOfThePromptByDefault() {
+        // given
+        EffectiveConfig config = configWithRepository(Map.of());
+
+        // when
+        String prompt = promptPassedToCodex(config, "Card task");
+
+        // then
+        assertThat(prompt).doesNotContain(CodexReviewPrompt.HEADING).doesNotContain("codex review");
+    }
+
+    @Test
+    void appendsCodexReviewLoopAfterRepositoryContextWhenWorkflowOptsIn() {
+        // given
+        EffectiveConfig config =
+                configWithRepository(Map.of("codex_review_before_handoff", true, "codex_review_max_cycles", 2));
+
+        // when
+        String prompt = promptPassedToCodex(config, "Card task");
+
+        // then
+        assertThat(prompt)
+                .startsWith("Card task")
+                .containsSubsequence("## Repository Source Context", CodexReviewPrompt.HEADING)
+                .endsWith("could not be fixed safely in this card, as a handoff caveat.");
+        assertThat(reviewSection(prompt))
+                .contains("`repository.codex_review_max_cycles: 2`")
+                .contains("or after 2 cycles in total")
+                .contains("timeout 30m codex review --base <base-branch> --title")
+                .contains("Do not add `--dangerously-bypass-approvals-and-sandbox`")
+                .contains("Review the same diff yourself in this session instead")
+                .contains("Fix a finding only when it is justified and inside the card's scope")
+                .contains("`git commit --fixup` and an autosquash rebase")
+                .contains("Never rewrite the default branch, pushed history")
+                .contains("Skip it for repository-independent work");
+    }
+
+    @Test
+    void codexReviewLoopRunsBeforeLocalChecksAndEveryPublicationPath() {
+        // given
+        EffectiveConfig config = configWithRepository(Map.of("codex_review_before_handoff", "true"));
+
+        // when
+        String section = reviewSection(promptPassedToCodex(config, "Card task"));
+
+        // then
+        assertThat(section)
+                .contains("`repository.codex_review_max_cycles: 3`")
+                .containsSubsequence(
+                        "1. Finish the implementation candidate and commit it locally. Do not push yet.",
+                        "2. Run the review loop below.",
+                        "3. Run the required local validation once on the reviewed candidate.",
+                        "CI-equivalent local checks used when CI is unavailable, cannot run, or does not apply"
+                                + " because the handoff has no pull request.",
+                        "4. Only then push the branch, create or update the pull request or write the no-PR handoff"
+                                + " artifact such as `PR.md`, and move the card to the review handoff list.")
+                .contains("Record the outcome in the Trello workpad and the visible handoff comment");
     }
 
     @Test
@@ -983,6 +1044,11 @@ final class LocalAgentRunnerTest {
         assertThat(result).isEqualTo(AgentRunResult.ok());
         assertThat(prompt).hasValueSatisfying(value -> assertThat(value).isNotBlank());
         return prompt.get();
+    }
+
+    /// Collapses line wrapping so assertions do not depend on where the prompt text breaks lines.
+    private static String reviewSection(String prompt) {
+        return prompt.substring(prompt.indexOf(CodexReviewPrompt.HEADING)).replaceAll("\\s+", " ");
     }
 
     private TrackerClient tracker(CardLookup lookup) {

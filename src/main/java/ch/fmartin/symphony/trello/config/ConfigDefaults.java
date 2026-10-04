@@ -40,5 +40,10 @@ public final class ConfigDefaults {
      */
     public static final int DEFAULT_SETUP_MAX_CONCURRENT_AGENTS = DEFAULT_MAX_CONCURRENT_AGENTS;
 
+    public static final boolean DEFAULT_CODEX_REVIEW_BEFORE_HANDOFF = false;
+
+    /// A small bound keeps a reviewer that keeps disputing the same findings from looping forever.
+    public static final int DEFAULT_CODEX_REVIEW_MAX_CYCLES = 3;
+
     private ConfigDefaults() {}
 }

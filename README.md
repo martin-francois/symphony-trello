@@ -1401,6 +1401,46 @@ commits show the wrong author, check `gh auth status`, `gh api user`, `gh api us
 repository's local `git config user.name`, `git config user.email`, and
 `git config symphony-trello.github-author-verified` inside the task checkout.
 
+### Codex Review Before Handoff
+
+Each workflow can make Codex review its own changes before it hands them off, so cards don't have to
+ask for it. The loop is off by default. To turn it on for one board, edit that board's workflow file:
+
+```yaml
+repository:
+  codex_review_before_handoff: true
+  codex_review_max_cycles: 3
+```
+
+Workflows that setup generates already contain both keys, with the flag set to `false` and the
+limit set to `3`. Set the flag back to `false`, or remove it, to turn the loop off. The next card that starts
+uses the new value; no restart is needed. Setup keeps both values when it regenerates the workflow.
+
+When the flag is `true`, Symphony adds a `Codex Review Before Handoff` section at the end of the
+prompt for every card. For cards that change a repository, Codex then works in this order:
+
+1. Finish the change and commit it locally.
+2. Review the whole change against its base branch. Codex fixes justified findings that are inside
+   the card's scope and repeats the review until a pass finds nothing worth fixing, or until
+   `codex_review_max_cycles` passes have run.
+3. Run the repository's local checks once on the reviewed result. This includes the CI-equivalent
+   checks Codex runs when CI is not available.
+4. Push, create or update the pull request, or write the no-PR handoff, then move the card to
+   `Human Review`.
+
+Codex puts review fixes into the commit that caused the problem when that is safe. It does not
+rewrite pushed history or the default branch for a review fix. Findings it rejects or leaves out of
+scope get a one-line reason. The workpad and the handoff comment say how many review passes ran,
+what was fixed, what was rejected, and whether the loop stopped at the limit with findings still
+open.
+
+Codex first tries a separate `codex review` run. Inside the default `workspaceWrite` sandbox that
+command usually fails because it cannot write to the Codex home directory. Codex then reviews the
+same diff in its own session and says so in the handoff. The prompt tells Codex not to bypass the
+sandbox to make the separate review run.
+
+Cards that only investigate, call an API, or need no repository change skip the loop.
+
 ### Trello Write Controls
 
 The recommended workflow gives Codex four scoped Trello handoff tools:

@@ -19,6 +19,7 @@ import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
+import ch.fmartin.symphony.trello.repository.CodexReviewPrompt;
 import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -42,6 +43,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 final class TrelloBoardSetupTest {
     private static final String REPOSITORY_POLICY_HEADING = "## Classify Repository Need Before Source Blocking";
@@ -852,6 +855,67 @@ final class TrelloBoardSetupTest {
         assertThat(examplePolicy)
                 .as("shipped workflow example repository policy")
                 .isEqualToNormalizingWhitespace(generatedPolicy);
+    }
+
+    @EnumSource(TrelloBoardSetup.GitHubIntegration.class)
+    @ParameterizedTest
+    void generatedWorkflowKeepsCodexReviewLoopOffAndPointsAtRuntimeSection(TrelloBoardSetup.GitHubIntegration github)
+            throws IOException {
+        // given
+        Path workflow = tempDir.resolve("review-loop-" + github + ".md");
+        String expectedPublication =
+                github.enabled() ? "any push, the pull request or no-PR handoff," : "the local commit or patch handoff";
+
+        // when
+        setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "Review Loop Queue",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                null,
+                1,
+                false,
+                false,
+                github));
+
+        // then
+        EffectiveConfig config =
+                new ConfigResolver(ignored -> Optional.empty()).resolve(new WorkflowLoader().load(workflow));
+        assertThat(config.repository().codexReview()).isEqualTo(EffectiveConfig.CodexReviewConfig.disabled());
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("  codex_review_before_handoff: false\n  codex_review_max_cycles: "
+                        + ConfigDefaults.DEFAULT_CODEX_REVIEW_MAX_CYCLES)
+                .contains("## Review Loop Setting")
+                .contains("final runtime section titled `" + CodexReviewPrompt.TITLE + "` to this prompt")
+                .containsIgnoringWhitespaces("before the final local validation, " + expectedPublication)
+                .containsIgnoringWhitespaces(
+                        "When that runtime section is absent, run a review loop only when the card asks for one.");
+    }
+
+    @Test
+    void exampleWorkflowReviewLoopSettingMatchesGeneratedGithubWorkflow() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("review-loop-example-sync.md");
+
+        // when
+        setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "Review Loop Example Queue",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                false));
+
+        // then
+        assertThat(reviewLoopSettingSection(Files.readString(Path.of("WORKFLOW.example.md"))))
+                .as("shipped workflow example review loop setting")
+                .isEqualToNormalizingWhitespace(reviewLoopSettingSection(Files.readString(workflow)));
     }
 
     @Test
@@ -2930,6 +2994,15 @@ final class TrelloBoardSetupTest {
 
     private static EffectiveConfig resolve(Path workflow) {
         return new ConfigResolver().resolve(new WorkflowLoader().load(workflow));
+    }
+
+    private static String reviewLoopSettingSection(String workflow) {
+        String heading = "## Review Loop Setting";
+        int start = workflow.indexOf(heading);
+        assertThat(start).as("review loop setting heading offset").isNotNegative();
+        int end = workflow.indexOf("\n## ", start + heading.length());
+        assertThat(end).as("next workflow section heading offset").isGreaterThan(start);
+        return workflow.substring(start, end);
     }
 
     private static String repositoryPolicySection(String workflow) {
