@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.tracker;
 
 import static ch.fmartin.symphony.trello.tracker.TrelloReferenceFuzzInvariants.analyzeChecklist;
+import static ch.fmartin.symphony.trello.tracker.TrelloReferenceFuzzInvariants.assertChecklistClassificationIsStable;
 import static ch.fmartin.symphony.trello.tracker.TrelloReferenceFuzzInvariants.assertChecklistClassificationNeverEmitsPrerequisitesWithProblems;
 import static ch.fmartin.symphony.trello.tracker.TrelloReferenceFuzzInvariants.assertReferenceParsingKeepsLookupIdsAndUrlsStable;
 import static ch.fmartin.symphony.trello.tracker.TrelloReferenceFuzzInvariants.checklist;
@@ -40,6 +41,7 @@ final class TrelloCardReferenceParserFuzzTest {
 
         // then
         assertChecklistClassificationNeverEmitsPrerequisitesWithProblems(result);
+        assertChecklistClassificationIsStable(checklist, result);
     }
 
     private static Stream<String> trelloReferenceTexts() {
