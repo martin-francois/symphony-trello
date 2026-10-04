@@ -855,7 +855,7 @@ public class SymphonyOrchestrator {
         }
         String prompt;
         try {
-            prompt = prompts.render(workflow.promptTemplate(), dispatchCard, attempt);
+            prompt = prompts.render(workflow.promptTemplate(), dispatchCard, attempt, launchConfig.github());
         } catch (RuntimeException e) {
             synchronized (this) {
                 running.remove(runningKey);

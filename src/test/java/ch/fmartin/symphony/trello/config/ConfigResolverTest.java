@@ -426,7 +426,74 @@ final class ConfigResolverTest {
     private static Stream<Arguments> malformedObjectSections() {
         return Stream.of(
                 Arguments.of("scalar-server", "server: 18080", "server must be an object"),
-                Arguments.of("scalar-polling", "polling: disabled", "polling must be an object"));
+                Arguments.of("scalar-polling", "polling: disabled", "polling must be an object"),
+                Arguments.of("scalar-github", "github: branch_only", "github must be an object"));
+    }
+
+    @MethodSource("gitHubHandoffSections")
+    @ParameterizedTest(name = "{0}")
+    void resolvesGitHubPullRequestHandoffSettings(
+            String name, String section, PullRequestMode expectedMode, String expectedLabel) throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow("WORKFLOW.github-" + name + ".md", section);
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.github()).isEqualTo(new EffectiveConfig.GitHubConfig(expectedMode, expectedLabel));
+    }
+
+    private static Stream<Arguments> gitHubHandoffSections() {
+        return Stream.of(
+                Arguments.of("omitted-section", "", PullRequestMode.CREATE, ConfigDefaults.DEFAULT_NO_PR_LABEL),
+                Arguments.of(
+                        "branch-only-board",
+                        "github:\n  pull_request_mode: branch_only\n",
+                        PullRequestMode.BRANCH_ONLY,
+                        ConfigDefaults.DEFAULT_NO_PR_LABEL),
+                Arguments.of(
+                        "mode-ignores-case",
+                        "github:\n  pull_request_mode: \" Branch_Only \"\n",
+                        PullRequestMode.BRANCH_ONLY,
+                        ConfigDefaults.DEFAULT_NO_PR_LABEL),
+                Arguments.of(
+                        "renamed-label",
+                        "github:\n  pull_request_mode: create\n  no_pr_label: \" Branch only \"\n",
+                        PullRequestMode.CREATE,
+                        "Branch only"),
+                Arguments.of("empty-label-disables", "github:\n  no_pr_label: \"\"\n", PullRequestMode.CREATE, null),
+                Arguments.of("null-label-disables", "github:\n  no_pr_label:\n", PullRequestMode.CREATE, null));
+    }
+
+    @MethodSource("invalidGitHubHandoffSections")
+    @ParameterizedTest(name = "{0}")
+    void rejectsInvalidGitHubPullRequestHandoffSettings(String name, String section, String expectedMessage)
+            throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow("WORKFLOW.github-invalid-" + name + ".md", section);
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        ConfigException error = catchThrowableOfType(
+                ConfigException.class, () -> resolver.resolve(new WorkflowLoader().load(workflow)));
+
+        // then
+        assertThat(error.code()).isEqualTo("config_value_error");
+        assertThat(error).hasMessage(expectedMessage);
+    }
+
+    private static Stream<Arguments> invalidGitHubHandoffSections() {
+        return Stream.of(
+                Arguments.of(
+                        "unknown-mode",
+                        "github:\n  pull_request_mode: draft\n",
+                        "github.pull_request_mode must be create or branch_only"),
+                Arguments.of(
+                        "list-label", "github:\n  no_pr_label: [No PR]\n", ConfigResolver.NO_PR_LABEL_TYPE_MESSAGE),
+                Arguments.of(
+                        "boolean-label", "github:\n  no_pr_label: false\n", ConfigResolver.NO_PR_LABEL_TYPE_MESSAGE));
     }
 
     @Test

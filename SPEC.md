@@ -495,6 +495,7 @@ Extension top-level keys defined in this specification:
 - `server`
 - `trello_tools`
 - `worker`
+- `github` (Java implementation extension, see Section 19.6)
 
 Unknown keys SHOULD be ignored for forward compatibility.
 
@@ -855,6 +856,9 @@ Template input variables:
 - `attempt` (integer or null)
   - `null`/absent on first attempt.
   - Integer on retry or continuation run.
+- `pull_request_handoff` (object, Java implementation extension)
+  - The pull request handoff mode resolved for this run from the `github` workflow settings and the
+    card labels. Section 19.6 defines its fields.
 
 Fallback prompt behavior:
 
@@ -1133,7 +1137,8 @@ guidance, or to record a path-safe blocker when no move destination is configure
 The generated workflow treats unavailable push credentials as blocking only when a card, repository
 policy, or human requires a push or pull request. For repository-changing work in the recommended
 workflow, `Human Review` means a pull request is available for review unless the card explicitly asks
-for local-only or no-push work. Generated workflows create ready-for-review, non-draft pull requests
+for local-only or no-push work, or the branch-only handoff extension in Section 19.6 selects a pushed
+branch without a pull request. Generated workflows create ready-for-review, non-draft pull requests
 by default and create draft pull requests only when the Trello card explicitly asks for a draft PR.
 They also allow handoff with documented, clearly unrelated broad validation failures when
 card-specific validation passed.
@@ -1183,6 +1188,7 @@ policy:
 - unresolved actionable feedback, required reviews, mergeability, checks, auth, or repository policy
   move the card to `Blocked` with the blocker class and next human action
 - the workflow SHOULD NOT leave the card parked in `Merging` after a failed merge attempt
+- a branch-only card without a pull request follows the branch merge rules in Section 19.6 instead
 
 When `new-board` would otherwise write `WORKFLOW.md` and that file already exists, the Java
 implementation writes a board-specific file named `WORKFLOW.<slugified-board-name>.md`. If that file
@@ -1375,6 +1381,8 @@ implemented.
 - `trello_tools.allow_url_attachments`: boolean, default true when writes are enabled
 - `trello_tools.allow_destructive_operations`: boolean, default `false`
 - `trello_tools.assume_write_scope`: boolean, default `false`
+- `github.pull_request_mode`: Java extension, `create` or `branch_only`, default `create`
+- `github.no_pr_label`: Java extension, Trello label name, default `No PR`; `""` or null disables it
 
 ## 7. Orchestration State Machine
 
@@ -2523,6 +2531,7 @@ Inputs to prompt rendering:
 - normalized `card` object
 - compatibility alias `issue`, pointing to the same normalized card object
 - OPTIONAL `attempt` integer, retry/continuation metadata
+- Java implementation extension `pull_request_handoff` object (Section 19.6)
 
 ### 12.2 Rendering Rules
 
@@ -3497,6 +3506,10 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - Prompt template renders `card`, compatibility alias `issue`, and `attempt`
 - `card` and `issue` prompt variables contain identical normalized card data
 - Prompt rendering fails on unknown variables, strict mode
+- `github.pull_request_mode` accepts `create` and `branch_only`, ignoring case, and rejects other
+  values; `github.no_pr_label` defaults to `No PR`, and an empty or null value disables it
+- `pull_request_handoff` resolves the documented precedence between the workflow default and the
+  card label, matching the label like other Trello label names
 
 ### 17.2 Workspace Manager and Safety
 
@@ -3697,6 +3710,10 @@ network access, or external service permissions are unavailable.
 - Real integration tests SHOULD verify behavior against open cards, archived cards, cards in
   archived lists, terminal-list cards, and per-card not-found/deleted lookup behavior when
   practical.
+- When the branch-only handoff profile in Section 19.6 changes, real integration checks SHOULD cover
+  a branch-only board, a `No PR` card on a `create` board, the untracked proposed description file,
+  rework, later pull request creation, and the branch merge from `Merging`, as listed in the live
+  E2E guide.
 - A skipped real-integration test SHOULD be reported as skipped, not silently treated as passed.
 - If a real-integration profile is explicitly enabled in CI or release validation, failures SHOULD
   fail that job.
@@ -4199,6 +4216,93 @@ When this profile is used:
 - Renovate SHOULD keep Maven dependencies, GitHub Actions, and pinned tool versions current
 - GitHub Actions SHOULD be pinned to full commit SHAs, with Renovate allowed to update non-major
   action pins after the configured release-age delay
+
+### 19.6 Branch-Only Pull Request Handoff Profile
+
+This profile is a Java implementation extension. It changes the `Human Review` and `Merging`
+expectations of Section 5.6 only for cards that it explicitly selects. Repository work stays
+workflow-owned and agent-owned: Java resolves the handoff mode from structured data and renders it
+into the prompt, and the generated workflow tells Codex how to commit, push, and merge. Java does not
+prepare checkouts, manage branches, or publish branches.
+
+Workflow fields, under the top-level `github` key:
+
+- `pull_request_mode` (string)
+  - `create` (default): repository-changing work hands off with a pull request.
+  - `branch_only`: repository-changing work hands off with a pushed branch and no pull request.
+  - Values are matched ignoring case and surrounding whitespace. Other values are configuration
+    errors.
+- `no_pr_label` (string or null)
+  - Default: `No PR`.
+  - A card that carries this Trello label uses branch-only handoff on a `create` workflow. Label
+    matching follows the label normalization in Section 11.3, so it ignores case and repeated
+    whitespace.
+  - An empty string or null disables the card-level label signal. Non-string values are
+    configuration errors.
+- An omitted `github` key behaves like the defaults above.
+
+Generated GitHub workflows write `github.pull_request_mode: create` and `github.no_pr_label: "No PR"`
+explicitly and include the branch-only handoff instructions. Generated non-GitHub workflows write no
+`github` key and keep their local handoff. Setup does not ask about the handoff mode; operators
+change it by editing the workflow. Workflow bodies that do not reference `pull_request_handoff`
+keep their previous behavior, because the mode reaches Codex only through the prompt.
+
+A board that already uses a Trello label named `No PR` for another purpose gets branch-only handoff
+for those cards once its workflow is generated, regenerated, or migrated with the current body. To
+keep the old meaning, rename that Trello label, or set `github.no_pr_label` to another name or to
+`""`.
+
+The `pull_request_handoff` prompt variable contains:
+
+- `mode`: the effective mode for this run, `create` or `branch_only`.
+- `workflow_mode`: the configured `github.pull_request_mode`.
+- `selected_by`: `workflow` or `card_label`.
+- `no_pr_label_enabled`: whether a card-level label is configured.
+- `no_pr_label`: the configured label name, or an empty string when disabled.
+- `card_has_no_pr_label`: whether the card carries the configured label.
+
+Effective mode precedence:
+
+1. A `branch_only` workflow is strict. No card on that board creates a pull request, whatever its
+   labels or comments say. Creating pull requests requires changing the workflow setting.
+2. On a `create` workflow, a Trello comment that explicitly asks Symphony to create a pull request
+   and is newer than the latest branch-only handoff selects `create` for that run. Codex applies
+   this rule because the request is free text.
+3. On a `create` workflow, the configured card label selects `branch_only`.
+4. Otherwise the run uses `create`.
+
+Once a pull request exists for the card branch, rework and merging use the pull request flow.
+
+A branch-only handoff MUST:
+
+- commit on a non-default task branch with the commit author policy of pull request work
+- run the local checks that would normally gate CI before pushing, keep the card active while
+  change-related failures remain, and record unrelated or unavailable checks
+- write the proposed pull request title and description to `PR.md` in the task checkout root, or to
+  the first unused `PR-<n>.md` name starting at 2 when an unrelated `PR.md` exists
+- never stage or commit the proposed description file
+- push the branch and create no pull request
+- move the card to the review handoff list with a handoff comment that names the branch-only mode
+  and its source, the task checkout path, the branch name and pushed head commit, the GitHub branch
+  link when available,
+  the proposed description file path, and the local check results
+
+The task checkout path is the one local path that a branch-only handoff names in Trello, because the
+user needs it to find the unmerged work. This is a deliberate exception to the path-free handoff text
+used elsewhere. Filesystem blocker comments still follow Section 19.2.
+
+Rework continues the same branch and checkout and may update the code and the proposed description
+file. When a later run uses `create` for a branch that went through a branch-only handoff, Codex
+creates the pull request from the proposed description file, honoring the repository pull request
+template, and moves the card to the review handoff list.
+
+When a human moves a branch-only card without a pull request to the merge approval list, Codex merges
+the card branch into the target branch named by the card, or into the repository default branch
+otherwise, pushes it without force, and moves the card to the configured done list. When the branch
+commits are already on the target branch, Codex skips the merge and moves the card to the done list.
+The completion comment names the merged branch and target, or why no merge was needed. Review-thread
+resolution does not apply without a pull request. A rejected merge or push moves the card to the
+blocked destination.
 
 ## Appendix A. SSH Worker Extension (OPTIONAL)
 
