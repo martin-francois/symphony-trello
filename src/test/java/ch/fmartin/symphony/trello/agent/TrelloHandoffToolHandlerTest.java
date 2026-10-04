@@ -447,7 +447,7 @@ final class TrelloHandoffToolHandlerTest {
                 "{\"text\":\"Ready\",\"card_id\":\"card-2\"}", unknownProperty("card_id"));
         int threads = 8;
         int roundsPerThread = 25;
-        CyclicBarrier start = new CyclicBarrier(threads);
+        var start = new CyclicBarrier(threads);
         List<String> expected = new ArrayList<>();
         List<Future<List<String>>> workers = new ArrayList<>();
 
