@@ -45,6 +45,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedSet;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -108,6 +109,7 @@ final class SetupDiagnosticReporter {
     private static final CharMatcher POSIX_PATH_START = SLASHES;
     private static final CharMatcher URL_AUTHORITY_TERMINATOR =
             CharMatcher.whitespace().or(CharMatcher.anyOf("/?#")).precomputed();
+    private static final CharMatcher WHITESPACE = CharMatcher.whitespace().precomputed();
     private static final CharMatcher TOKEN_TERMINATOR =
             CharMatcher.whitespace().or(CharMatcher.anyOf(")>'\"`")).precomputed();
     private static final CharMatcher ASCII_WORD_CHARACTER = CharMatcher.inRange('a', 'z')
@@ -244,6 +246,7 @@ final class SetupDiagnosticReporter {
     private final String osName;
     private List<String> sensitiveValues = List.of();
     private boolean deepDiagnostics;
+    private BiConsumer<String, String> pathTokenListener = (token, path) -> {};
     private DiagnosticsTokenHasher tokenHasher = DiagnosticsTokenHasher.ephemeral();
 
     SetupDiagnosticReporter(Map<String, String> environment, CommandRunner commandRunner) {
@@ -606,6 +609,10 @@ final class SetupDiagnosticReporter {
     private String renderPrivateContext(DiagnosticsRequest request, Optional<DiagnosticsTokenHasher> sharedTokenHasher)
             throws IOException {
         DiagnosticsContext context = diagnosticsContext(request, sharedTokenHasher);
+        // Tool path mappings sanitize the version lines the way the public report does, but private
+        // context never runs auth probes.
+        sensitiveValues = sensitiveValues(context.manifest(), context.paths(), diagnosticsArguments(request, false));
+        deepDiagnostics = false;
 
         var body = new StringBuilder();
         body.append("# Symphony for Trello Private Context\n\n");
@@ -705,6 +712,7 @@ final class SetupDiagnosticReporter {
         addLogMappings(mappings, context.paths().stateHome(), context.selectedWorkflowPaths(), context.selected());
         addProcessStateMappings(
                 mappings, context.paths().stateHome(), context.selectedWorkflowPaths(), context.selected());
+        addToolMappings(mappings);
         return mappings;
     }
 
@@ -871,6 +879,27 @@ final class SetupDiagnosticReporter {
                             pathToken(mapping.workflow().toString()),
                             mapping.workflow()));
         }
+    }
+
+    /// Maps the path tokens in the tool table. Tool output such as a Podman `docker` shim notice can
+    /// name any path, so the mapping reruns the version probes and records what sanitizing them
+    /// tokenizes instead of listing known paths.
+    private void addToolMappings(List<PrivateContextMapping> mappings) {
+        for (String tool : DIAGNOSTIC_TOOL_COMMANDS) {
+            emittedPathTokens(toolProbe(tool).detail())
+                    .forEach(token -> addMapping(mappings, "tool", tool, token.getKey(), token.getValue()));
+        }
+    }
+
+    private List<Map.Entry<String, String>> emittedPathTokens(String text) {
+        List<Map.Entry<String, String>> emitted = new ArrayList<>();
+        pathTokenListener = (token, path) -> emitted.add(Map.entry(token, path));
+        try {
+            sanitize(text);
+        } finally {
+            pathTokenListener = (token, path) -> {};
+        }
+        return emitted.stream().distinct().toList();
     }
 
     private static void addMapping(
@@ -1200,7 +1229,7 @@ final class SetupDiagnosticReporter {
         MarkdownTable table = MarkdownTable.leftAligned(List.of("tool", "status", "detail"));
         for (String tool : tools) {
             ToolProbe probe = toolProbe(tool);
-            table.row(tool, probe.status(), sanitize(probe.detail()));
+            table.row(tool, probe.status(), sanitize(probe.detail()) + probe.authStatus());
         }
         table.appendTo(body);
     }
@@ -1220,13 +1249,15 @@ final class SetupDiagnosticReporter {
             }
             return new ToolProbe("missing", "");
         }
-        String detail =
+        // The auth status stays out of the sanitized version line so a path token in that line is the
+        // same with and without --deep, and the private-context lookup can resolve it.
+        String authStatus =
                 switch (command.displayName()) {
-                    case "codex" -> codexStatus(command, version, deepDiagnostics);
-                    case "gh" -> githubStatus(command, version, deepDiagnostics);
-                    default -> version.output();
+                    case "codex" -> authStatus(command, "login", "login", "status");
+                    case "gh" -> authStatus(command, "auth", "auth", "status");
+                    default -> "";
                 };
-        return new ToolProbe("available", firstLine(detail));
+        return new ToolProbe("available", firstLine(version.output()), authStatus);
     }
 
     private ToolCommand toolCommand(String tool) {
@@ -1356,20 +1387,12 @@ final class SetupDiagnosticReporter {
         return stripped;
     }
 
-    private String codexStatus(ToolCommand command, CommandResult version, boolean deepDiagnostics) {
+    private String authStatus(ToolCommand command, String field, String... probeArguments) {
         if (!deepDiagnostics) {
-            return firstLine(version.output()) + "; login=not-probed";
+            return "; " + field + "=not-probed";
         }
-        CommandResult auth = commandRunner.run(command.command("login", "status"));
-        return firstLine(version.output()) + "; login=" + (auth.success() ? "ok" : "not-ok");
-    }
-
-    private String githubStatus(ToolCommand command, CommandResult version, boolean deepDiagnostics) {
-        if (!deepDiagnostics) {
-            return firstLine(version.output()) + "; auth=not-probed";
-        }
-        CommandResult auth = commandRunner.run(command.command("auth", "status"));
-        return firstLine(version.output()) + "; auth=" + (auth.success() ? "ok" : "not-ok");
+        CommandResult auth = commandRunner.run(command.command(probeArguments));
+        return "; " + field + "=" + (auth.success() ? "ok" : "not-ok");
     }
 
     private ManifestSnapshot manifest(Path manifestPath) {
@@ -2831,10 +2854,51 @@ final class SetupDiagnosticReporter {
         for (String path : sensitivePaths()) {
             if (!path.isBlank()) {
                 Pattern pathWithChildren = Pattern.compile(Pattern.quote(path) + "(?:[/\\\\][^\\r\\n\"'`<>|]*)?");
-                redacted = pathWithChildren.matcher(redacted).replaceAll(match -> pathToken(match.group()));
+                redacted = redactPathMatches(redacted, pathWithChildren);
             }
         }
         return redacted;
+    }
+
+    /// Replaces each match with one path token. A match can run past the end of the path into the
+    /// rest of a log line, because child paths may contain spaces. The token therefore ends at the
+    /// longest prefix that ends before whitespace and exists on disk, which keeps text such as
+    /// ` outcome=loaded` visible and lets the private-context lookup resolve the token. Without such
+    /// a prefix the whole match stays in the token, so no part of a private path leaks.
+    private String redactPathMatches(String value, Pattern pathPattern) {
+        Matcher matcher = pathPattern.matcher(value);
+        var redacted = new StringBuilder(value.length());
+        int cursor = 0;
+        while (matcher.find(cursor)) {
+            String path = existingPathPrefix(matcher.group());
+            redacted.append(value, cursor, matcher.start()).append(pathToken(path));
+            cursor = matcher.start() + path.length();
+        }
+        return redacted.append(value, cursor, value.length()).toString();
+    }
+
+    private static String existingPathPrefix(String candidate) {
+        if (WHITESPACE.matchesNoneOf(candidate) || existsAsPath(candidate)) {
+            return candidate;
+        }
+        for (int end = candidate.length() - 1; end > 0; end--) {
+            if (WHITESPACE.matches(candidate.charAt(end))
+                    && !WHITESPACE.matches(candidate.charAt(end - 1))
+                    && existsAsPath(candidate.substring(0, end))) {
+                return candidate.substring(0, end);
+            }
+        }
+        return candidate;
+    }
+
+    /// Text that is not a valid path on this platform is not an existing path, so the caller keeps
+    /// the whole match in one token.
+    private static boolean existsAsPath(String path) {
+        try {
+            return Files.exists(Path.of(path), LinkOption.NOFOLLOW_LINKS);
+        } catch (InvalidPathException e) {
+            return false;
+        }
     }
 
     private static void addPath(List<String> paths, String value) {
@@ -2844,7 +2908,9 @@ final class SetupDiagnosticReporter {
     }
 
     private String pathToken(String path) {
-        return "<path:" + hash(path) + ">";
+        String token = "<path:" + hash(path) + ">";
+        pathTokenListener.accept(token, path);
+        return token;
     }
 
     private static PrintStream borrowedOut(Terminal terminal) {
@@ -3056,7 +3122,11 @@ final class SetupDiagnosticReporter {
         WINDOWS_BATCH
     }
 
-    private record ToolProbe(String status, String detail) {}
+    private record ToolProbe(String status, String detail, String authStatus) {
+        private ToolProbe(String status, String detail) {
+            this(status, detail, "");
+        }
+    }
 
     private record ManifestSnapshot(ConnectedBoardManifest manifest, ManifestStatus status) {}
 
