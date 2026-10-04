@@ -453,16 +453,7 @@ final class TrelloBoardSetupTest {
         Path workflow = tempDir.resolve("generated-workflow.md");
 
         // when
-        var result = setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
-                endpoint(),
-                new TrelloBoardSetup.TrelloCredentials("key", "token"),
-                "Symphony Work Queue",
-                null,
-                workflow,
-                Path.of("./workspaces"),
-                1,
-                false,
-                false));
+        var result = setup.createRecommendedBoard(recommendedBoardRequest(workflow));
         int expectedPort = result.serverPort();
 
         // then
@@ -521,7 +512,7 @@ final class TrelloBoardSetupTest {
                 .contains("do not create separate progress comments")
                 .contains("## Operating Posture")
                 .contains("This is an unattended orchestration run")
-                .contains("Start by determining the current Trello list")
+                .contains("Start from the current Trello list shown under Trello Card")
                 .contains("## Out-Of-Scope Follow-Up Work")
                 .containsIgnoringWhitespaces(
                         "Problems introduced or worsened by this change MUST be addressed within the current card")
@@ -709,6 +700,49 @@ final class TrelloBoardSetupTest {
                         false,
                         EffectiveConfig.FollowUpCardsConfig.disabled()));
         assertThat(config.polling().interval()).isEqualTo(ConfigDefaults.GENERATED_WORKFLOW_POLLING_INTERVAL);
+    }
+
+    @Test
+    void recommendedWorkflowClosesMergingCardsWithNothingToMergeInDone() {
+        // given
+        Path workflow = tempDir.resolve("nothing-to-merge-workflow.md");
+
+        // when
+        setup.createRecommendedBoard(recommendedBoardRequest(workflow));
+        String prompt = new PromptRenderer()
+                .render(
+                        new WorkflowLoader().load(workflow).promptTemplate(),
+                        TestCards.card("card-1", "TRELLO-1", "Merging"),
+                        null);
+
+        // then
+        assertThat(prompt).contains("Current Trello list: Merging");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("If no PR for this card's work is linked from the card description, Trello comments, or")
+                .contains("no merge was needed, and move the card to \"Done\". Do not move it back to \"Human Review\"")
+                .contains("If the work needs a PR and PR discovery, checks, auth")
+                .contains("a human can move the card straight to \"Done\" after review");
+    }
+
+    @Test
+    void shippedSkillsCloseCardsWithNothingToMerge() throws IOException {
+        // given
+        Path landSkill = Path.of(".codex/skills/land/SKILL.md");
+        Path handoffSkill = Path.of(".codex/skills/trello-handoff/SKILL.md");
+
+        // when
+        String land = Files.readString(landSkill);
+        String handoff = Files.readString(handoffSkill);
+
+        // then
+        assertThat(land)
+                .contains("there is nothing to merge")
+                .contains("completion list. Do not send it back to the configured\n  review handoff list")
+                .contains("- The PR cannot be identified for work that needs one.");
+        assertThat(handoff)
+                .contains("a human can move the card\nstraight to `Done` after review")
+                .contains("move it to `Done` instead of back to\n`Human Review`");
     }
 
     @Test
@@ -1025,16 +1059,7 @@ final class TrelloBoardSetupTest {
                 workspaceJson("workspace-2", "second", "Second Workspace", "second")));
         Path workflow = tempDir.resolve("generated-workflow.md");
 
-        var request = new TrelloBoardSetup.NewBoardRequest(
-                endpoint(),
-                new TrelloBoardSetup.TrelloCredentials("key", "token"),
-                "Symphony Work Queue",
-                null,
-                workflow,
-                Path.of("./workspaces"),
-                1,
-                false,
-                false);
+        var request = recommendedBoardRequest(workflow);
 
         // when
         ThrowingCallable action = () -> setup.createRecommendedBoard(request);
@@ -1791,6 +1816,7 @@ final class TrelloBoardSetupTest {
                 .contains("renewed \"Review\"")
                 .contains("move back to\n  \"Review\" with the reason")
                 .contains("move the card to \"Released\"")
+                .contains("no merge was needed, and move the card to \"Released\". Do not move it back to \"Review\"")
                 .doesNotContain("renewed Human Review")
                 .doesNotContain("move back to\n  \"Human Review\"")
                 .doesNotContain("move the card to \"Done\"");
@@ -3074,6 +3100,19 @@ final class TrelloBoardSetupTest {
 
     private URI endpoint() {
         return URI.create("http://127.0.0.1:" + trello.endpointUri().getPort() + "/1");
+    }
+
+    private TrelloBoardSetup.NewBoardRequest recommendedBoardRequest(Path workflow) {
+        return new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "Symphony Work Queue",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                false);
     }
 
     private static EffectiveConfig resolve(Path workflow) {
