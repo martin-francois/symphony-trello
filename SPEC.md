@@ -4088,6 +4088,12 @@ that a second formatting pass leaves the source unchanged.
   and quiet periods recover it stepwise to `polling.interval_ms`
 - The next tick waits for the rest of a pending `Retry-After` and does not wait out a `Retry-After`
   that a request already sat out
+- Orchestrator operations are serialized: a retry dispatch that races a poll tick cannot exceed
+  `agent.max_concurrent_agents`, a worker exit waits for an in-flight operation before its tracker
+  I/O, and stop waits for an in-flight tick and cancels the workers that tick dispatched
+- If a refresh trigger is implemented, a refresh that races tick completion runs as the next tick
+  instead of waiting for the polling interval, and a refresh that races stop is a no-op that never
+  schedules work after shutdown
 - If a snapshot API is implemented, it returns running rows, retry rows, token totals, and rate
   limits
 - If a snapshot API is implemented, timeout/unavailable cases are surfaced

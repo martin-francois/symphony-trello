@@ -162,9 +162,16 @@ public class SymphonyOrchestrator {
     Runnable retryTimerWaitingHookForTests = () -> {};
     Runnable workerExitCompletionHookForTests = () -> {};
     Runnable workerLaunchHookForTests = () -> {};
-    Runnable executorsStoppedHookForTests = () -> {};
     Runnable handoffCancellationMarkedHookForTests = () -> {};
     Runnable stallSelectionHookForTests = () -> {};
+    /// Runs right after stop() shuts the scheduler down. A refresh that reached the scheduler now
+    /// would be rejected, so tests use this point to check that stop() marked the orchestrator as
+    /// stopped first.
+    Runnable schedulerStoppedHookForTests = () -> {};
+
+    /// Runs in scheduleRefreshIfStartedAndIdle between the started/idle check and scheduling the
+    /// tick, the window in which a concurrent stop() could shut the scheduler down.
+    Runnable refreshScheduleHookForTests = () -> {};
 
     @ConfigProperty(name = "symphony.workflow.path")
     volatile Path workflowPath;
@@ -320,9 +327,9 @@ public class SymphonyOrchestrator {
             });
             retryPendingUsageWorkpadCleanup(true);
             scheduler.shutdownNow();
+            schedulerStoppedHookForTests.run();
             handoffDeadlines.shutdownNow();
             workers.shutdownNow();
-            executorsStoppedHookForTests.run();
             releaseWorkflowProcessLock();
         } finally {
             operationLock.unlock();
@@ -398,6 +405,7 @@ public class SymphonyOrchestrator {
     /// schedule against the shut-down scheduler.
     private synchronized void scheduleRefreshIfStartedAndIdle() {
         if (started && !tickRunning) {
+            refreshScheduleHookForTests.run();
             scheduleTick(Duration.ZERO);
         }
     }
