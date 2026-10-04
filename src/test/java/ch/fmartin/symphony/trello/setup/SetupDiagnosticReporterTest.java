@@ -2452,7 +2452,9 @@ final class SetupDiagnosticReporterTest {
         Path configDir = tempDir.resolve("single-token-log-config");
         Path workspaceRoot = tempDir.resolve("single-token-log-workspaces");
         Path stateHome = tempDir.resolve("single-token-log-state");
-        Files.createDirectories(configDir);
+        // The token ends before " end" only because this path exists on disk.
+        Files.createDirectories(configDir.resolve("nested"));
+        Files.writeString(configDir.resolve("nested/output.txt"), "");
         Files.createDirectories(workspaceRoot);
         Files.createDirectories(stateHome);
         Files.writeString(
@@ -2481,6 +2483,40 @@ final class SetupDiagnosticReporterTest {
                         "<value:" + token(key, configDir.toString()) + ">",
                         tempDir.toString(),
                         "private-ref-value");
+    }
+
+    @Test
+    void rendersPathWithSpaceBelowCommandOptionDirectoryWithoutLeavingItsTailVisible() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("option-space-config");
+        Path workspaceRoot = tempDir.resolve("option-space-workspaces");
+        Path stateHome = tempDir.resolve("option-space-state");
+        Path existingChild = configDir.resolve("shared repos/output.txt");
+        Files.createDirectories(existingChild.getParent());
+        Files.writeString(existingChild, "");
+        Files.createDirectories(workspaceRoot);
+        Files.createDirectories(stateHome);
+        Files.writeString(
+                stateHome.resolve("option-space.log"),
+                """
+                cloned into %s/private client/repo
+                kept in %s/client (old) notes/repo
+                wrote %s end
+                """
+                        .formatted(configDir, configDir, existingChild));
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
+
+        // then
+        byte[] key = diagnosticsKey(configDir);
+        assertThat(report)
+                .contains(
+                        "cloned into " + pathToken(key, configDir.resolve("private client/repo")),
+                        "kept in " + pathToken(key, configDir.resolve("client (old) notes/repo")),
+                        "wrote " + pathToken(key, existingChild) + " end")
+                .doesNotContain("client/repo", "notes/repo", "repos/output.txt", tempDir.toString());
     }
 
     @Test
