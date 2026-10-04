@@ -24,9 +24,10 @@ for attempt in 1 2 3; do
     --ref main \
     -f operation=batch \
     -f "fuzz_seconds=$next_fuzz_seconds" \
+    -f automatic_budget=true \
     -f continue_fuzzing=true \
     -f "cycle_index=$next_cycle"; then
-    echo "Dispatched continuous-fuzzing cycle $next_cycle with $next_fuzz_seconds seconds per target."
+    echo "Dispatched continuous-fuzzing cycle $next_cycle with $((next_fuzz_seconds * 4)) aggregate fuzzing seconds."
     exit 0
   fi
 

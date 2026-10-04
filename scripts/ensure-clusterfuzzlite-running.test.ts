@@ -63,7 +63,7 @@ test("dispatches cycle zero when the continuous workflow is idle", () => {
   // then
   assert.equal(result.status, 0, result.stderr);
   assert.match(log, /workflow run continuous-fuzzing\.yml/);
-  assert.match(log, /-f fuzz_seconds=4950 -f continue_fuzzing=true -f cycle_index=0/);
+  assert.match(log, /-f fuzz_seconds=4950 -f automatic_budget=true -f continue_fuzzing=true -f cycle_index=0/);
 });
 
 test("restarts the continuous chain while an unrelated workflow run is active", () => {

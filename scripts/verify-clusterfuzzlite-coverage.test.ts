@@ -8,6 +8,7 @@ import test from "node:test";
 const script = resolve("scripts/verify-clusterfuzzlite-coverage");
 const targetSources = new Map([
   ["RepositorySourceFuzzer", "repository/RepositorySourceResolver.java"],
+  ["TrelloCardPayloadFuzzer", "tracker/TrelloClient.java"],
   ["TrelloCardReferenceParserFuzzer", "tracker/TrelloCardReferenceParser.java"],
   ["TrelloChecklistClassifierFuzzer", "tracker/TrelloChecklistClassifier.java"],
   ["TrelloHandoffToolFuzzer", "agent/TrelloHandoffToolHandler.java"],
@@ -109,3 +110,15 @@ for (const scenario of [
     assert.match(result.stderr, /RepositorySourceFuzzer coverage is malformed or does not reach/);
   });
 }
+
+test("rejects a card payload report that does not reach TrelloClient", () => {
+  const result = verify(
+    fixture(new Map([["TrelloCardPayloadFuzzer", report("tracker/TrelloCardReferenceParser.java")]])),
+  );
+
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /TrelloCardPayloadFuzzer coverage is malformed or does not reach src\/main\/java\/ch\/fmartin\/symphony\/trello\/tracker\/TrelloClient\.java/,
+  );
+});

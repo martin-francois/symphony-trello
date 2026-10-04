@@ -23,7 +23,7 @@ test("dispatches the next normal continuous batch", () => {
   assert.equal(attempts, 1);
   assert.match(
     log,
-    /workflow run continuous-fuzzing\.yml --repo owner\/project --ref main -f operation=batch -f fuzz_seconds=4950 -f continue_fuzzing=true -f cycle_index=1/,
+    /workflow run continuous-fuzzing\.yml --repo owner\/project --ref main -f operation=batch -f fuzz_seconds=4950 -f automatic_budget=true -f continue_fuzzing=true -f cycle_index=1/,
   );
 });
 
@@ -36,7 +36,7 @@ test("dispatches the shorter maintenance batch after three normal cycles", () =>
 
   // then
   assert.equal(result.status, 0, result.stderr);
-  assert.match(log, /-f fuzz_seconds=4500 -f continue_fuzzing=true -f cycle_index=3/);
+  assert.match(log, /-f fuzz_seconds=4500 -f automatic_budget=true -f continue_fuzzing=true -f cycle_index=3/);
 });
 
 test("wraps the maintenance cycle back to the first normal cycle", () => {
@@ -48,7 +48,7 @@ test("wraps the maintenance cycle back to the first normal cycle", () => {
 
   // then
   assert.equal(result.status, 0, result.stderr);
-  assert.match(log, /-f fuzz_seconds=4950 -f continue_fuzzing=true -f cycle_index=0/);
+  assert.match(log, /-f fuzz_seconds=4950 -f automatic_budget=true -f continue_fuzzing=true -f cycle_index=0/);
 });
 
 test("retries a transient dispatch failure", () => {

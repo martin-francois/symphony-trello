@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.fuzz.RepositorySourceFuzzer;
+import ch.fmartin.symphony.trello.fuzz.TrelloCardPayloadFuzzer;
 import ch.fmartin.symphony.trello.fuzz.TrelloCardReferenceParserFuzzer;
 import ch.fmartin.symphony.trello.fuzz.TrelloChecklistClassifierFuzzer;
 import ch.fmartin.symphony.trello.fuzz.TrelloHandoffToolFuzzer;
@@ -98,6 +99,18 @@ final class StandaloneFuzzerIsolationTest {
 
         // when
         WorkflowLoaderFuzzer.fuzzerTestOneInput(seed);
+
+        // then
+        // FuzzIsolationExtension checks the file and socket I/O of this execution after the class.
+    }
+
+    @FuzzTest
+    void trelloCardPayloadFuzzer(FuzzedDataProvider data) {
+        // given
+        FuzzedDataProvider seed = data;
+
+        // when
+        TrelloCardPayloadFuzzer.fuzzerTestOneInput(seed);
 
         // then
         // FuzzIsolationExtension checks the file and socket I/O of this execution after the class.

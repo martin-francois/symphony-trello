@@ -9,6 +9,7 @@ const script = resolve("scripts/select-clusterfuzzlite-target");
 const fullShareSeconds = "4950";
 const fuzzTargets = [
   "RepositorySourceFuzzer",
+  "TrelloCardPayloadFuzzer",
   "TrelloCardReferenceParserFuzzer",
   "TrelloChecklistClassifierFuzzer",
   "TrelloHandoffToolFuzzer",
@@ -107,12 +108,12 @@ chmod u+w "$last_argument"
   ]);
 });
 
-function selectedSeconds(target: string, fullShare: string) {
+function selectedSeconds(target: string, fullShare: string, automatic = false) {
   const buildOut = buildFixture();
   const output = join(buildOut, "github-output");
   const result = spawnSync("bash", [script, target, fullShare], {
     encoding: "utf8",
-    env: {...process.env, CFL_BUILD_OUT: buildOut, GITHUB_OUTPUT: output},
+    env: {...process.env, CFL_BUILD_OUT: buildOut, GITHUB_OUTPUT: output, CFL_AUTOMATIC_BUDGET: String(automatic)},
   });
   assert.equal(result.status, 0, result.stderr);
   const written = readFileSync(output, "utf8");
@@ -121,25 +122,33 @@ function selectedSeconds(target: string, fullShare: string) {
 }
 
 for (const scenario of [
-  {target: "TrelloHandoffToolFuzzer", fullShare: "4950", seconds: "3960"},
-  {target: "WorkflowLoaderFuzzer", fullShare: "4500", seconds: "3600"},
-  {target: "RepositorySourceFuzzer", fullShare: "1", seconds: "1"},
+  {target: "TrelloCardPayloadFuzzer", fullShare: "4950", seconds: "4950"},
+  {target: "TrelloCardReferenceParserFuzzer", fullShare: "4950", seconds: "2475"},
+  {target: "TrelloChecklistClassifierFuzzer", fullShare: "4500", seconds: "2250"},
+  {target: "TrelloChecklistClassifierFuzzer", fullShare: "1", seconds: "1"},
 ]) {
   test(`gives ${scenario.target} ${scenario.seconds} of ${scenario.fullShare} full-share seconds`, () => {
     assert.equal(selectedSeconds(scenario.target, scenario.fullShare), Number(scenario.seconds));
   });
 }
 
-// ADR 0078 fixes the batch cycle at four full shares; adding a target must not grow it.
-const aggregateFullShares = 4;
+for (const cycle of [
+  {baseline: "4950", total: 19800, full: 3960, half: 1980},
+  {baseline: "4500", total: 18000, full: 3600, half: 1800},
+]) {
+  test(`keeps the automatic cycle aggregate at ${cycle.total} seconds`, () => {
+    const seconds = fuzzTargets.map((target) => selectedSeconds(target, cycle.baseline, true));
+    assert.equal(seconds.reduce((total, value) => total + value, 0), cycle.total);
+    assert.equal(selectedSeconds("TrelloHandoffToolFuzzer", cycle.baseline, true), cycle.full);
+    assert.equal(selectedSeconds("TrelloCardReferenceParserFuzzer", cycle.baseline, true), cycle.half);
+  });
+}
 
-test("keeps the aggregate budget at four full shares", () => {
+test("keeps a manual full share independent of the automatic aggregate", () => {
   const seconds = fuzzTargets.map((target) => selectedSeconds(target, fullShareSeconds));
-
-  assert.equal(
-    seconds.reduce((total, value) => total + value, 0),
-    aggregateFullShares * Number(fullShareSeconds),
-  );
+  assert.equal(seconds.reduce((total, value) => total + value, 0), 24750);
+  assert.equal(selectedSeconds("TrelloHandoffToolFuzzer", fullShareSeconds), 4950);
+  assert.equal(selectedSeconds("TrelloChecklistClassifierFuzzer", fullShareSeconds), 2475);
 });
 
 for (const fullShare of ["", "0", "4950s", "-60"]) {
@@ -157,3 +166,15 @@ for (const fullShare of ["", "0", "4950s", "-60"]) {
     assert.deepEqual(readdirSync(buildOut).sort(), before);
   });
 }
+
+test("rejects an invalid automatic-budget mode before changing the build", () => {
+  const buildOut = buildFixture();
+  const before = readdirSync(buildOut).sort();
+  const result = spawnSync("bash", [script, "WorkflowLoaderFuzzer", fullShareSeconds], {
+    encoding: "utf8",
+    env: {...process.env, CFL_BUILD_OUT: buildOut, CFL_AUTOMATIC_BUDGET: "yes"},
+  });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /cannot select automatic fuzzing budget "yes": expected true or false/);
+  assert.deepEqual(readdirSync(buildOut).sort(), before);
+});

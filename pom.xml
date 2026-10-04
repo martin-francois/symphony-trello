@@ -215,6 +215,15 @@
         <targetPath>ch/fmartin/symphony/trello/agent/TrelloHandoffToolFuzzTestInputs/handoffToolCallsWriteOnlyWhatTheConfigurationAllows</targetPath>
         <directory>oss-fuzz/corpora/TrelloHandoffToolFuzzer</directory>
       </testResource>
+      <testResource>
+        <targetPath>ch/fmartin/symphony/trello/StandaloneFuzzerIsolationTestInputs/trelloCardPayloadFuzzer</targetPath>
+        <directory>oss-fuzz/corpora/TrelloCardPayloadFuzzer</directory>
+      </testResource>
+      <!-- Jazzer regression mode also replays the payload seeds through its mapping assertions. -->
+      <testResource>
+        <targetPath>ch/fmartin/symphony/trello/tracker/TrelloCardPayloadFuzzTestInputs/cardPayloadMappingReturnsACardOrRejectsTheUnknownPayload</targetPath>
+        <directory>oss-fuzz/corpora/TrelloCardPayloadFuzzer</directory>
+      </testResource>
     </testResources>
     <plugins>
       <plugin>

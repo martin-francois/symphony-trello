@@ -7,11 +7,14 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 
@@ -23,7 +26,13 @@ final class ContinuousFuzzingWorkflowTest {
     private static final String UNSAFE_WORKAROUND_EXPIRY_CHECK =
             ".clusterfuzzlite/check-unsafe-memory-access-workaround";
     private static final Path STANDALONE_FUZZERS = of("src/test/java/ch/fmartin/symphony/trello/fuzz");
+    private static final Path TARGET_SELECTOR = of("scripts/select-clusterfuzzlite-target");
     private static final Path COVERAGE_VERIFIER = of("scripts/verify-clusterfuzzlite-coverage");
+    private static final Path TEST_SOURCES = of("src/test/java");
+    private static final Pattern PROJECT_IMPORT =
+            Pattern.compile("^import (?:static )?(ch\\.fmartin\\.symphony\\.trello\\.[\\w.]+);$", Pattern.MULTILINE);
+    // The explicit helper manifest is relative to test_class_root in oss-fuzz/build.sh.
+    private static final Pattern COPIED_TEST_HELPERS = Pattern.compile("^  ([\\w/]+)$", Pattern.MULTILINE);
     private static final String CLUSTERFUZZLITE_COMMIT = "884713a6c30a92e5e8544c39945cd7cb630abcd1";
     private static final Pattern UNPINNED_ACTION = Pattern.compile("uses: [^\\s]+@(?![0-9a-f]{40}(?:\\s|$))");
     private static final Pattern PINNED_TEMURIN_IMAGE =
@@ -46,7 +55,9 @@ final class ContinuousFuzzingWorkflowTest {
                         "fail-fast: false",
                         "max-parallel: 1",
                         "group: continuous-fuzzing-batch-main-${{ matrix.target }}",
-                        "CFL_TARGET: ${{ matrix.target }}\n          CFL_FULL_SHARE_SECONDS: ${{ inputs.fuzz_seconds }}\n",
+                        "CFL_TARGET: ${{ matrix.target }}",
+                        "CFL_FULL_SHARE_SECONDS: ${{ inputs.fuzz_seconds }}",
+                        "CFL_AUTOMATIC_BUDGET: ${{ inputs.automatic_budget }}",
                         "scripts/select-clusterfuzzlite-target \"$CFL_TARGET\" \"$CFL_FULL_SHARE_SECONDS\"",
                         "google/clusterfuzzlite/actions/build_fuzzers@" + CLUSTERFUZZLITE_COMMIT,
                         "google/clusterfuzzlite/actions/run_fuzzers@" + CLUSTERFUZZLITE_COMMIT,
@@ -386,11 +397,31 @@ final class ContinuousFuzzingWorkflowTest {
                 .allSatisfy(fuzzer -> {
                     assertThat(batchMatrix).as("batch matrix").contains("- " + fuzzer + "\n");
                     assertThat(prunedCorpora).as("pruned corpus verification").contains(" " + fuzzer + "\n");
+                    assertThat(TARGET_SELECTOR)
+                            .as("target budget")
+                            .content(StandardCharsets.UTF_8)
+                            .contains("[" + fuzzer + "]=");
                     assertThat(COVERAGE_VERIFIER)
                             .as("coverage contract")
                             .content(StandardCharsets.UTF_8)
                             .contains("\"" + fuzzer + "|");
                 });
+    }
+
+    @Test
+    void ossFuzzBuildCopiesEveryTestHelperAStandaloneFuzzerImports() throws IOException {
+        // given
+        Set<String> importedTestHelpers = testClassesImportedByStandaloneFuzzers();
+        String ossFuzzBuild = Files.readString(OSS_FUZZ_BUILD);
+
+        // when
+        Set<String> copiedTestHelpers = copiedTestHelpers(ossFuzzBuild);
+
+        // then
+        assertThat(importedTestHelpers)
+                .as("a test helper missing from the OSS-Fuzz class path fails its fuzzer when the class loads")
+                .isNotEmpty()
+                .isSubsetOf(copiedTestHelpers);
     }
 
     @Test
@@ -429,6 +460,42 @@ final class ContinuousFuzzingWorkflowTest {
             }
         }
         return fuzzerNames;
+    }
+
+    // Class files under target/test-classes, for example ch/fmartin/symphony/trello/tracker/X.class.
+    private static Set<String> testClassesImportedByStandaloneFuzzers() throws IOException {
+        Set<String> testClasses = new HashSet<>();
+        try (var sources = Files.newDirectoryStream(STANDALONE_FUZZERS, "*Fuzzer.java")) {
+            for (Path source : sources) {
+                Matcher projectImport = PROJECT_IMPORT.matcher(Files.readString(source));
+                while (projectImport.find()) {
+                    testClassOf(projectImport.group(1)).ifPresent(testClasses::add);
+                }
+            }
+        }
+        return testClasses;
+    }
+
+    // A static import names a member, so drop trailing segments until a test source matches.
+    private static Optional<String> testClassOf(String importedName) {
+        for (String name = importedName; name.contains("."); name = name.substring(0, name.lastIndexOf('.'))) {
+            String classPath = name.replace('.', '/');
+            if (Files.isRegularFile(TEST_SOURCES.resolve(classPath + ".java"))) {
+                return Optional.of(classPath + ".class");
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static Set<String> copiedTestHelpers(String ossFuzzBuild) {
+        int start = ossFuzzBuild.indexOf("fuzzer_helpers=(\n");
+        int end = ossFuzzBuild.indexOf("\n)", start);
+        Matcher copy = COPIED_TEST_HELPERS.matcher(ossFuzzBuild.substring(start, end));
+        Set<String> helpers = new HashSet<>();
+        while (copy.find()) {
+            helpers.add("ch/fmartin/symphony/trello/" + copy.group(1) + ".class");
+        }
+        return helpers;
     }
 
     private static String workflowSource() throws IOException {

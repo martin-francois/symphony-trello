@@ -26,10 +26,15 @@ on:
           - coverage
           - build
       fuzz_seconds:
-        description: "One full share; a batch cycle fuzzes four full shares across all targets. Continuous cycles use 4500 or 4950 seconds."
+        description: "Manual full-share budget; automatic cycles use the fixed aggregate budget."
         required: true
         type: number
         default: 300
+      automatic_budget:
+        description: "Internal automatic-cycle allocation from four aggregate shares."
+        required: true
+        type: boolean
+        default: false
       continue_fuzzing:
         description: "Dispatch another long batch after this batch completes."
         required: true
@@ -135,6 +140,7 @@ jobs:
       matrix:
         target:
           - RepositorySourceFuzzer
+          - TrelloCardPayloadFuzzer
           - TrelloCardReferenceParserFuzzer
           - TrelloChecklistClassifierFuzzer
           - TrelloHandoffToolFuzzer
@@ -162,8 +168,9 @@ jobs:
       - name: Select one fuzz target and its budget
         id: target
         env:
-          CFL_TARGET: ${{ matrix.target }}
           CFL_FULL_SHARE_SECONDS: ${{ inputs.fuzz_seconds }}
+          CFL_AUTOMATIC_BUDGET: ${{ inputs.automatic_budget }}
+          CFL_TARGET: ${{ matrix.target }}
         run: scripts/select-clusterfuzzlite-target "$CFL_TARGET" "$CFL_FULL_SHARE_SECONDS"
       - name: Run batch fuzzing
         id: fuzz
@@ -253,6 +260,7 @@ jobs:
         run: >-
           scripts/verify-clusterfuzzlite-storage corpus
           RepositorySourceFuzzer
+          TrelloCardPayloadFuzzer
           TrelloCardReferenceParserFuzzer
           TrelloChecklistClassifierFuzzer
           TrelloHandoffToolFuzzer

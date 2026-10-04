@@ -6,7 +6,7 @@ Jazzer tests in regression mode, so fixed crash inputs stay part of the regular 
 Run the focused fuzzing and chaos tests:
 
 ```bash
-./mvnw -q -Dtest=RepositorySourceResolverFuzzTest,TrelloCardReferenceParserFuzzTest,TrelloHandoffToolFuzzTest,WorkflowLoaderFuzzTest,StandaloneFuzzerIsolationTest,FuzzHarnessIsolationRulesTest,TrelloClientChaosTest test
+./mvnw -q -Dtest=RepositorySourceResolverFuzzTest,TrelloCardReferenceParserFuzzTest,TrelloCardPayloadFuzzTest,TrelloHandoffToolFuzzTest,WorkflowLoaderFuzzTest,StandaloneFuzzerIsolationTest,FuzzHarnessIsolationRulesTest,TrelloClientChaosTest test
 ```
 
 Run one target in active fuzzing mode:
@@ -36,9 +36,12 @@ depend on GitHub scheduled events, which GitHub can delay or drop, and overlappi
 not queue duplicate batch chains. A transient successor-dispatch or batch-state API failure is
 retried at the next check instead of ending the watchdog. Three cycles use a 330-minute
 aggregate fuzzing budget; every fourth cycle uses 300
-aggregate minutes so daily maintenance can follow before the next batch. That aggregate is four full
-shares of 82.5 minutes, or 75 minutes in the maintenance cycle, however many targets run.
-`scripts/select-clusterfuzzlite-target` divides it evenly among the targets in the batch matrix. Each matrix job has a 100-minute timeout. Matrix jobs run one at a time because
+aggregate minutes so daily maintenance can follow before the next batch. The matrix runs one job
+per target and divides that budget by target weights. With six targets, full shares are 66 minutes,
+or 60 minutes in the maintenance cycle; half shares are 33 or 30 minutes.
+`scripts/select-clusterfuzzlite-target` gives each target a full or a half share, and
+[ADR 0116](adr/0116-fuzz-trello-card-payload-mapping.md) records why some targets get half.
+Each matrix job has a 100-minute timeout. Matrix jobs run one at a time because
 ClusterFuzzLite pushes every corpus to the same Git branch; serialization prevents non-fast-forward
 races without changing the aggregate fuzzing budget. The workflow intentionally uses `ubuntu-latest`,
 not a Blacksmith runner. Each runner keeps one fuzzer wrapper before invoking ClusterFuzzLite. This
@@ -70,6 +73,11 @@ smallest input for each tool and outcome from a local active run, named `<tool>-
 inputs that found a removed permission check. They are `FuzzedDataProvider` inputs, not readable
 payloads.
 
+The card payload seeds are Trello card responses taken from the `TrelloClientTest` payload shapes. Each one ends with nine choice bytes that
+`FuzzedDataProvider` reads from the end of the input: four priority label settings, then the closed
+flags of four board lists and of the board. The JSON body before them is what the card mapping
+parses, and Jackson ignores the trailing bytes.
+
 ClusterFuzzLite's `v1` runner image bundles JaCoCo 0.8.7, which rejects Java 25 class files after
 the fuzzers run and then uploads an incomplete coverage directory. The coverage job therefore uses
 the same digest-pinned ClusterFuzzLite runner with its JaCoCo agent and CLI replaced by the version
@@ -77,8 +85,8 @@ declared in `pom.xml`. The repository-owned wrapper still delegates corpus downl
 execution, and publication to ClusterFuzzLite. Its post-run verifier requires the HTML report,
 well-formed JaCoCo XML, aggregate summary, and every per-target summary. It downloads and
 checks every published file, rejects empty aggregate coverage, and rejects any target report that
-does not cover lines in that target's production resolver, parser, classifier, loader, or tool
-handler.
+does not cover lines in that target's production resolver, parser, classifier, loader,
+`TrelloClient` card mapping, or tool handler.
 
 ClusterFuzzLite stores corpora on `main` and coverage on `gh-pages` in the dedicated public
 [`symphony-trello-fuzzing-storage`](https://github.com/martin-francois/symphony-trello-fuzzing-storage)
@@ -99,9 +107,10 @@ gh workflow run continuous-fuzzing.yml --ref main \
   -f fuzz_seconds=60
 ```
 
-The manual `fuzz_seconds` value is one full share. Each target fuzzes for four full shares divided by
-the number of targets, rounded up. Because corpus writers are serialized, a one-minute smoke run takes
-roughly one build-and-fuzz cycle per target.
+The manual `fuzz_seconds` value is one full share. Full-share targets fuzz for that long and
+half-share targets for half of it, rounded up. Because corpus writers are serialized, a one-minute
+smoke run takes one build-and-fuzz cycle per target. `automatic_budget` defaults to `false`; the
+continuation script sets it to `true` to keep automatic cycles at 19,800 or 18,000 total seconds.
 
 Use `operation=prune`, `operation=coverage`, or `operation=build` to test the corpus-pruning,
 coverage, or baseline-build paths. The `fuzz_seconds` input applies only to batch runs.
@@ -112,6 +121,7 @@ Bootstrap or restart the continuous chain with cycle 0:
 gh workflow run continuous-fuzzing.yml --ref main \
   -f operation=batch \
   -f fuzz_seconds=4950 \
+  -f automatic_budget=true \
   -f continue_fuzzing=true \
   -f cycle_index=0
 ```
@@ -153,6 +163,7 @@ targets=(
   'TrelloCardReferenceParserFuzzTest#trelloReferenceParsingKeepsLookupIdsAndUrlsStable'
   'TrelloCardReferenceParserFuzzTest#checklistClassificationNeverEmitsPrerequisitesWithProblems'
   'TrelloHandoffToolFuzzTest#handoffToolCallsWriteOnlyWhatTheConfigurationAllows'
+  'TrelloCardPayloadFuzzTest#cardPayloadMappingReturnsACardOrRejectsTheUnknownPayload'
   'WorkflowLoaderFuzzTest#workflowLoaderHandlesArbitraryWorkflowBytes'
 )
 
@@ -162,8 +173,8 @@ done
 ```
 
 The `-Djazzer.max_duration=4m` value applies to one selected target in one Maven process. The loop
-above runs six separate targets, so it can take roughly 24 minutes plus Maven startup time; it is
-not a four-minute total suite limit.
+above runs each target in its own Maven process, so it takes roughly four minutes per target plus
+Maven startup time; it is not a four-minute total suite limit.
 
 For a longer or continuous agent-requested run, choose one target and a longer duration such as
 `-Djazzer.max_duration=5h -Djazzer.max_executions=0`. The execution override lets the duration,
@@ -172,6 +183,7 @@ when the requested window ends. Contributors are not expected to run this before
 use it when touching parser, prompt-line safety, workflow loading, or Trello reference/checklist
 parsing logic. Run the Trello handoff tool target when touching `TrelloHandoffToolHandler`,
 `TrelloMarkdown`, or the `TrelloClient` writes those tools send.
+Run the card payload target when touching how `TrelloClient` maps a card payload.
 
 Committed fuzz tests should stay deterministic in regression mode. If Jazzer finds a crash, keep the
 generated input only after checking that it contains no private context and after moving it into the
@@ -201,17 +213,22 @@ The JUnit fuzz tests and standalone OSS-Fuzz targets are related but separate:
   `WorkflowLoaderFuzzTest` uses `FuzzedDataProvider.consumeBytes(...)` for active fuzzing so the
   byte-size cap is enforced while the existing raw byte crash corpus stays valid; its curated
   workflow seeds remain deterministic parameterized regression tests.
+- `TrelloCardPayloadFuzzTest` also runs in Maven. It takes a `FuzzedDataProvider` and has no
+  `@MethodSource`. Maven copies the `oss-fuzz/corpora/TrelloCardPayloadFuzzer` seeds to its Jazzer
+  regression inputs, so normal test runs replay them next to its crash inputs.
 - `TrelloHandoffToolFuzzTest` also runs in Maven. It takes a `FuzzedDataProvider` and has no
   `@MethodSource`. Maven copies the `oss-fuzz/corpora/TrelloHandoffToolFuzzer` seeds to its Jazzer
   regression inputs, so normal test runs replay them next to its crash inputs.
 - `RepositorySourceFuzzer`, `WorkflowLoaderFuzzer`, `TrelloCardReferenceParserFuzzer`,
-  `TrelloChecklistClassifierFuzzer`, and `TrelloHandoffToolFuzzer` are standalone
+  `TrelloChecklistClassifierFuzzer`, `TrelloCardPayloadFuzzer`, and `TrelloHandoffToolFuzzer` are standalone
   `fuzzerTestOneInput` entry points. OSS-Fuzz wraps and runs these classes from compiled test output.
   `TrelloHandoffToolFuzzer` and `TrelloHandoffToolFuzzTest` share `TrelloHandoffToolFuzzInvariants`.
   It runs one fuzzed tool call through the real `TrelloClient` against `InMemoryTrelloBoard`, which
   answers requests from memory and records every write, and checks that each write is one the chosen
   `trello_tools` settings allow on the current card. [ADR 0118](adr/0118-fuzz-trello-handoff-tool-write-scope.md)
   lists the properties.
+  `TrelloCardPayloadFuzzer` and `TrelloCardPayloadFuzzTest` share `TrelloCardPayloadFuzzInvariants`,
+  which maps one card payload through the package-private `TrelloClient.normalize` without HTTP.
 - `StandaloneFuzzerIsolationTest` replays each standalone target's `oss-fuzz/corpora/` seeds through
   its real entry point in Jazzer regression mode. `pom.xml` maps each corpus directory to that class's
   regression inputs, so a new target needs a corpus, a mapping, and a `@FuzzTest` method named after it.
@@ -299,12 +316,13 @@ cp /path/to/symphony-trello/oss-fuzz/project.yaml projects/symphony-trello/
 python3 infra/helper.py build_image --no-pull symphony-trello
 python3 infra/helper.py build_fuzzers --sanitizer address symphony-trello
 python3 infra/helper.py check_build symphony-trello
-mkdir -p /tmp/symphony-trello-{RepositorySourceFuzzer,WorkflowLoaderFuzzer,TrelloCardReferenceParserFuzzer,TrelloChecklistClassifierFuzzer,TrelloHandoffToolFuzzer}
+mkdir -p /tmp/symphony-trello-{RepositorySourceFuzzer,WorkflowLoaderFuzzer,TrelloCardReferenceParserFuzzer,TrelloChecklistClassifierFuzzer,TrelloHandoffToolFuzzer,TrelloCardPayloadFuzzer}
 python3 infra/helper.py run_fuzzer --corpus-dir=/tmp/symphony-trello-RepositorySourceFuzzer symphony-trello RepositorySourceFuzzer -- -runs=100
 python3 infra/helper.py run_fuzzer --corpus-dir=/tmp/symphony-trello-WorkflowLoaderFuzzer symphony-trello WorkflowLoaderFuzzer -- -runs=100
 python3 infra/helper.py run_fuzzer --corpus-dir=/tmp/symphony-trello-TrelloCardReferenceParserFuzzer symphony-trello TrelloCardReferenceParserFuzzer -- -runs=100
 python3 infra/helper.py run_fuzzer --corpus-dir=/tmp/symphony-trello-TrelloChecklistClassifierFuzzer symphony-trello TrelloChecklistClassifierFuzzer -- -runs=100
 python3 infra/helper.py run_fuzzer --corpus-dir=/tmp/symphony-trello-TrelloHandoffToolFuzzer symphony-trello TrelloHandoffToolFuzzer -- -runs=100
+python3 infra/helper.py run_fuzzer --corpus-dir=/tmp/symphony-trello-TrelloCardPayloadFuzzer symphony-trello TrelloCardPayloadFuzzer -- -runs=100
 ```
 
 `--no-pull` keeps the helper non-interactive. Use `--pull` instead when intentionally refreshing

@@ -29,6 +29,7 @@ fuzzer_helpers=(
   agent/TrelloHandoffToolFuzzInvariants
   testsupport/TestRepositoryUris
   tracker/InMemoryTrelloBoard
+  tracker/TrelloCardPayloadFuzzInvariants
   tracker/TrelloReferenceFuzzInvariants
 )
 

@@ -74,9 +74,12 @@ Every fuzzing job uses `ubuntu-latest`, not a Blacksmith runner. Batch fuzzing r
 matrix with one job per target, and each job has a 100-minute timeout. A normal cycle has a
 19,800-second aggregate budget of four full shares of 4,950 seconds. Every fourth continuous cycle
 uses 4,500-second shares, for an 18,000-second aggregate budget, so prune and coverage jobs can
-follow before the next batch. `scripts/select-clusterfuzzlite-target` divides the aggregate among
-the targets evenly, so adding a target does not grow the cycle.
-[ADR 0118](0118-fuzz-trello-handoff-tool-write-scope.md) records that choice. Each target's corpus is stored in the dedicated Git storage repository for
+follow before the next batch. `scripts/select-clusterfuzzlite-target` divides that automatic aggregate
+by target weights. Four targets have weight 2 and the two reference-parsing targets have weight 1,
+so normal full/half allocations are 3,960/1,980 seconds, and maintenance allocations are 3,600/1,800.
+Manual `fuzz_seconds` remains one full target share. [ADR 0116](0116-fuzz-trello-card-payload-mapping.md)
+records the weighted allocation that follows the earlier even split from
+[ADR 0118](0118-fuzz-trello-handoff-tool-write-scope.md). Each target's corpus is stored in the dedicated Git storage repository for
 later runs.
 
 Each successful continuous batch dispatches its successor through the workflow-dispatch API. GitHub
@@ -294,6 +297,7 @@ continuous chain with a normal cycle:
 gh workflow run continuous-fuzzing.yml --ref main \
   -f operation=batch \
   -f fuzz_seconds=4950 \
+  -f automatic_budget=true \
   -f continue_fuzzing=true \
   -f cycle_index=0
 ```
@@ -304,7 +308,7 @@ cycle-0 successor starts.
 
 Then dispatch coverage and inspect the published report. The initial acceptance criterion is that
 every fuzzer report exists and each reaches the production parser, classifier, resolver, loader,
-or tool handler it targets. Record the first report as the baseline. A target that has zero or visibly
+or card mapping or tool handler it targets. Record the first report as the baseline. A target that has zero or visibly
 shallow reach into its intended entry point needs better seeds or another target before the hosted
 setup counts as healthy. Whole-application line coverage is not the target because these fuzzers
 deliberately cover untrusted parsing boundaries, not network and orchestration code.
