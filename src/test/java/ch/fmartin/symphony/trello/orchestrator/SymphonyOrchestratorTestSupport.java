@@ -263,6 +263,16 @@ final class SymphonyOrchestratorTestSupport {
 
     static void writeWorkflow(Path workflow, String pollIntervalMs, String extraConfig, String prompt)
             throws Exception {
+        writeWorkflow(workflow, "[Todo]", pollIntervalMs, extraConfig, prompt);
+    }
+
+    static void writeWorkflowWithActiveStates(Path workflow, String activeStates, String extraConfig) throws Exception {
+        writeWorkflow(workflow, activeStates, "60000", extraConfig, "{{ card.title }}");
+    }
+
+    private static void writeWorkflow(
+            Path workflow, String activeStates, String pollIntervalMs, String extraConfig, String prompt)
+            throws Exception {
         Files.writeString(
                 workflow,
                 """
@@ -272,7 +282,7 @@ final class SymphonyOrchestratorTestSupport {
                   api_key: key
                   api_token: token
                   board_id: board-1
-                  active_states: [Todo]
+                  active_states: %s
                 workspace:
                   root: work
                 polling:
@@ -283,7 +293,7 @@ final class SymphonyOrchestratorTestSupport {
                 ---
                 %s
                 """
-                        .formatted(pollIntervalMs, extraConfig, prompt));
+                        .formatted(activeStates, pollIntervalMs, extraConfig, prompt));
     }
 
     static void writeWorkflowWithCommand(Path workflow, String command, String extraConfig) throws Exception {

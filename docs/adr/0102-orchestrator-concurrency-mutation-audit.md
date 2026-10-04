@@ -138,7 +138,10 @@ memory model outcomes.
 
 ## More Information
 
-The audit ran on top of commit `0d135edf` with the tests and test hooks from this change. Mutant IDs:
+The audit ran on top of commit `0d135edf` with the tests and test hooks from this change.
+[GitHub issue #815](https://github.com/martin-francois/symphony-trello/issues/815) later removed the
+monitor sections listed below; [ADR 0105](0105-orchestrator-published-read-view.md) records the
+rerun against that code. Mutant IDs:
 `L` operation lock, `S` `synchronized` method, `B` `synchronized (this)` block in source order
 (blocks 5 to 7 belong to test-only helpers and were skipped), `V` `volatile`, `A` atomic
 read-modify-write, `O` statement order.
