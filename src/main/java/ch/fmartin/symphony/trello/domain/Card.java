@@ -11,21 +11,21 @@ public record Card(
         String id,
         String identifier,
         String title,
-        String description,
-        Integer priority,
+        @Nullable String description,
+        @Nullable Integer priority,
         String state,
         String stateSource,
-        String listId,
-        String listName,
-        Boolean listClosed,
-        String boardId,
-        Boolean boardClosed,
+        @Nullable String listId,
+        @Nullable String listName,
+        @Nullable Boolean listClosed,
+        @Nullable String boardId,
+        @Nullable Boolean boardClosed,
         boolean closed,
-        Integer idShort,
-        String shortLink,
-        String shortUrl,
-        String branchName,
-        String url,
+        @Nullable Integer idShort,
+        @Nullable String shortLink,
+        @Nullable String shortUrl,
+        @Nullable String branchName,
+        @Nullable String url,
         List<String> labels,
         List<String> labelIds,
         List<String> members,
@@ -35,11 +35,11 @@ public record Card(
         List<PrerequisiteProblem> prerequisiteProblems,
         List<BlockerRef> blockedBy,
         List<Comment> comments,
-        Instant createdAt,
-        Instant updatedAt,
-        Instant dueAt,
-        Boolean dueComplete,
-        BigDecimal position) {
+        @Nullable Instant createdAt,
+        @Nullable Instant updatedAt,
+        @Nullable Instant dueAt,
+        @Nullable Boolean dueComplete,
+        @Nullable BigDecimal position) {
 
     public Card {
         labels = List.copyOf(labels == null ? List.of() : labels);
@@ -53,8 +53,8 @@ public record Card(
         comments = List.copyOf(comments == null ? List.of() : comments);
     }
 
-    public Map<String, Object> toTemplateMap() {
-        Map<String, Object> values = new LinkedHashMap<>();
+    public Map<String, @Nullable Object> toTemplateMap() {
+        Map<String, @Nullable Object> values = new LinkedHashMap<>();
         values.put("id", id);
         values.put("identifier", identifier);
         values.put("title", title);
@@ -152,12 +152,12 @@ public record Card(
                 position);
     }
 
-    private static boolean notBlank(String value) {
+    private static boolean notBlank(@Nullable String value) {
         return value != null && !value.isBlank();
     }
 
-    private static Map<String, Object> checklistMap(Checklist checklist) {
-        Map<String, Object> values = new LinkedHashMap<>();
+    private static Map<String, @Nullable Object> checklistMap(Checklist checklist) {
+        Map<String, @Nullable Object> values = new LinkedHashMap<>();
         values.put("id", checklist.id());
         values.put("name", checklist.name());
         values.put(
@@ -165,24 +165,24 @@ public record Card(
         return values;
     }
 
-    private static Map<String, Object> attachmentMap(Attachment attachment) {
-        Map<String, Object> values = new LinkedHashMap<>();
+    private static Map<String, @Nullable Object> attachmentMap(Attachment attachment) {
+        Map<String, @Nullable Object> values = new LinkedHashMap<>();
         values.put("id", attachment.id());
         values.put("name", attachment.name());
         values.put("url", attachment.url());
         return values;
     }
 
-    private static Map<String, Object> checklistItemMap(ChecklistItem item) {
-        Map<String, Object> values = new LinkedHashMap<>();
+    private static Map<String, @Nullable Object> checklistItemMap(ChecklistItem item) {
+        Map<String, @Nullable Object> values = new LinkedHashMap<>();
         values.put("id", item.id());
         values.put("text", item.text());
         values.put("complete", item.complete());
         return values;
     }
 
-    private static Map<String, Object> trelloReferenceMap(TrelloReference reference) {
-        Map<String, Object> values = new LinkedHashMap<>();
+    private static Map<String, @Nullable Object> trelloReferenceMap(TrelloReference reference) {
+        Map<String, @Nullable Object> values = new LinkedHashMap<>();
         values.put("source", reference.source());
         values.put("text", reference.text());
         values.put("lookup_id", reference.lookupId());
@@ -195,16 +195,16 @@ public record Card(
         return values;
     }
 
-    private static Map<String, Object> prerequisiteProblemMap(PrerequisiteProblem problem) {
-        Map<String, Object> values = new LinkedHashMap<>();
+    private static Map<String, @Nullable Object> prerequisiteProblemMap(PrerequisiteProblem problem) {
+        Map<String, @Nullable Object> values = new LinkedHashMap<>();
         values.put("code", problem.code());
         values.put("message", problem.message());
         values.put("checklist", problem.checklist());
         return values;
     }
 
-    private static Map<String, Object> blockerMap(BlockerRef blocker) {
-        Map<String, Object> values = new LinkedHashMap<>();
+    private static Map<String, @Nullable Object> blockerMap(BlockerRef blocker) {
+        Map<String, @Nullable Object> values = new LinkedHashMap<>();
         values.put("id", blocker.id());
         values.put("identifier", blocker.identifier());
         values.put("state", blocker.state());
@@ -212,8 +212,8 @@ public record Card(
         return values;
     }
 
-    private static Map<String, Object> commentMap(Comment comment) {
-        Map<String, Object> values = new LinkedHashMap<>();
+    private static Map<String, @Nullable Object> commentMap(Comment comment) {
+        Map<String, @Nullable Object> values = new LinkedHashMap<>();
         values.put("id", comment.id());
         values.put("text", comment.text());
         values.put("author", comment.author());
@@ -221,28 +221,28 @@ public record Card(
         return values;
     }
 
-    public record Comment(String id, String text, String author, Instant createdAt) {}
+    public record Comment(@Nullable String id, String text, @Nullable String author, @Nullable Instant createdAt) {}
 
-    public record Checklist(String id, String name, List<ChecklistItem> items) {
+    public record Checklist(@Nullable String id, @Nullable String name, List<ChecklistItem> items) {
         public Checklist {
             items = List.copyOf(items == null ? List.of() : items);
         }
     }
 
-    public record ChecklistItem(String id, String text, boolean complete) {}
+    public record ChecklistItem(@Nullable String id, @Nullable String text, boolean complete) {}
 
-    public record Attachment(String id, String name, String url) {}
+    public record Attachment(@Nullable String id, @Nullable String name, @Nullable String url) {}
 
     public record TrelloReference(
             String source,
-            String text,
+            @Nullable String text,
             String lookupId,
-            String identifier,
-            String title,
-            String state,
-            String url,
+            @Nullable String identifier,
+            @Nullable String title,
+            @Nullable String state,
+            @Nullable String url,
             String status,
-            Boolean terminal) {}
+            @Nullable Boolean terminal) {}
 
-    public record PrerequisiteProblem(String code, String message, String checklist) {}
+    public record PrerequisiteProblem(String code, String message, @Nullable String checklist) {}
 }

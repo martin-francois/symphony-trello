@@ -254,7 +254,7 @@ Fields:
     - `items` (list of checklist item records)
   - Each checklist item record contains:
     - `id` (string or null)
-    - `text` (string)
+    - `text` (string or null)
     - `complete` (boolean)
 - `attachments` (list of attachment records)
   - Normal Trello card attachments fetched for selected card prompt context.

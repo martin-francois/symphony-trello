@@ -16,6 +16,7 @@ import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 
 @ApplicationScoped
 public class CodexSkillInstaller {
@@ -84,7 +85,7 @@ public class CodexSkillInstaller {
         }
     }
 
-    private static Path gitDir(Path workspacePath) throws IOException {
+    private static @Nullable Path gitDir(Path workspacePath) throws IOException {
         Path dotGit = workspacePath.resolve(".git");
         if (Files.isDirectory(dotGit, LinkOption.NOFOLLOW_LINKS)) {
             return dotGit;

@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
+import org.jspecify.annotations.Nullable;
 import picocli.CommandLine;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -37,7 +38,7 @@ public class SymphonyMain {
                 System.getProperty("symphony.workflow.path"), LocalEnvironment.get("SYMPHONY_WORKFLOW_PATH"));
     }
 
-    static String configuredWorkflowPath(String systemProperty, Optional<String> environmentValue) {
+    static String configuredWorkflowPath(@Nullable String systemProperty, Optional<String> environmentValue) {
         if (hasText(systemProperty)) {
             return systemProperty;
         }
@@ -50,7 +51,10 @@ public class SymphonyMain {
     }
 
     static Optional<String> configuredPort(
-            CliOptions options, Path workflowPath, String quarkusHttpPort, Optional<String> externalHttpPort) {
+            CliOptions options,
+            Path workflowPath,
+            @Nullable String quarkusHttpPort,
+            Optional<String> externalHttpPort) {
         if (options.port().isPresent()) {
             return options.port();
         }
@@ -67,7 +71,7 @@ public class SymphonyMain {
         return LocalEnvironment.firstPresent("SYMPHONY_HTTP_PORT", "QUARKUS_HTTP_PORT");
     }
 
-    private static boolean hasText(String value) {
+    private static boolean hasText(@Nullable String value) {
         return value != null && !value.isBlank();
     }
 
@@ -167,9 +171,11 @@ public class SymphonyMain {
 
     private static final class RuntimeArgs {
         @Parameters(index = "0", arity = "0..1", description = "Workflow file to run.")
+        @Nullable
         String workflowPath;
 
         @Option(names = "--port", description = "HTTP port for this Symphony worker.")
+        @Nullable
         String port;
     }
 }
