@@ -410,6 +410,12 @@ optional verification. Follow this order:
   finish, but do not block only on a pending CodeRabbit status context. Treat CodeRabbit as
   asynchronous review feedback: address it when it posts actionable comments or requested changes,
   and report if it is still pending after the actual CI checks are green.
+- CodeRabbit pre-merge checks read the PR description and request changes while one fails
+  ([ADR 0085](../adr/0085-enforce-pull-request-template-with-coderabbit.md)). Fix a failed check by
+  editing the body, then comment `@coderabbitai run pre-merge checks`. An agent leaves
+  `I confirm I understand what the code does` for the human to tick, so an AI assistance check that
+  fails only on that box is expected at handoff. Report it and do not tick the box. The check only
+  proves that someone ticked it before merge, so pull-request review enforces who did.
 
 ## References
 

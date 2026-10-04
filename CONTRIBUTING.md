@@ -395,6 +395,10 @@ Trello board links, or unrelated host paths.
 Create pull requests from a topic branch and fill out the template. Link the issue with `Fixes #123`
 when the PR should close it. Keep the PR focused on one user-visible change or one cleanup.
 
+CodeRabbit checks the description against the template, the AI Assistance section, and the
+Compatibility Decision. While one of those checks fails, CodeRabbit requests changes and the PR
+cannot merge. Fix the description, then comment `@coderabbitai run pre-merge checks` to rerun them.
+
 Before marking a PR ready for review:
 
 - run the validation commands listed in [Quality Bar](#quality-bar);
