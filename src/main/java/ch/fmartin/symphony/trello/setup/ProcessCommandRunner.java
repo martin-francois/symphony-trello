@@ -1,21 +1,29 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.process.ExecutableResolver;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 
 final class ProcessCommandRunner implements CommandRunner {
     private static final Duration COMMAND_TIMEOUT = Duration.ofSeconds(10);
 
     private final Duration commandTimeout;
+    private final ExecutableResolver executables;
 
     ProcessCommandRunner() {
         this(COMMAND_TIMEOUT);
     }
 
     ProcessCommandRunner(Duration commandTimeout) {
+        this(commandTimeout, ExecutableResolver.forCurrentProcess());
+    }
+
+    ProcessCommandRunner(Duration commandTimeout, ExecutableResolver executables) {
         this.commandTimeout = commandTimeout;
+        this.executables = executables;
     }
 
     @Override
@@ -24,12 +32,12 @@ final class ProcessCommandRunner implements CommandRunner {
         Process process = null;
         try {
             outputFile = Files.createTempFile("symphony-trello-command-", ".log");
-            process = new ProcessBuilder(command)
+            process = new ProcessBuilder(executables.launchCommand(List.of(command)))
                     .redirectErrorStream(true)
                     .redirectOutput(outputFile.toFile())
                     .start();
             if (!process.waitFor(commandTimeout)) {
-                process.destroyForcibly();
+                destroy(process);
                 process.waitFor(Duration.ofSeconds(1));
                 return new CommandResult(CommandResult.TIMED_OUT_EXIT_CODE, "command timed out");
             }
@@ -48,6 +56,8 @@ final class ProcessCommandRunner implements CommandRunner {
 
     private static void destroy(Process process) {
         if (process != null) {
+            // A Windows batch shim runs under cmd.exe, so the tool is a child of the started process.
+            process.descendants().forEach(ProcessHandle::destroyForcibly);
             process.destroyForcibly();
         }
     }
@@ -66,7 +76,9 @@ final class ProcessCommandRunner implements CommandRunner {
     @Override
     public CommandResult runInteractive(String... command) {
         try {
-            Process process = new ProcessBuilder(command).inheritIO().start();
+            Process process = new ProcessBuilder(executables.launchCommand(List.of(command)))
+                    .inheritIO()
+                    .start();
             return new CommandResult(process.waitFor(), "");
         } catch (IOException e) {
             return CommandResult.launchFailed(e.getMessage());

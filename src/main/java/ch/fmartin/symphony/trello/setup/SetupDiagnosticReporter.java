@@ -1214,7 +1214,7 @@ final class SetupDiagnosticReporter {
     }
 
     private ToolProbe toolProbe(String tool, String executable) {
-        CommandResult version = run(executable, toolVersionArgument(tool));
+        CommandResult version = commandRunner.run(executable, toolVersionArgument(tool));
         if (version.launchFailed()) {
             return new ToolProbe("unlaunchable", "could not launch");
         }
@@ -1228,13 +1228,6 @@ final class SetupDiagnosticReporter {
                     default -> version.output();
                 };
         return new ToolProbe("available", firstLine(detail));
-    }
-
-    private CommandResult run(String executable, String... arguments) {
-        List<String> command = new ArrayList<>();
-        command.add(executable);
-        command.addAll(List.of(arguments));
-        return commandRunner.run(executables.launchCommand(command).toArray(String[]::new));
     }
 
     private static String toolVersionArgument(String tool) {
@@ -1252,7 +1245,7 @@ final class SetupDiagnosticReporter {
         if (!deepDiagnostics) {
             return firstLine(version.output()) + "; login=not-probed";
         }
-        CommandResult auth = run(executable, "login", "status");
+        CommandResult auth = commandRunner.run(executable, "login", "status");
         return firstLine(version.output()) + "; login=" + (auth.success() ? "ok" : "not-ok");
     }
 
@@ -1260,7 +1253,7 @@ final class SetupDiagnosticReporter {
         if (!deepDiagnostics) {
             return firstLine(version.output()) + "; auth=not-probed";
         }
-        CommandResult auth = run(executable, "auth", "status");
+        CommandResult auth = commandRunner.run(executable, "auth", "status");
         return firstLine(version.output()) + "; auth=" + (auth.success() ? "ok" : "not-ok");
     }
 
