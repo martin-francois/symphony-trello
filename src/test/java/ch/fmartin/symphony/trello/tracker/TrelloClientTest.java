@@ -39,6 +39,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -159,6 +160,11 @@ final class TrelloClientTest {
             String path = exchange.getRequestURI().getPath();
             String suffix = path.substring(path.lastIndexOf("idshort-probe-") + "idshort-probe-".length());
             respond(exchange, cardWithIdShort("idshort-probe-" + suffix, idShortToken(suffix)));
+        });
+        trello.on("/1/cards/" + MalformedCardField.CARD_ID_PREFIX, exchange -> {
+            readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            String path = exchange.getRequestURI().getPath();
+            respond(exchange, MalformedCardField.cardJson(path.substring(path.lastIndexOf('/') + 1)));
         });
         trello.on("/1/cards/card-missing", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
@@ -340,6 +346,39 @@ final class TrelloClientTest {
                 Arguments.of("fractional", null, "a fractional idShort is rejected instead of truncated"),
                 Arguments.of("out-of-range", null, "an idShort beyond int range is rejected"),
                 Arguments.of("non-numeric", null, "a non-numeric idShort is rejected"));
+    }
+
+    @EnumSource(MalformedCardField.class)
+    @ParameterizedTest
+    void malformedCardFieldFailsOnlyThatCardInStateLookup(MalformedCardField field) {
+        // given
+        var client = new TrelloClient(new ObjectMapper());
+        var config = config("lookup-input", Map.of());
+        String malformedCardId = field.cardId();
+
+        // when
+        var results = client.fetchCardStatesByIds(config, List.of(malformedCardId, "card-found"));
+
+        // then
+        assertThat(results.get(malformedCardId))
+                .isInstanceOfSatisfying(CardLookupResult.Failed.class, failed -> assertThat(failed.code())
+                        .isEqualTo("trello_unknown_payload"));
+        assertThat(results.get("card-found")).isInstanceOf(CardLookupResult.Found.class);
+    }
+
+    @EnumSource(MalformedCardField.class)
+    @ParameterizedTest
+    void malformedCardFieldFailsWorkpadLookup(MalformedCardField field) {
+        // given
+        var client = new TrelloClient(new ObjectMapper());
+        var config = config("lookup-input", Map.of());
+
+        // when
+        var result = client.fetchCardStateForWorkpad(config, field.cardId());
+
+        // then
+        assertThat(result).isInstanceOfSatisfying(CardLookupResult.Failed.class, failed -> assertThat(failed.code())
+                .isEqualTo("trello_unknown_payload"));
     }
 
     @Test
@@ -1816,6 +1855,37 @@ final class TrelloClientTest {
                 {"id":"%s","name":"Found","idList":"lookup-review","idBoard":"lookup-board","closed":false,"shortLink":"found","idShort":%s,"labels":[],"actions":[]}
                 """
                 .formatted(cardId, idShortToken);
+    }
+
+    // Trello sets these fields, so a malformed value means Trello sent a payload this client does not
+    // understand. Each constant replaces one field of an otherwise valid card.
+    private enum MalformedCardField {
+        DUE("\"due\":\"not-a-date\""),
+        DATE_LAST_ACTIVITY("\"dateLastActivity\":\"2026-02-24T20:79:12.000Z\""),
+        COMMENT_DATE("\"actions\":[{\"id\":\"comment-1\",\"date\":\"yesterday\",\"data\":{\"text\":\"Looks good.\"}}]"),
+        TEXT_POSITION("\"pos\":\"top\""),
+        // Jackson reads a JSON number beyond the double range as infinity.
+        OVERFLOWING_POSITION("\"pos\":1e400");
+
+        static final String CARD_ID_PREFIX = "malformed-field-probe-";
+
+        private final String jsonField;
+
+        MalformedCardField(String jsonField) {
+            this.jsonField = jsonField;
+        }
+
+        String cardId() {
+            return CARD_ID_PREFIX + name();
+        }
+
+        static String cardJson(String cardId) {
+            MalformedCardField field = valueOf(cardId.substring(CARD_ID_PREFIX.length()));
+            return """
+                    {"id":"%s","name":"Found","idList":"lookup-review","idBoard":"lookup-board","closed":false,"shortLink":"found","labels":[],%s}
+                    """
+                    .formatted(cardId, field.jsonField);
+        }
     }
 
     private static String idShortToken(String scenario) {
