@@ -238,7 +238,18 @@ container:
 SYMPHONY_TRELLO_TEST_PWSH=./scripts/pwsh-docker.sh ./mvnw -Dtest=InstallerScriptTest test
 ```
 
-Prefix these commands with `SYMPHONY_TRELLO_CONTAINER_RUNTIME=podman` on a Podman host.
+On a Podman host, prefix the two direct wrapper calls with
+`SYMPHONY_TRELLO_CONTAINER_RUNTIME=podman`. The Maven installer tests remove inherited `SYMPHONY_*`
+variables, so they always call `docker`.
+
+The wrapper runs the container runtime with the home directory that `getent passwd` lists for your
+account, so rootless Podman pulls the image into your existing store once
+([ADR 0054](docs/adr/0054-powershell-installer-verification-runtime.md)). Podman caveats:
+
+- The installer tests do not use a Podman store that only `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, or a
+  `HOME` other than the `getent passwd` one points to.
+- Through a podman-docker shim, some PowerShell installer tests fail until
+  [#823](https://github.com/martin-francois/symphony-trello/issues/823) is fixed.
 
 `scripts/check-pwsh-docker` runs both dry runs and the PowerShell installer option tests through the
 wrapper, and fails when one of those tests skipped. CI runs it in the required

@@ -6,9 +6,11 @@ import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.writeExecu
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -16,9 +18,12 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 final class ContainerRuntimeScriptTest {
     private static final String SHA256_DIGEST_PATTERN = "@sha256:[a-f0-9]{64}$";
+    // The wrappers pass "-e HOME=/tmp", and the recording runtimes write one argument per line.
+    private static final String CONTAINER_HOME_ARGUMENTS = "-e\nHOME=/tmp";
 
     @TempDir
     Path tempDir;
@@ -27,8 +32,7 @@ final class ContainerRuntimeScriptTest {
     @ParameterizedTest
     void usesExplicitPodmanRuntime(ContainerWrapper wrapper) throws Exception {
         // given
-        Path invocation = tempDir.resolve("invocation.txt");
-        installRecordingRuntime("podman", invocation);
+        Path invocation = installRecordingRuntime("podman");
         installFailingRuntime("docker");
 
         // when
@@ -41,7 +45,7 @@ final class ContainerRuntimeScriptTest {
                 .contains("run", "--security-opt\nlabel=disable", "--userns=keep-id")
                 .containsPattern(wrapper.imagePattern());
         if (wrapper.script().equals("semgrep-docker.sh")) {
-            assertThat(invocationArguments).contains("-e\nHOME=/tmp", "--disable-version-check");
+            assertThat(invocationArguments).contains(CONTAINER_HOME_ARGUMENTS, "--disable-version-check");
         }
     }
 
@@ -49,8 +53,7 @@ final class ContainerRuntimeScriptTest {
     @ParameterizedTest
     void defaultsToDockerRuntime(ContainerWrapper wrapper) throws Exception {
         // given
-        Path invocation = tempDir.resolve("invocation.txt");
-        installRecordingRuntime("docker", invocation);
+        Path invocation = installRecordingRuntime("docker");
         installFailingRuntime("podman");
 
         // when
@@ -64,7 +67,7 @@ final class ContainerRuntimeScriptTest {
                 .containsPattern(wrapper.imagePattern())
                 .doesNotContain("--userns=keep-id");
         if (wrapper.script().equals("semgrep-docker.sh")) {
-            assertThat(invocationArguments).contains("-e\nHOME=/tmp", "--disable-version-check");
+            assertThat(invocationArguments).contains(CONTAINER_HOME_ARGUMENTS, "--disable-version-check");
         }
     }
 
@@ -72,7 +75,7 @@ final class ContainerRuntimeScriptTest {
     @ParameterizedTest
     void rejectsUnsupportedContainerRuntime(ContainerWrapper wrapper) throws Exception {
         // given
-        Path invocation = tempDir.resolve("invocation.txt");
+        Path invocation = invocationFile();
         installFailingRuntime("docker");
         installFailingRuntime("podman");
 
@@ -90,8 +93,7 @@ final class ContainerRuntimeScriptTest {
     @Test
     void betterLeaksWrapperRunsTheImageAPullRequestPins() throws Exception {
         // given
-        Path invocation = tempDir.resolve("invocation.txt");
-        installRecordingRuntime("docker", invocation);
+        Path invocation = installRecordingRuntime("docker");
         String pinnedImage = "ghcr.io/betterleaks/betterleaks:v9.9.9@sha256:" + "a".repeat(64);
         Map<String, String> environment = new HashMap<>(runtimeEnvironment(null));
         environment.put("SYMPHONY_TRELLO_BETTERLEAKS_IMAGE", pinnedImage);
@@ -104,11 +106,48 @@ final class ContainerRuntimeScriptTest {
         assertThat(Files.readAllLines(invocation)).contains(pinnedImage);
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"docker", "podman"})
+    void powershellWrapperRunsRuntimeWithAccountHomeInsteadOfTestHome(String runtime) throws Exception {
+        // given
+        Path invocation = installRecordingRuntime(runtime);
+        Path accountHome = tempDir.resolve("account-home");
+        installPasswdLookup(accountHome);
+        Map<String, String> environment = new HashMap<>(runtimeEnvironment(runtime));
+        environment.put("HOME", createTestHome().toString());
+
+        // when
+        ProcessResult result = runWrapper("pwsh-docker.sh", environment);
+
+        // then
+        result.assertSuccess();
+        assertThat(recordedRuntimeHome()).content(StandardCharsets.UTF_8).isEqualTo(accountHome.toString());
+        assertThat(invocation).content(StandardCharsets.UTF_8).contains(CONTAINER_HOME_ARGUMENTS);
+    }
+
+    @Test
+    void powershellWrapperKeepsCallerHomeWithoutGetent() throws Exception {
+        // given
+        installRecordingRuntime("docker");
+        for (String command : List.of("bash", "cut", "dirname", "env", "id")) {
+            installHostCommand(command);
+        }
+        Path testHome = createTestHome();
+
+        // when
+        ProcessResult result =
+                runWrapper("pwsh-docker.sh", Map.of("PATH", tempDir.toString(), "HOME", testHome.toString()));
+
+        // then
+        result.assertSuccess();
+        assertThat(recordedRuntimeHome()).content(StandardCharsets.UTF_8).isEqualTo(testHome.toString());
+    }
+
     @MethodSource("containerRuntimeRequirements")
     @ParameterizedTest
     void rejectsMissingSelectedContainerRuntime(String script, String requiredMessage) throws Exception {
         // given
-        Path invocation = tempDir.resolve("invocation.txt");
+        Path invocation = invocationFile();
         installHostCommand("bash");
         installHostCommand("dirname");
         installHostCommand("git");
@@ -123,15 +162,43 @@ final class ContainerRuntimeScriptTest {
         assertThat(invocation).doesNotExist();
     }
 
-    private void installRecordingRuntime(String name, Path invocation) throws Exception {
+    private Path installRecordingRuntime(String name) throws Exception {
+        Path invocation = invocationFile();
         writeExecutable(
                 tempDir.resolve(name),
                 """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 printf '%%s\n' "$@" > "%s"
+                printf '%%s' "$HOME" > "%s"
                 """
-                        .formatted(invocation));
+                        .formatted(invocation, recordedRuntimeHome()));
+        return invocation;
+    }
+
+    private void installPasswdLookup(Path accountHome) throws Exception {
+        writeExecutable(
+                tempDir.resolve("getent"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                [ "$1" = passwd ]
+                [ "$2" = "$(id -u)" ]
+                printf 'tester:x:%%s:%%s::%%s:/bin/sh\n' "$2" "$(id -g)" %s
+                """
+                        .formatted(shellQuote(accountHome.toString())));
+    }
+
+    private Path invocationFile() {
+        return tempDir.resolve("invocation.txt");
+    }
+
+    private Path recordedRuntimeHome() {
+        return tempDir.resolve("runtime-home.txt");
+    }
+
+    private Path createTestHome() throws Exception {
+        return Files.createDirectories(tempDir.resolve("installer-test-home"));
     }
 
     private void installFailingRuntime(String name) throws Exception {
