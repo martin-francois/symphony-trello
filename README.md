@@ -128,8 +128,9 @@ setup paths.
 
 ### One-Time Browser Setup: Workspace, API Key, Token
 
-Complete these browser steps once before creating the recommended board or importing an existing
-board. Symphony can set up everything for you, but Trello requires you to create the
+Complete these browser steps once. The installer's guided setup links here when it asks for the
+Trello API key. If you create or import a board with the commands in the next sections, complete
+these steps first. Symphony can set up everything for you, but Trello requires you to create the
 Workspace and authorize the API token in the browser.
 
 1. Sign in to Trello in your browser.
@@ -170,21 +171,30 @@ Workspace and authorize the API token in the browser.
 14. Click `Allow`.
 15. Copy the generated token. Treat it like a password: it grants access as your Trello account to
     boards and Workspaces your account can access.
-16. Save both values in the `.env` file read by the command you will run:
+16. Give both values to Symphony. Choose the way that matches how you are setting it up:
 
-    - Fresh installed `symphony-trello` command on normal Linux, macOS, or WSL2:
-      `$HOME/.config/symphony-trello/.env`.
-    - Existing default installs upgraded from the older single-home layout keep using the path from
-      their install context, usually `$HOME/.local/share/symphony-trello/config/.env`.
-    - Custom installs use the selected `SYMPHONY_HOME` or `SYMPHONY_TRELLO_CONFIG_DIR` config path.
-    - Installed `symphony-trello` command on MicroOS-like systems where the installer chose the
-      `/var` layout: `/var/lib/symphony-trello/users/<user>/config/.env`.
-    - Source checkout with Maven: the project-root `.env`.
+    - With the installer, or with guided setup started by the `symphony-trello setup-local` command,
+      go back to the terminal where guided setup is waiting. Paste the API key at the
+      `Trello API key:` prompt and press Enter. Then paste the token at the `Trello token:` prompt
+      and press Enter. The terminal does not show the token while you paste it. Setup saves both
+      values for you, so you do not need to edit a `.env` file.
+    - With commands that do not ask for credentials, such as `new-board`, `import-board`, and the
+      `start` command, save both values in the `.env` file read by the command you will run:
 
-```properties
-TRELLO_API_KEY=replace-with-generated-key
-TRELLO_API_TOKEN=replace-with-generated-token
-```
+      - Fresh installed `symphony-trello` command on normal Linux, macOS, or WSL2:
+        `$HOME/.config/symphony-trello/.env`
+      - Existing default installs upgraded from the older single-home layout keep using the path
+        from their install context, usually `$HOME/.local/share/symphony-trello/config/.env`
+      - Custom installs use the selected `SYMPHONY_HOME` or `SYMPHONY_TRELLO_CONFIG_DIR` config
+        path.
+      - Installed `symphony-trello` command on MicroOS-like systems where the installer chose the
+        `/var` layout: `/var/lib/symphony-trello/users/<user>/config/.env`
+      - Source checkout with Maven: the project-root `.env` file
+
+      ```properties
+      TRELLO_API_KEY=replace-with-generated-key
+      TRELLO_API_TOKEN=replace-with-generated-token
+      ```
 
 ### Fast Path: Create The Recommended Board
 
