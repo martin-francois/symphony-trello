@@ -83,7 +83,7 @@ final class StandaloneFuzzerIsolationTest {
         List<String> violations = new ArrayList<>();
         for (RecordedEvent execution : executions) {
             for (RecordedEvent event : io) {
-                if (insideExecution(event, execution) && !classLoading(event)) {
+                if (insideExecution(event, execution) && !expectedIo(event)) {
                     violations.add(execution.getString("target") + ": " + describe(event));
                 }
             }
@@ -213,12 +213,16 @@ final class StandaloneFuzzerIsolationTest {
                 && !start.isAfter(execution.getEndTime());
     }
 
-    // The first execution of each target loads its classes, which reads class files and jars.
-    private static boolean classLoading(RecordedEvent event) {
-        if (!event.hasField("path") || event.getString("path") == null) {
+    private static boolean expectedIo(RecordedEvent event) {
+        if (!event.hasField("path")) {
             return false;
         }
         String path = event.getString("path");
+        // A file event without a path is a write to a standard stream, such as a log line on stderr.
+        if (path == null) {
+            return true;
+        }
+        // The first execution of each target loads its classes, which reads class files and jars.
         return event.getEventType().getName().equals("jdk.FileRead")
                 && (path.endsWith(".class") || path.endsWith(".jar"));
     }
