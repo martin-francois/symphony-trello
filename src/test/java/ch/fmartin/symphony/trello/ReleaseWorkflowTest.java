@@ -154,7 +154,8 @@ final class ReleaseWorkflowTest {
                         "ignore_title_keywords:",
                         "- \"[skip ci]\"",
                         "ignore_usernames:",
-                        "- \"github-actions[bot]\"");
+                        "- \"github-actions[bot]\"",
+                        "- \"renovate[bot]\"");
     }
 
     @Test
