@@ -7,7 +7,8 @@ final class SetupOptionHelp {
     static final String MAX_AGENTS = "Maximum cards processed concurrently for this board (1-"
             + TrelloBoardSetup.MAX_SETUP_CONCURRENT_AGENTS
             + "). Each card runs its own Codex agent plus builds and tests; keep 1 until the machine, repository, and prerequisite checklists are ready for parallel work.";
-    static final String CODEX_MODEL = "Codex model to write into generated workflows.";
+    static final String CODEX_MODEL = "Codex model ID to write into generated workflows without prompting. Any model ID"
+            + " is accepted. Omit it in guided setup to pick from the installed Codex model list or enter another ID.";
     static final String CODEX_REASONING_EFFORT = "Codex reasoning effort to write into generated workflows.";
 
     private SetupOptionHelp() {}
