@@ -295,6 +295,22 @@ final class InstallerScriptTest {
     }
 
     @Test
+    void posixFixtureUsesTheJvmTemporaryDirectoryAsTmpdir() throws Exception {
+        // given
+        assumeFalse(isWindows());
+        assumeTrue(commandExists("bash"));
+        var processBuilder = new ProcessBuilder("bash", "-c", "printf '%s' \"${TMPDIR:-}\"");
+        processBuilder.environment().put("TMPDIR", "inherited-tmpdir-sentinel");
+
+        // when
+        ProcessResult result = run(Map.of(), processBuilder);
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output()).isEqualTo(System.getProperty("java.io.tmpdir"));
+    }
+
+    @Test
     void posixPublicInstallerDryRunUsesDefaultsInsteadOfInheritedRepositoryControls() throws Exception {
         // given
         assumeFalse(isWindows());
