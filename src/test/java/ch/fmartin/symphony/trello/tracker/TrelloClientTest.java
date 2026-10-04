@@ -10,11 +10,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
-import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
-import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Splitter;
 import java.math.BigDecimal;
@@ -26,9 +24,10 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -44,6 +43,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 final class TrelloClientTest {
     private static final String TRELLO_CARD_URL_PREFIX = "https://trello.com/c/";
+    private static final Instant RETRY_AFTER_NOW = Instant.parse("2026-10-04T10:00:00Z");
 
     private FakeTrelloServer trello;
     private final AtomicReference<String> authorization = new AtomicReference<>();
@@ -682,7 +682,7 @@ final class TrelloClientTest {
         HttpResponse<String> response = responseWithRetryAfter("-1");
 
         // when
-        Duration delay = TrelloClient.backoff(config, 1, response);
+        Duration delay = TrelloClient.backoff(config, 1, TrelloClient.retryAfter(response, RETRY_AFTER_NOW));
 
         // then
         assertThat(delay)
@@ -697,10 +697,42 @@ final class TrelloClientTest {
         HttpResponse<String> response = responseWithRetryAfter("4");
 
         // when
-        Duration delay = TrelloClient.backoff(config, 1, response);
+        Duration delay = TrelloClient.backoff(config, 1, TrelloClient.retryAfter(response, RETRY_AFTER_NOW));
 
         // then
         assertThat(delay).isEqualTo(Duration.ofSeconds(4));
+    }
+
+    @MethodSource("retryAfterDates")
+    @ParameterizedTest(name = "{0}")
+    void retryAfterHttpDateWaitsUntilThatDate(String value, Optional<Duration> expectedWait) {
+        // given
+        HttpResponse<String> response = responseWithRetryAfter(value);
+
+        // when
+        Optional<Duration> retryAfter = TrelloClient.retryAfter(response, RETRY_AFTER_NOW);
+
+        // then
+        assertThat(retryAfter).isEqualTo(expectedWait);
+    }
+
+    private static Stream<Arguments> retryAfterDates() {
+        return Stream.of(
+                Arguments.of("Sun, 4 Oct 2026 10:00:12 GMT", Optional.of(Duration.ofSeconds(12))),
+                Arguments.of("Sun, 4 Oct 2026 09:59:00 GMT", Optional.of(Duration.ZERO)),
+                Arguments.of("soon", Optional.empty()));
+    }
+
+    @Test
+    void retryAfterLongerThanTheMaximumWaitIsBoundedByIt() {
+        // given
+        HttpResponse<String> response = responseWithRetryAfter("120");
+
+        // when
+        Optional<Duration> retryAfter = TrelloClient.retryAfter(response, RETRY_AFTER_NOW);
+
+        // then
+        assertThat(retryAfter).hasValue(RateLimitPressure.MAX_WAIT);
     }
 
     @Test
@@ -1365,18 +1397,12 @@ final class TrelloClientTest {
     }
 
     private EffectiveConfig config(String boardId, Map<String, Object> trackerOverrides) {
-        Map<String, Object> tracker = new LinkedHashMap<>();
-        tracker.put("kind", "trello");
-        tracker.put("endpoint", trello.endpoint());
-        tracker.put("api_key", "key");
-        tracker.put("api_token", "token");
-        tracker.put("board_id", boardId);
-        tracker.put("active_states", List.of("Todo", "Review", "Ready"));
-        tracker.put("terminal_states", List.of("Done", "Archived", "ArchivedList", "ArchivedBoard", "Deleted"));
-        tracker.put("priority_labels", Map.of("P1", 1, "P2", 2));
+        Map<String, Object> tracker = new HashMap<>(Map.of(
+                "active_states", List.of("Todo", "Review", "Ready"),
+                "terminal_states", List.of("Done", "Archived", "ArchivedList", "ArchivedBoard", "Deleted"),
+                "priority_labels", Map.of("P1", 1, "P2", 2)));
         tracker.putAll(trackerOverrides);
-        return new ConfigResolver()
-                .resolve(new WorkflowDefinition(tempDir.resolve("WORKFLOW.md"), Map.of("tracker", tracker), ""))
+        return TrelloTestConfigs.trackerConfig(tempDir.resolve("WORKFLOW.md"), trello.endpoint(), boardId, tracker)
                 .withResolvedBoardId(boardId.equals("input") ? "board-1" : boardId);
     }
 
