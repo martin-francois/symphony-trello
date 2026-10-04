@@ -19,8 +19,9 @@ a card bounced back to `Human Review`.
 A replay with real Codex against a local stand-in for the Trello API showed the mechanism. Symphony
 dispatches the card from `Merging` because `Merging` is an active list. The generated prompt told
 Codex to "start by determining the current Trello list", but it never rendered that list, and the
-scoped Trello tools cannot read it. Codex treated the run as new work, posted the answer again, and
-called `trello_move_current_card` with `Human Review`. Even with the list known, the merge rules
+scoped Trello tools cannot read it. Codex treated the run as new work and called
+`trello_move_current_card` with `Human Review`. In one replay it also posted its answer a second
+time. Even with the list known, the merge rules
 only covered pull requests: a missing PR meant `Blocked`, and the only path to `Done` was a
 successful merge.
 
