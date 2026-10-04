@@ -11,8 +11,10 @@ import ch.fmartin.symphony.trello.tracker.TrelloException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.base.Splitter;
+import com.google.common.collect.Maps;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.net.URI;
 import java.util.ArrayList;
@@ -53,6 +55,7 @@ public class TrelloHandoffToolHandler {
     private static final int MAX_ACTION_ID_LENGTH = 128;
     private static final Splitter LOGICAL_LINE_BREAK = Splitter.onPattern("\\r\\n|[\\n\\r\\x{0085}\\x{2028}\\x{2029}]");
     private static final int WORKPAD_LOCK_STRIPES = 64;
+    private static final Map<String, ToolDefinition> TOOLS = toolDefinitions();
 
     private final ObjectMapper json;
     private final TrelloClient trello;
@@ -76,85 +79,97 @@ public class TrelloHandoffToolHandler {
             return tools;
         }
         if (config.trelloTools().allowComments()) {
-            tools.add(tool(
-                    ADD_COMMENT,
-                    "Add a handoff comment to the current Trello card. The current card is fixed by Symphony; do not include a card id.",
-                    objectSchema(
-                            Map.of(
-                                    "text",
-                                    stringSchema(
-                                            "Concise human-readable comment text to add to the current Trello card.")),
-                            List.of("text"))));
-            tools.add(tool(
-                    UPSERT_WORKPAD,
-                    "Create or update the single Codex workpad comment on the current Trello card. The text is Markdown and must summarize current plan, acceptance criteria, progress, validation, blockers, and handoff notes.",
-                    objectSchema(
-                            Map.of(
-                                    "text",
-                                    stringSchema(
-                                            "Full Markdown workpad body. Symphony ensures it starts with ## Codex Workpad. Do not include Symphony's managed Codex usage-section markers.")),
-                            List.of("text"))));
-            tools.add(tool(
-                    UPDATE_BLOCKER_RECHECK_STATUS,
-                    "Maintain one managed status while rechecking the newest exact Blocked: or Blocked by handoff. Set checking before the recheck, then set resumed only after that blocker no longer applies.",
-                    objectSchema(
-                            Map.of(
-                                    "status",
-                                    enumStringSchema(
-                                            "Recheck lifecycle state. Use checking before rechecking the blocker and resumed only after the recheck succeeds.",
-                                            List.of(RECHECK_STATUS_CHECKING, RECHECK_STATUS_RESUMED))),
-                            List.of("status"))));
+            addToolSpecs(tools, ADD_COMMENT, UPSERT_WORKPAD, UPDATE_BLOCKER_RECHECK_STATUS);
         }
         if (config.trelloTools().allowChecklists()) {
-            tools.add(tool(
-                    UPSERT_CHECKLIST_ITEM,
-                    "Create or update one checklist item on the current Trello card. The current card is fixed by Symphony; do not include a card id.",
-                    objectSchema(
-                            Map.of(
-                                    "checklist_name",
-                                    stringSchema("Exact checklist name on the current Trello card."),
-                                    "item_name",
-                                    stringSchema("Exact checklist item text to create or update."),
-                                    "complete",
-                                    booleanSchema("Whether the checklist item should be complete.")),
-                            List.of("checklist_name", "item_name", "complete"))));
+            addToolSpecs(tools, UPSERT_CHECKLIST_ITEM);
         }
         if (config.trelloTools().allowUrlAttachments()) {
-            tools.add(tool(
-                    ADD_URL_ATTACHMENT,
-                    "Attach one http or https URL without credentials, query string, or fragment to the current Trello card. The current card is fixed by Symphony; do not include a card id.",
-                    objectSchema(
-                            Map.of(
-                                    "url",
-                                    stringSchema(
-                                            "HTTP or HTTPS URL without credentials, query string, or fragment to attach to the current Trello card."),
-                                    "name",
-                                    stringSchema("Optional attachment display name.")),
-                            List.of("url"))));
+            addToolSpecs(tools, ADD_URL_ATTACHMENT);
         }
         if (moveAllowlistConfigured(config)) {
-            tools.add(tool(
-                    MOVE_CURRENT_CARD,
-                    "Move the current Trello card to one configured board-local handoff list. Use list_name unless the workflow explicitly gives a Trello list_id.",
-                    objectSchema(
-                            Map.of(
-                                    "list_name",
-                                    stringSchema("Allowed destination list name, for example Human Review."),
-                                    "list_id",
-                                    stringSchema("Allowed destination Trello list id.")),
-                            List.of())));
+            addToolSpecs(tools, MOVE_CURRENT_CARD);
         }
         return tools;
     }
 
+    private static void addToolSpecs(ArrayNode tools, String... names) {
+        for (String name : names) {
+            // A copy keeps a caller from editing the shared definition.
+            tools.add(TOOLS.get(name).spec().deepCopy());
+        }
+    }
+
+    /// Builds each advertised tool once, so every session and the dispatcher share one definition.
+    private static Map<String, ToolDefinition> toolDefinitions() {
+        List<ToolDefinition> definitions = List.of(
+                toolDefinition(
+                        ADD_COMMENT,
+                        "Add a handoff comment to the current Trello card. The current card is fixed by Symphony; do not include a card id.",
+                        objectSchema(
+                                Map.of(
+                                        "text",
+                                        stringSchema(
+                                                "Concise human-readable comment text to add to the current Trello card.")),
+                                List.of("text"))),
+                toolDefinition(
+                        UPSERT_WORKPAD,
+                        "Create or update the single Codex workpad comment on the current Trello card. The text is Markdown and must summarize current plan, acceptance criteria, progress, validation, blockers, and handoff notes.",
+                        objectSchema(
+                                Map.of(
+                                        "text",
+                                        stringSchema(
+                                                "Full Markdown workpad body. Symphony ensures it starts with ## Codex Workpad. Do not include Symphony's managed Codex usage-section markers.")),
+                                List.of("text"))),
+                toolDefinition(
+                        UPDATE_BLOCKER_RECHECK_STATUS,
+                        "Maintain one managed status while rechecking the newest exact Blocked: or Blocked by handoff. Set checking before the recheck, then set resumed only after that blocker no longer applies.",
+                        objectSchema(
+                                Map.of(
+                                        "status",
+                                        enumStringSchema(
+                                                "Recheck lifecycle state. Use checking before rechecking the blocker and resumed only after the recheck succeeds.",
+                                                List.of(RECHECK_STATUS_CHECKING, RECHECK_STATUS_RESUMED))),
+                                List.of("status"))),
+                toolDefinition(
+                        UPSERT_CHECKLIST_ITEM,
+                        "Create or update one checklist item on the current Trello card. The current card is fixed by Symphony; do not include a card id.",
+                        objectSchema(
+                                Map.of(
+                                        "checklist_name",
+                                        stringSchema("Exact checklist name on the current Trello card."),
+                                        "item_name",
+                                        stringSchema("Exact checklist item text to create or update."),
+                                        "complete",
+                                        booleanSchema("Whether the checklist item should be complete.")),
+                                List.of("checklist_name", "item_name", "complete"))),
+                toolDefinition(
+                        ADD_URL_ATTACHMENT,
+                        "Attach one http or https URL without credentials, query string, or fragment to the current Trello card. The current card is fixed by Symphony; do not include a card id.",
+                        objectSchema(
+                                Map.of(
+                                        "url",
+                                        stringSchema(
+                                                "HTTP or HTTPS URL without credentials, query string, or fragment to attach to the current Trello card."),
+                                        "name",
+                                        stringSchema("Optional attachment display name.")),
+                                List.of("url"))),
+                toolDefinition(
+                        MOVE_CURRENT_CARD,
+                        "Move the current Trello card to one configured board-local handoff list. Use list_name unless the workflow explicitly gives a Trello list_id.",
+                        objectSchema(
+                                Map.of(
+                                        "list_name",
+                                        stringSchema("Allowed destination list name, for example Human Review."),
+                                        "list_id",
+                                        stringSchema("Allowed destination Trello list id.")),
+                                List.of())));
+        return Maps.uniqueIndex(definitions, ToolDefinition::name);
+    }
+
     public ObjectNode handle(EffectiveConfig config, Card card, JsonNode params) {
         String tool = params.path("tool").asText("");
-        if (!ADD_COMMENT.equals(tool)
-                && !UPSERT_WORKPAD.equals(tool)
-                && !UPDATE_BLOCKER_RECHECK_STATUS.equals(tool)
-                && !MOVE_CURRENT_CARD.equals(tool)
-                && !UPSERT_CHECKLIST_ITEM.equals(tool)
-                && !ADD_URL_ATTACHMENT.equals(tool)) {
+        if (!TOOLS.containsKey(tool)) {
             return failure("unsupported_tool", "Unsupported Trello handoff tool: " + tool);
         }
         if (!config.trelloTools().enabled()) {
@@ -1088,31 +1103,40 @@ public class TrelloHandoffToolHandler {
                 || !config.trelloTools().allowedMoveListNames().isEmpty();
     }
 
-    private ObjectNode tool(String name, String description, ObjectNode inputSchema) {
-        return object("namespace", "symphony", "name", name, "description", description, "inputSchema", inputSchema);
+    private static ToolDefinition toolDefinition(String name, String description, ObjectNode inputSchema) {
+        ObjectNode spec = JsonNodeFactory.instance
+                .objectNode()
+                .put("namespace", "symphony")
+                .put("name", name)
+                .put("description", description);
+        spec.set("inputSchema", inputSchema);
+        return new ToolDefinition(name, spec);
     }
 
-    private ObjectNode objectSchema(Map<String, ObjectNode> properties, List<String> required) {
-        ObjectNode schema = object("type", "object", "additionalProperties", false);
-        ObjectNode propertySchema = json.createObjectNode();
-        properties.forEach(propertySchema::set);
-        schema.set("properties", propertySchema);
-        schema.set("required", json.valueToTree(required));
+    private static ObjectNode objectSchema(Map<String, ObjectNode> properties, List<String> required) {
+        ObjectNode schema =
+                JsonNodeFactory.instance.objectNode().put("type", "object").put("additionalProperties", false);
+        schema.putObject("properties").setAll(properties);
+        required.forEach(schema.putArray("required")::add);
         return schema;
     }
 
-    private ObjectNode stringSchema(String description) {
-        return object("type", "string", "minLength", 1, "description", description);
+    private static ObjectNode stringSchema(String description) {
+        return JsonNodeFactory.instance
+                .objectNode()
+                .put("type", "string")
+                .put("minLength", 1)
+                .put("description", description);
     }
 
-    private ObjectNode enumStringSchema(String description, List<String> values) {
+    private static ObjectNode enumStringSchema(String description, List<String> values) {
         ObjectNode schema = stringSchema(description);
-        schema.set("enum", json.valueToTree(values));
+        values.forEach(schema.putArray("enum")::add);
         return schema;
     }
 
-    private ObjectNode booleanSchema(String description) {
-        return object("type", "boolean", "description", description);
+    private static ObjectNode booleanSchema(String description) {
+        return JsonNodeFactory.instance.objectNode().put("type", "boolean").put("description", description);
     }
 
     private ObjectNode success(Map<String, String> payload) {
@@ -1211,6 +1235,8 @@ public class TrelloHandoffToolHandler {
     }
 
     private record BoardListMatch(TrelloClient.BoardList list, String error) {}
+
+    private record ToolDefinition(String name, ObjectNode spec) {}
 
     private record BlockerRecheckComments(Card.@Nullable Comment blocker, List<Card.Comment> managedComments) {
         private BlockerRecheckComments {
