@@ -4121,6 +4121,11 @@ When this profile is used:
 - setup MUST write ignored local Trello credentials after the user provides them directly and MUST
   redact secret values in terminal output. Credentials already supplied through real environment
   variables or an existing dotenv file MUST NOT be copied into another dotenv file.
+- when standard input and output are an interactive terminal, setup prompts SHOULD support basic
+  line editing, such as moving the cursor with the left and right arrow keys, and MUST keep secret
+  input such as the Trello token hidden and out of any recallable input history. Ctrl+C at a prompt
+  MUST end setup with exit status 130 and without a stack trace or setup failure report. Redirected or piped input MUST be read as plain
+  lines without terminal control handling
 - setup MUST reject local dotenv output paths that are not ignored by this repository's default
   `.env` ignore patterns
 - if setup writes credentials to a non-default dotenv file, the managed-run wrapper MUST provide a
