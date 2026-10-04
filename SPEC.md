@@ -4196,6 +4196,12 @@ When this profile is used:
 - setup MUST write ignored local Trello credentials after the user provides them directly and MUST
   redact secret values in terminal output. Credentials already supplied through real environment
   variables or an existing dotenv file MUST NOT be copied into another dotenv file.
+- when standard input and output are an interactive terminal on Linux, setup prompts SHOULD support
+  basic line editing, such as moving the cursor with the left and right arrow keys. Other platforms
+  keep the JDK default until issue #817 verifies their terminal behavior. Setup MUST keep secret
+  input such as the Trello token hidden and out of any recallable input history. Ctrl+C at a prompt
+  MUST end setup with exit status 130 and without a stack trace or setup failure report. Redirected
+  or piped input MUST be read as plain lines without terminal control handling.
 - setup MUST reject local dotenv output paths that are not ignored by this repository's default
   `.env` ignore patterns
 - if setup writes credentials to a non-default dotenv file, the managed-run wrapper MUST provide a
@@ -4265,6 +4271,9 @@ When this profile is used:
 - local uninstall MUST NOT treat the installer-managed app confirmation as confirmation to delete
   user data; unattended user-data cleanup MUST require a separate explicit confirmation option
 - local uninstall MUST require an installer marker before recursively deleting the app directory.
+- deterministic CI MUST verify setup line editing, hidden secrets, input history, Ctrl+C exit status,
+  and redirected-input fallback through `StreamTerminalLineEditingTest` on Linux. `SystemConsoleTest`
+  MUST verify the platform gate and explicit provider override in child JVMs.
 - deterministic CI SHOULD exercise the POSIX installer lifecycle beyond syntax checks by driving
   interactive prompts through a pseudo-terminal, using test doubles for external tools/services,
   verifying install, update, managed start/status, and uninstall cleanup behavior without real Trello,
