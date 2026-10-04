@@ -40,6 +40,7 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -47,6 +48,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -58,6 +60,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
@@ -3062,6 +3065,35 @@ final class TrelloBoardSetupMainTest {
                 .contains("oauth_consumer_key=\"env-key\"", "oauth_token=\"env-token\"");
     }
 
+    @EnumSource(UnusableCredentialFile.class)
+    @ParameterizedTest(name = "{0}")
+    void listWorkspacesWithKeyAndTokenFlagsSucceedsWhateverTheCredentialFileHolds(UnusableCredentialFile file)
+            throws Exception {
+        // given
+        Path env = tempDir.resolve(".env.unusable");
+        file.create(env);
+        assumeTrue(
+                file != UnusableCredentialFile.UNREADABLE || !Files.isReadable(env),
+                "the file system must be able to deny read access to the test user");
+
+        // when
+        CliRunResult result = runCliWithoutTrelloCredentials(
+                "list-workspaces",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "flag-key",
+                "--token",
+                "flag-token",
+                "--env",
+                env.toString());
+
+        // then
+        result.assertSuccess().stdoutContains("Trello workspaces:", "workspace-1");
+        assertThat(workspaceAuthorization.get())
+                .contains("oauth_consumer_key=\"flag-key\"", "oauth_token=\"flag-token\"");
+    }
+
     @Test
     void listWorkspacesReadsCredentialsBehindAByteOrderMark() throws Exception {
         // given
@@ -3109,6 +3141,42 @@ final class TrelloBoardSetupMainTest {
 
     private static Stream<ListWorkspacesMissingCredentialSource> listWorkspacesMissingCredentialSources() {
         return Stream.of(ListWorkspacesMissingCredentialSource.values());
+    }
+
+    /// Credential files that `--key` and `--token` must make irrelevant: the command never needs
+    /// them, so none of them may change its exit code or output.
+    private enum UnusableCredentialFile {
+        MISSING {
+            @Override
+            void create(Path env) {
+                // The path stays absent.
+            }
+        },
+        UNREADABLE {
+            @Override
+            void create(Path env) throws IOException {
+                Files.writeString(env, TestEnv.trelloCredentials("file-key", "file-token"));
+                if (env.getFileSystem().supportedFileAttributeViews().contains("posix")) {
+                    Files.setPosixFilePermissions(env, Set.of());
+                }
+            }
+        },
+        MALFORMED {
+            @Override
+            void create(Path env) throws IOException {
+                Files.writeString(env, "TRELLO_API_KEY=\"unterminated\n=no-key\nexport\n\\\nTRELLO_API_TOKEN\n");
+            }
+        },
+        NOT_UTF_8 {
+            @Override
+            void create(Path env) throws IOException {
+                byte[] invalidUtf8 = {(byte) 0xC3, (byte) 0x28, (byte) 0xFF};
+                Files.write(env, "TRELLO_API_KEY=file-key".getBytes(StandardCharsets.US_ASCII));
+                Files.write(env, invalidUtf8, StandardOpenOption.APPEND);
+            }
+        };
+
+        abstract void create(Path env) throws IOException;
     }
 
     private enum ListWorkspacesMissingCredentialSource {
