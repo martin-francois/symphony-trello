@@ -67,6 +67,19 @@ a checked-in seed corpus under `oss-fuzz/corpora/`. These seeds cover representa
 declarations, Trello references and checklist forms, and valid and invalid workflow front matter so
 coverage-guided mutation starts inside useful parser paths.
 
+`RepositorySourceFuzzer` builds structured input with `FuzzedDataProvider`. One input chooses what
+the card title, the description, and up to two comments carry (a declaration of the shared value, a
+declaration of its own value, free text, or nothing) and whether the workflow sets
+`repository.default_url`, `repository.default_path`, or neither. A plain text seed without a
+backslash is the repository value, declared with `Repository:` in the card title and description.
+Seeds that need other card fields or a workflow default use the byte layout described in the
+harness Javadoc. Its seeds cover bracketed IPv6 hosts with and without ports, `user@host:path`
+remotes, `file:` URLs, workflow defaults, and malformed variants of each.
+
+Fourteen `RepositorySourceResolver` branches cannot run with any input, so its hosted branch
+coverage stays below 100%. [ADR 0089](adr/0089-structured-input-for-the-repository-source-fuzz-target.md)
+lists why.
+
 ClusterFuzzLite's `v1` runner image bundles JaCoCo 0.8.7, which rejects Java 25 class files after
 the fuzzers run and then uploads an incomplete coverage directory. The coverage job therefore uses
 the same digest-pinned ClusterFuzzLite runner with its JaCoCo agent and CLI replaced by the version
@@ -138,7 +151,7 @@ set -euo pipefail
 
 targets=(
   'RepositorySourceResolverFuzzTest#labelledRepositorySourceValueCannotBreakSelectionInvariants'
-  'RepositorySourceResolverFuzzTest#cardTextDeclarationScanCannotBreakSelectionInvariants'
+  'RepositorySourceResolverFuzzTest#cardFieldsAndWorkflowDefaultCannotBreakSelectionInvariants'
   'TrelloCardReferenceParserFuzzTest#trelloReferenceParsingKeepsLookupIdsAndUrlsStable'
   'TrelloCardReferenceParserFuzzTest#checklistClassificationNeverEmitsPrerequisitesWithProblems'
   'WorkflowLoaderFuzzTest#workflowLoaderHandlesArbitraryWorkflowBytes'
@@ -159,6 +172,54 @@ rather than the method-level regression cap, decide when the fuzzing process sto
 when the requested window ends. Contributors are not expected to run this before every pull request;
 use it when touching parser, prompt-line safety, workflow loading, or Trello reference/checklist
 parsing logic.
+
+To measure what a target's corpus covers, replay it once under the JaCoCo agent, as the hosted
+coverage job does. The commands below need no container and run one process. They replay the stored
+corpus from the storage repository plus the checked-in seeds. Replace `RepositorySourceFuzzer` with
+the target to measure:
+
+```bash
+set -euo pipefail
+
+target=RepositorySourceFuzzer
+work="$(mktemp -d)"
+jacoco_version="$(./mvnw -q help:evaluate -Dexpression=jacoco.version -DforceStdout)"
+./mvnw -q -DskipTests test-compile dependency:copy-dependencies \
+  -DincludeScope=test -DoutputDirectory="$work/lib"
+./mvnw -q dependency:copy -DoutputDirectory="$work/jacoco" \
+  -Dartifact="org.jacoco:org.jacoco.agent:$jacoco_version:jar:runtime"
+./mvnw -q dependency:copy -DoutputDirectory="$work/jacoco" \
+  -Dartifact="org.jacoco:org.jacoco.cli:$jacoco_version:jar:nodeps"
+git clone --quiet --depth 1 --filter=blob:none --sparse \
+  https://github.com/martin-francois/symphony-trello-fuzzing-storage.git "$work/storage"
+git -C "$work/storage" sparse-checkout set "corpus/$target"
+mapfile -t inputs < <(find "$work/storage/corpus/$target" "oss-fuzz/corpora/$target" -type f)
+JAVA_TOOL_OPTIONS="-javaagent:$work/jacoco/org.jacoco.agent-$jacoco_version-runtime.jar=destfile=$work/jacoco.exec,includes=ch.fmartin.symphony.trello.*,excludes=ch.fmartin.symphony.trello.fuzz.*" \
+  java -cp "target/classes:target/test-classes:$work/lib/*" com.code_intelligence.jazzer.Jazzer \
+  --target_class="ch.fmartin.symphony.trello.fuzz.$target" "${inputs[@]}" >"$work/replay.log" 2>&1
+java -jar "$work/jacoco/org.jacoco.cli-$jacoco_version-nodeps.jar" report "$work/jacoco.exec" \
+  --classfiles target/classes --sourcefiles src/main/java --html "$work/report" --xml "$work/jacoco.xml"
+echo "Coverage report: $work/report/index.html"
+```
+
+The report counts every production class the replay loaded. Read the target's entry point, for
+example `RepositorySourceResolver`. For the same corpus, this replay gives the same branch counts as
+the hosted report.
+
+To see what a harness or seed change gains, fuzz for a few minutes first and replay the grown
+corpus. Run the same `java` command without `JAVA_TOOL_OPTIONS`, with a corpus directory instead of
+the input files, and stop it with libFuzzer's `-max_total_time`:
+
+```bash
+mkdir "$work/corpus"
+cp "${inputs[@]}" "$work/corpus/"
+java -cp "target/classes:target/test-classes:$work/lib/*" com.code_intelligence.jazzer.Jazzer \
+  --target_class="ch.fmartin.symphony.trello.fuzz.$target" -max_total_time=300 -print_final_stats=1 \
+  "$work/corpus"
+```
+
+The `stat::average_exec_per_sec` line at the end gives the throughput. Then run the replay and
+report commands again with `find "$work/corpus" -type f` as the inputs.
 
 Committed fuzz tests should stay deterministic in regression mode. If Jazzer finds a crash, keep the
 generated input only after checking that it contains no private context and after moving it into the
