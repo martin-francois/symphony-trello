@@ -1,0 +1,11 @@
+#!/bin/bash
+# Builds the jar, sources jar, Javadoc jar and POM into target/staging-deploy for JReleaser.
+# This step gets no publication secrets; scripts/deploy-maven-central signs and uploads.
+
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+# The release commit already passed the verify gate on main, so stop the lifecycle at package
+# and call deploy:deploy directly instead of rerunning tests and static analysis.
+./mvnw -B -ntp -Pmaven-central -DskipTests clean package deploy:deploy
