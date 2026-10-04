@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -16,6 +17,15 @@ import java.util.regex.Pattern;
  * <p>The real Codex app-server protocol is newline-delimited JSON over stdin/stdout. Keeping this as
  * a single-file Java program makes the live runbook repository-native while avoiding an extra test
  * dependency or a packaged helper just to emulate that stdio boundary.
+ *
+ * <p>The live bug-bash harness (scripts/live-bugbash) drives per-card behavior through optional
+ * environment variables. {@code SYMPHONY_FAKE_CODEX_PROMPT_DIR} receives one file per raw
+ * {@code turn/start} request so the harness can assert on the rendered prompt.
+ * {@code SYMPHONY_FAKE_CODEX_SCRIPT_DIR} holds {@code <scenario-id>.script} files; a turn whose
+ * request mentions a script's scenario id runs that script instead of the default handoff. The
+ * steps are the cases of {@link #runScript}. {@code SYMPHONY_FAKE_CODEX_TOOL_DIR} receives one file
+ * per client response to a scripted request. One file per record keeps the concurrent fake
+ * processes of one worker from interleaving their output.
  */
 public class FakeCodexAppServer {
     private static final Pattern ID = Pattern.compile("\"id\"\\s*:\\s*(\\d+)");
@@ -27,6 +37,8 @@ public class FakeCodexAppServer {
     public static void main(String[] args) throws Exception {
         new FakeCodexAppServer().run();
     }
+
+    private static int recordSequence;
 
     private final BufferedReader input =
             new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
@@ -59,7 +71,14 @@ public class FakeCodexAppServer {
     private void handleTurn(int responseId, String line) throws Exception {
         String threadId = capture(THREAD_ID, line).orElse("thread-fake");
         String turnId = "turn-fake-" + UUID.randomUUID();
+        writeRecord("SYMPHONY_FAKE_CODEX_PROMPT_DIR", line);
         send("{\"id\":%d,\"result\":{\"turn\":{\"id\":\"%s\"}}}".formatted(responseId, turnId));
+
+        Optional<Path> script = scriptFor(line);
+        if (script.isPresent()) {
+            runScript(script.orElseThrow(), threadId, turnId);
+            return;
+        }
 
         int sleepMs = Integer.parseInt(System.getenv().getOrDefault("SYMPHONY_FAKE_CODEX_SLEEP_MS", "0"));
         if (sleepMs > 0) {
@@ -77,6 +96,10 @@ public class FakeCodexAppServer {
             return;
         }
 
+        handoff(threadId, turnId);
+    }
+
+    private void handoff(String threadId, String turnId) throws IOException {
         String comment = System.getenv().getOrDefault("SYMPHONY_FAKE_CODEX_COMMENT", DEFAULT_COMMENT);
         String workpadResponse = requestTool(
                 10_000,
@@ -109,6 +132,105 @@ public class FakeCodexAppServer {
         completeTurn(threadId, turnId, moveError);
     }
 
+    private static Optional<Path> scriptFor(String turnStartLine) throws IOException {
+        String directory = System.getenv("SYMPHONY_FAKE_CODEX_SCRIPT_DIR");
+        if (directory == null || directory.isBlank() || !Files.isDirectory(Path.of(directory))) {
+            return Optional.empty();
+        }
+        try (var scripts = Files.list(Path.of(directory))) {
+            return scripts.filter(path -> path.getFileName().toString().endsWith(".script"))
+                    .filter(path -> turnStartLine.contains(scenarioId(path)))
+                    .max((left, right) -> Integer.compare(
+                            scenarioId(left).length(), scenarioId(right).length()));
+        }
+    }
+
+    private static String scenarioId(Path script) {
+        String name = script.getFileName().toString();
+        return name.substring(0, name.length() - ".script".length());
+    }
+
+    private void runScript(Path script, String threadId, String turnId) throws Exception {
+        String scenario = scenarioId(script);
+        List<String> steps = Files.readAllLines(script, StandardCharsets.UTF_8);
+        int requestId = 20_000;
+        for (String step : steps) {
+            String trimmed = step.strip();
+            if (trimmed.isEmpty() || trimmed.startsWith("#")) {
+                continue;
+            }
+            String[] parts = trimmed.split(" ", 3);
+            switch (parts[0]) {
+                case "tool" -> logToolResponse(
+                        scenario, parts[1], requestTool(requestId++, parts[1], parts.length > 2 ? parts[2] : "{}"));
+                case "user-input" -> logToolResponse(
+                        scenario,
+                        "item/tool/requestUserInput",
+                        request(
+                                requestId++,
+                                "item/tool/requestUserInput",
+                                "{\"threadId\":\"%s\",\"turnId\":\"%s\",\"itemId\":\"item-fake\",\"questions\":[{\"id\":\"q1\",\"header\":\"Fake\",\"question\":\"Continue?\",\"options\":null}]}"
+                                        .formatted(jsonString(threadId), jsonString(turnId))));
+                case "approval" -> logToolResponse(
+                        scenario,
+                        parts[1],
+                        request(
+                                requestId++,
+                                parts[1],
+                                "{\"threadId\":\"%s\",\"turnId\":\"%s\",\"itemId\":\"item-fake\",\"command\":\"true\",\"cwd\":\".\"}"
+                                        .formatted(jsonString(threadId), jsonString(turnId))));
+                case "telemetry" -> sendTelemetry(threadId, turnId);
+                case "malformed-json" -> {
+                    send("{this is not json");
+                    return;
+                }
+                case "turn-cancelled" -> {
+                    send("{\"method\":\"turn/cancelled\",\"params\":{\"threadId\":\"%s\",\"turnId\":\"%s\"}}"
+                            .formatted(jsonString(threadId), jsonString(turnId)));
+                    return;
+                }
+                case "stall" -> {
+                    return;
+                }
+                case "handoff" -> {
+                    handoff(threadId, turnId);
+                    return;
+                }
+                case "complete" -> {
+                    completeTurn(threadId, turnId, null);
+                    return;
+                }
+                default -> throw new IllegalArgumentException("Unknown fake Codex script step: " + parts[0]);
+            }
+        }
+        completeTurn(threadId, turnId, null);
+    }
+
+    private static void sendTelemetry(String threadId, String turnId) {
+        send(
+                "{\"method\":\"thread/tokenUsage/updated\",\"params\":{\"threadId\":\"%s\",\"turnId\":\"%s\",\"tokenUsage\":{\"total\":{\"inputTokens\":120,\"outputTokens\":30,\"totalTokens\":150}}}}"
+                        .formatted(jsonString(threadId), jsonString(turnId)));
+        send(
+                "{\"method\":\"account/rateLimits/updated\",\"params\":{\"rateLimits\":{\"primary\":{\"usedPercent\":42,\"windowDurationMins\":300,\"resetsAt\":4102444800},\"secondary\":null}}}");
+    }
+
+    private static void logToolResponse(String scenario, String request, String response) throws IOException {
+        writeRecord("SYMPHONY_FAKE_CODEX_TOOL_DIR", scenario + "\t" + request + "\t" + response);
+    }
+
+    /**
+     * Writes one record into its own file. The name starts with the wall-clock time and a
+     * per-process sequence number, so a sorted listing keeps each process's records in order.
+     */
+    private static void writeRecord(String variable, String record) throws IOException {
+        String directory = System.getenv(variable);
+        if (directory == null || directory.isBlank()) {
+            return;
+        }
+        String name = "%013d-%06d-%s.txt".formatted(System.currentTimeMillis(), ++recordSequence, UUID.randomUUID());
+        Files.writeString(Path.of(directory, name), record, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
+    }
+
     private static void completeWithUsageLimit(String threadId, String turnId) {
         long resetsAt = Long.parseLong(
                 System.getenv().getOrDefault("SYMPHONY_FAKE_CODEX_USAGE_LIMIT_RESETS_AT", "4102444800"));
@@ -121,8 +243,11 @@ public class FakeCodexAppServer {
     }
 
     private String requestTool(int requestId, String tool, String arguments) throws IOException {
-        send("{\"id\":%d,\"method\":\"item/tool/call\",\"params\":{\"tool\":\"%s\",\"arguments\":%s}}"
-                .formatted(requestId, tool, arguments));
+        return request(requestId, "item/tool/call", "{\"tool\":\"%s\",\"arguments\":%s}".formatted(tool, arguments));
+    }
+
+    private String request(int requestId, String method, String params) throws IOException {
+        send("{\"id\":%d,\"method\":\"%s\",\"params\":%s}".formatted(requestId, method, params));
         String line;
         while ((line = input.readLine()) != null) {
             if (captureInt(ID, line).filter(id -> id == requestId).isPresent()) {
