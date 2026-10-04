@@ -56,6 +56,8 @@ creating a second target-packaging implementation?
 * Reimplement JVM coverage publication outside ClusterFuzzLite.
 * Depend on cron alone for successive long batches.
 * Self-dispatch successful batches and run a self-queued idle-chain watchdog.
+* Choose new targets from dated coverage reviews.
+* Give saturated targets more runtime instead of adding targets.
 
 ## Decision Outcome
 
@@ -202,6 +204,13 @@ and crash reproducers use GitHub Actions artifacts.
 This workflow does not replace hosted OSS-Fuzz. Hosted OSS-Fuzz remains the long-term service because
 it provides dedicated infrastructure, triage, and broader continuous operation. ClusterFuzzLite is
 the repository-owned bridge and continues to use the same fuzz targets.
+
+Changes to the target set follow dated coverage reviews in `docs/fuzzing-reviews/`. A review
+ranks production input boundaries by three things: the uncovered JaCoCo branches a target could
+reach, what a defect there would cost, and how much harness the target needs. It prefers extending a
+target whose corpus already produces the input grammar over adding a matrix job, and it does not add
+a target for code an existing fuzzer already reaches. Each review records its own results, and this
+ADR keeps only the rule.
 
 ### Consequences
 
@@ -441,6 +450,25 @@ repository without the ClusterFuzzLite runner.
   and storage protocol.
 * Bad, because a second coverage path can drift from code-change target selection and hosted
   OSS-Fuzz packaging.
+
+### Choose New Targets From Dated Coverage Reviews
+
+Measure throughput, corpus growth, coverage, and findings per target, then rank the uncovered input
+boundaries and file one implementation issue per selected target.
+
+* Good, because runner time goes to code that no fuzzer reaches yet.
+* Good, because a dated record lets the next review compare numbers instead of impressions.
+* Bad, because each review needs a maintainer or agent to collect the data before GitHub's 90-day
+  log retention removes the batch statistics.
+
+### Give Saturated Targets More Runtime Instead of Adding Targets
+
+Keep the four targets and raise their budgets or batch frequency.
+
+* Good, because it needs no new harness code.
+* Bad, because the [first-week review](../fuzzing-reviews/2026-09-07-first-week.md) found that no
+  entry point gained more than one branch after the first day, so extra time buys almost no new
+  coverage.
 
 ## More Information
 
