@@ -24,7 +24,8 @@ description: >
   current list as the merge approval list.
 - `gh` is installed and authenticated.
 - The working tree is clean or changes are intentionally committed.
-- A PR can be identified for the current branch or Trello card.
+- A PR can be identified for the current branch or Trello card, or the
+  workflow selects a branch-only merge as described below.
 
 ## Steps
 
@@ -59,6 +60,44 @@ description: >
    - update the workpad with merge evidence,
    - add a short Trello comment if useful,
    - move the card to the configured merge completion list.
+
+## Branch-Only Merge
+
+Use this section instead of the PR steps when the workflow's Pull Request
+Handoff Mode section selects `branch_only` and no open PR exists for the card
+branch. A PR that a human opened from the proposed description takes the
+normal PR steps above.
+
+1. Pick the target branch: the branch the Trello card names, otherwise the
+   repository default branch.
+2. Fetch the target branch. Skip the merge when the card's commits are
+   already on it: the work was committed directly on the target branch, or
+   the card branch tip is an ancestor of the target branch. A card branch
+   that no longer exists on origin is not a blocker when the head commit
+   named in the earlier branch-only handoff is on the target branch:
+
+   ```bash
+   git fetch origin "$target_branch"
+   if git ls-remote --exit-code --heads origin "$card_branch" >/dev/null; then
+     git fetch origin "$card_branch"
+     git merge-base --is-ancestor "origin/$card_branch" "origin/$target_branch"
+   else
+     git merge-base --is-ancestor "$card_commit" "origin/$target_branch"
+   fi
+   ```
+
+3. Otherwise merge the card branch into the target branch in a separate
+   worktree, following any merge strategy the repository documents. When
+   none is documented, fast-forward when possible and create a merge commit
+   otherwise. Never commit the proposed description file.
+4. Run local validation on the merge result, then push the target branch
+   normally. Never force-push it.
+5. Do not resolve GitHub review threads; there is no PR.
+6. Say in the completion comment which branch was merged into which target,
+   or why no merge was needed, then move the card to the configured merge
+   completion list.
+7. If the merge conflicts, validation fails, or the push is rejected by
+   branch protection or a required-PR rule, use the blocked merge path below.
 
 ## Blocked Merge
 
