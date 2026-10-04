@@ -7,11 +7,16 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Named.named;
 
+import ch.fmartin.symphony.trello.fuzz.WorkflowConfigInvariants;
 import ch.fmartin.symphony.trello.fuzz.WorkflowLoaderInvariants.LoadResult;
 import ch.fmartin.symphony.trello.testsupport.FuzzIsolationExtension;
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import java.io.IOException;
+import java.lang.reflect.Method;
+import java.nio.file.DirectoryStream;
+import java.util.ArrayList;
+import java.util.List;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.stream.Stream;
@@ -26,6 +31,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 @ExtendWith(FuzzIsolationExtension.class)
 @Isolated
 final class WorkflowLoaderFuzzTest {
+    private static final Path STANDALONE_SEED_CORPUS = Path.of("oss-fuzz/corpora/WorkflowLoaderFuzzer");
     private static final int DEEP_NESTING_LEVELS = 4_000;
     // Enough "?," pairs that the config has more nodes than the input has bytes.
     private static final int EXPLICIT_EMPTY_KEYS = 40;
@@ -45,6 +51,9 @@ final class WorkflowLoaderFuzzTest {
 
         // then
         assertWorkflowLoaderProperties(loader, candidate, result);
+        if (result.definition() != null) {
+            WorkflowConfigInvariants.assertResolutionProperties(result.definition());
+        }
     }
 
     @MethodSource("workflowBytes")
@@ -59,6 +68,43 @@ final class WorkflowLoaderFuzzTest {
 
         // then
         assertWorkflowLoaderProperties(loader, candidate, result);
+        if (result.definition() != null) {
+            WorkflowConfigInvariants.assertResolutionProperties(result.definition());
+        }
+    }
+
+    // Maven maps the standalone seeds by class and method name, so renames must keep the copy intact.
+    @Test
+    void standaloneSeedCorpusReplaysAsFuzzTestInputs() throws IOException {
+        // given
+        String inputsDirectory = WorkflowLoaderFuzzTest.class.getSimpleName() + "Inputs/" + fuzzTestMethodName();
+        List<String> seeds = new ArrayList<>();
+
+        // when
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(STANDALONE_SEED_CORPUS)) {
+            for (Path file : files) {
+                seeds.add(file.getFileName().toString());
+            }
+        }
+
+        // then
+        assertThat(seeds).isNotEmpty().allSatisfy(seed -> assertThat(
+                        WorkflowLoaderFuzzTest.class.getResource(inputsDirectory + "/" + seed))
+                .as(seed)
+                .isNotNull());
+    }
+
+    private static String fuzzTestMethodName() {
+        List<String> names = new ArrayList<>();
+        for (Method method : WorkflowLoaderFuzzTest.class.getDeclaredMethods()) {
+            if (method.isAnnotationPresent(FuzzTest.class)) {
+                names.add(method.getName());
+            }
+        }
+        if (names.size() != 1) {
+            throw new IllegalStateException("Expected one @FuzzTest method but found " + names.size());
+        }
+        return names.getFirst();
     }
 
     @MethodSource("workflowBytes")

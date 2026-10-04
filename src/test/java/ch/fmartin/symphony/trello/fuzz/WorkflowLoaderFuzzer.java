@@ -10,7 +10,10 @@ public final class WorkflowLoaderFuzzer {
 
     public static void fuzzerTestOneInput(FuzzedDataProvider data) {
         byte[] markdown = data.consumeBytes(WorkflowLoaderInvariants.MAX_MARKDOWN_BYTES);
-        WorkflowLoaderInvariants.assertWorkflowLoaderProperties(
-                LOADER, markdown, WorkflowLoaderInvariants.parse(LOADER, markdown));
+        var result = WorkflowLoaderInvariants.parse(LOADER, markdown);
+        WorkflowLoaderInvariants.assertWorkflowLoaderProperties(LOADER, markdown, result);
+        if (result.definition() != null) {
+            WorkflowConfigInvariants.assertResolutionProperties(result.definition());
+        }
     }
 }

@@ -224,6 +224,11 @@
         <targetPath>ch/fmartin/symphony/trello/tracker/TrelloCardPayloadFuzzTestInputs/cardPayloadMappingReturnsACardOrRejectsTheUnknownPayload</targetPath>
         <directory>oss-fuzz/corpora/TrelloCardPayloadFuzzer</directory>
       </testResource>
+      <!-- Jazzer regression mode also replays workflow seeds through the typed configuration checks. -->
+      <testResource>
+        <targetPath>ch/fmartin/symphony/trello/workflow/WorkflowLoaderFuzzTestInputs/workflowLoaderHandlesArbitraryWorkflowBytes</targetPath>
+        <directory>oss-fuzz/corpora/WorkflowLoaderFuzzer</directory>
+      </testResource>
     </testResources>
     <plugins>
       <plugin>

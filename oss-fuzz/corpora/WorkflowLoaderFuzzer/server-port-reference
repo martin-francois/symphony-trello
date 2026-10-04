@@ -1,0 +1,15 @@
+---
+tracker:
+  kind: trello
+  api_key: file:trello-api-key
+  board_id: board-1
+server:
+  port: $SYMPHONY_FUZZ_PORT
+polling:
+  interval_ms: 30000.0
+agent:
+  max_concurrent_agents: 2
+  max_turns: 1e1
+  max_retry_backoff_ms: "300000"
+---
+Server port from the environment.
