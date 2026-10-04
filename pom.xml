@@ -200,6 +200,11 @@
         <targetPath>ch/fmartin/symphony/trello/StandaloneFuzzerIsolationTestInputs/workflowLoaderFuzzer</targetPath>
         <directory>oss-fuzz/corpora/WorkflowLoaderFuzzer</directory>
       </testResource>
+      <!-- Jazzer regression mode replays this seed corpus through TrelloHandoffToolFuzzTest. -->
+      <testResource>
+        <targetPath>ch/fmartin/symphony/trello/agent/TrelloHandoffToolFuzzTestInputs/handoffToolCallsWriteOnlyWhatTheConfigurationAllows</targetPath>
+        <directory>oss-fuzz/corpora/TrelloHandoffToolFuzzer</directory>
+      </testResource>
     </testResources>
     <plugins>
       <plugin>

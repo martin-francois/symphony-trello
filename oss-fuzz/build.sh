@@ -20,9 +20,17 @@ rm -rf target/oss-fuzz-deps
   -DincludeScope=runtime \
   -DoutputDirectory=target/oss-fuzz-deps
 
-fuzzer_class_dir=target/test-classes/ch/fmartin/symphony/trello/fuzz
-fuzzer_helper_dir=target/test-classes/ch/fmartin/symphony/trello/tracker
-repository_helper_dir=target/test-classes/ch/fmartin/symphony/trello/testsupport
+test_class_root=target/test-classes/ch/fmartin/symphony/trello
+fuzzer_class_dir="$test_class_root/fuzz"
+# Test helpers that the standalone fuzzers call, relative to $test_class_root. Each entry also copies
+# the helper's nested classes.
+fuzzer_helpers=(
+  TestCards
+  agent/TrelloHandoffToolFuzzInvariants
+  testsupport/TestRepositoryUris
+  tracker/InMemoryTrelloBoard
+  tracker/TrelloReferenceFuzzInvariants
+)
 
 mapfile -t fuzzer_class_files < <(find "$fuzzer_class_dir" -name '*Fuzzer.class' ! -name '*$*' -print | sort)
 if ((${#fuzzer_class_files[@]} == 0)); then
@@ -37,21 +45,17 @@ mkdir -p "$OUT/test-classes/ch/fmartin/symphony/trello"
 cp -R "$fuzzer_class_dir" "$OUT/test-classes/ch/fmartin/symphony/trello/"
 
 shopt -s nullglob
-fuzzer_helper_classes=("$fuzzer_helper_dir"/TrelloReferenceFuzzInvariants*.class)
-if ((${#fuzzer_helper_classes[@]} == 0)); then
-  echo "No TrelloReferenceFuzzInvariants helper classes found under $fuzzer_helper_dir" >&2
-  exit 1
-fi
-mkdir -p "$OUT/test-classes/ch/fmartin/symphony/trello/tracker"
-cp "${fuzzer_helper_classes[@]}" "$OUT/test-classes/ch/fmartin/symphony/trello/tracker/"
-
-repository_helper_classes=("$repository_helper_dir"/TestRepositoryUris*.class)
-if ((${#repository_helper_classes[@]} == 0)); then
-  echo "No TestRepositoryUris helper classes found under $repository_helper_dir" >&2
-  exit 1
-fi
-mkdir -p "$OUT/test-classes/ch/fmartin/symphony/trello/testsupport"
-cp "${repository_helper_classes[@]}" "$OUT/test-classes/ch/fmartin/symphony/trello/testsupport/"
+for fuzzer_helper in "${fuzzer_helpers[@]}"; do
+  fuzzer_helper_class="$test_class_root/$fuzzer_helper.class"
+  if [[ ! -f "$fuzzer_helper_class" ]]; then
+    echo "No $fuzzer_helper helper class found under $test_class_root" >&2
+    exit 1
+  fi
+  fuzzer_helper_classes=("$fuzzer_helper_class" "$test_class_root/$fuzzer_helper"\$*.class)
+  fuzzer_helper_out="$OUT/test-classes/ch/fmartin/symphony/trello/$(dirname "$fuzzer_helper")"
+  mkdir -p "$fuzzer_helper_out"
+  cp "${fuzzer_helper_classes[@]}" "$fuzzer_helper_out/"
+done
 
 runtime_jars=(target/oss-fuzz-deps/*.jar)
 if ((${#runtime_jars[@]} > 0)); then
