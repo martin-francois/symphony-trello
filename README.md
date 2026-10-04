@@ -100,6 +100,8 @@ All Symphony for Trello features work with Trello's Free plan.
 - Scoped Trello tools let Codex comment on, update, and move its current Trello card without access
   to the Trello API credentials. Symphony performs permitted Trello operations on Codex's behalf
   and enforces the configured write controls.
+- Optional follow-up cards: Codex can file useful out-of-scope work as a separate, linked Trello card
+  instead of growing the current card.
 - A local worker status page and JSON API for running, retrying, blocked, and finished work.
 - Configurable workflow files for board lists, workspace paths, Codex settings, concurrency, and
   safe local file access.
@@ -1443,6 +1445,60 @@ and tell Codex to move with `list_id`.
 
 The standardized generic `trello_rest` dynamic tool extension is documented in [SPEC.md](SPEC.md).
 This Java implementation advertises the narrower handoff tools above.
+
+### Follow-Up Cards For Out-Of-Scope Work
+
+Codex sometimes finds useful work that the current card did not ask for. Instead of growing the
+current card, Codex can file that work as its own Trello card so you can prioritize it later. This
+is off by default because it lets Codex create cards on your board. Turn it on in `WORKFLOW.md`:
+
+```yaml
+trello_tools:
+  enabled: true
+  allow_writes: true
+  allow_url_attachments: true
+  allow_checklists: true
+  follow_up_cards:
+    enabled: true
+```
+
+Symphony then offers Codex the `trello_create_follow_up_card` tool. The tool needs
+`allow_url_attachments`, and the two "must finish first" relationships also need `allow_checklists`. Codex gives a title, a
+description, acceptance criteria, and how the new card relates to the current one. Symphony does the
+rest:
+
+- It creates the card at the bottom of `Inbox`. Set `follow_up_cards.list_name` or `list_id` to use
+  another list. Symphony refuses active and done lists, so a person always decides when follow-up
+  work starts.
+- It adds the `follow-up` label, creating it on the board if needed. Set `follow_up_cards.label` to
+  another name, or to `""` to add no label. `relationship_labels` can add one more label per
+  relationship, for example `current_waits_for_follow_up: Must finish first`.
+- It attaches each card to the other, so both cards show a visible link.
+- It ends the new card's description with a `Managed by Symphony` line that names the source card
+  and the relationship. Symphony reads relationships only from that exact line. A card link you
+  paste or attach yourself stays a plain link.
+
+Codex picks one of three relationships:
+
+| Relationship | Meaning | What Symphony adds |
+| --- | --- | --- |
+| `related` | No required order. | Links and the `Managed by Symphony` line. |
+| `follow_up_waits_for_current` | The new card starts after the current card is done. | A `Must finish first` checklist on the new card. |
+| `current_waits_for_follow_up` | The current card cannot finish until the new card is done. | A `Must finish first` checklist on the current card. |
+
+The `Must finish first` checklists use the [prerequisite convention](#using-symphony-day-to-day): Symphony does
+not run a card while a card listed there is unfinished. With
+`follow_up_cards.move_current_card_to_blocked: true`, a `current_waits_for_follow_up` card also gets
+a `Blocked by` comment and moves to the list in `tracker.blocked_state`, which must be in the move
+allowlist.
+
+Limits keep a confused run from flooding the board. Calling the tool again with the same title for
+the same source card returns the existing card and repairs any missing link instead of creating a
+second card. A source card can have at most 3 unfinished follow-up cards
+(`max_cards_per_source_card`), and Symphony creates at most 10 follow-up cards per hour
+(`max_cards_per_hour`). The hourly count lives in memory and starts again after a restart. Symphony
+never deletes cards, labels, links, or checklists while doing this. Everything works on a Trello Free
+Workspace; no Custom Fields, mirror cards, or other paid features are needed.
 
 ## Operations
 

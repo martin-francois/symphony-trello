@@ -102,3 +102,7 @@ The tools are advertised only when `trello_tools.enabled=true` and
 `trello_tools.allow_writes=true`. Comment writes also require
 `trello_tools.allow_comments=true`. Card moves require configured allowed destination Trello list ids
 or list names, and the destination must resolve to an open list on the configured board.
+
+[ADR 0123](0123-trello-follow-up-card-tool.md) adds the opt-in `trello_create_follow_up_card` tool.
+It is the first typed tool that creates a card instead of changing the current card, so it has its
+own `trello_tools.follow_up_cards.enabled` switch on top of the write flags above.
