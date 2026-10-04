@@ -17,6 +17,7 @@ interface CodeRabbitConfig {
     readonly allow_author_approval?: boolean;
     readonly pre_merge_checks: {
       readonly custom_checks: readonly CustomCheck[];
+      readonly description?: PreMergeCheck;
       readonly override_requested_reviewers_only?: boolean;
       readonly [check: string]: PreMergeCheck | readonly CustomCheck[] | boolean | undefined;
     };
@@ -55,7 +56,7 @@ test("custom pre-merge checks quote only text the pull request template contains
   assert.deepEqual(missingExcerpts, []);
 });
 
-test("error-mode pre-merge checks run with the request changes workflow that makes them block", () => {
+test("the description check blocks in error mode through the request changes workflow", () => {
   // given
   const checks = Object.values(CONFIG.reviews.pre_merge_checks).flatMap((value) =>
     typeof value === "object" ? [value].flat() : [],
@@ -66,6 +67,7 @@ test("error-mode pre-merge checks run with the request changes workflow that mak
 
   // then
   assert.ok(blocking, "expected at least one pre-merge check in error mode");
+  assert.equal(CONFIG.reviews.pre_merge_checks.description?.mode, "error");
   assert.equal(CONFIG.reviews.request_changes_workflow, true);
 });
 

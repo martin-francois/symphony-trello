@@ -90,6 +90,13 @@ The compatibility check is a subset of `scripts/check-pr-compatibility-metadata.
 authoritative. That script also requires the `Because ...` rationale, rejects `Unsure`, compares
 the decision with the title and commits, and validates the commit history choice.
 
+A live run on [GitHub PR #781](https://github.com/martin-francois/symphony-trello/pull/781) shaped
+the instructions. CodeRabbit handed the custom checks a cut-off description of a 9,877-character
+body, so the AI Assistance section at the end was missing and that check came back Inconclusive.
+With the body emptied, the same check read its own instructions in the diff and passed. Both custom
+checks therefore judge only the body as GitHub stores it, fail an empty body, and read the full body
+from the GitHub REST API when the description they get is cut short.
+
 The template has no box for "no AI assistance", so an unticked AI Assistance section passes. The
 check cannot tell a pull request without AI help from one whose author skipped the disclosure.
 
@@ -102,7 +109,8 @@ check cannot tell a pull request without AI help from one whose author skipped t
   every human pull request here.
 * Good, because Release Please and Renovate pull requests behave as before.
 * Bad, because the checks are language-model judgments. A check can return Inconclusive, which does
-  not block.
+  not block, and the full-body fallback relies on the check agent fetching the body when it is cut
+  short.
 * Bad, because CodeRabbit reads `.coderabbit.yaml` from the pull request branch, so a pull request
   that edits it can weaken its own checks. Reviewers must read any change to that file.
 * Bad, because the built-in description check takes no instructions. It judges the body against
