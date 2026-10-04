@@ -88,6 +88,10 @@ lives in [Testing](testing.md).
   reason, Codex should not spend time reproducing that unrelated failure locally; handoff is
   acceptable when card-specific validation and related checks are clean and the Trello comment
   records why the failure is unrelated.
+- For repeatable live bug-bash coverage, use `scripts/live-bugbash/run.sh` and its manifest (see
+  [Live bug bash harness](../live-bugbash.md)). Report rows that ran against its local fake Trello
+  API, tagged `trello:fake`, as rehearsals, not live Trello coverage. When a live run finds a
+  repeatable scenario that the manifest lacks, add it as a manifest row.
 - For live E2E, run the deterministic fake-Codex phase before real Codex. Then run strict real-Codex
   checks against real Trello with fresh cards and wait for both Trello handoff completion and
   `/api/v1/state` returning to zero running/retrying before claiming real-Codex coverage.

@@ -1,0 +1,1733 @@
+# Live bug-bash scenario manifest. Each row is one stable scenario id with its requirements,
+# expected status, and linked issue. scripts/live-bugbash/run.sh reads this file; the automation for
+# a row lives in scripts/live-bugbash/scenarios/<family>.ts under the same id. Rows without
+# automation are reported as not-yet-automated, never as passes.
+#
+# Field reference: docs/live-bugbash.md#manifest-rows
+version: 1
+
+defaults:
+  evidence:
+    public: coverage-ledger row with a sanitized evidence summary
+    private: target/live-bugbash/<run-id>/private-evidence/<scenario-id>/
+
+scenarios:
+  # ---------------------------------------------------------------------------------------------
+  # Setup and onboarding
+  # ---------------------------------------------------------------------------------------------
+  - id: source-install
+    family: setup
+    profiles: [quick, release, trello-live]
+    requires: {trello: false, codex: false, github: false, network: false}
+    mode: deterministic-cli
+    description: The documented source install builds the current commit and installs a callable wrapper.
+    setup: Point HOME, XDG, and SYMPHONY_HOME at run-scoped sandboxes; keep the operator Maven cache.
+    action: Run install.sh --from-source --repo <checkout> --ref <commit> --no-onboard --no-update-path with a run-scoped prefix and bin dir, then symphony-trello --version.
+    assertions:
+      - install exits 0
+      - the installed wrapper exists and --version exits 0 with a version line
+      - install output does not print Trello credentials
+    cleanup: The run root keeps the install; nothing outside it is written.
+    expected: covered
+    notes: Skipped when --symphony-command selects an existing install.
+
+  - id: installed-wrapper-trello-auth
+    family: setup
+    profiles: [quick, release, trello-live]
+    requires: {trello: true, codex: false, github: false, network: false}
+    mode: trello-cli
+    description: The installed wrapper authenticates against Trello with run-scoped credentials.
+    setup: Pass the selected Trello target's credentials through the environment only.
+    action: Run symphony-trello list-workspaces --endpoint <endpoint>.
+    assertions:
+      - list-workspaces exits 0 and lists at least one Workspace
+      - output does not contain the Trello key or token
+    cleanup: None; the command is read-only.
+    expected: covered
+    notes: The original run once read the project-root .env instead of the installed config .env; this row reads credentials from the run environment only.
+
+  - id: new-board-real-trello
+    family: setup
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: false, github: false, network: false}
+    mode: trello-cli
+    description: new-board creates the recommended board and writes a workflow under the run root.
+    setup: Use a run-scoped workflow path and a board name that starts with the run id.
+    action: Run symphony-trello new-board --name <run-id>-new-board-real-trello --no-github --endpoint <endpoint> --workflow <run-root workflow>.
+    assertions:
+      - new-board exits 0 and the board is registered as run-owned
+      - the board has the recommended lists
+      - the workflow is written under the run root and names the new board
+    cleanup: Final cleanup archives the board.
+    expected: covered
+
+  - id: import-board-custom-real-trello
+    family: setup
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: false, github: false, network: false}
+    mode: trello-cli
+    description: import-board keeps repeated and comma-containing list selectors exactly.
+    setup: Create a disposable board with custom lists, including a comma-containing list name.
+    action: Run import-board with repeated --active and --terminal selectors plus --in-progress and --blocked.
+    assertions:
+      - import-board exits 0
+      - tracker.active_states keeps every repeated active selector in order, including the comma-containing name
+      - tracker.terminal_states contains every repeated terminal selector
+      - tracker.in_progress_state and tracker.blocked_state use the exact list names
+    cleanup: Final cleanup archives the board.
+    expected: covered
+
+  - id: setup-local-create-board
+    family: setup
+    profiles: [quick, release, trello-live]
+    requires: {trello: true, codex: false, github: false, network: false}
+    mode: trello-cli
+    description: Non-interactive setup-local creates a board, workflow, and manifest without starting a worker.
+    setup: Run-scoped config dir, env file, manifest, workflow, workspace root, and free port.
+    action: Run setup-local --non-interactive --no-start --no-github --force with a run-id board name.
+    assertions:
+      - setup-local exits 0
+      - the workflow and connected-board manifest are written under the run root
+      - no worker process starts because --no-start is set
+    cleanup: Final cleanup archives the board.
+    expected: covered
+
+  - id: setup-local-check-running-board
+    family: setup
+    profiles: [release, trello-live, lifecycle]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: setup-local check reports a connected, running board as healthy.
+    setup: Connect a board with import-board and start its worker with fake Codex.
+    action: Run setup-local check --endpoint <endpoint> against the run-scoped config dir.
+    assertions:
+      - setup-local check exits 0
+      - the check names the connected workflow and reports no port conflict or credential failure
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: configure-github-existing-board
+    family: setup
+    profiles: [github-live]
+    requires: {trello: true, codex: false, github: true, network: true}
+    mode: github-sandbox
+    description: setup-local configure-github adds the pull-request flow to an existing connected board.
+    setup: Connect a Trello-only board and create a private sandbox repository named with the run id.
+    action: Run setup-local configure-github --board <selector> with the sandbox repository URL.
+    assertions:
+      - configure-github exits 0
+      - the workflow gains the GitHub pull-request lists and prompt sections
+      - no existing repository is written
+    cleanup: Archive the board; list the sandbox repository for manual deletion.
+    expected: covered
+
+  - id: import-board-missing-list-selector-before-attached-option
+    family: setup
+    profiles: [quick, release]
+    requires: {trello: false, codex: false, github: false, network: false}
+    mode: deterministic-cli
+    description: import-board rejects --active without a value when the next token is an attached option.
+    setup: Run-scoped workflow and env paths that do not exist yet.
+    action: Run import-board --board <id> --active --terminal=Released --workflow <workflow> --env <env>.
+    assertions:
+      - the command fails with setup_failed code=setup_invalid_arguments
+      - the message says Expected parameter for option '--active'
+      - no workflow, env, or manifest file is written
+    cleanup: None.
+    expected: covered
+
+  - id: setup-local-missing-list-selector-before-attached-option
+    family: setup
+    profiles: [quick, release]
+    requires: {trello: false, codex: false, github: false, network: false}
+    mode: deterministic-cli
+    description: setup-local rejects --active without a value when the next token is an attached option.
+    setup: Run-scoped workflow, env, and config paths that do not exist yet.
+    action: Run setup-local --non-interactive --board <id> --active --terminal=Released --workflow <workflow> --env <env>.
+    assertions:
+      - the command fails with setup_failed code=setup_invalid_arguments
+      - the message says Expected parameter for option '--active'
+      - no workflow, env, or manifest file is written
+    cleanup: None.
+    expected: covered
+
+  - id: import-board-option-like-list-selector
+    family: setup
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: false, github: false, network: false}
+    mode: trello-cli
+    description: A Trello list literally named --terminal can be selected with an attached --active value.
+    setup: Create a disposable board with lists named --terminal and Done.
+    action: Run import-board --active=--terminal --terminal Done.
+    assertions:
+      - import-board exits 0
+      - tracker.active_states contains --terminal as a list name
+      - tracker.terminal_states contains Done
+    cleanup: Final cleanup archives the board.
+    expected: covered
+
+  - id: setup-local-option-like-list-selector
+    family: setup
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: false, github: false, network: false}
+    mode: trello-cli
+    description: setup-local treats an attached option-like value as a list name.
+    setup: Create a disposable board with lists named --terminal and Done.
+    action: Run setup-local --non-interactive --no-start --board <id> --active=--terminal --terminal Done.
+    assertions:
+      - setup-local exits 0
+      - tracker.active_states contains --terminal as a list name
+    cleanup: Final cleanup archives the board.
+    expected: covered
+
+  - id: import-board-invalid-board-selector
+    family: setup
+    profiles: [quick, release, trello-live]
+    requires: {trello: true, codex: false, github: false, network: false}
+    mode: trello-cli
+    description: import-board fails cleanly for a board selector that does not exist.
+    setup: Run-scoped workflow and env paths.
+    action: Run import-board --board <nonexistent short link>.
+    assertions:
+      - the command exits non-zero with a setup_failed code
+      - no workflow or manifest file is written
+    cleanup: None.
+    expected: covered
+
+  - id: import-board-duplicate-list-selector
+    family: setup
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: false, github: false, network: false}
+    mode: trello-cli
+    description: Passing the same list selector twice fails before any write.
+    setup: Create a disposable board with the standard lists.
+    action: Run import-board --active "Ready for Codex" --active "Ready for Codex".
+    assertions:
+      - the command fails with setup_failed code=setup_duplicate_active_state
+      - no workflow or manifest file is written
+    cleanup: Final cleanup archives the board.
+    expected: covered
+
+  - id: setup-local-check-missing-manifest
+    family: setup
+    profiles: [quick, release]
+    requires: {trello: false, codex: false, github: false, network: false}
+    mode: deterministic-cli
+    description: setup-local check with a missing manifest reports no boards and creates nothing.
+    setup: A run-scoped config dir without a manifest.
+    action: Run setup-local check --manifest <missing> --config-dir <config-dir>.
+    assertions:
+      - the command exits 0 and warns that no Trello boards are connected
+      - the missing manifest is not created
+    cleanup: None.
+    expected: covered
+
+  - id: setup-local-dry-run-all-paths-danger-access
+    family: setup
+    profiles: [quick, release]
+    requires: {trello: false, codex: false, github: false, network: false}
+    mode: deterministic-cli
+    description: setup-local --dry-run with all-path and danger access only describes the plan.
+    setup: Run-scoped config dir, workflow, env, and manifest paths that do not exist.
+    action: Run setup-local --dry-run --add-path / --allow-all-paths --danger-full-access --no-start.
+    assertions:
+      - the command exits 0
+      - the plan lists WOULD lines for the workflow, manifest, path access, and danger-full-access
+      - no file is written and no board is created
+    cleanup: None.
+    expected: covered
+
+  - id: setup-max-agents-boundary-99-and-100
+    family: setup
+    profiles: [quick, release, trello-live]
+    requires: {trello: true, codex: false, github: false, network: false}
+    mode: trello-cli
+    description: --max-agents accepts 99 and rejects 100 before any write.
+    setup: Two run-scoped workflow paths.
+    action: Run setup-local --max-agents 100, then setup-local --max-agents 99.
+    assertions:
+      - 100 fails with setup_failed code=setup_invalid_max_agents before writing a workflow or creating a board
+      - 99 exits 0 and writes agent.max_concurrent_agents 99
+    cleanup: Final cleanup archives the created board.
+    expected: covered
+
+  - id: guided-setup-local-max-agents
+    family: setup
+    profiles: [release]
+    requires: {trello: true, codex: false, github: false, network: false}
+    mode: trello-cli
+    description: Guided setup-local asks for Maximum cards processed concurrently and writes the answer.
+    setup: Drive setup-local through a pseudo-terminal with run-scoped paths.
+    action: Answer the guided prompts, entering a max-agents value.
+    assertions:
+      - the prompt text is Maximum cards processed concurrently
+      - the workflow records the entered value
+    cleanup: Final cleanup archives the board.
+    expected: covered
+    notes: Needs a pseudo-terminal driver; InstallerScriptLifecycleTest shows the pattern.
+
+  - id: guided-import-board-max-agents
+    family: setup
+    profiles: [release]
+    requires: {trello: true, codex: false, github: false, network: false}
+    mode: trello-cli
+    description: Guided import-board asks for Maximum cards processed concurrently and writes the answer.
+    setup: Drive import-board through a pseudo-terminal with run-scoped paths.
+    action: Answer the guided prompts, entering a max-agents value.
+    assertions:
+      - the prompt text is Maximum cards processed concurrently
+      - the workflow records the entered value
+    cleanup: Final cleanup archives the board.
+    expected: covered
+    notes: Needs a pseudo-terminal driver.
+
+  - id: setup-local-no-in-progress-dispatch
+    family: setup
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: setup-local --no-in-progress creates no In Progress list and runs cards from Ready.
+    setup: setup-local --no-in-progress --no-start; start the worker with fake Codex; one card in Ready for Codex.
+    action: Let the worker pick the card up and fake Codex hand it off.
+    assertions:
+      - the workflow has no tracker.in_progress_state and the board has no In Progress list
+      - the card reaches Human Review without ever entering In Progress
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+    linked_issue: 498
+
+  - id: configure-github-preserves-no-in-progress
+    family: setup
+    profiles: [github-live]
+    requires: {trello: true, codex: false, github: true, network: true}
+    mode: github-sandbox
+    description: configure-github keeps a board without an in-progress list in that shape.
+    setup: Connect a board created with --no-in-progress and a private sandbox repository.
+    action: Run setup-local configure-github --board <selector>.
+    assertions:
+      - the workflow still has no tracker.in_progress_state
+    cleanup: Archive the board; list the sandbox repository for manual deletion.
+    expected: covered
+
+  - id: import-board-no-handoff-destination
+    family: setup
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: false, github: false, network: false}
+    mode: trello-cli
+    description: import-board of a board with only a queue and Done lists writes a workflow without review or blocked lists.
+    setup: Create a disposable board with lists Ready for Codex and Done.
+    action: Run import-board without explicit selectors.
+    assertions:
+      - import-board exits 0
+      - the workflow has no tracker.blocked_state and allows moves only to Done
+    cleanup: Final cleanup archives the board.
+    expected: covered
+
+  - id: import-board-terminal-done-handoff
+    family: setup
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: On a board without a review list, the handoff to Done is terminal and the card stays there.
+    setup: Import a board with Ready for Codex and Done; fake Codex hands off to Done.
+    action: Start the worker with one card in Ready for Codex.
+    assertions:
+      - the card reaches Done
+      - the worker does not retry the card after the terminal move
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: setup-local-repair-port-occupied-port
+    family: setup
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: false, github: false, network: false}
+    mode: trello-cli
+    description: repair-port moves a connected board away from an occupied port.
+    setup: Connect a board with setup-local on a free port, then occupy that port.
+    action: Run setup-local check, then setup-local repair-port --board <name>.
+    assertions:
+      - setup-local check reports the occupied port and suggests repair-port
+      - repair-port exits 0 and the manifest and workflow use a different free port
+    cleanup: Release the port; final cleanup archives the board.
+    expected: covered
+
+  - id: setup-local-repair-port-reserved-port-avoidance
+    family: setup
+    profiles: [release]
+    requires: {trello: true, codex: false, github: false, network: false}
+    mode: trello-cli
+    description: repair-port never picks a port that another connected workflow reserves.
+    setup: Connect two boards; occupy the first board's port.
+    action: Run setup-local repair-port for the first board.
+    assertions:
+      - the new port is free and differs from every port in the connected-board manifest
+    cleanup: Final cleanup archives the boards.
+    expected: covered
+    notes: Quarantined repro candidate from the original run; the latest re-probe did not reproduce it. Automate once a deterministic way to force the collision exists.
+
+  # ---------------------------------------------------------------------------------------------
+  # Lifecycle, process, and state
+  # ---------------------------------------------------------------------------------------------
+  - id: start-all-stop-all
+    family: lifecycle
+    profiles: [release, trello-live, lifecycle]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: start --all starts every connected worker and stop drains them all.
+    setup: Two connected boards in one run-scoped config dir, both patched to fake Codex.
+    action: Run start --all, read /api/v1/state for both, run stop, then status.
+    assertions:
+      - start --all exits 0 and both state endpoints answer
+      - stop exits 0 and status reports both workflows stopped
+      - no run-owned worker process remains for these workflows
+    cleanup: Final cleanup archives the boards.
+    expected: covered
+
+  - id: start-all-stop-one-board
+    family: lifecycle
+    profiles: [release, trello-live, lifecycle]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: Stopping one board from start --all leaves the sibling running and working.
+    setup: Two connected boards started with start --all.
+    action: Run stop --board <first board name>, then add a card to the second board.
+    assertions:
+      - status reports the first board stopped and the second running
+      - the card on the second board reaches Human Review
+    cleanup: Stop all workers; final cleanup archives the boards.
+    expected: covered
+
+  - id: start-all-two-workflows
+    family: lifecycle
+    profiles: [release, trello-live, lifecycle]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: Two workflows started together each process their own card.
+    setup: Two connected boards started with start --all, one card on each.
+    action: Wait for both cards.
+    assertions:
+      - each card reaches Human Review on its own board
+      - each worker reports the board it was configured for
+    cleanup: Stop all workers; final cleanup archives the boards.
+    expected: covered
+
+  - id: start-running-workflow-idempotent
+    family: lifecycle
+    profiles: [release, trello-live, lifecycle]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: Starting an already running workflow is a no-op.
+    setup: One running worker.
+    action: Run start --workflow <workflow> again.
+    assertions:
+      - the second start exits 0 and says the worker is already running
+      - the worker pid does not change
+    cleanup: Stop the worker.
+    expected: covered
+
+  - id: managed-lifecycle-start-status-duplicate-start-stop
+    family: lifecycle
+    profiles: [release, trello-live, lifecycle]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: start, status, duplicate start, stop, and status agree with each other.
+    setup: One connected board.
+    action: start, status, start again, stop, status.
+    assertions:
+      - status reports running between start and stop and stopped afterwards
+      - the duplicate start does not create a second process
+    cleanup: Stop the worker.
+    expected: covered
+
+  - id: managed-lifecycle-logs-for-stopped-worker
+    family: lifecycle
+    profiles: [release, trello-live, lifecycle]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: logs still shows the last worker log after the worker stopped.
+    setup: Start and stop one worker.
+    action: Run logs --workflow <workflow>.
+    assertions:
+      - logs exits 0 and prints the worker's startup and shutdown lines
+    cleanup: None.
+    expected: covered
+
+  - id: lifecycle-commands-missing-workflow
+    family: lifecycle
+    profiles: [quick, release, lifecycle]
+    requires: {trello: false, codex: false, github: false, network: false}
+    mode: deterministic-cli
+    description: status, logs, and stop reject a missing workflow without creating files.
+    setup: A run-scoped config dir and state home; a workflow path that does not exist.
+    action: Run status, logs, and stop with --workflow <missing>.
+    assertions:
+      - each command fails with setup_failed code=setup_invalid_arguments
+      - no file is created in the config dir or state home
+    cleanup: None.
+    expected: covered
+
+  - id: stale-pid-restart-recovery
+    family: lifecycle
+    profiles: [release, trello-live, lifecycle]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: A worker that died without cleanup is reported stopped and can start again.
+    setup: Start one worker, then kill its run-owned process with SIGKILL.
+    action: Run status, then start again.
+    assertions:
+      - status reports the workflow stopped instead of running
+      - start exits 0 and the new worker answers its state endpoint
+    cleanup: Stop the worker.
+    expected: covered
+
+  - id: board-url-selector-live
+    family: lifecycle
+    profiles: [release, trello-live, lifecycle]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: Lifecycle commands accept a board URL selector.
+    setup: One connected, running board.
+    action: Run status --board <board url>.
+    assertions:
+      - status exits 0 and reports exactly the selected board as running
+    cleanup: Stop the worker.
+    expected: covered
+
+  - id: duplicate-board-name-selector
+    family: lifecycle
+    profiles: [release, trello-live, lifecycle]
+    requires: {trello: true, codex: false, github: false, network: false}
+    mode: trello-cli
+    description: A board-name selector that matches two connected boards fails before any process starts.
+    setup: Two disposable boards with the same name, both imported into one manifest.
+    action: Run start --board "<shared name>".
+    assertions:
+      - start fails with setup_failed and an ambiguous-board code
+      - no pid file is created
+    cleanup: Final cleanup archives the boards.
+    expected: covered
+    notes: The original run saw code setup_ambiguous_board_selector; current releases print setup_worker_board_ambiguous.
+
+  - id: board-name-selector-unicode
+    family: lifecycle
+    profiles: [release, trello-live, lifecycle]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: Lifecycle commands select a board by a Unicode board name.
+    setup: One connected board whose name contains non-ASCII characters.
+    action: Run start --board "<unicode name>", status --board, stop --board.
+    assertions:
+      - start, status, and stop exit 0 for the Unicode selector
+    cleanup: Stop the worker.
+    expected: covered
+
+  - id: invalid-workflow-reload-keeps-last-known-good
+    family: lifecycle
+    profiles: [release, trello-live, lifecycle]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: An invalid workflow edit while running keeps the last known good configuration.
+    setup: One running worker.
+    action: Break the workflow front matter, wait for a reload, add a card, then restore the file.
+    assertions:
+      - the worker keeps answering /api/v1/state
+      - the worker log records the rejected reload
+      - a card added after the bad edit still reaches Human Review
+    cleanup: Restore the workflow; stop the worker.
+    expected: covered
+
+  - id: state-api-codex-usage-and-rate-limit-telemetry
+    family: lifecycle
+    profiles: [release, trello-live, lifecycle]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: Token usage and rate-limit telemetry from Codex appear in /api/v1/state.
+    setup: Fake Codex sends thread/tokenUsage/updated and account/rateLimits/updated before handing off.
+    action: Run one card and read /api/v1/state.
+    assertions:
+      - codex_totals counts the reported tokens
+      - rate_limits shows the reported primary window
+    cleanup: Stop the worker.
+    expected: covered
+
+  - id: archive-in-progress-list-while-running
+    family: lifecycle
+    profiles: [release, trello-live, lifecycle]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: Archiving the in-progress list while a card runs there stops the run without churn.
+    setup: A stalled fake Codex turn keeps a card in In Progress.
+    action: Archive the In Progress list.
+    assertions:
+      - the worker stops the agent and does not retry the card
+      - no app-server process remains
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: archive-review-destination-while-running
+    family: lifecycle
+    profiles: [release, trello-live, lifecycle]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: Archiving the review list during a run makes the handoff fail truthfully.
+    setup: A running card whose handoff targets Human Review.
+    action: Archive Human Review before fake Codex moves the card.
+    assertions:
+      - the move fails with a truthful tool error and the card is not lost
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: external-terminal-move-while-worker-running
+    family: lifecycle
+    profiles: [release, trello-live, lifecycle]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: A human moving a running card to Done stops its agent without retry.
+    setup: A stalled fake Codex turn keeps a card running.
+    action: Move the card to Done through the Trello API.
+    assertions:
+      - the state API drops the card from running without a retry entry
+      - no fake app-server process for the card remains
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: external-non-active-move-while-worker-running
+    family: lifecycle
+    profiles: [release, trello-live, lifecycle]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: A human moving a running card to a non-active list stops its agent without retry.
+    setup: A stalled fake Codex turn keeps a card running.
+    action: Move the card to Human Review through the Trello API.
+    assertions:
+      - the state API drops the card from running without a retry entry
+      - no fake app-server process for the card remains
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  # ---------------------------------------------------------------------------------------------
+  # Repository source selection
+  # ---------------------------------------------------------------------------------------------
+  - id: repository-source-no-source-real-codex
+    family: repository-source
+    profiles: [real-codex, repository-source]
+    requires: {trello: true, codex: real, github: false, network: false}
+    mode: service-real-codex
+    description: Real Codex handles a card without any repository source as repository-independent work.
+    setup: Workflow without repository defaults; a question-only card.
+    action: Run the card with real Codex.
+    assertions:
+      - the card reaches Human Review with a path-safe answer
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: workflow-default-url-runtime-prompt
+    family: repository-source
+    profiles: [quick, release, trello-live, repository-source]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: A workflow repository.default_url is the selected source when the card names none.
+    setup: Workflow with repository.default_url https://example.invalid/team/repo.git and no default_path.
+    action: Run a card without a repository source and capture the prompt fake Codex receives.
+    assertions:
+      - Repository Source Context says Status selected, Type URL, Selected by workflow repository.default_url
+      - the credential-free remote is the default URL
+      - the prompt says the default applies only when the card supplies no explicit source
+      - the prompt forbids copying private repository details into Trello comments
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: workflow-default-path-runtime-prompt
+    family: repository-source
+    profiles: [release, trello-live, repository-source]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: A workflow repository.default_path is selected as a local path source.
+    setup: Workflow with an absolute repository.default_path inside the run root.
+    action: Run a card without a repository source and capture the prompt.
+    assertions:
+      - Repository Source Context says Status selected, Type local path, Selected by workflow repository.default_path
+      - the path appears only in the private prompt, not in Trello comments
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: relative-default-path-runtime-prompt
+    family: repository-source
+    profiles: [release, trello-live, repository-source]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: A relative repository.default_path resolves against the WORKFLOW.md directory.
+    setup: Workflow with repository.default_path ./local-source.
+    action: Run a card without a repository source and capture the prompt.
+    assertions:
+      - the resolved local path is the workflow directory plus local-source
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: environment-default-url-prompt
+    family: repository-source
+    profiles: [release, trello-live, repository-source]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: repository.default_url can come from an environment variable reference.
+    setup: Workflow with repository.default_url $BUGBASH_DEFAULT_URL; the worker env file sets it.
+    action: Run a card without a repository source and capture the prompt.
+    assertions:
+      - the selected remote is the value of the environment variable
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: environment-default-path-prompt
+    family: repository-source
+    profiles: [release, trello-live, repository-source]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: repository.default_path can come from an environment variable reference.
+    setup: Workflow with repository.default_path $BUGBASH_DEFAULT_PATH; the worker env file sets it.
+    action: Run a card without a repository source and capture the prompt.
+    assertions:
+      - the selected local path is the value of the environment variable
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: default-file-url-real-codex
+    family: repository-source
+    profiles: [real-codex, repository-source]
+    requires: {trello: true, codex: real, github: false, network: false}
+    mode: service-real-codex
+    description: Real Codex reads a run-owned repository selected through a file:// default URL.
+    setup: A local bare repository under the run root; workflow default_url file://<repo>.
+    action: Run a read-only card with real Codex.
+    assertions:
+      - Codex reads the repository and hands the card to Human Review with path-safe comments
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: explicit-file-url-real-codex
+    family: repository-source
+    profiles: [real-codex, repository-source]
+    requires: {trello: true, codex: real, github: false, network: false}
+    mode: service-real-codex
+    description: Real Codex uses an explicit Repository URL file:// source from the card.
+    setup: A local bare repository under the run root named in the card description.
+    action: Run a read-only card with real Codex.
+    assertions:
+      - Codex reads the explicit repository and hands off with path-safe comments
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: default-https-url-real-codex-no-network
+    family: repository-source
+    profiles: [real-codex, repository-source]
+    requires: {trello: true, codex: real, github: false, network: true}
+    mode: service-real-codex
+    description: An HTTPS default URL in a workflow without Codex network access blocks truthfully.
+    setup: Workflow default_url https://github.com/octocat/Hello-World.git with networkAccess false.
+    action: Run a card that needs repository files with real Codex.
+    assertions:
+      - the card is blocked or completed truthfully with path-safe guidance
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+    linked_issue: 496
+
+  - id: default-https-url-network-real-codex
+    family: repository-source
+    profiles: [real-codex, repository-source]
+    requires: {trello: true, codex: real, github: false, network: true}
+    mode: service-real-codex
+    description: With Codex network access, the HTTPS default URL is cloned and the card completes.
+    setup: Same default URL with networkAccess true.
+    action: Run a read-only card with real Codex.
+    assertions:
+      - the card reaches Human Review and comments stay path-safe
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: explicit-file-url-suppresses-credential-default
+    family: repository-source
+    profiles: [release, trello-live, repository-source]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: An explicit file URL on the card wins over a credential-bearing workflow default.
+    setup: Workflow default_url with embedded credentials; card Repository URL file:///work/explicit.git.
+    action: Capture the prompt.
+    assertions:
+      - the explicit card source is selected as a local path
+      - the credential-bearing default and its secret are absent from the prompt
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: invalid-explicit-suppresses-default
+    family: repository-source
+    profiles: [release, trello-live, repository-source]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: A credential-bearing explicit source is invalid and suppresses the workflow default.
+    setup: Workflow default_url; card Repository URL https://user:secret@example.invalid/team/project.git.
+    action: Capture the prompt.
+    assertions:
+      - Status invalid selected source with code repository_remote_credentials_unsupported
+      - the secret marker is absent from the Repository Source Context
+      - the workflow default URL is not offered
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: invalid-default-url-suppresses-path
+    family: repository-source
+    profiles: [release, trello-live, repository-source]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: A malformed default URL is an invalid workflow fallback; the default path never becomes the source.
+    setup: Workflow default_url https:example.invalid/team/repo.git and a default_path.
+    action: Capture the prompt for a card without a source.
+    assertions:
+      - Status invalid workflow fallback
+      - the default path is not selected as a local path source
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: empty-query-default-url-suppresses-path
+    family: repository-source
+    profiles: [release, trello-live, repository-source]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: A default URL ending in an empty query is invalid and does not fall back to the path.
+    setup: Workflow default_url https://example.invalid/team/repo.git? and a default_path.
+    action: Capture the prompt for a card without a source.
+    assertions:
+      - Status invalid workflow fallback with a repository problem code
+      - the default path is not selected
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: empty-fragment-default-url-suppresses-path
+    family: repository-source
+    profiles: [release, trello-live, repository-source]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: A default URL ending in an empty fragment is invalid and does not fall back to the path.
+    setup: Workflow default_url https://example.invalid/team/repo.git# and a default_path.
+    action: Capture the prompt for a card without a source.
+    assertions:
+      - Status invalid workflow fallback with a repository problem code
+      - the default path is not selected
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: blank-repository-label-suppresses-default
+    family: repository-source
+    profiles: [quick, release, trello-live, repository-source]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: A blank Repository URL label is an invalid explicit source that suppresses defaults.
+    setup: Workflow default_url; card description with an empty Repository URL line.
+    action: Capture the prompt.
+    assertions:
+      - Status invalid selected source with code repository_source_missing
+      - the workflow default URL is not offered
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: equivalent-source-declarations
+    family: repository-source
+    profiles: [release, trello-live, repository-source]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: Two labels naming the same repository select it instead of reporting a conflict.
+    setup: Card with Repository and Repository URL lines for the same HTTPS URL.
+    action: Capture the prompt.
+    assertions:
+      - Status selected with the shared remote
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: repository-source-conflict-suppresses-default
+    family: repository-source
+    profiles: [release, trello-live, repository-source]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: Two different explicit sources conflict and suppress the workflow default.
+    setup: Card with two Repository URL lines naming different repositories.
+    action: Capture the prompt.
+    assertions:
+      - Status invalid selected source with code repository_source_conflict
+      - the workflow default URL is not offered
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: unlabelled-web-link-uses-default
+    family: repository-source
+    profiles: [release, trello-live, repository-source]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: An unlabelled web link in the card text is not an explicit source.
+    setup: Workflow default_url; card prose with an unlabelled https link.
+    action: Capture the prompt.
+    assertions:
+      - the workflow default URL is selected
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: generic-windows-repository-source
+    family: repository-source
+    profiles: [release, trello-live, repository-source]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: A generic Repository label with a Windows path selects a local path.
+    setup: 'Card line Repository: C:/work/repo.git.'
+    action: Capture the prompt.
+    assertions:
+      - Status selected with Type local path
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: url-labeled-windows-source-invalid
+    family: repository-source
+    profiles: [release, trello-live, repository-source]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: A Repository URL label with a Windows path is invalid.
+    setup: 'Card line Repository URL: C:/work/repo.git.'
+    action: Capture the prompt.
+    assertions:
+      - Status invalid selected source
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: root-level-scp-repository-source
+    family: repository-source
+    profiles: [release, trello-live, repository-source]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: A root-level SCP-style remote is a valid URL source.
+    setup: 'Card line Repository URL: git@example.invalid:repo.git.'
+    action: Capture the prompt.
+    assertions:
+      - Status selected with Type URL
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: malformed-scheme-like-repository-source
+    family: repository-source
+    profiles: [release, trello-live, repository-source]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: A scheme-like value without slashes is malformed, not a local path.
+    setup: 'Card line Repository: https:example.invalid/team/repo.git.'
+    action: Capture the prompt.
+    assertions:
+      - Status invalid selected source with code repository_remote_malformed
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: percent-encoded-remote-source
+    family: repository-source
+    profiles: [release, trello-live, repository-source]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: Safe percent escapes in a remote stay path data.
+    setup: Card Repository URL with %3F, %23, %20, %25, and %2F escapes in the path.
+    action: Capture the prompt.
+    assertions:
+      - Status selected and the remote keeps the escapes verbatim
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: encoded-ssh-userinfo-rejected
+    family: repository-source
+    profiles: [release, trello-live, repository-source]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: Percent-encoded SSH password userinfo is rejected as credentials.
+    setup: 'Card line Repository URL: ssh://git%3Asecret@example.invalid/team/repo.git.'
+    action: Capture the prompt.
+    assertions:
+      - Status invalid selected source with code repository_remote_credentials_unsupported
+      - the encoded secret is absent from the Repository Source Context
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: file-url-encoded-newline-rejected
+    family: repository-source
+    profiles: [release, trello-live, repository-source]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: A file URL with an encoded newline is rejected.
+    setup: 'Card line Repository: file:///work/repo%0Ainjected.git.'
+    action: Capture the prompt.
+    assertions:
+      - Status invalid selected source
+      - no Repository Source Context line carries the text after the encoded newline
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: repository-source-encoded-newline-prompt-safety
+    family: repository-source
+    profiles: [release, trello-live, repository-source]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: An encoded newline cannot forge extra Repository Source Context lines.
+    setup: Card Repository URL with %0A-%20Status%3A%20injected in the path.
+    action: Capture the prompt.
+    assertions:
+      - the prompt has no forged Status, Selected by, Type, Guidance, or Repository identity line
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: unicode-linebreak-repository-source
+    family: repository-source
+    profiles: [release, trello-live, repository-source]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: A Unicode line separator ends the source value, so the text after it cannot reach the computed context.
+    setup: Card Repository URL with U+2028 inside an SCP remote.
+    action: Capture the prompt.
+    assertions:
+      - the selected remote stops at the line separator
+      - no Repository Source Context line carries the text after the separator
+      - the section has exactly one Status line
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: explicit-direct-local-work-real-codex
+    family: repository-source
+    profiles: [real-codex, repository-source]
+    requires: {trello: true, codex: real, github: false, network: false, hardened_host: true}
+    mode: service-real-codex
+    description: A card that explicitly asks for direct work in an allowed local checkout can edit and commit there.
+    setup: A run-owned local checkout allowed with --add-path; the card asks for a direct commit.
+    action: Run the card with real Codex.
+    assertions:
+      - the file edit and commit both land in the run-owned checkout
+      - comments stay path-safe
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+    linked_issue: 495
+
+  # ---------------------------------------------------------------------------------------------
+  # Trello prerequisites and relationship context
+  # ---------------------------------------------------------------------------------------------
+  - id: parallel-prerequisite-scheduler-service
+    family: trello-prerequisites
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: Independent cards run in parallel while dependent cards wait for their prerequisites.
+    setup: Several cards with and without prerequisite checklists, max agents above one.
+    action: Run the worker until every card settles.
+    assertions:
+      - independent cards overlap in time
+      - dependent cards start only after their prerequisites reach a terminal list
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: scheduler-parallelism-and-prerequisite-ordering
+    family: trello-prerequisites
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: Dispatch order respects prerequisites first, then priority and position.
+    setup: A chain of prerequisite cards plus unrelated cards.
+    action: Run the worker and record dispatch order.
+    assertions:
+      - no card starts before its prerequisites finish
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: mixed-prerequisite-checklist-live
+    family: trello-prerequisites
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: A Prerequisites checklist mixing a card URL with prose blocks dispatch with visible guidance.
+    setup: Dependency card in Done; target card in Ready with a Prerequisites checklist holding the dependency URL and a prose note.
+    action: Run the worker for several poll cycles.
+    assertions:
+      - the target card stays in Ready for Codex and fake Codex never sees it
+      - the state API never lists it as running or retrying
+      - one managed Symphony Prerequisite Status comment says the checklist mixes prerequisite references with notes
+      - the exact URL item stays incomplete
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: mixed-prerequisite-markdown
+    family: trello-prerequisites
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: A Prerequisites checklist mixing a card URL with a Markdown link blocks dispatch the same way.
+    setup: Dependency card in Done; target card with a checklist holding the exact URL and a Markdown link.
+    action: Run the worker for several poll cycles.
+    assertions:
+      - the target card stays in Ready for Codex and fake Codex never sees it
+      - the managed status comment shows the mixed-checklist guidance
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: prerequisite-status-comment-update-live
+    family: trello-prerequisites
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: An exact prerequisite syncs its checklist item and updates one status comment in place.
+    setup: Prerequisite card in Blocked; target card in Ready with a checklist item equal to the prerequisite URL.
+    action: Wait for the target to report waiting, then move the prerequisite to Done.
+    assertions:
+      - the target waits while the prerequisite is open and fake Codex does not see it
+      - after the move the checklist item is complete and the target is dispatched
+      - exactly one managed prerequisite status comment exists and was updated in place
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: per-state-concurrency-override
+    family: trello-prerequisites
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: agent.max_concurrent_agents_by_state limits one list below the global limit.
+    setup: Global limit 3, Ready for Codex limited to 1, three slow cards.
+    action: Watch /api/v1/state while the cards run.
+    assertions:
+      - at most one card from the limited list runs at a time
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: max-agents-99-parallel
+    family: trello-prerequisites
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: max_concurrent_agents 99 runs several cards at once.
+    setup: Three cards and a fake Codex turn that sleeps for a few seconds.
+    action: Watch /api/v1/state while the cards run.
+    assertions:
+      - at least two cards run at the same time
+      - every card reaches Human Review
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: required-label-eligibility
+    family: trello-prerequisites
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: tracker.required_labels limits dispatch to labelled cards.
+    setup: Workflow with required_labels bugbash-ready; one labelled and one unlabelled card.
+    action: Run the worker until the labelled card settles.
+    assertions:
+      - the labelled card reaches Human Review
+      - the unlabelled card stays in Ready for Codex and fake Codex never sees it
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: required-label-loss-while-running
+    family: trello-prerequisites
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: Removing the required label while a card runs stops its agent.
+    setup: A labelled card held in a stalled turn.
+    action: Remove the label through the Trello API.
+    assertions:
+      - the agent stops and the card is not retried while unlabelled
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: relationship-context-description-comment-attachment-markdown-links
+    family: trello-prerequisites
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: Card references from the description, a comment, a checklist, and an attachment reach the prompt.
+    setup: Four related cards; the target references one from each place, the description as a Markdown link.
+    action: Capture the prompt for the target card.
+    assertions:
+      - every related card appears in the relationship context of the prompt
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: relationship-context-deduplication-and-rendering
+    family: trello-prerequisites
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: Reference bullets render one per line and duplicates collapse.
+    setup: The same four references, one of them repeated in two places.
+    action: Capture the prompt for the target card.
+    assertions:
+      - no prompt line contains more than one card reference marker
+      - the repeated reference appears once
+      - every line of the reference list is one reference bullet
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: known-bug
+    linked_issue: 805
+    notes: "#497 fixed bullets that ran together on one line. #805 tracks multi-line description text that spills between the bullets."
+
+  # ---------------------------------------------------------------------------------------------
+  # Trello tools and workpad
+  # ---------------------------------------------------------------------------------------------
+  - id: trello-tool-comment-write-denied
+    family: trello-tools
+    profiles: [quick, release, trello-live, trello-tools]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: trello_add_comment fails with trello_comments_disabled when comments are off, and an allowed move still works.
+    setup: Workflow trello_tools.allow_comments false.
+    action: Fake Codex calls trello_add_comment, then trello_move_current_card to Human Review.
+    assertions:
+      - the comment call returns trello_comments_disabled
+      - the card has no new comment from the denied call
+      - the card reaches Human Review
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: trello-tool-move-allowlist-denied
+    family: trello-tools
+    profiles: [release, trello-live, trello-tools]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: A move outside the allowlist fails and a later allowed move succeeds.
+    setup: Workflow whose allowed_move_list_names omit Done.
+    action: Fake Codex moves to Done, then to Human Review.
+    assertions:
+      - the Done move returns trello_move_not_allowed
+      - the card never enters Done and reaches Human Review
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: unsupported-dynamic-tool-call
+    family: trello-tools
+    profiles: [release, trello-live, trello-tools]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: An unadvertised tool returns unsupported_tool and the turn continues.
+    setup: Default Trello tool policy.
+    action: Fake Codex calls trello_delete_board, then moves the card to Human Review.
+    assertions:
+      - the call returns unsupported_tool
+      - the card reaches Human Review
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: user-input-request-handling
+    family: trello-tools
+    profiles: [release, trello-live, trello-tools]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: A user-input request is answered without stalling the turn.
+    setup: Default Trello tool policy.
+    action: Fake Codex sends item/tool/requestUserInput, then moves the card.
+    assertions:
+      - Symphony answers the request with an empty answer set
+      - the card reaches Human Review
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: approval-request-handling
+    family: trello-tools
+    profiles: [release, trello-live, trello-tools]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: Approval requests get the configured decisions without stalling.
+    setup: Default Trello tool policy.
+    action: Fake Codex sends command-execution and permissions approval requests, then moves the card.
+    assertions:
+      - the command approval is accepted for the session and the permissions request is cancelled
+      - the card reaches Human Review
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: workpad-upsert-tool-idempotence
+    family: trello-tools
+    profiles: [release, trello-live, trello-tools]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: Two workpad upserts in one run leave one workpad comment with the latest text.
+    setup: Default Trello tool policy.
+    action: Fake Codex calls trello_upsert_workpad twice with different text, then moves the card.
+    assertions:
+      - the card has exactly one Codex Workpad comment
+      - the workpad holds the second text
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: workpad-destructive-duplicate-cleanup
+    family: trello-tools
+    profiles: [release, trello-live, trello-tools]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: In destructive mode, duplicate managed workpads are cleaned up and one remains.
+    setup: A card with two existing workpad comments; destructive workpad cleanup enabled.
+    action: Fake Codex upserts the workpad.
+    assertions:
+      - one updated workpad remains
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: workpad-nondestructive-duplicate-note
+    family: trello-tools
+    profiles: [release, trello-live, trello-tools]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: In non-destructive mode, duplicates stay and a manual-cleanup note is visible.
+    setup: A card with two existing workpad comments.
+    action: Fake Codex upserts the workpad.
+    assertions:
+      - duplicates remain and the workpad shows a manual cleanup note
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: hand-authored-checklist-url-tools
+    family: trello-tools
+    profiles: [release, trello-live, trello-tools]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: Enabled checklist and URL attachment tools write to the card.
+    setup: Workflow trello_tools.allow_checklists true and allow_url_attachments true.
+    action: Fake Codex calls trello_upsert_checklist_item and trello_add_url_attachment, then moves the card.
+    assertions:
+      - both calls succeed
+      - the checklist item and the URL attachment exist on the card
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+    linked_issue: 493
+
+  - id: trello-writes-disabled-tool-policy
+    family: trello-tools
+    profiles: [release, trello-live, trello-tools]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: With trello_tools.allow_writes false every write tool fails and the card stays put.
+    setup: Workflow trello_tools.allow_writes false.
+    action: Fake Codex tries a comment and a move.
+    assertions:
+      - both calls return trello_writes_disabled
+      - the card has no comment from Codex and never reaches Human Review
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  # ---------------------------------------------------------------------------------------------
+  # Diagnostics and private context
+  # ---------------------------------------------------------------------------------------------
+  - id: diagnostics-focused-lookup-for-emitted-path-tokens
+    family: diagnostics
+    profiles: [quick, release, trello-live]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: Every <path:...> token in a diagnostics report resolves through a focused lookup.
+    setup: A connected board whose worker ran once, so the report includes worker log excerpts.
+    action: Run diagnostics --workflow, then diagnostics --show-private-context --lookup for every emitted path token.
+    assertions:
+      - every emitted path token returns lookup_status found
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: known-bug
+    linked_issue: 803
+    notes: "#494 fixed the installer metadata tokens. #803 tracks the remaining misses: worker log lines whose path swallows the rest of the line, and the Podman docker-shim notice in the tool table."
+
+  - id: diagnostics-lookup-negative-paths
+    family: diagnostics
+    profiles: [quick, release]
+    requires: {trello: false, codex: false, github: false, network: false}
+    mode: deterministic-cli
+    description: Focused lookups report invalid and unknown tokens, and require --show-private-context.
+    setup: A run-scoped config dir.
+    action: Look up a malformed token, an unknown token, and a token without --show-private-context.
+    assertions:
+      - the malformed token reports lookup_status invalid_token
+      - the unknown token reports lookup_status not_found
+      - --lookup without --show-private-context fails with setup_failed code=setup_invalid_arguments
+    cleanup: None.
+    expected: covered
+
+  - id: diagnostics-deep-stopped-workflow
+    family: diagnostics
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: diagnostics --deep --json works for a stopped workflow.
+    setup: A connected board whose worker is stopped.
+    action: Run diagnostics --deep --json --workflow <workflow> --output <private-evidence>.
+    assertions:
+      - diagnostics exits 0 and writes a JSON report
+      - the report tokenizes run-root paths instead of printing them
+    cleanup: Final cleanup archives the board.
+    expected: covered
+
+  - id: diagnostics-deep-running-worker
+    family: diagnostics
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: diagnostics --deep --json reports a running worker without leaking private paths.
+    setup: A connected board with a running worker.
+    action: Run diagnostics --deep --json --workflow <workflow> --output <private-evidence>.
+    assertions:
+      - the worker was running before diagnostics
+      - diagnostics exits 0, writes JSON, and mentions the worker status
+      - the report tokenizes run-root paths instead of printing them
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: missing-secret-file-launch-diagnostics
+    family: diagnostics
+    profiles: [release]
+    requires: {trello: false, codex: false, github: false, network: false}
+    mode: deterministic-cli
+    description: A missing file-backed secret fails before launch with a resolvable lookup hint.
+    setup: A workflow outside the config dir whose tracker.api_token is file:./missing-token.txt.
+    action: Run start --workflow <workflow>, then the printed lookup command through the install config dir.
+    assertions:
+      - start fails before launch and prints secret_file_token with a quoted lookup command
+      - public output has no raw secret file path
+      - the printed lookup resolves the token as secret_file
+      - no diagnostics key is created in the workflow directory
+    cleanup: None.
+    expected: known-bug
+    linked_issue: 804
+    notes: The printed lookup resolves only with an added --workflow selector when the workflow is not connected.
+
+  - id: oversized-secret-file-launch-diagnostics
+    family: diagnostics
+    profiles: [release]
+    requires: {trello: false, codex: false, github: false, network: false}
+    mode: deterministic-cli
+    description: An oversized file-backed secret fails before launch with a resolvable lookup hint.
+    setup: A workflow outside the config dir whose tracker.api_token file is larger than 64 KiB.
+    action: Run start --workflow <workflow>, then the printed lookup command through the install config dir.
+    assertions:
+      - start fails before launch and prints secret_file_token with a quoted lookup command
+      - public output has no raw secret file path
+      - the printed lookup resolves the token as secret_file
+      - no diagnostics key is created in the workflow directory
+    cleanup: None.
+    expected: known-bug
+    linked_issue: 804
+    notes: The printed lookup resolves only with an added --workflow selector when the workflow is not connected.
+
+  - id: stale-pid-lookup-hints
+    family: diagnostics
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: Diagnostics for a stale pid file offer lookup hints that resolve.
+    setup: Kill a run-owned worker so its pid file goes stale.
+    action: Run diagnostics and look up the emitted pid and log tokens.
+    assertions:
+      - every emitted token resolves
+    cleanup: Final cleanup archives the board.
+    expected: covered
+
+  - id: workflow-config-validation-edges
+    family: diagnostics
+    profiles: [release]
+    requires: {trello: false, codex: false, github: false, network: false}
+    mode: deterministic-cli
+    description: start rejects invalid workflow configuration before launching a worker.
+    setup: Workflows with invalid YAML, list front matter, an unsupported tracker kind, and a negative poll interval.
+    action: Run start --workflow for each.
+    assertions:
+      - each start fails with setup_failed code=setup_workflow_invalid
+      - no pid file is created
+    cleanup: None.
+    expected: covered
+
+  # ---------------------------------------------------------------------------------------------
+  # Codex access and app-server
+  # ---------------------------------------------------------------------------------------------
+  - id: direct-real-codex-sentinel
+    family: codex-access
+    profiles: [real-codex, soak]
+    requires: {trello: false, codex: real, github: false, network: false}
+    mode: direct-real-codex
+    description: Real Codex can append one line to a run-owned marker in the workspace-write sandbox.
+    setup: A run-owned marker file and a run-scoped CODEX_HOME holding only the auth file.
+    action: Run codex exec --sandbox workspace-write -C <marker dir> with a one-line append instruction, bounded to three minutes.
+    assertions:
+      - the marker gains the requested line
+    cleanup: Delete the run-scoped CODEX_HOME.
+    expected: covered
+
+  - id: direct-codex-app-server-json-rpc-protocol-probe
+    family: codex-access
+    profiles: [real-codex]
+    requires: {trello: false, codex: real, github: false, network: false}
+    mode: direct-real-codex
+    description: codex app-server answers initialize over newline-delimited JSON-RPC.
+    setup: A run-scoped CODEX_HOME.
+    action: Start codex app-server, send initialize, read the response, close stdin.
+    assertions:
+      - the response has the request id and a userAgent
+      - the process exits after stdin closes
+    cleanup: Delete the run-scoped CODEX_HOME.
+    expected: covered
+
+  - id: installed-real-codex-trello-smoke
+    family: codex-access
+    profiles: [real-codex]
+    requires: {trello: true, codex: real, github: false, network: false}
+    mode: service-real-codex
+    description: The installed service with real Codex answers a question-only card and hands it off.
+    setup: A Trello-only workflow with the generated prompt; one question-only card; a run-scoped CODEX_HOME.
+    action: Start the worker and wait up to five minutes.
+    assertions:
+      - the card reaches Human Review
+      - the card has a Codex workpad or handoff comment
+      - the state API drains to zero running and retrying
+    cleanup: Stop the worker; final cleanup archives the board and deletes the CODEX_HOME copy.
+    expected: covered
+
+  - id: real-symphony-managed-danger-full-access-sentinel
+    family: codex-access
+    profiles: [real-codex]
+    requires: {trello: true, codex: real, github: false, network: false, hardened_host: true}
+    mode: service-real-codex
+    description: A danger-full-access workflow lets real Codex change a run-owned marker outside the workspace.
+    setup: setup-local --danger-full-access with run-owned paths; a marker card.
+    action: Run the card with real Codex.
+    assertions:
+      - the marker changes and the card reaches Human Review with path-safe comments
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: real-symphony-managed-additional-writable-root-sentinel
+    family: codex-access
+    profiles: [real-codex]
+    requires: {trello: true, codex: real, github: false, network: false, hardened_host: true}
+    mode: service-real-codex
+    description: An additional writable root lets real Codex change a run-owned marker there.
+    setup: setup-local --add-path <run-owned dir>; a marker card.
+    action: Run the card with real Codex.
+    assertions:
+      - the marker changes and the card reaches Human Review with path-safe comments
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: real-symphony-managed-blocked-host-path
+    family: codex-access
+    profiles: [real-codex]
+    requires: {trello: true, codex: real, github: false, network: false}
+    mode: service-real-codex
+    description: Without an allowed path, real Codex cannot change a run-owned marker and blocks truthfully.
+    setup: Default workspace-write workflow; a marker card pointing outside the workspace.
+    action: Run the card with real Codex.
+    assertions:
+      - the marker is unchanged and the card reaches Blocked with path-safe guidance
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: malformed-app-server-protocol
+    family: codex-access
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: Malformed JSON from the app-server becomes a retry with a protocol error.
+    setup: Fake Codex writes malformed JSON on turn start.
+    action: Run one card.
+    assertions:
+      - the state API shows the card retrying with codex_protocol_error app-server reader failed
+      - the card returns to Ready for Codex
+      - no fake app-server process remains after the worker stops
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: turn-cancelled-failure-path
+    family: codex-access
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: A turn/cancelled notification becomes a truthful retry.
+    setup: Fake Codex cancels the turn.
+    action: Run one card.
+    assertions:
+      - the state API shows the card retrying with a turn_cancelled error
+      - no fake app-server process remains after the worker stops
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  - id: stalled-codex-worker-cleanup-and-retry
+    family: codex-access
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: fake, github: false, network: false}
+    mode: service-fake-codex
+    description: A stalled turn is stopped by the stall timeout and retried.
+    setup: Fake Codex never completes the turn; codex.stall_timeout_ms is a few seconds.
+    action: Run one card.
+    assertions:
+      - the state API shows the card retrying with a stall error
+      - no fake app-server process remains after the worker stops
+    cleanup: Stop the worker; final cleanup archives the board.
+    expected: covered
+
+  # ---------------------------------------------------------------------------------------------
+  # GitHub sandbox and pull-request publication
+  # ---------------------------------------------------------------------------------------------
+  - id: github-sandbox-repository-creation
+    family: github
+    profiles: [github-live]
+    requires: {trello: false, codex: false, github: true, network: true}
+    mode: github-sandbox
+    description: A private sandbox repository named with the run id can be created.
+    setup: gh authenticated for the sandbox account.
+    action: gh repo create <prefix>-<run-id> --private.
+    assertions:
+      - the repository exists, is private, and is registered as run-owned
+    cleanup: List the repository for manual deletion.
+    expected: covered
+
+  - id: github-sandbox-seed-repository
+    family: github
+    profiles: [github-live]
+    requires: {trello: false, codex: false, github: true, network: true}
+    mode: github-sandbox
+    description: The sandbox repository is seeded with a README and a pull-request template.
+    setup: The sandbox repository from github-sandbox-repository-creation.
+    action: Clone, commit README.md and .github/pull_request_template.md, push main.
+    assertions:
+      - the default branch has the pull-request template
+    cleanup: List the repository for manual deletion.
+    expected: covered
+
+  - id: github-pr-flow-long-foreground-service
+    family: github
+    profiles: [github-live]
+    requires: {trello: true, codex: real, github: true, network: true}
+    mode: github-sandbox
+    description: A GitHub-enabled workflow takes a card through a pull request in the sandbox.
+    setup: GitHub-enabled workflow pointing at the sandbox repository.
+    action: Run a small code-change card with real Codex in the foreground service.
+    assertions:
+      - a ready-for-review pull request exists in the sandbox and the card reaches Human Review
+    cleanup: Archive the board; list the repository for manual deletion.
+    expected: covered
+
+  - id: github-pr-flow-author-scope-blocker
+    family: github
+    profiles: [github-live]
+    requires: {trello: true, codex: real, github: true, network: true}
+    mode: github-sandbox
+    description: A token without user or email scope surfaces the author-verification blocker truthfully.
+    setup: A GitHub token that lacks user and email scope.
+    action: Run the pull-request card.
+    assertions:
+      - the card explains the author-verification blocker without leaking account details
+    cleanup: Archive the board; list the repository for manual deletion.
+    expected: covered-with-caveat
+
+  - id: github-sandbox-pr-template-publication
+    family: github
+    profiles: [github-live]
+    requires: {trello: true, codex: real, github: true, network: true}
+    mode: github-sandbox
+    description: The published pull request body keeps the template headings and fills them.
+    setup: The seeded sandbox repository.
+    action: Run the pull-request card and read the remote PR body.
+    assertions:
+      - the body keeps Summary, Validation, and Caveats and fills each
+    cleanup: Archive the board; list the repository for manual deletion.
+    expected: covered
+
+  # ---------------------------------------------------------------------------------------------
+  # Cleanup and soak
+  # ---------------------------------------------------------------------------------------------
+  - id: install-dry-run-custom-prefix
+    family: cleanup
+    profiles: [quick, release]
+    requires: {trello: false, codex: false, github: false, network: false}
+    mode: deterministic-cli
+    description: install.sh --dry-run with a custom prefix plans without writing.
+    setup: Run-scoped HOME, XDG, SYMPHONY_HOME, prefix, and bin dir.
+    action: Run install.sh --dry-run --no-onboard --no-update-path --prefix <prefix> --bin-dir <bin>.
+    assertions:
+      - the dry run exits 0 and prints WOULD lines
+      - neither the prefix nor the bin dir is created
+    cleanup: None.
+    expected: covered
+
+  - id: uninstall-dry-run-custom-prefix-safety
+    family: cleanup
+    profiles: [quick, release]
+    requires: {trello: false, codex: false, github: false, network: false}
+    mode: deterministic-cli
+    description: uninstall.sh --dry-run with a custom prefix removes nothing.
+    setup: A run-scoped fake prefix and bin dir with marker files.
+    action: Run uninstall.sh --dry-run --prefix <prefix> --bin-dir <bin>.
+    assertions:
+      - the dry run exits 0
+      - every marker file still exists afterwards
+    cleanup: None.
+    expected: covered
+
+  - id: interim-real-trello-board-cleanup
+    family: cleanup
+    profiles: [release, trello-live]
+    requires: {trello: true, codex: false, github: false, network: false}
+    mode: cleanup
+    harness_only: true
+    description: A registered disposable board can be archived mid-run and archiving again is safe.
+    setup: Create and register one disposable board.
+    action: Archive it through the registry, then archive it again.
+    assertions:
+      - the board is closed after the first archive
+      - the second archive succeeds without error
+      - archiving an unregistered board id is refused
+    cleanup: None; the board is already archived.
+    expected: covered
+
+  - id: final-trello-board-cleanup
+    family: cleanup
+    profiles: [quick, release, trello-live, real-codex, github-live]
+    requires: {trello: true, codex: false, github: false, network: false}
+    mode: cleanup
+    harness_only: true
+    description: Final cleanup stops registered workers and archives every registered board.
+    setup: The run's registries.
+    action: Run the cleanup routine.
+    assertions:
+      - every registered board is closed
+      - no run-owned process remains
+    cleanup: This row is the cleanup.
+    expected: covered
+
+  - id: final-cleanup-verification
+    family: cleanup
+    profiles: [quick, release, trello-live, real-codex, github-live]
+    requires: {trello: true, codex: false, github: false, network: false}
+    mode: cleanup
+    harness_only: true
+    description: Running cleanup again changes nothing, which proves the first pass was complete.
+    setup: The run after final-trello-board-cleanup.
+    action: Run the cleanup routine again and list run-owned processes.
+    assertions:
+      - the second pass archives no board and stops no worker
+      - no run-owned process remains
+    cleanup: None.
+    expected: covered
+
+  - id: private-context-scan-public-reports-and-drafts
+    family: diagnostics
+    profiles: [quick, release, trello-live, real-codex, github-live, soak]
+    requires: {trello: false, codex: false, github: false, network: false}
+    mode: cleanup
+    harness_only: true
+    description: scripts/check-private-context finds nothing in the public reports and issue drafts.
+    setup: The run's public progress, ledger, cleanup summary, and issue drafts.
+    action: Run scripts/check-private-context --file for each public file.
+    assertions:
+      - the scan exits 0
+    cleanup: None.
+    expected: covered
+    notes: Runs after cleanup so the cleanup summary is scanned too. The final report is scanned after it is written; the result is printed and changes the exit code.
+
+  - id: passive-soak-trello-auth-board-process-codex-sentinel
+    family: soak
+    profiles: [soak]
+    requires: {trello: true, codex: false, github: false, network: false}
+    mode: soak
+    description: Passive health loop after cleanup until a duration or hard stop.
+    setup: A finished run, or a fresh run whose registries are empty.
+    action: Every interval, check Trello auth with list-workspaces, query every registered board, scan for run-owned processes, and run the Codex sentinel when --codex real.
+    assertions:
+      - every cycle reports zero Trello failures, board query failures, open run-owned boards, run-owned processes, and Codex sentinel failures
+    cleanup: None.
+    expected: covered
+    notes: Needs --soak-duration or --soak-until. Without --codex real the sentinel column reports not-run.

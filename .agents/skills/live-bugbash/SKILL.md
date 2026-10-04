@@ -209,6 +209,25 @@ Short waits are allowed only when they are tied to concrete product behavior und
 
 Do not stop early just because the first planned matrix pass is complete. If the main matrix is covered before `RUN_END_SYSTEM_TIME`, keep doing active exploration: vary inputs, run edge cases, test failure paths, inspect source boundaries, exercise live installed paths, deduplicate possible issues, improve evidence, or clean and report. The normal early-success exit is the no-new-findings rule above, measured in active exploration time.
 
+## Repeatable harness baseline
+
+Before exploring, run the repeatable harness from `../../../docs/live-bugbash.md` once with the
+resolved modes. It replays the scenario manifest in `../../../scripts/live-bugbash/manifest.yml`
+and writes its own run root, so use a separate run id:
+
+```bash
+scripts/live-bugbash/run.sh --profile full --run-id <RUN_ID>-harness --time-budget <minutes until RUN_END_SYSTEM_TIME>m \
+  [--trello real] [--codex real] [--github real-sandbox] [--host-profile hardened]
+```
+
+Pass `--trello real` only when `TRELLO_MODE=real`, `--codex real` only when `CODEX_MODE=real`,
+`--github real-sandbox` only when `GITHUB_MODE=real-sandbox`, and `--host-profile hardened` only
+when `HOST_PROFILE=hardened`. Then copy the harness results into this run's coverage ledger: rows
+the harness reports `covered` count as covered, `failed` rows are suspected bugs to reproduce before
+drafting, and `skipped` or `not-yet-automated` rows stay open for exploration. Link the harness
+`final-report.md` from this run's final report. When exploration finds a repeatable scenario the
+manifest lacks, record it in the final report as a candidate manifest row.
+
 ## Working loop
 
 Use this loop throughout the run:

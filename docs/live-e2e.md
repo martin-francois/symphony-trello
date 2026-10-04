@@ -17,6 +17,9 @@ before claiming real `codex app-server` coverage.
 The live commands read `.env` automatically. Real environment variables with the same names take
 precedence.
 
+For the broader scenario matrix from the live bug bash, with profiles, a coverage ledger, and
+cleanup verification, use the repeatable harness in [live-bugbash.md](live-bugbash.md).
+
 ## Automated Fake-Codex Harness
 
 Use the Java harness first when you need to verify real Trello setup, card ordering, imports,
