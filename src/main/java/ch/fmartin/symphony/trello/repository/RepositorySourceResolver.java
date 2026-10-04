@@ -15,6 +15,7 @@ import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import org.jspecify.annotations.Nullable;
 
 public final class RepositorySourceResolver {
     private static final CharMatcher LEADING_TOKEN_PUNCTUATION = CharMatcher.anyOf("<([{");
@@ -323,7 +324,7 @@ public final class RepositorySourceResolver {
                 .toList();
     }
 
-    private static Stream<Declaration> declarations(String text) {
+    private static Stream<Declaration> declarations(@Nullable String text) {
         if (text == null || text.isBlank()) {
             return Stream.empty();
         }
@@ -397,7 +398,7 @@ public final class RepositorySourceResolver {
         return SLASHES.trimFrom(value.strip());
     }
 
-    private static String lower(String value) {
+    private static @Nullable String lower(@Nullable String value) {
         return value == null ? null : value.toLowerCase(Locale.ROOT);
     }
 
@@ -424,7 +425,7 @@ public final class RepositorySourceResolver {
         return value.chars().anyMatch(Character::isWhitespace);
     }
 
-    private static boolean unsafeDecodedComponent(String value) {
+    private static boolean unsafeDecodedComponent(@Nullable String value) {
         return RepositorySourceText.unsafePromptLine(value);
     }
 
@@ -432,11 +433,11 @@ public final class RepositorySourceResolver {
         return uri.getRawQuery() != null || uri.getRawFragment() != null;
     }
 
-    private static boolean notBlank(String value) {
+    private static boolean notBlank(@Nullable String value) {
         return !blank(value);
     }
 
-    private static boolean blank(String value) {
+    private static boolean blank(@Nullable String value) {
         return value == null || value.isBlank();
     }
 
