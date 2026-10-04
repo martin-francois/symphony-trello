@@ -52,13 +52,13 @@ test("a short commit id stays readable", () => {
   assert.equal(result, text);
 });
 
-test("table cells stay on one line and escape pipes", () => {
+test("table cells stay on one line and escape backslashes and pipes", () => {
   // given
-  const text = "first | second\nthird";
+  const text = "first | second\nthird \\|";
 
   // when
   const cell = tableCell(text);
 
   // then
-  assert.equal(cell, "first \\| second third");
+  assert.equal(cell, "first \\| second third \\\\\\|");
 });
