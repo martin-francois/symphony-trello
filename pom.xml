@@ -7,6 +7,30 @@
   <version>1.2.0</version>
   <name>Symphony for Trello</name>
   <description>Quarkus service that orchestrates Codex workers from Trello cards.</description>
+  <url>https://github.com/martin-francois/symphony-trello</url>
+  <licenses>
+    <license>
+      <name>Apache-2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+  <developers>
+    <developer>
+      <id>martinfrancois</id>
+      <name>François Martin</name>
+      <url>https://github.com/martinfrancois</url>
+    </developer>
+  </developers>
+  <scm>
+    <connection>scm:git:https://github.com/martin-francois/symphony-trello.git</connection>
+    <developerConnection>scm:git:https://github.com/martin-francois/symphony-trello.git</developerConnection>
+    <url>https://github.com/martin-francois/symphony-trello</url>
+  </scm>
+  <issueManagement>
+    <system>GitHub Issues</system>
+    <url>https://github.com/martin-francois/symphony-trello/issues</url>
+  </issueManagement>
 
   <properties>
     <java.version>25</java.version>
@@ -24,8 +48,10 @@
     <maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
     <maven-dependency-plugin.version>3.11.0</maven-dependency-plugin.version>
     <maven-failsafe-plugin.version>${surefire.version}</maven-failsafe-plugin.version>
+    <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
     <maven.plugins.group-id>org.apache.maven.plugins</maven.plugins.group-id>
     <maven-pmd-plugin.version>3.28.0</maven-pmd-plugin.version>
+    <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
     <pmd.failOnViolation>true</pmd.failOnViolation>
     <pmd.ruleset>config/pmd/ruleset.xml</pmd.ruleset>
     <junit.parallel.config.fixed.parallelism>4</junit.parallel.config.fixed.parallelism>
@@ -40,7 +66,9 @@
     <findsecbugs.version>1.14.0</findsecbugs.version>
     <guava.version>33.7.1-jre</guava.version>
     <jazzer.version>0.30.0</jazzer.version>
+    <jreleaser.version>1.26.0</jreleaser.version>
     <jspecify.version>1.0.1</jspecify.version>
+    <maven-central.staging-directory>${project.build.directory}/staging-deploy</maven-central.staging-directory>
     <rewrite-maven-plugin.version>6.46.1</rewrite-maven-plugin.version>
     <rewrite-maven.version>8.90.4</rewrite-maven.version>
     <rewrite-error-prone-support.version>0.30.0</rewrite-error-prone-support.version>
@@ -242,6 +270,32 @@
           <release>${maven.compiler.release}</release>
           <parameters>true</parameters>
         </configuration>
+      </plugin>
+      <plugin>
+        <groupId>${maven.plugins.group-id}</groupId>
+        <artifactId>maven-source-plugin</artifactId>
+        <version>${maven-source-plugin.version}</version>
+        <executions>
+          <execution>
+            <id>attach-sources</id>
+            <goals>
+              <goal>jar-no-fork</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>${maven.plugins.group-id}</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <version>${maven-javadoc-plugin.version}</version>
+        <executions>
+          <execution>
+            <id>attach-javadocs</id>
+            <goals>
+              <goal>jar</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
       <plugin>
         <groupId>${maven.plugins.group-id}</groupId>
@@ -463,6 +517,52 @@
                 </configuration>
               </execution>
             </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <!-- Used only by scripts/stage-maven-central-artifacts and scripts/deploy-maven-central. -->
+      <id>maven-central</id>
+      <properties>
+        <altDeploymentRepository>local::file:${maven-central.staging-directory}</altDeploymentRepository>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.jreleaser</groupId>
+            <artifactId>jreleaser-maven-plugin</artifactId>
+            <version>${jreleaser.version}</version>
+            <configuration>
+              <jreleaser>
+                <signing>
+                  <pgp>
+                    <active>ALWAYS</active>
+                    <armored>true</armored>
+                  </pgp>
+                </signing>
+                <!-- Release Please owns tags and GitHub Releases, and the release workflow owns their assets (ADR 0106). -->
+                <release>
+                  <github>
+                    <skipTag>true</skipTag>
+                    <skipRelease>true</skipRelease>
+                  </github>
+                </release>
+                <deploy>
+                  <maven>
+                    <mavenCentral>
+                      <sonatype>
+                        <active>RELEASE</active>
+                        <url>https://central.sonatype.com/api/v1/publisher</url>
+                        <!-- UPLOAD stops at a validated deployment that a maintainer publishes in the Central Portal. -->
+                        <stage>UPLOAD</stage>
+                        <stagingRepositories>${maven-central.staging-directory}</stagingRepositories>
+                      </sonatype>
+                    </mavenCentral>
+                  </maven>
+                </deploy>
+              </jreleaser>
+            </configuration>
           </plugin>
         </plugins>
       </build>

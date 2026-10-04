@@ -1,0 +1,17 @@
+#!/bin/bash
+# Signs the staged artifacts and uploads them to Maven Central with JReleaser.
+# JRELEASER_MAVENCENTRAL_STAGE comes from the MAVEN_CENTRAL_STAGE repository variable.
+
+set -euo pipefail
+
+case "${JRELEASER_MAVENCENTRAL_STAGE:-}" in
+  UPLOAD | FULL) ;;
+  *)
+    echo "MAVEN_CENTRAL_STAGE must be UPLOAD or FULL, got '${JRELEASER_MAVENCENTRAL_STAGE:-}'." >&2
+    exit 2
+    ;;
+esac
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+./mvnw -B -ntp -Pmaven-central jreleaser:deploy

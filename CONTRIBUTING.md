@@ -375,6 +375,63 @@ scripts/package-release-assets.sh 0.2.0
 
 Replace `0.2.0` with the release version being tested.
 
+### Maven Central Publication
+
+After the release job has published the GitHub Release, the `maven-central` job in the same
+workflow can publish the jar, sources jar, Javadoc jar, and POM to Maven Central with JReleaser. It
+does not touch the GitHub Release or its assets.
+[ADR 0106](docs/adr/0106-publish-maven-artifacts-with-jreleaser.md) explains the design.
+
+The job is off until the repository variable `MAVEN_CENTRAL_STAGE` is set. To turn it on, the
+repository owner:
+
+1. Signs in to the [Central Portal](https://central.sonatype.com), adds the namespace `ch.fmartin`, and verifies it with
+   the DNS TXT record the portal shows for `fmartin.ch`.
+2. Generates a portal user token on the portal's account page.
+3. Creates a PGP signing key for releases and publishes the public key to `keys.openpgp.org` and
+   `keyserver.ubuntu.com`. Maven Central checks signatures against public key servers.
+4. Creates the GitHub environment `maven-central` under Settings, Environments. Limiting it to the
+   `main` branch and adding required reviewers is optional; with reviewers, every publication waits
+   for approval.
+5. Adds these environment secrets:
+   - `JRELEASER_MAVENCENTRAL_USERNAME`: the token user name
+   - `JRELEASER_MAVENCENTRAL_PASSWORD`: the token password
+   - `JRELEASER_GPG_PUBLIC_KEY`: output of `gpg --armor --export KEY_ID`
+   - `JRELEASER_GPG_SECRET_KEY`: output of `gpg --armor --export-secret-keys KEY_ID`
+   - `JRELEASER_GPG_PASSPHRASE`: the key's passphrase
+6. Sets the repository variable `MAVEN_CENTRAL_STAGE` to `UPLOAD`.
+
+With `UPLOAD`, JReleaser uploads the signed bundle, waits until the portal has validated it, and
+stops. Open Deployments in the Central Portal, check the files, and press Publish, or Drop to
+discard the deployment. Once a few releases have gone through cleanly, set `MAVEN_CENTRAL_STAGE` to
+`FULL` so JReleaser publishes without the manual step. Delete the variable to turn publication off
+again. The deploy step rejects any value other than `UPLOAD` or `FULL`.
+
+If the job fails after the GitHub Release is out, the GitHub Release is not affected. Before you use
+"Re-run failed jobs", open Deployments in the Central Portal and drop any deployment the failed
+attempt left there, because a re-run uploads a new bundle. If the version is already published, a
+re-run fails: a version on Maven Central cannot be replaced. A failure caused by the tagged code
+needs a new patch release.
+
+To check the publication locally without uploading anything, stage the artifacts and run a JReleaser
+dry run with a throwaway key and dummy portal credentials:
+
+```bash
+scripts/stage-maven-central-artifacts
+export GNUPGHOME="$(mktemp -d)"
+gpg --batch --pinentry-mode loopback --passphrase dry-run \
+  --quick-gen-key "Dry run <dry-run@example.invalid>" ed25519 sign 1d
+JRELEASER_DRY_RUN=true JRELEASER_MAVENCENTRAL_STAGE=UPLOAD \
+  JRELEASER_MAVENCENTRAL_USERNAME=dry-run JRELEASER_MAVENCENTRAL_PASSWORD=dry-run \
+  JRELEASER_GPG_PUBLIC_KEY="$(gpg --armor --export)" \
+  JRELEASER_GPG_SECRET_KEY="$(gpg --batch --pinentry-mode loopback --passphrase dry-run --armor --export-secret-keys)" \
+  JRELEASER_GPG_PASSPHRASE=dry-run \
+  scripts/deploy-maven-central
+```
+
+The dry run checks the POM against Maven Central's rules, signs the staged files, and writes the
+bundle under `target/jreleaser/deploy` without uploading it.
+
 ## Issues
 
 Before opening a pull request, search the existing issues and pull requests. Open a new issue when
