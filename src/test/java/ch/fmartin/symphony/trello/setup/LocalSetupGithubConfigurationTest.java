@@ -43,6 +43,55 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void setupRecordsEachGeneratedBodyForLaterWorkflowMigrationChecks() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.recorded-upgrade.md");
+        Path env = tempDir.resolve(".env");
+        SetupRunResult connected = connectLocalBoardWithoutGithub(workflow, env, "Recorded Upgrade");
+        GeneratedWorkflowRecord nonGithubRecord = recordedBody(workflow);
+        String nonGithubBody = bodyOf(workflow);
+        prepareNextSetupRunWithGithubAuth();
+
+        // when
+        SetupRunResult upgraded = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/abc123/recorded-upgrade",
+                "configure-github");
+
+        // then
+        connected.assertSuccess();
+        upgraded.assertSuccess();
+        assertThat(nonGithubRecord.body()).isEqualTo(nonGithubBody);
+        assertThat(nonGithubRecord.inputs().githubEnabled())
+                .as("the first record describes the non-GitHub workflow")
+                .isFalse();
+        assertThat(recordedBody(workflow))
+                .satisfies(record -> assertThat(record.body()).isEqualTo(bodyOf(workflow)))
+                .satisfies(record -> assertThat(record.inputs().githubEnabled())
+                        .as("configure-github records the regenerated GitHub workflow body")
+                        .isTrue());
+    }
+
+    private GeneratedWorkflowRecord recordedBody(Path workflow) throws Exception {
+        return GeneratedWorkflowStore.find(
+                        GeneratedWorkflowStore.besideManifest(fixture.manifestPath())
+                                .records(),
+                        workflow)
+                .orElseThrow();
+    }
+
+    private static String bodyOf(Path workflow) throws Exception {
+        return WorkflowFileText.parse(Files.readString(workflow)).orElseThrow().body();
+    }
+
+    @Test
     void configureGithubPreservesExactUrlLikeBoardNameSelection() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.url-like-name.md");

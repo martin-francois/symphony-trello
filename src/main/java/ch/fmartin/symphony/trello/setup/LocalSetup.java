@@ -238,6 +238,8 @@ public final class LocalSetup {
             workerManager.rotateLogsForReplacedBoards(localWorkerPaths(options), connectedBoard, replacedBoards);
             manifest = manifest.withBoard(connectedBoard);
             boards.save(manifest);
+            GeneratedWorkflowStore.recordGenerated(options.manifestPath(), result.workflowPath(), result.bodyInputs())
+                    .ifPresent(out::println);
 
             out.println();
             out.println("Trello board");
@@ -1186,6 +1188,8 @@ public final class LocalSetup {
                 access.additionalWritableRoots(),
                 access.dangerFullAccess());
         connectedBoards(options).save(manifest.withBoard(upgraded));
+        GeneratedWorkflowStore.recordGenerated(options.manifestPath(), board.workflowPath(), result.bodyInputs())
+                .ifPresent(out::println);
         out.println();
         out.println("  OK  GitHub workflow enabled for " + DisplayNames.quotedName(board.boardName()));
         if (previousHealth.kind() == BoardHealthKind.SAME_WORKFLOW && !options.noStart()) {
@@ -1962,7 +1966,8 @@ public final class LocalSetup {
             List<String> lists,
             Path workflowPath,
             int serverPort,
-            GitHubIntegration githubIntegration) {
+            GitHubIntegration githubIntegration,
+            GeneratedWorkflowBodyInputs bodyInputs) {
         static SetupResult from(TrelloBoardSetup.NewBoardResult result, GitHubIntegration githubIntegration) {
             return new SetupResult(
                     result.boardId(),
@@ -1972,7 +1977,8 @@ public final class LocalSetup {
                     result.lists(),
                     result.workflowPath(),
                     result.serverPort(),
-                    githubIntegration);
+                    githubIntegration,
+                    result.bodyInputs());
         }
 
         static SetupResult from(TrelloBoardSetup.ImportBoardResult result, GitHubIntegration githubIntegration) {
@@ -1984,7 +1990,8 @@ public final class LocalSetup {
                     result.openLists(),
                     result.workflowPath(),
                     result.serverPort(),
-                    githubIntegration);
+                    githubIntegration,
+                    result.bodyInputs());
         }
     }
 

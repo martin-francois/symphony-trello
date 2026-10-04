@@ -648,9 +648,9 @@ function Get-InstalledAppVersionFallback {
   return "unknown"
 }
 
-function Get-InstalledAppVersion {
+function Get-AppCommandVersion {
   if (-not (Test-Command "java")) {
-    return (Get-InstalledAppVersionFallback)
+    return $null
   }
   $classpath = @(
     (Join-Path $Prefix "target\quarkus-app\quarkus-run.jar"),
@@ -664,9 +664,53 @@ function Get-InstalledAppVersion {
       return $Matches[1].Trim()
     }
   } catch {
-    return (Get-InstalledAppVersionFallback)
+    return $null
+  }
+  return $null
+}
+
+function Get-InstalledAppVersion {
+  $commandVersion = Get-AppCommandVersion
+  if ($commandVersion) {
+    return $commandVersion
   }
   return (Get-InstalledAppVersionFallback)
+}
+
+function Assert-NoMajorDowngrade {
+  if ($InstallSource -ne "release-archive" -or -not $PreviousAppVersion) {
+    return
+  }
+  $previousMajor = ($PreviousAppVersion -split '\.')[0]
+  $targetMajor = ($Version -split '\.')[0]
+  if ($previousMajor -notmatch '^[0-9]+$' -or $targetMajor -notmatch '^[0-9]+$') {
+    return
+  }
+  if ([int]$previousMajor -gt [int]$targetMajor) {
+    throw "Symphony $PreviousAppVersion is installed, and release $Version belongs to an older major version.`nDowngrading to an older major version is not supported. Install a $previousMajor.x release instead."
+  }
+}
+
+function Invoke-GeneratedWorkflowCheck {
+  if (-not $UpdatingExistingApp) {
+    return
+  }
+  Write-Host
+  Write-Host "Checking generated workflows..."
+  $global:LASTEXITCODE = 0
+  & "$BinDir\symphony-trello.ps1" migrate-workflows --help *> $null
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host "  NOTE  This Symphony version cannot check generated workflow bodies."
+    return
+  }
+  $migrateArgs = @("migrate-workflows")
+  if ($PreviousAppVersion) {
+    $migrateArgs += @("--from-version", $PreviousAppVersion)
+  }
+  if ($NoOnboard -or -not (Test-InteractiveInput)) {
+    $migrateArgs += "--non-interactive"
+  }
+  Invoke-Step "$BinDir\symphony-trello.ps1 $($migrateArgs -join ' ')" { & "$BinDir\symphony-trello.ps1" @migrateArgs }
 }
 
 function Get-InstalledSourceCommit {
@@ -1356,6 +1400,9 @@ if ($DryRun) {
     Write-Host "  WOULD unpack release archive to: $Prefix"
   }
   Write-Host "  WOULD install CLI executable: $BinDir\symphony-trello.ps1"
+  if (Test-Path -LiteralPath $Prefix) {
+    Write-Host "  WOULD check generated workflows after the update: symphony-trello migrate-workflows"
+  }
   Offer-PathSetup
   if (-not $NoOnboard) {
     Write-Host
@@ -1403,6 +1450,11 @@ if (-not $NoOnboard) {
 Write-Host
 Write-Host "Installing Symphony..."
 $UpdatingExistingApp = Test-Path -LiteralPath $Prefix
+$PreviousAppVersion = $null
+if ($UpdatingExistingApp) {
+  $PreviousAppVersion = Get-AppCommandVersion
+}
+Assert-NoMajorDowngrade
 $RestartManagedWorkers = $false
 if ($UpdatingExistingApp -and (Get-ManagedPidFile)) {
   $RestartManagedWorkers = $true
@@ -1514,6 +1566,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0symphony-trello.ps
 }
 Write-Host "  OK  Command installed: $BinDir\symphony-trello.ps1"
 Write-InstallContext
+Invoke-GeneratedWorkflowCheck
 
 Offer-PathSetup
 

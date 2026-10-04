@@ -37,6 +37,21 @@ final class InstalledCliDefaultsTest {
     }
 
     @Test
+    void addsOnlyTheInstalledConfigDirForWorkflowMigration() {
+        // given
+        InstalledCliDefaults.InstalledPaths paths = installedPaths();
+
+        // when
+        List<String> installed = InstalledCliDefaults.apply(List.of("migrate-workflows", "--dry-run"), paths);
+        List<String> explicit =
+                InstalledCliDefaults.apply(List.of("migrate-workflows", "--config-dir", "/tmp/other-config"), paths);
+
+        // then
+        assertThat(installed).containsExactly("migrate-workflows", "--config-dir", configDir.toString(), "--dry-run");
+        assertThat(explicit).containsExactly("migrate-workflows", "--config-dir", "/tmp/other-config");
+    }
+
+    @Test
     void derivesIsolatedLifecycleDefaultsFromExplicitConfigDir() {
         // given
         InstalledCliDefaults.InstalledPaths paths = installedPaths();

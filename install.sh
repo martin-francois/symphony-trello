@@ -298,15 +298,21 @@ stable_install_context_file_safe() {
   return 0
 }
 
-installed_app_version() {
+command_app_version() {
   local output version
-  if [[ -x "$BIN_DIR/symphony-trello" ]]; then
-    output="$("$BIN_DIR/symphony-trello" --version 2>/dev/null || true)"
-    version="${output#symphony-trello }"
-    if [[ -n "$output" && "$output" != *$'\n'* && "$version" != "$output" && -n "$version" ]]; then
-      printf '%s\n' "$version"
-      return
-    fi
+  [[ -x "$BIN_DIR/symphony-trello" ]] || return 1
+  output="$("$BIN_DIR/symphony-trello" --version 2>/dev/null || true)"
+  version="${output#symphony-trello }"
+  if [[ -n "$output" && "$output" != *$'\n'* && "$version" != "$output" && -n "$version" ]]; then
+    printf '%s\n' "$version"
+    return 0
+  fi
+  return 1
+}
+
+installed_app_version() {
+  if command_app_version; then
+    return
   fi
   if [[ "$INSTALL_SOURCE" == "release-archive" ]]; then
     printf '%s\n' "$VERSION"
@@ -320,6 +326,39 @@ installed_source_commit() {
     return
   fi
   git -C "$APP_DIR" rev-parse --verify HEAD 2>/dev/null || true
+}
+
+reject_major_downgrade() {
+  local previous_major="${PREVIOUS_APP_VERSION%%.*}" target_major="${VERSION%%.*}"
+  if [[ "$INSTALL_SOURCE" != "release-archive" || ! "$previous_major" =~ ^[0-9]+$ || ! "$target_major" =~ ^[0-9]+$ ]]; then
+    return
+  fi
+  if ((previous_major > target_major)); then
+    echo "Symphony $PREVIOUS_APP_VERSION is installed, and release $VERSION belongs to an older major version." >&2
+    echo "Downgrading to an older major version is not supported. Install a $previous_major.x release instead." >&2
+    exit 2
+  fi
+}
+
+check_generated_workflows() {
+  local -a migrate_command=("$BIN_DIR/symphony-trello" migrate-workflows)
+  if [[ "$UPDATING_EXISTING_APP" != true ]]; then
+    return
+  fi
+  echo
+  echo "Checking generated workflows..."
+  if ! "$BIN_DIR/symphony-trello" migrate-workflows --help >/dev/null 2>&1; then
+    echo "  NOTE  This Symphony version cannot check generated workflow bodies."
+    return
+  fi
+  if [[ -n "$PREVIOUS_APP_VERSION" ]]; then
+    migrate_command+=(--from-version "$PREVIOUS_APP_VERSION")
+  fi
+  if [[ "$NO_ONBOARD" == false ]] && terminal_available; then
+    run_interactive "${migrate_command[@]}"
+  else
+    run "${migrate_command[@]}" --non-interactive
+  fi
 }
 
 prompt_from_terminal() {
@@ -2626,6 +2665,9 @@ if [[ "$DRY_RUN" == true ]]; then
     echo "  WOULD unpack release archive into: $APP_DIR"
   fi
   echo "  WOULD install command: $BIN_DIR/symphony-trello"
+  if [[ -d "$APP_DIR" ]]; then
+    echo "  WOULD check generated workflows after the update: symphony-trello migrate-workflows"
+  fi
   offer_path_setup
   if [[ "$NO_ONBOARD" == false ]]; then
     echo "  WOULD run guided setup and start Symphony automatically."
@@ -2669,9 +2711,12 @@ fi
 echo
 echo "Installing Symphony..."
 UPDATING_EXISTING_APP=false
+PREVIOUS_APP_VERSION=""
 if [[ -d "$APP_DIR" ]]; then
   UPDATING_EXISTING_APP=true
+  PREVIOUS_APP_VERSION="$(command_app_version || true)"
 fi
+reject_major_downgrade
 RESTART_MANAGED_WORKERS=false
 if [[ "$UPDATING_EXISTING_APP" == true ]] && has_managed_pid_files; then
   if [[ -x "$BIN_DIR/symphony-trello" ]]; then
@@ -2751,6 +2796,7 @@ EOF
 fi
 echo "  OK  Command installed: $BIN_DIR/symphony-trello"
 write_install_context
+check_generated_workflows
 
 offer_path_setup
 
