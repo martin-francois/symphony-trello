@@ -10,16 +10,27 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
+import ch.fmartin.symphony.trello.testsupport.BoundedWait;
 import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
 import java.io.IOException;
+import java.net.ConnectException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,6 +55,14 @@ final class TrelloClientChaosTest {
             ]
             """
                     .formatted(CARD_ID);
+
+    private static final int CLASSIFICATION_MAX_API_RETRIES = 2;
+    private static final int SINGLE_RETRY = 1;
+    private static final long FAST_RETRY_BASE_DELAY_MS = 1;
+    private static final Duration SHORT_REQUEST_TIMEOUT = Duration.ofMillis(200);
+    private static final Duration REFUSED_CONNECTION_RETRY_BASE_DELAY = Duration.ofMillis(100);
+    private static final Duration LONG_RETRY_AFTER = Duration.ofSeconds(60);
+    private static final Duration TEST_WAIT_LIMIT = Duration.ofSeconds(10);
 
     private final TrelloClient client = new TrelloClient(new ObjectMapper());
     private final List<String> writes = new ArrayList<>();
@@ -120,6 +139,162 @@ final class TrelloClientChaosTest {
                 Arguments.of("non-object response", "\"attachment-1\""));
     }
 
+    @MethodSource("readRetryClassifications")
+    @ParameterizedTest(name = "{0}")
+    void readRetriesOnlyRateLimitsAndTransportFailuresUpToConfiguredLimit(
+            String scenario, HttpHandler fault, Duration requestTimeout, int expectedRequests, String expectedCode) {
+        // given
+        var requests = new AtomicInteger();
+        trello.on("/1/boards/input", exchange -> {
+            requests.incrementAndGet();
+            fault.handle(exchange);
+        });
+        EffectiveConfig config = config(Map.of(
+                "max_api_retries",
+                CLASSIFICATION_MAX_API_RETRIES,
+                "api_retry_base_delay_ms",
+                FAST_RETRY_BASE_DELAY_MS,
+                "request_timeout_ms",
+                requestTimeout.toMillis()));
+
+        // when
+        TrelloException failure = catchThrowableOfType(TrelloException.class, () -> client.resolveBoardId(config));
+
+        // then
+        assertThat(failure).as(scenario).extracting(TrelloException::code).isEqualTo(expectedCode);
+        assertThat(requests).as(scenario).hasValue(expectedRequests);
+    }
+
+    private static Stream<Arguments> readRetryClassifications() {
+        int everyAttempt = CLASSIFICATION_MAX_API_RETRIES + 1;
+        return Stream.of(
+                Arguments.of(
+                        "HTTP 429 is retried until the limit",
+                        (HttpHandler) exchange -> respond(exchange, 429, "{}"),
+                        ConfigDefaults.DEFAULT_TRACKER_REQUEST_TIMEOUT,
+                        everyAttempt,
+                        "trello_api_rate_limited"),
+                Arguments.of(
+                        "HTTP 500 is not retried",
+                        (HttpHandler) exchange -> respond(exchange, 500, "{}"),
+                        ConfigDefaults.DEFAULT_TRACKER_REQUEST_TIMEOUT,
+                        1,
+                        "trello_api_status"),
+                Arguments.of(
+                        "truncated response body is retried until the limit",
+                        (HttpHandler) TrelloClientChaosTest::respondWithTruncatedBody,
+                        ConfigDefaults.DEFAULT_TRACKER_REQUEST_TIMEOUT,
+                        everyAttempt,
+                        "trello_api_request"),
+                Arguments.of(
+                        "request timeout is retried until the limit",
+                        (HttpHandler) TrelloClientChaosTest::neverRespond,
+                        SHORT_REQUEST_TIMEOUT,
+                        everyAttempt,
+                        "trello_api_request"));
+    }
+
+    @Test
+    void readRetriesRefusedConnectionsWithBackoff() throws IOException {
+        // given
+        try (var reservedPort = new Socket()) {
+            // Binding without listening keeps this port unavailable to competing listeners.
+            reservedPort.bind(new InetSocketAddress(InetAddress.ofLiteral("127.0.0.1"), 0));
+            EffectiveConfig config = config(Map.of(
+                    "endpoint",
+                    "http://" + reservedPort.getLocalAddress().getHostAddress() + ":" + reservedPort.getLocalPort()
+                            + "/1",
+                    "max_api_retries",
+                    CLASSIFICATION_MAX_API_RETRIES,
+                    "api_retry_base_delay_ms",
+                    REFUSED_CONNECTION_RETRY_BASE_DELAY.toMillis()));
+            long started = System.nanoTime();
+
+            // when
+            TrelloException failure = catchThrowableOfType(TrelloException.class, () -> client.resolveBoardId(config));
+            Duration elapsed = Duration.ofNanos(System.nanoTime() - started);
+
+            // then
+            assertThat(failure)
+                    .hasCauseInstanceOf(ConnectException.class)
+                    .extracting(TrelloException::code)
+                    .isEqualTo("trello_api_request");
+            // A refused connection fails within milliseconds, so only the retry waits make the call this slow.
+            assertThat(elapsed)
+                    .as("each of the %d retries waits at least the base delay", CLASSIFICATION_MAX_API_RETRIES)
+                    .isGreaterThanOrEqualTo(
+                            REFUSED_CONNECTION_RETRY_BASE_DELAY.multipliedBy(CLASSIFICATION_MAX_API_RETRIES));
+        }
+    }
+
+    @Test
+    void interruptDuringRetryBackoffStopsWaitingAndKeepsInterruptFlag() throws InterruptedException {
+        // given
+        trello.on("/1/boards/input", exchange -> {
+            exchange.getResponseHeaders().add("Retry-After", String.valueOf(LONG_RETRY_AFTER.toSeconds()));
+            respond(exchange, 429, "{}");
+        });
+        EffectiveConfig config = config(Map.of("max_api_retries", SINGLE_RETRY));
+        var failure = new AtomicReference<Throwable>();
+        var interruptFlagKept = new AtomicBoolean();
+        Thread poller = Thread.ofPlatform().start(() -> {
+            try {
+                client.resolveBoardId(config);
+            } catch (RuntimeException e) {
+                failure.set(e);
+            }
+            interruptFlagKept.set(Thread.currentThread().isInterrupted());
+        });
+        try {
+            // Interrupting before the backoff starts would hit the HTTP call and prove nothing about the wait.
+            BoundedWait.until(TEST_WAIT_LIMIT, () -> isSleeping(poller), "the poller sleeping in the retry backoff");
+
+            // when
+            poller.interrupt();
+            poller.join(TEST_WAIT_LIMIT);
+        } finally {
+            poller.interrupt();
+        }
+
+        // then
+        assertThat(poller.isAlive())
+                .as("an interrupt ends the %s Retry-After wait within %s", LONG_RETRY_AFTER, TEST_WAIT_LIMIT)
+                .isFalse();
+        assertThat(failure.get()).isInstanceOfSatisfying(TrelloException.class, e -> assertThat(e)
+                .hasMessage("Trello retry sleep interrupted")
+                .extracting(TrelloException::code)
+                .isEqualTo("trello_api_request"));
+        assertThat(interruptFlagKept.get())
+                .as("the polling thread still sees its interrupt after the Trello client gives up")
+                .isTrue();
+    }
+
+    private static boolean isSleeping(Thread thread) {
+        for (StackTraceElement frame : thread.getStackTrace()) {
+            if (frame.getClassName().equals(Thread.class.getName())
+                    && frame.getMethodName().equals("sleep")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void respondWithTruncatedBody(HttpExchange exchange) throws IOException {
+        // Flush before closing: when a connection closes before any response bytes arrive, the JDK
+        // HttpClient re-sends an idempotent GET on its own, which would double the request count.
+        // With headers received, the short body fails each attempt with exactly one IOException.
+        byte[] promisedBody = boardJson("board-1", "Board", false).getBytes(StandardCharsets.UTF_8);
+        exchange.sendResponseHeaders(200, promisedBody.length);
+        exchange.getResponseBody().write(promisedBody, 0, promisedBody.length - 1);
+        exchange.getResponseBody().flush();
+        exchange.close();
+    }
+
+    private static void neverRespond(HttpExchange exchange) {
+        // Leaving the exchange open frees the server thread for the next attempt while this one
+        // waits for its request timeout; stopping the server closes it.
+    }
+
     @Test
     void readRateLimitRetriesButWriteRateLimitDoesNotRetry() throws IOException {
         // given
@@ -133,7 +308,8 @@ final class TrelloClientChaosTest {
             writes.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(exchange, 429, "{}");
         });
-        EffectiveConfig config = config(Map.of("max_api_retries", 1, "api_retry_base_delay_ms", 1));
+        EffectiveConfig config =
+                config(Map.of("max_api_retries", SINGLE_RETRY, "api_retry_base_delay_ms", FAST_RETRY_BASE_DELAY_MS));
 
         // when
         List<?> cards = client.fetchCandidateCards(config);
@@ -142,7 +318,7 @@ final class TrelloClientChaosTest {
 
         // then
         assertThat(cards).isEmpty();
-        assertThat(board.requests()).isEqualTo(2);
+        assertThat(board.requests()).isEqualTo(SINGLE_RETRY + 1);
         assertThat(writeFailure.code()).isEqualTo("trello_api_rate_limited");
         assertThat(writes).containsExactly("POST /1/cards/write-card/actions/comments?text=hello");
     }
