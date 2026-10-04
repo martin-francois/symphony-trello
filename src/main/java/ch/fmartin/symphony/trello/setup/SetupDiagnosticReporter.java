@@ -242,6 +242,7 @@ final class SetupDiagnosticReporter {
     private final RecentLogLister recentLogLister;
     private final Clock clock;
     private final String osName;
+    private final SetupFailureFollowUp followUp;
     private List<String> sensitiveValues = List.of();
     private boolean deepDiagnostics;
     private DiagnosticsTokenHasher tokenHasher = DiagnosticsTokenHasher.ephemeral();
@@ -269,6 +270,22 @@ final class SetupDiagnosticReporter {
             RecentLogLister recentLogLister,
             Clock clock,
             String osName) {
+        this(
+                environment,
+                commandRunner,
+                recentLogLister,
+                clock,
+                osName,
+                SetupFailureFollowUp.forConsole(commandRunner, environment));
+    }
+
+    SetupDiagnosticReporter(
+            Map<String, String> environment,
+            CommandRunner commandRunner,
+            RecentLogLister recentLogLister,
+            Clock clock,
+            String osName,
+            SetupFailureFollowUp followUp) {
         this.environment = Map.copyOf(environment);
         this.commandRunner = commandRunner;
         this.httpClient = HttpClient.newBuilder().connectTimeout(PROBE_TIMEOUT).build();
@@ -276,6 +293,7 @@ final class SetupDiagnosticReporter {
         this.recentLogLister = recentLogLister;
         this.clock = clock;
         this.osName = osName;
+        this.followUp = followUp;
     }
 
     @FunctionalInterface
@@ -473,15 +491,14 @@ final class SetupDiagnosticReporter {
         if (request.dryRun()) {
             return Optional.empty();
         }
-        Optional<Path> reportPath = write(exception, request);
-        reportPath.ifPresent(path -> {
-            terminal.err().println("Troubleshooting report written: " + path);
-            terminal.err().println("Review it before sharing. It is intended to omit secrets and private context.");
+        Optional<WrittenReport> report = write(exception, request);
+        report.ifPresent(written -> {
+            announce(written, terminal);
             if (!request.nonInteractive()) {
-                offerGithubIssue(path, terminal);
+                followUp.offer(failedSetup(exception, requestArguments(request), written), terminal);
             }
         });
-        return reportPath;
+        return report.map(WrittenReport::path);
     }
 
     private Optional<Path> reportFailure(
@@ -490,19 +507,35 @@ final class SetupDiagnosticReporter {
             Terminal terminal,
             boolean offerIssuePrompt,
             WorkflowPathResolution workflowPathResolution) {
-        Optional<Path> reportPath = write(exception, args, workflowPathResolution);
-        reportPath.ifPresent(path -> {
-            terminal.err().println("Troubleshooting report written: " + path);
-            terminal.err().println("Review it before sharing. It is intended to omit secrets and private context.");
+        Optional<WrittenReport> report = write(exception, args, workflowPathResolution);
+        report.ifPresent(written -> {
+            announce(written, terminal);
             if (offerIssuePrompt) {
-                offerGithubIssue(path, terminal);
+                followUp.offer(failedSetup(exception, args, written), terminal);
             }
         });
-        return reportPath;
+        return report.map(WrittenReport::path);
+    }
+
+    private static void announce(WrittenReport report, Terminal terminal) {
+        terminal.err().println("Troubleshooting report written: " + report.path());
+        terminal.err().println("Review it before sharing. It is intended to omit secrets and private context.");
+    }
+
+    private SetupFailureFollowUp.FailedSetup failedSetup(Exception exception, List<String> args, WrittenReport report) {
+        ToolCommand codex = toolCommand("codex");
+        Optional<CodexInvestigationRunner.CodexCommand> codexCommand =
+                codex.resolved() ? Optional.of(codex::command) : Optional.empty();
+        return new SetupFailureFollowUp.FailedSetup(
+                report.path(), errorCode(exception), commandName(args), report.paths(), codexCommand, this::sanitize);
+    }
+
+    private static String commandName(List<String> args) {
+        return args.stream().filter(arg -> !arg.startsWith("-")).findFirst().orElse("unknown");
     }
 
     Optional<Path> write(Exception exception, List<String> args) {
-        return write(exception, args, workflowPathResolution(args));
+        return write(exception, args, workflowPathResolution(args)).map(WrittenReport::path);
     }
 
     String renderReport(DiagnosticsRequest request, boolean privateContext) throws IOException {
@@ -742,7 +775,7 @@ final class SetupDiagnosticReporter {
         Optional.ofNullable(environment.get("SYMPHONY_TRELLO_CALLER_DIR"))
                 .filter(value -> !value.isBlank())
                 .ifPresent(value -> addMapping(mappings, "local_path", "caller_dir", pathToken(value), value));
-        Optional.ofNullable(environment.get("SYMPHONY_TRELLO_COMMAND"))
+        Optional.ofNullable(environment.get(LocalSetup.COMMAND_ENV))
                 .filter(value -> !value.isBlank())
                 .ifPresent(value -> addMapping(mappings, "local_path", "command", pathToken(value), value));
     }
@@ -966,7 +999,7 @@ final class SetupDiagnosticReporter {
         return request.configDir().map(path -> !path.toString().isBlank()).orElse(true);
     }
 
-    private Optional<Path> write(
+    private Optional<WrittenReport> write(
             Exception exception, List<String> args, WorkflowPathResolution workflowPathResolution) {
         try {
             LocalWorkerPaths paths = LocalWorkerPaths.from(
@@ -978,20 +1011,22 @@ final class SetupDiagnosticReporter {
             Path manifestPath = pathOption(args, "--manifest")
                     .map(path -> resolveUserDataPath(path, paths.configDir()))
                     .orElseGet(paths::manifestPath);
-            return write(exception, args, paths, manifestPath, workflowPathResolution);
+            return write(exception, args, paths, manifestPath, workflowPathResolution)
+                    .map(path -> new WrittenReport(path, paths));
         } catch (RuntimeException | IOException ignored) {
             return Optional.empty();
         }
     }
 
-    private Optional<Path> write(Exception exception, LocalSetupRequest request) {
+    private Optional<WrittenReport> write(Exception exception, LocalSetupRequest request) {
         try {
             LocalWorkerPaths paths = LocalWorkerPaths.from(
                     Optional.empty(), request.configDir(), request.workspaceRoot(), Optional.empty(), environment);
             Path manifestPath = request.manifestPath()
                     .map(path -> resolveUserDataPath(path, paths.configDir()))
                     .orElseGet(paths::manifestPath);
-            return write(exception, requestArguments(request), paths, manifestPath, WorkflowPathResolution.CONFIG_DIR);
+            return write(exception, requestArguments(request), paths, manifestPath, WorkflowPathResolution.CONFIG_DIR)
+                    .map(path -> new WrittenReport(path, paths));
         } catch (RuntimeException | IOException ignored) {
             return Optional.empty();
         }
@@ -1099,7 +1134,7 @@ final class SetupDiagnosticReporter {
     }
 
     private String commandContext() {
-        return environment.containsKey("SYMPHONY_TRELLO_COMMAND")
+        return environment.containsKey(LocalSetup.COMMAND_ENV)
                 ? "effective command after installer wrapper defaults"
                 : "direct command";
     }
@@ -1166,7 +1201,7 @@ final class SetupDiagnosticReporter {
         values.put("caller_dir", environment.getOrDefault("SYMPHONY_TRELLO_CALLER_DIR", ""));
         values.put("repo_url", environment.getOrDefault("SYMPHONY_TRELLO_REPO_URL", ""));
         values.put("ref", environment.getOrDefault("SYMPHONY_TRELLO_REF", ""));
-        values.put("command", environment.getOrDefault("SYMPHONY_TRELLO_COMMAND", ""));
+        values.put("command", environment.getOrDefault(LocalSetup.COMMAND_ENV, ""));
         values.put("wrapper_shell", environment.getOrDefault("SYMPHONY_TRELLO_WRAPPER_SHELL", ""));
         values.forEach((key, value) -> line(body, key, sanitizeInstallerContextValue(key, value)));
         Path context = paths.stateHome().resolve("install-context.properties");
@@ -1190,7 +1225,7 @@ final class SetupDiagnosticReporter {
         Optional.ofNullable(environment.get("SYMPHONY_TRELLO_CALLER_DIR"))
                 .filter(value -> !value.isBlank())
                 .ifPresent(value -> table.row("caller_dir", pathToken(value), value));
-        Optional.ofNullable(environment.get("SYMPHONY_TRELLO_COMMAND"))
+        Optional.ofNullable(environment.get(LocalSetup.COMMAND_ENV))
                 .filter(value -> !value.isBlank())
                 .ifPresent(value -> table.row("command", pathToken(value), value));
         table.appendTo(body);
@@ -2271,51 +2306,6 @@ final class SetupDiagnosticReporter {
         }
     }
 
-    private void offerGithubIssue(Path reportPath, Terminal terminal) {
-        if (SystemConsole.current() == null) {
-            return;
-        }
-        if (!commandRunner.run("gh", "auth", "status").success()) {
-            return;
-        }
-        try {
-            String answer =
-                    terminal.readLine("GitHub CLI is authenticated. Open a GitHub issue with this report? [y/N] ");
-            if (answer == null || !answer.toLowerCase(Locale.ROOT).startsWith("y")) {
-                return;
-            }
-            String body = Files.readString(reportPath);
-            PrintStream out = borrowedOut(terminal); // NOPMD - Terminal owns the stream.
-            out.println();
-            out.println("Issue title:");
-            out.println("Local setup failed");
-            out.println();
-            out.println("Issue body:");
-            out.println(body);
-            String confirm = terminal.readLine("Post this GitHub issue now? [y/N] ");
-            if (confirm == null || !confirm.toLowerCase(Locale.ROOT).startsWith("y")) {
-                return;
-            }
-            CommandResult result = commandRunner.run(
-                    "gh",
-                    "issue",
-                    "create",
-                    "--repo",
-                    "martin-francois/symphony-trello",
-                    "--title",
-                    "Local setup failed",
-                    "--body-file",
-                    reportPath.toString());
-            if (result.success()) {
-                out.println(firstLine(result.output()));
-            } else {
-                terminal.err().println("GitHub issue creation failed: " + sanitize(firstLine(result.output())));
-            }
-        } catch (IOException e) {
-            terminal.err().println("GitHub issue prompt failed: " + sanitize(e.getMessage()));
-        }
-    }
-
     private static List<String> requestArguments(LocalSetupRequest request) {
         List<String> args = new ArrayList<>();
         args.add("setup-local");
@@ -2847,11 +2837,6 @@ final class SetupDiagnosticReporter {
         return "<path:" + hash(path) + ">";
     }
 
-    private static PrintStream borrowedOut(Terminal terminal) {
-        // Terminal owns the stream. Diagnostics can write to it but must not close it.
-        return terminal.out();
-    }
-
     private static String safePathText(Path path) {
         return path == null ? "unavailable" : path.toString();
     }
@@ -2951,7 +2936,7 @@ final class SetupDiagnosticReporter {
         return FileChannel.open(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS);
     }
 
-    private static String firstLine(String value) {
+    static String firstLine(String value) {
         if (value == null || value.isBlank()) {
             return "";
         }
@@ -2979,7 +2964,7 @@ final class SetupDiagnosticReporter {
         body.append(fence).append('\n');
     }
 
-    private static String markdownFence(String content) {
+    static String markdownFence(String content) {
         int longestRun = 0;
         int currentRun = 0;
         for (int index = 0; index < content.length(); index++) {
@@ -3001,7 +2986,7 @@ final class SetupDiagnosticReporter {
         body.append("\n## ").append(title).append("\n\n");
     }
 
-    private static void line(StringBuilder body, String label, Object value) {
+    static void line(StringBuilder body, String label, Object value) {
         body.append("- **").append(label).append(":** ").append(value).append('\n');
     }
 
@@ -3057,6 +3042,8 @@ final class SetupDiagnosticReporter {
     }
 
     private record ToolProbe(String status, String detail) {}
+
+    private record WrittenReport(Path path, LocalWorkerPaths paths) {}
 
     private record ManifestSnapshot(ConnectedBoardManifest manifest, ManifestStatus status) {}
 

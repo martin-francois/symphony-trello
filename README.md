@@ -647,6 +647,21 @@ public-safe checks. Use `--show-private-context` only locally when you need to m
 back to your own board, workflow, log file, or PID/state file. Add `--lookup <token>` when you only
 need one mapping. Do not paste private-context output into public issues.
 
+When a setup or lifecycle command fails in an unexpected way, it writes a sanitized troubleshooting
+report and, in an interactive terminal with GitHub CLI signed in, offers to post it as a GitHub
+issue. Failures you can fix yourself, such as missing credentials, print a next step instead. If
+Codex CLI is installed and signed in, the command first asks whether Codex should investigate the
+failure on your machine. The answer defaults to no. Codex gets the Symphony for Trello version, the
+command name and how it was started, the error code, and the sanitized report. It runs locally, so
+it can read your files and sees local paths through its working directory and writable directories.
+Apart from temporary files, it can change files only in the Symphony config directory and, for a
+source install, the source checkout. It does not commit, push, or post anything. Afterwards the
+command shows the cause Codex found, the files it changed, and the validation it ran. A local
+configuration problem ends with a next step. After a validated fix, you can post an issue that
+describes the failure and the fix. Only sanitized text goes into that issue draft, and you see the
+full draft before you confirm. If Codex is missing, signed out, times out after 15 minutes, or
+fails, the command offers the usual issue instead. `--non-interactive` runs never start Codex.
+
 ## Installer Reference
 
 The installer downloads the latest GitHub Release archive, verifies its SHA3-256 checksum, and
