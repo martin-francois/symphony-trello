@@ -33,16 +33,14 @@ import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.junit.jupiter.api.parallel.Isolated;
 
-/**
- * Replays every standalone fuzzer's checked-in seed corpus through its real {@code fuzzerTestOneInput} entry
- * point and fails if an execution reads or writes a file or a socket. Maven copies each
- * {@code oss-fuzz/corpora/<Fuzzer>} directory to this class's Jazzer regression inputs, see {@code pom.xml}.
- *
- * <p>Java Flight Recorder records file and socket I/O for the whole JVM, so each execution is wrapped in a
- * {@link FuzzerExecution} event and only I/O on the same thread inside that event counts. The class runs
- * isolated because other test classes would flood the JVM-wide recording with their own file events, and
- * its methods share one recording, so they run on one thread. The replay takes a few seconds.
- */
+/// Replays every standalone fuzzer's checked-in seed corpus through its real `fuzzerTestOneInput` entry
+/// point and fails if an execution reads or writes a file or a socket. Maven copies each
+/// `oss-fuzz/corpora/<Fuzzer>` directory to this class's Jazzer regression inputs, see `pom.xml`.
+///
+/// Java Flight Recorder records file and socket I/O for the whole JVM, so each execution is wrapped in a
+/// [FuzzerExecution] event and only I/O on the same thread inside that event counts. The class runs
+/// isolated because other test classes would flood the JVM-wide recording with their own file events, and
+/// its methods share one recording, so they run on one thread. The replay takes a few seconds.
 @Execution(ExecutionMode.SAME_THREAD)
 @Isolated
 final class StandaloneFuzzerIsolationTest {
@@ -165,7 +163,7 @@ final class StandaloneFuzzerIsolationTest {
         assertThat(replayedSeeds)
                 .as("each oss-fuzz/corpora directory needs a @FuzzTest method named after its fuzzer in lower"
                         + " camel case and a matching testResource mapping in pom.xml")
-                .isEqualTo(corpusSeeds);
+                .containsExactlyInAnyOrderEntriesOf(corpusSeeds);
     }
 
     @Test
@@ -237,7 +235,7 @@ final class StandaloneFuzzerIsolationTest {
         String target;
 
         static FuzzerExecution starting(Class<?> target) {
-            FuzzerExecution execution = new FuzzerExecution();
+            var execution = new FuzzerExecution();
             execution.target = target.getSimpleName();
             execution.begin();
             return execution;

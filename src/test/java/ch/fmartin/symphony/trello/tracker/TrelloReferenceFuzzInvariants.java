@@ -91,11 +91,9 @@ public final class TrelloReferenceFuzzInvariants {
         }
     }
 
-    /**
-     * Checks properties that compare the classification of {@code checklist} with related checklists: item
-     * order must not change the outcome, and a checklist rebuilt from the normalized prerequisite URLs must
-     * classify to the same prerequisites.
-     */
+    /// Checks properties that compare the classification of `checklist` with related checklists: item
+    /// order must not change the outcome, and a checklist rebuilt from the normalized prerequisite URLs must
+    /// classify to the same prerequisites.
     public static void assertChecklistClassificationIsStable(
             Card.Checklist checklist, ChecklistClassificationResult result) {
         ChecklistClassificationResult reversed = analyzeChecklist(new Card.Checklist(

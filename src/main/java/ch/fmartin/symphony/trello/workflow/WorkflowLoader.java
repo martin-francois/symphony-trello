@@ -36,10 +36,8 @@ public class WorkflowLoader {
         return parse(absolute, content);
     }
 
-    /**
-     * Parses workflow file content as if {@link #load(Path)} had read it from {@code path}. Fuzz targets
-     * call this directly so each input is parsed in memory instead of through a temporary file.
-     */
+    /// Parses workflow file content as if [#load(Path)] had read it from `path`. Fuzz targets
+    /// call this directly so each input is parsed in memory instead of through a temporary file.
     public WorkflowDefinition parse(Path path, byte[] content) {
         Path absolute = path.toAbsolutePath().normalize();
         String markdown;
