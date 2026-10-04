@@ -238,7 +238,9 @@ final class WorkflowConfigEditor {
             }
             return TrelloBoardSetup.RepositoryDefaults.preserved(
                     optionalString(repository.get("default_url")).orElse(null),
-                    optionalString(repository.get("default_path")).orElse(null));
+                    optionalString(repository.get("default_path")).orElse(null),
+                    repository.get("codex_review_before_handoff"),
+                    repository.get("codex_review_max_cycles"));
         } catch (IOException | RuntimeException ignored) {
             return TrelloBoardSetup.RepositoryDefaults.empty();
         }

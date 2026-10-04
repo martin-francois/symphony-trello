@@ -14,7 +14,7 @@ final class RepositoryDefaultSummaryTest {
         // given
         var output = new ByteArrayOutputStream();
         TrelloBoardSetup.RepositoryDefaults defaults =
-                TrelloBoardSetup.RepositoryDefaults.preserved(null, "$SYNTHETIC_REPOSITORY_PATH");
+                TrelloBoardSetup.RepositoryDefaults.preserved(null, "$SYNTHETIC_REPOSITORY_PATH", null, null);
 
         // when
         RepositoryDefaultSummary.printDirect(

@@ -16,6 +16,7 @@ public record TypedWorkflowConfig(
         WorkflowIntegerSetting codexReadTimeoutMs,
         WorkflowIntegerSetting codexStallTimeoutMs,
         WorkflowIntegerSetting serverPort,
+        WorkflowIntegerSetting repositoryCodexReviewMaxCycles,
         Map<String, Integer> priorityLabels,
         Map<String, Integer> maxConcurrentAgentsByState,
         List<WorkflowConfigFinding> findings) {

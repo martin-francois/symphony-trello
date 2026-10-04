@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.fmartin.symphony.trello.repository.CodexReviewPrompt;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -126,6 +127,30 @@ final class CodexSkillStructureTest {
                 .contains("time reproducing that unrelated failure locally")
                 .contains("flaky-check caveat")
                 .contains("Repeat the sweep until no actionable comments remain");
+    }
+
+    @Test
+    void publicationSkillsFollowTheOptionalCodexReviewSectionBeforeLocalChecksAndHandoff() throws IOException {
+        // given
+        String runtimeSection = "`" + CodexReviewPrompt.TITLE + "` section";
+
+        // when
+        String pushPr = readSkillMetadata(SKILLS_ROOT.resolve("push-pr").resolve("SKILL.md"))
+                .body();
+        String handoff = readSkillMetadata(SKILLS_ROOT.resolve("trello-handoff").resolve("SKILL.md"))
+                .body();
+
+        // then
+        assertThat(pushPr)
+                .containsIgnoringWhitespaces("runtime " + runtimeSection + ", finish that review loop first")
+                .containsSubsequence(
+                        "finish that review loop first", "Then run the required local checks", "4. Push normally:")
+                .containsIgnoringWhitespaces("including CI-equivalent local checks when CI cannot run")
+                .containsIgnoringWhitespaces(
+                        "has a " + runtimeSection + " and its review loop has not run for the current candidate");
+        assertThat(handoff)
+                .containsIgnoringWhitespaces(
+                        "has a " + runtimeSection + ", also record the review loop outcome it asks for");
     }
 
     @Test
