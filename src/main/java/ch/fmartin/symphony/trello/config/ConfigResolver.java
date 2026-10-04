@@ -17,6 +17,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.function.Function;
@@ -124,8 +125,8 @@ public class ConfigResolver {
                                 ConfigDefaults.DEFAULT_TRACKER_API_RETRY_BASE_DELAY_MS)),
                 new EffectiveConfig.PollingConfig(positiveMillis(
                         typedWorkflow.pollingIntervalMs(), "interval_ms", ConfigDefaults.DEFAULT_POLLING_INTERVAL_MS)),
-                new EffectiveConfig.WorkspaceConfig(
-                        path(workflow.path().getParent(), string(workspace, "root", systemTempRoot()))),
+                new EffectiveConfig.WorkspaceConfig(path(
+                        workflow.path().getParent(), "workspace.root", string(workspace, "root", systemTempRoot()))),
                 repositoryConfig(workflow.path().getParent(), repository),
                 new EffectiveConfig.HooksConfig(
                         string(hooks, "after_create", null),
@@ -308,7 +309,7 @@ public class ConfigResolver {
     }
 
     private String fileSecret(Path workflowDirectory, String displayName, String configuredPath) {
-        Path secretPath = path(workflowDirectory, configuredPath);
+        Path secretPath = path(workflowDirectory, displayName + " secret file", configuredPath);
         try {
             long size = secretFiles.size(secretPath);
             if (size > MAX_SECRET_BYTES) {
@@ -389,6 +390,11 @@ public class ConfigResolver {
             return defaultValue;
         }
         if (value instanceof List<?> list) {
+            // YAML turns an empty list item such as "- " into null. List.contains(null) throws for
+            // immutable lists, so the check streams instead.
+            if (list.stream().anyMatch(Objects::isNull)) {
+                throw new ConfigException("config_type_error", key + " must not contain empty items");
+            }
             return list.stream().map(Object::toString).toList();
         }
         return List.of(value.toString());
@@ -400,36 +406,32 @@ public class ConfigResolver {
 
     private List<Path> additionalWritableRoots(Path workflowDirectory, Map<String, Object> codex) {
         Stream<Path> configuredRoots = list(codex, "additional_writable_roots", List.of()).stream()
-                .map(value -> path(workflowDirectory, value));
+                .map(value -> path(workflowDirectory, "codex.additional_writable_roots", value));
         Stream<Path> environmentRoots = environmentValue(ADDITIONAL_WRITABLE_ROOTS_ENVIRONMENT).stream()
                 .flatMap(PATH_SEPARATOR::splitToStream)
                 .map(String::trim)
                 .filter(value -> !value.isBlank())
-                .map(value -> path(workflowDirectory, value));
+                .map(value -> path(workflowDirectory, ADDITIONAL_WRITABLE_ROOTS_ENVIRONMENT, value));
         return Stream.concat(configuredRoots, environmentRoots).distinct().toList();
     }
 
-    private Path path(Path workflowDirectory, String value) {
+    private Path path(Path workflowDirectory, String setting, String value) {
         String expanded = expandPath(value);
-        Path path = Path.of(expanded);
+        Path path;
+        try {
+            path = Path.of(expanded);
+        } catch (InvalidPathException e) {
+            throw new ConfigException("config_value_error", setting + " must be a valid local path", e);
+        }
         if (!path.isAbsolute()) {
             path = workflowDirectory.resolve(path);
         }
         return path.toAbsolutePath().normalize();
     }
 
-    private Path optionalPath(Path workflowDirectory, Map<String, Object> root, String key) {
-        String configured = optionalString(root, key);
-        String resolved = optionalEnvironmentPathValue(configured);
-        return resolved == null ? null : path(workflowDirectory, resolved);
-    }
-
     private Path optionalRepositoryPath(Path workflowDirectory, Map<String, Object> repository) {
-        try {
-            return optionalPath(workflowDirectory, repository, "default_path");
-        } catch (InvalidPathException e) {
-            throw new ConfigException("config_value_error", "repository.default_path must be a valid local path", e);
-        }
+        String resolved = optionalEnvironmentPathValue(optionalString(repository, "default_path"));
+        return resolved == null ? null : path(workflowDirectory, "repository.default_path", resolved);
     }
 
     private String optionalEnvironmentPathValue(String configured) {
