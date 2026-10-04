@@ -633,7 +633,7 @@ Fields:
 
 Fields:
 
-- `root` (path string or `$VAR`)
+- `root` (path string, `$VAR`, or `${VAR}`)
   - Default: `<system-temp>/symphony_workspaces`
   - `~` is expanded.
   - A leading `$VAR` or `${VAR}` whose variable is unset or blank fails configuration, as described
@@ -1244,7 +1244,11 @@ Value coercion semantics:
 
 - Path/command fields support:
   - `~` home expansion
-  - `$VAR` expansion for env-backed path values
+  - `$VAR` and `${VAR}` expansion for env-backed path values. The reference is the whole value or
+    its first segment up to the first `/`, so `$VAR`, `${VAR}`, `$VAR/suffix`, and `${VAR}/suffix`
+    all expand, and the suffix is appended to the variable's value. The variable name starts with a
+    letter or `_` and continues with letters, digits, or `_`. Other shapes, such as
+    `${VAR:-default}/suffix`, `$VAR-suffix`, or a reference after the first segment, stay literal.
   - Apply expansion only to values intended to be local filesystem paths; do not rewrite URIs or
     arbitrary shell command strings.
   - When a path value starts with `$VAR` or `${VAR}` and the variable is unset or blank, the value
@@ -3504,6 +3508,7 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
   `workspace.root`, `codex.additional_writable_roots`, `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`,
   or a `file:` secret path fails configuration and names the setting and the variable, and in
   `repository.default_path` it resolves to absent
+- Path values expand a leading `${VAR}` or `${VAR}/suffix` the same way as `$VAR` and `$VAR/suffix`
 - `~` path expansion works
 - `tracker.blocker_enforced_states` defaults and normalization work
 - Tracker list-role overlap validation rejects one Trello list used by two roles and allows the

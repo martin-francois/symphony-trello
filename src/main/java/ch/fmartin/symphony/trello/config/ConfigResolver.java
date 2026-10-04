@@ -445,23 +445,11 @@ public class ConfigResolver {
         if (configured == null) {
             return null;
         }
-        Optional<String> reference = EnvironmentReferences.referenceName(configured);
-        if (reference.isPresent()) {
-            return nonBlankEnvironmentValue(reference.get()).orElse(null);
-        }
-        if (configured.startsWith("$")) {
-            int separator = configured.indexOf('/');
-            if (separator > 1) {
-                String name = configured.substring(1, separator);
-                if (EnvironmentReferences.referenceName("$" + name).isPresent()) {
-                    String suffix = configured.substring(separator);
-                    return nonBlankEnvironmentValue(name)
-                            .map(value -> value + suffix)
-                            .orElse(null);
-                }
-            }
-        }
-        return configured;
+        // An unset or blank variable yields an absent path; a value without a reference stays as written.
+        return EnvironmentReferences.pathReference(configured)
+                .map(reference -> reference.resolve(this::nonBlankEnvironmentValue))
+                .orElseGet(() -> Optional.of(configured))
+                .orElse(null);
     }
 
     private Optional<String> nonBlankEnvironmentValue(String environmentName) {
@@ -469,24 +457,10 @@ public class ConfigResolver {
     }
 
     public static String expandPath(String value, Function<String, Optional<String>> environmentResolver) {
-        String expanded = value;
-        if (expanded.startsWith("~/")) {
-            expanded = System.getProperty("user.home") + expanded.substring(1);
-        }
-        if (expanded.startsWith("$") && expanded.indexOf('/') < 0) {
-            expanded = EnvironmentReferences.referenceName(expanded)
-                    .flatMap(environmentResolver)
-                    .orElse(expanded);
-        } else if (expanded.startsWith("$")) {
-            int separator = expanded.indexOf('/');
-            String reference = expanded.substring(0, separator);
-            String suffix = expanded.substring(separator);
-            expanded = EnvironmentReferences.referenceName(reference)
-                    .flatMap(environmentResolver)
-                    .map(envValue -> envValue + suffix)
-                    .orElse(expanded);
-        }
-        return expanded;
+        String homeExpanded = value.startsWith("~/") ? System.getProperty("user.home") + value.substring(1) : value;
+        return EnvironmentReferences.pathReference(homeExpanded)
+                .flatMap(reference -> reference.resolve(environmentResolver))
+                .orElse(homeExpanded);
     }
 
     private String expandPath(String value) {
