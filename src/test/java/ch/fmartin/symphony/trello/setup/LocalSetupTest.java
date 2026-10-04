@@ -7288,13 +7288,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        var loadedWorkflow = new WorkflowLoader().load(workflow);
         result.assertSuccess();
-        assertThat(loadedWorkflow.config())
-                .containsKeys("tracker", "codex")
-                .extractingByKey("codex")
-                .asString()
-                .contains(allowedPath.toString());
+        assertThat(new WorkflowLoader().load(workflow).config()).containsKeys("tracker", "codex");
+        assertThatWorkflow(workflow).hasAdditionalWritableRoot(allowedPath);
         assertThat(workflow).content(StandardCharsets.UTF_8).doesNotStartWith("---\n---\n");
     }
 

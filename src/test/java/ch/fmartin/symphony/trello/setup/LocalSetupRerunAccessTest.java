@@ -229,8 +229,8 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
 
         // then
         result.assertSuccess().stdoutContains("Choose the Trello board to update:");
-        assertThatWorkflow(firstWorkflow).doesNotContain(allowedPath.toString());
-        assertThatWorkflow(secondWorkflow).contains(allowedPath.toString());
+        assertThatWorkflow(firstWorkflow).hasNoAdditionalWritableRoot(allowedPath);
+        assertThatWorkflow(secondWorkflow).hasAdditionalWritableRoot(allowedPath);
     }
 
     @Test
@@ -339,8 +339,8 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
         // then
         result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_board_selection_required", "Re-run with --board NAME");
-        assertThatWorkflow(firstWorkflow).doesNotContain(allowedPath.toString());
-        assertThatWorkflow(secondWorkflow).doesNotContain(allowedPath.toString());
+        assertThatWorkflow(firstWorkflow).hasNoAdditionalWritableRoot(allowedPath);
+        assertThatWorkflow(secondWorkflow).hasNoAdditionalWritableRoot(allowedPath);
     }
 
     @Test
@@ -366,7 +366,7 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
 
         // then
         result.assertFailure(SETUP_FAILURE).stderrContains("setup_mixed_codex_access_update", "--server-port");
-        assertThatWorkflow(workflow).doesNotContain(allowedPath.toString(), "19000");
+        assertThatWorkflow(workflow).hasNoAdditionalWritableRoot(allowedPath).doesNotHaveServerPort(19000);
         assertThat(commands.startedWorkflows).isEmpty();
         assertThat(commands.stoppedWorkflows).isEmpty();
     }
@@ -429,7 +429,7 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
 
         // then
         result.assertFailure(SETUP_FAILURE).stderrContains("setup_worker_untracked", "no managed pid");
-        assertThatWorkflow(workflow).doesNotContain(allowedPath.toString());
+        assertThatWorkflow(workflow).hasNoAdditionalWritableRoot(allowedPath);
         assertThat(commands.startedWorkflows).isEmpty();
         assertThat(commands.stoppedWorkflows).isEmpty();
     }
@@ -480,6 +480,6 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
         firstResult.assertSuccess();
         result.assertSuccess().stdoutContains("Board connected: \"Imported Queue\"");
         assertThat(trello.boardLookups()).anySatisfy(path -> assertThat(path).contains("/1/boards/newabc"));
-        assertThatWorkflow(importedWorkflow).contains(allowedPath.toString());
+        assertThatWorkflow(importedWorkflow).hasAdditionalWritableRoot(allowedPath);
     }
 }
