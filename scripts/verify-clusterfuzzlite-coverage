@@ -11,6 +11,7 @@ target_contracts=(
   "RepositorySourceFuzzer|src/main/java/ch/fmartin/symphony/trello/repository/RepositorySourceResolver.java"
   "TrelloCardReferenceParserFuzzer|src/main/java/ch/fmartin/symphony/trello/tracker/TrelloCardReferenceParser.java"
   "TrelloChecklistClassifierFuzzer|src/main/java/ch/fmartin/symphony/trello/tracker/TrelloChecklistClassifier.java"
+  "TrelloHandoffToolFuzzer|src/main/java/ch/fmartin/symphony/trello/agent/TrelloHandoffToolHandler.java"
   "WorkflowLoaderFuzzer|src/main/java/ch/fmartin/symphony/trello/workflow/WorkflowLoader.java"
 )
 

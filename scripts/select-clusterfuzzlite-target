@@ -3,24 +3,25 @@
 set -euo pipefail
 
 selected_target="${1:-}"
+full_share_seconds="${2:-}"
 build_out="${CFL_BUILD_OUT:-build-out}"
-fuzz_targets=(
-  RepositorySourceFuzzer
-  TrelloCardReferenceParserFuzzer
-  TrelloChecklistClassifierFuzzer
-  WorkflowLoaderFuzzer
+# A batch cycle fuzzes for four full shares in total, however many targets it runs (ADR 0078). Each
+# target gets that aggregate in proportion to its weight, so adding a target never grows the cycle.
+aggregate_full_shares=4
+declare -A budget_weights=(
+  [RepositorySourceFuzzer]=1
+  [TrelloCardReferenceParserFuzzer]=1
+  [TrelloChecklistClassifierFuzzer]=1
+  [TrelloHandoffToolFuzzer]=1
+  [WorkflowLoaderFuzzer]=1
 )
 
-target_is_known=false
-for fuzz_target in "${fuzz_targets[@]}"; do
-  if [[ "$fuzz_target" == "$selected_target" ]]; then
-    target_is_known=true
-    break
-  fi
-done
-
-if [[ "$target_is_known" != true ]]; then
+if [[ -z "$selected_target" || -z "${budget_weights[$selected_target]+known}" ]]; then
   echo "Unknown ClusterFuzzLite target: $selected_target" >&2
+  exit 2
+fi
+if [[ ! "$full_share_seconds" =~ ^[1-9][0-9]*$ ]]; then
+  echo "Full-share fuzzing seconds must be a positive whole number: $full_share_seconds" >&2
   exit 2
 fi
 if [[ ! -x "$build_out/$selected_target" ]]; then
@@ -35,7 +36,7 @@ if [[ ! -w "$build_out" ]]; then
   sudo chown -R -- "$(id -u):$(id -g)" "$build_out"
 fi
 
-for fuzz_target in "${fuzz_targets[@]}"; do
+for fuzz_target in "${!budget_weights[@]}"; do
   if [[ "$fuzz_target" == "$selected_target" ]]; then
     continue
   fi
@@ -45,3 +46,14 @@ for fuzz_target in "${fuzz_targets[@]}"; do
     "$build_out/$fuzz_target.options" \
     "$build_out/${fuzz_target}_seed_corpus.zip"
 done
+
+total_weight=0
+for weight in "${budget_weights[@]}"; do
+  total_weight=$((total_weight + weight))
+done
+# Round up so a one-second smoke run still fuzzes every target.
+fuzz_seconds=$(((full_share_seconds * aggregate_full_shares * budget_weights[$selected_target] + total_weight - 1) / total_weight))
+echo "Selected $selected_target for $fuzz_seconds seconds of batch fuzzing."
+if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+  printf 'fuzz_seconds=%s\n' "$fuzz_seconds" >>"$GITHUB_OUTPUT"
+fi
