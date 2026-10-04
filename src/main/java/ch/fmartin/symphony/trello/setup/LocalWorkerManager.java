@@ -1173,11 +1173,8 @@ final class LocalWorkerManager {
             Optional<Path> explicitWorkflowEnvPath,
             Path fallbackWorkflowEnvPath,
             boolean validateServerPort) {
-        if (board.isPresent() && workflow.isPresent()) {
-            throw new TrelloBoardSetupException(
-                    "setup_worker_selection_conflict", "--board and --workflow cannot be used together.");
-        }
-        return board.map(selector -> selectedBoard(manifest, selector))
+        ConnectedBoardSelection.rejectConflictingSelectors(board, workflow);
+        return board.map(selector -> ConnectedBoardSelection.byBoard(manifest, selector))
                 .or(() -> workflow.map(workflowSelector -> selectedWorkflow(
                         manifest,
                         workflowSelector,
@@ -1187,20 +1184,6 @@ final class LocalWorkerManager {
                 .orElseGet(() -> defaultSelectedBoard(manifest, command));
     }
 
-    private ConnectedBoard selectedBoard(ConnectedBoardManifest manifest, String selector) {
-        List<ConnectedBoard> matches = manifest.findAllByBoard(selector);
-        if (matches.isEmpty()) {
-            throw new TrelloBoardSetupException(
-                    "setup_worker_board_not_found", "No connected Trello board matches \"" + selector + "\".");
-        }
-        if (matches.size() > 1) {
-            throw new TrelloBoardSetupException(
-                    "setup_worker_board_ambiguous",
-                    "Multiple connected boards match --board. Re-run with a board id, short link, or --workflow.");
-        }
-        return matches.getFirst();
-    }
-
     private ConnectedBoard selectedWorkflow(
             ConnectedBoardManifest manifest,
             Path workflowSelector,
@@ -1208,16 +1191,9 @@ final class LocalWorkerManager {
             Path fallbackWorkflowEnvPath,
             boolean validateServerPort) {
         Path workflowPath = workflowSelector.toAbsolutePath().normalize();
-        List<ConnectedBoard> matches = manifest.findAllByWorkflow(workflowPath);
-        if (matches.size() > 1) {
-            throw new TrelloBoardSetupException(
-                    "setup_worker_workflow_ambiguous",
-                    "Multiple connected-board rows reference --workflow. Repair "
-                            + ConnectedBoardManifest.FILE_NAME
-                            + ", then rerun the command.");
-        }
         Path validationEnvPath = explicitWorkflowEnvPath.orElse(fallbackWorkflowEnvPath);
-        ConnectedBoard board = matches.isEmpty() ? workflowBoard(workflowPath, validationEnvPath) : matches.getFirst();
+        ConnectedBoard board = ConnectedBoardSelection.byWorkflow(manifest, workflowPath)
+                .orElseGet(() -> workflowBoard(workflowPath, validationEnvPath));
         validateExplicitWorkflowSelector(
                 workflowPath,
                 selectedWorkflowEnvPath(board, explicitWorkflowEnvPath, fallbackWorkflowEnvPath),
