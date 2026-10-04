@@ -13,7 +13,7 @@ import java.util.Optional;
 /// Names the underlying cause in setup and lifecycle failure messages, so a transient filesystem or
 /// network failure can be diagnosed from one occurrence. Setup code that turns an I/O or transport
 /// failure into a [TrelloBoardSetupException], a usage error, or a warning renders the cause through
-/// this class. docs/adr/0083-setup-failure-cause-summaries.md records the convention and the
+/// this class. docs/adr/0086-setup-failure-cause-summaries.md records the convention and the
 /// rejected alternatives.
 final class SetupFailureCauses {
     private SetupFailureCauses() {}
