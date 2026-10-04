@@ -6,7 +6,7 @@ Jazzer tests in regression mode, so fixed crash inputs stay part of the regular 
 Run the focused fuzzing and chaos tests:
 
 ```bash
-./mvnw -q -Dtest=RepositorySourceResolverFuzzTest,TrelloCardReferenceParserFuzzTest,WorkflowLoaderFuzzTest,TrelloClientChaosTest test
+./mvnw -q -Dtest=RepositorySourceResolverFuzzTest,TrelloCardReferenceParserFuzzTest,WorkflowLoaderFuzzTest,StandaloneFuzzerIsolationTest,TrelloClientChaosTest test
 ```
 
 Run one target in active fuzzing mode:
@@ -191,6 +191,34 @@ The JUnit fuzz tests and standalone OSS-Fuzz targets are related but separate:
 - `RepositorySourceFuzzer`, `WorkflowLoaderFuzzer`, `TrelloCardReferenceParserFuzzer`, and
   `TrelloChecklistClassifierFuzzer` are standalone `fuzzerTestOneInput` entry points. OSS-Fuzz wraps
   and runs these classes from compiled test output.
+- `StandaloneFuzzerIsolationTest` replays each standalone target's `oss-fuzz/corpora/` seeds through
+  its real entry point in Jazzer regression mode. `pom.xml` maps each corpus directory to that class's
+  regression inputs, so a new target needs a corpus, a mapping, and a `@FuzzTest` method named after it.
+
+Both kinds of target check the same properties. A target that only checks for uncaught exceptions
+misses wrong results, so each harness asserts what the parser must produce:
+
+| Harness | Properties | Why |
+| --- | --- | --- |
+| `WorkflowLoaderFuzzer`, `WorkflowLoaderFuzzTest` | Same bytes give the same result. Invalid UTF-8, and nothing else, fails as `missing_workflow_file`. Every other failure uses a specified error code and a one-line message. Markdown without front matter has an empty config and the whole trimmed text as prompt. Unclosed front matter is a parse error. The prompt is trimmed and survives a second parse after it is wrapped in empty front matter. The config has at most four keys and values per input byte. | `SPEC.md` section 5.2 defines these rules. The size bound fails if the YAML parser starts expanding aliases, which can turn a few kilobytes into an exponential config. |
+| `TrelloCardReferenceParserFuzzer`, `trelloReferenceParsingKeepsLookupIdsAndUrlsStable` | Lookup ids are alphanumeric, URLs are normalized, and `containsTrelloCardUrl` agrees with the parsed references. The normalized URLs parse back to the same references, each URL is an exact reference to itself, and the number of references fits the text length. | Prerequisite lookups and prompts use the normalized URL, so it must identify the same card when parsed again. |
+| `TrelloChecklistClassifierFuzzer`, `checklistClassificationNeverEmitsPrerequisitesWithProblems` | A checklist with a problem has no prerequisites and only known problem codes. Reversing the items reverses the prerequisites and keeps the problems. A checklist rebuilt from the prerequisite URLs classifies to the same result. | The scheduler must not depend on item order, and a prerequisite it reports must survive being written back as a URL. |
+| `RepositorySourceFuzzer`, `RepositorySourceResolverFuzzTest` | Selected sources, identities, paths, and problems contain no control or line-separator characters. A selected URI has a usable port. | These values become prompt lines and clone targets. Their input generation is changing in [#691](https://github.com/martin-francois/symphony-trello/issues/691), so their properties stay as they are here. |
+
+Byte and text inputs are capped at 8 KiB and 2,048 characters. The YAML parser rejects nesting
+deeper than 1,000 levels, and `WorkflowLoaderFuzzTest` keeps a 4,000-level seed that must fail as
+`workflow_parse_error` instead of overflowing the stack.
+
+No target may touch files, the network, or user configuration. `WorkflowLoaderFuzzer` calls
+`WorkflowLoader.parse(Path, byte[])` instead of writing each input to a temporary file.
+`StandaloneFuzzerIsolationTest` records file and socket reads and writes with Java Flight Recorder
+while the seeds replay and fails on any that happen inside a target execution, apart from class
+loading. During ClusterFuzzLite and OSS-Fuzz runs, Jazzer's `ServerSideRequestForgery` detector
+reports every network connection as a finding. The same test fails if the fuzzing build files
+disable that detector. In JUnit regression mode the detector loads but does not fail on a
+connection, which is why the replay test records socket I/O itself.
+[ADR 0091](adr/0091-fuzz-harness-properties-and-isolation.md) records these choices and the
+throughput measurements behind them.
 
 The OSS-Fuzz runtime classpath is deliberately narrower than Maven's test classpath. The build
 script copies production classes to `$OUT/classes`, only the standalone fuzzer classes and their

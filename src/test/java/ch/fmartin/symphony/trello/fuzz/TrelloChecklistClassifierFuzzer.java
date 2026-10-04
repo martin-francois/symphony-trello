@@ -13,5 +13,6 @@ public final class TrelloChecklistClassifierFuzzer {
         TrelloReferenceFuzzInvariants.ChecklistClassificationResult result =
                 TrelloReferenceFuzzInvariants.analyzeChecklist(checklist);
         TrelloReferenceFuzzInvariants.assertChecklistClassificationNeverEmitsPrerequisitesWithProblems(result);
+        TrelloReferenceFuzzInvariants.assertChecklistClassificationIsStable(checklist, result);
     }
 }
