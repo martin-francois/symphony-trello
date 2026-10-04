@@ -18,6 +18,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.function.Function;
@@ -443,6 +444,11 @@ public class ConfigResolver {
             return defaultValue;
         }
         if (value instanceof List<?> list) {
+            // YAML turns an empty list item such as "- " into null. List.contains(null) throws for
+            // immutable lists, so the check streams instead.
+            if (list.stream().anyMatch(Objects::isNull)) {
+                throw new ConfigException("config_type_error", key + " must not contain empty items");
+            }
             return list.stream().map(Object::toString).toList();
         }
         return List.of(value.toString());
@@ -470,6 +476,7 @@ public class ConfigResolver {
     private Path pathFailingOnMissingVariable(Path workflowDirectory, String setting, String value) {
         return absolutePath(
                 workflowDirectory,
+                setting,
                 expandPath(value, environmentName -> Optional.of(requiredPathVariable(setting, environmentName))));
     }
 
@@ -480,26 +487,22 @@ public class ConfigResolver {
                         setting + MISSING_PATH_ENVIRONMENT_MARKER + environmentName));
     }
 
-    private static Path absolutePath(Path workflowDirectory, String expanded) {
-        Path path = Path.of(expanded);
+    private static Path absolutePath(Path workflowDirectory, String setting, String expanded) {
+        Path path;
+        try {
+            path = Path.of(expanded);
+        } catch (InvalidPathException e) {
+            throw new ConfigException("config_value_error", setting + " must be a valid local path", e);
+        }
         if (!path.isAbsolute()) {
             path = workflowDirectory.resolve(path);
         }
         return path.toAbsolutePath().normalize();
     }
 
-    private Path optionalPath(Path workflowDirectory, Map<String, Object> root, String key) {
-        String configured = optionalString(root, key);
-        String resolved = optionalEnvironmentPathValue(configured);
-        return resolved == null ? null : absolutePath(workflowDirectory, expandPath(resolved));
-    }
-
     private Path optionalRepositoryPath(Path workflowDirectory, Map<String, Object> repository) {
-        try {
-            return optionalPath(workflowDirectory, repository, "default_path");
-        } catch (InvalidPathException e) {
-            throw new ConfigException("config_value_error", "repository.default_path must be a valid local path", e);
-        }
+        String resolved = optionalEnvironmentPathValue(optionalString(repository, "default_path"));
+        return resolved == null ? null : absolutePath(workflowDirectory, "repository.default_path", expandPath(resolved));
     }
 
     private String optionalEnvironmentPathValue(String configured) {

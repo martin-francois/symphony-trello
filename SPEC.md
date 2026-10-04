@@ -1378,6 +1378,15 @@ Extension fields are documented in the section that defines them. Core conforman
 recognizing or validating extension fields unless that extension or conformance profile is
 implemented.
 
+In this Java implementation, a `tracker` or `trello_tools` list field that contains an empty item,
+such as a YAML `-` entry with no value, fails with `config_type_error`. A path field whose resolved
+value the platform rejects as a path, for example because it contains a NUL character, fails with
+`config_value_error` and names the field. This covers `workspace.root`,
+`codex.additional_writable_roots`, `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`, `file:` secret paths,
+and `repository.default_path` when no `repository.default_url` is set. When `repository.default_url`
+is set, the URL stays the selected source, and resolution drops an unusable `repository.default_path`
+as a checkout candidate instead of failing.
+
 - `tracker.kind`: string, REQUIRED, currently `trello`
 - `tracker.endpoint`: string, must be an absolute `http(s)` URL with a host, default
   `https://api.trello.com/1` when `tracker.kind=trello`
@@ -3746,6 +3755,9 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
   `repository.default_path` it resolves to absent
 - Path values expand a leading `${VAR}` or `${VAR}/suffix` the same way as `$VAR` and `$VAR/suffix`
 - `~` path expansion works
+- An empty item in a `tracker` or `trello_tools` list field returns `config_type_error`, and a path
+  field the platform rejects returns `config_value_error` naming the field, except a
+  `repository.default_path` next to a configured `repository.default_url`, which resolution drops
 - `tracker.blocker_enforced_states` defaults and normalization work
 - Tracker list-role overlap validation rejects one Trello list used by two roles and allows the
   in-progress pickup list inside the active lists
