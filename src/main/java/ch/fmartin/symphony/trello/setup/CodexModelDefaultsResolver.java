@@ -4,6 +4,7 @@ import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNSAFE_SINGLE_LIN
 import static ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.blank;
 import static com.google.common.base.Preconditions.checkArgument;
 
+import ch.fmartin.symphony.trello.process.ExecutableResolver;
 import ch.fmartin.symphony.trello.process.ProcessEnvironment;
 import ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.CatalogModel;
 import ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.ReasoningEffortOption;
@@ -42,6 +43,7 @@ final class CodexModelDefaultsResolver {
     private final List<String> command;
     private final Map<String, String> environment;
     private final Duration readTimeout;
+    private final String osName;
 
     CodexModelDefaultsResolver(ObjectMapper json) {
         this(json, List.of("codex", "app-server"));
@@ -57,10 +59,20 @@ final class CodexModelDefaultsResolver {
 
     CodexModelDefaultsResolver(
             ObjectMapper json, List<String> command, Map<String, String> environment, Duration readTimeout) {
+        this(json, command, environment, readTimeout, System.getProperty("os.name"));
+    }
+
+    CodexModelDefaultsResolver(
+            ObjectMapper json,
+            List<String> command,
+            Map<String, String> environment,
+            Duration readTimeout,
+            String osName) {
         this.json = json;
         this.command = List.copyOf(command);
         this.environment = Map.copyOf(environment);
         this.readTimeout = readTimeout;
+        this.osName = osName;
     }
 
     CodexModelDefaults resolve() {
@@ -79,9 +91,10 @@ final class CodexModelDefaultsResolver {
     }
 
     private CodexModelSelectionDefaults queryAppServer() throws IOException, InterruptedException {
-        ProcessBuilder processBuilder = new ProcessBuilder(command).redirectError(ProcessBuilder.Redirect.DISCARD);
+        ProcessBuilder processBuilder = new ProcessBuilder().redirectError(ProcessBuilder.Redirect.DISCARD);
         processBuilder.environment().putAll(environment);
         ProcessEnvironment.removeDefaultSecrets(processBuilder);
+        processBuilder.command(new ExecutableResolver(processBuilder.environment(), osName).launchCommand(command));
         Process process = processBuilder.start();
         var reader = new AppServerResponseReader(process.getInputStream());
         try (var writer = process.outputWriter(StandardCharsets.UTF_8)) {

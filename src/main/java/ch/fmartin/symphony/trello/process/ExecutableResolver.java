@@ -1,7 +1,9 @@
 package ch.fmartin.symphony.trello.process;
 
+import com.google.common.base.CharMatcher;
 import com.google.common.base.Splitter;
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -10,16 +12,26 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /// Finds a tool on `PATH` the way the platform shell does and builds the command that starts it.
-/// On Windows the search uses `PATHEXT`, and batch shims start through `cmd.exe`.
+///
+/// On Windows, `ProcessBuilder` hands a bare name to `CreateProcess`, which appends only `.exe`.
+/// npm installs Codex as a `codex.cmd` batch shim, so a bare `codex` does not start even though it
+/// works in PowerShell. This class searches `PATH` with `PATHEXT` and starts batch shims through
+/// `cmd.exe`. ADR 0114 records why.
 public final class ExecutableResolver {
     private static final Splitter POSIX_PATH_SPLITTER = Splitter.on(File.pathSeparator);
     private static final Splitter WINDOWS_LIST_SPLITTER = Splitter.on(';');
     private static final List<String> DEFAULT_WINDOWS_PATH_EXTENSIONS = List.of(".COM", ".EXE", ".BAT", ".CMD");
     private static final List<String> WINDOWS_BATCH_EXTENSIONS = List.of(".cmd", ".bat");
+
+    /// `cmd.exe` expands `%` and, with delayed expansion, `!` even inside double quotes, and a quote
+    /// or line break ends the quoted argument, so an argument with one of these cannot reach a batch
+    /// shim unchanged.
+    private static final CharMatcher CMD_UNSAFE_CHARACTERS = CharMatcher.anyOf("\"%!\r\n");
+
+    private static final CharMatcher BACKSLASH = CharMatcher.is('\\');
 
     private final PlatformEnvironment environment;
     private final boolean windows;
@@ -45,9 +57,12 @@ public final class ExecutableResolver {
     }
 
     /// Returns `command` in the form `ProcessBuilder` can start. On Windows, a batch file, named
-    /// directly or found on `PATH`, starts through `cmd.exe /d /s /c`. Every other command is
-    /// returned unchanged.
-    public List<String> launchCommand(List<String> command) {
+    /// directly or found on `PATH`, starts through `cmd.exe /d /s /c` with every argument quoted.
+    /// Every other command is returned unchanged.
+    ///
+    /// @throws IOException when a batch-file argument contains a character that `cmd.exe` would
+    ///     change, so the launch fails instead of passing a different argument
+    public List<String> launchCommand(List<String> command) throws IOException {
         if (!windows || command.isEmpty()) {
             return command;
         }
@@ -59,12 +74,21 @@ public final class ExecutableResolver {
         List<String> parts = new ArrayList<>();
         parts.add(executable);
         parts.addAll(command.subList(1, command.size()));
-        return List.of(
-                "cmd.exe",
-                "/d",
-                "/s",
-                "/c",
-                "\"" + parts.stream().map(ExecutableResolver::quoteForCmd).collect(Collectors.joining(" ")) + "\"");
+        List<String> quoted = new ArrayList<>();
+        for (String part : parts) {
+            quoted.add(quoteForCmd(part));
+        }
+        // With /s, cmd.exe strips exactly the outer quote pair and runs the rest as written.
+        return List.of(commandInterpreter(), "/d", "/s", "/c", "\"" + String.join(" ", quoted) + "\"");
+    }
+
+    /// `ComSpec` names the system's `cmd.exe`. A bare `cmd.exe` would let `CreateProcess` pick up a
+    /// copy from the current directory first.
+    private String commandInterpreter() {
+        return environment
+                .value("ComSpec")
+                .filter(value -> validPath(value).map(Path::isAbsolute).orElse(false))
+                .orElse("cmd.exe");
     }
 
     private Optional<Path> findOnWindows(String tool, Path toolPath) {
@@ -124,8 +148,16 @@ public final class ExecutableResolver {
         return WINDOWS_BATCH_EXTENSIONS.stream().anyMatch(lowerCase::endsWith);
     }
 
-    private static String quoteForCmd(String value) {
-        return "\"" + value.replace("%", "%%").replace("\"", "\\\"") + "\"";
+    private static String quoteForCmd(String value) throws IOException {
+        if (CMD_UNSAFE_CHARACTERS.matchesAnyOf(value)) {
+            throw new IOException("cannot pass an argument with a double quote, percent sign, exclamation mark, "
+                    + "or line break to a Windows batch file through cmd.exe");
+        }
+        // The program reads `\"` as a literal quote, so trailing backslashes are doubled to keep
+        // them in front of the closing quote.
+        int trailingBackslashes =
+                value.length() - BACKSLASH.trimTrailingFrom(value).length();
+        return "\"" + value + "\\".repeat(trailingBackslashes) + "\"";
     }
 
     private static Optional<Path> validPath(String value) {
