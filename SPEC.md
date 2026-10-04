@@ -612,7 +612,8 @@ Fields:
   - Applies to Trello API requests.
 - `max_api_retries` (integer)
   - Default: `3`
-  - Applies to retryable Trello API transport errors and `429` rate-limit responses.
+  - Applies to retryable Trello API transport errors and `429` rate-limit responses on read
+    requests. Write requests are not retried automatically.
 - `api_retry_base_delay_ms` (integer)
   - Default: `1000`
   - Base delay for retryable Trello API errors.
@@ -2317,6 +2318,8 @@ Trello-specific requirements for `tracker.kind == "trello"`:
 - The adapter SHOULD use bounded exponential backoff with jitter for retryable Trello transport
   errors and `429` responses
 - The adapter SHOULD honor response retry hints such as `Retry-After` if Trello provides them
+- The adapter MUST NOT automatically retry tracker write requests. A lost response after Trello
+  applied a write would repeat it, for example by posting a duplicate comment.
 - The adapter SHOULD avoid unnecessary `/1/members/` calls because member-related endpoints can be
   more constrained than board/card reads
 

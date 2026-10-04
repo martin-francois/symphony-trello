@@ -1319,7 +1319,9 @@ public class TrelloClient implements TrackerClient {
 
     // Blocking out the retry window is inherent: Trello publishes no event when a rate-limit
     // window or outage ends, so the only choices are honoring Retry-After/backoff or failing
-    // the request (see docs/adr/0053-sleep-based-waits-kept-as-polling-boundaries.md).
+    // the request (see docs/adr/0053-sleep-based-waits-kept-as-polling-boundaries.md). The loop
+    // stays hand-rolled instead of using a retry library; see
+    // docs/adr/0097-keep-hand-rolled-trello-retry-backoff.md.
     private static void sleep(Duration duration) {
         try {
             Thread.sleep(duration);
