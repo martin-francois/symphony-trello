@@ -7,24 +7,22 @@ import test from "node:test";
 
 const script = resolve("scripts/verify-clusterfuzzlite-coverage");
 const targetSources = new Map([
-  ["RepositorySourceFuzzer", "repository/RepositorySourceResolver.java"],
-  ["TrelloCardReferenceParserFuzzer", "tracker/TrelloCardReferenceParser.java"],
-  ["TrelloChecklistClassifierFuzzer", "tracker/TrelloChecklistClassifier.java"],
-  ["WorkflowLoaderFuzzer", "workflow/WorkflowLoader.java"],
+  ["RepositorySourceFuzzer", ["repository/RepositorySourceResolver.java"]],
+  ["TrelloCardReferenceParserFuzzer", ["tracker/TrelloCardReferenceParser.java"]],
+  ["TrelloChecklistClassifierFuzzer", ["tracker/TrelloChecklistClassifier.java"]],
+  ["WorkflowLoaderFuzzer", ["workflow/WorkflowLoader.java", "config/ConfigResolver.java"]],
 ]);
 
-function report(source: string, coveredLines = 42) {
+function report(sources: string | string[], coveredLines = 42) {
   return JSON.stringify({
     type: "oss-fuzz.java.coverage.json.export",
     version: "1.0.0",
     data: [
       {
-        files: [
-          {
-            filename: `src/main/java/ch/fmartin/symphony/trello/${source}`,
-            summary: {lines: {covered: coveredLines}},
-          },
-        ],
+        files: [sources].flat().map((source) => ({
+          filename: `src/main/java/ch/fmartin/symphony/trello/${source}`,
+          summary: {lines: {covered: coveredLines}},
+        })),
         totals: {lines: {covered: coveredLines}},
       },
     ],
@@ -108,3 +106,15 @@ for (const scenario of [
     assert.match(result.stderr, /RepositorySourceFuzzer coverage is malformed or does not reach/);
   });
 }
+
+test("rejects a workflow report that stops at the loader", () => {
+  const result = verify(
+    fixture(new Map([["WorkflowLoaderFuzzer", report("workflow/WorkflowLoader.java")]])),
+  );
+
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /WorkflowLoaderFuzzer coverage is malformed or does not reach .*config\/ConfigResolver\.java/,
+  );
+});

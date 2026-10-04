@@ -1,0 +1,19 @@
+---
+tracker:
+  kind: trello
+  api_key: literal-api-key
+  api_token: literal-api-token
+  board_id: board-1
+codex:
+  command: codex app-server
+  turn_sandbox_policy:
+    type: workspaceWrite
+    networkAccess: true
+    writableRoots:
+      - /srv/cache
+  additional_writable_roots:
+    - shared
+    - $SYMPHONY_FUZZ_ROOT/shared
+    - ~/cache
+---
+Sandbox policy with writable roots.
