@@ -10,9 +10,11 @@ import {
   buildReadmeDemoManifest,
   createReadmeDemoSourceSnapshot,
   GITHUB_VIDEO_ATTACHMENT_LIMIT_BYTES,
+  HYPERFRAMES_VERSION_PATH,
   readReadmeDemoManifest,
   writeReadmeDemoManifest,
 } from "./readme-demo-manifest.ts";
+import {applyRegexUpdate, extractRegexDependencies} from "./test-support/renovate-regex-manager.ts";
 
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 
@@ -27,7 +29,9 @@ function writeCrossPlatformFixture(root: string, newline: "\n" | "\r\n"): void {
       ],
     ],
     ["docs/demo/index.html", ["<main>", "  Demo", "</main>"]],
+    [HYPERFRAMES_VERSION_PATH, ['export const HYPERFRAMES_VERSION = "1.2.3";']],
     ["scripts/readme-demo-manifest.ts", ["export const manifest = true;"]],
+    ["scripts/readme-demo-process.ts", ["export const process = true;"]],
     ["scripts/readme-demo-timing.ts", ["export const timing = true;"]],
     ["scripts/render-readme-demo.ts", ["export const render = true;"]],
   ]);
@@ -60,6 +64,29 @@ test("committed README demo artifacts match every render input", () => {
     "README demo sources or artifacts changed without a successful render; "
       + "run `node scripts/render-readme-demo.ts` and commit all generated files",
   );
+});
+
+test("a version-only HyperFrames update leaves the committed README demo stale", (t) => {
+  // given
+  const fixtureRoot = createManifestFixture(t);
+  const renderedManifest = buildReadmeDemoManifest(fixtureRoot);
+  const pinPath = join(fixtureRoot, HYPERFRAMES_VERSION_PATH);
+  const pinSource = readFileSync(pinPath, "utf8");
+  const [pin] = extractRegexDependencies(HYPERFRAMES_VERSION_PATH, pinSource);
+  assert.ok(pin, "Renovate must find the fixture's HyperFrames pin");
+
+  // when
+  writeFileSync(pinPath, applyRegexUpdate(pinSource, pin, "1.2.4"));
+  const updatedManifest = buildReadmeDemoManifest(fixtureRoot);
+
+  // then
+  assert.notEqual(
+    updatedManifest.sourceSha256,
+    renderedManifest.sourceSha256,
+    "a renderer update must invalidate media rendered with the previous version",
+  );
+  assert.equal(updatedManifest.videoSha256, renderedManifest.videoSha256);
+  assert.equal(updatedManifest.posterSha256, renderedManifest.posterSha256);
 });
 
 test("committed README demo video stays below GitHub's 10 MB attachment limit", () => {

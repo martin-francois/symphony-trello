@@ -36,3 +36,7 @@ image a pull request pins: `pinned-betterleaks-image` for BetterLeaks
 `pinned-maven-snapshot-image` for the Maven image behind `scripts/snapshot-tests-docker.sh`
 ([ADR 0092](../adr/0092-approvaltests-terminal-output-snapshots.md)). The snapshot check runs the
 wrapper on each pull request, including Renovate image updates. It fails if no snapshot tests run.
+
+HyperFrames, the README demo renderer, changes the committed video and poster. Its updates never
+merge automatically, and the README demo freshness script test blocks them until a maintainer
+commits media rendered with the new version.
