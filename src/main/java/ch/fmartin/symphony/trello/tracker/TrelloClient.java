@@ -10,6 +10,7 @@ import ch.fmartin.symphony.trello.config.WholeNumbers.Classified;
 import ch.fmartin.symphony.trello.config.WholeNumbers.Kind;
 import ch.fmartin.symphony.trello.domain.BlockerRef;
 import ch.fmartin.symphony.trello.domain.Card;
+import ch.fmartin.symphony.trello.tracker.PrerequisiteStatusCommentMemo.CommentActivity;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -29,7 +30,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +43,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.jboss.logging.Logger;
+import org.jspecify.annotations.Nullable;
 
 @ApplicationScoped
 public class TrelloClient implements TrackerClient {
@@ -61,6 +63,7 @@ public class TrelloClient implements TrackerClient {
 
     private final ObjectMapper json;
     private final HttpClient httpClient;
+    private final PrerequisiteStatusCommentMemo prerequisiteStatusMemo = new PrerequisiteStatusCommentMemo();
 
     public TrelloClient(ObjectMapper json) {
         this.json = json;
@@ -86,14 +89,14 @@ public class TrelloClient implements TrackerClient {
                 "boards/" + encodeSegment(context.boardId()) + "/cards/open",
                 Map.of("fields", CARD_FIELDS, "filter", "open"));
         List<Card> candidates = new ArrayList<>();
-        Set<String> cardsWithComments = new HashSet<>();
+        Map<String, CommentActivity> commentActivity = new HashMap<>();
         for (Map<String, Object> cardPayload : payload) {
             normalize(cardPayload, context, config).ifPresent(card -> {
                 if (!isActive(card, config) || isTerminal(card, config)) {
                     return;
                 }
                 if (hasComments(cardPayload)) {
-                    cardsWithComments.add(card.id());
+                    commentActivity.put(card.id(), commentActivity(cardPayload));
                 }
                 candidates.add(
                         hasChecklistItems(cardPayload)
@@ -101,7 +104,8 @@ public class TrelloClient implements TrackerClient {
                                 : card);
             });
         }
-        return enrichPrerequisites(config, candidates, false, cardsWithComments);
+        prerequisiteStatusMemo.retainOnly(candidates.stream().map(Card::id).collect(toImmutableSet()));
+        return enrichPrerequisites(config, candidates, false, CommentHints.fromCommentBadges(commentActivity));
     }
 
     @Override
@@ -161,7 +165,7 @@ public class TrelloClient implements TrackerClient {
                 .map(CardLookupResult.Found::card)
                 .toList();
         Map<String, Card> enriched =
-                enrichPrerequisites(config, foundCards, true, cardsWithComments(foundCards)).stream()
+                enrichPrerequisites(config, foundCards, true, CommentHints.fromLoadedComments(foundCards)).stream()
                         .collect(Collectors.toMap(
                                 Card::id, Function.identity(), (left, right) -> left, LinkedHashMap::new));
         Map<String, CardLookupResult> updated = new LinkedHashMap<>();
@@ -343,7 +347,7 @@ public class TrelloClient implements TrackerClient {
     }
 
     private List<Card> enrichPrerequisites(
-            EffectiveConfig config, List<Card> cards, boolean includeReferenceContext, Set<String> cardsWithComments) {
+            EffectiveConfig config, List<Card> cards, boolean includeReferenceContext, CommentHints commentHints) {
         if (cards.isEmpty()) {
             return List.of();
         }
@@ -353,11 +357,13 @@ public class TrelloClient implements TrackerClient {
         Map<String, CardLookupResult> lookupResults = lookupReferencedCards(config, analyses);
         List<Card> enriched = new ArrayList<>();
         for (PrerequisiteAnalysis analysis : analyses) {
+            String cardId = analysis.card().id();
             enriched.add(enrichPrerequisiteCard(
                     config,
                     analysis,
                     lookupResults,
-                    cardsWithComments.contains(analysis.card().id())));
+                    commentHints.hasComments(cardId),
+                    commentHints.rememberableActivity(cardId)));
         }
         return enriched;
     }
@@ -390,20 +396,14 @@ public class TrelloClient implements TrackerClient {
             EffectiveConfig config,
             PrerequisiteAnalysis analysis,
             Map<String, CardLookupResult> lookupResults,
-            boolean mayHaveWaitingComment) {
+            boolean hasComments,
+            @Nullable CommentActivity commentActivity) {
         Card card = analysis.card();
         ResolvedPrerequisites resolved = resolvePrerequisites(config, card, analysis.plan(), lookupResults);
         List<Card.TrelloReference> references = promptReferences(config, analysis.promptReferences(), lookupResults);
         Card enriched = card.withRelationships(card.checklists(), references, resolved.problems(), resolved.blockers());
-        syncPrerequisiteWaitingFeedback(config, enriched, mayHaveWaitingComment);
+        syncPrerequisiteWaitingFeedback(config, enriched, hasComments, commentActivity);
         return enriched;
-    }
-
-    private static Set<String> cardsWithComments(List<Card> cards) {
-        return cards.stream()
-                .filter(card -> !card.comments().isEmpty())
-                .map(Card::id)
-                .collect(Collectors.toUnmodifiableSet());
     }
 
     private static PrerequisitePlan prerequisitePlan(Card card) {
@@ -606,7 +606,8 @@ public class TrelloClient implements TrackerClient {
                 null);
     }
 
-    private void syncPrerequisiteWaitingFeedback(EffectiveConfig config, Card card, boolean mayHaveWaitingComment) {
+    private void syncPrerequisiteWaitingFeedback(
+            EffectiveConfig config, Card card, boolean hasComments, @Nullable CommentActivity commentActivity) {
         if (!config.tracker().blockerEnforcedStates().contains(StateNames.normalize(card.state()))) {
             return;
         }
@@ -614,20 +615,22 @@ public class TrelloClient implements TrackerClient {
                 .anyMatch(blocker -> blocker.state() == null
                         || !config.tracker().terminalStates().contains(StateNames.normalize(blocker.state())));
         if (!waiting && card.prerequisiteProblems().isEmpty()) {
-            if (!card.checklists().isEmpty() || mayHaveWaitingComment) {
-                clearPrerequisiteWaitingComment(config, card);
+            // A card without comments cannot carry a managed status comment to clear.
+            if (hasComments) {
+                clearPrerequisiteWaitingComment(config, card, commentActivity);
             }
         } else if (waiting || !card.prerequisiteProblems().isEmpty()) {
-            upsertPrerequisiteWaitingComment(config, card, prerequisiteWaitingText(card));
+            upsertPrerequisiteWaitingComment(config, card, commentActivity, prerequisiteWaitingText(card));
         }
     }
 
-    private void upsertPrerequisiteWaitingComment(EffectiveConfig config, Card card, String text) {
+    private void upsertPrerequisiteWaitingComment(
+            EffectiveConfig config, Card card, @Nullable CommentActivity commentActivity, String text) {
         try {
-            prerequisiteWaitingComment(config, card.id())
+            prerequisiteWaitingComment(config, card.id(), commentActivity)
                     .ifPresentOrElse(
                             comment -> updateOrCreatePrerequisiteWaitingComment(config, card, comment, text),
-                            () -> addComment(config, card.id(), text));
+                            () -> writePrerequisiteStatus(card, () -> addComment(config, card.id(), text)));
         } catch (RuntimeException e) {
             LOG.warnf("card_id=%s prerequisite_waiting_comment=failed reason=%s", card.id(), e.getMessage());
         }
@@ -639,25 +642,40 @@ public class TrelloClient implements TrackerClient {
             return;
         }
         if (blank(existing.id())) {
-            addComment(config, card.id(), text);
+            writePrerequisiteStatus(card, () -> addComment(config, card.id(), text));
             return;
         }
-        updateComment(config, existing.id(), text);
+        writePrerequisiteStatus(card, () -> updateComment(config, existing.id(), text));
     }
 
-    private void clearPrerequisiteWaitingComment(EffectiveConfig config, Card card) {
+    private void clearPrerequisiteWaitingComment(
+            EffectiveConfig config, Card card, @Nullable CommentActivity commentActivity) {
         try {
-            Optional<Card.Comment> existing = prerequisiteWaitingComment(config, card.id());
+            Optional<Card.Comment> existing = prerequisiteWaitingComment(config, card.id(), commentActivity);
             String text = resolvedPrerequisiteStatusText();
             existing.filter(comment -> !blank(comment.id()))
                     .filter(comment -> !text.equals(comment.text()))
-                    .ifPresent(comment -> updateComment(config, comment.id(), text));
+                    .ifPresent(
+                            comment -> writePrerequisiteStatus(card, () -> updateComment(config, comment.id(), text)));
         } catch (RuntimeException e) {
             LOG.warnf("card_id=%s prerequisite_waiting_comment_clear=failed reason=%s", card.id(), e.getMessage());
         }
     }
 
-    private Optional<Card.Comment> prerequisiteWaitingComment(EffectiveConfig config, String cardId) {
+    /// Forgets the remembered status lookup before the write, so a failed or partial write also
+    /// makes the next poll read the comment again.
+    private void writePrerequisiteStatus(Card card, Runnable write) {
+        prerequisiteStatusMemo.forget(card.id());
+        write.run();
+    }
+
+    private Optional<Card.Comment> prerequisiteWaitingComment(
+            EffectiveConfig config, String cardId, @Nullable CommentActivity commentActivity) {
+        return prerequisiteStatusMemo.find(
+                cardId, commentActivity, () -> fetchPrerequisiteWaitingComment(config, cardId));
+    }
+
+    private Optional<Card.Comment> fetchPrerequisiteWaitingComment(EffectiveConfig config, String cardId) {
         Map<String, Object> payload = getMap(
                 config,
                 "cards/" + encodeSegment(cardId),
@@ -1336,6 +1354,10 @@ public class TrelloClient implements TrackerClient {
         return badgeCount(payload, "comments") > 0;
     }
 
+    private static CommentActivity commentActivity(Map<String, Object> payload) {
+        return new CommentActivity(badgeCount(payload, "comments"), string(payload.get("dateLastActivity")));
+    }
+
     private static int badgeCount(Map<String, Object> payload, String name) {
         Object badges = payload.get("badges");
         if (!(badges instanceof Map<?, ?> badgeMap)) {
@@ -1519,6 +1541,38 @@ public class TrelloClient implements TrackerClient {
 
     private record PrerequisiteAnalysis(
             Card card, PrerequisitePlan plan, Map<String, ReferencedText> promptReferences) {}
+
+    /// Tells the prerequisite status sync which cards have comments, and under which comment activity
+    /// a card's status lookup may be remembered.
+    private record CommentHints(Set<String> cardsWithComments, Map<String, CommentActivity> activityByCard) {
+        CommentHints {
+            cardsWithComments = Set.copyOf(cardsWithComments);
+            activityByCard = Map.copyOf(activityByCard);
+        }
+
+        /// The candidate poll's comment badges count every comment, so its lookups may be remembered.
+        static CommentHints fromCommentBadges(Map<String, CommentActivity> activityByCard) {
+            return new CommentHints(activityByCard.keySet(), activityByCard);
+        }
+
+        /// Loaded cards carry only their newest comments, so their lookups are never remembered.
+        static CommentHints fromLoadedComments(List<Card> cards) {
+            return new CommentHints(
+                    cards.stream()
+                            .filter(card -> !card.comments().isEmpty())
+                            .map(Card::id)
+                            .collect(toImmutableSet()),
+                    Map.of());
+        }
+
+        private boolean hasComments(String cardId) {
+            return cardsWithComments.contains(cardId);
+        }
+
+        private @Nullable CommentActivity rememberableActivity(String cardId) {
+            return activityByCard.get(cardId);
+        }
+    }
 
     private record ResolvedPrerequisites(List<Card.PrerequisiteProblem> problems, List<BlockerRef> blockers) {}
 

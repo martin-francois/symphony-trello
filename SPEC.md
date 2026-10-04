@@ -2433,6 +2433,13 @@ or sync-failed prerequisites, Symphony MUST update one managed Trello-visible st
 or equivalent card-visible surface. Board users MUST NOT need host logs to understand why a Trello
 card has not left an active list.
 
+Java implementation extension: the candidate poll reads a Trello card's comments for the managed
+prerequisite status only when the card is active and in a blocker-enforced state. A card without
+waiting prerequisites or prerequisite problems is read only when it has comments. The poll remembers
+the result in memory and reads the comments again only when the card's comment count or
+last-activity time changes, or after Symphony wrote the status itself. Removing prerequisite
+checklist items still updates a remembered waiting status to resolved on the next poll.
+
 ### 11.5 Error Handling Contract
 
 RECOMMENDED error categories:
@@ -3541,6 +3548,10 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - Blockers default to empty when no Trello-specific blocker convention is implemented
 - If blocker derivation is implemented, blockers are normalized according to the documented
   convention
+- If the managed prerequisite status is implemented, repeated candidate polls clear a stale waiting
+  status after prerequisite items are removed, do not read comments for it on inactive or terminal
+  cards or on commentless cards without prerequisite state, and do not repeat the comment read while
+  a card's comment activity is unchanged
 - Card state refresh by ID returns minimal normalized cards or typed per-card missing results
 - Error mapping covers request errors, non-2xx statuses, rate limits, missing list mappings, auth
   failures, permission failures, not-found cards, and malformed payloads
