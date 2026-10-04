@@ -40,5 +40,12 @@ public final class ConfigDefaults {
      */
     public static final int DEFAULT_SETUP_MAX_CONCURRENT_AGENTS = DEFAULT_MAX_CONCURRENT_AGENTS;
 
+    // Follow-up cards land in a list a human triages, so a maintainer decides when they run.
+    public static final String DEFAULT_FOLLOW_UP_LIST_NAME = "Inbox";
+    public static final String DEFAULT_FOLLOW_UP_LABEL = "follow-up";
+    // One card rarely uncovers more than a few separate pieces of work; more usually means scope creep.
+    public static final int DEFAULT_FOLLOW_UP_MAX_CARDS_PER_SOURCE_CARD = 3;
+    public static final int DEFAULT_FOLLOW_UP_MAX_CARDS_PER_HOUR = 10;
+
     private ConfigDefaults() {}
 }
