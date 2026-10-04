@@ -19,11 +19,9 @@ import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 
-/**
- * Domain properties of {@link WorkflowLoader} shared by the standalone {@code WorkflowLoaderFuzzer} and the
- * JUnit {@code WorkflowLoaderFuzzTest}. It throws {@link AssertionError} instead of using AssertJ because the
- * OSS-Fuzz runtime classpath has no test libraries.
- */
+/// Domain properties of [WorkflowLoader] shared by the standalone `WorkflowLoaderFuzzer` and the
+/// JUnit `WorkflowLoaderFuzzTest`. It throws [AssertionError] instead of using AssertJ because the
+/// OSS-Fuzz runtime classpath has no test libraries.
 public final class WorkflowLoaderInvariants {
     public static final int MAX_MARKDOWN_BYTES = 8 * 1024;
 
@@ -162,10 +160,8 @@ public final class WorkflowLoaderInvariants {
             return failure == null ? null : failure.code();
         }
 
-        /**
-         * Describes the result by value. Config values can hold {@code byte[]} from YAML {@code !!binary}, so
-         * {@link Map#equals} would compare arrays by identity; key-sorted JSON compares their content.
-         */
+        /// Describes the result by value. Config values can hold `byte[]` from YAML `!!binary`, so
+        /// [Map#equals] would compare arrays by identity; key-sorted JSON compares their content.
         public String canonical() {
             if (definition == null) {
                 return failure == null ? "no result" : "failure " + failure.code() + ": " + failure.getMessage();
