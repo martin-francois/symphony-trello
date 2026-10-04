@@ -124,6 +124,19 @@
       ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^scripts/readme-demo-hyperframes\\.ts$/"
+      ],
+      "matchStrings": [
+        "export const HYPERFRAMES_VERSION = \"(?<currentValue>\\d+\\.\\d+\\.\\d+)\";"
+      ],
+      "datasourceTemplate": "npm",
+      "depNameTemplate": "hyperframes",
+      "versioningTemplate": "semver",
+      "description": "The HyperFrames CLI that renders the README demo. The repository has no package.json for the demo, so no built-in manager sees this pin. The version file is a render input, so an update stays blocked by the README demo freshness check until media rendered with it is committed."
     }
   ],
   "customDatasources": {
@@ -201,6 +214,26 @@
       ],
       "prBodyNotes": [
         "After Renovate updates `tessl.json`, run `tessl install`, review the refreshed `.tessl/tiles` diff, and commit those vendored tile changes before merging."
+      ]
+    },
+    {
+      "description": "HyperFrames renders the README demo video. Each update needs a local re-render and a visual review of the new media, so it never merges on its own.",
+      "matchDatasources": [
+        "npm"
+      ],
+      "matchPackageNames": [
+        "hyperframes"
+      ],
+      "groupName": null,
+      "automerge": false,
+      "addLabels": [
+        "hyperframes"
+      ],
+      "prBodyNotes": [
+        "HyperFrames renders the README demo video. The `script-tests` README demo freshness check fails on this pull request until media rendered with the new version is committed to this branch.",
+        "To finish this update, check out this branch and run `node scripts/render-readme-demo.ts` from the repository root. It needs Git, Node.js 22.18 or later, Docker, FFmpeg with `ffprobe`, and pnpm. It runs the HyperFrames checks, renders the video, validates its format, duration, size, and text regions, and rewrites `docs/assets/demo.mp4`, `docs/assets/readme-demo-poster.png`, and `docs/demo/render-manifest.json`. Commit all three files to this branch.",
+        "Before merging, read the HyperFrames release notes, extract representative frames from the new MP4 as `docs/demo/README.md` describes, and compare them with the previous video. Then replace the README inline video attachment as described in that guide's \"Updating the inline README video\" section, and merge manually.",
+        "After you push the render commit, Renovate stops updating this branch. Do not tick its rebase checkbox: Renovate would recreate the branch without your render commit. Rebase on `main` yourself instead."
       ]
     },
     {

@@ -26,3 +26,6 @@ when the row naming that artifact leaves its primary failure surface or required
 The repository also pins and tests Node script tooling, GitHub Actions, and tool-container images.
 Their manifests, custom Renovate managers, config validation, and script tests are the confidence
 map for those non-Maven dependencies.
+HyperFrames, the README demo renderer, changes the committed video and poster. Its updates never
+merge automatically, and the README demo freshness script test blocks them until a maintainer
+commits media rendered with the new version.
