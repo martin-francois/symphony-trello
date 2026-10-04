@@ -1,8 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
-import static ch.fmartin.symphony.trello.testsupport.WindowsShimFixtures.CMD_SAFE_ARGUMENTS;
 import static ch.fmartin.symphony.trello.testsupport.WindowsShimFixtures.NPM_PATHEXT;
-import static ch.fmartin.symphony.trello.testsupport.WindowsShimFixtures.command;
 import static java.nio.file.Files.readAllLines;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -16,6 +14,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.FieldSource;
 
 /// Starts a real batch shim shaped like the one npm writes for Codex. Only Windows has `cmd.exe`,
 /// so the windows-powershell CI lane runs this class.
@@ -43,18 +43,21 @@ final class WindowsBatchShimLaunchTest {
         assertThat(readAllLines(recordFile)).containsExactly("login", "status");
     }
 
-    @Test
-    void runPassesArgumentsAndExitStatusThroughTheShimUnchanged() throws Exception {
+    @FieldSource("ch.fmartin.symphony.trello.testsupport.WindowsShimFixtures#CMD_SAFE_ARGUMENTS")
+    @ParameterizedTest(name = "[{index}] argument <{0}>")
+    void runPassesArgumentAndExitStatusThroughTheShimUnchanged(String argument) throws Exception {
         // given
         Path recordFile = tempDir.resolve("run-arguments.txt");
         var runner = runnerFindingShimIn(npmStyleShim(recordFile));
 
         // when
-        CommandResult result = runner.run(command(SHIM_NAME, CMD_SAFE_ARGUMENTS).toArray(String[]::new));
+        CommandResult result = runner.run(SHIM_NAME, argument);
 
         // then
-        assertThat(result.exitCode()).isEqualTo(ArgumentRecorder.EXIT_CODE);
-        assertThat(readAllLines(recordFile)).containsExactlyElementsOf(CMD_SAFE_ARGUMENTS);
+        assertThat(result.exitCode())
+                .as("exit status of the shim; its output was: %s", result.output())
+                .isEqualTo(ArgumentRecorder.EXIT_CODE);
+        assertThat(readAllLines(recordFile)).containsExactly(argument);
     }
 
     @Test
