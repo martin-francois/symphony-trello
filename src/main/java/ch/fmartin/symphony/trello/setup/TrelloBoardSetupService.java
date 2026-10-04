@@ -66,10 +66,7 @@ final class TrelloBoardSetupService {
             boards.loadForLifecycle();
             boards.validateWritable();
         } catch (IOException exception) {
-            throw new TrelloBoardSetupException(
-                    "setup_manifest_unavailable",
-                    "Could not read or write the connected-board manifest. Check the config directory permissions.",
-                    exception);
+            throw manifestUnavailable(exception);
         }
     }
 
@@ -82,10 +79,7 @@ final class TrelloBoardSetupService {
         try {
             manifest = new ConnectedBoardRepository(manifestPath).loadForLifecycle();
         } catch (IOException exception) {
-            throw new TrelloBoardSetupException(
-                    "setup_manifest_unavailable",
-                    "Could not read or write the connected-board manifest. Check the config directory permissions.",
-                    exception);
+            throw manifestUnavailable(exception);
         }
         Optional<ConnectedBoard> replaceableBoard = force
                 ? manifest.boards().stream()
@@ -176,7 +170,7 @@ final class TrelloBoardSetupService {
                     localWorkerPaths(manifestPath, board.workspaceRoot()), board, replacedBoards);
             boards.save(manifest.withBoard(board));
         } catch (IOException exception) {
-            throw new TrelloBoardSetupException(
+            throw SetupFailureCauses.setupFailure(
                     "setup_manifest_write_failed",
                     "Could not update the connected-board manifest. Check the config directory permissions.",
                     exception);
@@ -193,13 +187,26 @@ final class TrelloBoardSetupService {
         Path envPath = (board.envPath() == null ? paths.defaultEnvPath() : board.envPath())
                 .toAbsolutePath()
                 .normalize();
+        String failurePrefix = "Could not restart the worker for " + DisplayNames.quotedName(board.boardName());
         try {
             workerManager.start(paths, board, envPath, out);
-        } catch (IOException | TrelloBoardSetupException exception) {
-            out.println("Could not restart the worker for " + DisplayNames.quotedName(board.boardName()) + ": "
-                    + exception.getMessage());
-            out.println("Start it again with the start command shown under Next.");
+        } catch (IOException exception) {
+            printRestartFailure(SetupFailureCauses.withCause(failurePrefix, exception), out);
+        } catch (TrelloBoardSetupException exception) {
+            printRestartFailure(failurePrefix + ": " + exception.getMessage(), out);
         }
+    }
+
+    private static void printRestartFailure(String failure, PrintStream out) {
+        out.println(failure);
+        out.println("Start it again with the start command shown under Next.");
+    }
+
+    private static TrelloBoardSetupException manifestUnavailable(IOException exception) {
+        return SetupFailureCauses.setupFailure(
+                "setup_manifest_unavailable",
+                "Could not read or write the connected-board manifest. Check the config directory permissions.",
+                exception);
     }
 
     private void stopReplacedBoards(Path manifestPath, Path workspaceRoot, List<ConnectedBoard> replacedBoards) {
@@ -216,10 +223,9 @@ final class TrelloBoardSetupService {
                 workerManager.stop(
                         paths, board, new PrintStream(OutputStream.nullOutputStream(), true, StandardCharsets.UTF_8));
             } catch (IOException exception) {
-                throw new TrelloBoardSetupException(
+                throw SetupFailureCauses.setupFailure(
                         "setup_stop_failed",
-                        "Could not stop Symphony for " + DisplayNames.quotedName(board.boardName()) + ": "
-                                + exception.getMessage(),
+                        "Could not stop Symphony for " + DisplayNames.quotedName(board.boardName()),
                         exception);
             }
             stoppedWorkflowPaths.add(board.workflowPath());

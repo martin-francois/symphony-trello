@@ -23,7 +23,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
-import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
@@ -2047,31 +2046,8 @@ final class SetupDiagnosticReporter {
                 Thread.currentThread().interrupt();
             }
             line(body, "status", "unavailable");
-            line(body, "error", sanitize(exceptionSummary(e)));
+            line(body, "error", sanitize(SetupFailureCauses.summary(e)));
         }
-    }
-
-    static String exceptionSummary(Exception exception) {
-        String message = exception.getMessage();
-        if (message == null || message.isBlank()) {
-            return exception.getClass().getSimpleName();
-        }
-        return exception.getClass().getSimpleName() + ": " + message;
-    }
-
-    /// Like [#exceptionSummary(Exception)], but safe for user-facing setup stderr:
-    /// [FileSystemException] messages embed the affected paths, so only the path-free
-    /// reason is kept for them. Other IOException messages at the setup boundaries are
-    /// hand-written without paths.
-    static String pathFreeExceptionSummary(Exception exception) {
-        if (!(exception instanceof FileSystemException fileSystemException)) {
-            return exceptionSummary(exception);
-        }
-        String reason = fileSystemException.getReason();
-        if (reason == null || reason.isBlank()) {
-            return exception.getClass().getSimpleName();
-        }
-        return exception.getClass().getSimpleName() + ": " + reason;
     }
 
     private void appendRecentLogs(StringBuilder body, Path stateHome) {
@@ -2312,7 +2288,7 @@ final class SetupDiagnosticReporter {
                 terminal.err().println("GitHub issue creation failed: " + sanitize(firstLine(result.output())));
             }
         } catch (IOException e) {
-            terminal.err().println("GitHub issue prompt failed: " + sanitize(e.getMessage()));
+            terminal.err().println(sanitize(SetupFailureCauses.withCause("GitHub issue prompt failed", e)));
         }
     }
 

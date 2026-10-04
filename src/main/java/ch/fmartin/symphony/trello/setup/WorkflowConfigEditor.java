@@ -80,11 +80,16 @@ final class WorkflowConfigEditor {
                         + DisplayNames.quotedName(board.boardName()) + ": overlapping tracker list roles");
             }
             return WorkflowValidation.valid();
-        } catch (IOException | TrelloBoardSetupException e) {
-            return WorkflowValidation.warn("Workflow file is not readable or has invalid YAML for "
-                    + DisplayNames.quotedName(board.boardName()) + ": " + board.workflowPath() + " (" + e.getMessage()
-                    + ")");
+        } catch (IOException e) {
+            return WorkflowValidation.warn(SetupFailureCauses.withCause(unusableWorkflowFile(board), e));
+        } catch (TrelloBoardSetupException e) {
+            return WorkflowValidation.warn(unusableWorkflowFile(board) + " (" + e.getMessage() + ")");
         }
+    }
+
+    private static String unusableWorkflowFile(ConnectedBoard board) {
+        return "Workflow file is not readable or has invalid YAML for " + DisplayNames.quotedName(board.boardName())
+                + ": " + board.workflowPath();
     }
 
     private static WorkflowValidation validateBoardId(ConnectedBoard board, String configuredBoardId) {
@@ -173,8 +178,7 @@ final class WorkflowConfigEditor {
         try {
             yaml = parseYaml(read(workflowPath));
         } catch (IOException e) {
-            throw new TrelloBoardSetupException(
-                    "setup_workflow_read_failed", "Workflow file cannot be read before worker start.", e);
+            throw workflowReadFailure(e);
         } catch (TrelloBoardSetupException e) {
             // This method only runs on the start launch path, which reports every
             // workflow-content failure, including missing front matter, through the
@@ -364,10 +368,7 @@ final class WorkflowConfigEditor {
         try {
             return readWorkflow(workflowPath);
         } catch (IOException e) {
-            throw invalidWorkflowForLaunch(
-                    workflowPath,
-                    new TrelloBoardSetupException(
-                            "setup_workflow_read_failed", "Workflow file cannot be read before worker start.", e));
+            throw invalidWorkflowForLaunch(workflowPath, workflowReadFailure(e));
         } catch (TrelloBoardSetupException e) {
             throw invalidWorkflowForLaunch(workflowPath, e);
         }
@@ -379,6 +380,11 @@ final class WorkflowConfigEditor {
         } catch (ConfigException e) {
             throw invalidWorkflowForLaunch(workflowPath, e);
         }
+    }
+
+    private static TrelloBoardSetupException workflowReadFailure(IOException cause) {
+        return SetupFailureCauses.setupFailure(
+                "setup_workflow_read_failed", "Workflow file cannot be read before worker start.", cause);
     }
 
     private static TrelloBoardSetupException invalidWorkflowForLaunch(Path workflowPath, RuntimeException cause) {
@@ -528,12 +534,21 @@ final class WorkflowConfigEditor {
         if ("missing workflow file".equals(message) || "workflow path is not a regular workflow file".equals(message)) {
             return message;
         }
-        return "Workflow file cannot be read.";
+        return unreadableWorkflowFile(failure);
+    }
+
+    /// The launch message hides the workflow path, but the path-free read cause still tells a
+    /// permission problem apart from an encoding problem.
+    private static String unreadableWorkflowFile(RuntimeException failure) {
+        String problem = "Workflow file cannot be read.";
+        return Optional.ofNullable(failure.getCause())
+                .map(cause -> SetupFailureCauses.withCause(problem, cause))
+                .orElse(problem);
     }
 
     private static String publicWorkflowProblem(WorkflowException failure) {
         return switch (failure.code()) {
-            case "missing_workflow_file" -> "Workflow file cannot be read.";
+            case "missing_workflow_file" -> unreadableWorkflowFile(failure);
             case "workflow_front_matter_not_a_map" -> "Workflow front matter must be a YAML map.";
             case "workflow_parse_error" -> "Workflow front matter is invalid YAML.";
             default -> "Workflow front matter is invalid.";
@@ -544,7 +559,7 @@ final class WorkflowConfigEditor {
         return switch (failure.code()) {
             case "setup_workflow_frontmatter_missing" -> "Workflow has no YAML front matter.";
             case "setup_workflow_frontmatter_not_map" -> "Workflow front matter must be a YAML map.";
-            case "setup_workflow_read_failed" -> "Workflow file cannot be read.";
+            case "setup_workflow_read_failed" -> unreadableWorkflowFile(failure);
             case "setup_workflow_yaml_invalid" -> "Workflow front matter is invalid YAML.";
             case "setup_workflow_unresolved_environment" -> publicUnresolvedEnvironmentProblem(failure);
             case "setup_invalid_server_port" ->

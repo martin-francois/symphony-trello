@@ -13,6 +13,7 @@ import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.workspaces
 import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.HTTPS;
 import static ch.fmartin.symphony.trello.testsupport.WorkflowAssertions.assertThatWorkflow;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -29,6 +30,7 @@ import ch.fmartin.symphony.trello.testsupport.CliRunResult;
 import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
 import ch.fmartin.symphony.trello.testsupport.SetupCommandBuilder;
 import ch.fmartin.symphony.trello.testsupport.TestEnv;
+import ch.fmartin.symphony.trello.testsupport.TestFileContents;
 import ch.fmartin.symphony.trello.testsupport.TestWorkflows;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
@@ -38,8 +40,11 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AccessDeniedException;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -63,6 +68,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 
 final class TrelloBoardSetupMainTest {
+    private static final String PRIVATE_WORKER_PID_FILE = "/home/private-user/.local/state/symphony-trello/board.pid";
     private static final String CONFIG_DIR_PROPERTY = "symphony.trello.config.dir";
     private static final String SHELL_PROPERTY = "symphony.trello.shell";
     private static final String CLI_COMMAND_PROPERTY = "symphony.trello.command";
@@ -1026,7 +1032,8 @@ final class TrelloBoardSetupMainTest {
         // then
         result.assertFailure(SETUP_FAILURE)
                 .stdoutDoesNotContain("# Symphony for Trello Diagnostics")
-                .stderrContains("Could not write diagnostics output")
+                .stderrContains(
+                        "Could not write diagnostics output. Choose a writable file. (FileAlreadyExistsException)")
                 .stderrDoesNotContain(
                         output.toString(), privatePathComponent.toString(), tempDir.toString(), "Jane Doe");
     }
@@ -1988,7 +1995,7 @@ final class TrelloBoardSetupMainTest {
         // then
         result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
-                        "setup_failed code=trello_api_request message=Trello request failed",
+                        "setup_failed code=trello_api_request message=Trello request failed (ConnectException",
                         "Next step: Check the Trello API endpoint URL and network connection")
                 .stderrDoesNotContain("Troubleshooting report written", "Open a GitHub issue", endpoint)
                 .stdoutDoesNotContain("Trello workspaces:");
@@ -2570,7 +2577,7 @@ final class TrelloBoardSetupMainTest {
         // then
         result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
-                        "setup_failed code=trello_api_request message=Trello request failed",
+                        "setup_failed code=trello_api_request message=Trello request failed (ConnectException",
                         "Next step: Check the Trello API endpoint URL and network connection")
                 .stderrDoesNotContain(
                         "Troubleshooting report written",
@@ -2737,6 +2744,48 @@ final class TrelloBoardSetupMainTest {
                                 + ConnectedBoardManifest.FILE_NAME + " is valid JSON.")
                 .stdoutDoesNotContain(
                         "Created Trello board", "Saving Trello credentials", "Troubleshooting report written");
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).doesNotExist();
+    }
+
+    @Test
+    void newBoardNamesThePathFreeCauseWhenTheManifestDirectoryIsNotWritable() throws Exception {
+        // given
+        assumeTrue(
+                FileSystems.getDefault().supportedFileAttributeViews().contains("posix"),
+                "POSIX directory permissions are required");
+        Path workflow = tempDir.resolve("read-only-manifest.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.read-only-manifest");
+        Path configDir = Files.createDirectory(tempDir.resolve("read-only-config"));
+        Files.setPosixFilePermissions(configDir, PosixFilePermissions.fromString("r-x------"));
+        assumeFalse(Files.isWritable(configDir), "The current user can still write to the read-only directory.");
+
+        // when
+        CliRunResult result = runCli(
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "Read-Only Manifest Queue",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                configDir.resolve(ConnectedBoardManifest.FILE_NAME).toString(),
+                "--env",
+                env.toString());
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_manifest_unavailable",
+                        "Could not read or write the connected-board manifest. Check the config directory permissions."
+                                + " (AccessDeniedException)")
+                .stderrDoesNotContain(configDir.toString(), "Troubleshooting report written");
         assertThat(createdBoardName.get()).isNull();
         assertThat(workflow).doesNotExist();
         assertThat(env).doesNotExist();
@@ -3457,11 +3506,13 @@ final class TrelloBoardSetupMainTest {
                 .isEqualTo(fixture.newWorkflow().toAbsolutePath().normalize());
     }
 
-    @Test
-    void importBoardPrintsRecoveryStepWhenReplacedWorkerRestartFails() throws Exception {
+    @MethodSource("restartFailures")
+    @ParameterizedTest(name = "{0}")
+    void importBoardPrintsRecoveryStepWhenReplacedWorkerRestartFails(
+            String scenario, Exception failure, String expectedFailureLine) throws Exception {
         // given
         ReplacedRunningWorkerFixture fixture = replacedRunningWorkerFixture("restart-fail");
-        doThrow(new TrelloBoardSetupException("setup_start_unhealthy", "worker did not become healthy"))
+        doThrow(failure)
                 .when(fixture.workerManager())
                 .start(any(LocalWorkerPaths.class), any(ConnectedBoard.class), any(Path.class), any(PrintStream.class));
 
@@ -3471,9 +3522,20 @@ final class TrelloBoardSetupMainTest {
         // then
         assertThat(run.exitCode()).isZero();
         assertThat(run.stdout())
-                .contains(
-                        "Could not restart the worker for \"Existing Board\": worker did not become healthy",
-                        "Start it again with the start command shown under Next.");
+                .contains(expectedFailureLine, "Start it again with the start command shown under Next.")
+                .doesNotContain(PRIVATE_WORKER_PID_FILE);
+    }
+
+    private static Stream<Arguments> restartFailures() {
+        return Stream.of(
+                Arguments.of(
+                        "setup failure keeps its own message",
+                        new TrelloBoardSetupException("setup_start_unhealthy", "worker did not become healthy"),
+                        "Could not restart the worker for \"Existing Board\": worker did not become healthy"),
+                Arguments.of(
+                        "I/O failure names its path-free cause",
+                        new AccessDeniedException(PRIVATE_WORKER_PID_FILE),
+                        "Could not restart the worker for \"Existing Board\" (AccessDeniedException)"));
     }
 
     @Test
@@ -3937,7 +3999,7 @@ final class TrelloBoardSetupMainTest {
     void newBoardRejectsMalformedRuntimeEnvFileBeforeCreatingBoard() throws Exception {
         // given
         Path env = tempDir.resolve(".env.runtime");
-        Files.write(env, new byte[] {(byte) 0xc3, (byte) 0x28});
+        Files.write(env, TestFileContents.invalidUtf8());
         Path workflow = tempDir.resolve("malformed-runtime-env.WORKFLOW.md");
 
         // when
@@ -3952,7 +4014,7 @@ final class TrelloBoardSetupMainTest {
                 .contains(
                         "setup_failed code=setup_env_write_failed",
                         "Choose a writable .env or .env.NAME file",
-                        "(MalformedInputException: Input length = 1)")
+                        "(" + TestFileContents.INVALID_UTF_8_READ_FAILURE + ")")
                 .doesNotContain(env.toString(), tempDir.toString(), "direct-key", "direct-token");
     }
 

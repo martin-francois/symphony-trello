@@ -1,11 +1,15 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.testsupport.TestFileContents.INVALID_UTF_8_READ_FAILURE;
+import static ch.fmartin.symphony.trello.testsupport.TestFileContents.INVALID_YAML_QUOTING_PRIVATE_VALUE;
+import static ch.fmartin.symphony.trello.testsupport.TestFileContents.PRIVATE_YAML_VALUE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.WorkflowServerPortClassification;
+import ch.fmartin.symphony.trello.testsupport.TestFileContents;
 import ch.fmartin.symphony.trello.workflow.CodexSandboxPolicy;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -584,6 +588,67 @@ final class WorkflowConfigEditorTest {
         // then
         assertThat(config.codex().turnSandboxPolicy()).isNull();
         assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(original);
+    }
+
+    @Test
+    void validateNamesTheReadCauseForAnUnreadableConnectedWorkflow() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.not-utf8.md");
+        Files.write(workflow, TestFileContents.invalidUtf8());
+        ConnectedBoard board = ConnectedBoardBuilder.connectedBoard(workflow)
+                .withBoardName("Unreadable Queue")
+                .build();
+        var editor = new WorkflowConfigEditor();
+
+        // when
+        WorkflowValidation validation = editor.validate(board, ignored -> Optional.empty());
+
+        // then
+        assertThat(validation)
+                .isEqualTo(WorkflowValidation.warn("Workflow file is not readable or has invalid YAML for"
+                        + " \"Unreadable Queue\": " + workflow + " (" + INVALID_UTF_8_READ_FAILURE + ")"));
+    }
+
+    @Test
+    void validateOmitsYamlParserDetailsBecauseTheyQuoteWorkflowContent() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.invalid-yaml.md");
+        Files.writeString(workflow, "---\n" + INVALID_YAML_QUOTING_PRIVATE_VALUE + "---\nBody\n");
+        ConnectedBoard board = ConnectedBoardBuilder.connectedBoard(workflow)
+                .withBoardName("Invalid YAML Queue")
+                .build();
+        var editor = new WorkflowConfigEditor();
+
+        // when
+        WorkflowValidation validation = editor.validate(board, ignored -> Optional.empty());
+
+        // then
+        assertThat(validation.ok()).as("invalid YAML must produce a warning").isFalse();
+        assertThat(validation.message())
+                .startsWith("Workflow file is not readable or has invalid YAML for \"Invalid YAML Queue\": " + workflow)
+                .endsWith("Exception)")
+                .doesNotContain(PRIVATE_YAML_VALUE);
+    }
+
+    @Test
+    void launchValidationNamesThePathFreeReadCauseWithoutTheWorkflowPath() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.launch-not-utf8.md");
+        Files.write(workflow, TestFileContents.invalidUtf8());
+        var editor = new WorkflowConfigEditor();
+
+        // when
+        Throwable thrown = catchThrowable(() -> editor.prepareLaunchWorkflow(workflow, trelloCredentials(), true));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_workflow_invalid");
+            assertThat(failure.getMessage())
+                    .contains(
+                            "Workflow file cannot be read. (" + INVALID_UTF_8_READ_FAILURE + ")",
+                            "selected workflow file")
+                    .doesNotContain(workflow.toString());
+        });
     }
 
     @Test
