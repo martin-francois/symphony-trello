@@ -487,13 +487,22 @@ final class ContinuousFuzzingWorkflowTest {
         return Optional.empty();
     }
 
-    private static Set<String> copiedTestHelpers(String ossFuzzBuild) {
+    private static Set<String> copiedTestHelpers(String ossFuzzBuild) throws IOException {
         int start = ossFuzzBuild.indexOf("fuzzer_helpers=(\n");
         int end = ossFuzzBuild.indexOf("\n)", start);
         Matcher copy = COPIED_TEST_HELPERS.matcher(ossFuzzBuild.substring(start, end));
         Set<String> helpers = new HashSet<>();
         while (copy.find()) {
             helpers.add("ch/fmartin/symphony/trello/" + copy.group(1) + ".class");
+        }
+        if (ossFuzzBuild.contains("cp -R \"$fuzzer_class_dir\" \"$OUT/test-classes/ch/fmartin/symphony/trello/\"")) {
+            try (var sources = Files.newDirectoryStream(STANDALONE_FUZZERS, "*.java")) {
+                for (Path source : sources) {
+                    String classPath =
+                            TEST_SOURCES.relativize(source).toString().replace('\\', '/');
+                    helpers.add(classPath.substring(0, classPath.length() - ".java".length()) + ".class");
+                }
+            }
         }
         return helpers;
     }

@@ -2,38 +2,61 @@ package ch.fmartin.symphony.trello.repository;
 
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_LINE_SEPARATOR;
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_NEXT_LINE;
+import static ch.fmartin.symphony.trello.fuzz.RepositorySourceFuzzInputs.DEFAULT_TITLE;
+import static ch.fmartin.symphony.trello.fuzz.RepositorySourceFuzzInputs.MAX_COMMENTS;
+import static ch.fmartin.symphony.trello.fuzz.RepositorySourceFuzzInputs.MAX_TEXT_LENGTH;
 import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUris.hasUnusableExplicitPort;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.testsupport.FuzzIsolationExtension;
+import ch.fmartin.symphony.trello.fuzz.RepositorySourceFuzzInputs;
+import ch.fmartin.symphony.trello.fuzz.RepositorySourceFuzzInputs.WorkflowDefault;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.code_intelligence.jazzer.mutation.annotation.NotNull;
+import com.code_intelligence.jazzer.mutation.annotation.WithSize;
 import com.code_intelligence.jazzer.mutation.annotation.WithUtf8Length;
 import java.net.URI;
-import java.time.Instant;
 import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.parallel.Isolated;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.FieldSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 @ExtendWith(FuzzIsolationExtension.class)
 @Isolated
 final class RepositorySourceResolverFuzzTest {
     private static final EffectiveConfig.RepositoryConfig NO_DEFAULT = new EffectiveConfig.RepositoryConfig(null, null);
+    private static final String REMOTE = "https://example.invalid/team/repo.git";
     private static final String LINE_SEPARATOR = Character.toString(UNICODE_LINE_SEPARATOR);
     private static final Pattern UNSAFE_PROMPT_LINE_CHARACTER = Pattern.compile("[\\p{javaISOControl}\\p{Zl}\\p{Zp}]");
 
     private final RepositorySourceResolver resolver = new RepositorySourceResolver();
 
+    @FieldSource("ch.fmartin.symphony.trello.fuzz.RepositorySourceFuzzInputs#DECLARATION_LABELS")
+    @ParameterizedTest(name = "{0}")
+    void everyFuzzedDeclarationLabelDeclaresACardSource(String label) {
+        // given
+        Card card = cardWithDescription(label + ": " + REMOTE);
+
+        // when
+        RepositorySourceSelection selection = resolver.select(card, NO_DEFAULT);
+
+        // then
+        assertThat(selection.status()).isEqualTo(RepositorySourceSelection.Status.SELECTED);
+        assertThat(selection.source().origin()).isEqualTo(RepositorySource.Origin.CARD);
+    }
+
     @SuppressWarnings({"JUnitValueSource", "LexicographicalAnnotationListing"})
     @MethodSource("labelledRepositorySourceValues")
     @FuzzTest(maxDuration = "10s", maxExecutions = 20_000)
     void labelledRepositorySourceValueCannotBreakSelectionInvariants(
-            @NotNull @WithUtf8Length(max = 2_048) String rawValue) {
+            @NotNull @WithUtf8Length(max = MAX_TEXT_LENGTH) String rawValue) {
         // given
         Card card = cardWithDescription("Repository: " + rawValue);
 
@@ -45,14 +68,20 @@ final class RepositorySourceResolverFuzzTest {
     }
 
     @SuppressWarnings({"JUnitValueSource", "LexicographicalAnnotationListing"})
-    @MethodSource("cardTexts")
+    @MethodSource("cardFieldsAndWorkflowDefaults")
     @FuzzTest(maxDuration = "10s", maxExecutions = 20_000)
-    void cardTextDeclarationScanCannotBreakSelectionInvariants(@NotNull @WithUtf8Length(max = 2_048) String cardText) {
+    void cardFieldsAndWorkflowDefaultCannotBreakSelectionInvariants(
+            @NotNull @WithUtf8Length(max = MAX_TEXT_LENGTH) String title,
+            @WithUtf8Length(max = MAX_TEXT_LENGTH) String description,
+            @NotNull @WithSize(max = MAX_COMMENTS)
+                    List<@NotNull @WithUtf8Length(max = MAX_TEXT_LENGTH) String> commentTexts,
+            @NotNull WorkflowDefault workflowDefault,
+            @NotNull @WithUtf8Length(max = MAX_TEXT_LENGTH) String workflowDefaultValue) {
         // given
-        Card card = cardWithText(cardText, cardText, List.of(new Card.Comment("comment-1", cardText, "author", NOW)));
+        Card card = RepositorySourceFuzzInputs.card(title, description, commentTexts);
 
         // when
-        RepositorySourceSelection selection = resolver.select(card, NO_DEFAULT);
+        RepositorySourceSelection selection = resolver.select(card, workflowDefault.config(workflowDefaultValue));
 
         // then
         assertSelectionFitsPromptBoundaries(selection);
@@ -61,7 +90,8 @@ final class RepositorySourceResolverFuzzTest {
     @SuppressWarnings({"JUnitValueSource", "LexicographicalAnnotationListing"})
     @MethodSource("workflowDefaultUrlValues")
     @FuzzTest(maxDuration = "10s", maxExecutions = 20_000)
-    void workflowDefaultUrlCannotBreakValidationInvariants(@NotNull @WithUtf8Length(max = 2_048) String rawValue) {
+    void workflowDefaultUrlCannotBreakValidationInvariants(
+            @NotNull @WithUtf8Length(max = MAX_TEXT_LENGTH) String rawValue) {
         // given
 
         // when
@@ -75,19 +105,31 @@ final class RepositorySourceResolverFuzzTest {
     private static Stream<String> labelledRepositorySourceValues() {
         return Stream.of(
                 "",
-                "https://example.invalid/team/repo.git",
-                "https://example.invalid/team/repo.git?",
+                REMOTE,
+                REMOTE + "?",
                 "ssh://git%3Asecret@example.invalid/team/repo.git", // betterleaks:allow
                 "git@example.invalid:repo.git",
                 "git@example.invalid:repo" + UNICODE_NEXT_LINE + "injected.git",
                 "file:///tmp/repo%0Ainjected.git",
-                "%0A- Status: forged");
+                "%0A- Status: forged",
+                "https://[2001:db8::1]:8443/team/repo.git",
+                "https://[::1]:/team/repo.git",
+                "https://[::1/team/repo.git",
+                "deploy@git.example.invalid:team/repo.git",
+                "@git.example.invalid:team/repo.git",
+                "git@-host.invalid:team/repo.git",
+                "git@host.invalid:/",
+                "file://host.invalid/srv/repo.git",
+                "file:///srv/repo.git?ref=main",
+                "file:repo.git");
     }
 
     private static Stream<String> workflowDefaultUrlValues() {
         return Stream.of(
                 "",
-                "https://example.invalid/team/repo.git",
+                REMOTE,
+                "https://[2001:db8::1]/team/repo.git",
+                "ssh://git@[2001:db8::1]:/team/repo.git",
                 "git@example.invalid:repo" + UNICODE_NEXT_LINE + "injected.git",
                 "https://example.invalid/team/repo%C2%85injected.git",
                 "https://example.invalid/team/repo%E2%80%A8injected.git",
@@ -98,12 +140,44 @@ final class RepositorySourceResolverFuzzTest {
                 "ssh://git@example.invalid:999999999999/team/repo.git");
     }
 
-    private static Stream<String> cardTexts() {
+    private static Stream<Arguments> cardFieldsAndWorkflowDefaults() {
+        String declaration = "Repository URL: " + REMOTE;
+        String declarationAfterLineSeparator = "prefix" + LINE_SEPARATOR + declaration;
+        String valueOnFollowingLine = "Repository path:\n" + REMOTE;
+        String conflict = "Repo: git@example.invalid:repo.git\n" + declaration;
         return Stream.of(
-                "Repository URL: https://example.invalid/team/repo.git",
-                "prefix" + LINE_SEPARATOR + "Repository URL: https://example.invalid/team/repo.git",
-                "Repository path:\nhttps://example.invalid/team/repo.git",
-                "Repo: git@example.invalid:repo.git\nRepository URL: https://example.invalid/team/repo.git");
+                Arguments.of(declaration, declaration, List.of(declaration), WorkflowDefault.NONE, ""),
+                Arguments.of(
+                        declarationAfterLineSeparator,
+                        declarationAfterLineSeparator,
+                        List.of(declarationAfterLineSeparator),
+                        WorkflowDefault.NONE,
+                        ""),
+                Arguments.of(
+                        valueOnFollowingLine,
+                        valueOnFollowingLine,
+                        List.of(valueOnFollowingLine),
+                        WorkflowDefault.NONE,
+                        ""),
+                Arguments.of(conflict, conflict, List.of(conflict), WorkflowDefault.NONE, ""),
+                Arguments.of(DEFAULT_TITLE, null, List.of(), WorkflowDefault.NONE, ""),
+                Arguments.of(DEFAULT_TITLE, "No repository here.", List.of(), WorkflowDefault.URL, REMOTE),
+                Arguments.of(
+                        DEFAULT_TITLE, null, List.of(), WorkflowDefault.URL, "https://example.invalid:0/team/repo.git"),
+                Arguments.of(DEFAULT_TITLE, null, List.of("Looks good."), WorkflowDefault.PATH, "../checkouts/repo"),
+                Arguments.of(DEFAULT_TITLE, null, List.of(), WorkflowDefault.PATH, "repo" + LINE_SEPARATOR + "clone"),
+                Arguments.of(
+                        DEFAULT_TITLE,
+                        "Repository URL: https://[2001:db8::1]:8443/team/repo.git",
+                        List.of("Repo: git@example.invalid:team/other.git"),
+                        WorkflowDefault.URL,
+                        REMOTE),
+                Arguments.of(
+                        "Repo: " + REMOTE,
+                        "Local path: C:\\src\\repo",
+                        List.of("Repository: file:///srv/repos/team/repo.git"),
+                        WorkflowDefault.PATH,
+                        "/srv/repos/team/repo"));
     }
 
     private static void assertSelectionFitsPromptBoundaries(RepositorySourceSelection selection) {
@@ -159,44 +233,6 @@ final class RepositorySourceResolverFuzzTest {
     }
 
     private static Card cardWithDescription(String description) {
-        return cardWithText("Implement feature", description, List.of());
+        return RepositorySourceFuzzInputs.card(DEFAULT_TITLE, description, List.of());
     }
-
-    private static Card cardWithText(String title, String description, List<Card.Comment> comments) {
-        return new Card(
-                "card-1",
-                "TRELLO-1",
-                title,
-                description,
-                null,
-                "Ready for Codex",
-                "list",
-                "list-ready",
-                "Ready for Codex",
-                false,
-                "board-1",
-                false,
-                false,
-                1,
-                "abc123",
-                "https://trello.com/c/abc123",
-                null,
-                "https://trello.com/c/abc123/example",
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                comments,
-                NOW,
-                NOW,
-                null,
-                false,
-                null);
-    }
-
-    private static final Instant NOW = Instant.parse("2026-01-01T00:00:00Z");
 }
