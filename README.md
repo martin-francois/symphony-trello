@@ -651,7 +651,9 @@ need one mapping. Do not paste private-context output into public issues.
 
 The installer downloads the latest GitHub Release archive, verifies its SHA3-256 checksum, and
 unpacks it into the local app directory. It installs or updates Symphony for Trello, then runs guided
-setup and starts the managed local worker unless you pass `--no-onboard`.
+setup and starts the managed local worker unless you pass `--no-onboard`. On an update, it also checks
+whether your connected workflows need the new generated prompt; see
+[Migrate Generated Workflows](#migrate-generated-workflows).
 
 For Windows, WSL2 is the recommended setup path. Run the Linux installer inside WSL2, keep Codex CLI
 and Git on the WSL2 `PATH`, and use Linux paths for allowed local files and folders. Native Windows
@@ -780,6 +782,7 @@ symphony-trello logs --board "My Board Name"
 symphony-trello diagnostics --board "My Board Name" --output diagnostics.txt
 symphony-trello diagnostics --workflow WORKFLOW.md --output diagnostics.txt
 symphony-trello diagnostics --show-private-context
+symphony-trello migrate-workflows --dry-run
 symphony-trello stop --board "My Board Name"
 ```
 
@@ -811,6 +814,65 @@ bash uninstall.sh --yes --yes-local-data --remove-all-local-data
 
 `--yes` only skips the prompt for installer-managed app files. Add `--yes-local-data` only when you
 also want unattended deletion of local `.env` files, workflows, workspaces, state, and logs.
+
+### Migrate Generated Workflows
+
+New Symphony for Trello versions can change the generated workflow prompt, the text after the
+closing `---` line of a workflow file. When you rerun the installer to update, it checks your
+connected workflows and offers to bring their prompt up to date. It never changes the YAML metadata
+at the top of the file, and it never recreates your Trello board.
+
+Setup remembers which version generated each workflow prompt in `generated-workflows.json`, next
+to the connected-board manifest in the config directory. The check compares each workflow with
+that recorded text and shows one result per workflow before it changes anything:
+
+| Result | Meaning | What happens |
+| --- | --- | --- |
+| `OK` | The new version generates the same prompt. | Nothing. |
+| `CURRENT` | The workflow already contains the new prompt. | Nothing. |
+| `MIGRATE` | The workflow has the old prompt unchanged, maybe with your own text before or after it. | Symphony asks before replacing the old prompt. Your own text stays exactly as it is. |
+| `MANUAL` | The old prompt was edited inside, appears twice, is unknown, or the file cannot be read safely. | Symphony writes the new prompt to a preview file and explains how to merge it. |
+| `REJECTED` | The workflow comes from a newer major version. | Nothing; reinstall that major version. |
+
+Symphony asks once for all `MIGRATE` workflows (`all`, `each`, or `none`) or once for a single
+workflow. If you kept your own text before or after the prompt, it warns you first: that text can
+conflict with the new prompt, so read it again after the update.
+
+Before it replaces a prompt, Symphony copies the workflow to
+`WORKFLOW.<name>.md.backup-<UTC time>` in the same folder and keeps the file permissions. It checks
+the new file before and after the replacement and restores the backup if a check fails. To undo a
+migration, copy the backup over the workflow. If the new version causes problems, also reinstall the
+previous version with `--version`.
+
+For a `MANUAL` result, Symphony writes the new prompt to `WORKFLOW.<name>.md.symphony-<version>-body.txt`.
+Keep everything up to and including the closing `---` line, compare the text after it with the
+preview, and copy over the parts you want. Then record that you migrated it, so later updates
+compare against the new prompt:
+
+```bash
+symphony-trello migrate-workflows --workflow /path/to/WORKFLOW.my-board.md --mark-migrated
+```
+
+Workflows created before this check existed have no recorded prompt. Symphony recognizes them only
+when they already contain the current prompt; otherwise they show `MANUAL`.
+
+You can run the check yourself at any time:
+
+```bash
+symphony-trello migrate-workflows --dry-run
+symphony-trello migrate-workflows
+symphony-trello migrate-workflows --board "My Board Name"
+```
+
+`--dry-run` shows the results and planned changes without writing files. Without a terminal, or
+when you update with `--no-onboard`, the installer runs the check with `--non-interactive`: it only
+reports, leaves every workflow unchanged, and writes no preview files.
+
+Downgrading to an older release of the same major version runs the same check in reverse. Symphony
+says that the workflow was made for a newer version. If you keep the newer prompt, it warns that the
+prompt may mention features the older version does not support, which can cause unexpected
+behavior. The installer refuses to install a release from an older major version before it changes
+anything.
 
 ## Advanced Setup
 
