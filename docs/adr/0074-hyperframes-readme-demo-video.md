@@ -15,6 +15,11 @@ informed: [Future maintainers, Contributors]
 
 # Render the README Demo Video With HyperFrames From Real UI Captures
 
+How the HyperFrames version is pinned and updated is amended by
+[ADR 0093](0093-renovate-updates-hyperframes.md). The version lives in one Renovate-managed file,
+`scripts/readme-demo-hyperframes.ts`, which is a render input. The rest of this decision is
+unchanged.
+
 ## Context and Problem Statement
 
 The README needs a polished, silent demo video and poster that show the real workflow: a Trello
@@ -131,8 +136,8 @@ risk this check is intended to remove.
   with Chromium and FFmpeg, and browser-native animations.
 * Good, because `hyperframes check` gates layout overflows, WCAG contrast, frozen frames, and
   motion assertions (`docs/demo/index.motion.json`) on every re-render.
-* Good, because the CLI version is pinned (`hyperframes@0.7.64`) in the render script and docs,
-  so future renders use the same HyperFrames behavior.
+* Good, because the CLI version is pinned to an exact release in
+  `scripts/readme-demo-hyperframes.ts`, so future renders use the same HyperFrames behavior.
 * Good, because CRF 26 keeps the 136.5-second 1080p video below 10 MB without changing its H.264
   browser-compatibility profile.
 * Good, because required CI fails deterministically when render inputs or either committed artifact
@@ -152,8 +157,8 @@ risk this check is intended to remove.
 
 `node scripts/render-readme-demo.ts` regenerates and verifies both assets with the Docker
 renderer; it fails if the MP4 is not a single silent H.264 stream of the expected duration, does not
-exceed 6 MiB, reaches 10 MB, or lacks dark text pixels in representative text-only regions. `pnpm
-dlx hyperframes@0.7.64 check` passes in `docs/demo`. The committed MP4 and poster match the composition
+exceed 6 MiB, reaches 10 MB, or lacks dark text pixels in representative text-only regions. `node
+scripts/readme-demo-hyperframes-cli.ts check` passes. The committed MP4 and poster match the composition
 when re-rendered at the pinned CLI version. `pnpm run verify:scripts` recomputes
 `docs/demo/render-manifest.json` and fails when the source digest, source-file list, video digest, or
 poster digest differs.

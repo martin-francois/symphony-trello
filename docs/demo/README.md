@@ -15,8 +15,9 @@ chosen over Remotion and the other candidates.
 ## Re-rendering
 
 Requirements: a Git working tree, Git on `PATH`, Node.js 22.18+, Docker, FFmpeg with `ffprobe`, and
-pnpm. The HyperFrames CLI is fetched on demand at a pinned version, and rendering uses its Docker
-environment so the production browser has the system font support needed to load the bundled fonts.
+pnpm. The HyperFrames CLI is fetched on demand at the version pinned in
+`scripts/readme-demo-hyperframes.ts`, and rendering uses its Docker environment so the production
+browser has the system font support needed to load the bundled fonts.
 No `package.json` or install step is needed here. The script validates the Git requirement before it
 starts the Docker render.
 
@@ -39,8 +40,8 @@ and output stay in a system temporary directory until media validation passes; o
 script labels only that directory for the renderer, leaving the checkout's security labels unchanged.
 
 The normal `pnpm run verify:scripts` CI gate recomputes that manifest. It fails when a composition,
-capture, font, render configuration, render script, MP4, or poster changes without running the
-render command and committing all three generated files. It also fails when the committed MP4 is
+capture, font, render configuration, render script, HyperFrames version, MP4, or poster changes without
+running the render command and committing all three generated files. It also fails when the committed MP4 is
 not strictly below GitHub's 10,000,000-byte (10 MB) video-attachment limit. This ceiling exists
 because [GitHub limits video attachments to 10 MB for repositories owned by users or organizations
 on its free plan](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files),
@@ -83,17 +84,59 @@ reading interval and disappears when the visual action starts. In card-movement 
 explanation is centered on its own during the reading hold. It then lifts into caption position while
 the board fades in; the cursor or Symphony badge starts only after that reveal.
 
-For iterating on the composition, run the CLI directly from this directory:
+For iterating on the composition, run the pinned CLI in this directory from the repository root.
+The wrapper reads the version from `scripts/readme-demo-hyperframes.ts`, so these commands never go
+out of date:
 
 ```bash
-pnpm dlx hyperframes@0.7.64 lint             # fast static feedback
-pnpm dlx hyperframes@0.7.64 check            # full browser gate (layout, motion, contrast)
-pnpm dlx hyperframes@0.7.64 preview          # live preview in the browser
-ffmpeg -i ../assets/demo.mp4 -ss 42.5 -frames:v 1 /tmp/demo-frame.png
+node scripts/readme-demo-hyperframes-cli.ts lint      # fast static feedback
+node scripts/readme-demo-hyperframes-cli.ts check     # full browser gate (layout, motion, contrast)
+node scripts/readme-demo-hyperframes-cli.ts preview   # live preview in the browser
+ffmpeg -i docs/assets/demo.mp4 -ss 42.5 -frames:v 1 /tmp/demo-frame.png
 ```
 
 Extract review stills from the rendered MP4 so they use the same browser and font render as the
 committed video.
+
+## Updating HyperFrames
+
+`scripts/readme-demo-hyperframes.ts` is the only file that names the HyperFrames version. The render
+script and the CLI wrapper above import it, and the CLI version also selects the Docker renderer
+image. A regex manager in `renovate.json` reads the same line, so Renovate opens an update pull
+request with the `hyperframes` label once a release has passed the repository's seven-day release
+age. That pull request never merges automatically.
+
+The version file is a render input. Renovate's version-only change therefore fails the
+`script-tests` freshness check until media rendered with the new version is committed. Do not edit
+`render-manifest.json` by hand to make the check pass: the manifest would then claim that media from
+the old renderer came from the new one.
+
+To finish a HyperFrames update pull request:
+
+1. Read the [HyperFrames release notes](https://github.com/heygen-com/hyperframes/releases) for
+   every version between the old and the new pin.
+2. Check out the Renovate branch and run `node scripts/render-readme-demo.ts` from the repository
+   root. It has the same requirements as a normal re-render and runs the same checks.
+3. Extract a few stills from the new MP4 and from the previous one, for example with
+   `git show origin/main:docs/assets/demo.mp4 > /tmp/demo-before.mp4`, and compare them.
+4. Commit `docs/assets/demo.mp4`, `docs/assets/readme-demo-poster.png`, and
+   `docs/demo/render-manifest.json` to the Renovate branch and push.
+5. Replace the README inline video as described in
+   [Updating the inline README video](#updating-the-inline-readme-video).
+6. Merge manually after the required checks pass.
+
+No automation renders or commits these files; [ADR 0093](../adr/0093-renovate-updates-hyperframes.md)
+explains why. If something goes wrong:
+
+- **The render or one of its checks fails.** The pull request stays blocked. If the new version
+  needs a composition change, make it on the same branch and render again. Otherwise close the pull
+  request. Renovate then skips that version, or the whole major version for a major update, and
+  proposes the next newer release.
+- **The branch falls behind `main`.** Renovate stops updating a branch after you push to it, and a
+  newer HyperFrames release does not replace your commit. Rebase the branch yourself. If `main`
+  changed a render input in the meantime, the freshness check fails again, and you render again.
+- **The rebase checkbox was ticked.** Renovate recreates the branch from its own commit and drops
+  the render commit. Run steps 2 to 4 again.
 
 ## Structure
 
