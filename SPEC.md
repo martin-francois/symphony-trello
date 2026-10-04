@@ -4040,6 +4040,12 @@ When this profile is used:
 - the default installer MUST download a release archive, verify its SHA3-256 checksum from the
   release's `checksums.txt`, and unpack it into the installer-managed app directory. It MUST NOT
   require Git or Maven for the default release-archive path
+- installer and uninstaller output MAY use color to accent headings and status words, but every
+  status MUST stay readable from its words alone. `NO_COLOR` set to a non-empty value MUST turn color
+  off. `CLICOLOR_FORCE` set to a non-empty value other than `0` MAY turn color on for redirected
+  output. Otherwise the scripts MUST NOT color output when `CLICOLOR=0`, when `TERM` is `dumb`, or
+  when output is not an interactive terminal, so redirected logs, CI output, and dry-run captures
+  stay free of escape sequences
 - the installer MAY support an explicit source-checkout mode for development and testing. In that
   mode it MUST clone or update the configured Git ref, run the Maven wrapper to build the packaged
   Quarkus app, and keep the rest of setup behavior equivalent to release-archive installs
