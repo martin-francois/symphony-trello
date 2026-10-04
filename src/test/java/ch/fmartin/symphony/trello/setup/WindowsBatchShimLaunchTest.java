@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.testsupport.WindowsShimFixtures.NPM_PATHEXT;
+import static ch.fmartin.symphony.trello.testsupport.WindowsShimFixtures.command;
 import static java.nio.file.Files.readAllLines;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -10,6 +11,7 @@ import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
@@ -73,6 +75,39 @@ final class WindowsBatchShimLaunchTest {
         // then
         assertThat(result.exitCode()).isEqualTo(ArgumentRecorder.EXIT_CODE);
         assertThat(readAllLines(recordFile)).containsExactly("login", "--device-auth");
+    }
+
+    @Test
+    void investigationStartsTheShimOnceWithItsArgumentsUnchanged() throws Exception {
+        // given
+        Path recordFile = tempDir.resolve("investigation-arguments.txt");
+        Path shim = npmStyleShim(recordFile).resolve(SHIM_NAME + ".cmd");
+        Path workingRoot = Files.createDirectories(tempDir.resolve("config with spaces"));
+        var request = new CodexInvestigationRunner.Request(
+                arguments -> command(shim.toString(), List.of(arguments)).toArray(String[]::new),
+                "Investigate the synthetic failure.",
+                workingRoot,
+                List.of(),
+                PROCESS_TIMEOUT);
+
+        // when
+        CodexInvestigationRunner.Outcome outcome = new ProcessCodexInvestigationRunner().investigate(request);
+
+        // then
+        assertThat(outcome)
+                .isEqualTo(new CodexInvestigationRunner.Outcome.Failed(
+                        ProcessCodexInvestigationRunner.exitCodeReason(ArgumentRecorder.EXIT_CODE)));
+        assertThat(readAllLines(recordFile))
+                .startsWith(
+                        "exec",
+                        "--sandbox",
+                        "workspace-write",
+                        "--skip-git-repo-check",
+                        "--ephemeral",
+                        "--color",
+                        "never")
+                .containsSubsequence("--output-schema", "--output-last-message")
+                .endsWith("--cd", workingRoot.toString(), "-");
     }
 
     /// Writes `fake-codex.cmd` with the same structure as npm's shim: start a program with a fixed
