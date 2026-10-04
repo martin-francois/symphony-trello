@@ -165,13 +165,13 @@ Workspace and authorize the API token in the browser.
 10. Copy the API key somewhere temporary. The API key identifies the app and is not sensitive.
 11. On the same API key page, click the `Token` link. The link is just a linked word inside a paragraph
     next to the key. The token is the sensitive credential.
-13. Review the authorization screen. Confirm it shows `Symphony for Trello Automation`, your Trello
+12. Review the authorization screen. Confirm it shows `Symphony for Trello Automation`, your Trello
     account, and permissions to make comments and create or update cards, lists, boards, and
     Workspaces.
-14. Click `Allow`.
-15. Copy the generated token. Treat it like a password: it grants access as your Trello account to
+13. Click `Allow`.
+14. Copy the generated token. Treat it like a password: it grants access as your Trello account to
     boards and Workspaces your account can access.
-16. Give both values to Symphony. Choose the way that matches how you are setting it up:
+15. Give both values to Symphony. Choose the way that matches how you are setting it up:
 
     - With the installer, or with guided setup started by the `symphony-trello setup-local` command,
       go back to the terminal where guided setup is waiting. Paste the API key at the
