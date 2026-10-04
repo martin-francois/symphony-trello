@@ -28,6 +28,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -1233,10 +1234,10 @@ public class TrelloClient implements TrackerClient {
                 List.<BlockerRef>of(),
                 comments(payload),
                 createdAtFromObjectId(id),
-                instant(payload.get("dateLastActivity")),
-                instant(payload.get("due")),
+                instant(payload.get("dateLastActivity"), "dateLastActivity"),
+                instant(payload.get("due"), "due"),
                 nullableBool(payload.get("dueComplete")),
-                decimal(payload.get("pos"))));
+                decimal(payload.get("pos"), "pos")));
     }
 
     private static List<Card.Comment> comments(Map<String, Object> payload) {
@@ -1308,7 +1309,7 @@ public class TrelloClient implements TrackerClient {
                 string(action.get("id")),
                 text,
                 commentAuthor(action.get("memberCreator")),
-                instant(action.get("date"))));
+                instant(action.get("date"), "actions.date")));
     }
 
     private static String commentText(Map<?, ?> action) {
@@ -1585,18 +1586,27 @@ public class TrelloClient implements TrackerClient {
         }
     }
 
-    private static Instant instant(Object value) {
+    private static Instant instant(Object value, String field) {
+        // SPEC.md 11.3 reads a blank date as no date, while decimal() rejects a blank pos as malformed.
         if (value == null || value.toString().isBlank()) {
             return null;
         }
-        return Instant.parse(value.toString());
+        try {
+            return Instant.parse(value.toString());
+        } catch (DateTimeParseException e) {
+            throw malformedField(field, "an ISO-8601 instant", value, e);
+        }
     }
 
-    private static BigDecimal decimal(Object value) {
+    private static BigDecimal decimal(Object value, String field) {
         if (value == null) {
             return null;
         }
-        return new BigDecimal(value.toString());
+        try {
+            return new BigDecimal(value.toString());
+        } catch (NumberFormatException e) {
+            throw malformedField(field, "a decimal number", value, e);
+        }
     }
 
     private static Integer integer(Object value, String field) {
@@ -1608,10 +1618,19 @@ public class TrelloClient implements TrackerClient {
         // malformed payload instead of being silently truncated by Number.intValue().
         Classified classified = WholeNumbers.classify(value.toString());
         if (classified.kind() != Kind.WHOLE) {
-            throw new TrelloException(
-                    "trello_unknown_payload", "Trello payload field " + field + " is not a whole number: " + value);
+            throw malformedField(field, "a whole number", value, null);
         }
         return classified.value();
+    }
+
+    // A malformed field Trello sets fails the card it belongs to. Per-card lookups catch TrelloException and
+    // report that one card as failed instead of aborting the whole lookup.
+    private static TrelloException malformedField(
+            String field, String expected, Object value, @Nullable Throwable cause) {
+        return new TrelloException(
+                "trello_unknown_payload",
+                "Trello payload field " + field + " is not " + expected + ": " + value,
+                cause);
     }
 
     private static Boolean nullableBool(Object value) {
