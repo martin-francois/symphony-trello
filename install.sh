@@ -70,6 +70,7 @@ LAUNCH_AGENT_DIR="$HOME/Library/LaunchAgents"
 LAUNCH_AGENT_LABEL="ch.fmartin.symphony-trello"
 LAUNCH_AGENT_PATH="$LAUNCH_AGENT_DIR/$LAUNCH_AGENT_LABEL.plist"
 INSTALLER_COMPLETION_ENV="SYMPHONY_TRELLO_INSTALLER_COMPLETION"
+CONNECTED_BOARDS_FILE_NAME="connected-boards.json"
 
 usage() {
   cat <<USAGE
@@ -178,35 +179,65 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-run() {
-  printf '  RUN  %s\n' "$*"
-  if [[ "$DRY_RUN" == false ]]; then
-    "$@"
+# Progress output: one plan, numbered phases, and one result line per milestone. Routine commands
+# run without a RUN line and name themselves only when they fail. Commands the user approves or
+# answers interactively still print RUN first. ADR 0122 records this output contract.
+PHASE_COUNT=0
+PHASE_INDEX=0
+PHASE_TITLE=""
+PHASE_RECOVERY=""
+
+begin_phase() {
+  PHASE_INDEX=$((PHASE_INDEX + 1))
+  PHASE_TITLE="$1"
+  PHASE_RECOVERY="$2"
+  echo
+  printf '[%s/%s] %s\n' "$PHASE_INDEX" "$PHASE_COUNT" "$PHASE_TITLE"
+}
+
+report_failed_phase() {
+  local status=$?
+  if [[ "$status" -ne 0 && -n "$PHASE_TITLE" ]]; then
+    {
+      echo
+      printf 'Installer stopped during [%s/%s] %s.\n' "$PHASE_INDEX" "$PHASE_COUNT" "$PHASE_TITLE"
+      printf '%s\n' "$PHASE_RECOVERY"
+    } >&2
   fi
 }
 
 run_with_label() {
-  local label="$1"
+  local label="$1" status=0
   shift
-  printf '  RUN  %s\n' "$label"
-  if [[ "$DRY_RUN" == false ]]; then
-    "$@"
+  if [[ "$DRY_RUN" == true ]]; then
+    return 0
   fi
+  "$@" || status=$?
+  if [[ "$status" -ne 0 ]]; then
+    printf 'Command failed with exit code %s: %s\n' "$status" "$label" >&2
+  fi
+  return "$status"
+}
+
+run() {
+  run_with_label "$*" "$@"
 }
 
 terminal_available() {
   [[ -e /dev/tty ]] && { : </dev/tty; } 2>/dev/null
 }
 
-run_interactive() {
+require_terminal() {
   if ! terminal_available; then
     echo "This step needs an interactive terminal. Rerun the installer from a terminal or pass --no-onboard." >&2
     exit 2
   fi
+}
+
+run_interactive() {
+  require_terminal
   printf '  RUN  %s\n' "$*"
-  if [[ "$DRY_RUN" == false ]]; then
-    "$@" </dev/tty
-  fi
+  "$@" </dev/tty
 }
 
 run_setup_local_with_deferred_completion() {
@@ -1243,10 +1274,10 @@ checkout_ref() {
     return
   fi
   if git -C "$app_dir" show-ref --verify --quiet "refs/remotes/origin/$ref"; then
-    run git -C "$app_dir" checkout -B "$ref" "origin/$ref"
-    run git -C "$app_dir" pull --ff-only origin "$ref"
+    run git -C "$app_dir" checkout -q -B "$ref" "origin/$ref"
+    run git -C "$app_dir" pull -q --ff-only origin "$ref"
   else
-    run git -C "$app_dir" checkout --detach "$ref"
+    run git -C "$app_dir" checkout -q --detach "$ref"
   fi
 }
 
@@ -1272,6 +1303,7 @@ ensure_checkout_origin() {
     return
   fi
   display_repo="$(display_repo_source "$REPO_URL")"
+  echo "  NOTE  Setting the app checkout origin to $display_repo"
   if [[ -z "$origin_url" ]]; then
     run_with_label "git -C $APP_DIR remote add origin $display_repo" git -C "$APP_DIR" remote add origin "$REPO_URL"
   else
@@ -1292,20 +1324,21 @@ install_or_update_checkout() {
   if [[ ! -d "$APP_DIR/.git" ]]; then
     if [[ -e "$APP_DIR" ]]; then
       assert_existing_app_safe
+      echo "  NOTE  Replacing the installed release archive app with a Git checkout"
       run rm -rf "$APP_DIR"
     fi
     run mkdir -p "$(dirname "$APP_DIR")"
     if [[ "$DRY_RUN" == false ]] && remote_has_branch "$REPO_URL" "$REF"; then
-      run_with_label "git clone --branch $REF $(display_repo_source "$REPO_URL") $APP_DIR" git clone --branch "$REF" "$REPO_URL" "$APP_DIR"
+      run_with_label "git clone -q --branch $REF $(display_repo_source "$REPO_URL") $APP_DIR" git clone -q --branch "$REF" "$REPO_URL" "$APP_DIR"
     else
-      run_with_label "git clone $(display_repo_source "$REPO_URL") $APP_DIR" git clone "$REPO_URL" "$APP_DIR"
-      run git -C "$APP_DIR" fetch --tags --prune origin
+      run_with_label "git clone -q $(display_repo_source "$REPO_URL") $APP_DIR" git clone -q "$REPO_URL" "$APP_DIR"
+      run git -C "$APP_DIR" fetch -q --tags --prune origin
       checkout_ref "$APP_DIR" "$REF"
     fi
   else
     assert_existing_checkout_safe
     ensure_checkout_origin
-    run git -C "$APP_DIR" fetch --tags --prune origin
+    run git -C "$APP_DIR" fetch -q --tags --prune origin
     checkout_ref "$APP_DIR" "$REF"
   fi
 }
@@ -1492,6 +1525,16 @@ path_contains() {
   esac
 }
 
+# Shell-correct command for next-step hints. The bare name works only when this shell already
+# finds the command directory on PATH; profile changes apply to new shells.
+installed_command_display() {
+  if path_contains "$BIN_DIR" "$ORIGINAL_PATH"; then
+    printf 'symphony-trello\n'
+  else
+    printf '%s\n' "$(shell_literal "$BIN_DIR/symphony-trello")"
+  fi
+}
+
 path_setup_line() {
   local current_path
   current_path="\"\$PATH\""
@@ -1560,7 +1603,6 @@ append_path_setup_to_profile() {
   line="$(path_setup_line)"
   for profile in "${profiles[@]}"; do
     if [[ -f "$profile" ]] && grep -Fqx "$line" "$profile"; then
-      echo "  OK  PATH setup already exists in $profile"
       continue
     fi
     if [[ "$DRY_RUN" == true ]]; then
@@ -1595,14 +1637,6 @@ offer_path_setup() {
     print_path_setup_instructions
     return
   fi
-  echo
-  echo "Command PATH setup"
-  if [[ "$DRY_RUN" == true ]]; then
-    echo "Symphony would install the command here:"
-  else
-    echo "Symphony installed the command here:"
-  fi
-  echo "  $BIN_DIR/symphony-trello"
   append_path_setup_to_profile
 }
 
@@ -1718,7 +1752,6 @@ RestartSec=10s
 [Install]
 WantedBy=default.target
 EOF
-  echo "  OK  User systemd service installed: $SYSTEMD_SERVICE_PATH"
 }
 
 enable_user_systemd_service() {
@@ -1785,7 +1818,6 @@ $(xml_autostart_environment_entries)
 </dict>
 </plist>
 EOF
-  echo "  OK  macOS LaunchAgent installed: $LAUNCH_AGENT_PATH"
 }
 
 enable_launch_agent() {
@@ -1808,7 +1840,6 @@ enable_launch_agent() {
 }
 
 start_managed_workers() {
-  echo "Starting managed workers..."
   if user_systemd_available && enable_user_systemd_service; then
     return
   fi
@@ -1818,8 +1849,13 @@ start_managed_workers() {
   if [[ "$OS_NAME" == "Linux" ]] && need systemctl; then
     echo "  NOTE  User systemd is unavailable in this session. On headless Linux hosts, enable lingering and make sure the user systemd manager is available."
   fi
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "  WOULD skip autostart and start managed workers with: $BIN_DIR/symphony-trello start --all"
+    return
+  fi
   echo "  NOTE  Autostart service was not configured. Use '$BIN_DIR/symphony-trello start --all' after reboot or login."
   run "$BIN_DIR/symphony-trello" start --all
+  echo "  OK  Managed workers started"
 }
 
 start_managed_workers_without_installer_completion() (
@@ -1948,7 +1984,7 @@ prepare_microos_var_root() {
     echo "  $create_command" >&2
     exit 2
   fi
-  run bash -c "$create_command"
+  run_shell_command "$create_command"
   MICROOS_VAR_ROOT_CREATED=true
 }
 
@@ -2356,6 +2392,7 @@ install_package_or_exit() {
   if package_command_requires_reboot "$command"; then
     explain_transactional_reboot_and_exit
   fi
+  echo "  OK  $label installed"
 }
 
 codex_authenticated() {
@@ -2377,6 +2414,7 @@ install_codex_with_user_local_npm() {
       echo "Open a new terminal with npm on PATH, then rerun this installer." >&2
       exit 2
     fi
+    echo "  OK  Node.js/npm installed"
   fi
   run mkdir -p "$CODEX_NPM_PREFIX" "$BIN_DIR"
   run_shell_command "$(codex_npm_install_command)"
@@ -2453,6 +2491,7 @@ install_codex_or_exit() {
     echo "Add $BIN_DIR or $CODEX_NPM_PREFIX/bin to PATH, then rerun this installer." >&2
     exit 2
   fi
+  echo "  OK  Codex CLI installed"
 }
 
 ensure_prerequisites() {
@@ -2540,8 +2579,6 @@ print_dry_run_prerequisite_plan() {
   fi
   if [[ "$NO_ONBOARD" == false ]] && ! need codex; then
     print_dry_run_codex_plan
-  elif [[ "$NO_ONBOARD" == true ]] && ! need codex; then
-    echo "  NOTE   Codex CLI setup is skipped because --no-onboard was passed."
   fi
 }
 
@@ -2579,44 +2616,85 @@ CONFIG_INSTALL_CONTEXT_FILE="$CONFIG_DIR/install-context.properties"
 activate_managed_codex_path
 activate_brew_openjdk
 
+UPDATING_EXISTING_APP=false
+if [[ -d "$APP_DIR" ]]; then
+  UPDATING_EXISTING_APP=true
+fi
+RESTART_MANAGED_WORKERS=false
+if [[ "$UPDATING_EXISTING_APP" == true ]] && has_managed_pid_files && [[ -x "$BIN_DIR/symphony-trello" ]]; then
+  RESTART_MANAGED_WORKERS=true
+fi
+if [[ "$UPDATING_EXISTING_APP" == true ]]; then
+  PLAN_TITLE="Update plan"
+  APP_PHASE_TITLE="Updating Symphony"
+else
+  PLAN_TITLE="Install plan"
+  APP_PHASE_TITLE="Installing Symphony"
+fi
+WORKER_PHASE_TITLE="Starting managed workers"
+if [[ "$RESTART_MANAGED_WORKERS" == true ]]; then
+  WORKER_PHASE_TITLE="Restarting managed workers"
+fi
+if [[ "$NO_ONBOARD" == false ]]; then
+  PHASE_COUNT=4
+elif [[ "$RESTART_MANAGED_WORKERS" == true ]]; then
+  PHASE_COUNT=3
+else
+  PHASE_COUNT=2
+fi
+INSTALLED_COMMAND="$(installed_command_display)"
+PREREQUISITES_RECOVERY="Follow the prerequisite steps above, then rerun the installer."
+APP_RECOVERY="Fix the problem above, then rerun the installer."
+SETUP_RECOVERY="Fix the problem above, then rerun the installer or run: $INSTALLED_COMMAND setup-local"
+WORKERS_RECOVERY="Fix the problem above, then run: $INSTALLED_COMMAND start --all"
+
 echo "Symphony for Trello installer"
-echo
 echo "Detected $(platform_name)"
+echo
+echo "$PLAN_TITLE"
+if [[ "$INSTALL_SOURCE" == "source-checkout" ]]; then
+  echo "Source: Git checkout"
+  echo "Repository: $(display_repo_source "$REPO_URL")"
+  echo "Ref: $REF"
+else
+  echo "Source: release archive"
+  echo "Version: $VERSION"
+  echo "Release assets: $RELEASE_BASE_URL"
+fi
 echo "Install: $APP_DIR"
 echo "Config: $CONFIG_DIR"
 echo "Workspaces: $WORKSPACE_ROOT"
 echo "State/logs: $STATE_HOME"
 echo "Command: $BIN_DIR/symphony-trello"
-echo "Install source: $INSTALL_SOURCE"
-if [[ "$INSTALL_SOURCE" == "source-checkout" ]]; then
-  echo "Repository: $(display_repo_source "$REPO_URL")"
-  echo "Ref: $REF"
-else
-  echo "Version: $VERSION"
-  echo "Release assets: $RELEASE_BASE_URL"
+if [[ "$DRY_RUN" == true ]]; then
+  echo
+  echo "Dry run: no files changed."
 fi
-echo
-echo "Checking prerequisites..."
+trap report_failed_phase EXIT
+
+begin_phase "Checking prerequisites" "$PREREQUISITES_RECOVERY"
 if [[ "$INSTALL_SOURCE" == "source-checkout" ]]; then
-  if need git; then echo "  OK      Git available"; else echo "  NEEDED  Git"; fi
+  if need git; then echo "  OK  Git"; else echo "  NEEDED  Git"; fi
 fi
-if jdk_compatible; then echo "  OK      Java 25+ JDK available"; else echo "  NEEDED  Java 25+ JDK"; fi
+if jdk_compatible; then echo "  OK  Java 25+ JDK"; else echo "  NEEDED  Java 25+ JDK"; fi
 if need codex; then
-  echo "  OK      Codex CLI available"
+  echo "  OK  Codex CLI"
 elif [[ "$NO_ONBOARD" == true ]]; then
-  echo "  NEEDED  Codex CLI (only needed for guided setup; skipped by --no-onboard)"
+  echo "  SKIP  Codex CLI (only needed for guided setup; skipped by --no-onboard)"
 else
   echo "  NEEDED  Codex CLI"
 fi
 
 if [[ "$DRY_RUN" == true ]]; then
-  echo
-  echo "Dry run: no files changed."
   print_dry_run_prerequisite_plan
   if [[ "$DRY_RUN_STOPS_AFTER_PREREQUISITES" == true ]]; then
     exit 0
   fi
   prepare_microos_var_root
+  begin_phase "$APP_PHASE_TITLE" "$APP_RECOVERY"
+  if [[ "$RESTART_MANAGED_WORKERS" == true ]]; then
+    echo "  WOULD stop managed workers before the update"
+  fi
   if [[ "$INSTALL_SOURCE" == "source-checkout" ]]; then
     echo "  WOULD clone or update: $APP_DIR"
     echo "  WOULD build packaged Quarkus app with Maven wrapper"
@@ -2628,7 +2706,12 @@ if [[ "$DRY_RUN" == true ]]; then
   echo "  WOULD install command: $BIN_DIR/symphony-trello"
   offer_path_setup
   if [[ "$NO_ONBOARD" == false ]]; then
-    echo "  WOULD run guided setup and start Symphony automatically."
+    begin_phase "Running setup" "$SETUP_RECOVERY"
+    echo "  WOULD run guided setup: $BIN_DIR/symphony-trello setup-local"
+  fi
+  if [[ "$NO_ONBOARD" == false || "$RESTART_MANAGED_WORKERS" == true ]]; then
+    begin_phase "$WORKER_PHASE_TITLE" "$WORKERS_RECOVERY"
+    start_managed_workers
   fi
   exit 0
 fi
@@ -2664,36 +2747,30 @@ if [[ "$NO_ONBOARD" == false ]] && ! codex login status >/dev/null 2>&1; then
     echo "Run \`$login_command\`, then rerun this installer." >&2
     exit 2
   fi
+  echo "  OK  Codex CLI logged in"
 fi
 
-echo
-echo "Installing Symphony..."
-UPDATING_EXISTING_APP=false
-if [[ -d "$APP_DIR" ]]; then
-  UPDATING_EXISTING_APP=true
-fi
-RESTART_MANAGED_WORKERS=false
-if [[ "$UPDATING_EXISTING_APP" == true ]] && has_managed_pid_files; then
-  if [[ -x "$BIN_DIR/symphony-trello" ]]; then
-    RESTART_MANAGED_WORKERS=true
-    echo "Stopping managed workers before update..."
-    run "$BIN_DIR/symphony-trello" stop
-  elif has_live_managed_pid_files; then
+begin_phase "$APP_PHASE_TITLE" "$APP_RECOVERY"
+if [[ "$RESTART_MANAGED_WORKERS" == true ]]; then
+  run "$BIN_DIR/symphony-trello" stop
+  echo "  OK  Managed workers stopped for the update"
+elif [[ "$UPDATING_EXISTING_APP" == true ]] && has_managed_pid_files; then
+  if has_live_managed_pid_files; then
     echo "Cannot stop managed workers because the installed command is missing: $BIN_DIR/symphony-trello" >&2
     echo "Stop the running Symphony worker processes manually, then rerun the installer." >&2
     exit 2
-  else
-    echo "Removing stale managed worker pid files before update..."
-    if [[ "$DRY_RUN" == false ]]; then
-      remove_stale_managed_pid_files
-    fi
   fi
+  remove_stale_managed_pid_files
+  echo "  OK  Removed stale managed worker pid files"
 fi
 if [[ "$INSTALL_SOURCE" == "source-checkout" ]]; then
   install_or_update_checkout
+  echo "  OK  Source checked out"
   run "$APP_DIR/mvnw" -q -f "$APP_DIR/pom.xml" -DskipTests clean package
+  echo "  OK  App built with Maven wrapper"
 else
   install_release_archive
+  echo "  OK  Release $VERSION verified and unpacked"
 fi
 run mkdir -p "$BIN_DIR" "$CONFIG_DIR" "$WORKSPACE_ROOT" "$STATE_HOME"
 if [[ "$DRY_RUN" == false ]]; then
@@ -2749,27 +2826,34 @@ exec_setup_cli "\$@"
 EOF
   chmod +x "$BIN_DIR/symphony-trello"
 fi
-echo "  OK  Command installed: $BIN_DIR/symphony-trello"
+echo "  OK  Command installed"
 write_install_context
 
 offer_path_setup
 
 if [[ "$NO_ONBOARD" == false ]]; then
-  echo
-  if [[ "$RESTART_MANAGED_WORKERS" == true ]]; then
-    echo "Restarting managed workers after update..."
-  fi
-  echo "Starting setup..."
-  if [[ "$DRY_RUN" == true ]]; then
-    run_interactive "$BIN_DIR/symphony-trello" setup-local
-    start_managed_workers_without_installer_completion
-  else
-    run_setup_local_with_deferred_completion
-    start_managed_workers_without_installer_completion
-    print_installer_completion
-  fi
-elif [[ "$RESTART_MANAGED_WORKERS" == true ]]; then
-  echo
-  echo "Restarting managed workers after update..."
+  begin_phase "Running setup" "$SETUP_RECOVERY"
+  run_setup_local_with_deferred_completion
+  echo "  OK  Setup complete"
+  begin_phase "$WORKER_PHASE_TITLE" "$WORKERS_RECOVERY"
   start_managed_workers_without_installer_completion
+  print_installer_completion
+  exit 0
+fi
+if [[ "$RESTART_MANAGED_WORKERS" == true ]]; then
+  begin_phase "$WORKER_PHASE_TITLE" "$WORKERS_RECOVERY"
+  start_managed_workers_without_installer_completion
+fi
+echo
+if [[ "$UPDATING_EXISTING_APP" == true ]]; then
+  echo "Symphony for Trello updated."
+else
+  echo "Symphony for Trello installed."
+fi
+if [[ "$RESTART_MANAGED_WORKERS" == true ]]; then
+  echo "Next step: check the managed workers with: $INSTALLED_COMMAND status"
+elif [[ -f "$CONFIG_DIR/$CONNECTED_BOARDS_FILE_NAME" ]]; then
+  echo "Next step: start the connected boards with: $INSTALLED_COMMAND start --all"
+else
+  echo "Next step: connect a Trello board with: $INSTALLED_COMMAND setup-local"
 fi
