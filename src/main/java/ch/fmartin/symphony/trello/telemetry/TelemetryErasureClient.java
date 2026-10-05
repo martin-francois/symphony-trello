@@ -18,9 +18,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import org.jboss.logging.Logger;
 
 /// Bounded HTTPS transport for ownership operations. Request bodies and raw errors are never logged.
 final class TelemetryErasureClient implements AutoCloseable {
+    private static final Logger LOG = Logger.getLogger(TelemetryErasureClient.class);
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Duration TIMEOUT = Duration.ofSeconds(20);
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
@@ -85,13 +87,13 @@ final class TelemetryErasureClient implements AutoCloseable {
         post(unsigned + "|" + ownership.credential().sign(unsigned));
     }
 
-    /// Best effort: returns false instead of failing when the service cannot be reached.
-    boolean acknowledge(TelemetryOwnership ownership, TelemetryOwnership.Erasure erasure, Instant now) {
+    /// Best effort: a lost acknowledgment leaves only a status flag for the operator to archive.
+    void acknowledge(TelemetryOwnership ownership, TelemetryOwnership.Erasure erasure, Instant now) {
         try {
             request(Action.ACK, ownership, erasure, now);
-            return true;
         } catch (TelemetryStateException unreachable) {
-            return false;
+            // Completion is already durable locally, so the user has nothing to retry.
+            LOG.debugf("erasure acknowledgment not delivered: %s", unreachable.getMessage());
         }
     }
 

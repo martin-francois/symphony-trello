@@ -112,23 +112,23 @@ final class TelemetryErasure {
     }
 
     Request request(TelemetryStateStore store) {
-        Claim claim = store.update(state -> {
+        OwnershipCase ownershipCase = store.update(state -> {
             TelemetryOwnership owner = state.ownership();
             TelemetryState disabled = state.withMode(TelemetryMode.DISABLED);
             if (owner == null) {
-                return Update.write(disabled, state.hasIdentity() ? Claim.LEGACY : Claim.NOTHING_SENT);
+                return Update.write(disabled, state.hasIdentity() ? OwnershipCase.LEGACY : OwnershipCase.NOTHING_SENT);
             }
             if (owner.erasure() != null) {
-                return Update.write(disabled, Claim.OWNED);
+                return Update.write(disabled, OwnershipCase.OWNED);
             }
             Instant now = clock.instant();
             // Let a dispatched heartbeat finish its transport and ingestion before looking up its profile.
             Instant notBefore = owner.settledAt(now);
             Phase phase = owner.used() ? Phase.REQUESTED : Phase.COMPLETE;
             Erasure job = new Erasure(UUID.randomUUID(), now, notBefore, phase);
-            return Update.write(disabled.withOwnership(owner.withErasure(job)), Claim.OWNED);
+            return Update.write(disabled.withOwnership(owner.withErasure(job)), OwnershipCase.OWNED);
         });
-        return switch (claim) {
+        return switch (ownershipCase) {
             case LEGACY ->
                 throw new TelemetryStateException(
                         "reporting is off; this installation has no ownership credential; use maintainer-assisted erasure");
@@ -140,7 +140,8 @@ final class TelemetryErasure {
         };
     }
 
-    private enum Claim {
+    /// What the installation can prove about its reports when erasure is requested.
+    private enum OwnershipCase {
         LEGACY,
         NOTHING_SENT,
         OWNED
