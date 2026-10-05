@@ -71,6 +71,52 @@ LAUNCH_AGENT_LABEL="ch.fmartin.symphony-trello"
 LAUNCH_AGENT_PATH="$LAUNCH_AGENT_DIR/$LAUNCH_AGENT_LABEL.plist"
 INSTALLER_COMPLETION_ENV="SYMPHONY_TRELLO_INSTALLER_COMPLETION"
 
+# >>> output style >>>
+# Colors only accent words that already carry the meaning (OK, NOTE, RUN, ...), so plain output says
+# the same thing. NO_COLOR turns color off, CLICOLOR_FORCE turns it on for any output, and otherwise
+# color needs a terminal on stdout, CLICOLOR other than 0, and a TERM other than dumb. ADR 0108
+# records the palette contrast and this precedence. Keep this block identical in install.sh and
+# uninstall.sh.
+STYLE_RESET=""
+STYLE_ACCENT=""
+STYLE_SUCCESS=""
+STYLE_ATTENTION=""
+
+output_color_enabled() {
+  if [[ -n "${NO_COLOR:-}" ]]; then
+    return 1
+  fi
+  if [[ -n "${CLICOLOR_FORCE:-}" && "$CLICOLOR_FORCE" != 0 ]]; then
+    return 0
+  fi
+  [[ "${CLICOLOR:-}" != 0 && -t 1 && -n "${TERM:-}" && "$TERM" != dumb ]]
+}
+
+if output_color_enabled; then
+  STYLE_RESET=$'\033[0m'
+  STYLE_ACCENT=$'\033[1;38;5;32m'
+  STYLE_SUCCESS=$'\033[1;38;5;64m'
+  STYLE_ATTENTION=$'\033[1;38;5;166m'
+fi
+
+print_heading() {
+  printf '%s%s%s\n' "$STYLE_ACCENT" "$1" "$STYLE_RESET"
+}
+
+# Prints two spaces, the styled LABEL, then TEXT unchanged. TEXT starts with its own separator so
+# the plain output keeps its column layout.
+print_status() {
+  local label="$1"
+  local text="$2"
+  local style="$STYLE_ACCENT"
+  case "$label" in
+  OK) style="$STYLE_SUCCESS" ;;
+  NEEDED | NOTE | SKIP | KILL) style="$STYLE_ATTENTION" ;;
+  esac
+  printf '  %s%s%s%s\n' "$style" "$label" "$STYLE_RESET" "$text"
+}
+# <<< output style <<<
+
 usage() {
   cat <<USAGE
 Usage:
@@ -179,7 +225,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 run() {
-  printf '  RUN  %s\n' "$*"
+  print_status RUN "  $*"
   if [[ "$DRY_RUN" == false ]]; then
     "$@"
   fi
@@ -188,7 +234,7 @@ run() {
 run_with_label() {
   local label="$1"
   shift
-  printf '  RUN  %s\n' "$label"
+  print_status RUN "  $label"
   if [[ "$DRY_RUN" == false ]]; then
     "$@"
   fi
@@ -203,7 +249,7 @@ run_interactive() {
     echo "This step needs an interactive terminal. Rerun the installer from a terminal or pass --no-onboard." >&2
     exit 2
   fi
-  printf '  RUN  %s\n' "$*"
+  print_status RUN "  $*"
   if [[ "$DRY_RUN" == false ]]; then
     "$@" </dev/tty
   fi
@@ -1448,7 +1494,7 @@ has_control_character() {
 write_autostart_environment_file() {
   local name parent temp value
   if [[ "$DRY_RUN" == true ]]; then
-    echo "  WOULD write autostart environment snapshot: $AUTOSTART_ENV_PATH"
+    print_status WOULD " write autostart environment snapshot: $AUTOSTART_ENV_PATH"
     return
   fi
   parent="$(dirname "$AUTOSTART_ENV_PATH")"
@@ -1524,7 +1570,7 @@ likely_shell_profiles() {
 
 print_path_setup_instructions() {
   local profile profiles=()
-  echo "  NOTE  $BIN_DIR is not on PATH for this shell."
+  print_status NOTE "  $BIN_DIR is not on PATH for this shell."
   echo "        Add this line to a shell profile file so future shells can run symphony-trello:"
   echo "        $(path_setup_line)"
   if [[ -n "${HOME:-}" ]]; then
@@ -1553,23 +1599,23 @@ append_path_setup_to_profile() {
     done < <(likely_shell_profiles 2>/dev/null || true)
   fi
   if [[ -z "${HOME:-}" ]] || [[ "${#profiles[@]}" -eq 0 ]]; then
-    echo "  NOTE  Could not safely choose a shell profile file."
+    print_status NOTE "  Could not safely choose a shell profile file."
     print_path_setup_instructions
     return
   fi
   line="$(path_setup_line)"
   for profile in "${profiles[@]}"; do
     if [[ -f "$profile" ]] && grep -Fqx "$line" "$profile"; then
-      echo "  OK  PATH setup already exists in $profile"
+      print_status OK "  PATH setup already exists in $profile"
       continue
     fi
     if [[ "$DRY_RUN" == true ]]; then
-      echo "  WOULD add $BIN_DIR to PATH in $profile"
+      print_status WOULD " add $BIN_DIR to PATH in $profile"
       echo "        Line: $line"
       continue
     fi
     if ! mkdir -p "$(dirname "$profile")"; then
-      echo "  NOTE  Could not update PATH in $profile."
+      print_status NOTE "  Could not update PATH in $profile."
       print_path_setup_instructions
       continue
     fi
@@ -1579,9 +1625,9 @@ append_path_setup_to_profile() {
       printf '%s\n' "$line"
       printf '%s\n' "$PATH_BLOCK_END"
     } >>"$profile"; then
-      echo "  OK  Added $BIN_DIR to PATH in $profile"
+      print_status OK "  Added $BIN_DIR to PATH in $profile"
     else
-      echo "  NOTE  Could not update PATH in $profile."
+      print_status NOTE "  Could not update PATH in $profile."
       print_path_setup_instructions
     fi
   done
@@ -1596,7 +1642,7 @@ offer_path_setup() {
     return
   fi
   echo
-  echo "Command PATH setup"
+  print_heading "Command PATH setup"
   if [[ "$DRY_RUN" == true ]]; then
     echo "Symphony would install the command here:"
   else
@@ -1695,7 +1741,7 @@ write_user_systemd_service() {
   path_unit="$(systemd_quote "PATH=$PATH")"
   run mkdir -p "$SYSTEMD_USER_DIR"
   if [[ "$DRY_RUN" == true ]]; then
-    echo "  WOULD write user systemd service: $SYSTEMD_SERVICE_PATH"
+    print_status WOULD " write user systemd service: $SYSTEMD_SERVICE_PATH"
     return
   fi
   cat >"$SYSTEMD_SERVICE_PATH" <<EOF
@@ -1718,31 +1764,31 @@ RestartSec=10s
 [Install]
 WantedBy=default.target
 EOF
-  echo "  OK  User systemd service installed: $SYSTEMD_SERVICE_PATH"
+  print_status OK "  User systemd service installed: $SYSTEMD_SERVICE_PATH"
 }
 
 enable_user_systemd_service() {
   write_autostart_environment_file
   write_user_systemd_service
   if [[ "$DRY_RUN" == true ]]; then
-    echo "  WOULD enable user systemd service: $SYSTEMD_SERVICE_NAME"
-    echo "  WOULD start managed workers through user systemd"
+    print_status WOULD " enable user systemd service: $SYSTEMD_SERVICE_NAME"
+    print_status WOULD " start managed workers through user systemd"
     return 0
   fi
   if systemctl --user daemon-reload >/dev/null 2>&1 &&
     systemctl --user enable "$SYSTEMD_SERVICE_NAME" >/dev/null 2>&1 &&
     systemctl --user restart "$SYSTEMD_SERVICE_NAME" >/dev/null 2>&1; then
-    echo "  OK  User systemd service enabled: $SYSTEMD_SERVICE_NAME"
+    print_status OK "  User systemd service enabled: $SYSTEMD_SERVICE_NAME"
     if need loginctl && [[ -n "${USER:-}" ]]; then
       if loginctl enable-linger "$USER" >/dev/null 2>&1; then
-        echo "  OK  User lingering enabled for reboot autostart."
+        print_status OK "  User lingering enabled for reboot autostart."
       else
-        echo "  NOTE  Could not enable user lingering. The service will start when the user session starts."
+        print_status NOTE "  Could not enable user lingering. The service will start when the user session starts."
       fi
     fi
     return 0
   fi
-  echo "  NOTE  Could not enable the user systemd service. Falling back to direct start."
+  print_status NOTE "  Could not enable the user systemd service. Falling back to direct start."
   return 1
 }
 
@@ -1750,7 +1796,7 @@ write_launch_agent() {
   write_autostart_environment_file
   run mkdir -p "$LAUNCH_AGENT_DIR"
   if [[ "$DRY_RUN" == true ]]; then
-    echo "  WOULD write macOS LaunchAgent: $LAUNCH_AGENT_PATH"
+    print_status WOULD " write macOS LaunchAgent: $LAUNCH_AGENT_PATH"
     return
   fi
   : >"$LAUNCH_AGENT_PATH"
@@ -1785,30 +1831,30 @@ $(xml_autostart_environment_entries)
 </dict>
 </plist>
 EOF
-  echo "  OK  macOS LaunchAgent installed: $LAUNCH_AGENT_PATH"
+  print_status OK "  macOS LaunchAgent installed: $LAUNCH_AGENT_PATH"
 }
 
 enable_launch_agent() {
   write_launch_agent
   if [[ "$DRY_RUN" == true ]]; then
-    echo "  WOULD enable macOS LaunchAgent: $LAUNCH_AGENT_LABEL"
-    echo "  WOULD start managed workers through launchd"
+    print_status WOULD " enable macOS LaunchAgent: $LAUNCH_AGENT_LABEL"
+    print_status WOULD " start managed workers through launchd"
     return 0
   fi
   if need launchctl; then
     launchctl bootout "gui/$(id -u)" "$LAUNCH_AGENT_PATH" >/dev/null 2>&1 || true
     if launchctl bootstrap "gui/$(id -u)" "$LAUNCH_AGENT_PATH" >/dev/null 2>&1 &&
       launchctl enable "gui/$(id -u)/$LAUNCH_AGENT_LABEL" >/dev/null 2>&1; then
-      echo "  OK  macOS LaunchAgent enabled: $LAUNCH_AGENT_LABEL"
+      print_status OK "  macOS LaunchAgent enabled: $LAUNCH_AGENT_LABEL"
       return 0
     fi
   fi
-  echo "  NOTE  Could not enable the macOS LaunchAgent. Falling back to direct start."
+  print_status NOTE "  Could not enable the macOS LaunchAgent. Falling back to direct start."
   return 1
 }
 
 start_managed_workers() {
-  echo "Starting managed workers..."
+  print_heading "Starting managed workers..."
   if user_systemd_available && enable_user_systemd_service; then
     return
   fi
@@ -1816,9 +1862,9 @@ start_managed_workers() {
     return
   fi
   if [[ "$OS_NAME" == "Linux" ]] && need systemctl; then
-    echo "  NOTE  User systemd is unavailable in this session. On headless Linux hosts, enable lingering and make sure the user systemd manager is available."
+    print_status NOTE "  User systemd is unavailable in this session. On headless Linux hosts, enable lingering and make sure the user systemd manager is available."
   fi
-  echo "  NOTE  Autostart service was not configured. Use '$BIN_DIR/symphony-trello start --all' after reboot or login."
+  print_status NOTE "  Autostart service was not configured. Use '$BIN_DIR/symphony-trello start --all' after reboot or login."
   run "$BIN_DIR/symphony-trello" start --all
 }
 
@@ -1923,7 +1969,7 @@ prepare_microos_var_root() {
   echo "Symphony workspaces and dependency caches can become large, so this install will use:"
   echo "  $MICROOS_VAR_ROOT"
   if [[ "$DRY_RUN" == true ]]; then
-    echo "  WOULD create MicroOS data root with:"
+    print_status WOULD " create MicroOS data root with:"
     echo "          $(microos_var_root_create_command)"
     return
   fi
@@ -2220,7 +2266,7 @@ activate_brew_openjdk() {
 
 run_shell_command() {
   local command="$1"
-  printf '  RUN  %s\n' "$command"
+  print_status RUN "  $command"
   if [[ "$DRY_RUN" == false ]]; then
     bash -c "$command"
   fi
@@ -2486,7 +2532,7 @@ print_dry_run_package_offer() {
   local package="$2"
   local command
   command="$(package_install_command "$package" || true)"
-  echo "  WOULD offer to install $label${command:+ with: $command}"
+  print_status WOULD " offer to install $label${command:+ with: $command}"
   mark_package_command_completed "$command"
 }
 
@@ -2501,7 +2547,7 @@ print_dry_run_transactional_package_plan() {
   fi
   command="$(package_install_command "${packages[@]}" || true)"
   root_command="$(package_install_root_command "${packages[@]}")"
-  echo "  WOULD offer to install missing OS packages:"
+  print_status WOULD " offer to install missing OS packages:"
   for package in "${packages[@]}"; do
     echo "          - $(transactional_package_label "$package")"
   done
@@ -2510,7 +2556,7 @@ print_dry_run_transactional_package_plan() {
   elif [[ -n "$root_command" ]]; then
     echo "          Run as root: $root_command"
   fi
-  echo "  WOULD stop after transactional-update and ask you to reboot, then rerun this installer."
+  print_status WOULD " stop after transactional-update and ask you to reboot, then rerun this installer."
   return 0
 }
 
@@ -2521,7 +2567,7 @@ print_dry_run_codex_plan() {
   else
     npm_status="no"
   fi
-  echo "  WOULD offer to install Codex CLI with Symphony-managed npm:"
+  print_status WOULD " offer to install Codex CLI with Symphony-managed npm:"
   echo "          Install location: $CODEX_NPM_PREFIX"
   echo "          Command link: $BIN_DIR/codex"
   echo "          Node.js/npm installed: $npm_status"
@@ -2541,7 +2587,7 @@ print_dry_run_prerequisite_plan() {
   if [[ "$NO_ONBOARD" == false ]] && ! need codex; then
     print_dry_run_codex_plan
   elif [[ "$NO_ONBOARD" == true ]] && ! need codex; then
-    echo "  NOTE   Codex CLI setup is skipped because --no-onboard was passed."
+    print_status NOTE "   Codex CLI setup is skipped because --no-onboard was passed."
   fi
 }
 
@@ -2579,7 +2625,7 @@ CONFIG_INSTALL_CONTEXT_FILE="$CONFIG_DIR/install-context.properties"
 activate_managed_codex_path
 activate_brew_openjdk
 
-echo "Symphony for Trello installer"
+print_heading "Symphony for Trello installer"
 echo
 echo "Detected $(platform_name)"
 echo "Install: $APP_DIR"
@@ -2596,39 +2642,39 @@ else
   echo "Release assets: $RELEASE_BASE_URL"
 fi
 echo
-echo "Checking prerequisites..."
+print_heading "Checking prerequisites..."
 if [[ "$INSTALL_SOURCE" == "source-checkout" ]]; then
-  if need git; then echo "  OK      Git available"; else echo "  NEEDED  Git"; fi
+  if need git; then print_status OK "      Git available"; else print_status NEEDED "  Git"; fi
 fi
-if jdk_compatible; then echo "  OK      Java 25+ JDK available"; else echo "  NEEDED  Java 25+ JDK"; fi
+if jdk_compatible; then print_status OK "      Java 25+ JDK available"; else print_status NEEDED "  Java 25+ JDK"; fi
 if need codex; then
-  echo "  OK      Codex CLI available"
+  print_status OK "      Codex CLI available"
 elif [[ "$NO_ONBOARD" == true ]]; then
-  echo "  NEEDED  Codex CLI (only needed for guided setup; skipped by --no-onboard)"
+  print_status NEEDED "  Codex CLI (only needed for guided setup; skipped by --no-onboard)"
 else
-  echo "  NEEDED  Codex CLI"
+  print_status NEEDED "  Codex CLI"
 fi
 
 if [[ "$DRY_RUN" == true ]]; then
   echo
-  echo "Dry run: no files changed."
+  print_heading "Dry run: no files changed."
   print_dry_run_prerequisite_plan
   if [[ "$DRY_RUN_STOPS_AFTER_PREREQUISITES" == true ]]; then
     exit 0
   fi
   prepare_microos_var_root
   if [[ "$INSTALL_SOURCE" == "source-checkout" ]]; then
-    echo "  WOULD clone or update: $APP_DIR"
-    echo "  WOULD build packaged Quarkus app with Maven wrapper"
+    print_status WOULD " clone or update: $APP_DIR"
+    print_status WOULD " build packaged Quarkus app with Maven wrapper"
   else
-    echo "  WOULD download release archive: $RELEASE_BASE_URL/symphony-trello-$VERSION.tar.gz"
-    echo "  WOULD verify SHA3-256 checksum from: $RELEASE_BASE_URL/checksums.txt"
-    echo "  WOULD unpack release archive into: $APP_DIR"
+    print_status WOULD " download release archive: $RELEASE_BASE_URL/symphony-trello-$VERSION.tar.gz"
+    print_status WOULD " verify SHA3-256 checksum from: $RELEASE_BASE_URL/checksums.txt"
+    print_status WOULD " unpack release archive into: $APP_DIR"
   fi
-  echo "  WOULD install command: $BIN_DIR/symphony-trello"
+  print_status WOULD " install command: $BIN_DIR/symphony-trello"
   offer_path_setup
   if [[ "$NO_ONBOARD" == false ]]; then
-    echo "  WOULD run guided setup and start Symphony automatically."
+    print_status WOULD " run guided setup and start Symphony automatically."
   fi
   exit 0
 fi
@@ -2667,7 +2713,7 @@ if [[ "$NO_ONBOARD" == false ]] && ! codex login status >/dev/null 2>&1; then
 fi
 
 echo
-echo "Installing Symphony..."
+print_heading "Installing Symphony..."
 UPDATING_EXISTING_APP=false
 if [[ -d "$APP_DIR" ]]; then
   UPDATING_EXISTING_APP=true
@@ -2676,7 +2722,7 @@ RESTART_MANAGED_WORKERS=false
 if [[ "$UPDATING_EXISTING_APP" == true ]] && has_managed_pid_files; then
   if [[ -x "$BIN_DIR/symphony-trello" ]]; then
     RESTART_MANAGED_WORKERS=true
-    echo "Stopping managed workers before update..."
+    print_heading "Stopping managed workers before update..."
     run "$BIN_DIR/symphony-trello" stop
   elif has_live_managed_pid_files; then
     echo "Cannot stop managed workers because the installed command is missing: $BIN_DIR/symphony-trello" >&2
@@ -2749,7 +2795,7 @@ exec_setup_cli "\$@"
 EOF
   chmod +x "$BIN_DIR/symphony-trello"
 fi
-echo "  OK  Command installed: $BIN_DIR/symphony-trello"
+print_status OK "  Command installed: $BIN_DIR/symphony-trello"
 write_install_context
 
 offer_path_setup
@@ -2757,9 +2803,9 @@ offer_path_setup
 if [[ "$NO_ONBOARD" == false ]]; then
   echo
   if [[ "$RESTART_MANAGED_WORKERS" == true ]]; then
-    echo "Restarting managed workers after update..."
+    print_heading "Restarting managed workers after update..."
   fi
-  echo "Starting setup..."
+  print_heading "Starting setup..."
   if [[ "$DRY_RUN" == true ]]; then
     run_interactive "$BIN_DIR/symphony-trello" setup-local
     start_managed_workers_without_installer_completion
@@ -2770,6 +2816,6 @@ if [[ "$NO_ONBOARD" == false ]]; then
   fi
 elif [[ "$RESTART_MANAGED_WORKERS" == true ]]; then
   echo
-  echo "Restarting managed workers after update..."
+  print_heading "Restarting managed workers after update..."
   start_managed_workers_without_installer_completion
 fi

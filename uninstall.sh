@@ -52,6 +52,52 @@ LAUNCH_AGENT_DIR="$HOME/Library/LaunchAgents"
 LAUNCH_AGENT_LABEL="ch.fmartin.symphony-trello"
 LAUNCH_AGENT_PATH="$LAUNCH_AGENT_DIR/$LAUNCH_AGENT_LABEL.plist"
 
+# >>> output style >>>
+# Colors only accent words that already carry the meaning (OK, NOTE, RUN, ...), so plain output says
+# the same thing. NO_COLOR turns color off, CLICOLOR_FORCE turns it on for any output, and otherwise
+# color needs a terminal on stdout, CLICOLOR other than 0, and a TERM other than dumb. ADR 0108
+# records the palette contrast and this precedence. Keep this block identical in install.sh and
+# uninstall.sh.
+STYLE_RESET=""
+STYLE_ACCENT=""
+STYLE_SUCCESS=""
+STYLE_ATTENTION=""
+
+output_color_enabled() {
+  if [[ -n "${NO_COLOR:-}" ]]; then
+    return 1
+  fi
+  if [[ -n "${CLICOLOR_FORCE:-}" && "$CLICOLOR_FORCE" != 0 ]]; then
+    return 0
+  fi
+  [[ "${CLICOLOR:-}" != 0 && -t 1 && -n "${TERM:-}" && "$TERM" != dumb ]]
+}
+
+if output_color_enabled; then
+  STYLE_RESET=$'\033[0m'
+  STYLE_ACCENT=$'\033[1;38;5;32m'
+  STYLE_SUCCESS=$'\033[1;38;5;64m'
+  STYLE_ATTENTION=$'\033[1;38;5;166m'
+fi
+
+print_heading() {
+  printf '%s%s%s\n' "$STYLE_ACCENT" "$1" "$STYLE_RESET"
+}
+
+# Prints two spaces, the styled LABEL, then TEXT unchanged. TEXT starts with its own separator so
+# the plain output keeps its column layout.
+print_status() {
+  local label="$1"
+  local text="$2"
+  local style="$STYLE_ACCENT"
+  case "$label" in
+  OK) style="$STYLE_SUCCESS" ;;
+  NEEDED | NOTE | SKIP | KILL) style="$STYLE_ATTENTION" ;;
+  esac
+  printf '  %s%s%s%s\n' "$style" "$label" "$STYLE_RESET" "$text"
+}
+# <<< output style <<<
+
 usage() {
   cat <<'USAGE'
 Usage:
@@ -1118,9 +1164,9 @@ remove_path() {
   path="$(safe_removal_path "$1")"
   if [[ -e "$path" || -L "$path" ]]; then
     if [[ "$DRY_RUN" == true ]]; then
-      echo "  WOULD REMOVE  $path"
+      print_status "WOULD REMOVE" "  $path"
     else
-      echo "  REMOVE  $path"
+      print_status REMOVE "  $path"
     fi
     if [[ "$DRY_RUN" == false ]]; then
       delete_tree_safely "$path"
@@ -1377,7 +1423,7 @@ remove_path_setup_from_profile() {
   line="$(path_setup_line)"
   tmp="$(mktemp "${TMPDIR:-/tmp}/symphony-trello-profile.XXXXXX")"
   if ! exec 3<"$profile"; then
-    echo "  NOTE  Could not remove managed PATH setup from $profile"
+    print_status NOTE "  Could not remove managed PATH setup from $profile"
     rm -f "$tmp"
     return
   fi
@@ -1410,24 +1456,24 @@ remove_path_setup_from_profile() {
   exec 3<&-
   if [[ "$in_block" == true ]]; then
     printf '%s' "$block" >>"$tmp"
-    echo "  SKIP  managed PATH setup in $profile is missing its end marker"
+    print_status SKIP "  managed PATH setup in $profile is missing its end marker"
   fi
   if [[ "$changed" == false ]]; then
     rm -f "$tmp"
     return
   fi
   if [[ "$DRY_RUN" == true ]]; then
-    echo "  WOULD remove managed PATH setup from $profile"
+    print_status WOULD " remove managed PATH setup from $profile"
     rm -f "$tmp"
     return
   fi
   if ! cat "$tmp" >"$profile"; then
-    echo "  NOTE  Could not remove managed PATH setup from $profile"
+    print_status NOTE "  Could not remove managed PATH setup from $profile"
     rm -f "$tmp"
     return
   fi
   rm -f "$tmp"
-  echo "  OK  Removed managed PATH setup from $profile"
+  print_status OK "  Removed managed PATH setup from $profile"
 }
 
 remove_path_setup_from_profiles() {
@@ -1525,7 +1571,7 @@ wait_for_exit() {
     sleep 0.2
   done
   if kill -0 "$pid" >/dev/null 2>&1; then
-    echo "  KILL  pid=$pid did not stop after SIGTERM"
+    print_status KILL "  pid=$pid did not stop after SIGTERM"
     kill -KILL "$pid" >/dev/null 2>&1 || true
     deadline=$((SECONDS + 5))
     while kill -0 "$pid" >/dev/null 2>&1 && [[ "$SECONDS" -lt "$deadline" ]]; do
@@ -1545,15 +1591,15 @@ stop_managed_processes() {
     pid="$(cat "$pid_file")"
     if kill -0 "$pid" >/dev/null 2>&1 && is_managed_pid "$pid"; then
       if [[ "$DRY_RUN" == true ]]; then
-        echo "  WOULD STOP  $(worker_label "$pid_file") pid=$pid"
+        print_status "WOULD STOP" "  $(worker_label "$pid_file") pid=$pid"
       else
-        echo "  STOP  $(worker_label "$pid_file") pid=$pid"
+        print_status STOP "  $(worker_label "$pid_file") pid=$pid"
         kill "$pid" >/dev/null 2>&1 || true
         wait_for_exit "$pid"
         rm -f "$pid_file"
       fi
     elif kill -0 "$pid" >/dev/null 2>&1; then
-      echo "  SKIP  stale pid does not belong to this install: $(worker_label "$pid_file") pid=$pid"
+      print_status SKIP "  stale pid does not belong to this install: $(worker_label "$pid_file") pid=$pid"
     elif [[ "$DRY_RUN" == false ]]; then
       rm -f "$pid_file"
     fi
@@ -1565,12 +1611,12 @@ remove_user_systemd_service() {
     return
   fi
   if [[ "$DRY_RUN" == true ]]; then
-    echo "  WOULD disable user systemd service: $SYSTEMD_SERVICE_NAME"
-    echo "  WOULD remove user systemd service: $SYSTEMD_SERVICE_PATH"
+    print_status WOULD " disable user systemd service: $SYSTEMD_SERVICE_NAME"
+    print_status WOULD " remove user systemd service: $SYSTEMD_SERVICE_PATH"
     return
   fi
   if command -v systemctl >/dev/null 2>&1; then
-    echo "  STOP  user systemd service: $SYSTEMD_SERVICE_NAME"
+    print_status STOP "  user systemd service: $SYSTEMD_SERVICE_NAME"
     systemctl --user disable --now "$SYSTEMD_SERVICE_NAME" >/dev/null 2>&1 || true
     systemctl --user daemon-reload >/dev/null 2>&1 || true
   fi
@@ -1582,12 +1628,12 @@ remove_launch_agent() {
     return
   fi
   if [[ "$DRY_RUN" == true ]]; then
-    echo "  WOULD disable macOS LaunchAgent: $LAUNCH_AGENT_LABEL"
-    echo "  WOULD remove macOS LaunchAgent: $LAUNCH_AGENT_PATH"
+    print_status WOULD " disable macOS LaunchAgent: $LAUNCH_AGENT_LABEL"
+    print_status WOULD " remove macOS LaunchAgent: $LAUNCH_AGENT_PATH"
     return
   fi
   if command -v launchctl >/dev/null 2>&1; then
-    echo "  STOP  macOS LaunchAgent: $LAUNCH_AGENT_LABEL"
+    print_status STOP "  macOS LaunchAgent: $LAUNCH_AGENT_LABEL"
     launchctl bootout "gui/$(id -u)" "$LAUNCH_AGENT_PATH" >/dev/null 2>&1 || true
   fi
   remove_path "$LAUNCH_AGENT_PATH"
@@ -1598,7 +1644,7 @@ remove_autostart_environment_file() {
     return
   fi
   if [[ "$DRY_RUN" == true ]]; then
-    echo "  WOULD remove autostart environment snapshot: $AUTOSTART_ENV_PATH"
+    print_status WOULD " remove autostart environment snapshot: $AUTOSTART_ENV_PATH"
     return
   fi
   remove_path "$AUTOSTART_ENV_PATH"
@@ -1623,7 +1669,7 @@ print_managed_codex_removal_plan() {
     local target
     target="$(readlink "$codex_command" || true)"
     if [[ "$target" == "$CODEX_NPM_PREFIX/bin/codex" ]]; then
-      echo "  CODEX CLI       $codex_command"
+      print_status "CODEX CLI" "       $codex_command"
       printed=true
     fi
   fi
@@ -1631,61 +1677,61 @@ print_managed_codex_removal_plan() {
     if [[ "$printed" == true ]]; then
       echo "                  $CODEX_NPM_PREFIX"
     else
-      echo "  CODEX CLI       $CODEX_NPM_PREFIX"
+      print_status "CODEX CLI" "       $CODEX_NPM_PREFIX"
     fi
   fi
 }
 
 print_user_systemd_removal_plan() {
   if [[ -e "$SYSTEMD_SERVICE_PATH" || -L "$SYSTEMD_SERVICE_PATH" ]]; then
-    echo "  USER SERVICE    $SYSTEMD_SERVICE_PATH"
+    print_status "USER SERVICE" "    $SYSTEMD_SERVICE_PATH"
   fi
 }
 
 print_launch_agent_removal_plan() {
   if [[ -e "$LAUNCH_AGENT_PATH" || -L "$LAUNCH_AGENT_PATH" ]]; then
-    echo "  LAUNCH AGENT    $LAUNCH_AGENT_PATH"
+    print_status "LAUNCH AGENT" "    $LAUNCH_AGENT_PATH"
   fi
 }
 
-echo "Symphony for Trello uninstall"
+print_heading "Symphony for Trello uninstall"
 echo
 echo "App checkout: $APP_DIR"
 echo "Installed CLI: $BIN_DIR/symphony-trello"
 echo
 if [[ "$DRY_RUN" == true ]]; then
-  echo "Dry run: no files changed."
+  print_heading "Dry run: no files changed."
   echo
 fi
-echo "Will remove if present:"
-echo "  APP FILES       $APP_DIR"
-echo "  CLI EXECUTABLE  $BIN_DIR/symphony-trello"
+print_heading "Will remove if present:"
+print_status "APP FILES" "       $APP_DIR"
+print_status "CLI EXECUTABLE" "  $BIN_DIR/symphony-trello"
 print_user_systemd_removal_plan
 print_launch_agent_removal_plan
 print_managed_codex_removal_plan
-echo "  WORKERS         Managed Symphony workers are stopped before removal"
+print_status WORKERS "         Managed Symphony workers are stopped before removal"
 if [[ "$REMOVE_CONFIG" == true ]]; then
-  echo "  CONFIG          $CONFIG_DIR"
+  print_status CONFIG "          $CONFIG_DIR"
 fi
 if [[ "$REMOVE_WORKSPACES" == true ]]; then
-  echo "  WORKSPACES      $WORKSPACE_ROOT"
+  print_status WORKSPACES "      $WORKSPACE_ROOT"
 fi
 if [[ "$REMOVE_STATE" == true ]]; then
-  echo "  STATE/LOGS      $STATE_HOME"
+  print_status "STATE/LOGS" "      $STATE_HOME"
 fi
 echo
-echo "Will preserve:"
+print_heading "Will preserve:"
 if [[ "$REMOVE_CONFIG" == false ]]; then
-  echo "  CONFIG          $CONFIG_DIR"
+  print_status CONFIG "          $CONFIG_DIR"
 fi
 if [[ "$REMOVE_WORKSPACES" == false ]]; then
-  echo "  WORKSPACES      $WORKSPACE_ROOT"
+  print_status WORKSPACES "      $WORKSPACE_ROOT"
 fi
 if [[ "$REMOVE_STATE" == false ]]; then
-  echo "  STATE/LOGS      $STATE_HOME"
+  print_status "STATE/LOGS" "      $STATE_HOME"
 fi
-echo "  AUTH            Codex login/auth files and GitHub auth"
-echo "  TRELLO          Trello boards are not deleted or archived"
+print_status AUTH "            Codex login/auth files and GitHub auth"
+print_status TRELLO "          Trello boards are not deleted or archived"
 echo
 
 APP_REMOVAL_CONFIRMED=false

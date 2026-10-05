@@ -36,7 +36,7 @@ while IFS='=' read -r name _; do
       docker_environment+=(-e "$name")
     fi
     ;;
-  SYMPHONY_*) docker_environment+=(-e "$name") ;;
+  SYMPHONY_* | NO_COLOR | CLICOLOR | CLICOLOR_FORCE) docker_environment+=(-e "$name") ;;
   esac
 done < <(env)
 

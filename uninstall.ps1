@@ -48,6 +48,62 @@ $WindowsProfileRoot = if ($env:APPDATA) { $env:APPDATA } else { Join-Path $Windo
 $StartupFolder = Join-Path $WindowsProfileRoot "Microsoft\Windows\Start Menu\Programs\Startup"
 $StartupCommandPath = Join-Path $StartupFolder "Symphony for Trello.cmd"
 
+# >>> output style >>>
+# Colors only accent words that already carry the meaning (OK, NOTE, RUN, ...), so plain output says
+# the same thing. NO_COLOR turns color off, CLICOLOR_FORCE turns it on for any output, and otherwise
+# color needs console output that is not redirected, a host that renders ANSI sequences, CLICOLOR
+# other than 0, and a TERM other than dumb. ADR 0108 records the palette contrast and this
+# precedence. Keep this block identical in install.ps1 and uninstall.ps1.
+function Test-OutputColorEnabled {
+  if (-not [string]::IsNullOrEmpty($env:NO_COLOR)) {
+    return $false
+  }
+  if (-not [string]::IsNullOrEmpty($env:CLICOLOR_FORCE) -and $env:CLICOLOR_FORCE -ne "0") {
+    return $true
+  }
+  if ($env:CLICOLOR -eq "0" -or $env:TERM -eq "dumb") {
+    return $false
+  }
+  try {
+    if ([Console]::IsOutputRedirected) {
+      return $false
+    }
+  } catch {
+    return $false
+  }
+  # Hosts without virtual terminal support, such as the Windows PowerShell ISE, print the escape
+  # sequences literally.
+  $virtualTerminal = $Host.UI.PSObject.Properties["SupportsVirtualTerminal"]
+  return $null -ne $virtualTerminal -and [bool]$virtualTerminal.Value
+}
+
+$OutputStyle = @{ Reset = ""; Accent = ""; Success = ""; Attention = "" }
+if (Test-OutputColorEnabled) {
+  $escape = [char]27
+  $OutputStyle = @{
+    Reset = "${escape}[0m"
+    Accent = "${escape}[1;38;5;32m"
+    Success = "${escape}[1;38;5;64m"
+    Attention = "${escape}[1;38;5;166m"
+  }
+}
+
+function Write-Heading([string]$Text) {
+  Write-Host "$($OutputStyle.Accent)$Text$($OutputStyle.Reset)"
+}
+
+# Writes two spaces, the styled label, then the text unchanged. The text starts with its own
+# separator so the plain output keeps its column layout.
+function Write-Status([string]$Label, [string]$Text) {
+  $style = switch ($Label) {
+    "OK" { $OutputStyle.Success }
+    { $_ -in @("NEEDED", "NOTE", "SKIP", "KILL") } { $OutputStyle.Attention }
+    default { $OutputStyle.Accent }
+  }
+  Write-Host "  $style$Label$($OutputStyle.Reset)$Text"
+}
+# <<< output style <<<
+
 function Apply-PositionalFlag([string]$Token) {
   switch ($Token) {
     { $_ -in @("-dry-run", "--dry-run") } {
@@ -490,9 +546,9 @@ function Remove-ManagedPath([string]$Path) {
   $safePath = Assert-SafeRemovalPath $Path
   if (Test-Path -LiteralPath $safePath) {
     if ($DryRun) {
-      Write-Host "  WOULD REMOVE  $safePath"
+      Write-Status "WOULD REMOVE" "  $safePath"
     } else {
-      Write-Host "  REMOVE  $safePath"
+      Write-Status "REMOVE" "  $safePath"
     }
     if (-not $DryRun) {
       Remove-Item -Recurse -Force -LiteralPath $safePath
@@ -539,7 +595,7 @@ function Write-ManagedCodexRemovalPlan {
   $codexExe = Join-Path $BinDir "codex.exe"
   $managedCodexExe = Join-Path $CodexHome "bin\codex.exe"
   if (Test-SameFileContent $codexExe $managedCodexExe) {
-    Write-Host "  CODEX CLI       $codexExe"
+    Write-Status "CODEX CLI" "       $codexExe"
     $printed = $true
   }
   foreach ($wrapper in @("codex.cmd", "codex.ps1")) {
@@ -548,7 +604,7 @@ function Write-ManagedCodexRemovalPlan {
       if ($printed) {
         Write-Host "                  $path"
       } else {
-        Write-Host "  CODEX CLI       $path"
+        Write-Status "CODEX CLI" "       $path"
         $printed = $true
       }
     }
@@ -558,7 +614,7 @@ function Write-ManagedCodexRemovalPlan {
       if ($printed) {
         Write-Host "                  $path"
       } else {
-        Write-Host "  CODEX CLI       $path"
+        Write-Status "CODEX CLI" "       $path"
         $printed = $true
       }
     }
@@ -645,7 +701,7 @@ function Stop-AndWaitManagedProcess([int]$ManagedPid) {
     if (-not (Get-Process -Id $ManagedPid -ErrorAction SilentlyContinue)) {
       return
     }
-    Write-Host "  KILL  pid=$ManagedPid did not stop after SIGTERM"
+    Write-Status "KILL" "  pid=$ManagedPid did not stop after SIGTERM"
     Stop-Process -Id $ManagedPid -Force -ErrorAction SilentlyContinue
     try {
       Wait-Process -Id $ManagedPid -Timeout 5 -ErrorAction Stop
@@ -673,7 +729,7 @@ function Stop-ManagedProcesses {
     $pidText = Get-Content -LiteralPath $pidFile.FullName -Raw -ErrorAction SilentlyContinue
     $managedPid = 0
     if (($null -eq $pidText) -or (-not [int]::TryParse($pidText.Trim(), [ref]$managedPid))) {
-      Write-Host "  SKIP  invalid stale pid: $(Get-WorkerLabel $pidFile.BaseName)"
+      Write-Status "SKIP" "  invalid stale pid: $(Get-WorkerLabel $pidFile.BaseName)"
       if (-not $DryRun) {
         Remove-Item -LiteralPath $pidFile.FullName -Force
       }
@@ -682,14 +738,14 @@ function Stop-ManagedProcesses {
     $process = Get-Process -Id $managedPid -ErrorAction SilentlyContinue
     if ($process -and (Test-ManagedPid $managedPid)) {
       if ($DryRun) {
-        Write-Host "  WOULD STOP  $(Get-WorkerLabel $pidFile.BaseName) pid=$managedPid"
+        Write-Status "WOULD STOP" "  $(Get-WorkerLabel $pidFile.BaseName) pid=$managedPid"
       } else {
-        Write-Host "  STOP  $(Get-WorkerLabel $pidFile.BaseName) pid=$managedPid"
+        Write-Status "STOP" "  $(Get-WorkerLabel $pidFile.BaseName) pid=$managedPid"
         Stop-AndWaitManagedProcess $managedPid
         Remove-Item -LiteralPath $pidFile.FullName -Force
       }
     } elseif ($process) {
-      Write-Host "  SKIP  stale pid does not belong to this install: $(Get-WorkerLabel $pidFile.BaseName) pid=$managedPid"
+      Write-Status "SKIP" "  stale pid does not belong to this install: $(Get-WorkerLabel $pidFile.BaseName) pid=$managedPid"
     } elseif (-not $DryRun) {
       Remove-Item -LiteralPath $pidFile.FullName -Force
     }
@@ -701,20 +757,20 @@ function Remove-WindowsAutostart {
   $hasAutostartScript = Test-Path -LiteralPath $AutostartScriptPath
   $hasAutostartEnvironment = Test-Path -LiteralPath $AutostartEnvironmentPath
   if ($DryRun) {
-    Write-Host "  WOULD remove Windows Scheduled Task: $ScheduledTaskName"
+    Write-Status "WOULD" " remove Windows Scheduled Task: $ScheduledTaskName"
     if ($hasStartupCommand) {
-      Write-Host "  WOULD remove Windows Startup command: $StartupCommandPath"
+      Write-Status "WOULD" " remove Windows Startup command: $StartupCommandPath"
     }
     if ($hasAutostartScript) {
-      Write-Host "  WOULD remove Windows autostart launcher: $AutostartScriptPath"
+      Write-Status "WOULD" " remove Windows autostart launcher: $AutostartScriptPath"
     }
     if ($hasAutostartEnvironment) {
-      Write-Host "  WOULD remove autostart environment snapshot: $AutostartEnvironmentPath"
+      Write-Status "WOULD" " remove autostart environment snapshot: $AutostartEnvironmentPath"
     }
     return
   }
   if (Get-Command schtasks.exe -ErrorAction SilentlyContinue) {
-    Write-Host "  STOP  Windows Scheduled Task: $ScheduledTaskName"
+    Write-Status "STOP" "  Windows Scheduled Task: $ScheduledTaskName"
     & schtasks.exe /End /TN $ScheduledTaskName *> $null
     & schtasks.exe /Delete /TN $ScheduledTaskName /F *> $null
   }
@@ -730,43 +786,43 @@ function Remove-WindowsAutostart {
 }
 
 function Write-WindowsAutostartRemovalPlan {
-  Write-Host "  SCHEDULED TASK  $ScheduledTaskName"
+  Write-Status "SCHEDULED TASK" "  $ScheduledTaskName"
   if (Test-Path -LiteralPath $StartupCommandPath) {
-    Write-Host "  STARTUP COMMAND $StartupCommandPath"
+    Write-Status "STARTUP COMMAND" " $StartupCommandPath"
   }
   if (Test-Path -LiteralPath $AutostartScriptPath) {
-    Write-Host "  AUTOSTART       $AutostartScriptPath"
+    Write-Status "AUTOSTART" "       $AutostartScriptPath"
   }
   if (Test-Path -LiteralPath $AutostartEnvironmentPath) {
-    Write-Host "  AUTOSTART ENV   $AutostartEnvironmentPath"
+    Write-Status "AUTOSTART ENV" "   $AutostartEnvironmentPath"
   }
 }
 
-Write-Host "Symphony for Trello uninstall"
+Write-Heading "Symphony for Trello uninstall"
 Write-Host
 Write-Host "App checkout: $Prefix"
 Write-Host "Installed CLI: $(Join-Path $BinDir "symphony-trello.ps1")"
 Write-Host
 if ($DryRun) {
-  Write-Host "Dry run: no files changed."
+  Write-Heading "Dry run: no files changed."
   Write-Host
 }
-Write-Host "Will remove if present:"
-Write-Host "  APP FILES       $Prefix"
-Write-Host "  CLI EXECUTABLE  $(Join-Path $BinDir "symphony-trello.ps1")"
+Write-Heading "Will remove if present:"
+Write-Status "APP FILES" "       $Prefix"
+Write-Status "CLI EXECUTABLE" "  $(Join-Path $BinDir "symphony-trello.ps1")"
 Write-WindowsAutostartRemovalPlan
 Write-ManagedCodexRemovalPlan
-Write-Host "  WORKERS         Managed Symphony workers are stopped before removal"
-if ($RemoveConfig) { Write-Host "  CONFIG          $ConfigDir" }
-if ($RemoveWorkspaces) { Write-Host "  WORKSPACES      $WorkspaceRoot" }
-if ($RemoveState) { Write-Host "  STATE/LOGS      $StateHome" }
+Write-Status "WORKERS" "         Managed Symphony workers are stopped before removal"
+if ($RemoveConfig) { Write-Status "CONFIG" "          $ConfigDir" }
+if ($RemoveWorkspaces) { Write-Status "WORKSPACES" "      $WorkspaceRoot" }
+if ($RemoveState) { Write-Status "STATE/LOGS" "      $StateHome" }
 Write-Host
-Write-Host "Will preserve:"
-if (-not $RemoveConfig) { Write-Host "  CONFIG          $ConfigDir" }
-if (-not $RemoveWorkspaces) { Write-Host "  WORKSPACES      $WorkspaceRoot" }
-if (-not $RemoveState) { Write-Host "  STATE/LOGS      $StateHome" }
-Write-Host "  AUTH            Codex login/auth files and GitHub auth"
-Write-Host "  TRELLO          Trello boards are not deleted or archived"
+Write-Heading "Will preserve:"
+if (-not $RemoveConfig) { Write-Status "CONFIG" "          $ConfigDir" }
+if (-not $RemoveWorkspaces) { Write-Status "WORKSPACES" "      $WorkspaceRoot" }
+if (-not $RemoveState) { Write-Status "STATE/LOGS" "      $StateHome" }
+Write-Status "AUTH" "            Codex login/auth files and GitHub auth"
+Write-Status "TRELLO" "          Trello boards are not deleted or archived"
 Write-Host
 if (Confirm-Step "Remove installer-managed app files and CLI executable?" $Yes) {
   if ((Test-Path $Prefix) -and (-not (Test-Path "$Prefix\.symphony-trello-install"))) {
