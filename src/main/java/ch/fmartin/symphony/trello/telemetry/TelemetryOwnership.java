@@ -76,7 +76,7 @@ public record TelemetryOwnership(
         return issued(credential);
     }
 
-    public enum Phase {
+    public enum Phase implements WireVocabulary {
         REQUESTED("pending"),
         ACCEPTED("accepted"),
         COMPLETE("complete"),
@@ -90,6 +90,7 @@ public record TelemetryOwnership(
 
         /// The status variant the erasure service publishes for this phase; local state stores the
         /// constant name instead.
+        @Override
         public String wireName() {
             return wireName;
         }

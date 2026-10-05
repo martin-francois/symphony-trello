@@ -7,7 +7,6 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.Optional;
-import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
 /// The allowlisted `properties` object of one heartbeat. Only these fields exist; nothing else is
@@ -45,7 +44,6 @@ public record HeartbeatProperties(
         @JsonProperty(Names.BOARD_CREATIONS_TOTAL) long boardCreationsTotal) {
 
     public static final int SCHEMA_VERSION = 1;
-    private static final Set<String> RUNTIME_ARCHITECTURES = WireVocabulary.wireNames(RuntimeArch.class);
 
     /// Always true so PostHog adds no location data derived from the connection.
     @JsonProperty(Names.GEOIP_DISABLE)
@@ -65,8 +63,9 @@ public record HeartbeatProperties(
         if (telemetrySchemaVersion != SCHEMA_VERSION) {
             return Optional.of("pending report has schema version " + telemetrySchemaVersion);
         }
-        Optional<OsFamily> family = OsFamily.fromWireName(osFamily);
-        if (family.isEmpty() || runtimeArch == null || !RUNTIME_ARCHITECTURES.contains(runtimeArch)) {
+        Optional<OsFamily> family = WireVocabulary.fromWireName(OsFamily.class, osFamily);
+        if (family.isEmpty()
+                || WireVocabulary.fromWireName(RuntimeArch.class, runtimeArch).isEmpty()) {
             return Optional.of("pending report has an unknown platform value");
         }
         if (osRelease == null || !PlatformNormalizer.isNormalized(family.get(), osRelease, linuxDistribution)) {

@@ -1,7 +1,6 @@
 package ch.fmartin.symphony.trello.telemetry;
 
 import java.util.Locale;
-import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
 /// The coarse operating-system buckets a heartbeat may name.
@@ -21,15 +20,6 @@ enum OsFamily implements WireVocabulary {
     @Override
     public String wireName() {
         return wireName;
-    }
-
-    static Optional<OsFamily> fromWireName(@Nullable String wireName) {
-        for (OsFamily family : values()) {
-            if (family.wireName.equals(wireName)) {
-                return Optional.of(family);
-            }
-        }
-        return Optional.empty();
     }
 
     static OsFamily fromOsName(@Nullable String osName) {

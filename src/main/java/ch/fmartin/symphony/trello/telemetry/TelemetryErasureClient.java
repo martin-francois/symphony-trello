@@ -119,12 +119,8 @@ final class TelemetryErasureClient implements AutoCloseable {
             throw new TelemetryStateException("erasure status is temporarily unavailable");
         }
         String variant = response.path("flags").path(key).path("variant").asText();
-        for (TelemetryOwnership.Phase phase : TelemetryOwnership.Phase.values()) {
-            if (phase != TelemetryOwnership.Phase.REQUESTED && phase.wireName().equals(variant)) {
-                return Optional.of(phase);
-            }
-        }
-        return Optional.empty();
+        return WireVocabulary.fromWireName(TelemetryOwnership.Phase.class, variant)
+                .filter(phase -> phase != TelemetryOwnership.Phase.REQUESTED);
     }
 
     /// `rejected` is the diagnostic for a 401, whose likely cause depends on the request.
