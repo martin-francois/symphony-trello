@@ -90,11 +90,15 @@ organization decision, not a Symphony one.
       too few reports to be useful. No legal advice was obtained.
 - [ ] Dashboard access: only the maintainer's account has access to the organization. Keep it that
       way, or restrict the project with PostHog's access control if more members join.
-- [ ] Retention: the API returned no `event_retention_months` or `events_retention_enforced`
+- [x] Retention: the API returned no `event_retention_months` or `events_retention_enforced`
       value for either project on 2026-09-22 (the verification report marks them UNKNOWN), so the
       effective retention window is unknown. Read both fields again from
       `GET /api/projects/281084/` before release and record them here with the date. `verify`
-      read both projects again on 2026-10-05 and both fields were still absent. PostHog documents that a retention window hides events from
+      read both projects again on 2026-10-05 and both fields were still absent. The published
+      source is `https://posthog.com/pricing`, read on 2026-10-05: one year of data retention on the
+      free plan, seven years on pay-as-you-go, which this organization uses, and data older than the
+      period "may be permanently deleted". The privacy page states the seven years; update it if
+      the plan changes. PostHog documents that a retention window hides events from
       queries; it is not evidence of physical deletion of events, profiles, backups, or
       infrastructure logs. The privacy page promises analysis of at most one year of detailed
       events, not a deletion deadline.

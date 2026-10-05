@@ -164,7 +164,9 @@ its hosted lifecycle checks pass.
 
 ## Retention
 
-PostHog keeps event data for analysis according to the project's plan and settings. The maintainer
+PostHog keeps event data for analysis according to the project's plan. PostHog's pricing page,
+read on 2026-10-05, lists seven years for the pay-as-you-go plan this project uses and says data
+older than that may be permanently deleted. The maintainer
 intends to analyze at most one year of detailed events and to rely on the repeated registration
 date and counters in fresh reports for anything older. Turning reporting off does not erase
 history. Thirty days without a report is how the maintainer defines an inactive installation; it
