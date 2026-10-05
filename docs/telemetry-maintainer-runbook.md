@@ -64,7 +64,7 @@ organization decision, not a Symphony one.
       this organization). The maintainer signed it on 2026-10-05 as a private person, in the plain
       format; PostHog countersigns the generated document and PandaDoc delivers the signed copy by
       email. Keep that copy outside the repository.
-- [ ] Subprocessors and transfers: read `https://posthog.com/subprocessors` for the EU data center
+- [x] Subprocessors and transfers: read `https://posthog.com/subprocessors` for the EU data center
       and note the date read. Read on 2026-10-05 (page dated June 12, 2026): the core list names
       Amazon Web Services (storage, Germany for EU Cloud), Wiz (vulnerability detection, Germany and
       France), PlanetScale (database monitoring, Germany for EU Cloud), Modal Labs (isolated code
@@ -74,8 +74,8 @@ organization decision, not a Symphony one.
       and Standard Contractual Clauses for transfers; confirm that covers the maintainer's Swiss
       obligations. Reading on 2026-10-05, without legal advice: the EU Cloud stores the data in
       Germany, which Switzerland lists as a state with adequate data protection, and the signed DPA
-      supplies the framework and clauses for any access from the United States. Status: the
-      maintainer has not confirmed this reading.
+      supplies the framework and clauses for any access from the United States. The maintainer
+      confirmed this reading on the same day.
 - [x] Product and model development opt-out: PostHog's privacy policy states customer content may be
       used for product and model development unless the customer opts out through the service
       settings, and the DPA states no third party may use it to train AI models. The control is the
