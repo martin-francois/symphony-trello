@@ -47,6 +47,10 @@ discards `user:password@example.invalid` as synthetic. Other pairs on that host,
 `token:secret@example.invalid`, can still be reported at low confidence. When a test needs such a
 pair, end the line with a `betterleaks:allow` comment.
 
+The BetterLeaks image does not update automatically. The pull request check scans with the base
+branch's image, so run `scripts/check-private-context --worktree` on a BetterLeaks update branch
+before merging it; see [ADR 0124](../adr/0124-look-up-betterleaks-through-the-github-package-feed.md).
+
 Pull request guardrail workflows scan untrusted pull request content with trusted scanner code. The
 private-context workflow checks out the pull request source and the trusted base-branch scanner into
 separate directories, then runs the trusted scanner against the pull request worktree and commit

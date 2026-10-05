@@ -108,7 +108,11 @@ const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
   readonly vulnerabilityAlerts?: {
     readonly enabled?: boolean;
   };
+  readonly customDatasources?: Readonly<
+    Record<string, {readonly defaultRegistryUrlTemplate?: string}>
+  >;
   readonly customManagers: readonly {
+    readonly datasourceTemplate?: string;
     readonly matchStrings?: readonly string[];
   }[];
   readonly packageRules: readonly {
@@ -125,6 +129,7 @@ const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
     readonly minimumReleaseAge?: string;
     readonly minimumReleaseAgeBehaviour?: string;
     readonly platformAutomerge?: boolean;
+    readonly prBodyNotes?: readonly string[];
   }[];
   readonly prConcurrentLimit?: number;
   readonly statusCheckWhen?: {
@@ -1134,6 +1139,35 @@ test("Renovate owns immutable tool-image declarations", () => {
       `${script} must contain a digest-pinned image owned by Renovate`,
     );
   }
+});
+
+test("Renovate looks up GHCR images through a feed with release timestamps", () => {
+  // Renovate's docker datasource reads release timestamps only from Docker Hub. Under
+  // timestamp-required, a GHCR image looked up through it stays pending forever.
+  const ghcrManagers = RENOVATE_CONFIG.customManagers.filter(({matchStrings}) =>
+    matchStrings?.some((pattern) => pattern.includes("ghcr\\.io/")),
+  );
+
+  assert.ok(ghcrManagers.length > 0);
+  for (const {datasourceTemplate} of ghcrManagers) {
+    assert.match(datasourceTemplate ?? "", /^custom\./u, "a GHCR image needs a custom datasource");
+    const datasourceName = datasourceTemplate?.slice("custom.".length) ?? "";
+    const datasource = RENOVATE_CONFIG.customDatasources?.[datasourceName];
+    assert.match(
+      datasource?.defaultRegistryUrlTemplate ?? "",
+      /^https:\/\/api\.github\.com\/users\/[^/]+\/packages\/container\/[^/]+\/versions\?per_page=100$/u,
+    );
+  }
+});
+
+test("BetterLeaks image updates wait for a maintainer scan", () => {
+  // Pull request scans run the base branch's scanner, so no required check runs a new image.
+  const rule = RENOVATE_CONFIG.packageRules.findLast(({matchPackageNames}) =>
+    matchPackageNames?.includes("ghcr.io/betterleaks/betterleaks"),
+  );
+
+  assert.equal(rule?.automerge, false);
+  assert.match(rule?.prBodyNotes?.join("\n") ?? "", /scripts\/check-private-context --worktree/u);
 });
 
 test("Renovate permits unlimited concurrent branches and pull requests", () => {

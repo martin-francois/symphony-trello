@@ -20,6 +20,14 @@ requirements.
   pending. Do not use the publisher-controlled OCI `org.opencontainers.image.created` annotation as
   release-age evidence. The script test `Renovate enforces the repository-wide seven-day dependency
   cooldown` asserts `pinDigests` and that `digest`, `pin`, and `pinDigest` remain enabled.
+- Look up a GHCR image through a custom datasource that reads GitHub's container package API, which
+  gives each version its push time and manifest digest. Renovate's docker datasource has release
+  timestamps only for Docker Hub, so a GHCR image looked up through it never passes the cooldown.
+  The script test `Renovate looks up GHCR images through a feed with release timestamps` asserts
+  this; see [ADR 0124](../adr/0124-look-up-betterleaks-through-the-github-package-feed.md).
+- BetterLeaks image updates merge by hand. Pull request checks scan with the base branch's scanner,
+  so no required check runs the new image. Run `scripts/check-private-context --worktree` on the
+  Renovate branch before merging it.
 - Apply a seven-day minimum release age to ordinary dependency updates. Renovate security updates
   retain their documented cooldown bypass so disclosed vulnerabilities can be fixed immediately.
 - The seven-day release age MUST hold on every path that can move a version, including the paths
@@ -65,3 +73,4 @@ requirements.
 - [Static analysis policy](static-analysis.md)
 - [Testing](testing.md)
 - [ADR 0008](../adr/0008-renovate-and-github-actions-hardening.md)
+- [ADR 0124](../adr/0124-look-up-betterleaks-through-the-github-package-feed.md)

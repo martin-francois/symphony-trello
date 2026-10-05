@@ -122,11 +122,20 @@
       "matchStrings": [
         "(?<depName>ghcr\\.io/betterleaks/betterleaks):v(?<currentValue>\\d+\\.\\d+\\.\\d+)@(?<currentDigest>sha256:[a-f0-9]{64})"
       ],
-      "datasourceTemplate": "docker",
-      "versioningTemplate": "docker"
+      "datasourceTemplate": "custom.betterleaks-ghcr",
+      "versioningTemplate": "semver",
+      "description": "BetterLeaks publishes its image only on GHCR, where Renovate's docker datasource reads no release timestamps, so timestamp-required would hold every update forever. The betterleaks-ghcr feed supplies the timestamp and the manifest digest for each version; see ADR 0124."
     }
   ],
   "customDatasources": {
+    "betterleaks-ghcr": {
+      "description": "GitHub's newest 100 package-version records for ghcr.io/betterleaks/betterleaks. Every exact vX.Y.Z tag becomes release X.Y.Z with the record's created_at as its release timestamp and the record's manifest digest. Release candidates, the v1 alias, latest and sha256-* signature tags are left out.",
+      "defaultRegistryUrlTemplate": "https://api.github.com/users/betterleaks/packages/container/betterleaks/versions?per_page=100",
+      "format": "json",
+      "transformTemplates": [
+        "($semver := /^v[0-9]+\\.[0-9]+\\.[0-9]+$/; $releases := $reduce($, function($all, $record) { ($tags := $filter($record.metadata.container.tags, function($tag) { $match($tag, $semver) }); $append($all, $map($tags, function($tag) { {\"version\": $substringAfter($tag, \"v\"), \"releaseTimestamp\": $record.created_at, \"digest\": $record.name} }))) }, []); {\"releases\": [$releases], \"sourceUrl\": \"https://github.com/betterleaks/betterleaks\"})"
+      ]
+    },
     "tessl-tile": {
       "defaultRegistryUrlTemplate": "https://api.tessl.io/v1/tiles/{{packageName}}",
       "transformTemplates": [
@@ -201,6 +210,18 @@
       ],
       "prBodyNotes": [
         "After Renovate updates `tessl.json`, run `tessl install`, review the refreshed `.tessl/tiles` diff, and commit those vendored tile changes before merging."
+      ]
+    },
+    {
+      "description": "The private-context check on a pull request runs the base branch's BetterLeaks image, so no pull request check runs a new scanner image. Merge it by hand after scanning the branch with it; see ADR 0124.",
+      "matchPackageNames": [
+        "ghcr.io/betterleaks/betterleaks"
+      ],
+      "groupName": null,
+      "automerge": false,
+      "prBodyNotes": [
+        "The private-context check on this pull request scans with the BetterLeaks image from the base branch, not with the image this pull request pins. A new built-in rule that flags existing files would only fail after merging, on `main` and on every later pull request.",
+        "Before merging, check out this branch and run `scripts/check-private-context --worktree`. Merge only when it passes; otherwise fix or mark the flagged fixtures in this branch first."
       ]
     },
     {
