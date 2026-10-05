@@ -53,6 +53,7 @@ final class TelemetryErasureTest {
     private final AtomicReference<Runnable> onIssue = new AtomicReference<>(() -> {});
     private final AtomicReference<Runnable> onStatus = new AtomicReference<>(() -> {});
     private final AtomicBoolean issuerDown = new AtomicBoolean();
+    private final AtomicBoolean signatureRejected = new AtomicBoolean();
     // The fake server records on its own threads while the test reads; a snapshot-safe list avoids
     // a concurrent modification during assertions.
     private final List<String> requests = new CopyOnWriteArrayList<>();
@@ -118,6 +119,35 @@ final class TelemetryErasureTest {
         assertThat(resumed.ownership().erasure()).isNull();
         assertThat(requests).noneMatch(request -> request.contains(CREDENTIAL.secret()));
         assertThat(output.toString(StandardCharsets.UTF_8)).doesNotContain(CREDENTIAL.secret());
+    }
+
+    @Test
+    void rejectedSignatureNamesTheClockAndCredentialAndKeepsTheBackoff() {
+        // given
+        erasure.maintain(store);
+        store.update(state -> Update.write(state.withOwnership(state.ownership().markUsed()), null));
+        signatureRejected.set(true);
+        var output = new ByteArrayOutputStream();
+        var out = new PrintStream(output, true, StandardCharsets.UTF_8);
+        TelemetryService service = new TelemetryService(installation, TelemetryFixture.snapshots(installation), clock);
+
+        // when
+        int requested = service.erase(out, out);
+        int checked = service.erasureStatus(out, out);
+        TelemetryOwnership.Erasure job =
+                store.read().stateOrInitial().ownership().erasure();
+
+        // then
+        assertThat(requested).isEqualTo(TelemetryService.EXIT_FAILURE);
+        assertThat(checked).isEqualTo(TelemetryService.EXIT_FAILURE);
+        assertThat(output.toString(StandardCharsets.UTF_8))
+                .contains("Erasure could not be confirmed: " + TelemetryErasureClient.SIGNATURE_REJECTED)
+                .contains("system clock")
+                .contains("credential");
+        assertThat(job.phase()).isEqualTo(Phase.REQUESTED);
+        assertThat(job.notBefore())
+                .as("a rejected attempt still reserves the next retry instead of spinning")
+                .isAfter(clock.instant());
     }
 
     @Test
@@ -502,6 +532,9 @@ final class TelemetryErasureTest {
                     .put("key_version", CREDENTIAL.keyVersion())
                     .put("secret", CREDENTIAL.secret())
                     .toString();
+        } else if (signatureRejected.get()) {
+            code = 401;
+            response = "{\"status\":\"rejected\"}";
         } else {
             code = 201;
             response = "{\"status\":\"queued\"}";

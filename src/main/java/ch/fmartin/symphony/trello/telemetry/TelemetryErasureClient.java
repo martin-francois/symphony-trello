@@ -22,6 +22,11 @@ final class TelemetryErasureClient implements AutoCloseable {
     private static final Duration TIMEOUT = Duration.ofSeconds(20);
     // The erasure handler (infra/posthog/erasure-service.hog.tftpl) rejects longer validity windows.
     static final Duration SIGNATURE_LIFETIME = Duration.ofSeconds(900);
+    private static final String NOT_CONFIRMED = "erasure service did not confirm the request; retry later";
+    // The handler answers 401 to a bad signature and to a timestamp outside its clock tolerance,
+    // so a fast or slow clock is the common cause a user can fix; retries keep their backoff.
+    static final String SIGNATURE_REJECTED = "erasure service rejected the signed request; check that the system"
+            + " clock is correct, and if it is, contact the maintainer because the stored credential may be invalid";
     private final TelemetryErasureEndpoint endpoint;
     private final TelemetryDistribution distribution;
     private final HttpClient http = BoundedHttp.newClient();
@@ -50,7 +55,7 @@ final class TelemetryErasureClient implements AutoCloseable {
     // Parsing causes can contain the issuance response, including its credential.
     @SuppressWarnings("PMD.PreserveStackTrace")
     TelemetryCredential issue() {
-        JsonNode result = post("issue-v1");
+        JsonNode result = post("issue-v1", NOT_CONFIRMED);
         try {
             if (!"issued".equals(result.path("status").asText())) {
                 throw new IllegalArgumentException("unexpected issuance response");
@@ -75,7 +80,7 @@ final class TelemetryErasureClient implements AutoCloseable {
                 erasure.operation().toString(),
                 Long.toString(now.getEpochSecond()),
                 Long.toString(now.plus(SIGNATURE_LIFETIME).getEpochSecond()));
-        post(unsigned + "|" + ownership.credential().sign(unsigned));
+        post(unsigned + "|" + ownership.credential().sign(unsigned), SIGNATURE_REJECTED);
     }
 
     /// Best effort: a lost acknowledgment leaves only a status flag for the operator to archive.
@@ -88,10 +93,10 @@ final class TelemetryErasureClient implements AutoCloseable {
         }
     }
 
-    private JsonNode post(String payload) {
+    private JsonNode post(String payload, String rejected) {
         // All fields have a restricted alphabet; canonical JSON rejects duplicate/extra members server-side.
         String body = "{\"payload\":\"" + payload + "\"}";
-        return post(endpoint.uri(), body);
+        return post(endpoint.uri(), body, rejected);
     }
 
     /// The provider-confirmed phase, or empty while the service reports pending or an unknown value.
@@ -104,7 +109,7 @@ final class TelemetryErasureClient implements AutoCloseable {
         body.put("api_key", distribution.projectToken().orElseThrow());
         body.put("distinct_id", "erasure-status");
         body.putArray("flag_keys_to_evaluate").add(key);
-        JsonNode response = post(distribution.endpoint().resolve("/flags?v=2"), body.toString());
+        JsonNode response = post(distribution.endpoint().resolve("/flags?v=2"), body.toString(), NOT_CONFIRMED);
         if (response.path("errorsWhileComputingFlags").asBoolean(true)) {
             throw new TelemetryStateException("erasure status is temporarily unavailable");
         }
@@ -116,24 +121,28 @@ final class TelemetryErasureClient implements AutoCloseable {
         };
     }
 
-    private JsonNode post(URI uri, String body) {
+    /// `rejected` is the diagnostic for a 401, whose likely cause depends on the request.
+    private JsonNode post(URI uri, String body, String rejected) {
         return switch (BoundedHttp.post(http, uri, TIMEOUT, body)) {
             case Exchange.Unanswered unanswered ->
                 throw new TelemetryStateException(
                         unanswered.failure() == Failure.INTERRUPTED
                                 ? "erasure request interrupted; its outcome is unknown"
                                 : "erasure service unavailable; its outcome is unknown");
-            case Exchange.Answered answered -> answer(answered);
+            case Exchange.Answered answered -> answer(answered, rejected);
         };
     }
 
     // JSON parsing causes can retain the response body. Expose only fixed diagnostics.
     @SuppressWarnings("PMD.PreserveStackTrace")
-    private static JsonNode answer(Exchange.Answered answered) {
+    private static JsonNode answer(Exchange.Answered answered, String rejected) {
+        if (answered.status() == BoundedHttp.HTTP_UNAUTHORIZED) {
+            throw new TelemetryStateException(rejected);
+        }
         boolean receipt = answered.status() == BoundedHttp.HTTP_CREATED;
         if ((answered.status() != BoundedHttp.HTTP_OK && !receipt)
                 || !(answered.body() instanceof BodyRead.Complete complete)) {
-            throw new TelemetryStateException("erasure service did not confirm the request; retry later");
+            throw new TelemetryStateException(NOT_CONFIRMED);
         }
         if (receipt || complete.text().isBlank()) {
             // A receipt carries no result; the handler continues in the background.
