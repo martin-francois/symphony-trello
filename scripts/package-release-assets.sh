@@ -387,6 +387,8 @@ publish_assets() {
 # the only build that carries it. The source file is restored after packaging.
 TELEMETRY_PROPERTIES="src/main/resources/symphony-trello-telemetry.properties"
 TELEMETRY_TOKEN_KEY="posthog.project-token"
+TELEMETRY_ERASURE_ENDPOINT_KEY="posthog.erasure-endpoint"
+TELEMETRY_ERASURE_AUDIENCE_KEY="posthog.erasure-audience"
 PRODUCTION_PROJECT_FILE="infra/posthog/production-project-id"
 TELEMETRY_TOKEN_PLACEHOLDER="<unset>"
 TELEMETRY_TOKEN_PATTERN='^phc_[A-Za-z0-9]{40,64}$'
@@ -437,7 +439,7 @@ inject_telemetry_token() {
   injected="$(sed "s|^$TELEMETRY_TOKEN_KEY=$TELEMETRY_TOKEN_PLACEHOLDER\$|$TELEMETRY_TOKEN_KEY=$token|" "$ROOT/$TELEMETRY_PROPERTIES")"
   printf '%s\n' "$injected" >"$ROOT/$TELEMETRY_PROPERTIES"
   if [[ -n "$erasure_url" ]]; then
-    printf 'posthog.erasure-endpoint=%s\nposthog.erasure-audience=%s\n' "$erasure_url" "$erasure_audience" >>"$ROOT/$TELEMETRY_PROPERTIES"
+    printf '%s=%s\n' "$TELEMETRY_ERASURE_ENDPOINT_KEY" "$erasure_url" "$TELEMETRY_ERASURE_AUDIENCE_KEY" "$erasure_audience" >>"$ROOT/$TELEMETRY_PROPERTIES"
   fi
   echo "  OK  Usage-reporting token injected for this release archive"
 }
@@ -455,7 +457,7 @@ verify_packaged_telemetry_token() {
   fi
   if [[ -n "${SYMPHONY_TRELLO_ERASURE_ENDPOINT:-}" ]]; then
     local entry
-    for entry in "posthog.erasure-endpoint=$SYMPHONY_TRELLO_ERASURE_ENDPOINT" "posthog.erasure-audience=$SYMPHONY_TRELLO_ERASURE_AUDIENCE"; do
+    for entry in "$TELEMETRY_ERASURE_ENDPOINT_KEY=$SYMPHONY_TRELLO_ERASURE_ENDPOINT" "$TELEMETRY_ERASURE_AUDIENCE_KEY=$SYMPHONY_TRELLO_ERASURE_AUDIENCE"; do
       if ! unzip -p "$app_jar" "$(basename "$TELEMETRY_PROPERTIES")" | grep -Fxq "$entry"; then
         echo "packaged application does not carry the erasure configuration." >&2
         exit 2
