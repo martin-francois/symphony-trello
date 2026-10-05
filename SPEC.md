@@ -4378,7 +4378,9 @@ When this profile is used:
   Waiting for either lock MUST share one bounded time budget. Unreadable, corrupt, newer-format, or
   inconsistent state (an id without a registration date, negative counters, a claim without its
   pending report, or a pending report outside the field contract) MUST turn reporting off without
-  regenerating an identity or re-enabling reporting, and MUST leave the file untouched
+  regenerating an identity or re-enabling reporting, and MUST leave the file untouched. The
+  `$geoip_disable` and `$process_person_profile` flags are not stored state: reading a pending
+  report MUST ignore them, and every sent body MUST set both to `true`
 - `SYMPHONY_TRELLO_TELEMETRY_DISABLED` MUST turn off reporting and counting for the inheriting
   process and MUST NOT be defeated by `telemetry enable`; `SYMPHONY_TRELLO_TELEMETRY_DEBUG` MUST
   switch the inheriting process to local-only mode and MUST NOT override a stored disable;

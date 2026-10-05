@@ -700,7 +700,9 @@ considered but not selected.
 At most one pending report; retries reuse its UUID, timestamp, and properties with backoff of 1,
 5, 15, then 60 minutes plus up to 30 seconds of jitter, honoring `Retry-After` up to one hour;
 permanent errors defer to the next UTC day; a pending report expires at the next UTC day and is
-replaced by a current observation. Status: selected.
+replaced by a current observation. The `$geoip_disable` and `$process_person_profile` flags are
+not stored state: reading a pending report ignores them, and every sent body sets both to true.
+Status: selected.
 
 - Good, because old buffered activity never masquerades as present use, and telemetry never
   blocks Trello or Codex work.
