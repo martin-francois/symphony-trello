@@ -114,7 +114,13 @@ final class FakePostHog implements AutoCloseable {
     }
 
     long count(String prefix) {
-        return requests.stream().filter(request -> request.startsWith(prefix)).count();
+        long matching = 0;
+        for (String request : requests) {
+            if (request.startsWith(prefix)) {
+                matching++;
+            }
+        }
+        return matching;
     }
 
     synchronized List<String> eventUuids(String distinctId) {

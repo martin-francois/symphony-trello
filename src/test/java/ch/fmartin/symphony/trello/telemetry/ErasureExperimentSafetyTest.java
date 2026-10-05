@@ -219,9 +219,9 @@ final class ErasureExperimentSafetyTest {
         assertThat(summary)
                 .contains("| 8. Reused ID erasable, fixtures cleaned up | PASS |")
                 .doesNotContain("FAIL");
-        for (String text : List.of(evidence, summary, checkpoint, printed, outcome.message())) {
-            assertThat(text).doesNotContain(FakePostHog.KEY).doesNotContain(FakePostHog.TOKEN);
-        }
+        assertThat(List.of(evidence, summary, checkpoint, printed, outcome.message()))
+                .allSatisfy(
+                        text -> assertThat(text).doesNotContain(FakePostHog.KEY).doesNotContain(FakePostHog.TOKEN));
         assertThat(evidence).contains("\"phase\":\"send\"").contains("\"http_status\":\"202\"");
         EvidenceLog redactor = new EvidenceLog(
                 tempDir.resolve("unused"), clock, List.of(() -> FakePostHog.KEY, () -> FakePostHog.TOKEN));

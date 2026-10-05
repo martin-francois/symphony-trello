@@ -487,9 +487,13 @@ final class TelemetryErasureTest {
     }
 
     private long signedRequests() {
-        return requests.stream()
-                .filter(request -> request.contains(SIGNED_REQUEST))
-                .count();
+        long signed = 0;
+        for (String request : requests) {
+            if (request.contains(SIGNED_REQUEST)) {
+                signed++;
+            }
+        }
+        return signed;
     }
 
     private HeartbeatReporter worker(Executor executor) {

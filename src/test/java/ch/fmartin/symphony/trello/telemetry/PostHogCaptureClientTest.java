@@ -305,9 +305,11 @@ final class PostHogCaptureClientTest {
         // given
         var release = new CountDownLatch(1);
         var handlerFinished = new CountDownLatch(1);
+        var headersSent = new CountDownLatch(1);
         server.createContext("/interrupt", exchange -> {
             exchange.sendResponseHeaders(200, 20);
             exchange.getResponseBody().flush();
+            headersSent.countDown();
             try {
                 release.await(5, TimeUnit.SECONDS);
             } catch (InterruptedException exception) {
@@ -330,7 +332,9 @@ final class PostHogCaptureClientTest {
 
         // when
         caller.start();
-        Thread.sleep(200);
+        assertThat(headersSent.await(5, TimeUnit.SECONDS))
+                .as("the server sends the headers and then holds the body")
+                .isTrue();
         caller.interrupt();
         caller.join(5_000);
         release.countDown();
