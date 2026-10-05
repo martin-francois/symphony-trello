@@ -91,9 +91,11 @@ Two changes keep the unlocked update from breaking `main`:
   on the line it appears on. The one fixture inside a Java text block, where a marker would become
   test data, uses `user:password@example.invalid` instead, a form the rule discards as synthetic.
 * A new job, `pinned-betterleaks-image` in the private-context workflow, scans a pull request with
-  the image it pins, and the `Required merge checks` ruleset requires it. The job reads the
-  digest-pinned `ghcr.io/betterleaks/betterleaks` reference from `scripts/betterleaks-docker.sh` on
-  the base and on the head. When the two differ, it runs the base branch's
+  the image it pins, and the `Required merge checks` ruleset requires it. The job reads the image
+  `scripts/betterleaks-docker.sh` runs on the base and on the head: the default of its single
+  `image=` assignment, which must be a digest-pinned `ghcr.io/betterleaks/betterleaks` reference,
+  with `"$image"` passed to `exec`. A wrapper in any other form fails the job, because the image it
+  runs cannot be read from it. When the two images differ, it runs the base branch's
   `scripts/check-private-context --worktree` and rule file against the pull request worktree, with
   `SYMPHONY_TRELLO_BETTERLEAKS_IMAGE` set to the head image. When they match, the `private-context`
   job already covers the image and the new job only reports success. The BetterLeaks update keeps
