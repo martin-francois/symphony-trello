@@ -100,8 +100,7 @@ public final class HeartbeatReporter {
                         } catch (TelemetryStateException exception) {
                             if (issuing) {
                                 int failures = issuanceFailures.incrementAndGet();
-                                issuanceNotBefore = clock.instant()
-                                        .plus(RETRY_BACKOFF.get(Math.min(failures, RETRY_BACKOFF.size()) - 1));
+                                issuanceNotBefore = clock.instant().plus(backoff(failures));
                             }
                             output.info("telemetry ownership request deferred: " + exception.getMessage());
                         } finally {
@@ -301,9 +300,9 @@ public final class HeartbeatReporter {
         int attempts = state.retrySchedule().map(RetryState::attempts).orElse(0) + 1;
         return switch (outcome.kind()) {
             case ACCEPTED -> state.withReporting(report.observationDate(), null, null, null);
-            // A quota drop is not an accepted report: keep the last real success, do not retry today
-            // (the next attempt would be dropped too), and leave the reason visible in status.
-            case QUOTA_LIMITED ->
+            // Neither outcome is an accepted report. Keep the last real success, wait for the next UTC
+            // day because a retry today would be dropped or rejected again, and show the reason in status.
+            case QUOTA_LIMITED, PERMANENT ->
                 state.withReporting(
                         state.lastReportedDate(),
                         new RetryState(attempts, nextUtcDay(report.observationDate()), outcome.summary()),
@@ -316,19 +315,18 @@ public final class HeartbeatReporter {
                                 attempts, now.plus(retryDelay(attempts, outcome.retryAfter())), outcome.summary()),
                         report,
                         null);
-            case PERMANENT ->
-                state.withReporting(
-                        state.lastReportedDate(),
-                        new RetryState(attempts, nextUtcDay(report.observationDate()), outcome.summary()),
-                        null,
-                        null);
         };
     }
 
     private Duration retryDelay(int attempts, Optional<Duration> retryAfter) {
-        Duration base = retryAfter.orElseGet(() -> RETRY_BACKOFF.get(Math.min(attempts, RETRY_BACKOFF.size()) - 1));
+        Duration base = retryAfter.orElseGet(() -> backoff(attempts));
         long jitter = Math.floorMod(jitterSeconds.getAsLong(), RETRY_JITTER_MAX.toSeconds() + 1);
         return base.plusSeconds(jitter);
+    }
+
+    /// The backoff step for the given failure count; failures beyond the table keep the last step.
+    private static Duration backoff(int failures) {
+        return RETRY_BACKOFF.get(Math.min(failures, RETRY_BACKOFF.size()) - 1);
     }
 
     private boolean stillOurs(TelemetryState state, Dispatch dispatch) {
