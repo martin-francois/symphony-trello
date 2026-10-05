@@ -312,7 +312,8 @@ final class InstallerScriptTest {
 
     @Test
     void posixInstallerDryRunPlansTheTelemetryDisableWhenTheValueCarriesSurroundingWhitespace() throws Exception {
-        // given: the value a CRLF .env file yields, which Java reads as disabled after stripping
+        // given
+        // The value is what a CRLF .env file yields, which Java reads as disabled after stripping.
         assumeFalse(isWindows());
         assumeTrue(commandExists("bash"));
         var processBuilder = new ProcessBuilder("bash", "install.sh", "--dry-run", "--no-onboard");
@@ -5683,7 +5684,8 @@ final class InstallerScriptTest {
 
     @Test
     void powershellInstallerDryRunPlansTheTelemetryDisableWhenTheVariableIsSetWhenAvailable() throws Exception {
-        // given: the value a CRLF .env file yields, which Java reads as disabled after stripping
+        // given
+        // The value is what a CRLF .env file yields, which Java reads as disabled after stripping.
         List<String> pwsh = powershellCommand();
         assumeFalse(pwsh.isEmpty());
         Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());

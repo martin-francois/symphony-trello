@@ -98,9 +98,8 @@ final class TelemetryErasureContractTest {
 
         // then
         assertThat(packager)
-                .contains("'" + endpoint + "=%s\\n" + audience + "=%s\\n'")
-                .contains("\"" + endpoint + "=$SYMPHONY_TRELLO_ERASURE_ENDPOINT\"")
-                .contains("\"" + audience + "=$SYMPHONY_TRELLO_ERASURE_AUDIENCE\"");
+                .contains("TELEMETRY_ERASURE_ENDPOINT_KEY=\"" + endpoint + "\"")
+                .contains("TELEMETRY_ERASURE_AUDIENCE_KEY=\"" + audience + "\"");
     }
 
     @Test
