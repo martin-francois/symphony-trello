@@ -1215,10 +1215,16 @@ test("BetterLeaks image updates automerge only after a scan with the image they 
     scan?.env?.SYMPHONY_TRELLO_BETTERLEAKS_IMAGE,
     "${{ steps.images.outputs.head_image }}",
   );
+  // The job reads the image the wrapper runs, so the wrapper must keep the form the job parses.
+  const wrapper = readFileSync(new URL("betterleaks-docker.sh", SCRIPTS), "utf8");
+  const execLine = 'exec "$container_runtime" "${docker_args[@]}" "$image" "$@"';
   assert.match(
-    readFileSync(new URL("betterleaks-docker.sh", SCRIPTS), "utf8"),
-    /^image="\$\{SYMPHONY_TRELLO_BETTERLEAKS_IMAGE:-ghcr\.io\/betterleaks\/betterleaks:/mu,
+    wrapper,
+    /^image="\$\{SYMPHONY_TRELLO_BETTERLEAKS_IMAGE:-ghcr\.io\/betterleaks\/betterleaks:v[0-9.]+@sha256:[a-f0-9]{64}\}"$/mu,
   );
+  assert.equal(wrapper.match(/(?:^|[^\w])image\+?=/gmu)?.length, 1);
+  assert.ok(wrapper.split("\n").includes(execLine));
+  assert.ok(compare?.run?.includes(`grep -qxF '${execLine}'`));
 
   // With the scan in place, a BetterLeaks update follows the ordinary non-major automerge.
   assert.ok(

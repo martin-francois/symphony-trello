@@ -49,8 +49,9 @@ pair, end the line with a `betterleaks:allow` comment.
 
 Renovate updates the BetterLeaks image. When a pull request pins a different image than its base
 branch, the required `pinned-betterleaks-image` job runs the trusted base-branch scanner against the
-pull request worktree with the new image. That job accepts only a digest-pinned
-`ghcr.io/betterleaks/betterleaks` image and runs with a read-only token and no secrets; see
+pull request worktree with the new image. That job reads the image from the wrapper's single
+`image=` assignment, accepts only a digest-pinned `ghcr.io/betterleaks/betterleaks` image, and runs
+with a read-only token and no secrets; see
 [ADR 0124](../adr/0124-look-up-betterleaks-through-the-github-package-feed.md). The same scan runs
 locally from the repository root:
 

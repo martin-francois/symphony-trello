@@ -99,21 +99,29 @@ jobs:
       - name: Compare pinned BetterLeaks images
         id: images
         run: |
-          # Only the publisher's repository is accepted, so a pull request can pick a released
-          # BetterLeaks image by digest but never an image of its own.
-          pinned_image() {
-            grep -oE 'ghcr\.io/betterleaks/betterleaks:v[0-9]+\.[0-9]+\.[0-9]+@sha256:[0-9a-f]{64}' "$1" | sort -u || true
-          }
-          require_one_image() {
-            if [ -z "$2" ] || [ "$(printf '%s\n' "$2" | wc -l)" -ne 1 ]; then
-              echo "::error file=scripts/betterleaks-docker.sh::The $1 branch must pin exactly one ghcr.io/betterleaks/betterleaks image by digest."
-              exit 1
+          # Read the image the wrapper runs, not any reference in the file: exactly one image
+          # assignment, a digest-pinned image from the publisher's repository, passed to exec.
+          # A pull request can pick a released BetterLeaks image but never an image of its own.
+          effective_image() {
+            local assignments
+            assignments="$(grep -cE '(^|[^[:alnum:]_])image\+?=' "$1" || true)"
+            # shellcheck disable=SC2016 # the exec line is matched literally
+            if [ "$assignments" -eq 1 ] &&
+              grep -qxF 'exec "$container_runtime" "${docker_args[@]}" "$image" "$@"' "$1"; then
+              local ref='ghcr\.io/betterleaks/betterleaks:v[0-9]+\.[0-9]+\.[0-9]+@sha256:[0-9a-f]{64}'
+              sed -nE -e "s#^image=\"\\\$\\{SYMPHONY_TRELLO_BETTERLEAKS_IMAGE:-($ref)\\}\"\$#\\1#p" \
+                -e "s#^image=\"($ref)\"\$#\\1#p" "$1"
             fi
           }
-          base_image="$(pinned_image scanner/scripts/betterleaks-docker.sh)"
-          head_image="$(pinned_image source/scripts/betterleaks-docker.sh)"
-          require_one_image base "$base_image"
-          require_one_image head "$head_image"
+          base_image="$(effective_image scanner/scripts/betterleaks-docker.sh)"
+          head_image="$(effective_image source/scripts/betterleaks-docker.sh)"
+          for side in base head; do
+            image_var="${side}_image"
+            if [ -z "${!image_var}" ]; then
+              echo "::error file=scripts/betterleaks-docker.sh::Cannot tell which image the $side branch runs. Keep one image=\"\${SYMPHONY_TRELLO_BETTERLEAKS_IMAGE:-ghcr.io/betterleaks/betterleaks:vX.Y.Z@sha256:...}\" line and pass \"\$image\" to exec."
+              exit 1
+            fi
+          done
           echo "head_image=$head_image" >> "$GITHUB_OUTPUT"
           if [ "$head_image" = "$base_image" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
