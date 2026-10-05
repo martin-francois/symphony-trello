@@ -72,22 +72,28 @@ public record TelemetryDistribution(
                 systemProperties.apply(ERASURE_ENDPOINT_PROPERTY), bundled.getProperty(ERASURE_ENDPOINT_KEY));
         Optional<String> erasureAudience = firstNonBlank(
                 systemProperties.apply(ERASURE_AUDIENCE_PROPERTY), bundled.getProperty(ERASURE_AUDIENCE_KEY));
+        // An invalid explicit override must not break startup or setup, and must not silently send
+        // to production instead. Parser messages can quote the input, so the problems are fixed text.
+        URI endpointUri;
         try {
-            if (erasureUrl.isPresent() != erasureAudience.isPresent()) {
-                return invalid("erasure endpoint and audience must be configured together");
-            }
-            Optional<TelemetryErasureEndpoint> erasure = erasureUrl.flatMap(
-                    url -> erasureAudience.map(scope -> new TelemetryErasureEndpoint(URI.create(url), scope)));
-            return new TelemetryDistribution(
-                    URI.create(endpoint.strip()),
-                    token.flatMap(TelemetryDistribution::validToken),
-                    Optional.empty(),
-                    erasure);
+            endpointUri = URI.create(endpoint.strip());
+            requireHttpsOrLoopback(endpointUri);
         } catch (IllegalArgumentException exception) {
-            // An invalid explicit override must not break startup or setup, and must not silently
-            // send to production instead; the value itself is not echoed.
-            return invalid(ENDPOINT_PROPERTY + " is not a usable endpoint: " + exception.getMessage());
+            return invalid(ENDPOINT_PROPERTY + " is not a usable endpoint");
         }
+        if (erasureUrl.isPresent() != erasureAudience.isPresent()) {
+            return invalid("erasure endpoint and audience must be configured together");
+        }
+        Optional<TelemetryErasureEndpoint> erasure;
+        try {
+            erasure = erasureUrl.flatMap(
+                    url -> erasureAudience.map(scope -> new TelemetryErasureEndpoint(URI.create(url), scope)));
+        } catch (IllegalArgumentException exception) {
+            return invalid(ERASURE_ENDPOINT_PROPERTY + " and " + ERASURE_AUDIENCE_PROPERTY
+                    + " are not a usable erasure service");
+        }
+        return new TelemetryDistribution(
+                endpointUri, token.flatMap(TelemetryDistribution::validToken), Optional.empty(), erasure);
     }
 
     public boolean ready() {

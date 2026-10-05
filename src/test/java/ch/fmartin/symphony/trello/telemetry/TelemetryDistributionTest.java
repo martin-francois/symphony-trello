@@ -103,6 +103,43 @@ final class TelemetryDistributionTest {
         assertThat(distribution.problem()).isPresent();
     }
 
+    @Test
+    void aMalformedEndpointOverrideIsNamedWithoutEchoingTheValue() {
+        // given
+        Map<String, String> overrides = Map.of(TelemetryDistribution.ENDPOINT_PROPERTY, "https://secret-marker host/");
+
+        // when
+        TelemetryDistribution distribution = TelemetryDistribution.load(overrides::get);
+
+        // then
+        assertThat(distribution.problem())
+                .hasValue(TelemetryDistribution.ENDPOINT_PROPERTY + " is not a usable endpoint");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"https://secret-marker host/erase", "http://secret-marker.example/erase"})
+    void anUnusableErasureServiceIsNamedWithoutEchoingTheValue(String erasureEndpoint) {
+        // given
+        Map<String, String> overrides = Map.of(
+                TelemetryDistribution.ERASURE_ENDPOINT_PROPERTY,
+                erasureEndpoint,
+                TelemetryDistribution.ERASURE_AUDIENCE_PROPERTY,
+                "symphony-trello-erasure",
+                TelemetryDistribution.TOKEN_PROPERTY,
+                LONG_TOKEN);
+
+        // when
+        TelemetryDistribution distribution = TelemetryDistribution.load(overrides::get);
+
+        // then
+        assertThat(distribution.ready())
+                .as("an unusable erasure service blocks sending")
+                .isFalse();
+        assertThat(distribution.problem())
+                .hasValue(TelemetryDistribution.ERASURE_ENDPOINT_PROPERTY + " and "
+                        + TelemetryDistribution.ERASURE_AUDIENCE_PROPERTY + " are not a usable erasure service");
+    }
+
     @ParameterizedTest
     @ValueSource(
             strings = {
