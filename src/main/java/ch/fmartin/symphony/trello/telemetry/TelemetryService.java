@@ -29,7 +29,7 @@ public final class TelemetryService {
     private static final String IDENTITY_PLACEHOLDER_LINE =
             "distinct_id and registered_on are null until the first eligible worker registers this installation.";
     private static final String REMAINS_ENABLED_LINE = "Telemetry remains enabled.";
-    private static final String THANKS_LINE = "Thanks for helping improve symphony-trello!";
+    private static final String THANKS_LINE = "Thanks for helping improve " + TelemetryNotice.PRODUCT_NAME + "!";
     private static final String DISABLED_LINE = "Telemetry disabled. The orchestra will have to play this one by ear.";
     private static final String FEATURES_LINE = "All features remain available.";
     private static final String PROMPT = "Disable telemetry? [yes/No/privacy] ";
@@ -59,9 +59,12 @@ public final class TelemetryService {
         out.println("  Stored mode: " + state.mode().displayName()
                 + (read.status() == StateRead.Status.ABSENT ? " (default, no preference stored yet)" : ""));
         out.println("  Effective mode: " + effective.effective().displayName()
-                + effective.overrideReason().map(reason -> " (" + reason + ")").orElse(""));
+                + effective
+                        .overrideReason()
+                        .map(reason -> ", overridden by " + reason)
+                        .orElse(""));
         if (installation.environment().log()) {
-            out.println("  Request logging: on (" + TelemetryEnvironment.LOG_VARIABLE + "=1, output only)");
+            out.println("  Request logging: on, output only, set by " + TelemetryEnvironment.LOG_VARIABLE + "=1");
         }
         out.println(
                 "  Installation ID: " + state.installation().map(UUID::toString).orElse("not registered yet"));
@@ -110,11 +113,7 @@ public final class TelemetryService {
                 + read.problem()
                         .map(problem -> " (unreadable: " + problem + ")")
                         .orElse(""));
-        if (!installation.installed()) {
-            out.println(NOT_INSTALLED_LINE);
-        } else if (!installation.distribution().ready()) {
-            out.println(NOT_CONFIGURED_LINE);
-        }
+        printEligibilityNotes(out);
         return EXIT_OK;
     }
 
@@ -162,11 +161,9 @@ public final class TelemetryService {
                         .withFirstWorkerDeadline(now);
                 TelemetryOwnership ownership = state.ownership();
                 TelemetryOwnership.Erasure erasure = state.erasure();
-                if (erasure != null
-                        && (erasure.phase() == TelemetryOwnership.Phase.REQUESTED
-                                || erasure.phase() == TelemetryOwnership.Phase.ACCEPTED)) {
+                if (erasure != null && erasure.phase().inProgress()) {
                     throw new TelemetryStateException(
-                            "erasure is still in progress; check `symphony-trello telemetry erase-status`");
+                            "erasure is still in progress; check `" + TelemetryNotice.ERASE_STATUS_COMMAND + "`");
                 }
                 if (ownership != null) {
                     // A refused period stays with the maintainer; a new period cannot join its profile.
@@ -296,15 +293,17 @@ public final class TelemetryService {
         String message =
                 switch (erasure.phase()) {
                     case REQUESTED ->
-                        "Erasure is not yet confirmed as accepted. Reporting is off. Retry with `symphony-trello telemetry erase-status`; running workers also retry.";
+                        "Erasure is not yet confirmed as accepted. Reporting is off. Retry with `"
+                                + TelemetryNotice.ERASE_STATUS_COMMAND + "`; running workers also retry.";
                     case ACCEPTED ->
                         "Erasure accepted. PostHog continues deletion after this command exits. Physical deletion is still pending.";
                     case COMPLETE ->
-                        "Erasure complete. Reporting remains off until you run `symphony-trello telemetry enable`.";
+                        "Erasure complete. Reporting remains off until you run `" + TelemetryNotice.ENABLE_COMMAND
+                                + "`.";
                     case REFUSED ->
                         "Automatic erasure refused because the provider identity is inconsistent. Reporting is off; contact"
-                                + " the maintainer for manual deletion. `symphony-trello telemetry enable` resumes reporting"
-                                + " under a new analytics ID.";
+                                + " the maintainer for manual deletion. `" + TelemetryNotice.ENABLE_COMMAND
+                                + "` resumes reporting under a new analytics ID.";
                 };
         out.println(message);
         return erasure.phase() == TelemetryOwnership.Phase.REFUSED ? EXIT_FAILURE : EXIT_OK;
@@ -327,14 +326,14 @@ public final class TelemetryService {
                 case ENABLED -> Update.write(current.withMode(TelemetryMode.DEBUG), false);
             });
             if (disabled) {
-                err.println("Telemetry is disabled, and debug mode does not override that. Run"
-                        + " `symphony-trello telemetry enable` first if you want local-only debug output.");
+                err.println("Telemetry is disabled, and debug mode does not override that. Run `"
+                        + TelemetryNotice.ENABLE_COMMAND + "` first if you want local-only debug output.");
                 return EXIT_FAILURE;
             }
             StateRead read = readState();
             out.println("Telemetry switched to local-only debug mode for this installation.");
-            out.println("Workers print each report they would send and send nothing. Re-enable with"
-                    + " `symphony-trello telemetry enable`.");
+            out.println("Workers print each report they would send and send nothing. Re-enable with `"
+                    + TelemetryNotice.ENABLE_COMMAND + "`.");
             out.println();
             printPreview(out, read.stateOrInitial(), read);
             if (installation.environment().disabled()) {
@@ -419,7 +418,7 @@ public final class TelemetryService {
     }
 
     private Review review(DisableRequest request, PrintStream out, TelemetryState state, StateRead read) {
-        out.println("Telemetry helps " + TelemetryNotice.MAINTAINER + " improve symphony-trello.");
+        out.println("Telemetry helps " + TelemetryNotice.MAINTAINER + " improve " + TelemetryNotice.PRODUCT_NAME + ".");
         out.println("Reports are sent through PostHog EU, normally once per day while running.");
         out.println();
         out.println("This is the complete JSON body of a report generated now.");
@@ -427,7 +426,8 @@ public final class TelemetryService {
         out.println();
         printPreviewJson(out, state, read);
         out.println();
-        out.println(TelemetryNotice.MAINTAINER + " uses these reports only to improve symphony-trello.");
+        out.println(TelemetryNotice.MAINTAINER + " uses these reports only to improve " + TelemetryNotice.PRODUCT_NAME
+                + ".");
         out.println("Privacy covers provider processing, network metadata, retention and deletion.");
         out.println();
         while (true) {
@@ -439,6 +439,7 @@ public final class TelemetryService {
             try {
                 line = request.input().get();
             } catch (RuntimeException exception) {
+                // An answer that cannot be read is no consent; cancelling keeps the stored preference.
                 return Review.CANCELLED;
             }
             if (line == null) {
@@ -524,7 +525,7 @@ public final class TelemetryService {
             case DISABLED ->
                 effective
                         .overrideReason()
-                        .map(reason -> "Telemetry is disabled for this process by " + reason + ".")
+                        .map(reason -> "Telemetry is disabled for this process by " + reason)
                         .orElse("Telemetry is disabled.");
         };
     }
@@ -555,6 +556,7 @@ public final class TelemetryService {
             try {
                 return source.readLine();
             } catch (IOException exception) {
+                // A broken input stream ends the review like end of input, which never disables telemetry.
                 return null;
             }
         };

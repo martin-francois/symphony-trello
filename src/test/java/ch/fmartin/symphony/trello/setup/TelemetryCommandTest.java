@@ -133,8 +133,10 @@ final class TelemetryCommandTest {
         CliRunResult status = run(environment, "telemetry", "status");
 
         // then
-        enable.assertFailure(1).stderrContains("cannot be enabled while SYMPHONY_TRELLO_TELEMETRY_DISABLED");
-        status.assertSuccess().stdoutContains("Effective mode: disabled (SYMPHONY_TRELLO_TELEMETRY_DISABLED=1)");
+        enable.assertFailure(1).stderrContains("cannot be enabled while " + TelemetryEnvironment.DISABLED_VARIABLE);
+        status.assertSuccess()
+                .stdoutContains(
+                        "Effective mode: disabled, overridden by " + TelemetryEnvironment.DISABLED_VARIABLE + "=1");
     }
 
     @Test

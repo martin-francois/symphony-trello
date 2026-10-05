@@ -43,7 +43,7 @@ final class TelemetryErasure {
         }
         Erasure job = state.erasure();
         if (job != null) {
-            return active(job) && !job.notBefore().isAfter(clock.instant());
+            return job.phase().inProgress() && !job.notBefore().isAfter(clock.instant());
         }
         return !state.hasIdentity() && installation.effective(state.mode()).sendsReports();
     }
@@ -59,7 +59,7 @@ final class TelemetryErasure {
         run(store, state -> {
             Erasure job = state.erasure();
             TelemetryOwnership ownership = state.ownership();
-            return job != null && ownership != null && active(job) && ownership.settled(clock.instant());
+            return job != null && ownership != null && job.phase().inProgress() && ownership.settled(clock.instant());
         });
     }
 
@@ -161,10 +161,6 @@ final class TelemetryErasure {
                 ? RETRY_FLOOR
                 : waited.compareTo(RETRY_CEILING) > 0 ? RETRY_CEILING : waited;
         return now.plus(delay);
-    }
-
-    private static boolean active(Erasure job) {
-        return job.phase() != Phase.COMPLETE && job.phase() != Phase.REFUSED;
     }
 
     private static boolean replace(

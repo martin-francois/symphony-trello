@@ -45,6 +45,7 @@ final class TelemetryInstallations {
                     Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), environment);
             return forPaths(paths, environment);
         } catch (RuntimeException exception) {
+            // Telemetry must never stop a worker; an unusable layout only means no reports from it.
             return TelemetryInstallation.absent(telemetryEnvironment, distribution);
         }
     }
@@ -73,6 +74,7 @@ final class TelemetryInstallations {
                         .count();
                 return OptionalInt.of(Math.toIntExact(distinct));
             } catch (IOException | RuntimeException exception) {
+                // An unreadable manifest leaves the board count unknown; it must not fail the report.
                 return OptionalInt.empty();
             }
         };

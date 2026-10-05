@@ -70,7 +70,7 @@ public record TelemetryOwnership(
         if (erasure == null) {
             return this;
         }
-        if (erasure.phase() != Phase.COMPLETE && erasure.phase() != Phase.REFUSED) {
+        if (erasure.phase().inProgress()) {
             throw new IllegalStateException("erasure is still in progress");
         }
         return issued(credential);
@@ -80,7 +80,12 @@ public record TelemetryOwnership(
         REQUESTED,
         ACCEPTED,
         COMPLETE,
-        REFUSED
+        REFUSED;
+
+        /// Whether the provider may still act on the request; complete and refused are final.
+        public boolean inProgress() {
+            return this == REQUESTED || this == ACCEPTED;
+        }
     }
 
     public record Erasure(

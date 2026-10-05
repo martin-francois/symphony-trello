@@ -100,7 +100,7 @@ final class TelemetryServiceTest {
         assertThat(exit).isZero();
         assertThat(output())
                 .contains("Stored mode: debug")
-                .contains("Effective mode: disabled (SYMPHONY_TRELLO_TELEMETRY_DISABLED=1)")
+                .contains("Effective mode: disabled, overridden by " + TelemetryEnvironment.DISABLED_VARIABLE + "=1")
                 .contains("Request logging: on")
                 .contains("Installation ID: not registered yet")
                 .contains("Installed context: yes")
@@ -157,12 +157,12 @@ final class TelemetryServiceTest {
         // then
         assertThat(exit).isZero();
         assertThat(output())
-                .contains("Telemetry helps François Martin improve symphony-trello.")
+                .contains("Telemetry helps François Martin improve Symphony for Trello.")
                 .contains("This is the complete JSON body of a report generated now.")
                 .contains("\"event\" : \"installation_heartbeat\"")
                 .contains("Disable telemetry? [yes/No/privacy]")
                 .contains("Enter keeps telemetry enabled.")
-                .endsWith("Telemetry remains enabled.\nThanks for helping improve symphony-trello!\n");
+                .endsWith("Telemetry remains enabled.\nThanks for helping improve Symphony for Trello!\n");
         assertThat(store.read().status()).isEqualTo(StateRead.Status.ABSENT);
     }
 
@@ -225,7 +225,7 @@ final class TelemetryServiceTest {
                         "# Usage reporting privacy",
                         "Disable telemetry? [yes/No/privacy]",
                         "Telemetry remains enabled.")
-                .endsWith("Telemetry remains enabled.\nThanks for helping improve symphony-trello!\n");
+                .endsWith("Telemetry remains enabled.\nThanks for helping improve Symphony for Trello!\n");
         assertThat(disableExit).isZero();
         assertThat(output()).contains("Telemetry disabled.");
         assertThat(store.read().stateOrInitial().mode()).isEqualTo(TelemetryMode.DISABLED);
@@ -273,7 +273,8 @@ final class TelemetryServiceTest {
 
         // then
         assertThat(output())
-                .endsWith("Telemetry is disabled for this process by SYMPHONY_TRELLO_TELEMETRY_DISABLED=1.\n")
+                .endsWith(
+                        "Telemetry is disabled for this process by " + TelemetryEnvironment.DISABLED_VARIABLE + "=1\n")
                 .doesNotContain("Thanks for helping");
     }
 
@@ -414,9 +415,9 @@ final class TelemetryServiceTest {
         assertThat(disableExit).isZero();
         assertThat(output())
                 .contains("Telemetry disabled.")
-                .contains("SYMPHONY_TRELLO_TELEMETRY_DISABLED already covered");
+                .contains(TelemetryEnvironment.DISABLED_VARIABLE + " already covered");
         assertThat(enableExit).isEqualTo(TelemetryService.EXIT_FAILURE);
-        assertThat(errors()).contains("cannot be enabled while SYMPHONY_TRELLO_TELEMETRY_DISABLED");
+        assertThat(errors()).contains("cannot be enabled while " + TelemetryEnvironment.DISABLED_VARIABLE);
         assertThat(store.read().stateOrInitial().mode()).isEqualTo(TelemetryMode.DISABLED);
     }
 

@@ -12,13 +12,16 @@ public final class TelemetryNotice {
     public static final int REVISION = 1;
     public static final Duration FIRST_REPORT_GRACE = Duration.ofMinutes(5);
     public static final String MAINTAINER = "François Martin";
-    public static final String PURPOSE_SENTENCE =
-            MAINTAINER + " uses these reports only to improve symphony-trello, with processing through PostHog EU.";
+    public static final String PRODUCT_NAME = "Symphony for Trello";
+    public static final String PURPOSE_SENTENCE = MAINTAINER + " uses these reports only to improve " + PRODUCT_NAME
+            + ", with processing through PostHog EU.";
     public static final String FIELD_SUMMARY =
             "Includes a random ID, registration date, app version, OS/architecture, and board/import/create counts.";
+    public static final String ENABLE_COMMAND = "symphony-trello telemetry enable";
     public static final String DISABLE_COMMAND = "symphony-trello telemetry disable";
     public static final String PREVIEW_COMMAND = "symphony-trello telemetry preview";
     public static final String PRIVACY_COMMAND = "symphony-trello telemetry privacy";
+    public static final String ERASE_STATUS_COMMAND = "symphony-trello telemetry erase-status";
     private static final long SECONDS_PER_MINUTE = 60;
 
     private TelemetryNotice() {}
