@@ -172,15 +172,13 @@ final class HeartbeatJsonTest {
     @Test
     void fieldCatalogAndJsonNamesAgree() {
         // given
-        List<String> catalogProperties = HeartbeatField.properties().stream()
-                .map(HeartbeatField::jsonName)
-                .toList();
-
-        // when
         List<String> serialized = propertyNames();
 
+        // when
+        List<HeartbeatField> catalogProperties = HeartbeatField.properties();
+
         // then
-        assertThat(serialized).containsExactlyElementsOf(catalogProperties);
+        assertThat(catalogProperties).extracting(HeartbeatField::jsonName).containsExactlyElementsOf(serialized);
     }
 
     private static List<String> envelopeNames() {
