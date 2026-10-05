@@ -58,7 +58,7 @@ public final class TelemetryService {
         Instant now = clock.instant();
         out.println("Telemetry status");
         out.println("  Stored mode: " + state.mode().displayName()
-                + (read.status() == StateRead.Status.ABSENT ? " (default, no preference stored yet)" : ""));
+                + (read instanceof StateRead.Absent ? " (default, no preference stored yet)" : ""));
         out.println("  Effective mode: " + effective.effective().displayName()
                 + effective
                         .overrideReason()
@@ -111,9 +111,9 @@ public final class TelemetryService {
                 + store.map(TelemetryStateStore::stateFile)
                         .map(Object::toString)
                         .orElse("-")
-                + read.problem()
-                        .map(problem -> " (unreadable: " + problem + ")")
-                        .orElse(""));
+                + (read instanceof StateRead.Unreadable unreadable
+                        ? " (unreadable: " + unreadable.problem() + ")"
+                        : ""));
         printEligibilityNotes(out);
         return EXIT_OK;
     }
@@ -208,8 +208,8 @@ public final class TelemetryService {
     private int disable(TelemetryStateStore store, DisableRequest request, PrintStream out, PrintStream err) {
         StateRead read = store.read();
         TelemetryState state = read.stateOrInitial();
-        if (read.unreadable()) {
-            err.println("Telemetry state is unreadable: " + read.problem().orElse("") + ". Reporting is already off.");
+        if (read instanceof StateRead.Unreadable unreadable) {
+            err.println("Telemetry state is unreadable: " + unreadable.problem() + ". Reporting is already off.");
             return EXIT_FAILURE;
         }
         if (state.mode() == TelemetryMode.DISABLED) {
@@ -528,9 +528,10 @@ public final class TelemetryService {
     }
 
     private void printPreviewJson(PrintStream out, TelemetryState state, StateRead read) {
-        read.problem()
-                .ifPresent(problem -> out.println(
-                        "Note: stored telemetry state is unreadable (" + problem + "); this preview uses defaults."));
+        if (read instanceof StateRead.Unreadable unreadable) {
+            out.println("Note: stored telemetry state is unreadable (" + unreadable.problem()
+                    + "); this preview uses defaults.");
+        }
         out.println(HeartbeatJson.serialize(snapshots.preview(state, clock.instant())));
     }
 
@@ -543,7 +544,7 @@ public final class TelemetryService {
     }
 
     private StateRead readState() {
-        return installation.store().map(TelemetryStateStore::read).orElseGet(StateRead::absent);
+        return installation.store().map(TelemetryStateStore::read).orElseGet(StateRead.Absent::new);
     }
 
     /// The truthful state after a review that changed nothing, including overrides and concurrent

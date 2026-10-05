@@ -61,7 +61,7 @@ final class TelemetryServiceTest {
                 .contains("\"connected_board_count\" : 3")
                 .contains("This preview is not sent.")
                 .contains("distinct_id and registered_on are null until");
-        assertThat(store.read().status()).isEqualTo(StateRead.Status.ABSENT);
+        assertThat(store.read()).isInstanceOf(StateRead.Absent.class);
     }
 
     @Test
@@ -163,7 +163,7 @@ final class TelemetryServiceTest {
                 .contains("Disable telemetry? [yes/No/privacy]")
                 .contains("Enter keeps telemetry enabled.")
                 .endsWith("Telemetry remains enabled.\nThanks for helping improve Symphony for Trello!\n");
-        assertThat(store.read().status()).isEqualTo(StateRead.Status.ABSENT);
+        assertThat(store.read()).isInstanceOf(StateRead.Absent.class);
     }
 
     @ParameterizedTest(name = "answer {0} disables")
@@ -202,7 +202,7 @@ final class TelemetryServiceTest {
                         "Please answer yes, no, or privacy.",
                         "Disable telemetry? [yes/No/privacy]",
                         "Telemetry remains enabled.");
-        assertThat(store.read().status()).isEqualTo(StateRead.Status.ABSENT);
+        assertThat(store.read()).isInstanceOf(StateRead.Absent.class);
     }
 
     @ParameterizedTest(name = "answer {0} shows privacy and asks again")
@@ -243,7 +243,7 @@ final class TelemetryServiceTest {
         // then
         assertThat(exit).isZero();
         assertThat(output()).endsWith("Cancelled. Telemetry remains enabled.\n");
-        assertThat(store.read().status()).isEqualTo(StateRead.Status.ABSENT);
+        assertThat(store.read()).isInstanceOf(StateRead.Absent.class);
     }
 
     @Test
@@ -612,7 +612,7 @@ final class TelemetryServiceTest {
 
         // then
         assertThat(output()).isEmpty();
-        assertThat(store.read().status()).isEqualTo(StateRead.Status.ABSENT);
+        assertThat(store.read()).isInstanceOf(StateRead.Absent.class);
         assertThat(Files.exists(developmentDir.resolve(TelemetryStateStore.STATE_FILE)))
                 .as("no dev state")
                 .isFalse();

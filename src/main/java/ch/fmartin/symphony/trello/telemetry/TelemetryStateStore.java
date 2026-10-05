@@ -15,7 +15,6 @@ import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Duration;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
@@ -62,9 +61,9 @@ public final class TelemetryStateStore {
         try {
             json = Files.readString(stateFile);
         } catch (NoSuchFileException exception) {
-            return StateRead.absent();
+            return new StateRead.Absent();
         } catch (IOException | SecurityException exception) {
-            return StateRead.unreadable("telemetry state could not be read: " + exception.getMessage());
+            return new StateRead.Unreadable("telemetry state could not be read: " + exception.getMessage());
         }
         return parse(json);
     }
@@ -102,12 +101,10 @@ public final class TelemetryStateStore {
     }
 
     private TelemetryState currentForUpdate() {
-        StateRead read = read();
-        return switch (read.status()) {
-            case ABSENT -> TelemetryState.initial();
-            case VALID -> read.state().orElseThrow();
-            case UNREADABLE ->
-                throw new TelemetryStateException(read.problem().orElse("telemetry state is unreadable"));
+        return switch (read()) {
+            case StateRead.Absent _ -> TelemetryState.initial();
+            case StateRead.Valid valid -> valid.state();
+            case StateRead.Unreadable unreadable -> throw new TelemetryStateException(unreadable.problem());
         };
     }
 
@@ -116,15 +113,15 @@ public final class TelemetryStateStore {
         try {
             state = TelemetryStateJson.read(json);
         } catch (IOException | RuntimeException exception) {
-            return StateRead.unreadable("telemetry state is not valid JSON or contains invalid values");
+            return new StateRead.Unreadable("telemetry state is not valid JSON or contains invalid values");
         }
         if (state.formatVersion() != TelemetryState.FORMAT_VERSION) {
-            return StateRead.unreadable("telemetry state format version " + state.formatVersion()
+            return new StateRead.Unreadable("telemetry state format version " + state.formatVersion()
                     + " is not supported by this release (expected " + TelemetryState.FORMAT_VERSION + ")");
         }
         return state.invariantProblem()
-                .map(problem -> StateRead.unreadable("telemetry state is inconsistent: " + problem))
-                .orElseGet(() -> StateRead.valid(state));
+                .<StateRead>map(problem -> new StateRead.Unreadable("telemetry state is inconsistent: " + problem))
+                .orElseGet(() -> new StateRead.Valid(state));
     }
 
     private static boolean tryLockWithin(Lock lock, long deadline) {
@@ -213,32 +210,18 @@ public final class TelemetryStateStore {
     }
 
     /// A lock-free read of the state file.
-    public record StateRead(Status status, Optional<TelemetryState> state, Optional<String> problem) {
-        public enum Status {
-            ABSENT,
-            VALID,
-            UNREADABLE
-        }
+    public sealed interface StateRead {
+        /// No state file exists yet.
+        record Absent() implements StateRead {}
 
-        static StateRead absent() {
-            return new StateRead(Status.ABSENT, Optional.empty(), Optional.empty());
-        }
+        record Valid(TelemetryState state) implements StateRead {}
 
-        static StateRead valid(TelemetryState state) {
-            return new StateRead(Status.VALID, Optional.of(state), Optional.empty());
-        }
+        /// The file exists but cannot be used; reporting stays off until it is repaired.
+        record Unreadable(String problem) implements StateRead {}
 
-        static StateRead unreadable(String problem) {
-            return new StateRead(Status.UNREADABLE, Optional.empty(), Optional.of(problem));
-        }
-
-        /// The state to reason about when nothing is stored yet: the initial defaults.
-        public TelemetryState stateOrInitial() {
-            return state.orElseGet(TelemetryState::initial);
-        }
-
-        public boolean unreadable() {
-            return status == Status.UNREADABLE;
+        /// The state to reason about when nothing usable is stored: the initial defaults.
+        default TelemetryState stateOrInitial() {
+            return this instanceof Valid valid ? valid.state() : TelemetryState.initial();
         }
     }
 }

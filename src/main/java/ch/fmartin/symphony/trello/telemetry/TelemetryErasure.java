@@ -166,7 +166,7 @@ final class TelemetryErasure {
 
     static TelemetryState readable(TelemetryStateStore store) {
         TelemetryStateStore.StateRead read = store.read();
-        if (read.unreadable()) {
+        if (read instanceof TelemetryStateStore.StateRead.Unreadable) {
             throw new TelemetryStateException("telemetry state is unreadable; reporting remains off");
         }
         return read.stateOrInitial();

@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.telemetry;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import ch.fmartin.symphony.trello.setup.ExternalFileLockHolder;
@@ -59,15 +60,18 @@ final class TelemetryStateStoreTest {
         StateRead after = store.read();
 
         // then
-        assertThat(before.status()).isEqualTo(StateRead.Status.ABSENT);
+        assertThat(before).isInstanceOf(StateRead.Absent.class);
         assertThat(id)
                 .as("the transaction saw the initial state without an identity")
                 .isNull();
-        assertThat(after.state()).get().satisfies(state -> {
-            assertThat(state.hasIdentity()).as("identity persisted").isTrue();
-            assertThat(state.registeredOn()).isEqualTo(LocalDate.of(2026, 9, 22));
-            assertThat(state.mode()).isEqualTo(TelemetryMode.ENABLED);
-        });
+        assertThat(after)
+                .asInstanceOf(type(StateRead.Valid.class))
+                .extracting(StateRead.Valid::state)
+                .satisfies(state -> {
+                    assertThat(state.hasIdentity()).as("identity persisted").isTrue();
+                    assertThat(state.registeredOn()).isEqualTo(LocalDate.of(2026, 9, 22));
+                    assertThat(state.mode()).isEqualTo(TelemetryMode.ENABLED);
+                });
         assertThat(store.stateFile()).hasFileName("telemetry.json");
     }
 
@@ -103,9 +107,10 @@ final class TelemetryStateStoreTest {
         StateRead read = store.read();
 
         // then
-        assertThat(read.state()).contains(full);
-        assertThat(read.state())
-                .get()
+        assertThat(read)
+                .asInstanceOf(type(StateRead.Valid.class))
+                .extracting(StateRead.Valid::state)
+                .isEqualTo(full)
                 .extracting(TelemetryState::preferenceRevision)
                 .isEqualTo(1L);
     }
@@ -137,7 +142,7 @@ final class TelemetryStateStoreTest {
         StateRead read = store.read();
 
         // then
-        assertThat(read.unreadable()).as("truncated JSON is unreadable").isTrue();
+        assertThat(read).as("truncated JSON is unreadable").isInstanceOf(StateRead.Unreadable.class);
         assertThatThrownBy(() -> store.update(state -> Update.write(state.withCounters(1, 1), null)))
                 .isInstanceOf(TelemetryStateException.class)
                 .hasMessageContaining("not valid");
@@ -157,7 +162,11 @@ final class TelemetryStateStoreTest {
         StateRead read = store.read();
 
         // then
-        assertThat(read.problem()).get().asString().contains("format version 2");
+        assertThat(read)
+                .asInstanceOf(type(StateRead.Unreadable.class))
+                .extracting(StateRead.Unreadable::problem)
+                .asString()
+                .contains("format version 2");
     }
 
     @Test
@@ -173,9 +182,7 @@ final class TelemetryStateStoreTest {
         StateRead read = store.read();
 
         // then
-        assertThat(read.unreadable())
-                .as("a newer field set is not silently accepted")
-                .isTrue();
+        assertThat(read).as("a newer field set is not silently accepted").isInstanceOf(StateRead.Unreadable.class);
     }
 
     @Test
@@ -191,10 +198,10 @@ final class TelemetryStateStoreTest {
         StateRead read = store.read();
 
         // then
-        assertThat(read.unreadable())
+        assertThat(read)
                 .as("the flag is not stored state, so the file stays readable")
-                .isFalse();
-        assertThat(TelemetryStateJson.write(read.state().orElseThrow())).contains("\"$geoip_disable\" : true");
+                .isInstanceOf(StateRead.Valid.class);
+        assertThat(TelemetryStateJson.write(read.stateOrInitial())).contains("\"$geoip_disable\" : true");
     }
 
     @MethodSource("inconsistentStates")
@@ -213,10 +220,12 @@ final class TelemetryStateStoreTest {
         Throwable failure = catchThrowable(() -> store.update(state -> Update.write(state.withCounters(9, 9), null)));
 
         // then
-        assertThat(read.unreadable())
+        assertThat(read)
                 .as("%s must not pass as healthy state", scenario)
-                .isTrue();
-        assertThat(read.problem()).get().asString().contains(expectedProblem);
+                .asInstanceOf(type(StateRead.Unreadable.class))
+                .extracting(StateRead.Unreadable::problem)
+                .asString()
+                .contains(expectedProblem);
         assertThat(failure).isInstanceOf(TelemetryStateException.class);
         assertThat(Files.readString(store.stateFile()))
                 .as("the original file is kept for diagnosis")
@@ -359,8 +368,7 @@ final class TelemetryStateStoreTest {
         }
 
         // then
-        assertThat(store.read().state())
-                .get()
+        assertThat(store.read().stateOrInitial())
                 .extracting(TelemetryState::boardImportsTotal)
                 .isEqualTo((long) WRITERS * INCREMENTS_PER_WRITER);
     }
@@ -396,8 +404,7 @@ final class TelemetryStateStoreTest {
 
             // then
             assertThat(seen).isEqualTo(1L);
-            assertThat(store.read().state())
-                    .get()
+            assertThat(store.read().stateOrInitial())
                     .extracting(TelemetryState::boardImportsTotal)
                     .isEqualTo(2L);
         } finally {

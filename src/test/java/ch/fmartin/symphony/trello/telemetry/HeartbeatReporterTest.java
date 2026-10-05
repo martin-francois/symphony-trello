@@ -682,7 +682,7 @@ final class HeartbeatReporterTest {
         // then
         assertThat(results)
                 .containsExactly(CheckResult.DISABLED, CheckResult.NOT_CONFIGURED, CheckResult.NOT_INSTALLED);
-        assertThat(store.read().status()).isEqualTo(TelemetryStateStore.StateRead.Status.ABSENT);
+        assertThat(store.read()).isInstanceOf(TelemetryStateStore.StateRead.Absent.class);
         assertThat(Files.exists(developmentDir.resolve(TelemetryStateStore.STATE_FILE)))
                 .as("a development run writes no telemetry state")
                 .isFalse();

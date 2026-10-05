@@ -71,8 +71,8 @@ public final class HeartbeatReporter {
 
     private CheckResult check(TelemetryStateStore store) {
         StateRead read = store.read();
-        if (read.unreadable()) {
-            reportUnreadable(read);
+        if (read instanceof StateRead.Unreadable unreadable) {
+            reportUnreadable(unreadable);
             return CheckResult.UNREADABLE;
         }
         TelemetryState current = read.stateOrInitial();
@@ -277,7 +277,7 @@ public final class HeartbeatReporter {
 
     private boolean canStartRequest(TelemetryStateStore store, Dispatch dispatch) {
         StateRead latest = store.read();
-        return !latest.unreadable()
+        return !(latest instanceof StateRead.Unreadable)
                 && stillOurs(latest.stateOrInitial(), dispatch)
                 && dispatch.claim().expiresAt().isAfter(clock.instant().plus(client.requestTimeout()));
     }
@@ -356,9 +356,9 @@ public final class HeartbeatReporter {
         output.info("telemetry debug preview (local only, not sent):\n" + HeartbeatJson.serialize(preview));
     }
 
-    private void reportUnreadable(StateRead read) {
+    private void reportUnreadable(StateRead.Unreadable read) {
         if (unreadableReported.compareAndSet(false, true)) {
-            output.info("telemetry reporting is off: " + read.problem().orElse("state unreadable"));
+            output.info("telemetry reporting is off: " + read.problem());
         }
     }
 
