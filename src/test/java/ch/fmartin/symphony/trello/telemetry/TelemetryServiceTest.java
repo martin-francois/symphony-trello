@@ -179,7 +179,8 @@ final class TelemetryServiceTest {
         assertThat(exit).isZero();
         assertThat(output())
                 .endsWith("Telemetry disabled. The orchestra will have to play this one by ear.\n"
-                        + "All features remain available.\n");
+                        + "All features remain available.\n"
+                        + TelemetryService.IN_FLIGHT_LINE + "\n");
         assertThat(store.read().stateOrInitial().mode()).isEqualTo(TelemetryMode.DISABLED);
         assertThat(store.read().stateOrInitial().preferenceRevision()).isEqualTo(1);
     }
@@ -377,6 +378,9 @@ final class TelemetryServiceTest {
         TelemetryState state = store.read().stateOrInitial();
 
         // then
+        assertThat(output())
+                .as("a disable must say that a report already on its way cannot be recalled")
+                .contains(TelemetryService.IN_FLIGHT_LINE);
         assertThat(state.pendingReport())
                 .as("the report discarded by the disable is not replayed")
                 .isNull();

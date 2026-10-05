@@ -32,6 +32,7 @@ public final class TelemetryService {
     private static final String THANKS_LINE = "Thanks for helping improve " + TelemetryNotice.PRODUCT_NAME + "!";
     private static final String DISABLED_LINE = "Telemetry disabled. The orchestra will have to play this one by ear.";
     private static final String FEATURES_LINE = "All features remain available.";
+    static final String IN_FLIGHT_LINE = "A report that a worker is already sending cannot be recalled.";
     private static final String PROMPT = "Disable telemetry? [yes/No/privacy] ";
     private static final String ENTER_HINT = "Enter keeps telemetry enabled.";
 
@@ -474,6 +475,7 @@ public final class TelemetryService {
             }
             out.println(DISABLED_LINE);
             out.println(FEATURES_LINE);
+            out.println(IN_FLIGHT_LINE);
             if (installation.environment().disabled()) {
                 out.println(TelemetryEnvironment.DISABLED_VARIABLE
                         + " already covered processes that inherit it; the stored preference now covers every worker.");
