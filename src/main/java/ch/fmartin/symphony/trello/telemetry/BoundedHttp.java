@@ -80,7 +80,7 @@ final class BoundedHttp {
     /// is larger than any documented response, and no prefix of it is trusted. A read that fails,
     /// times out, or is interrupted is a failed attempt, never an empty answer; the stream is closed
     /// on those paths, which cancels the exchange.
-    private static BodyRead readBounded(InputStream body, long deadline) {
+    static BodyRead readBounded(InputStream body, long deadline) {
         var read = new CompletableFuture<BodyRead>();
         Thread.startVirtualThread(() -> {
             try (InputStream stream = body) {
@@ -91,6 +91,9 @@ final class BoundedHttp {
                                 : new BodyRead.Complete(new String(bytes, StandardCharsets.UTF_8)));
             } catch (IOException exception) {
                 read.complete(new BodyRead.Failed("response body unreadable"));
+            } catch (RuntimeException exception) {
+                // Without this the caller would wait out the whole deadline for a read that already ended.
+                read.completeExceptionally(exception);
             }
         });
         try {
