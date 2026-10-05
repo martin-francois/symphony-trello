@@ -74,3 +74,58 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: ../scanner/scripts/check-private-context --git-range "$PR_BASE_SHA..$PR_HEAD_SHA"
+
+  # A required check: the scan above runs the base branch's image, so without this job a BetterLeaks
+  # update would automerge untested and fail main once its new rules run there (ADR 0124).
+  pinned-betterleaks-image:
+    if: ${{ github.event_name == 'pull_request' && !startsWith(github.head_ref, 'release-please--branches--') }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Check out pull request source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: source
+          persist-credentials: false
+      - name: Check out trusted scanner
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: scanner
+          persist-credentials: false
+      - name: Compare pinned BetterLeaks images
+        id: images
+        run: |
+          # Only the publisher's repository is accepted, so a pull request can pick a released
+          # BetterLeaks image by digest but never an image of its own.
+          pinned_image() {
+            grep -oE 'ghcr\.io/betterleaks/betterleaks:v[0-9]+\.[0-9]+\.[0-9]+@sha256:[0-9a-f]{64}' "$1" | sort -u || true
+          }
+          require_one_image() {
+            if [ -z "$2" ] || [ "$(printf '%s\n' "$2" | wc -l)" -ne 1 ]; then
+              echo "::error file=scripts/betterleaks-docker.sh::The $1 branch must pin exactly one ghcr.io/betterleaks/betterleaks image by digest."
+              exit 1
+            fi
+          }
+          base_image="$(pinned_image scanner/scripts/betterleaks-docker.sh)"
+          head_image="$(pinned_image source/scripts/betterleaks-docker.sh)"
+          require_one_image base "$base_image"
+          require_one_image head "$head_image"
+          echo "head_image=$head_image" >> "$GITHUB_OUTPUT"
+          if [ "$head_image" = "$base_image" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::The pull request keeps the base branch's BetterLeaks image; the private-context job already scans with it."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Scanning with $head_image, which replaces $base_image."
+          fi
+      - name: Scan pull request worktree with its pinned image
+        if: steps.images.outputs.changed == 'true'
+        working-directory: source
+        env:
+          BETTERLEAKS_COMMAND: ${{ github.workspace }}/scanner/scripts/betterleaks-docker.sh
+          SYMPHONY_TRELLO_BETTERLEAKS_IMAGE: ${{ steps.images.outputs.head_image }}
+        run: ../scanner/scripts/check-private-context --worktree

@@ -59,6 +59,10 @@ const DEPENDENCY_SUBMISSION_WORKFLOW = readFileSync(
   new URL("../.github/workflows/dependency-submission.yml", import.meta.url),
   "utf8",
 );
+const PRIVATE_CONTEXT_WORKFLOW = readFileSync(
+  new URL("../.github/workflows/private-context.yml", import.meta.url),
+  "utf8",
+);
 const RENOVATE = readFileSync(new URL("../renovate.json", import.meta.url), "utf8");
 const PACKAGE = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8"),
@@ -129,7 +133,6 @@ const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
     readonly minimumReleaseAge?: string;
     readonly minimumReleaseAgeBehaviour?: string;
     readonly platformAutomerge?: boolean;
-    readonly prBodyNotes?: readonly string[];
   }[];
   readonly prConcurrentLimit?: number;
   readonly statusCheckWhen?: {
@@ -1160,14 +1163,70 @@ test("Renovate looks up GHCR images through a feed with release timestamps", () 
   }
 });
 
-test("BetterLeaks image updates wait for a maintainer scan", () => {
-  // Pull request scans run the base branch's scanner, so no required check runs a new image.
-  const rule = RENOVATE_CONFIG.packageRules.findLast(({matchPackageNames}) =>
-    matchPackageNames?.includes("ghcr.io/betterleaks/betterleaks"),
+test("BetterLeaks image updates automerge only after a scan with the image they pin", () => {
+  // The private-context job scans with the base branch's image. Without this job a new
+  // BetterLeaks rule would first run on main, after the update had already automerged.
+  const workflow = parse(PRIVATE_CONTEXT_WORKFLOW) as {
+    readonly on?: Readonly<Record<string, unknown>>;
+    readonly jobs?: Readonly<
+      Record<
+        string,
+        {
+          readonly if?: string;
+          readonly permissions?: unknown;
+          readonly steps?: readonly {
+            readonly env?: Readonly<Record<string, string>>;
+            readonly name?: string;
+            readonly run?: string;
+            readonly uses?: string;
+            readonly with?: Readonly<Record<string, unknown>>;
+          }[];
+        }
+      >
+    >;
+  };
+  const job = workflow.jobs?.["pinned-betterleaks-image"];
+  const steps = job?.steps ?? [];
+  const scan = steps.find(({name}) => name === "Scan pull request worktree with its pinned image");
+  const trustedScanner = steps.find(({name}) => name === "Check out trusted scanner");
+  const compare = steps.find(({name}) => name === "Compare pinned BetterLeaks images");
+
+  // The image comes from the pull request, so the job must never see a secret or a write token.
+  assert.deepEqual(Object.keys(workflow.on ?? {}).sort(), ["pull_request", "push"]);
+  assert.doesNotMatch(PRIVATE_CONTEXT_WORKFLOW, /secrets\./u);
+  assert.match(job?.if ?? "", /github\.event_name == 'pull_request'/u);
+  assert.deepEqual(job?.permissions, {contents: "read"});
+  for (const step of steps.filter(({uses}) => uses?.startsWith("actions/checkout@"))) {
+    assert.equal(step.with?.["persist-credentials"], false);
+  }
+  assert.equal(trustedScanner?.with?.ref, "${{ github.event.pull_request.base.sha }}");
+  assert.ok(
+    compare?.run?.includes(
+      String.raw`'ghcr\.io/betterleaks/betterleaks:v[0-9]+\.[0-9]+\.[0-9]+@sha256:[0-9a-f]{64}'`,
+    ),
+    "only digest-pinned images from the BetterLeaks repository may be scanned",
+  );
+  assert.equal(scan?.run, "../scanner/scripts/check-private-context --worktree");
+  assert.equal(
+    scan?.env?.BETTERLEAKS_COMMAND,
+    "${{ github.workspace }}/scanner/scripts/betterleaks-docker.sh",
+  );
+  assert.equal(
+    scan?.env?.SYMPHONY_TRELLO_BETTERLEAKS_IMAGE,
+    "${{ steps.images.outputs.head_image }}",
+  );
+  assert.match(
+    readFileSync(new URL("betterleaks-docker.sh", SCRIPTS), "utf8"),
+    /^image="\$\{SYMPHONY_TRELLO_BETTERLEAKS_IMAGE:-ghcr\.io\/betterleaks\/betterleaks:/mu,
   );
 
-  assert.equal(rule?.automerge, false);
-  assert.match(rule?.prBodyNotes?.join("\n") ?? "", /scripts\/check-private-context --worktree/u);
+  // With the scan in place, a BetterLeaks update follows the ordinary non-major automerge.
+  assert.ok(
+    RENOVATE_CONFIG.packageRules.every(
+      ({automerge, matchPackageNames}) =>
+        automerge !== false || !matchPackageNames?.includes("ghcr.io/betterleaks/betterleaks"),
+    ),
+  );
 });
 
 test("Renovate permits unlimited concurrent branches and pull requests", () => {

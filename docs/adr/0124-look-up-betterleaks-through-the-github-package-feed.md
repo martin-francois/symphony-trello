@@ -11,6 +11,7 @@ consulted:
   - "[GitHub REST API: list package versions for a user's package](https://docs.github.com/en/rest/packages/packages#list-package-versions-for-a-package-owned-by-a-user)"
   - "[BetterLeaks generic-credential-uri rule](https://github.com/betterleaks/betterleaks/blob/v1.9.0/cmd/generate/config/rules/generic_credential_uri.go)"
   - "[BetterLeaks configuration](https://github.com/betterleaks/betterleaks/blob/v1.9.0/docs/config.md)"
+  - "[GitHub Security Lab: Preventing pwn requests](https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/)"
 informed: [Future maintainers, Contributors]
 ---
 
@@ -51,6 +52,8 @@ from then on every pull request fails too, because the base scanner is now the n
 * The scanner's trust boundary from ADR 0047 stays as it is: pull requests are scanned by the base
   branch's scanner.
 * A dependency automerges only when a required check exercises the new version.
+* A BetterLeaks update should automerge like every other non-major update, with no manual step.
+* A job that runs an image chosen by a pull request must hold no secret and no write token.
 
 ## Considered Options
 
@@ -87,9 +90,20 @@ Two changes keep the unlocked update from breaking `main`:
 * The six flagged test fixtures carry an inline `betterleaks:allow` marker, which BetterLeaks honors
   on the line it appears on. The one fixture inside a Java text block, where a marker would become
   test data, uses `user:password@example.invalid` instead, a form the rule discards as synthetic.
-* A package rule turns automerge off for the image and adds pull request notes. No pull request check
-  runs a new scanner image, so the maintainer runs `scripts/check-private-context --worktree` on the
-  Renovate branch before merging it.
+* A new job, `pinned-betterleaks-image` in the private-context workflow, scans a pull request with
+  the image it pins, and the `Required merge checks` ruleset requires it. The job reads the
+  digest-pinned `ghcr.io/betterleaks/betterleaks` reference from `scripts/betterleaks-docker.sh` on
+  the base and on the head. When the two differ, it runs the base branch's
+  `scripts/check-private-context --worktree` and rule file against the pull request worktree, with
+  `SYMPHONY_TRELLO_BETTERLEAKS_IMAGE` set to the head image. When they match, the `private-context`
+  job already covers the image and the new job only reports success. The BetterLeaks update keeps
+  the ordinary non-major automerge, and GitHub merges it only after this check passes.
+
+The job runs on `pull_request`, never on `pull_request_target`, with `contents: read` and checkouts
+that keep no credentials. It references no secret, and it rejects any image outside the BetterLeaks
+repository, so a pull request can choose among images the BetterLeaks project published but cannot
+supply its own. It adds a scan and replaces none: the `private-context` job still scans every pull
+request with the base branch's image.
 
 ### Consequences
 
@@ -101,7 +115,10 @@ Two changes keep the unlocked update from breaking `main`:
   digest the script pins today.
 * Good, because a new BetterLeaks rule that flags existing files is caught before merge rather than
   on `main`.
-* Bad, because a BetterLeaks update now needs a maintainer to run one local command and merge.
+* Good, because a BetterLeaks update that passes the scan with its own image merges without a
+  maintainer.
+* Bad, because the required check lives in the repository ruleset, outside version control. The
+  script test covers the workflow, not the ruleset.
 * Bad, because the GitHub package API requires a token with package read access. The hosted Renovate
   app has one; a local dry run with a token that lacks `read:packages` gets 403 and has to point the
   datasource at a fixture.
@@ -120,7 +137,12 @@ This decision remains implemented when:
 * the script test `Renovate looks up GHCR images through a feed with release timestamps` passes,
   which requires every custom manager for a `ghcr.io` image to use a custom datasource reading
   GitHub's package API;
-* the script test `BetterLeaks image updates wait for a maintainer scan` passes; and
+* the script test `BetterLeaks image updates automerge only after a scan with the image they pin`
+  passes;
+* `ContainerRuntimeScriptTest` shows that `scripts/betterleaks-docker.sh` runs the image named by
+  `SYMPHONY_TRELLO_BETTERLEAKS_IMAGE`;
+* `gh api repos/martin-francois/symphony-trello/rulesets --jq '.[].name'` lists `Required merge
+  checks`, and that ruleset's `required_status_checks` include `pinned-betterleaks-image`; and
 * the Dependency Dashboard lists no failed lookup for `ghcr.io/betterleaks/betterleaks`.
 
 ## Pros and Cons of the Options
@@ -155,6 +177,20 @@ This decision remains implemented when:
 * Bad, because that timestamp describes the release page, not the image push.
 * Bad, because the datasource's digest is a git commit SHA, which cannot pin a container image.
 
+### Options For Testing A New Image Before It Merges
+
+* Turn automerge off for the image and ask the maintainer to run `scripts/check-private-context
+  --worktree` on the Renovate branch. It works, but every BetterLeaks release then waits for a
+  person, and nothing checks that the scan ran. Rejected in favor of the required job.
+* Scan with the head image inside the existing `private-context` job and make that job required.
+  It would also turn the base-image scan into a merge requirement, a policy change beyond this
+  decision. A separate job keeps the two concerns apart and has a name that says what it gates.
+* Scan inside the required `test` job. That job runs the pull request's own scripts on a paid
+  Blacksmith runner, so the scan would use pull-request-controlled scanner code and add cost to
+  every pull request. Rejected.
+* Run the scan on `pull_request_target`. That event gives the job the base repository's secrets
+  and a token that can write, while the image comes from the pull request. Rejected.
+
 ### Options For The Fixtures Newer BetterLeaks Versions Flag
 
 These were compared for the six fixtures flagged by `generic-credential-uri`:
@@ -177,4 +213,4 @@ These were compared for the six fixtures flagged by `generic-credential-uri`:
 [ADR 0008](0008-renovate-and-github-actions-hardening.md) set the seven-day cooldown and the
 `timestamp-required` behavior this decision keeps.
 [ADR 0047](0047-betterleaks-private-context-scanning.md) chose BetterLeaks and the trusted-scanner
-workflow whose base-branch scan is the reason the image no longer automerges.
+workflow whose base-branch scan is the reason a new image needs its own required job.

@@ -25,9 +25,12 @@ requirements.
   timestamps only for Docker Hub, so a GHCR image looked up through it never passes the cooldown.
   The script test `Renovate looks up GHCR images through a feed with release timestamps` asserts
   this; see [ADR 0124](../adr/0124-look-up-betterleaks-through-the-github-package-feed.md).
-- BetterLeaks image updates merge by hand. Pull request checks scan with the base branch's scanner,
-  so no required check runs the new image. Run `scripts/check-private-context --worktree` on the
-  Renovate branch before merging it.
+- BetterLeaks image updates automerge like other non-major updates, gated by the required check
+  `pinned-betterleaks-image`. It runs the base branch's scanner with the image the pull request
+  pins, because the `private-context` job scans with the base branch's image and would never run a
+  new BetterLeaks rule before merge. Keep that check in the `Required merge checks` ruleset. The
+  script test `BetterLeaks image updates automerge only after a scan with the image they pin`
+  asserts the workflow side; see [ADR 0124](../adr/0124-look-up-betterleaks-through-the-github-package-feed.md).
 - Apply a seven-day minimum release age to ordinary dependency updates. Renovate security updates
   retain their documented cooldown bypass so disclosed vulnerabilities can be fixed immediately.
 - The seven-day release age MUST hold on every path that can move a version, including the paths

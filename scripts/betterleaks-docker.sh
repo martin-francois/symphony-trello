@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-image="ghcr.io/betterleaks/betterleaks:v1.4.1@sha256:1edd658874fbbd42fe224b7b0ccff32acc5940dd0098ad651caf32998462bff7"
+# The pinned-betterleaks-image check sets the override to scan a pull request with the image it pins.
+image="${SYMPHONY_TRELLO_BETTERLEAKS_IMAGE:-ghcr.io/betterleaks/betterleaks:v1.4.1@sha256:1edd658874fbbd42fe224b7b0ccff32acc5940dd0098ad651caf32998462bff7}"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 project_root="$(cd "$script_dir/.." && pwd -P)"
 scan_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"

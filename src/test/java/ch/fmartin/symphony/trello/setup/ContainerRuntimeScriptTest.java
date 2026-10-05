@@ -8,8 +8,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -85,6 +87,23 @@ final class ContainerRuntimeScriptTest {
         assertThat(invocation).doesNotExist();
     }
 
+    @Test
+    void betterLeaksWrapperRunsTheImageAPullRequestPins() throws Exception {
+        // given
+        Path invocation = tempDir.resolve("invocation.txt");
+        installRecordingRuntime("docker", invocation);
+        String pinnedImage = "ghcr.io/betterleaks/betterleaks:v9.9.9@sha256:" + "a".repeat(64);
+        Map<String, String> environment = new HashMap<>(runtimeEnvironment(null));
+        environment.put("SYMPHONY_TRELLO_BETTERLEAKS_IMAGE", pinnedImage);
+
+        // when
+        ProcessResult result = runWrapper("betterleaks-docker.sh", environment);
+
+        // then
+        result.assertSuccess();
+        assertThat(Files.readAllLines(invocation)).contains(pinnedImage);
+    }
+
     @MethodSource("containerRuntimeRequirements")
     @ParameterizedTest
     void rejectsMissingSelectedContainerRuntime(String script, String requiredMessage) throws Exception {
@@ -152,6 +171,7 @@ final class ContainerRuntimeScriptTest {
         processBuilder.directory(Path.of(".").toAbsolutePath().normalize().toFile());
         processBuilder.environment().remove("SYMPHONY_TRELLO_CONTAINER_RUNTIME");
         processBuilder.environment().remove("SYMPHONY_TRELLO_PWSH_DOCKER_IMAGE");
+        processBuilder.environment().remove("SYMPHONY_TRELLO_BETTERLEAKS_IMAGE");
         processBuilder.environment().putAll(environment);
         return run(processBuilder, "", 30);
     }
