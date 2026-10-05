@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.telemetry;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import ch.fmartin.symphony.trello.telemetry.TelemetryOwnership.Phase;
 import ch.fmartin.symphony.trello.telemetry.TelemetryStateStore.Update;
@@ -18,11 +19,14 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
@@ -464,13 +468,21 @@ final class TelemetryErasureTest {
     @Test
     void eraseThatCannotStoreTheDisabledPreferenceSaysTheOldPreferenceStillApplies() throws IOException {
         // given
-        Files.writeString(store.stateFile(), "{corrupt");
+        Path stateDirectory = store.stateFile().getParent();
+        assumeTrue(Files.getFileStore(stateDirectory).supportsFileAttributeView("posix"));
         TelemetryService service = new TelemetryService(installation, TelemetryFixture.snapshots(installation), clock);
         var output = new ByteArrayOutputStream();
         var out = new PrintStream(output, true, StandardCharsets.UTF_8);
+        Set<PosixFilePermission> writable = Files.getPosixFilePermissions(stateDirectory);
+        Files.setPosixFilePermissions(stateDirectory, PosixFilePermissions.fromString("r-xr-xr-x"));
 
         // when
-        int result = service.erase(out, out);
+        int result;
+        try {
+            result = service.erase(out, out);
+        } finally {
+            Files.setPosixFilePermissions(stateDirectory, writable);
+        }
 
         // then
         assertThat(result).isEqualTo(TelemetryService.EXIT_FAILURE);

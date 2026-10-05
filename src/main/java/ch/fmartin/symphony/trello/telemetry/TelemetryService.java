@@ -21,6 +21,7 @@ import org.jspecify.annotations.Nullable;
 public final class TelemetryService {
     public static final int EXIT_OK = 0;
     public static final int EXIT_FAILURE = 1;
+    private static final String NOT_DISABLED_PREFIX = "Telemetry could not be disabled: ";
     private static final String NOT_INSTALLED_LINE = "This run is not inside an installed "
             + TelemetryNotice.PRODUCT_NAME + " context, so reports are never sent.";
     private static final String NOT_CONFIGURED_LINE =
@@ -209,8 +210,7 @@ public final class TelemetryService {
         StateRead read = store.read();
         TelemetryState state = read.stateOrInitial();
         if (read instanceof StateRead.Unreadable unreadable) {
-            err.println("Telemetry state is unreadable: " + unreadable.problem() + ". Reporting is already off.");
-            return EXIT_FAILURE;
+            return printUnreadable(err, unreadable);
         }
         if (state.mode() == TelemetryMode.DISABLED) {
             out.println("Telemetry is already disabled.");
@@ -236,6 +236,11 @@ public final class TelemetryService {
     }
 
     public int erase(PrintStream out, PrintStream err) {
+        Optional<StateRead.Unreadable> unreadable =
+                installation.store().map(TelemetryStateStore::read).flatMap(TelemetryService::unreadable);
+        if (unreadable.isPresent()) {
+            return printUnreadable(err, unreadable.get());
+        }
         try {
             if (erasureUnavailable()) {
                 // The user asked to stop reporting even though this build cannot erase automatically.
@@ -250,7 +255,11 @@ public final class TelemetryService {
             }
             return printErasure(store, out);
         } catch (TelemetryErasure.NotDisabledException exception) {
-            printErasureFailure(err, exception.getMessage());
+            if (erasureUnavailable()) {
+                err.println(NOT_DISABLED_PREFIX + exception.getMessage());
+            } else {
+                printErasureFailure(err, exception.getMessage());
+            }
             printPreferenceUnchanged(err);
             return EXIT_FAILURE;
         } catch (TelemetryStateException exception) {
@@ -259,15 +268,15 @@ public final class TelemetryService {
     }
 
     /// Stores the disabled preference and tells whether this installation has an identity, so
-    /// reports may have left it. Without an installed state nothing was ever sent.
+    /// reports may have left it. The state directory decides, not the install context: an identity
+    /// can outlive a removed context file. Without a state file nothing was ever sent.
     private boolean disableBeforeManualErasure() {
-        Optional<TelemetryStateStore> installed = installation.installedStore();
-        if (installed.isEmpty()) {
+        Optional<TelemetryStateStore> stored = installation.store();
+        if (stored.isEmpty() || !installation.installed() && stored.get().read() instanceof StateRead.Absent) {
             return false;
         }
         try {
-            return installed
-                    .get()
+            return stored.get()
                     .update(state -> state.mode() == TelemetryMode.DISABLED
                             ? Update.unchanged(state.hasIdentity())
                             : Update.write(state.withMode(TelemetryMode.DISABLED), state.hasIdentity()));
@@ -506,10 +515,20 @@ public final class TelemetryService {
             }
             return EXIT_OK;
         } catch (TelemetryStateException exception) {
-            err.println("Telemetry could not be disabled: " + exception.getMessage());
+            err.println(NOT_DISABLED_PREFIX + exception.getMessage());
             printPreferenceUnchanged(err);
             return EXIT_FAILURE;
         }
+    }
+
+    private static Optional<StateRead.Unreadable> unreadable(StateRead read) {
+        return read instanceof StateRead.Unreadable unreadable ? Optional.of(unreadable) : Optional.empty();
+    }
+
+    /// An unreadable state already keeps every worker from reporting, so no preference needs storing.
+    private static int printUnreadable(PrintStream err, StateRead.Unreadable unreadable) {
+        err.println("Telemetry state is unreadable: " + unreadable.problem() + ". Reporting is already off.");
+        return EXIT_FAILURE;
     }
 
     private static void printPreferenceUnchanged(PrintStream err) {

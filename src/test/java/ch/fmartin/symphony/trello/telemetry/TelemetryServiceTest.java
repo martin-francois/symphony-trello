@@ -407,7 +407,7 @@ final class TelemetryServiceTest {
     }
 
     @Test
-    void eraseWithoutAutomaticErasureReportsAFailedPreferenceWriteAsAnError() throws IOException {
+    void eraseWithAnUnreadableStateSaysReportingIsAlreadyOff() throws IOException {
         // given
         Files.writeString(store.stateFile(), "{corrupt");
         TelemetryService service = service(TelemetryEnvironment.none());
@@ -418,9 +418,28 @@ final class TelemetryServiceTest {
         // then
         assertThat(exit).isEqualTo(TelemetryService.EXIT_FAILURE);
         assertThat(errors())
-                .contains("Erasure could not be confirmed")
                 .contains("not valid JSON")
-                .contains("The previous preference is unchanged. Set " + TelemetryEnvironment.DISABLED_VARIABLE);
+                .contains("Reporting is already off")
+                .doesNotContain("The previous preference is unchanged");
+        assertThat(Files.readString(store.stateFile()))
+                .as("an unreadable state file is kept for diagnosis")
+                .isEqualTo("{corrupt");
+    }
+
+    @Test
+    void eraseWithAnIdentityButNoInstallContextDoesNotClaimNothingWasSent() throws IOException {
+        // given
+        store.update(state -> Update.write(state.withIdentity(UUID.randomUUID(), LocalDate.of(2026, 9, 22)), null));
+        Files.delete(InstalledVersion.installContextPath(stateDir));
+        TelemetryService service = service(TelemetryEnvironment.none());
+
+        // when
+        int exit = service.erase(out, err);
+
+        // then
+        assertThat(exit).isEqualTo(TelemetryService.EXIT_FAILURE);
+        assertThat(output()).doesNotContain("nothing to erase");
+        assertThat(store.read().stateOrInitial().mode()).isEqualTo(TelemetryMode.DISABLED);
     }
 
     @Test
