@@ -34,7 +34,11 @@ flag update when the status has not changed.
 
 The flag key is `erasure-` followed by HMAC-SHA-256 over
 `symphony-trello/status/v1|<audience>|<period>`, using the installation credential. Public
-`/flags?v=2` evaluation returns only the opaque key and status. Management credentials alone
+`/flags?v=2` evaluation returns only the opaque key and status. A request to the TEST project
+with its public token on 2026-10-05 returned, per flag, the key, `enabled`, the status as
+`variant`, a generic match reason, and metadata with a numeric id, a version and a null
+`description`. The flag name, which holds the analytics ID, was absent from the response.
+Management credentials alone
 write it. A completed result is saved locally before one best-effort flag archival request. The client then stops maintenance traffic.
 Failure to archive does not undo completion. `scripts/posthog-infra erasure-flags` removes
 leftovers before PostHog's 2,000 non-deleted flag limit (see
