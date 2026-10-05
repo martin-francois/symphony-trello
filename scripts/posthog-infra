@@ -90,10 +90,7 @@ bound_state_path() {
   if [[ ! -f "$BACKEND_RECORD" ]]; then
     return
   fi
-  node -e '
-    const record = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
-    process.stdout.write(String((record.backend && record.backend.config && record.backend.config.path) || ""));
-  ' "$BACKEND_RECORD"
+  local_files bound-state-path --record "$BACKEND_RECORD"
 }
 
 # Every command that reads or changes state runs only when the data directory is bound to the
@@ -110,6 +107,11 @@ require_bound_state() {
 
 supplement() {
   with_credentials node "$SUPPLEMENT" "$@" --host "$HOST"
+}
+
+# Reads local files only (backend record, tofu JSON, outputs, lifecycle ledger); no credentials.
+local_files() {
+  node "$SUPPLEMENT" "$@"
 }
 
 ensure_state_dir() {
@@ -167,26 +169,14 @@ bootstrap() {
 
 # The project id straight from the state; outputs are not complete until the full apply.
 project_id_from_state() {
-  tofu_cmd show -json | node -e '
-    const show = JSON.parse(require("fs").readFileSync(0, "utf8"));
-    const address = "module." + process.argv[1] + ".posthog_project.this";
-    const modules = show.values?.root_module?.child_modules ?? [];
-    const resource = modules.flatMap((module) => module.resources ?? []).find((entry) => entry.address === address);
-    if (!resource) { console.error("no " + address + " in state"); process.exit(1); }
-    console.log(resource.values.id);
-  ' "$1"
+  tofu_cmd show -json | local_files project-id-from-show --role "$1"
 }
 
 # The hosted lifecycle ledger is the only source of the production activation pass. OpenTofu
 # compares it with the current handler template, so a changed handler needs a new pass.
 lifecycle_pass_args() {
   if [[ -r "$LIFECYCLE_LEDGER" ]]; then
-    node -e '
-      const ledger = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
-      if (ledger.status === "TWO_PERIOD_LIFECYCLE_PASS" && ledger.handlerMixed !== true && /^[0-9a-f]{64}$/.test(ledger.handlerSha256 ?? "")) {
-        console.log("-var=erasure_lifecycle_pass=" + ledger.handlerSha256);
-      }
-    ' "$LIFECYCLE_LEDGER"
+    local_files lifecycle-pass-args --ledger "$LIFECYCLE_LEDGER"
   fi
 }
 
@@ -222,7 +212,7 @@ cmd_verify() {
   write_outputs
   local report="${1:-$STATE_DIR/verification-report.md}"
   supplement verify --outputs "$OUTPUTS_FILE" --report "$report" --config-revision "$(config_revision)" \
-    --tofu-version "$(tofu version -json | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0,"utf8")).terraform_version)')" \
+    --tofu-version "$(tofu version -json | local_files tofu-version)" \
     --provider-version "$(grep -A1 'registry.opentofu.org/posthog/posthog' "$INFRA_DIR/.terraform.lock.hcl" | sed -n 's/.*version *= *"\([^"]*\)".*/\1/p')"
   echo "posthog-infra: report written to $report"
 }
@@ -244,9 +234,9 @@ cmd_release_token() {
   fi
   require_initialized
   write_outputs
-  echo "posthog-infra: production token from state $STATE_FILE (project $(node -e 'const o=require(process.argv[1]); console.log(o.projects.value.production.id)' "$OUTPUTS_FILE"))"
+  echo "posthog-infra: production token from state $STATE_FILE (project $(local_files production-project-id --outputs "$OUTPUTS_FILE"))"
   # The token travels from the outputs file into gh's stdin; it never becomes an argument.
-  node -e 'const o=require(process.argv[1]); process.stdout.write(o.capture_tokens.value.production)' "$OUTPUTS_FILE" |
+  local_files production-capture-token --outputs "$OUTPUTS_FILE" |
     gh secret set POSTHOG_PROJECT_TOKEN --repo "$repository"
   echo "posthog-infra: POSTHOG_PROJECT_TOKEN updated in $repository (GitHub reports the name and time only):"
   gh secret list --repo "$repository" | grep '^POSTHOG_PROJECT_TOKEN'
@@ -305,7 +295,7 @@ retire-project)
   # A project this state manages is retired through destroy, never through this command.
   if [[ -n "$(bound_state_path)" ]] && tofu_cmd state list 2>/dev/null | grep -q '^module\.'; then
     write_outputs
-    if node -e 'const o=require(process.argv[1]); process.exit(Object.values(o.projects.value).some((p) => String(p.id) === process.argv[2]) ? 0 : 1)' "$OUTPUTS_FILE" "${1:?project id}"; then
+    if local_files manages-project --outputs "$OUTPUTS_FILE" --id "${1:?project id}"; then
       echo "posthog-infra: project $1 is managed by $STATE_FILE; use destroy instead of retire-project" >&2
       exit 2
     fi

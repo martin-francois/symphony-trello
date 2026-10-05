@@ -13,6 +13,7 @@ import {existsSync, readFileSync, writeFileSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {isEntryPoint} from "./entry-point.ts";
+import {boundStatePath, lifecyclePassArguments, managesProject, productionCaptureToken, productionProjectId, projectIdFromShow, readJson, tofuVersion} from "./posthog-state-files.ts";
 
 export const ENVIRONMENT_GAP_SETTINGS = {
   autocapture_opt_out: true,
@@ -1035,8 +1036,44 @@ function requireFlag(options: Options, name: string): string {
   return value;
 }
 
+/** Commands that read local files only; they run before, and without, the personal API key.
+ * Returns undefined for any other command. `-` as a file reads standard input. */
+function runLocalCommand(options: Options): number | undefined {
+  switch (options.command) {
+    case "bound-state-path":
+      process.stdout.write(boundStatePath(readJson(requireFlag(options, "record"))));
+      return 0;
+    case "project-id-from-show":
+      console.log(projectIdFromShow(readJson("-"), requireFlag(options, "role")));
+      return 0;
+    case "lifecycle-pass-args":
+      for (const argument of lifecyclePassArguments(readJson(requireFlag(options, "ledger")))) {
+        console.log(argument);
+      }
+      return 0;
+    case "tofu-version":
+      process.stdout.write(tofuVersion(readJson("-")));
+      return 0;
+    case "production-project-id":
+      console.log(productionProjectId(readJson(requireFlag(options, "outputs"))));
+      return 0;
+    case "production-capture-token":
+      // Written without a newline: the wrapper pipes it straight into `gh secret set`.
+      process.stdout.write(productionCaptureToken(readJson(requireFlag(options, "outputs"))));
+      return 0;
+    case "manages-project":
+      return managesProject(readJson(requireFlag(options, "outputs")), requireFlag(options, "id")) ? 0 : 1;
+    default:
+      return undefined;
+  }
+}
+
 export async function main(argv: readonly string[], environment: NodeJS.ProcessEnv, sleep: Sleeper = realSleep): Promise<number> {
   const options = parseArguments(argv);
+  const local = runLocalCommand(options);
+  if (local !== undefined) {
+    return local;
+  }
   const host = options.flags.get("host") ?? environment["POSTHOG_HOST"] ?? "https://eu.posthog.com";
   const key = environment["POSTHOG_API_KEY"] ?? readKey(options.flags.get("key-file") ?? join(environment["HOME"] ?? ".", "posthog-personal-api-key"));
   const api = new PostHogApi(host, key);

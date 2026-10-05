@@ -5,6 +5,7 @@ import {join} from "node:path";
 import {PostHogApi, readKey, readRoles, verifyProbeTarget, type Json} from "./posthog-infra.ts";
 import {isEntryPoint} from "./entry-point.ts";
 import {erasureService, handlerTemplateSha256} from "./erasure-service.ts";
+import {LIFECYCLE_PASS_STATUS} from "./erasure-lifecycle-ledger.ts";
 
 /** Seconds between a signed operation's issue and expiry times. The native handler in
  * `infra/posthog/erasure-service.hog.tftpl` rejects any longer lifetime; a test pins the two. */
@@ -258,7 +259,7 @@ export async function main(): Promise<void> {
   const name = `erasure-lifecycle-${ledger.run}-${randomUUID()}`;
   let source: HogFunction;
   await archiveRunSources(api, base, ledger, save);
-  if (ledger.status === "TWO_PERIOD_LIFECYCLE_PASS") {
+  if (ledger.status === LIFECYCLE_PASS_STATUS) {
     await cleanupVerifiedCanary(api, base, ledger, save);
     console.log(JSON.stringify({status: ledger.status})); return;
   }
@@ -491,7 +492,7 @@ export async function main(): Promise<void> {
     }
     check("canary remains intact before fixture cleanup", await canarySurvives());
     ledger.canaryPersonId = (await person(ledger.canary!))!.id;
-    ledger.status = "TWO_PERIOD_LIFECYCLE_PASS"; save();
+    ledger.status = LIFECYCLE_PASS_STATUS; save();
     await cleanupVerifiedCanary(api, base, ledger, save);
     console.log(JSON.stringify({status: ledger.status}));
   } catch (error) {
