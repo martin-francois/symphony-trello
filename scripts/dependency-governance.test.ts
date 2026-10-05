@@ -146,3 +146,41 @@ test("the OpenTofu version is pinned once per owner and the owners agree", () =>
   assert.equal(manager?.datasourceTemplate, "github-releases");
   assert.ok(manager?.matchStrings?.some((pattern) => new RegExp(pattern).test(`tofu_version: ${String(workflowVersion)}`)));
 });
+
+test("one Renovate group moves both OpenTofu pins, since each alone would fail the agreement test", () => {
+  // given
+  const miseConfig = readFileSync("infra/posthog/mise.toml", "utf8");
+  const renovateConfig = JSON.parse(readFileSync("renovate.json", "utf8")) as {
+    customManagers?: Array<{depNameTemplate?: string; datasourceTemplate?: string}>;
+    packageRules?: Array<Record<string, unknown>>;
+  };
+  // Renovate's mise manager reports the `opentofu` tool as package opentofu/opentofu from GitHub
+  // releases; the custom manager's depName doubles as its package name.
+  const pins = [
+    {source: "infra/posthog/mise.toml", present: /^opentofu\s*=/m.test(miseConfig), packageName: "opentofu/opentofu", datasource: "github-releases"},
+    ...(renovateConfig.customManagers ?? [])
+      .filter(({depNameTemplate}) => depNameTemplate === "opentofu/opentofu")
+      .map(({depNameTemplate, datasourceTemplate}) => ({source: "ci.yml custom manager", present: true, packageName: String(depNameTemplate), datasource: String(datasourceTemplate)})),
+  ];
+
+  // when
+  const groupOf = (pin: (typeof pins)[number]) => {
+    let group: unknown;
+    for (const rule of renovateConfig.packageRules ?? []) {
+      const names = rule["matchPackageNames"] as string[] | undefined;
+      const datasources = rule["matchDatasources"] as string[] | undefined;
+      const otherMatchers = Object.keys(rule).filter((key) => key.startsWith("match") && key !== "matchPackageNames" && key !== "matchDatasources");
+      if (names?.includes(pin.packageName) && (datasources === undefined || datasources.includes(pin.datasource)) && otherMatchers.length === 0 && "groupName" in rule) {
+        group = rule["groupName"];
+      }
+    }
+    return group;
+  };
+  const groups = pins.map(groupOf);
+
+  // then
+  assert.equal(pins.length, 2);
+  assert.ok(pins.every(({present}) => present));
+  assert.equal(typeof groups[0], "string");
+  assert.equal(groups[1], groups[0]);
+});

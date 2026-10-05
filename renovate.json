@@ -246,6 +246,16 @@
         "required_version"
       ],
       "enabled": false
+    },
+    {
+      "description": "The mise pin in infra/posthog/mise.toml and the tofu_version input in the posthog-infra CI job carry the same OpenTofu release, and a governance test requires them to match, so one pull request must move both.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "opentofu/opentofu"
+      ],
+      "groupName": "OpenTofu"
     }
   ]
 }
