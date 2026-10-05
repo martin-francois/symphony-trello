@@ -12,6 +12,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpHeaders;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.HashMap;
@@ -117,9 +118,9 @@ final class PostHogCaptureClientTest {
 
         // when
         CaptureOutcome outcome = client.capture(BODY);
-        Optional<Duration> huge = PostHogCaptureClient.retryAfter(Map.of("retry-after", List.of("999999")));
+        Optional<Duration> huge = PostHogCaptureClient.retryAfter(headers("retry-after", "999999"));
         Optional<Duration> date =
-                PostHogCaptureClient.retryAfter(Map.of("Retry-After", List.of("Wed, 21 Oct 2026 07:28:00 GMT")));
+                PostHogCaptureClient.retryAfter(headers("Retry-After", "Wed, 21 Oct 2026 07:28:00 GMT"));
 
         // then
         assertThat(outcome.retryAfter()).contains(Duration.ofSeconds(120));
@@ -393,6 +394,10 @@ final class PostHogCaptureClientTest {
 
     private URI endpoint(String path) {
         return URI.create("http://127.0.0.1:" + server.getAddress().getPort() + path);
+    }
+
+    private static HttpHeaders headers(String name, String value) {
+        return HttpHeaders.of(Map.of(name, List.of(value)), (headerName, headerValue) -> true);
     }
 
     private void respondWith(int status, String body, Map<String, String> headers) {

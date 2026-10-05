@@ -1,22 +1,16 @@
 package ch.fmartin.symphony.trello.telemetry;
 
-import static ch.fmartin.symphony.trello.telemetry.BoundedHttp.HTTP_CLIENT_ERROR_START;
-import static ch.fmartin.symphony.trello.telemetry.BoundedHttp.HTTP_OK;
-import static ch.fmartin.symphony.trello.telemetry.BoundedHttp.HTTP_REDIRECT_START;
-import static ch.fmartin.symphony.trello.telemetry.BoundedHttp.HTTP_REQUEST_TIMEOUT;
-import static ch.fmartin.symphony.trello.telemetry.BoundedHttp.HTTP_SERVER_ERROR_START;
-import static ch.fmartin.symphony.trello.telemetry.BoundedHttp.HTTP_TOO_MANY_REQUESTS;
-import static ch.fmartin.symphony.trello.telemetry.BoundedHttp.HTTP_UNAUTHORIZED;
-
 import ch.fmartin.symphony.trello.telemetry.BoundedHttp.BodyRead;
 import ch.fmartin.symphony.trello.telemetry.BoundedHttp.Exchange;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.ws.rs.core.Response.Status;
+import jakarta.ws.rs.core.Response.Status.Family;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpHeaders;
 import java.time.Duration;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -76,7 +70,7 @@ public final class PostHogCaptureClient {
     /// Any other status is classified by the status alone, which the headers already settled.
     private CaptureOutcome classify(Exchange.Answered response, BodyRead.Failed failed) {
         int status = response.status();
-        if (status == HTTP_OK) {
+        if (status == Status.OK.getStatusCode()) {
             return CaptureOutcome.transientFailure(Optional.of(status), Optional.empty(), failed.summary());
         }
         return classify(response, "");
@@ -84,19 +78,23 @@ public final class PostHogCaptureClient {
 
     private CaptureOutcome classify(Exchange.Answered response, String body) {
         int status = response.status();
-        if (status == HTTP_OK) {
+        Family family = Family.familyOf(status);
+        if (status == Status.OK.getStatusCode()) {
             return classifyOk(body);
         }
-        if (status == HTTP_TOO_MANY_REQUESTS || status == HTTP_REQUEST_TIMEOUT || status >= HTTP_SERVER_ERROR_START) {
+        if (status == Status.TOO_MANY_REQUESTS.getStatusCode()
+                || status == Status.REQUEST_TIMEOUT.getStatusCode()
+                || family == Family.SERVER_ERROR) {
             return CaptureOutcome.transientFailure(
-                    Optional.of(status), retryAfter(response.headers().map()), "HTTP " + status);
+                    Optional.of(status), retryAfter(response.headers()), "HTTP " + status);
         }
-        if (status >= HTTP_CLIENT_ERROR_START) {
-            String summary =
-                    status == HTTP_UNAUTHORIZED ? "project token rejected (HTTP " + status + ")" : "HTTP " + status;
+        if (family == Family.CLIENT_ERROR) {
+            String summary = status == Status.UNAUTHORIZED.getStatusCode()
+                    ? "project token rejected (HTTP " + status + ")"
+                    : "HTTP " + status;
             return CaptureOutcome.permanentFailure(status, summary);
         }
-        if (status >= HTTP_REDIRECT_START) {
+        if (family == Family.REDIRECTION) {
             // Redirects are never followed: a moved endpoint is a configuration change, not a retry.
             return CaptureOutcome.permanentFailure(status, "redirect refused (HTTP " + status + ")");
         }
@@ -108,25 +106,24 @@ public final class PostHogCaptureClient {
     /// JSON: a non-empty `quota_limited` array is a drop, anything unparseable is not a proof of
     /// acceptance and is retried.
     private static CaptureOutcome classifyOk(String body) {
+        int ok = Status.OK.getStatusCode();
         if (body.isEmpty()) {
-            return CaptureOutcome.accepted(HTTP_OK);
+            return CaptureOutcome.accepted(ok);
         }
         JsonNode node;
         try {
             node = JSON.readTree(body);
         } catch (IOException | RuntimeException exception) {
-            return CaptureOutcome.transientFailure(Optional.of(HTTP_OK), Optional.empty(), "unrecognized response");
+            return CaptureOutcome.transientFailure(Optional.of(ok), Optional.empty(), "unrecognized response");
         }
         JsonNode quota = node == null ? null : node.get(QUOTA_LIMITED_FIELD);
         return quota != null && quota.isArray() && !quota.isEmpty()
-                ? CaptureOutcome.quotaLimited(HTTP_OK)
-                : CaptureOutcome.accepted(HTTP_OK);
+                ? CaptureOutcome.quotaLimited(ok)
+                : CaptureOutcome.accepted(ok);
     }
 
-    static Optional<Duration> retryAfter(Map<String, List<String>> headers) {
-        return headers.entrySet().stream()
-                .filter(entry -> "retry-after".equalsIgnoreCase(entry.getKey()))
-                .flatMap(entry -> entry.getValue().stream())
+    static Optional<Duration> retryAfter(HttpHeaders headers) {
+        return headers.allValues("Retry-After").stream()
                 .map(PostHogCaptureClient::parseRetryAfterSeconds)
                 .filter(Objects::nonNull)
                 .findAny();

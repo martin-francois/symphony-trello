@@ -24,14 +24,6 @@ final class BoundedHttp {
     static final String USER_AGENT = "symphony-trello-telemetry/1";
     static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
     static final int MAX_RESPONSE_BYTES = 4096;
-    static final int HTTP_OK = 200;
-    static final int HTTP_CREATED = 201;
-    static final int HTTP_REDIRECT_START = 300;
-    static final int HTTP_CLIENT_ERROR_START = 400;
-    static final int HTTP_UNAUTHORIZED = 401;
-    static final int HTTP_REQUEST_TIMEOUT = 408;
-    static final int HTTP_TOO_MANY_REQUESTS = 429;
-    static final int HTTP_SERVER_ERROR_START = 500;
     private static final Logger LOG = Logger.getLogger(BoundedHttp.class);
 
     private BoundedHttp() {}

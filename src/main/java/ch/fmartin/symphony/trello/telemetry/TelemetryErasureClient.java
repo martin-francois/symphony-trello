@@ -5,6 +5,7 @@ import ch.fmartin.symphony.trello.telemetry.BoundedHttp.Exchange;
 import ch.fmartin.symphony.trello.telemetry.BoundedHttp.Failure;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.ws.rs.core.Response.Status;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -140,11 +141,11 @@ final class TelemetryErasureClient implements AutoCloseable {
     // JSON parsing causes can retain the response body. Expose only fixed diagnostics.
     @SuppressWarnings("PMD.PreserveStackTrace")
     private static JsonNode answer(Exchange.Answered answered, String rejected) {
-        if (answered.status() == BoundedHttp.HTTP_UNAUTHORIZED) {
+        if (answered.status() == Status.UNAUTHORIZED.getStatusCode()) {
             throw new TelemetryStateException(rejected);
         }
-        boolean receipt = answered.status() == BoundedHttp.HTTP_CREATED;
-        if ((answered.status() != BoundedHttp.HTTP_OK && !receipt)
+        boolean receipt = answered.status() == Status.CREATED.getStatusCode();
+        if ((answered.status() != Status.OK.getStatusCode() && !receipt)
                 || !(answered.body() instanceof BodyRead.Complete complete)) {
             throw new TelemetryStateException(NOT_CONFIRMED);
         }
