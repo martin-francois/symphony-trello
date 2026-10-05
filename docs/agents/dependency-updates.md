@@ -25,6 +25,13 @@ requirements.
   timestamps only for Docker Hub, so a GHCR image looked up through it never passes the cooldown.
   The script test `Renovate looks up GHCR images through a feed with release timestamps` asserts
   this; see [ADR 0124](../adr/0124-look-up-betterleaks-through-the-github-package-feed.md).
+- Look up an MCR image through a custom datasource that reads the Microsoft Artifact Registry tag
+  catalog. Its `lastModifiedDate` is the time MCR last pushed the tag, and its `digest` is the tag's
+  current digest. The script test `Renovate looks up MCR images through the catalog's push times`
+  asserts this; see [ADR 0125](../adr/0125-read-mcr-push-times-for-the-dotnet-sdk-image.md).
+- The `gcr.io/oss-fuzz-base` images stay on the docker datasource and their digest updates stay
+  pending. OSS-Fuzz pushes them at least daily, so a seven-day-old digest never exists; ADR 0125
+  explains why no datasource changes that.
 - BetterLeaks image updates automerge like other non-major updates, gated by the required check
   `pinned-betterleaks-image`. It runs the base branch's scanner with the image the pull request
   pins, because the `private-context` job scans with the base branch's image and would never run a
@@ -77,3 +84,4 @@ requirements.
 - [Testing](testing.md)
 - [ADR 0008](../adr/0008-renovate-and-github-actions-hardening.md)
 - [ADR 0124](../adr/0124-look-up-betterleaks-through-the-github-package-feed.md)
+- [ADR 0125](../adr/0125-read-mcr-push-times-for-the-dotnet-sdk-image.md)

@@ -113,7 +113,10 @@ const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
     readonly enabled?: boolean;
   };
   readonly customDatasources?: Readonly<
-    Record<string, {readonly defaultRegistryUrlTemplate?: string}>
+    Record<
+      string,
+      {readonly defaultRegistryUrlTemplate?: string; readonly transformTemplates?: readonly string[]}
+    >
   >;
   readonly customManagers: readonly {
     readonly datasourceTemplate?: string;
@@ -1159,6 +1162,30 @@ test("Renovate looks up GHCR images through a feed with release timestamps", () 
     assert.match(
       datasource?.defaultRegistryUrlTemplate ?? "",
       /^https:\/\/api\.github\.com\/users\/[^/]+\/packages\/container\/[^/]+\/versions\?per_page=100$/u,
+    );
+  }
+});
+
+test("Renovate looks up MCR images through the catalog's push times", () => {
+  // Renovate's docker datasource reads release timestamps only from Docker Hub. Under
+  // timestamp-required, an MCR image looked up through it stays pending forever.
+  const mcrManagers = RENOVATE_CONFIG.customManagers.filter(({matchStrings}) =>
+    matchStrings?.some((pattern) => pattern.includes("mcr\\.microsoft\\.com/")),
+  );
+
+  assert.ok(mcrManagers.length > 0);
+  for (const {datasourceTemplate} of mcrManagers) {
+    assert.match(datasourceTemplate ?? "", /^custom\./u, "an MCR image needs a custom datasource");
+    const datasourceName = datasourceTemplate?.slice("custom.".length) ?? "";
+    const datasource = RENOVATE_CONFIG.customDatasources?.[datasourceName];
+    assert.match(
+      datasource?.defaultRegistryUrlTemplate ?? "",
+      /^https:\/\/mcr\.microsoft\.com\/api\/v1\/catalog\/[^?]+\/tags\?reg=mar$/u,
+    );
+    // lastModifiedDate is the registry's time of the push that set the tag's current digest.
+    assert.match(
+      datasource?.transformTemplates?.join("\n") ?? "",
+      /"releaseTimestamp": \$tag\.lastModifiedDate/u,
     );
   }
 });

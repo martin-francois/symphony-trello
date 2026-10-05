@@ -100,8 +100,9 @@
       "matchStrings": [
         "(?<depName>mcr\\.microsoft\\.com/dotnet/sdk):(?<currentValue>\\d+\\.\\d+)@(?<currentDigest>sha256:[a-f0-9]{64})"
       ],
-      "datasourceTemplate": "docker",
-      "versioningTemplate": "docker"
+      "datasourceTemplate": "custom.mcr-dotnet-sdk",
+      "versioningTemplate": "docker",
+      "description": "Renovate's docker datasource reads release timestamps only from Docker Hub, so under timestamp-required every .NET SDK digest update would stay pending forever. The mcr-dotnet-sdk feed supplies the time MCR last pushed each tag and the tag's current digest; see ADR 0125."
     },
     {
       "customType": "regex",
@@ -134,6 +135,14 @@
       "format": "json",
       "transformTemplates": [
         "($semver := /^v[0-9]+\\.[0-9]+\\.[0-9]+$/; $releases := $reduce($, function($all, $record) { ($tags := $filter($record.metadata.container.tags, function($tag) { $match($tag, $semver) }); $append($all, $map($tags, function($tag) { {\"version\": $substringAfter($tag, \"v\"), \"releaseTimestamp\": $record.created_at, \"digest\": $record.name} }))) }, []); {\"releases\": [$releases], \"sourceUrl\": \"https://github.com/betterleaks/betterleaks\"})"
+      ]
+    },
+    "mcr-dotnet-sdk": {
+      "description": "Microsoft Artifact Registry's tag catalog for mcr.microsoft.com/dotnet/sdk. Every major.minor tag, such as 8.0, becomes a release with the catalog's lastModifiedDate, the time MCR last pushed that tag, as its release timestamp and the tag's current manifest-list digest. Patch, distribution and architecture tags are left out because the pin follows a major.minor tag.",
+      "defaultRegistryUrlTemplate": "https://mcr.microsoft.com/api/v1/catalog/dotnet/sdk/tags?reg=mar",
+      "format": "json",
+      "transformTemplates": [
+        "($tags := $filter($, function($tag) { $match($tag.name, /^[0-9]+\\.[0-9]+$/) }); {\"releases\": [$map($tags, function($tag) { {\"version\": $tag.name, \"releaseTimestamp\": $tag.lastModifiedDate, \"digest\": $tag.digest} })], \"sourceUrl\": \"https://github.com/dotnet/sdk\"})"
       ]
     },
     "tessl-tile": {
