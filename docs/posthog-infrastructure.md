@@ -22,7 +22,7 @@ records the gate for any future definition.
 | Privacy settings the provider knows: IP discarding, cookieless hashing off, replay, performance, exception, web-vitals, heatmap, and survey capture off, empty authorized and replay domains, empty internal-user filter | OpenTofu, `posthog_project_settings` | same file |
 | The GeoIP transformation PostHog creates with every project, kept disabled | OpenTofu, `posthog_hog_function`, adopted by the bootstrap step of `scripts/posthog-infra apply` | same file |
 | Dashboard "Symphony for Trello installations", one SQL insight per panel, tile layout | OpenTofu, `posthog_dashboard`, `posthog_insight`, `posthog_dashboard_layout` | same file, queries in `infra/posthog/queries/` |
-| `autocapture_opt_out`, `capture_console_log_opt_in`, `capture_dead_clicks` | API supplement `scripts/posthog-infra gaps` (`scripts/posthog-infra.ts`) | canonical values in `ENVIRONMENT_GAP_SETTINGS` |
+| `autocapture_opt_out`, `capture_console_log_opt_in`, `capture_dead_clicks` | API supplement `scripts/posthog-infra gaps` (`scripts/posthog-verify.ts`) | canonical values in `ENVIRONMENT_GAP_SETTINGS` |
 | Dashboard fixture and expected panel results | `scripts/posthog-infra fixture` | `infra/posthog/fixtures/dashboard-fixture.json` |
 | Release capture token in the GitHub secret `POSTHOG_PROJECT_TOKEN` | `scripts/posthog-infra release-token <owner/repo>` | one tested handoff, never a second owner |
 | Organization: EU region, legal agreements, `is_ai_training_opted_in`, public-sharing allowance, member access | Manual, organization settings; read back by `verify` as shared controls | see "Manual prerequisites" |
@@ -126,7 +126,7 @@ non-sending because the repository keeps the placeholder.
 
 1. Edit the definition: `.tf` files for anything the provider owns, a `.sql` file for a panel,
    `dashboard-fixture.json` when a panel's expected result changes, `ENVIRONMENT_GAP_SETTINGS` in
-   `scripts/posthog-infra.ts` for the three API-owned settings.
+   `scripts/posthog-verify.ts` for the three API-owned settings.
 2. `scripts/posthog-infra fmt` and `validate`; `pnpm run verify:scripts` when the TypeScript changed.
 3. `scripts/posthog-infra plan` and, for the gap settings, `gaps diff`. Read the plan: a
    replacement of `posthog_project` deletes a project and its data.

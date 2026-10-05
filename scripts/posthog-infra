@@ -221,7 +221,7 @@ cmd_verify() {
 config_revision() {
   local sha dirty=""
   sha="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
-  if [[ -n "$(git -C "$ROOT" status --porcelain -- infra/posthog scripts/posthog-infra scripts/posthog-infra.ts 2>/dev/null)" ]]; then
+  if [[ -n "$(git -C "$ROOT" status --porcelain -- infra/posthog scripts/posthog-infra 'scripts/posthog-*.ts' 2>/dev/null)" ]]; then
     dirty=" (uncommitted changes in infra/posthog or scripts/posthog-infra)"
   fi
   echo "$sha$dirty"
