@@ -47,9 +47,18 @@ discards `user:password@example.invalid` as synthetic. Other pairs on that host,
 `token:secret@example.invalid`, can still be reported at low confidence. When a test needs such a
 pair, end the line with a `betterleaks:allow` comment.
 
-The BetterLeaks image does not update automatically. The pull request check scans with the base
-branch's image, so run `scripts/check-private-context --worktree` on a BetterLeaks update branch
-before merging it; see [ADR 0124](../adr/0124-look-up-betterleaks-through-the-github-package-feed.md).
+Renovate updates the BetterLeaks image. When a pull request pins a different image than its base
+branch, the required `pinned-betterleaks-image` job runs the trusted base-branch scanner against the
+pull request worktree with the new image. That job accepts only a digest-pinned
+`ghcr.io/betterleaks/betterleaks` image and runs with a read-only token and no secrets; see
+[ADR 0124](../adr/0124-look-up-betterleaks-through-the-github-package-feed.md). The same scan runs
+locally from the repository root:
+
+```bash
+BETTERLEAKS_COMMAND=scripts/betterleaks-docker.sh \
+  SYMPHONY_TRELLO_BETTERLEAKS_IMAGE='ghcr.io/betterleaks/betterleaks:vX.Y.Z@sha256:<digest>' \
+  scripts/check-private-context --worktree
+```
 
 Pull request guardrail workflows scan untrusted pull request content with trusted scanner code. The
 private-context workflow checks out the pull request source and the trusted base-branch scanner into
