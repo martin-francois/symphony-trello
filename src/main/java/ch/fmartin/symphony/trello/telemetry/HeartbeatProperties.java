@@ -1,7 +1,7 @@
 package ch.fmartin.symphony.trello.telemetry;
 
 import ch.fmartin.symphony.trello.telemetry.HeartbeatField.Names;
-import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import java.time.LocalDate;
@@ -13,6 +13,12 @@ import org.jspecify.annotations.Nullable;
 
 /// The allowlisted `properties` object of one heartbeat. Only these fields exist; nothing else is
 /// ever serialized. `null` means unknown and is distinct from `0`.
+///
+/// A stored pending report carries both protocol flags. Reading skips them because the sent body
+/// always sets them, whatever the file says.
+@JsonIgnoreProperties(
+        value = {Names.GEOIP_DISABLE, Names.PROCESS_PERSON_PROFILE},
+        allowGetters = true)
 @JsonPropertyOrder({
     Names.TELEMETRY_SCHEMA_VERSION,
     Names.REGISTERED_ON,
@@ -43,38 +49,6 @@ public record HeartbeatProperties(
     private static final Set<String> OS_FAMILIES = WireVocabulary.wireNames(OsFamily.class);
     private static final Set<String> RUNTIME_ARCHITECTURES = WireVocabulary.wireNames(RuntimeArch.class);
     private static final Pattern RELEASE_TOKEN = Pattern.compile("^[a-z0-9_.-]{1,32}$");
-
-    /// The stored form of a pending report, which still carries both protocol flags. A file whose
-    /// flags are not `true` is rejected here because the sent body always sets them.
-    @JsonCreator
-    HeartbeatProperties(
-            @JsonProperty(Names.TELEMETRY_SCHEMA_VERSION) int telemetrySchemaVersion,
-            @JsonProperty(Names.REGISTERED_ON) @Nullable String registeredOn,
-            @JsonProperty(Names.APP_VERSION) @Nullable String appVersion,
-            @JsonProperty(Names.OS_FAMILY) String osFamily,
-            @JsonProperty(Names.OS_RELEASE) String osRelease,
-            @JsonProperty(Names.LINUX_DISTRIBUTION) @Nullable String linuxDistribution,
-            @JsonProperty(Names.RUNTIME_ARCH) String runtimeArch,
-            @JsonProperty(Names.CONNECTED_BOARD_COUNT) @Nullable Integer connectedBoardCount,
-            @JsonProperty(Names.BOARD_IMPORTS_TOTAL) long boardImportsTotal,
-            @JsonProperty(Names.BOARD_CREATIONS_TOTAL) long boardCreationsTotal,
-            @JsonProperty(Names.GEOIP_DISABLE) boolean geoipDisable,
-            @JsonProperty(Names.PROCESS_PERSON_PROFILE) boolean processPersonProfile) {
-        if (!geoipDisable || !processPersonProfile) {
-            throw new IllegalArgumentException("pending report changed a fixed protocol flag");
-        }
-        this(
-                telemetrySchemaVersion,
-                registeredOn,
-                appVersion,
-                osFamily,
-                osRelease,
-                linuxDistribution,
-                runtimeArch,
-                connectedBoardCount,
-                boardImportsTotal,
-                boardCreationsTotal);
-    }
 
     /// Always true so PostHog adds no location data derived from the connection.
     @JsonProperty(Names.GEOIP_DISABLE)

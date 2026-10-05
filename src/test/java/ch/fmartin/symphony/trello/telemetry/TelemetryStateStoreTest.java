@@ -178,6 +178,25 @@ final class TelemetryStateStoreTest {
                 .isTrue();
     }
 
+    @Test
+    void aStoredProtocolFlagCannotChangeWhatIsSent() throws IOException {
+        // given
+        TelemetryStateStore store = new TelemetryStateStore(tempDir);
+        ObjectNode document = (ObjectNode) JSON.readTree(TelemetryStateJson.write(validStoredState()));
+        ((ObjectNode) document.get("pending_report").get("properties")).put("$geoip_disable", false);
+        Files.writeString(
+                store.stateFile(), JSON.writerWithDefaultPrettyPrinter().writeValueAsString(document));
+
+        // when
+        StateRead read = store.read();
+
+        // then
+        assertThat(read.unreadable())
+                .as("the flag is not stored state, so the file stays readable")
+                .isFalse();
+        assertThat(TelemetryStateJson.write(read.state().orElseThrow())).contains("\"$geoip_disable\" : true");
+    }
+
     @MethodSource("inconsistentStates")
     @ParameterizedTest(name = "{0}")
     void inconsistentStateIsUnreadableAndNeverRepairedInPlace(
@@ -205,9 +224,7 @@ final class TelemetryStateStoreTest {
     }
 
     static Stream<Arguments> inconsistentStates() {
-        // A changed protocol flag is rejected while the file is parsed, before the invariant check.
         String inconsistent = "inconsistent";
-        String invalidValue = "contains invalid values";
         return Stream.of(
                 Arguments.of(
                         "identity without registration date",
@@ -226,12 +243,6 @@ final class TelemetryStateStoreTest {
                         (Consumer<ObjectNode>) node -> ((ObjectNode) node.get("claim"))
                                 .put("event_uuid", "00000000-0000-4000-8000-000000000000"),
                         inconsistent),
-                Arguments.of(
-                        "pending report with changed protocol flag",
-                        (Consumer<ObjectNode>)
-                                node -> ((ObjectNode) node.get("pending_report").get("properties"))
-                                        .put("$geoip_disable", false),
-                        invalidValue),
                 Arguments.of(
                         "pending report with free-text platform",
                         (Consumer<ObjectNode>)
