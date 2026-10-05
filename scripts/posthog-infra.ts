@@ -89,7 +89,9 @@ function runLocalCommand(options: Options): number | undefined {
       process.stdout.write(productionCaptureToken(readJson(requireFlag(options, "outputs"))));
       return 0;
     case "manages-project":
-      return managesProject(readJson(requireFlag(options, "outputs")), requireFlag(options, "id")) ? 0 : 1;
+      // The answer goes to stdout so that any failure, which exits 1, can never read as "not managed".
+      console.log(managesProject(readJson(requireFlag(options, "outputs")), requireFlag(options, "id")) ? "yes" : "no");
+      return 0;
     default:
       return undefined;
   }

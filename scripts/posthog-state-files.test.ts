@@ -71,6 +71,8 @@ test("the local-file commands run without a personal API key", () => {
   assert.equal(pass.stdout, `-var=erasure_lifecycle_pass=${SHA}\n`);
   assert.equal(token.stdout, "phc_production_token");
   assert.equal(managed.status, 0, managed.stderr);
-  assert.equal(unmanaged.status, 1, unmanaged.stderr);
+  assert.equal(managed.stdout, "yes\n");
+  assert.equal(unmanaged.status, 0, unmanaged.stderr);
+  assert.equal(unmanaged.stdout, "no\n");
   assert.equal(version.stdout, "1.12.6");
 });

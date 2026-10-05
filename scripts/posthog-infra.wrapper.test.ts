@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
-import {existsSync, mkdtempSync, readFileSync, writeFileSync} from "node:fs";
+import {chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import test from "node:test";
@@ -74,4 +74,36 @@ test("the Hog probe requires opt-in before initializing state or loading credent
   assert.equal(result.status, 2);
   assert.match(result.stderr, /SYMPHONY_TRELLO_POSTHOG_LIVE_PROBE=1/);
   assert.equal(existsSync(stateDir), false);
+});
+
+test("retire-project stops when the managed-project check fails instead of reading it as unmanaged", () => {
+  // given: a bound state whose outputs cannot be parsed, from a stand-in tofu on PATH
+  const root = mkdtempSync(join(tmpdir(), "posthog-retire-guard-"));
+  const stateDir = join(root, "state");
+  const bin = join(root, "bin");
+  const keyFile = join(root, "key");
+  writeFileSync(keyFile, "phx_fake_personal_key_for_wrapper_test\n");
+  mkdirSync(join(stateDir, ".terraform"), {recursive: true});
+  writeFileSync(join(stateDir, ".terraform", "terraform.tfstate"), JSON.stringify({backend: {config: {path: join(stateDir, "terraform.tfstate")}}}));
+  mkdirSync(bin);
+  const fakeTofu = join(bin, "tofu");
+  writeFileSync(fakeTofu, `#!/bin/sh
+for argument in "$@"; do
+  case "$argument" in
+    list) echo module.test.posthog_project.this; exit 0 ;;
+    -json) echo "not json"; exit 0 ;;
+  esac
+done
+exit 0
+`);
+  chmodSync(fakeTofu, 0o755);
+
+  // when: the closed port means a retire request that slipped through would fail, never reach PostHog
+  const result = run(stateDir, keyFile, ["retire-project", "4242", "Unrelated project"],
+    {PATH: `${bin}:${process.env["PATH"] ?? ""}`, SYMPHONY_TRELLO_POSTHOG_HOST: "http://127.0.0.1:9"});
+
+  // then
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /JSON/);
+  assert.doesNotMatch(result.stderr, /\/api\/projects\//);
 });

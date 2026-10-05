@@ -296,9 +296,13 @@ retire-project)
   # A project this state manages is retired through destroy, never through this command.
   if [[ -n "$(bound_state_path)" ]] && tofu_cmd state list 2>/dev/null | grep -q '^module\.'; then
     write_outputs
-    if local_files manages-project --outputs "$OUTPUTS_FILE" --id "${1:?project id}"; then
+    managed="$(local_files manages-project --outputs "$OUTPUTS_FILE" --id "${1:?project id}")" || exit 1
+    if [[ "$managed" == yes ]]; then
       echo "posthog-infra: project $1 is managed by $STATE_FILE; use destroy instead of retire-project" >&2
       exit 2
+    elif [[ "$managed" != no ]]; then
+      echo "posthog-infra: unexpected manages-project answer '$managed'; refusing to retire" >&2
+      exit 1
     fi
   fi
   supplement retire-project --id "${1:?project id}" --name "${2:?expected name}"
