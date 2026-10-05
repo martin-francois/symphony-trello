@@ -76,7 +76,7 @@ final class TelemetryStateStoreTest {
         // given
         TelemetryStateStore store = new TelemetryStateStore(tempDir);
         HeartbeatProperties properties =
-                new HeartbeatProperties(1, "2026-09-22", "1.2.0", "linux", "13", "debian", "x64", 2, 1, 1, true, true);
+                new HeartbeatProperties(1, "2026-09-22", "1.2.0", "linux", "13", "debian", "x64", 2, 1, 1);
         TelemetryState full = TelemetryState.initial()
                 .withIdentity(UUID.fromString("74a69e87-089d-4fd1-8ac2-df8aab052cb1"), LocalDate.of(2026, 9, 22))
                 .withNotice(1, Instant.parse("2026-09-22T10:00:00Z"))
@@ -180,8 +180,8 @@ final class TelemetryStateStoreTest {
 
     @MethodSource("inconsistentStates")
     @ParameterizedTest(name = "{0}")
-    void inconsistentStateIsUnreadableAndNeverRepairedInPlace(String scenario, Consumer<ObjectNode> mutation)
-            throws IOException {
+    void inconsistentStateIsUnreadableAndNeverRepairedInPlace(
+            String scenario, Consumer<ObjectNode> mutation, String expectedProblem) throws IOException {
         // given
         TelemetryStateStore store = new TelemetryStateStore(tempDir);
         ObjectNode document = (ObjectNode) JSON.readTree(TelemetryStateJson.write(validStoredState()));
@@ -197,7 +197,7 @@ final class TelemetryStateStoreTest {
         assertThat(read.unreadable())
                 .as("%s must not pass as healthy state", scenario)
                 .isTrue();
-        assertThat(read.problem()).get().asString().contains("inconsistent");
+        assertThat(read.problem()).get().asString().contains(expectedProblem);
         assertThat(failure).isInstanceOf(TelemetryStateException.class);
         assertThat(Files.readString(store.stateFile()))
                 .as("the original file is kept for diagnosis")
@@ -205,30 +205,56 @@ final class TelemetryStateStoreTest {
     }
 
     static Stream<Arguments> inconsistentStates() {
+        // A changed protocol flag is rejected while the file is parsed, before the invariant check.
+        String inconsistent = "inconsistent";
+        String invalidValue = "contains invalid values";
         return Stream.of(
-                Arguments.of("identity without registration date", (Consumer<ObjectNode>)
-                        node -> node.putNull("registered_on")),
-                Arguments.of("negative counter", (Consumer<ObjectNode>) node -> node.put("board_imports_total", -1)),
                 Arguments.of(
-                        "claim without pending report", (Consumer<ObjectNode>) node -> node.putNull("pending_report")),
-                Arguments.of("claim for another event", (Consumer<ObjectNode>) node ->
-                        ((ObjectNode) node.get("claim")).put("event_uuid", "00000000-0000-4000-8000-000000000000")),
-                Arguments.of("pending report with changed protocol flag", (Consumer<ObjectNode>) node ->
-                        ((ObjectNode) node.get("pending_report").get("properties")).put("$geoip_disable", false)),
-                Arguments.of("pending report with free-text platform", (Consumer<ObjectNode>)
-                        node -> ((ObjectNode) node.get("pending_report").get("properties"))
-                                .put("os_release", "Ubuntu 24.04 LTS (custom build)")),
-                Arguments.of("pending report from a future revision", (Consumer<ObjectNode>)
-                        node -> ((ObjectNode) node.get("pending_report")).put("preference_revision", 99)),
-                Arguments.of("incomplete retry schedule", (Consumer<ObjectNode>)
-                        node -> node.set("retry", JSON.createObjectNode().put("attempts", 0))));
+                        "identity without registration date",
+                        (Consumer<ObjectNode>) node -> node.putNull("registered_on"),
+                        inconsistent),
+                Arguments.of(
+                        "negative counter",
+                        (Consumer<ObjectNode>) node -> node.put("board_imports_total", -1),
+                        inconsistent),
+                Arguments.of(
+                        "claim without pending report",
+                        (Consumer<ObjectNode>) node -> node.putNull("pending_report"),
+                        inconsistent),
+                Arguments.of(
+                        "claim for another event",
+                        (Consumer<ObjectNode>) node -> ((ObjectNode) node.get("claim"))
+                                .put("event_uuid", "00000000-0000-4000-8000-000000000000"),
+                        inconsistent),
+                Arguments.of(
+                        "pending report with changed protocol flag",
+                        (Consumer<ObjectNode>)
+                                node -> ((ObjectNode) node.get("pending_report").get("properties"))
+                                        .put("$geoip_disable", false),
+                        invalidValue),
+                Arguments.of(
+                        "pending report with free-text platform",
+                        (Consumer<ObjectNode>)
+                                node -> ((ObjectNode) node.get("pending_report").get("properties"))
+                                        .put("os_release", "Ubuntu 24.04 LTS (custom build)"),
+                        inconsistent),
+                Arguments.of(
+                        "pending report from a future revision",
+                        (Consumer<ObjectNode>)
+                                node -> ((ObjectNode) node.get("pending_report")).put("preference_revision", 99),
+                        inconsistent),
+                Arguments.of(
+                        "incomplete retry schedule",
+                        (Consumer<ObjectNode>) node ->
+                                node.set("retry", JSON.createObjectNode().put("attempts", 0)),
+                        inconsistent));
     }
 
     /// A complete, consistent stored state: registered, mid-retry, with a claimed pending report.
     private static TelemetryState validStoredState() {
         UUID eventUuid = UUID.fromString("95127c85-1c9e-460c-b652-0a3a7899cbde");
         HeartbeatProperties properties =
-                new HeartbeatProperties(1, "2026-09-22", "1.2.0", "linux", "13", "debian", "x64", 2, 1, 1, true, true);
+                new HeartbeatProperties(1, "2026-09-22", "1.2.0", "linux", "13", "debian", "x64", 2, 1, 1);
         return TelemetryState.initial()
                 .withIdentity(UUID.fromString("74a69e87-089d-4fd1-8ac2-df8aab052cb1"), LocalDate.of(2026, 9, 22))
                 .withNotice(1, Instant.parse("2026-09-22T10:00:00Z"))

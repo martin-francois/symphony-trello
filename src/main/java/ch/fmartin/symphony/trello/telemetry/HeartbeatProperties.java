@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.telemetry;
 
 import ch.fmartin.symphony.trello.telemetry.HeartbeatField.Names;
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import java.time.LocalDate;
@@ -36,9 +37,7 @@ public record HeartbeatProperties(
         @JsonProperty(Names.RUNTIME_ARCH) String runtimeArch,
         @JsonProperty(Names.CONNECTED_BOARD_COUNT) @Nullable Integer connectedBoardCount,
         @JsonProperty(Names.BOARD_IMPORTS_TOTAL) long boardImportsTotal,
-        @JsonProperty(Names.BOARD_CREATIONS_TOTAL) long boardCreationsTotal,
-        @JsonProperty(Names.GEOIP_DISABLE) boolean geoipDisable,
-        @JsonProperty(Names.PROCESS_PERSON_PROFILE) boolean processPersonProfile) {
+        @JsonProperty(Names.BOARD_CREATIONS_TOTAL) long boardCreationsTotal) {
 
     public static final int SCHEMA_VERSION = 1;
     private static final Set<String> OS_FAMILIES =
@@ -47,14 +46,55 @@ public record HeartbeatProperties(
             Set.of("x64", "arm64", "x86", Platform.OTHER, Platform.UNKNOWN);
     private static final Pattern RELEASE_TOKEN = Pattern.compile("^[a-z0-9_.-]{1,32}$");
 
+    /// The stored form of a pending report, which still carries both protocol flags. A file whose
+    /// flags are not `true` is rejected here because the sent body always sets them.
+    @JsonCreator
+    HeartbeatProperties(
+            @JsonProperty(Names.TELEMETRY_SCHEMA_VERSION) int telemetrySchemaVersion,
+            @JsonProperty(Names.REGISTERED_ON) @Nullable String registeredOn,
+            @JsonProperty(Names.APP_VERSION) @Nullable String appVersion,
+            @JsonProperty(Names.OS_FAMILY) String osFamily,
+            @JsonProperty(Names.OS_RELEASE) String osRelease,
+            @JsonProperty(Names.LINUX_DISTRIBUTION) @Nullable String linuxDistribution,
+            @JsonProperty(Names.RUNTIME_ARCH) String runtimeArch,
+            @JsonProperty(Names.CONNECTED_BOARD_COUNT) @Nullable Integer connectedBoardCount,
+            @JsonProperty(Names.BOARD_IMPORTS_TOTAL) long boardImportsTotal,
+            @JsonProperty(Names.BOARD_CREATIONS_TOTAL) long boardCreationsTotal,
+            @JsonProperty(Names.GEOIP_DISABLE) boolean geoipDisable,
+            @JsonProperty(Names.PROCESS_PERSON_PROFILE) boolean processPersonProfile) {
+        if (!geoipDisable || !processPersonProfile) {
+            throw new IllegalArgumentException("pending report changed a fixed protocol flag");
+        }
+        this(
+                telemetrySchemaVersion,
+                registeredOn,
+                appVersion,
+                osFamily,
+                osRelease,
+                linuxDistribution,
+                runtimeArch,
+                connectedBoardCount,
+                boardImportsTotal,
+                boardCreationsTotal);
+    }
+
+    /// Always true so PostHog adds no location data derived from the connection.
+    @JsonProperty(Names.GEOIP_DISABLE)
+    public boolean geoipDisable() {
+        return true;
+    }
+
+    /// Always true so PostHog keeps a minimal profile through which the maintainer can erase reports.
+    @JsonProperty(Names.PROCESS_PERSON_PROFILE)
+    public boolean processPersonProfile() {
+        return true;
+    }
+
     /// A stored snapshot is input, not fresh normalizer output; before it is sent again it must
-    /// still match the contract. Unknown values stay allowed, free text and changed flags do not.
+    /// still match the contract. Unknown values stay allowed, free text does not.
     public Optional<String> invariantProblem() {
         if (telemetrySchemaVersion != SCHEMA_VERSION) {
             return Optional.of("pending report has schema version " + telemetrySchemaVersion);
-        }
-        if (!geoipDisable || !processPersonProfile) {
-            return Optional.of("pending report changed a fixed protocol flag");
         }
         if (osFamily == null
                 || !OS_FAMILIES.contains(osFamily)

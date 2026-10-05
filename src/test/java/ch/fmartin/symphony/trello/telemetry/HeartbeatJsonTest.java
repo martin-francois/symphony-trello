@@ -27,8 +27,7 @@ final class HeartbeatJsonTest {
                 DISTINCT_ID,
                 EVENT_UUID,
                 TIMESTAMP,
-                new HeartbeatProperties(
-                        1, "2026-09-22", "1.2.0", "linux", "24.04", "ubuntu", "arm64", 3, 4, 2, true, true));
+                new HeartbeatProperties(1, "2026-09-22", "1.2.0", "linux", "24.04", "ubuntu", "arm64", 3, 4, 2));
 
         // when
         String json = HeartbeatJson.serialize(event);
@@ -76,7 +75,7 @@ final class HeartbeatJsonTest {
                 null,
                 EVENT_UUID,
                 TIMESTAMP,
-                new HeartbeatProperties(1, null, null, "windows", "11", null, "x64", null, 0, 0, true, true));
+                new HeartbeatProperties(1, null, null, "windows", "11", null, "x64", null, 0, 0));
 
         // when
         JsonNode parsed = JSON.readTree(HeartbeatJson.serialize(event));
@@ -107,8 +106,8 @@ final class HeartbeatJsonTest {
     void representativePlatformsSerializeWithinTheAllowlist(
             String scenario, String family, String release, String distribution, String arch) throws IOException {
         // given
-        HeartbeatProperties properties = new HeartbeatProperties(
-                1, "2026-09-22", "1.2.0", family, release, distribution, arch, 1, 1, 0, true, true);
+        HeartbeatProperties properties =
+                new HeartbeatProperties(1, "2026-09-22", "1.2.0", family, release, distribution, arch, 1, 1, 0);
         HeartbeatEvent event = new HeartbeatEvent(
                 "phc_token", HeartbeatEvent.EVENT_NAME, DISTINCT_ID, EVENT_UUID, TIMESTAMP, properties);
 
@@ -136,7 +135,7 @@ final class HeartbeatJsonTest {
                 null,
                 EVENT_UUID,
                 TIMESTAMP,
-                new HeartbeatProperties(1, null, null, "linux", "13", "debian", "x64", 0, 0, 0, true, true));
+                new HeartbeatProperties(1, null, null, "linux", "13", "debian", "x64", 0, 0, 0));
 
         // when
         ThrowingCallable send = placeholder::requireSendable;
@@ -161,7 +160,7 @@ final class HeartbeatJsonTest {
                 distinctId,
                 EVENT_UUID,
                 timestamp,
-                new HeartbeatProperties(1, registeredOn, null, "linux", "13", "debian", "x64", 0, 0, 0, true, true));
+                new HeartbeatProperties(1, registeredOn, null, "linux", "13", "debian", "x64", 0, 0, 0));
 
         // when
         ThrowingCallable send = event::requireSendable;

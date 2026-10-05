@@ -48,9 +48,7 @@ public final class HeartbeatSnapshots {
                 detected.runtimeArch(),
                 observation.connectedBoardCount(),
                 state.boardImportsTotal(),
-                state.boardCreationsTotal(),
-                true,
-                true);
+                state.boardCreationsTotal());
     }
 
     /// Platform, installed release, and board count as seen at one moment.
