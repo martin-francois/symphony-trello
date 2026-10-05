@@ -1,44 +1,33 @@
 package ch.fmartin.symphony.trello.telemetry;
 
+import static ch.fmartin.symphony.trello.telemetry.BoundedHttp.HTTP_CLIENT_ERROR_START;
+import static ch.fmartin.symphony.trello.telemetry.BoundedHttp.HTTP_OK;
+import static ch.fmartin.symphony.trello.telemetry.BoundedHttp.HTTP_REDIRECT_START;
+import static ch.fmartin.symphony.trello.telemetry.BoundedHttp.HTTP_REQUEST_TIMEOUT;
+import static ch.fmartin.symphony.trello.telemetry.BoundedHttp.HTTP_SERVER_ERROR_START;
+import static ch.fmartin.symphony.trello.telemetry.BoundedHttp.HTTP_TOO_MANY_REQUESTS;
+import static ch.fmartin.symphony.trello.telemetry.BoundedHttp.HTTP_UNAUTHORIZED;
+
+import ch.fmartin.symphony.trello.telemetry.BoundedHttp.BodyRead;
+import ch.fmartin.symphony.trello.telemetry.BoundedHttp.Exchange;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.net.http.HttpTimeoutException;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import org.jboss.logging.Logger;
 import org.jspecify.annotations.Nullable;
 
 /// A minimal typed capture adapter for the PostHog single-event endpoint. It sends exactly the
 /// bytes it is given, never follows redirects, bounds every timeout and the response size, and
 /// reports a [CaptureOutcome] instead of exposing raw responses or exception text.
 public final class PostHogCaptureClient {
-    public static final String USER_AGENT = "symphony-trello-telemetry/1";
-    private static final Logger LOG = Logger.getLogger(PostHogCaptureClient.class);
-    static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
     static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(15);
-    static final int MAX_RESPONSE_BYTES = 4096;
     static final Duration MAX_RETRY_AFTER = Duration.ofHours(1);
-    private static final int HTTP_OK = 200;
-    private static final int HTTP_UNAUTHORIZED = 401;
-    private static final int HTTP_REQUEST_TIMEOUT = 408;
-    private static final int HTTP_TOO_MANY_REQUESTS = 429;
-    private static final int HTTP_SERVER_ERROR_START = 500;
-    private static final int HTTP_CLIENT_ERROR_START = 400;
-    private static final int HTTP_REDIRECT_START = 300;
     private static final String QUOTA_LIMITED_FIELD = "quota_limited";
     private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -47,13 +36,7 @@ public final class PostHogCaptureClient {
     private final Duration requestTimeout;
 
     public PostHogCaptureClient(URI endpoint) {
-        this(
-                HttpClient.newBuilder()
-                        .connectTimeout(CONNECT_TIMEOUT)
-                        .followRedirects(HttpClient.Redirect.NEVER)
-                        .build(),
-                endpoint,
-                REQUEST_TIMEOUT);
+        this(BoundedHttp.newClient(), endpoint, REQUEST_TIMEOUT);
     }
 
     PostHogCaptureClient(HttpClient httpClient, URI endpoint, Duration requestTimeout) {
@@ -72,103 +55,35 @@ public final class PostHogCaptureClient {
 
     /// The only headers this client sends besides what the JDK adds for the transport itself.
     public static Map<String, String> requestHeaders() {
-        return Map.of("Content-Type", "application/json", "User-Agent", USER_AGENT);
+        return BoundedHttp.requestHeaders();
     }
 
-    /// Sends the body and reads the answer, bounded to [#MAX_RESPONSE_BYTES], inside one time
-    /// budget. The JDK request timeout covers only the response headers, so the body read runs on
-    /// its own thread against the same deadline; on timeout the exchange is cancelled and the
-    /// stream closed.
+    /// Sends the body within the request timeout and classifies the answer.
     public CaptureOutcome capture(String body) {
-        HttpRequest.Builder request = HttpRequest.newBuilder(endpoint)
-                .timeout(requestTimeout)
-                .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8));
-        requestHeaders().forEach(request::header);
-        long deadline = System.nanoTime() + requestTimeout.toNanos();
-        CompletableFuture<HttpResponse<InputStream>> exchange =
-                httpClient.sendAsync(request.build(), HttpResponse.BodyHandlers.ofInputStream());
-        HttpResponse<InputStream> response;
-        try {
-            response = exchange.get(remaining(deadline), TimeUnit.NANOSECONDS);
-        } catch (TimeoutException exception) {
-            exchange.cancel(true);
-            return CaptureOutcome.transientFailure(Optional.empty(), Optional.empty(), "request timed out");
-        } catch (ExecutionException exception) {
-            return CaptureOutcome.transientFailure(
-                    Optional.empty(),
-                    Optional.empty(),
-                    exception.getCause() instanceof HttpTimeoutException ? "request timed out" : "connection failed");
-        } catch (InterruptedException exception) {
-            exchange.cancel(true);
-            Thread.currentThread().interrupt();
-            return CaptureOutcome.transientFailure(Optional.empty(), Optional.empty(), "interrupted");
-        }
-        return switch (readBounded(response.body(), deadline)) {
-            case BodyRead.Complete complete -> classify(response, complete.text());
-            case BodyRead.Failed failed -> classify(response, failed);
+        return switch (BoundedHttp.post(httpClient, endpoint, requestTimeout, body)) {
+            case Exchange.Unanswered unanswered ->
+                CaptureOutcome.transientFailure(
+                        Optional.empty(), Optional.empty(), unanswered.failure().summary());
+            case Exchange.Answered answered ->
+                switch (answered.body()) {
+                    case BodyRead.Complete complete -> classify(answered, complete.text());
+                    case BodyRead.Failed failed -> classify(answered, failed);
+                };
         };
-    }
-
-    private static long remaining(long deadline) {
-        return Math.max(0, deadline - System.nanoTime());
-    }
-
-    /// Reads the whole body on a virtual thread so a stalled body cannot hold the caller past the
-    /// deadline. One byte more than the bound is requested: a read that fills it means the answer
-    /// is larger than any documented response, and no prefix of it is trusted. A read that fails,
-    /// times out, or is interrupted is a failed attempt, never an empty answer; the stream is closed
-    /// on those paths, which cancels the exchange.
-    static BodyRead readBounded(InputStream body, long deadline) {
-        var read = new CompletableFuture<BodyRead>();
-        Thread.startVirtualThread(() -> {
-            try (InputStream stream = body) {
-                byte[] bytes = stream.readNBytes(MAX_RESPONSE_BYTES + 1);
-                read.complete(
-                        bytes.length > MAX_RESPONSE_BYTES
-                                ? new BodyRead.Failed("response too large")
-                                : new BodyRead.Complete(new String(bytes, StandardCharsets.UTF_8)));
-            } catch (IOException exception) {
-                read.complete(new BodyRead.Failed("response body unreadable"));
-            }
-        });
-        try {
-            return read.get(remaining(deadline), TimeUnit.NANOSECONDS);
-        } catch (TimeoutException exception) {
-            read.cancel(true);
-            closeQuietly(body);
-            return new BodyRead.Failed("response body timed out");
-        } catch (ExecutionException exception) {
-            closeQuietly(body);
-            return new BodyRead.Failed("response body unreadable");
-        } catch (InterruptedException exception) {
-            read.cancel(true);
-            closeQuietly(body);
-            Thread.currentThread().interrupt();
-            return new BodyRead.Failed("interrupted");
-        }
-    }
-
-    private static void closeQuietly(InputStream stream) {
-        try {
-            stream.close();
-        } catch (IOException exception) {
-            // Closing only serves to cancel the exchange; a failure to close changes nothing.
-            LOG.debugf(exception, "telemetry response stream close failed");
-        }
     }
 
     /// A body that never arrived whole cannot prove acceptance: on a 200 the attempt is retried.
     /// Any other status is classified by the status alone, which the headers already settled.
-    private CaptureOutcome classify(HttpResponse<InputStream> response, BodyRead.Failed failed) {
-        int status = response.statusCode();
+    private CaptureOutcome classify(Exchange.Answered response, BodyRead.Failed failed) {
+        int status = response.status();
         if (status == HTTP_OK) {
             return CaptureOutcome.transientFailure(Optional.of(status), Optional.empty(), failed.summary());
         }
         return classify(response, "");
     }
 
-    private CaptureOutcome classify(HttpResponse<InputStream> response, String body) {
-        int status = response.statusCode();
+    private CaptureOutcome classify(Exchange.Answered response, String body) {
+        int status = response.status();
         if (status == HTTP_OK) {
             return classifyOk(body);
         }
@@ -229,12 +144,5 @@ public final class PostHogCaptureClient {
             // HTTP-date forms are ignored; the bounded backoff applies instead.
             return null;
         }
-    }
-
-    /// What the body read produced: every byte of a bounded answer, or the reason it is not one.
-    sealed interface BodyRead {
-        record Complete(String text) implements BodyRead {}
-
-        record Failed(String summary) implements BodyRead {}
     }
 }

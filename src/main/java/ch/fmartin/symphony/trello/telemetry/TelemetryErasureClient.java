@@ -1,23 +1,18 @@
 package ch.fmartin.symphony.trello.telemetry;
 
+import ch.fmartin.symphony.trello.telemetry.BoundedHttp.BodyRead;
+import ch.fmartin.symphony.trello.telemetry.BoundedHttp.Exchange;
+import ch.fmartin.symphony.trello.telemetry.BoundedHttp.Failure;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.ws.rs.core.Response.Status;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import org.jboss.logging.Logger;
 
 /// Bounded HTTPS transport for ownership operations. Request bodies and raw errors are never logged.
@@ -25,15 +20,11 @@ final class TelemetryErasureClient implements AutoCloseable {
     private static final Logger LOG = Logger.getLogger(TelemetryErasureClient.class);
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Duration TIMEOUT = Duration.ofSeconds(20);
-    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
     // The erasure handler (infra/posthog/erasure-service.hog.tftpl) rejects longer validity windows.
     static final Duration SIGNATURE_LIFETIME = Duration.ofSeconds(900);
     private final TelemetryErasureEndpoint endpoint;
     private final TelemetryDistribution distribution;
-    private final HttpClient http = HttpClient.newBuilder()
-            .connectTimeout(CONNECT_TIMEOUT)
-            .followRedirects(HttpClient.Redirect.NEVER)
-            .build();
+    private final HttpClient http = BoundedHttp.newClient();
 
     TelemetryErasureClient(TelemetryErasureEndpoint endpoint, TelemetryDistribution distribution) {
         this.endpoint = endpoint;
@@ -125,42 +116,35 @@ final class TelemetryErasureClient implements AutoCloseable {
         };
     }
 
-    // Transport and JSON causes can retain request/response bodies. Expose only fixed diagnostics.
-    @SuppressWarnings("PMD.PreserveStackTrace")
     private JsonNode post(URI uri, String body) {
-        HttpRequest request = HttpRequest.newBuilder(uri)
-                .timeout(TIMEOUT)
-                .header("Content-Type", "application/json")
-                .header("User-Agent", PostHogCaptureClient.USER_AGENT)
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .build();
-        long deadline = System.nanoTime() + TIMEOUT.toNanos();
-        CompletableFuture<HttpResponse<InputStream>> exchange =
-                http.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream());
+        return switch (BoundedHttp.post(http, uri, TIMEOUT, body)) {
+            case Exchange.Unanswered unanswered ->
+                throw new TelemetryStateException(
+                        unanswered.failure() == Failure.INTERRUPTED
+                                ? "erasure request interrupted; its outcome is unknown"
+                                : "erasure service unavailable; its outcome is unknown");
+            case Exchange.Answered answered -> answer(answered);
+        };
+    }
+
+    // JSON parsing causes can retain the response body. Expose only fixed diagnostics.
+    @SuppressWarnings("PMD.PreserveStackTrace")
+    private static JsonNode answer(Exchange.Answered answered) {
+        boolean receipt = answered.status() == BoundedHttp.HTTP_CREATED;
+        if ((answered.status() != BoundedHttp.HTTP_OK && !receipt)
+                || !(answered.body() instanceof BodyRead.Complete complete)) {
+            throw new TelemetryStateException("erasure service did not confirm the request; retry later");
+        }
+        if (receipt || complete.text().isBlank()) {
+            // A receipt carries no result; the handler continues in the background.
+            return JSON.createObjectNode();
+        }
         try {
-            HttpResponse<InputStream> response = exchange.get(TIMEOUT.toNanos(), TimeUnit.NANOSECONDS);
-            PostHogCaptureClient.BodyRead read = PostHogCaptureClient.readBounded(response.body(), deadline);
-            boolean receipt = response.statusCode() == Status.CREATED.getStatusCode();
-            if ((response.statusCode() != Status.OK.getStatusCode() && !receipt)
-                    || !(read instanceof PostHogCaptureClient.BodyRead.Complete complete)) {
-                throw new TelemetryStateException("erasure service did not confirm the request; retry later");
-            }
-            if (receipt || complete.text().isBlank()) {
-                // A receipt carries no result; the handler continues in the background.
-                return JSON.createObjectNode();
-            }
             JsonNode result = JSON.readTree(complete.text());
             if (result == null || !result.isObject()) {
                 throw new TelemetryStateException("erasure service returned an unrecognized response");
             }
             return result;
-        } catch (InterruptedException exception) {
-            exchange.cancel(true);
-            Thread.currentThread().interrupt();
-            throw new TelemetryStateException("erasure request interrupted; its outcome is unknown");
-        } catch (ExecutionException | TimeoutException exception) {
-            exchange.cancel(true);
-            throw new TelemetryStateException("erasure service unavailable; its outcome is unknown");
         } catch (IOException exception) {
             throw new TelemetryStateException("erasure service returned an unreadable response");
         }

@@ -64,7 +64,7 @@ final class PostHogCaptureClientTest {
             assertThat(request.path()).isEqualTo("/i/v0/e/");
             assertThat(request.body()).isEqualTo(BODY);
             assertThat(request.headers()).containsEntry("Content-type", "application/json");
-            assertThat(request.headers()).containsEntry("User-agent", PostHogCaptureClient.USER_AGENT);
+            assertThat(request.headers()).containsEntry("User-agent", BoundedHttp.USER_AGENT);
             assertThat(request.headers().keySet())
                     .noneMatch(name -> name.equalsIgnoreCase("Authorization") || name.equalsIgnoreCase("Cookie"));
         });
