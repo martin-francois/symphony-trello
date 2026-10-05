@@ -47,10 +47,17 @@ requirements.
   their owning rules. The `Required merge checks` ruleset on the default branch enforces the
   required checks, linear history, and thread resolution, and the script test `major update pull
   requests require manual merge` asserts the major-update policy.
+- HyperFrames, which renders the README demo, is review-required at every update type. Its exact
+  version lives only in `scripts/readme-demo-hyperframes.ts`, which a Renovate regex manager owns
+  and the render manifest hashes. A Renovate update stays blocked by the README demo freshness check
+  until a maintainer renders, reviews, and commits the media. Never refresh
+  `docs/demo/render-manifest.json` without that render. See
+  [ADR 0093](../adr/0093-renovate-updates-hyperframes.md) and
+  [docs/demo/README.md](../demo/README.md#updating-hyperframes).
 - This public repository groups dependencies by release or compatibility contract. Unrelated
   non-major updates have separate pull requests and no weekly update schedule.
 - Keep majors reviewed and separate from non-major updates. Keep the coordinated OpenRewrite
-  group and the Quarkus and vendored-guidance review exceptions intact. A passing check MUST NOT
+  group and the Quarkus, vendored-guidance, and HyperFrames review exceptions intact. A passing check MUST NOT
   enable automatic merging for a dependency whose rule requires manual review.
 - For each direct dependency and build plugin, document its failure surface and the required check
   that detects a bad update. A dependency is eligible for automatic merge only when that evidence is

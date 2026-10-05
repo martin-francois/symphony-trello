@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {readFileSync, readdirSync} from "node:fs";
 import test from "node:test";
 import {parse} from "yaml";
+import {matchesMajor, matchesNonMajor} from "./test-support/renovate-config.ts";
 
 interface PullRequest {
   readonly base: {readonly ref: string; readonly repo: {readonly full_name: string}};
@@ -1004,23 +1005,6 @@ test("major update pull requests require manual merge", () => {
   assert.ok(majorRule > openRewriteRule);
   assert.equal(majorUpdateRule?.automerge, false);
 });
-
-type PackageRule = (typeof RENOVATE_CONFIG.packageRules)[number];
-
-// Renovate applies a package rule to every update type unless matchUpdateTypes
-// restricts it. An omitted matchUpdateTypes therefore matches majors AND non-majors,
-// which is the opposite of what a naive `!rule.matchUpdateTypes?.includes("major")`
-// check concludes.
-function matchesMajor(rule: PackageRule): boolean {
-  return !rule.matchUpdateTypes || rule.matchUpdateTypes.includes("major");
-}
-
-function matchesNonMajor(rule: PackageRule): boolean {
-  return (
-    !rule.matchUpdateTypes ||
-    rule.matchUpdateTypes.some((updateType) => updateType !== "major")
-  );
-}
 
 test("update-type predicates follow Renovate's match-everything default", () => {
   assert.equal(matchesMajor({}), true);

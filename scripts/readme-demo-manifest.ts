@@ -3,13 +3,16 @@ import {createHash} from "node:crypto";
 import {existsSync, mkdirSync, readFileSync, statSync, writeFileSync} from "node:fs";
 import {dirname, resolve} from "node:path";
 
-const MANIFEST_RELATIVE_PATH = "docs/demo/render-manifest.json";
-const VIDEO_RELATIVE_PATH = "docs/assets/demo.mp4";
-const POSTER_RELATIVE_PATH = "docs/assets/readme-demo-poster.png";
+export const MANIFEST_RELATIVE_PATH = "docs/demo/render-manifest.json";
+export const VIDEO_RELATIVE_PATH = "docs/assets/demo.mp4";
+export const POSTER_RELATIVE_PATH = "docs/assets/readme-demo-poster.png";
 export const GITHUB_VIDEO_ATTACHMENT_LIMIT_BYTES = 10_000_000;
+export const HYPERFRAMES_VERSION_PATH = "scripts/readme-demo-hyperframes.ts";
 const RENDER_SCRIPT_PATHS = [
   ".gitattributes",
+  HYPERFRAMES_VERSION_PATH,
   "scripts/readme-demo-manifest.ts",
+  "scripts/readme-demo-process.ts",
   "scripts/readme-demo-timing.ts",
   "scripts/render-readme-demo.ts",
 ] as const;
