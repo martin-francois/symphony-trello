@@ -80,60 +80,23 @@ public record TelemetryState(
     }
 
     public TelemetryState withIdentity(UUID installationId, LocalDate registeredOn) {
-        return new TelemetryState(
-                formatVersion,
-                preferenceRevision,
-                mode,
-                installationId,
-                registeredOn,
-                noticeRevision,
-                noticeShownAt,
-                firstWorkerDeadline,
-                boardImportsTotal,
-                boardCreationsTotal,
-                lastReportedDate,
-                retry,
-                pendingReport,
-                claim,
-                ownership);
+        Copy next = new Copy(this);
+        next.installationId = installationId;
+        next.registeredOn = registeredOn;
+        return next.build();
     }
 
     public TelemetryState withNotice(int noticeRevision, Instant shownAt) {
-        return new TelemetryState(
-                formatVersion,
-                preferenceRevision,
-                mode,
-                installationId,
-                registeredOn,
-                noticeRevision,
-                shownAt,
-                firstWorkerDeadline,
-                boardImportsTotal,
-                boardCreationsTotal,
-                lastReportedDate,
-                retry,
-                pendingReport,
-                claim,
-                ownership);
+        Copy next = new Copy(this);
+        next.noticeRevision = noticeRevision;
+        next.noticeShownAt = shownAt;
+        return next.build();
     }
 
     public TelemetryState withFirstWorkerDeadline(@Nullable Instant deadline) {
-        return new TelemetryState(
-                formatVersion,
-                preferenceRevision,
-                mode,
-                installationId,
-                registeredOn,
-                noticeRevision,
-                noticeShownAt,
-                deadline,
-                boardImportsTotal,
-                boardCreationsTotal,
-                lastReportedDate,
-                retry,
-                pendingReport,
-                claim,
-                ownership);
+        Copy next = new Copy(this);
+        next.firstWorkerDeadline = deadline;
+        return next.build();
     }
 
     /// A preference change bumps the revision and discards any pending report, claim, and its retry
@@ -141,22 +104,13 @@ public record TelemetryState(
     /// report is the hold after a permanent or quota-limited failure; it survives so toggling the
     /// mode cannot send again before the next UTC day.
     public TelemetryState withMode(TelemetryMode mode) {
-        return new TelemetryState(
-                formatVersion,
-                preferenceRevision + 1,
-                mode,
-                installationId,
-                registeredOn,
-                noticeRevision,
-                noticeShownAt,
-                firstWorkerDeadline,
-                boardImportsTotal,
-                boardCreationsTotal,
-                lastReportedDate,
-                pendingReport == null ? retry : null,
-                null,
-                null,
-                ownership);
+        Copy next = new Copy(this);
+        next.preferenceRevision = preferenceRevision + 1;
+        next.mode = mode;
+        next.retry = pendingReport == null ? retry : null;
+        next.pendingReport = null;
+        next.claim = null;
+        return next.build();
     }
 
     /// The invariants a stored file must satisfy beyond its JSON shape. A file that breaks one is
@@ -198,22 +152,10 @@ public record TelemetryState(
     }
 
     public TelemetryState withCounters(long boardImportsTotal, long boardCreationsTotal) {
-        return new TelemetryState(
-                formatVersion,
-                preferenceRevision,
-                mode,
-                installationId,
-                registeredOn,
-                noticeRevision,
-                noticeShownAt,
-                firstWorkerDeadline,
-                boardImportsTotal,
-                boardCreationsTotal,
-                lastReportedDate,
-                retry,
-                pendingReport,
-                claim,
-                ownership);
+        Copy next = new Copy(this);
+        next.boardImportsTotal = boardImportsTotal;
+        next.boardCreationsTotal = boardCreationsTotal;
+        return next.build();
     }
 
     public TelemetryState withReporting(
@@ -221,41 +163,18 @@ public record TelemetryState(
             @Nullable RetryState retry,
             @Nullable PendingHeartbeat pendingReport,
             @Nullable ReportClaim claim) {
-        return new TelemetryState(
-                formatVersion,
-                preferenceRevision,
-                mode,
-                installationId,
-                registeredOn,
-                noticeRevision,
-                noticeShownAt,
-                firstWorkerDeadline,
-                boardImportsTotal,
-                boardCreationsTotal,
-                lastReportedDate,
-                retry,
-                pendingReport,
-                claim,
-                ownership);
+        Copy next = new Copy(this);
+        next.lastReportedDate = lastReportedDate;
+        next.retry = retry;
+        next.pendingReport = pendingReport;
+        next.claim = claim;
+        return next.build();
     }
 
     public TelemetryState withOwnership(TelemetryOwnership next) {
-        return new TelemetryState(
-                formatVersion,
-                preferenceRevision,
-                mode,
-                installationId,
-                registeredOn,
-                noticeRevision,
-                noticeShownAt,
-                firstWorkerDeadline,
-                boardImportsTotal,
-                boardCreationsTotal,
-                lastReportedDate,
-                retry,
-                pendingReport,
-                claim,
-                next);
+        Copy copy = new Copy(this);
+        copy.ownership = next;
+        return copy.build();
     }
 
     /// The erasure requested for the current reporting period, if any.
@@ -309,4 +228,61 @@ public record TelemetryState(
             @JsonProperty("attempts") int attempts,
             @JsonProperty("not_before") Instant notBefore,
             @JsonProperty("reason") String reason) {}
+
+    /// A mutable copy used by the `with...` methods, so each one names only the components it
+    /// changes and a new component is added here instead of in every method.
+    private static final class Copy {
+        private final int formatVersion;
+        private long preferenceRevision;
+        private TelemetryMode mode;
+        private @Nullable UUID installationId;
+        private @Nullable LocalDate registeredOn;
+        private int noticeRevision;
+        private @Nullable Instant noticeShownAt;
+        private @Nullable Instant firstWorkerDeadline;
+        private long boardImportsTotal;
+        private long boardCreationsTotal;
+        private @Nullable LocalDate lastReportedDate;
+        private @Nullable RetryState retry;
+        private @Nullable PendingHeartbeat pendingReport;
+        private @Nullable ReportClaim claim;
+        private @Nullable TelemetryOwnership ownership;
+
+        Copy(TelemetryState source) {
+            formatVersion = source.formatVersion;
+            preferenceRevision = source.preferenceRevision;
+            mode = source.mode;
+            installationId = source.installationId;
+            registeredOn = source.registeredOn;
+            noticeRevision = source.noticeRevision;
+            noticeShownAt = source.noticeShownAt;
+            firstWorkerDeadline = source.firstWorkerDeadline;
+            boardImportsTotal = source.boardImportsTotal;
+            boardCreationsTotal = source.boardCreationsTotal;
+            lastReportedDate = source.lastReportedDate;
+            retry = source.retry;
+            pendingReport = source.pendingReport;
+            claim = source.claim;
+            ownership = source.ownership;
+        }
+
+        TelemetryState build() {
+            return new TelemetryState(
+                    formatVersion,
+                    preferenceRevision,
+                    mode,
+                    installationId,
+                    registeredOn,
+                    noticeRevision,
+                    noticeShownAt,
+                    firstWorkerDeadline,
+                    boardImportsTotal,
+                    boardCreationsTotal,
+                    lastReportedDate,
+                    retry,
+                    pendingReport,
+                    claim,
+                    ownership);
+        }
+    }
 }
