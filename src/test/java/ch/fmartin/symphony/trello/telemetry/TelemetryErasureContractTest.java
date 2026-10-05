@@ -2,9 +2,14 @@ package ch.fmartin.symphony.trello.telemetry;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.fmartin.symphony.trello.telemetry.TelemetryOwnership.Phase;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 
 /// The client and the PostHog handler run in different languages and cannot share constants. These
@@ -15,6 +20,11 @@ final class TelemetryErasureContractTest {
     private static final Path RENDERER = Path.of("scripts/erasure-service.ts");
     private static final Path LIFECYCLE_RUNNER = Path.of("scripts/erasure-lifecycle-live.ts");
     private static final Path RELEASE_PACKAGER = Path.of("scripts/package-release-assets.sh");
+    private static final Path FLAG_PRUNER = Path.of("scripts/posthog-erasure-flags.ts");
+    private static final Pattern HANDLER_STATUS = Pattern.compile("(?:state := |'key': )'([a-z]+)'");
+    private static final Pattern PRUNER_STATUS = Pattern.compile("state === \"([a-z]+)\"");
+    private static final Pattern RUNNER_STATUS =
+            Pattern.compile("(?:observed ===|observed =|\\?\\?|\\) ===) \"([a-z]+)\"");
 
     @Test
     void handlerAcceptsExactlyTheSignatureLifetimeTheClientRequests() throws IOException {
@@ -134,5 +144,36 @@ final class TelemetryErasureContractTest {
         assertThat(module).contains("erasure_scope = \"symphony:${posthog_project.this.id}\"");
         assertThat(renderer).contains("/^" + TelemetryErasureEndpoint.AUDIENCE.pattern() + "$/");
         assertThat(sampleScope).matches(TelemetryErasureEndpoint.AUDIENCE);
+    }
+
+    @Test
+    void handlerAndScriptsUseExactlyTheClientStatusValues() throws IOException {
+        // given
+        List<String> wireNames = new ArrayList<>();
+        for (Phase phase : Phase.values()) {
+            wireNames.add(phase.wireName());
+        }
+
+        // when
+        List<String> handler = statuses(HANDLER_STATUS, Files.readString(HANDLER));
+        List<String> pruner = statuses(PRUNER_STATUS, Files.readString(FLAG_PRUNER));
+        List<String> runner = statuses(RUNNER_STATUS, Files.readString(LIFECYCLE_RUNNER));
+
+        // then
+        assertThat(handler).as("statuses the handler publishes").hasSameElementsAs(wireNames);
+        assertThat(pruner).as("statuses the flag pruner compares").isNotEmpty().isSubsetOf(wireNames);
+        assertThat(runner)
+                .as("statuses the lifecycle runner compares")
+                .isNotEmpty()
+                .isSubsetOf(wireNames);
+    }
+
+    private static List<String> statuses(Pattern pattern, String text) {
+        List<String> found = new ArrayList<>();
+        Matcher matcher = pattern.matcher(text);
+        while (matcher.find()) {
+            found.add(matcher.group(1));
+        }
+        return found;
     }
 }

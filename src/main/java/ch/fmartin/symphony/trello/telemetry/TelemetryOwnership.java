@@ -77,10 +77,22 @@ public record TelemetryOwnership(
     }
 
     public enum Phase {
-        REQUESTED,
-        ACCEPTED,
-        COMPLETE,
-        REFUSED;
+        REQUESTED("pending"),
+        ACCEPTED("accepted"),
+        COMPLETE("complete"),
+        REFUSED("refused");
+
+        private final String wireName;
+
+        Phase(String wireName) {
+            this.wireName = wireName;
+        }
+
+        /// The status variant the erasure service publishes for this phase; local state stores the
+        /// constant name instead.
+        public String wireName() {
+            return wireName;
+        }
 
         /// Whether the provider may still act on the request; complete and refused are final.
         public boolean inProgress() {
