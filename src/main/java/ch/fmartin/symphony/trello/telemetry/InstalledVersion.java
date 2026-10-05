@@ -29,6 +29,7 @@ public final class InstalledVersion {
         try (InputStream stream = Files.newInputStream(file)) {
             properties.load(stream);
         } catch (IOException | IllegalArgumentException exception) {
+            // A missing or damaged installer file only means the version is unknown, reported as null.
             return Optional.empty();
         }
         return normalize(properties.getProperty(APP_VERSION_KEY));

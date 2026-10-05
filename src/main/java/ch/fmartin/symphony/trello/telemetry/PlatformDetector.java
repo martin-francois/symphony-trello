@@ -70,6 +70,7 @@ public final class PlatformDetector {
         try {
             lines = Files.readAllLines(path);
         } catch (IOException | RuntimeException exception) {
+            // Not every Linux system ships this file; without it the distribution is reported as unknown.
             return Map.of();
         }
         Map<String, String> entries = new HashMap<>();
