@@ -119,7 +119,9 @@ const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
     >
   >;
   readonly customManagers: readonly {
+    readonly currentValueTemplate?: string;
     readonly datasourceTemplate?: string;
+    readonly managerFilePatterns?: readonly string[];
     readonly matchStrings?: readonly string[];
   }[];
   readonly packageRules: readonly {
@@ -131,6 +133,7 @@ const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
     readonly groupSlug?: string;
     readonly internalChecksFilter?: string;
     readonly matchDepTypes?: readonly string[];
+    readonly matchManagers?: readonly string[];
     readonly matchPackageNames?: readonly string[];
     readonly matchUpdateTypes?: readonly string[];
     readonly minimumReleaseAge?: string;
@@ -1186,6 +1189,78 @@ test("Renovate looks up MCR images through the catalog's push times", () => {
     assert.match(
       datasource?.transformTemplates?.join("\n") ?? "",
       /"releaseTimestamp": \$tag\.lastModifiedDate/u,
+    );
+  }
+});
+
+test("Renovate offers each OSS-Fuzz base image's newest v1 build past the cooldown", () => {
+  // OSS-Fuzz rebuilds these images daily, so the digest a tag points to is never seven days
+  // old. Each pushed build keeps its digest and push time, and the feed offers the newest one
+  // that has served the cooldown. Renovate's docker datasource has no push times for gcr.io.
+  const cooldown = /^(\d+) days$/u.exec(RENOVATE_CONFIG.minimumReleaseAge ?? "")?.[1];
+  assert.ok(cooldown, "renovate.json must state the cooldown as a whole number of days");
+  const ossFuzzPins = [".clusterfuzzlite/", "oss-fuzz/"].flatMap((directory) =>
+    readdirSync(new URL(`../${directory}`, import.meta.url))
+      .filter((name) => name.endsWith("Dockerfile"))
+      .flatMap((name) => {
+        const path = `${directory}${name}`;
+        const source = readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+        return (source.match(/^FROM gcr\.io\/oss-fuzz-base\/\S+$/gmu) ?? []).map((line) => ({
+          line,
+          path,
+        }));
+      }),
+  );
+
+  assert.equal(ossFuzzPins.length, 3);
+  for (const {line, path} of ossFuzzPins) {
+    const owners = RENOVATE_CONFIG.customManagers.flatMap((manager) =>
+      (manager.managerFilePatterns ?? []).some((pattern) =>
+        new RegExp(pattern.slice(1, -1), "u").test(path),
+      )
+        ? (manager.matchStrings ?? []).flatMap((pattern) => {
+            const groups = new RegExp(pattern, "u").exec(line)?.groups;
+            return groups ? [{groups, manager}] : [];
+          })
+        : [],
+    );
+    const [owner, ...otherOwners] = owners;
+    assert.ok(owner, `${path}: ${line} needs a custom manager`);
+    assert.equal(otherOwners.length, 0, `${path}: ${line} needs exactly one custom manager`);
+    const {groups, manager} = owner;
+    assert.match(groups.currentDigest ?? "", /^sha256:[a-f0-9]{64}$/u);
+
+    const datasourceName = /^custom\.(.+)$/u.exec(manager.datasourceTemplate ?? "")?.[1] ?? "";
+    const datasource = RENOVATE_CONFIG.customDatasources?.[datasourceName];
+    assert.equal(
+      datasource?.defaultRegistryUrlTemplate,
+      "https://artifactregistry.googleapis.com/v1/projects/oss-fuzz-base/locations/us/repositories/gcr.io/" +
+        `packages/${groups.depName?.split("/").at(-1)}/versions?view=FULL&orderBy=create_time+desc&pageSize=1000`,
+    );
+    const transform = datasource?.transformTemplates?.join("\n") ?? "";
+    // The feed decides which build is old enough, so its cutoff must be the configured cooldown.
+    assert.ok(
+      transform.includes(`$minimumAgeMs := ${cooldown} * 24 * 60 * 60 * 1000;`),
+      `${datasourceName} must count ${cooldown} days`,
+    );
+    assert.ok(transform.includes("$toMillis(createTime) <= $millis() - $minimumAgeMs"));
+    // createTime is Artifact Registry's record of the push.
+    assert.ok(transform.includes('"releaseTimestamp": $release.createTime'));
+    // The pin follows one tag, and the release must carry that tag's name, or Renovate would
+    // try to write a version into a FROM line that has none.
+    const followedTag = manager.currentValueTemplate ?? groups.currentValue;
+    assert.equal(followedTag, "v1");
+    assert.ok(transform.includes(`"version": "${followedTag}"`));
+
+    assert.ok(
+      RENOVATE_CONFIG.packageRules.some(
+        ({enabled, matchManagers, matchPackageNames}) =>
+          enabled === false &&
+          matchManagers?.length === 1 &&
+          matchManagers[0] === "dockerfile" &&
+          matchPackageNames?.includes(groups.depName ?? ""),
+      ),
+      `the dockerfile manager must leave ${groups.depName} to the custom manager`,
     );
   }
 });

@@ -129,7 +129,9 @@ request with the base branch's image.
 * Neutral, because other images in registries without release timestamps keep the behavior ADR 0008
   describes until a decision of their own changes it.
   [ADR 0125](0125-read-mcr-push-times-for-the-dotnet-sdk-image.md) covers
-  `mcr.microsoft.com/dotnet/sdk` and the `gcr.io/oss-fuzz-base` images.
+  `mcr.microsoft.com/dotnet/sdk`, and
+  [ADR 0126](0126-offer-the-newest-oss-fuzz-build-past-the-cooldown.md) the `gcr.io/oss-fuzz-base`
+  images.
 
 ### Confirmation
 

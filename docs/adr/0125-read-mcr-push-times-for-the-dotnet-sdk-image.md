@@ -9,6 +9,7 @@ consulted:
   - "[Renovate custom datasources](https://docs.renovatebot.com/modules/datasource/custom/)"
   - "[Renovate minimum release age](https://docs.renovatebot.com/key-concepts/minimum-release-age/)"
   - "[Renovate docker datasource](https://docs.renovatebot.com/modules/datasource/docker/)"
+  - "[ADR 0126](0126-offer-the-newest-oss-fuzz-build-past-the-cooldown.md)"
   - "[Microsoft Artifact Registry: .NET SDK](https://mcr.microsoft.com/product/dotnet/sdk/tags)"
   - "[.NET 8.0 release metadata](https://builds.dotnet.microsoft.com/dotnet/release-metadata/8.0/releases.json)"
 informed: [Future maintainers, Contributors]
@@ -28,8 +29,9 @@ Renovate's docker datasource has release timestamps only for Docker Hub. The rep
 and stays pending. ADR 0008 accepted that outcome for registries without timestamps. ADR 0124
 replaced it for the GHCR-hosted BetterLeaks image with GitHub's package feed.
 
-The `gcr.io/oss-fuzz-base` images sit in the same list for the same reason. They are covered under
-[More Information](#more-information), because this decision does not change them.
+The `gcr.io/oss-fuzz-base` images sit in the same list for the same reason.
+[ADR 0126](0126-offer-the-newest-oss-fuzz-build-past-the-cooldown.md) covers them, because they need
+a different feed; see [More Information](#more-information).
 
 ## Decision Drivers
 
@@ -128,14 +130,10 @@ This decision remains implemented when:
 
 ## More Information
 
-The `gcr.io/oss-fuzz-base/base-builder-jvm` and `gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers`
-pins stay on the docker datasource. The `tags/list` response from `gcr.io` does carry an upload
-time, `timeUploadedMs`, for every manifest, but a timestamp would not unblock these updates.
-OSS-Fuzz rebuilds these images at least once a day. Between 2026-09-22 and 2026-10-05
-`base-builder-jvm` received three new image manifests every day and `clusterfuzzlite-run-fuzzers` at
-least two, and on 2026-10-05 `latest` and `v1` pointed at that day's build. A digest update is aged
-against the digest the tag points to now, so with a timestamp the update would still be pending, now
-because it is less than a day old. The registry keeps no record of which older, untagged digest
-carried `latest`, so no datasource can offer a seven-day-old `latest` digest either. Any fix for
-these two images needs a different mechanism, such as a repository-owned record of the digests
-`latest` has pointed to, and is outside this decision.
+This decision covers only `mcr.microsoft.com/dotnet/sdk`. The `gcr.io/oss-fuzz-base/base-builder-jvm`
+and `gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers` pins need a different approach. OSS-Fuzz
+rebuilds them every day, so the digest a tag points to is never seven days old, and a timestamp for
+the tag would keep their updates pending. The registry keeps every build with its push time,
+though, and a build from a week ago is still pullable.
+[ADR 0126](0126-offer-the-newest-oss-fuzz-build-past-the-cooldown.md) reads Artifact Registry's
+version list and offers each pin the newest `v1` build pushed at least seven days ago.
