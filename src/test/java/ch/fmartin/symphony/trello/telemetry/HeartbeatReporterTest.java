@@ -30,6 +30,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 
 final class HeartbeatReporterTest {
@@ -378,6 +381,43 @@ final class HeartbeatReporterTest {
         assertThat(state.retry().reason()).isEqualTo("accepted but quota-limited");
         assertThat(state.retry().notBefore()).isEqualTo(Instant.parse("2026-09-23T00:00:00Z"));
         verify(client).capture(anyString());
+    }
+
+    @MethodSource("modeRoundTripsAfterADailyHold")
+    @ParameterizedTest(name = "{0}")
+    void aModeRoundTripDoesNotLiftTheHoldUntilTheNextUtcDay(
+            String scenario, CaptureOutcome outcome, TelemetryMode interim) {
+        // given
+        when(client.capture(anyString())).thenReturn(outcome).thenReturn(CaptureOutcome.accepted(200));
+        HeartbeatReporter reporter = readyReporter();
+        reporter.check();
+
+        // when
+        store.update(state -> Update.write(state.withMode(interim), null));
+        store.update(state -> Update.write(state.withMode(TelemetryMode.ENABLED), null));
+        clock.advance(Duration.ofHours(1));
+        CheckResult sameDay = reporter.check();
+        clock.set(Instant.parse("2026-09-23T00:00:30Z"));
+        CheckResult nextDay = reporter.check();
+
+        // then
+        assertThat(sameDay)
+                .as("%s: the hold until the next UTC day survives the preference change", scenario)
+                .isEqualTo(CheckResult.WAITING);
+        assertThat(nextDay)
+                .as("%s: the next UTC day sends a fresh report", scenario)
+                .isEqualTo(CheckResult.DISPATCHED);
+        verify(client, times(2)).capture(anyString());
+        assertThat(store.read().stateOrInitial().lastReportedDate()).isEqualTo(LocalDate.of(2026, 9, 23));
+    }
+
+    static List<Arguments> modeRoundTripsAfterADailyHold() {
+        CaptureOutcome quotaLimited = CaptureOutcome.quotaLimited(200);
+        CaptureOutcome permanent = CaptureOutcome.permanentFailure(401, "project token rejected");
+        return List.of(
+                Arguments.of("quota-limited, disable, enable", quotaLimited, TelemetryMode.DISABLED),
+                Arguments.of("quota-limited, debug, enable", quotaLimited, TelemetryMode.DEBUG),
+                Arguments.of("permanent failure, disable, enable", permanent, TelemetryMode.DISABLED));
     }
 
     @Test

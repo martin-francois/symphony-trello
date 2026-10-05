@@ -136,8 +136,10 @@ public record TelemetryState(
                 ownership);
     }
 
-    /// A preference change bumps the revision and discards any pending report, claim, and retry
-    /// schedule so an in-flight completion cannot restore them.
+    /// A preference change bumps the revision and discards any pending report, claim, and its retry
+    /// schedule so an in-flight completion cannot restore them. A retry schedule without a pending
+    /// report is the hold after a permanent or quota-limited failure; it survives so toggling the
+    /// mode cannot send again before the next UTC day.
     public TelemetryState withMode(TelemetryMode mode) {
         return new TelemetryState(
                 formatVersion,
@@ -151,7 +153,7 @@ public record TelemetryState(
                 boardImportsTotal,
                 boardCreationsTotal,
                 lastReportedDate,
-                null,
+                pendingReport == null ? retry : null,
                 null,
                 null,
                 ownership);
