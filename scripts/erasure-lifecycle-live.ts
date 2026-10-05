@@ -2,7 +2,9 @@
 import {randomBytes, randomUUID, createHmac} from "node:crypto";
 import {mkdirSync, readFileSync, writeFileSync, renameSync, chmodSync} from "node:fs";
 import {join} from "node:path";
-import {DEFAULT_CAPTURE_ENDPOINT, DEFAULT_HOST, keyFilePath, PostHogApi, readKey, readRoles, verifyProbeTarget, type Json} from "./posthog-infra.ts";
+import {DEFAULT_CAPTURE_ENDPOINT, DEFAULT_HOST, keyFilePath, PostHogApi, readKey, type Json} from "./posthog-api.ts";
+import {verifyProbeTarget} from "./posthog-hog-probe.ts";
+import {readRoles} from "./posthog-state-files.ts";
 import {isEntryPoint} from "./entry-point.ts";
 import {erasureService, handlerTemplateSha256} from "./erasure-service.ts";
 import {LIFECYCLE_PASS_STATUS} from "./erasure-lifecycle-ledger.ts";

@@ -2,7 +2,7 @@ import {test} from "node:test";
 import assert from "node:assert/strict";
 import {createHash, createHmac} from "node:crypto";
 import {readFileSync} from "node:fs";
-import type {Json} from "./posthog-infra.ts";
+import type {Json} from "./posthog-api.ts";
 import {archiveRunSources, mailboxKey, recordHandler, SIGNATURE_LIFETIME_SECONDS, signedOperation, type HandlerLedger, type Owner, type SourceApi, type SourceLedger} from "./erasure-lifecycle-live.ts";
 import {handlerTemplateSha256} from "./erasure-service.ts";
 

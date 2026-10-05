@@ -17,16 +17,8 @@ import {asObject, DEFAULT_CAPTURE_ENDPOINT, DEFAULT_HOST, InfraError, keyFilePat
 import {reviewErasureFlags} from "./posthog-erasure-flags.ts";
 import {runFixture} from "./posthog-fixture.ts";
 import {probeHogRuntime, verifyProbeTarget} from "./posthog-hog-probe.ts";
-import {boundStatePath, infraDir, lifecyclePassArguments, managesProject, productionCaptureToken, productionProjectId, projectIdFromShow, readJson, readProductionProjectId, readRoles, tofuVersion} from "./posthog-state-files.ts";
+import {boundStatePath, infraDir, lifecyclePassArguments, managesProject, productionCaptureToken, productionProjectId, projectIdFromShow, readJson, readProductionProjectId, readRoles, tofuVersion, type Role} from "./posthog-state-files.ts";
 import {findGeoipFunction, gapApply, gapDiff, outcomeOf, renderReport, verify} from "./posthog-verify.ts";
-
-// The public surface the tests and the lifecycle runner import from this entry point.
-export {DEFAULT_CAPTURE_ENDPOINT, DEFAULT_HOST, InfraError, keyFilePath, PostHogApi, readBounded, readKey, runQuery, type Json, type Sleeper} from "./posthog-api.ts";
-export {ERASURE_FLAG_MIN_AGE_MS, ERASURE_FLAG_STALE_MS, ERASURE_FLAG_WARNING, erasureFlagList, reviewErasureFlags, type ErasureFlagAction, type ErasureFlagReview} from "./posthog-erasure-flags.ts";
-export {comparePanel, fixtureEvents, HEARTBEAT_EVENT, newFixtureRun, renderQuery, scopeQuery, timeDependentExpectations, type Fixture, type FixtureRun, type PanelOutcome} from "./posthog-fixture.ts";
-export {HOG_PROBES, probeHogRuntime, verifyProbeTarget, type HogProbe, type ProbeResult, type ProbeStatus} from "./posthog-hog-probe.ts";
-export {POLICY_SETTINGS, readProductionProjectId, readRoles, type Role} from "./posthog-state-files.ts";
-export {DESTINATION_TYPES, ENVIRONMENT_GAP_SETTINGS, findGeoipFunction, gapApply, gapDiff, GEOIP_TEMPLATE_ID, outcomeOf, renderReport, verify, type Check, type CheckStatus, type GapChange, type Outcome} from "./posthog-verify.ts";
 
 // Command line.
 
@@ -61,6 +53,16 @@ function requireFlag(options: Options, name: string): string {
     throw new InfraError(`--${name} is required`);
   }
   return value;
+}
+
+/** The role named by --role, read from the outputs file named by --outputs. */
+function requireRole(options: Options): Role {
+  const roleName = requireFlag(options, "role");
+  const role = readRoles(requireFlag(options, "outputs")).find((candidate) => candidate.name === roleName);
+  if (role === undefined) {
+    throw new InfraError(`no role ${roleName} in outputs`);
+  }
+  return role;
 }
 
 /** Commands that read local files only; they run before, and without, the personal API key.
@@ -155,13 +157,8 @@ export async function main(argv: readonly string[], environment: NodeJS.ProcessE
       return outcome === "verified" ? 0 : 1;
     }
     case "fixture": {
-      const roles = readRoles(requireFlag(options, "outputs"));
-      const roleName = requireFlag(options, "role");
-      const role = roles.find((candidate) => candidate.name === roleName);
-      if (role === undefined) {
-        throw new InfraError(`no role ${roleName} in outputs`);
-      }
-      if (roleName === "production") {
+      const role = requireRole(options);
+      if (role.name === "production") {
         throw new InfraError("the fixture is never sent to the production role");
       }
       const fixturePath = options.flags.get("fixture") ?? join(infraDir(), "fixtures", "dashboard-fixture.json");
@@ -193,12 +190,7 @@ export async function main(argv: readonly string[], environment: NodeJS.ProcessE
       return results.some((result) => result.status === "unexpected") ? 1 : 0;
     }
     case "erasure-flags": {
-      const roles = readRoles(requireFlag(options, "outputs"));
-      const roleName = requireFlag(options, "role");
-      const role = roles.find((candidate) => candidate.name === roleName);
-      if (role === undefined) {
-        throw new InfraError(`no role ${roleName} in outputs`);
-      }
+      const role = requireRole(options);
       const archive = options.flags.get("archive") === "true";
       const reviews = await reviewErasureFlags(api, role.projectId, new Date(), archive);
       for (const review of reviews) {

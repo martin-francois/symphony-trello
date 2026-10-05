@@ -4,31 +4,13 @@ import {mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync} from "n
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {after, before, beforeEach, test} from "node:test";
-import {
-  comparePanel,
-  ERASURE_FLAG_WARNING,
-  fixtureEvents,
-  findGeoipFunction,
-  gapApply,
-  gapDiff,
-  InfraError,
-  main,
-  newFixtureRun,
-  outcomeOf,
-  PostHogApi,
-  probeHogRuntime,
-  readKey,
-  readRoles,
-  renderQuery,
-  renderReport,
-  reviewErasureFlags,
-  scopeQuery,
-  timeDependentExpectations,
-  verify,
-  verifyProbeTarget,
-  type Fixture,
-  type Json,
-} from "./posthog-infra.ts";
+import {InfraError, PostHogApi, readKey, type Json} from "./posthog-api.ts";
+import {ERASURE_FLAG_WARNING, reviewErasureFlags} from "./posthog-erasure-flags.ts";
+import {comparePanel, fixtureEvents, newFixtureRun, renderQuery, scopeQuery, timeDependentExpectations, type Fixture} from "./posthog-fixture.ts";
+import {probeHogRuntime, verifyProbeTarget} from "./posthog-hog-probe.ts";
+import {main} from "./posthog-infra.ts";
+import {readRoles} from "./posthog-state-files.ts";
+import {findGeoipFunction, gapApply, gapDiff, outcomeOf, renderReport, verify} from "./posthog-verify.ts";
 
 const KEY = "phx_test_personal_key_0123456789";
 const TOKEN = "phc_" + "faketoken0".repeat(4) + "0123";
