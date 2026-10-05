@@ -42,6 +42,7 @@ export const GEOIP_TEMPLATE_ID = "template-geoip";
 export const DESTINATION_TYPES = "destination,site_destination,internal_destination,source_webhook,site_app";
 export const HEARTBEAT_EVENT = "installation_heartbeat";
 export const DEFAULT_CAPTURE_ENDPOINT = "https://eu.i.posthog.com/i/v0/e/";
+export const DEFAULT_HOST = "https://eu.posthog.com";
 const PERSONAL_KEY_PREFIX = "phx_";
 const PAGE_LIMIT = 100;
 const MAX_PAGES = 50;
@@ -268,6 +269,11 @@ function asObject(value: Json, context: string): JsonObject {
     throw new InfraError(`${context}: expected a JSON object`);
   }
   return value;
+}
+
+/** The personal API key file: SYMPHONY_TRELLO_POSTHOG_KEY_FILE, or posthog-personal-api-key in the home directory. */
+export function keyFilePath(environment: NodeJS.ProcessEnv): string {
+  return environment["SYMPHONY_TRELLO_POSTHOG_KEY_FILE"] ?? join(environment["HOME"] ?? ".", "posthog-personal-api-key");
 }
 
 export function readKey(keyFile: string): string {
@@ -1074,8 +1080,8 @@ export async function main(argv: readonly string[], environment: NodeJS.ProcessE
   if (local !== undefined) {
     return local;
   }
-  const host = options.flags.get("host") ?? environment["POSTHOG_HOST"] ?? "https://eu.posthog.com";
-  const key = environment["POSTHOG_API_KEY"] ?? readKey(options.flags.get("key-file") ?? join(environment["HOME"] ?? ".", "posthog-personal-api-key"));
+  const host = options.flags.get("host") ?? environment["POSTHOG_HOST"] ?? DEFAULT_HOST;
+  const key = environment["POSTHOG_API_KEY"] ?? readKey(options.flags.get("key-file") ?? keyFilePath(environment));
   const api = new PostHogApi(host, key);
   switch (options.command) {
     case "geoip-id": {
@@ -1201,7 +1207,7 @@ export async function main(argv: readonly string[], environment: NodeJS.ProcessE
       if (environment["SYMPHONY_TRELLO_POSTHOG_LIVE_PROBE"] !== "1") {
         throw new InfraError("hog-probe requires explicit live opt-in: SYMPHONY_TRELLO_POSTHOG_LIVE_PROBE=1");
       }
-      if (host !== "https://eu.posthog.com" && !/^http:\/\/(127\.0\.0\.1|localhost):[0-9]+$/.test(host)) {
+      if (host !== DEFAULT_HOST && !/^http:\/\/(127\.0\.0\.1|localhost):[0-9]+$/.test(host)) {
         throw new InfraError("hog-probe requires the EU administration host");
       }
       const roleName = options.flags.get("role") ?? "test";

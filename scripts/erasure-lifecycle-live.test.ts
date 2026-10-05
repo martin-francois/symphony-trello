@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {createHash, createHmac} from "node:crypto";
 import {readFileSync} from "node:fs";
 import type {Json} from "./posthog-infra.ts";
-import {archiveRunSources, recordHandler, SIGNATURE_LIFETIME_SECONDS, signedOperation, type HandlerLedger, type Owner, type SourceApi, type SourceLedger} from "./erasure-lifecycle-live.ts";
+import {archiveRunSources, mailboxKey, recordHandler, SIGNATURE_LIFETIME_SECONDS, signedOperation, type HandlerLedger, type Owner, type SourceApi, type SourceLedger} from "./erasure-lifecycle-live.ts";
 import {handlerTemplateSha256} from "./erasure-service.ts";
 
 type JsonObject = {readonly [key: string]: Json};
@@ -108,4 +108,17 @@ test("a lifecycle pass names only the handler that ran every stage", () => {
 test("the recorded handler hash is the raw template hash OpenTofu's filesha256 compares", () => {
   const raw = readFileSync(new URL("../infra/posthog/erasure-service.hog.tftpl", import.meta.url));
   assert.equal(handlerTemplateSha256(), createHash("sha256").update(raw).digest("hex"));
+});
+
+test("the status mailbox key uses the status label the native handler derives it from", () => {
+  // given
+  const handler = readFileSync(new URL("../infra/posthog/erasure-service.hog.tftpl", import.meta.url), "utf8");
+  const expected = `erasure-${createHmac("sha256", OWNER.secret).update("symphony-trello/status/v1|test:erasure|period-id").digest("hex")}`;
+
+  // when
+  const mailbox = mailboxKey(OWNER, "test:erasure", "period-id");
+
+  // then
+  assert.ok(handler.includes("concat('erasure-', sha256HmacChainHex([key, concat('symphony-trello/status/v1|${scope}|', parts[5])]))"));
+  assert.equal(mailbox, expected);
 });

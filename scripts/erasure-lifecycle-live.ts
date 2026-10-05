@@ -2,7 +2,7 @@
 import {randomBytes, randomUUID, createHmac} from "node:crypto";
 import {mkdirSync, readFileSync, writeFileSync, renameSync, chmodSync} from "node:fs";
 import {join} from "node:path";
-import {PostHogApi, readKey, readRoles, verifyProbeTarget, type Json} from "./posthog-infra.ts";
+import {DEFAULT_CAPTURE_ENDPOINT, DEFAULT_HOST, keyFilePath, PostHogApi, readKey, readRoles, verifyProbeTarget, type Json} from "./posthog-infra.ts";
 import {isEntryPoint} from "./entry-point.ts";
 import {erasureService, handlerTemplateSha256} from "./erasure-service.ts";
 import {LIFECYCLE_PASS_STATUS} from "./erasure-lifecycle-ledger.ts";
@@ -165,13 +165,19 @@ interface SourceResponse {
   readonly body: Json;
 }
 
-/** Names the response fields the runner reads. It adds no validation: the runner's explicit
- * checks stay as they were, so a resumed live run makes the same decisions as the run that began. */
-function shape<T>(value: Json | readonly JsonObject[]): T {
+/** Names the response fields the runner reads without checking them. The runner's explicit checks
+ * stay as they were, so a resumed live run makes the same decisions as the run that began. */
+function uncheckedCast<T>(value: Json | readonly JsonObject[]): T {
   return value as unknown as T;
 }
 
 const hmac = (key: string, value: string): string => createHmac("sha256", key).update(value).digest("hex");
+
+/** The public status flag key of one period, as the native handler derives it. */
+export function mailboxKey(owner: Owner, scope: string, period: string): string {
+  return `erasure-${hmac(owner.secret, `symphony-trello/status/v1|${scope}|${period}`)}`;
+}
+
 export function signedOperation(owner: Owner, scope: string, period: string, operation: string, action: string, now: number = Math.floor(Date.now() / 1000)): string {
   const subject = `h1-${owner.key_version}-${owner.installation_id}`;
   const unsigned = ["h2", action, scope, subject, period, operation, now, now + SIGNATURE_LIFETIME_SECONDS].join("|");
@@ -185,11 +191,11 @@ export async function archiveRunSources(api: SourceApi, base: string, ledger: So
     if (ledger.plannedSource) names.add(ledger.plannedSource);
     const prefix = `erasure-lifecycle-${ledger.run}-`;
     if ([...names].some(name => !name.startsWith(prefix))) throw new Error("Source ledger ownership mismatch");
-    const remote = shape<readonly HogFunction[]>(await api.listAll(`${base}/hog_functions/?type=source_webhook`));
+    const remote = uncheckedCast<readonly HogFunction[]>(await api.listAll(`${base}/hog_functions/?type=source_webhook`));
     for (const source of remote.filter(source => names.has(source.name))) {
       const known = ledger.sources.find(item => item.name === source.name);
       if (known && known.id !== source.id) throw new Error("Source identity mismatch");
-      const live = shape<HogFunction>(await api.get(`${base}/hog_functions/${source.id}/`));
+      const live = uncheckedCast<HogFunction>(await api.get(`${base}/hog_functions/${source.id}/`));
       if (live.name !== source.name || live.type !== "source_webhook") throw new Error("Source cleanup ownership mismatch");
       await api.patch(`${base}/hog_functions/${source.id}/`, {enabled: false, deleted: true});
       if (known) known.archived = true;
@@ -209,12 +215,12 @@ export async function archiveRunSources(api: SourceApi, base: string, ledger: So
 
 async function cleanupVerifiedCanary(api: PostHogApi, base: string, ledger: Ledger, save: () => void): Promise<void> {
   if (ledger.canaryCleanupAccepted) return;
-  const result = shape<PersonListing>(await api.get(`${base}/persons/?distinct_id=${ledger.canary}`));
+  const result = uncheckedCast<PersonListing>(await api.get(`${base}/persons/?distinct_id=${ledger.canary}`));
   if (!Array.isArray(result.results) || result.next || result.results.length > 1) throw new Error("Ambiguous canary cleanup");
   const person = result.results[0];
   if (person) {
     if (person.id !== ledger.canaryPersonId || person.distinct_ids.length !== 1 || person.distinct_ids[0] !== ledger.canary) throw new Error("Canary cleanup ownership mismatch");
-    const cleaned = shape<BulkDeleteResult>(await api.post(`${base}/persons/bulk_delete/`, {ids: [person.id], delete_events: true, delete_recordings: true}));
+    const cleaned = uncheckedCast<BulkDeleteResult>(await api.post(`${base}/persons/bulk_delete/`, {ids: [person.id], delete_events: true, delete_recordings: true}));
     if (cleaned.deletion_errors?.length) throw new Error("Canary cleanup failed");
   }
   ledger.canaryCleanupAccepted = true; save();
@@ -226,7 +232,8 @@ export async function main(): Promise<void> {
   const stateFile = join(stateDir, "terraform.tfstate");
   const backend = JSON.parse(readFileSync(join(stateDir, ".terraform/terraform.tfstate"), "utf8")) as TerraformBackend;
   if (backend.backend.config.path !== stateFile) throw new Error("Backend mismatch");
-  const api = new PostHogApi("https://eu.posthog.com", readKey(process.env["SYMPHONY_TRELLO_POSTHOG_KEY_FILE"] ?? `${process.env["HOME"]}/posthog-personal-api-key`));
+  const key = readKey(keyFilePath(process.env));
+  const api = new PostHogApi(DEFAULT_HOST, key);
   const target = await verifyProbeTarget(api, readRoles(join(stateDir, "outputs.json")), stateFile);
   const directory = process.env["SYMPHONY_TRELLO_ERASURE_LIFECYCLE_DIR"] ?? `${process.env["HOME"]}/.local/state/symphony-trello/erasure-lifecycle`;
   mkdirSync(directory, {recursive: true, mode: 0o700});
@@ -263,24 +270,24 @@ export async function main(): Promise<void> {
     await cleanupVerifiedCanary(api, base, ledger, save);
     console.log(JSON.stringify({status: ledger.status})); return;
   }
-  const project = shape<Project>(await api.get(`${base}/`));
+  const project = uncheckedCast<Project>(await api.get(`${base}/`));
   const pause = (): Promise<void> => new Promise(r => setTimeout(r, 2000));
   const person = async (distinct: string): Promise<Person | undefined> => {
-    const result = shape<PersonListing>(await api.get(`${base}/persons/?distinct_id=${distinct}`));
+    const result = uncheckedCast<PersonListing>(await api.get(`${base}/persons/?distinct_id=${distinct}`));
     if (!Array.isArray(result.results) || result.next || result.results.length > 1) throw new Error("Ambiguous person lookup");
     const p = result.results[0];
     if (p && (p.distinct_ids.length !== 1 || p.distinct_ids[0] !== distinct)) throw new Error("Merged synthetic person");
     return p;
   };
   const rows = async (distinct: string): Promise<number> => {
-    const result = shape<QueryResult>(await api.post(`${base}/query/`, {query: {kind: "HogQLQuery", query: "SELECT count() FROM events WHERE distinct_id = {id} AND properties.poc_run = {run}", values: {id: distinct, run: ledger.run}}, refresh: "force_blocking"}));
+    const result = uncheckedCast<QueryResult>(await api.post(`${base}/query/`, {query: {kind: "HogQLQuery", query: "SELECT count() FROM events WHERE distinct_id = {id} AND properties.poc_run = {run}", values: {id: distinct, run: ledger.run}}, refresh: "force_blocking"}));
     if (result.is_cached) throw new Error("Deletion verification query returned cached data");
     const count = result.results?.[0]?.[0];
     if (!Number.isSafeInteger(count)) throw new Error("Unrecognized event query result");
     return count as number;
   };
   const capture = async (distinct: string): Promise<void> => {
-    const response = await fetch("https://eu.i.posthog.com/i/v0/e/", {method: "POST", redirect: "manual", signal: AbortSignal.timeout(15000), headers: {"Content-Type": "application/json"}, body: JSON.stringify({api_key: project.api_token, event: "ownership_lifecycle_poc", distinct_id: distinct, properties: {$process_person_profile: true, poc_run: ledger.run}})});
+    const response = await fetch(DEFAULT_CAPTURE_ENDPOINT, {method: "POST", redirect: "manual", signal: AbortSignal.timeout(15000), headers: {"Content-Type": "application/json"}, body: JSON.stringify({api_key: project.api_token, event: "ownership_lifecycle_poc", distinct_id: distinct, properties: {$process_person_profile: true, poc_run: ledger.run}})});
     await response.body?.cancel();
     if (!response.ok) throw new Error("Synthetic capture rejected");
     for (let i = 0; i < 40; i++) {
@@ -291,10 +298,10 @@ export async function main(): Promise<void> {
   };
   try {
     ledger.plannedSource = name; save();
-    source = shape<HogFunction>(await api.post(`${base}/hog_functions/`, {
+    source = uncheckedCast<HogFunction>(await api.post(`${base}/hog_functions/`, {
       type: "source_webhook", name, description: "Temporary owned TEST erasure lifecycle gate", enabled: false,
       hog: erasureService(scope, target.projectId), filters: {},
-      inputs: {master_k1: {value: ledger.master}, api_key: {value: readKey(process.env["SYMPHONY_TRELLO_POSTHOG_KEY_FILE"] ?? `${process.env["HOME"]}/posthog-personal-api-key`)}},
+      inputs: {master_k1: {value: ledger.master}, api_key: {value: key}},
       inputs_schema: [{key: "master_k1", type: "string", secret: true, required: true}, {key: "api_key", type: "string", secret: true, required: true}],
     }));
     ledger.sources.push({id: source.id, name}); save();
@@ -317,7 +324,7 @@ export async function main(): Promise<void> {
     if (!ledger.owner) {
       // Only a discarded response returns nothing; this call keeps its response.
       const issued = (await call("issue-v1"))!;
-      const issuedBody = shape<Owner>(issued.body);
+      const issuedBody = uncheckedCast<Owner>(issued.body);
       check("issuer chooses and returns a credential", issued.status === 200 && issuedBody.status === "issued");
       ledger.owner = issuedBody;
       check("native derivation matches reference", ledger.owner.secret === hmac(ledger.master, `symphony-trello/owner/v1|${scope}|h1-k1-${ledger.owner.installation_id}`));
@@ -336,7 +343,7 @@ export async function main(): Promise<void> {
       ledger.emptyPeriod ??= randomUUID();
       ledger.emptyOperation ??= randomUUID();
       save();
-      const mailbox = `erasure-${hmac(owner.secret, `symphony-trello/status/v1|${scope}|${ledger.emptyPeriod}`)}`;
+      const mailbox = mailboxKey(owner, scope, ledger.emptyPeriod);
       let observed = "pending";
       for (let attempt = 0; attempt < 60; attempt++) {
         if (attempt % 10 === 0) await call(signedOperation(owner, scope, ledger.emptyPeriod, ledger.emptyOperation, "erase"));
@@ -353,7 +360,7 @@ export async function main(): Promise<void> {
     const canarySurvives = async (): Promise<boolean> => {
       const p = await person(ledger.canary!);
       if (!p) return false;
-      const deletion = shape<DeletionStatus>(await api.get(`${base}/persons/deletion_status/?person_uuid=${p.id}&status=all`));
+      const deletion = uncheckedCast<DeletionStatus>(await api.get(`${base}/persons/deletion_status/?person_uuid=${p.id}&status=all`));
       return deletion.results?.length === 0 && await rows(ledger.canary!) > 0;
     };
     if (!ledger.partialRecoveryVerified) {
@@ -366,15 +373,15 @@ export async function main(): Promise<void> {
         partial.personId = (await person(distinct))!.id;
         save();
       }
-      const mailbox = `erasure-${hmac(owner.secret, `symphony-trello/status/v1|${scope}|${partial.id}`)}`;
-      const flags = shape<FeatureFlagListing>(await api.get(`${base}/feature_flags/?search=${mailbox}`));
+      const mailbox = mailboxKey(owner, scope, partial.id);
+      const flags = uncheckedCast<FeatureFlagListing>(await api.get(`${base}/feature_flags/?search=${mailbox}`));
       if (!flags.results.some(flag => flag.key === mailbox)) {
         await api.post(`${base}/feature_flags/`, {key: mailbox, name: `symphony-erasure-v1|${partial.personId}`, active: true,
           filters: {groups: [{properties: [], rollout_percentage: 100}], multivariate: {variants: [{key: "pending", rollout_percentage: 100}]}}});
       }
       if (!partial.queued) {
         // Reproduce the recoverable postcondition without inducing an outage: events queued, profile retained.
-        const queued = shape<BulkDeleteResult>(await api.post(`${base}/persons/bulk_delete/`, {ids: [partial.personId], keep_person: true, delete_events: true}));
+        const queued = uncheckedCast<BulkDeleteResult>(await api.post(`${base}/persons/bulk_delete/`, {ids: [partial.personId], keep_person: true, delete_events: true}));
         check("partial-failure fixture retains its owned profile", !queued.deletion_errors?.length && (await person(distinct))?.id === partial.personId);
         partial.queued = true; save();
       }
@@ -407,8 +414,8 @@ export async function main(): Promise<void> {
       if (index === 1 && !ledger.replayVerified) {
         // The loop reaches the second period only after the first exists.
         const old = ledger.periods[0]!;
-        const oldMailbox = `erasure-${hmac(owner.secret, `symphony-trello/status/v1|${scope}|${old.id}`)}`;
-        const activeFlags = async (): Promise<FeatureFlagListing["results"]> => shape<FeatureFlagListing>(await api.get(`${base}/feature_flags/?search=${oldMailbox}`)).results.filter(flag => flag.key === oldMailbox && !flag.deleted);
+        const oldMailbox = mailboxKey(owner, scope, old.id);
+        const activeFlags = async (): Promise<FeatureFlagListing["results"]> => uncheckedCast<FeatureFlagListing>(await api.get(`${base}/feature_flags/?search=${oldMailbox}`)).results.filter(flag => flag.key === oldMailbox && !flag.deleted);
         // Remove the prior completion result, then require a newly completed replay result.
         await call(signedOperation(owner, scope, old.id, old.operation, "ack"));
         for (let attempt = 0; attempt < 60 && (await activeFlags()).length; attempt++) await pause();
@@ -420,7 +427,7 @@ export async function main(): Promise<void> {
           await pause();
         }
         check("first-period replay finished processing", replayComplete);
-        const nextDeletion = shape<DeletionStatus>(await api.get(`${base}/persons/deletion_status/?person_uuid=${period.personId}&status=all`));
+        const nextDeletion = uncheckedCast<DeletionStatus>(await api.get(`${base}/persons/deletion_status/?person_uuid=${period.personId}&status=all`));
         check("processed replay leaves second period unqueued and present", nextDeletion.results?.length === 0 && (await person(distinct))?.id === period.personId && await rows(distinct) > 0);
         ledger.replayVerified = true; save();
         await call(signedOperation(owner, scope, old.id, old.operation, "ack"));
@@ -431,21 +438,21 @@ export async function main(): Promise<void> {
         await call(retriedProof, true);
         let admitted = false;
         for (let attempt = 0; attempt < 90; attempt++) {
-          const queued = shape<DeletionStatus>(await api.get(`${base}/persons/deletion_status/?person_uuid=${period.personId}&status=all`));
+          const queued = uncheckedCast<DeletionStatus>(await api.get(`${base}/persons/deletion_status/?person_uuid=${period.personId}&status=all`));
           if (queued.results?.length === 1 && queued.results[0]!.person_uuid === period.personId) {admitted = true; break;}
           await pause();
         }
         check(`period ${index + 1}: deletion admitted without further client writes`, admitted);
         check(`period ${index + 1}: profile retained until event admission is observed`, (await person(distinct))?.id === period.personId);
         await call(retriedProof);
-        const retried = shape<DeletionStatus>(await api.get(`${base}/persons/deletion_status/?person_uuid=${period.personId}&status=all`));
+        const retried = uncheckedCast<DeletionStatus>(await api.get(`${base}/persons/deletion_status/?person_uuid=${period.personId}&status=all`));
         check(`period ${index + 1}: lost response retry retained one deletion record`, retried.results?.length === 1 && retried.results[0]!.person_uuid === period.personId);
         period.admissionOrderVerified = true;
         period.admissionObserved = true;
         period.lostResponseVerified = true;
         save();
       }
-      const mailbox = `erasure-${hmac(owner.secret, `symphony-trello/status/v1|${scope}|${period.id}`)}`;
+      const mailbox = mailboxKey(owner, scope, period.id);
       let observed = "pending";
       for (let attempt = 0; attempt < 90; attempt++) {
         if (attempt % 10 === 0) await call(proof("status"));
@@ -455,7 +462,7 @@ export async function main(): Promise<void> {
         await pause();
       }
       check(`period ${index + 1}: provider-backed acceptance`, observed === "accepted" || observed === "complete");
-      const status = shape<DeletionStatus>(await api.get(`${base}/persons/deletion_status/?person_uuid=${period.personId}&status=all`));
+      const status = uncheckedCast<DeletionStatus>(await api.get(`${base}/persons/deletion_status/?person_uuid=${period.personId}&status=all`));
       const deletion = status.results?.[0];
       check(`period ${index + 1}: matching deletion record`, status.results?.length === 1 && deletion!.person_uuid === period.personId);
       check("unrelated canary retains events, profile and no deletion job", await canarySurvives());
@@ -480,11 +487,11 @@ export async function main(): Promise<void> {
     check("native admission precedes profile removal", ledger.periods.some(period => period.admissionOrderVerified));
     // The partial fixture exists once partialRecoveryVerified passed above.
     for (const operation of [...ledger.periods, ledger.partial!]) {
-      const mailbox = `erasure-${hmac(owner.secret, `symphony-trello/status/v1|${scope}|${operation.id}`)}`;
+      const mailbox = mailboxKey(owner, scope, operation.id);
       await call(signedOperation(owner, scope, operation.id, operation.operation, "ack"));
       let archived = false;
       for (let attempt = 0; attempt < 90; attempt++) {
-        const flags = shape<FeatureFlagListing>(await api.get(`${base}/feature_flags/?search=${mailbox}`));
+        const flags = uncheckedCast<FeatureFlagListing>(await api.get(`${base}/feature_flags/?search=${mailbox}`));
         if (!flags.results.some(flag => flag.key === mailbox && !flag.deleted)) {archived = true; break;}
         await pause();
       }

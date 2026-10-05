@@ -9,6 +9,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INFRA_DIR="$ROOT/infra/posthog"
 SUPPLEMENT="$ROOT/scripts/posthog-infra.ts"
+# Bash cannot import keyFilePath from posthog-infra.ts; keep this default equal to it.
 KEY_FILE="${SYMPHONY_TRELLO_POSTHOG_KEY_FILE:-$HOME/posthog-personal-api-key}"
 STATE_DIR="${SYMPHONY_TRELLO_POSTHOG_STATE_DIR:-$HOME/.local/state/symphony-trello/posthog}"
 HOST="${SYMPHONY_TRELLO_POSTHOG_HOST:-https://eu.posthog.com}"
