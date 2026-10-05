@@ -22,6 +22,12 @@ final class TelemetryErasureClient implements AutoCloseable {
     private static final Duration TIMEOUT = Duration.ofSeconds(20);
     // The erasure handler (infra/posthog/erasure-service.hog.tftpl) rejects longer validity windows.
     static final Duration SIGNATURE_LIFETIME = Duration.ofSeconds(900);
+    // Wire values the handler and scripts/erasure-lifecycle-live.ts repeat; TelemetryErasureContractTest
+    // pins each of them on every side.
+    static final String ISSUE_PAYLOAD = "issue-v1";
+    static final String SIGNED_FORMAT = "h2";
+    static final String STATUS_KEY_CONTEXT = "symphony-trello/status/v1|";
+    static final String STATUS_FLAG_PREFIX = "erasure-";
     private static final String NOT_CONFIRMED = "erasure service did not confirm the request; retry later";
     // The handler answers 401 to a bad signature and to a timestamp outside its clock tolerance,
     // so a fast or slow clock is the common cause a user can fix; retries keep their backoff.
@@ -55,7 +61,7 @@ final class TelemetryErasureClient implements AutoCloseable {
     // Parsing causes can contain the issuance response, including its credential.
     @SuppressWarnings("PMD.PreserveStackTrace")
     TelemetryCredential issue() {
-        JsonNode result = post("issue-v1", NOT_CONFIRMED);
+        JsonNode result = post(ISSUE_PAYLOAD, NOT_CONFIRMED);
         try {
             if (!"issued".equals(result.path("status").asText())) {
                 throw new IllegalArgumentException("unexpected issuance response");
@@ -72,7 +78,7 @@ final class TelemetryErasureClient implements AutoCloseable {
     void request(Action action, TelemetryOwnership ownership, TelemetryOwnership.Erasure erasure, Instant now) {
         String unsigned = String.join(
                 "|",
-                "h2",
+                SIGNED_FORMAT,
                 action.wireName(),
                 endpoint.audience(),
                 ownership.credential().subject(),
@@ -101,10 +107,8 @@ final class TelemetryErasureClient implements AutoCloseable {
 
     /// The provider-confirmed phase, or empty while the service reports pending or an unknown value.
     Optional<TelemetryOwnership.Phase> status(TelemetryOwnership ownership) {
-        String key = "erasure-"
-                + ownership
-                        .credential()
-                        .sign("symphony-trello/status/v1|" + endpoint.audience() + "|" + ownership.period());
+        String key = STATUS_FLAG_PREFIX
+                + ownership.credential().sign(STATUS_KEY_CONTEXT + endpoint.audience() + "|" + ownership.period());
         var body = JSON.createObjectNode();
         body.put("api_key", distribution.projectToken().orElseThrow());
         body.put("distinct_id", "erasure-status");
