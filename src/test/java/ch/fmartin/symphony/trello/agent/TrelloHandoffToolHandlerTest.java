@@ -482,7 +482,7 @@ final class TrelloHandoffToolHandlerTest {
         TrelloHandoffToolHandler handler = handler();
 
         // when
-        var result = addUrlAttachment(handler, "https://token:secret@example.invalid/private");
+        var result = addUrlAttachment(handler, "https://token:secret@example.invalid/private"); // betterleaks:allow
 
         // then
         assertUnsafeUrlAttachmentRejected(result);

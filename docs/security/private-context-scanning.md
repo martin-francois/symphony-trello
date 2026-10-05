@@ -42,6 +42,11 @@ SYNTH001
 https://trello.com/b/SYNTH001/synthetic-board
 ```
 
+A test that needs a credential-bearing URL should use the reserved `example.invalid` host. BetterLeaks
+discards `user:password@example.invalid` as synthetic. Other pairs on that host, such as
+`token:secret@example.invalid`, can still be reported at low confidence. When a test needs such a
+pair, end the line with a `betterleaks:allow` comment.
+
 Pull request guardrail workflows scan untrusted pull request content with trusted scanner code. The
 private-context workflow checks out the pull request source and the trusted base-branch scanner into
 separate directories, then runs the trusted scanner against the pull request worktree and commit

@@ -72,7 +72,7 @@ final class RepositorySourceResolverFuzzTest {
                 "",
                 "https://example.invalid/team/repo.git",
                 "https://example.invalid/team/repo.git?",
-                "ssh://git%3Asecret@example.invalid/team/repo.git",
+                "ssh://git%3Asecret@example.invalid/team/repo.git", // betterleaks:allow
                 "git@example.invalid:repo.git",
                 "git@example.invalid:repo" + UNICODE_NEXT_LINE + "injected.git",
                 "file:///tmp/repo%0Ainjected.git",

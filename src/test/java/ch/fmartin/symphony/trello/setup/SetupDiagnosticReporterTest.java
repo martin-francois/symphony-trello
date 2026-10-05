@@ -2430,7 +2430,7 @@ final class SetupDiagnosticReporterTest {
         Files.writeString(
                 stateHome.resolve("url-user-info.log"),
                 """
-                authority https://user:secret@example.invalid/path
+                authority https://user:password@example.invalid/path
                 path-at https://example.invalid/path@outside
                 """);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
@@ -2443,7 +2443,7 @@ final class SetupDiagnosticReporterTest {
                 .contains(
                         "authority https://<redacted>@example.invalid/path",
                         "path-at https://example.invalid/path@outside")
-                .doesNotContain("user:secret");
+                .doesNotContain("user:password");
     }
 
     @Test

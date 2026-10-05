@@ -419,12 +419,12 @@ final class RepositorySourceResolverTest {
     @ParameterizedTest(name = "{0}")
     @ValueSource(
             strings = {
-                "Repository URL: https://user:secret@example.invalid/team/project.git",
+                "Repository URL: https://user:secret@example.invalid/team/project.git", // betterleaks:allow
                 "Repository URL: https://token@example.invalid/team/project.git",
                 "Repository URL: https://example.invalid/team/project.git?access_token=secret",
                 "Repository URL: https://example.invalid/team/project.git#secret",
-                "Repository URL: ssh://git%3Asecret@example.invalid/team/project.git",
-                "Repository URL: ssh://git:secret@example.invalid/team/project.git"
+                "Repository URL: ssh://git%3Asecret@example.invalid/team/project.git", // betterleaks:allow
+                "Repository URL: ssh://git:secret@example.invalid/team/project.git" // betterleaks:allow
             })
     void rejectsCredentialBearingRemoteWithoutEchoingSecret(String cardText) {
         // given
