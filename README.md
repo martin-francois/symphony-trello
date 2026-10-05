@@ -1507,8 +1507,7 @@ disable` and `symphony-trello telemetry enable` change the setting for the whole
 in [docs/telemetry-privacy.md](docs/telemetry-privacy.md) and
 [docs/operations.md](docs/operations.md). When automatic erasure is configured,
 `symphony-trello telemetry erase` disables reporting and requests deletion;
-`symphony-trello telemetry erase-status` checks progress. Production activation awaits the
-[hosted lifecycle gate](docs/telemetry-erasure-implementation.md).
+`symphony-trello telemetry erase-status` checks progress.
 
 Important environment variables:
 
