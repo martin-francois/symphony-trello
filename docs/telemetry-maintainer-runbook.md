@@ -63,7 +63,12 @@ organization decision, not a Symphony one.
       (`app.posthog.com/legal` in PostHog's documentation; use the `eu.posthog.com` equivalent for
       this organization). Status: not executed. Generate, sign, and file it before release.
 - [ ] Subprocessors and transfers: read `https://posthog.com/subprocessors` for the EU data center
-      and note the date read. The DPA references the EU-US, UK, and Swiss-US Data Privacy Framework
+      and note the date read. Read on 2026-10-05 (page dated June 12, 2026): the core list names
+      Amazon Web Services (storage, Germany for EU Cloud), Wiz (vulnerability detection, Germany and
+      France), PlanetScale (database monitoring, Germany for EU Cloud), Modal Labs (isolated code
+      execution, Germany for EU Cloud), and Cloudflare (reverse proxy and edge network, worldwide
+      for data in transit). A second list applies only with AI features enabled, which this
+      organization keeps off. The DPA references the EU-US, UK, and Swiss-US Data Privacy Framework
       and Standard Contractual Clauses for transfers; confirm that covers the maintainer's Swiss
       obligations. Status: unknown, needs the maintainer's review or advice.
 - [x] Product and model development opt-out: PostHog's privacy policy states customer content may be
@@ -80,13 +85,17 @@ organization decision, not a Symphony one.
 - [ ] Retention: the API returned no `event_retention_months` or `events_retention_enforced`
       value for either project on 2026-09-22 (the verification report marks them UNKNOWN), so the
       effective retention window is unknown. Read both fields again from
-      `GET /api/projects/281084/` before release and record them here with the date. PostHog documents that a retention window hides events from
+      `GET /api/projects/281084/` before release and record them here with the date. `verify`
+      read both projects again on 2026-10-05 and both fields were still absent. PostHog documents that a retention window hides events from
       queries; it is not evidence of physical deletion of events, profiles, backups, or
       infrastructure logs. The privacy page promises analysis of at most one year of detailed
       events, not a deletion deadline.
 - [ ] Person profiles: reports set `$process_person_profile: true` so each installation ID has a
       minimal profile. Confirm in the test project that no profile property other than the ID
-      appears, and document the profile lifetime separately from the event window. Status: open.
+      appears, and document the profile lifetime separately from the event window. Read on
+      2026-10-05: all 11 profiles in the test project carried exactly one property,
+      `$creator_event_uuid`, which PostHog sets itself. The profile lifetime is still undocumented.
+      Status: open.
 - [x] Wire check in the test project only: `scripts/posthog-infra fixture` sends the documented
       synthetic installations to the test project through the documented event shape and checks
       every panel; it passed on the rebuilt test project (id 281083) on 2026-09-22. The erasure
@@ -136,8 +145,8 @@ Five identifiers take part, and they are not interchangeable:
 - the deletion status is keyed by that profile `uuid`, not by the analytics ID.
 
 The steps below were executed against the test project with the harness described in
-[docs/telemetry-erasure-verification.md](telemetry-erasure-verification.md); steps 1 to 4 are
-verified there, steps 5 and 6 were still pending on 2026-09-22 because PostHog batches event
+[docs/telemetry-erasure-verification.md](telemetry-erasure-verification.md); steps 1 to 4 were
+verified there on 2026-09-22 and steps 5 and 6 on 2026-10-05, after PostHog had processed the
 deletion.
 Replace `<analytics id>` with one analytics ID from step 1 and keep `$POSTHOG_PERSONAL_API_KEY`
 in the maintainer's shell only; the key needs `person:read`, `person:write`, and `query:read`.
@@ -289,10 +298,12 @@ and no report discarded by the disable is replayed. Those new snapshots do not r
 events, but they do repeat the registration date and the cumulative counters, so the user should
 know that enabling again shares those summary facts again.
 
-The rest of this section concerns an analytics ID reused after a manual erasure. Whether PostHog
-then builds a new profile for the reused ID without maintainer work is what rows 4
-to 6 of the verification note test, and they were pending on 2026-09-22. What is known from the
-API contract until then:
+The rest of this section concerns an analytics ID reused after a manual erasure. Rows 4 to 6 of
+the verification note tested on 2026-10-05 whether PostHog then builds a new profile for the reused
+ID without maintainer work. It does: once the deletion status was `completed`, the first new
+report produced a queryable event and a profile for the same ID, with and without a reset
+beforehand, and none of the erased events came back. A re-enabled installation therefore needs no
+maintainer step in the tested sequence. The remaining guidance:
 
 - `POST /api/projects/281084/persons/reset_person_distinct_id/` with body
   `{"distinct_id": "<analytics id>"}` answers 202 whenever the ID exists. Its implementation

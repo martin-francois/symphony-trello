@@ -98,6 +98,13 @@ its ledger in a separate `SYMPHONY_TRELLO_ERASURE_LIFECYCLE_DIR`. Unsaved Hog pr
 project confirmed that `typeof` returns `object` for a dictionary and `null` for a missing field,
 that the nested status check and the flag-name split work, and that the rendered handler runs.
 
+A `--resume` on 2026-10-05 passed `period 1: physical event absence and public completion` and
+marked the first period complete. The same invocation ran the second period through the replay of
+the first period, forgery rejection, lost-response retry and provider-backed acceptance, all
+passing, and stopped again at `ACCEPTED_PHYSICAL_COMPLETION_PENDING` for the second period. One
+more `--resume` after PostHog completes that deletion decides `TWO_PERIOD_LIFECYCLE_PASS`. The run
+from 2026-09-23 on the earlier handler reached the same point on the same day.
+
 ### Risks and how they are handled
 
 Review found four risks. Their handling:

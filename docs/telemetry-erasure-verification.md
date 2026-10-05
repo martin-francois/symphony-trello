@@ -156,15 +156,23 @@ event deletion to the profile that was deleted.
 ## Current run erasure-b000c2f3 on 2026-09-22 (rebuilt project 281083)
 
 Worktree at the commit that adds the PostHog infrastructure (the harness unchanged since the
-historical run). All times UTC. The sequence and outcome match the historical run: rows 1 and 2
-PASS, row 3 PENDING, rows 4 to 8 NOT RUN.
+historical run). All times UTC. Rows 1 and 2 and the deletion request ran on 2026-09-22. A resumed
+invocation on 2026-10-05 ran rows 3 to 7 and requested the cleanup; row 8 waits for PostHog to
+verify that second deletion.
 
 | Row | Status | Evidence |
 | --- | --- | --- |
 | 1. Old event/profile baseline established | PASS | Five heartbeats accepted from 10:11:00; every event UUID queryable by raw `distinct_id`, one profile per ID mapped only to that ID, events' `person_id` equal to the profile UUID present in the persons table. |
 | 2. Local disable preserves UUID and prevents transmission | PASS | Same ID, registration date, and counters after disable; simulated restarts past the grace period returned `DISABLED` and issued no request. |
-| 3. Old event deletion completed and independently verified | PENDING | `bulk_delete` at 10:12:06: 202, `persons_found` 2, `persons_queued_for_deletion` 2, `events_queued_for_deletion` true, no errors. By 10:15:13 the profiles were gone from the person API while the old events remained queryable; `deletion_status` pending. |
-| 4. to 8. | NOT RUN | Wait for row 3; resume with the command above after PostHog's next deletion batch (Sunday 05:00 UTC). |
+| 3. Old event deletion completed and independently verified | PASS | `bulk_delete` at 10:12:06 on 2026-09-22: 202, `persons_found` 2, `persons_queued_for_deletion` 2, `events_queued_for_deletion` true, no errors. On 2026-10-05 at 00:24:02 `deletion_status` showed `completed` for both profile UUIDs with `delete_verified_at` 2026-09-25T13:02:55Z, the person API returned no profile for A or B, and the event queries returned none of the four old events. |
+| 4. A: reuse without reset | PASS | Heartbeat accepted with HTTP 200 at 00:24:02 on 2026-10-05. By 00:24:35 the new event was queryable, the person API returned one profile for the ID, and the event's `person_id` equalled it. The profile UUID is the one from before the erasure. |
+| 5. B: reset before first new event | PASS | `reset_person_distinct_id` at 00:24:02 answered 202 with no profile present afterwards; the heartbeat that followed was accepted with HTTP 200. By 00:24:35 B looked exactly like A: event queryable, one profile, same profile UUID as before the erasure. The reset changed nothing observable. |
+| 6. Conditional reset after a new event | NOT NEEDED | Both IDs had a resolved profile after their first new event, so no reset ran. |
+| 7. Old events absent and new records usable | PASS | At 00:24:35 neither ID returned any of its old event UUIDs, and each returned exactly its one new event. |
+| 8. Reused ID erasable, fixtures cleaned up | PENDING | `bulk_delete` for A, B, and C at 00:24:36: 202, `persons_found` 3, `persons_queued_for_deletion` 3, `events_queued_for_deletion` true, no errors. By 00:27:45 the profiles were gone from the person API and the new events were still queryable. Resume with the command above once PostHog has processed the deletion. |
+
+PostHog verified the first deletion on a Friday, three days after the request. A deletion can
+therefore finish before the Sunday batch; poll the status instead of waiting for Sunday.
 
 | Subject | Installation ID (`distinct_id`) | Profile UUID before erasure | Old event UUIDs |
 | --- | --- | --- | --- |
