@@ -44,13 +44,33 @@ docker_mounts=(
   -v "$repo_root:$repo_root"
   -v /tmp:/tmp
 )
-case "$PWD" in
-"$repo_root" | "$repo_root"/* | /tmp | /tmp/*) ;;
-*) docker_mounts+=(-v "$PWD:$PWD") ;;
-esac
+mount_unless_covered() {
+  case "$1" in
+  "$repo_root" | "$repo_root"/* | /tmp | /tmp/*) ;;
+  *) docker_mounts+=(-v "$1:$1") ;;
+  esac
+}
+mount_unless_covered "$PWD"
+
+# Installer tests keep their files in the JVM temp dir, which the test fixture exports as TMPDIR.
+temp_dir="${TMPDIR:-}"
+temp_dir="${temp_dir%/}"
+if [[ "$temp_dir" == /* && -d "$temp_dir" && "$temp_dir" != "$PWD" ]]; then
+  mount_unless_covered "$temp_dir"
+fi
+
+# The podman-docker shim installs Podman as `docker`. Without keep-id, rootless Podman maps the
+# host user to a subordinate UID that cannot read the caller's 0700 directories. The probe drops
+# HOME because installer tests may point it at a missing directory, which Podman refuses.
+runtime_is_podman() {
+  local version
+  [ "$container_runtime" = "podman" ] && return 0
+  version="$(env -u HOME "$container_runtime" --version 2>/dev/null)" || return 1
+  [[ "$version" == "podman version "* ]]
+}
 
 container_user_namespace=()
-if [ "$container_runtime" = "podman" ]; then
+if runtime_is_podman; then
   container_user_namespace+=(--userns=keep-id)
 fi
 

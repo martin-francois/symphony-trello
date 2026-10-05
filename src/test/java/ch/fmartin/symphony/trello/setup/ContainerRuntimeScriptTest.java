@@ -6,17 +6,27 @@ import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.writeExecu
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.AnnotatedElementContext;
+import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.io.TempDirFactory;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 final class ContainerRuntimeScriptTest {
     private static final String SHA256_DIGEST_PATTERN = "@sha256:[a-f0-9]{64}$";
+    private static final String DOCKER_VERSION_OUTPUT = "Docker version 28.5.1, build e180ab8";
+    private static final String PODMAN_VERSION_OUTPUT = "podman version 6.0.2";
 
     @TempDir
     Path tempDir;
@@ -85,6 +95,75 @@ final class ContainerRuntimeScriptTest {
         assertThat(invocation).doesNotExist();
     }
 
+    @Test
+    void powershellWrapperKeepsHostUserWhenDockerCommandIsPodman() throws Exception {
+        // given
+        Path invocation = tempDir.resolve("invocation.txt");
+        installRecordingRuntime("docker", invocation, PODMAN_VERSION_OUTPUT);
+        installFailingRuntime("podman");
+
+        // when
+        ProcessResult result = runWrapper(
+                "pwsh-docker.sh",
+                defaultRuntimeEnvironmentWith(
+                        "HOME", tempDir.resolve("missing-installer-test-home").toString()));
+
+        // then
+        result.assertSuccess();
+        assertThat(invocation).content(StandardCharsets.UTF_8).contains("run", "--userns=keep-id");
+    }
+
+    @Test
+    void powershellWrapperMountsTemporaryDirectoryOutsideTmp(
+            @TempDir(factory = TemporaryDirectoryOutsideTmpFactory.class) Path testTemporaryDirectory)
+            throws Exception {
+        // given
+        Path invocation = tempDir.resolve("invocation.txt");
+        installRecordingRuntime("docker", invocation);
+
+        // when
+        ProcessResult result = runWrapper(
+                "pwsh-docker.sh", defaultRuntimeEnvironmentWith("TMPDIR", testTemporaryDirectory.toString()));
+
+        // then
+        result.assertSuccess();
+        assertThat(Files.readAllLines(invocation))
+                .containsSequence("-v", testTemporaryDirectory + ":" + testTemporaryDirectory);
+    }
+
+    @MethodSource("temporaryDirectoriesAlreadyMounted")
+    @ParameterizedTest
+    void powershellWrapperMountsTemporaryDirectoryOnlyOnce(String temporaryDirectory, String expectedMount)
+            throws Exception {
+        // given
+        Path invocation = tempDir.resolve("invocation.txt");
+        installRecordingRuntime("docker", invocation);
+
+        // when
+        ProcessResult result =
+                runWrapper("pwsh-docker.sh", defaultRuntimeEnvironmentWith("TMPDIR", temporaryDirectory));
+
+        // then
+        result.assertSuccess();
+        assertThat(Files.readAllLines(invocation)).containsOnlyOnce(expectedMount);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"relative-temp-dir", "/nonexistent/symphony-trello-temp-dir"})
+    void powershellWrapperSkipsTemporaryDirectoryItCannotMount(String temporaryDirectory) throws Exception {
+        // given
+        Path invocation = tempDir.resolve("invocation.txt");
+        installRecordingRuntime("docker", invocation);
+
+        // when
+        ProcessResult result =
+                runWrapper("pwsh-docker.sh", defaultRuntimeEnvironmentWith("TMPDIR", temporaryDirectory));
+
+        // then
+        result.assertSuccess();
+        assertThat(invocation).content(StandardCharsets.UTF_8).doesNotContain(temporaryDirectory);
+    }
+
     @MethodSource("containerRuntimeRequirements")
     @ParameterizedTest
     void rejectsMissingSelectedContainerRuntime(String script, String requiredMessage) throws Exception {
@@ -105,14 +184,26 @@ final class ContainerRuntimeScriptTest {
     }
 
     private void installRecordingRuntime(String name, Path invocation) throws Exception {
+        installRecordingRuntime(name, invocation, DOCKER_VERSION_OUTPUT);
+    }
+
+    private void installRecordingRuntime(String name, Path invocation, String versionOutput) throws Exception {
         writeExecutable(
                 tempDir.resolve(name),
                 """
                 #!/usr/bin/env bash
                 set -euo pipefail
+                if [[ "$*" == --version ]]; then
+                  # Like Podman, refuse to start when HOME names a missing directory.
+                  if [[ -n "${HOME:-}" && ! -d "$HOME" ]]; then
+                    exit 125
+                  fi
+                  printf '%%s\n' %s
+                  exit 0
+                fi
                 printf '%%s\n' "$@" > "%s"
                 """
-                        .formatted(invocation));
+                        .formatted(shellQuote(versionOutput), invocation));
     }
 
     private void installFailingRuntime(String name) throws Exception {
@@ -147,6 +238,12 @@ final class ContainerRuntimeScriptTest {
         return Map.of("PATH", tempDir + ":/usr/bin:/bin", "SYMPHONY_TRELLO_CONTAINER_RUNTIME", runtime);
     }
 
+    private Map<String, String> defaultRuntimeEnvironmentWith(String name, String value) {
+        Map<String, String> environment = new HashMap<>(runtimeEnvironment(null));
+        environment.put(name, value);
+        return environment;
+    }
+
     private ProcessResult runWrapper(String script, Map<String, String> environment) throws Exception {
         var processBuilder = new ProcessBuilder(wrapper(script).toString(), "--version");
         processBuilder.directory(Path.of(".").toAbsolutePath().normalize().toFile());
@@ -172,6 +269,14 @@ final class ContainerRuntimeScriptTest {
                         "mcr.microsoft.com/dotnet/sdk"));
     }
 
+    private static Stream<Arguments> temporaryDirectoriesAlreadyMounted() throws IOException {
+        String repositoryRoot = Path.of(".").toRealPath().toString();
+        return Stream.of(
+                Arguments.of("/tmp", "/tmp:/tmp"),
+                Arguments.of("/tmp/", "/tmp:/tmp"),
+                Arguments.of(repositoryRoot, repositoryRoot + ":" + repositoryRoot));
+    }
+
     private static Stream<Arguments> containerRuntimeRequirements() {
         return Stream.of(
                 Arguments.of("betterleaks-docker.sh", "podman is required to run BetterLeaks in a container"),
@@ -183,6 +288,16 @@ final class ContainerRuntimeScriptTest {
 
     private static Path wrapper(String script) {
         return Path.of("scripts", script).toAbsolutePath().normalize();
+    }
+
+    /// Creates the directory outside `/tmp`, which the wrapper always mounts. The FHS keeps `/var/tmp` on
+    /// every Linux host, and macOS has it too.
+    static final class TemporaryDirectoryOutsideTmpFactory implements TempDirFactory {
+        @Override
+        public Path createTempDirectory(AnnotatedElementContext elementContext, ExtensionContext extensionContext)
+                throws Exception {
+            return Files.createTempDirectory(Path.of("/var/tmp"), "symphony-trello-container-runtime-");
+        }
     }
 
     private record ContainerWrapper(String script, String imagePattern, String imageRepository) {}
