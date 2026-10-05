@@ -73,6 +73,15 @@ SYMPHONY_TRELLO_TEST_PWSH=./scripts/pwsh-docker.sh ./mvnw -Dtest=InstallerScript
 The wrapper uses Docker by default. On a Podman host, prefix a command with
 `SYMPHONY_TRELLO_CONTAINER_RUNTIME=podman` to call Podman directly.
 
+The wrapper runs the container runtime with the account's home directory from `getent passwd`, not
+the caller's `HOME`. Installer tests give every installer run a throwaway `HOME`, and rootless Podman
+keeps its image store under `HOME`, so inheriting it made every test home pull its own copy of the
+image ([issue #777](https://github.com/martin-francois/symphony-trello/issues/777)). Pointing
+`CONTAINERS_STORAGE_CONF` at the user's store was rejected: it needs a generated `storage.conf` with
+a host-specific graph root, it only helps Podman, and the wrapper cannot tell that `docker` is a
+Podman shim because the tests remove `SYMPHONY_TRELLO_CONTAINER_RUNTIME`. Docker keeps its images in
+the daemon, so for Docker the home override only changes which CLI config is read.
+
 By default, `scripts/pwsh-docker.sh` sets
 `SYMPHONY_TRELLO_ALLOW_NON_WINDOWS_PWSH_FOR_TEST=1` so the Windows-only platform guard can be
 exercised from Linux. Maintainers can set `SYMPHONY_TRELLO_PWSH_ALLOW_NON_WINDOWS_TEST_RUNTIME=0`

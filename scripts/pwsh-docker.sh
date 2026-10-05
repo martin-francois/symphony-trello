@@ -54,6 +54,12 @@ if [ "$container_runtime" = "podman" ]; then
   container_user_namespace+=(--userns=keep-id)
 fi
 
+# Installer tests give each pwsh call a throwaway HOME. Rootless Podman keeps its image store and
+# Docker keeps its CLI contexts under HOME, so run the runtime with the account's home instead.
+if account_home="$(getent passwd "$(id -u)" 2>/dev/null | cut -d: -f6)" && [ -n "$account_home" ]; then
+  export HOME="$account_home"
+fi
+
 exec "$container_runtime" run --rm --security-opt label=disable \
   "${container_user_namespace[@]}" \
   --user "$(id -u):$(id -g)" \

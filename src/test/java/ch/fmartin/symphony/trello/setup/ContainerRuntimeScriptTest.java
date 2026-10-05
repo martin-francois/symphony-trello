@@ -6,14 +6,19 @@ import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.writeExecu
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 final class ContainerRuntimeScriptTest {
     private static final String SHA256_DIGEST_PATTERN = "@sha256:[a-f0-9]{64}$";
@@ -85,6 +90,44 @@ final class ContainerRuntimeScriptTest {
         assertThat(invocation).doesNotExist();
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"docker", "podman"})
+    void powershellWrapperRunsRuntimeWithAccountHomeInsteadOfTestHome(String runtime) throws Exception {
+        // given
+        Path invocation = tempDir.resolve("invocation.txt");
+        installRecordingRuntime(runtime, invocation);
+        Path testHome = Files.createDirectories(tempDir.resolve("installer-test-home"));
+        Map<String, String> environment = new HashMap<>(runtimeEnvironment(runtime));
+        environment.put("HOME", testHome.toString());
+
+        // when
+        ProcessResult result = runWrapper("pwsh-docker.sh", environment);
+
+        // then
+        result.assertSuccess();
+        assertThat(recordedRuntimeHome()).content(StandardCharsets.UTF_8).isEqualTo(System.getProperty("user.home"));
+        assertThat(invocation).content(StandardCharsets.UTF_8).contains("-e\nHOME=/tmp");
+    }
+
+    @Test
+    void powershellWrapperKeepsCallerHomeWithoutGetent() throws Exception {
+        // given
+        Path invocation = tempDir.resolve("invocation.txt");
+        installRecordingRuntime("docker", invocation);
+        for (String command : List.of("bash", "cut", "dirname", "env", "id")) {
+            installHostCommand(command);
+        }
+        Path testHome = Files.createDirectories(tempDir.resolve("installer-test-home"));
+
+        // when
+        ProcessResult result =
+                runWrapper("pwsh-docker.sh", Map.of("PATH", tempDir.toString(), "HOME", testHome.toString()));
+
+        // then
+        result.assertSuccess();
+        assertThat(recordedRuntimeHome()).content(StandardCharsets.UTF_8).isEqualTo(testHome.toString());
+    }
+
     @MethodSource("containerRuntimeRequirements")
     @ParameterizedTest
     void rejectsMissingSelectedContainerRuntime(String script, String requiredMessage) throws Exception {
@@ -111,8 +154,13 @@ final class ContainerRuntimeScriptTest {
                 #!/usr/bin/env bash
                 set -euo pipefail
                 printf '%%s\n' "$@" > "%s"
+                printf '%%s' "$HOME" > "%s"
                 """
-                        .formatted(invocation));
+                        .formatted(invocation, recordedRuntimeHome()));
+    }
+
+    private Path recordedRuntimeHome() {
+        return tempDir.resolve("runtime-home.txt");
     }
 
     private void installFailingRuntime(String name) throws Exception {
