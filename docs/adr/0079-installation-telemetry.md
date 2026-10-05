@@ -660,7 +660,7 @@ thank-you, never judgment.
 
 ### Purpose-only wording versus broad privacy promises
 
-The notice says "François Martin uses these reports only to improve symphony-trello", with the JSON
+The notice says "François Martin uses these reports only to improve Symphony for Trello", with the JSON
 as evidence and the bundled privacy document for detail. Status: selected.
 
 - Good, because the sentence describes a commitment the maintainer controls.

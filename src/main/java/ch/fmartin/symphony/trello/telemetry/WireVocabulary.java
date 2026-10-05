@@ -16,14 +16,6 @@ interface WireVocabulary {
         return EnumSet.allOf(vocabulary).stream().map(WireVocabulary::wireName).collect(toImmutableSet());
     }
 
-    static <E extends Enum<E> & WireVocabulary> E fromWireName(Class<E> vocabulary, String wireName) {
-        return EnumSet.allOf(vocabulary).stream()
-                .filter(value -> value.wireName().equals(wireName))
-                .findAny()
-                .orElseThrow(() ->
-                        new IllegalArgumentException("not a " + vocabulary.getSimpleName() + " value: " + wireName));
-    }
-
     /// The values in declaration order as prose, for example "`a`, `b`, or `c`".
     static <E extends Enum<E> & WireVocabulary> String describe(Class<E> vocabulary) {
         List<String> quoted = EnumSet.allOf(vocabulary).stream()

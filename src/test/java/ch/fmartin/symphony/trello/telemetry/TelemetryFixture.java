@@ -21,7 +21,7 @@ final class TelemetryFixture {
     static final String INSTALLED_VERSION = "1.2.0";
     static final String TEST_TOKEN = "phc_" + "testtoken0".repeat(4) + "0123";
     static final URI LOOPBACK_ENDPOINT = URI.create("http://127.0.0.1:9/i/v0/e/");
-    static final Platform LINUX_PLATFORM = new Platform("linux", "24.04", "ubuntu", "x64");
+    static final Platform LINUX_PLATFORM = new Platform(OsFamily.LINUX, "24.04", "ubuntu", RuntimeArch.X64);
 
     private TelemetryFixture() {}
 

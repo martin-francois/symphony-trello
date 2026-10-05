@@ -360,8 +360,8 @@ final class TelemetryServiceTest {
         // given
         UUID pendingUuid = UUID.randomUUID();
         store.update(state -> Update.write(state.withIdentity(UUID.randomUUID(), LocalDate.of(2026, 9, 22)), null));
-        HeartbeatProperties properties = new HeartbeatProperties(
-                1, "2026-09-22", "1.2.0", "linux", "24.04", "ubuntu", "x64", 3, 0, 0, true, true);
+        HeartbeatProperties properties =
+                new HeartbeatProperties(1, "2026-09-22", "1.2.0", "linux", "24.04", "ubuntu", "x64", 3, 0, 0);
         store.update(state -> Update.write(
                 state.withReporting(
                         null,
@@ -443,8 +443,8 @@ final class TelemetryServiceTest {
     void enableAfterDisableKeepsIdentityAndCountersAndRemovesTheGracePeriod() {
         // given
         UUID id = UUID.randomUUID();
-        HeartbeatProperties properties = new HeartbeatProperties(
-                1, "2026-09-21", "1.2.0", "linux", "24.04", "ubuntu", "x64", 3, 4, 2, true, true);
+        HeartbeatProperties properties =
+                new HeartbeatProperties(1, "2026-09-21", "1.2.0", "linux", "24.04", "ubuntu", "x64", 3, 4, 2);
         store.update(state -> Update.write(
                 state.withIdentity(id, LocalDate.of(2026, 9, 1))
                         .withCounters(4, 2)

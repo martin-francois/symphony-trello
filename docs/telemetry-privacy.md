@@ -6,7 +6,7 @@ can and cannot do with it. Print it offline with `symphony-trello telemetry priv
 
 ## Purpose
 
-François Martin, the maintainer, uses these reports only to improve symphony-trello. They answer
+François Martin, the maintainer, uses these reports only to improve Symphony for Trello. They answer
 questions such as: how many installations report, which releases are still in use, how often
 installations run one board or several, whether the import and create flows are used, and which
 operating systems and architectures deserve testing. The reports are not sold, not used for
@@ -99,7 +99,8 @@ sends, not that no metadata exists on the network path.
 - Setting `SYMPHONY_TRELLO_TELEMETRY_DISABLED=1` before an unattended installation stores the
   disabled preference before any worker starts.
 
-Turning reporting off stops new reports and freezes the counters. It does not delete reports that
+Turning reporting off stops new reports and freezes the counters. A report that a worker is
+already sending cannot be recalled. Turning it off does not delete reports that
 were already received; see the erasure section below. Turning it back on keeps the same
 installation ID.
 

@@ -58,7 +58,7 @@ final class TelemetryDocumentationTest {
         // then
         assertThat(notice).contains(TelemetryNotice.FIELD_SUMMARY, TelemetryNotice.PURPOSE_SENTENCE);
         assertThat(notice).anySatisfy(line -> assertThat(line).endsWith(TelemetryNotice.DISABLE_COMMAND));
-        assertThat(published).contains("uses these reports only to improve symphony-trello");
+        assertThat(published).contains("uses these reports only to improve " + TelemetryNotice.PRODUCT_NAME);
         assertThat(String.join("\n", notice)).doesNotContain("—").doesNotContain("“");
     }
 
