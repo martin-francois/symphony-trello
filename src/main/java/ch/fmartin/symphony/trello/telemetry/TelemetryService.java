@@ -235,16 +235,16 @@ public final class TelemetryService {
     }
 
     public int erase(PrintStream out, PrintStream err) {
-        if (erasureUnavailable()) {
-            // The user asked to stop reporting even though this build cannot erase automatically.
-            installation
-                    .installedStore()
-                    .ifPresent(store -> store.update(state -> state.mode() == TelemetryMode.DISABLED
-                            ? Update.unchanged(null)
-                            : Update.write(state.withMode(TelemetryMode.DISABLED), null)));
-            return printErasureUnavailable(err);
-        }
         try {
+            if (erasureUnavailable()) {
+                // The user asked to stop reporting even though this build cannot erase automatically.
+                installation
+                        .installedStore()
+                        .ifPresent(store -> store.update(state -> state.mode() == TelemetryMode.DISABLED
+                                ? Update.unchanged(null)
+                                : Update.write(state.withMode(TelemetryMode.DISABLED), null)));
+                return printErasureUnavailable(err);
+            }
             TelemetryStateStore store = installation.installedStore().orElseThrow();
             if (new TelemetryErasure(installation, clock).request(store) == TelemetryErasure.Request.NOTHING_SENT) {
                 out.println("Reporting is off. This installation never sent a report, so there is nothing to erase.");

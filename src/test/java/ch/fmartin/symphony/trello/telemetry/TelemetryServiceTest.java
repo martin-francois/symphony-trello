@@ -403,6 +403,20 @@ final class TelemetryServiceTest {
     }
 
     @Test
+    void eraseWithoutAutomaticErasureReportsAFailedPreferenceWriteAsAnError() throws IOException {
+        // given
+        Files.writeString(store.stateFile(), "{corrupt");
+        TelemetryService service = service(TelemetryEnvironment.none());
+
+        // when
+        int exit = service.erase(out, err);
+
+        // then
+        assertThat(exit).isEqualTo(TelemetryService.EXIT_FAILURE);
+        assertThat(errors()).contains("Erasure could not be confirmed").contains("not valid JSON");
+    }
+
+    @Test
     void messagesStayTruthfulUnderAnEnvironmentDisableOverride() {
         // given
         TelemetryService service = service(new TelemetryEnvironment(true, false, false));
