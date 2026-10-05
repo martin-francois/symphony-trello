@@ -224,8 +224,13 @@ print_installer_completion() {
 # TelemetryEnvironment in Java because the installer must decide whether to run Java at all, also in
 # dry runs and before Java is verified.
 apply_telemetry_environment_preference() {
+  # Java strips surrounding whitespace, so a value such as "1\r" from a CRLF .env file disables
+  # every Java process; trimming here keeps the stored preference in step with that.
+  local requested="${SYMPHONY_TRELLO_TELEMETRY_DISABLED:-}"
+  requested="${requested#"${requested%%[![:space:]]*}"}"
+  requested="${requested%"${requested##*[![:space:]]}"}"
   # Case patterns instead of a lowercase expansion: macOS ships Bash 3, which lacks case conversion.
-  case "${SYMPHONY_TRELLO_TELEMETRY_DISABLED:-}" in
+  case "$requested" in
   1 | [Tt][Rr][Uu][Ee] | [Yy][Ee][Ss] | [Oo][Nn]) ;;
   *) return ;;
   esac

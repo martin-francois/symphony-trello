@@ -311,6 +311,21 @@ final class InstallerScriptTest {
     }
 
     @Test
+    void posixInstallerDryRunPlansTheTelemetryDisableWhenTheValueCarriesSurroundingWhitespace() throws Exception {
+        // given: the value a CRLF .env file yields, which Java reads as disabled after stripping
+        assumeFalse(isWindows());
+        assumeTrue(commandExists("bash"));
+        var processBuilder = new ProcessBuilder("bash", "install.sh", "--dry-run", "--no-onboard");
+
+        // when
+        ProcessResult result = run(Map.of("SYMPHONY_TRELLO_TELEMETRY_DISABLED", " 1\r"), processBuilder);
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output()).contains("WOULD run: ").contains("symphony-trello telemetry disable --yes");
+    }
+
+    @Test
     void posixInstallerDryRunSkipsTheTelemetryDisableWhenTheVariableIsUnsetOrFalse() throws Exception {
         // given
         assumeFalse(isWindows());
@@ -5664,6 +5679,25 @@ final class InstallerScriptTest {
         // then
         result.assertSuccess();
         assertThat(result.output()).contains("Symphony for Trello installer", "Dry run: no files changed.");
+    }
+
+    @Test
+    void powershellInstallerDryRunPlansTheTelemetryDisableWhenTheVariableIsSetWhenAvailable() throws Exception {
+        // given: the value a CRLF .env file yields, which Java reads as disabled after stripping
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
+        environment.put("SYMPHONY_TRELLO_TELEMETRY_DISABLED", " Yes\r");
+
+        // when
+        ProcessResult result = run(
+                environment,
+                command(pwsh, "-NoProfile", "-File", "./install.ps1", "--dry-run", "--no-onboard")
+                        .toArray(String[]::new));
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output()).contains("WOULD run: ").contains("symphony-trello.ps1 telemetry disable --yes");
     }
 
     @Test
