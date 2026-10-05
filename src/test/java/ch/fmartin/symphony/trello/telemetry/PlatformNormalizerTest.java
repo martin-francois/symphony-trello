@@ -87,6 +87,9 @@ final class PlatformNormalizerTest {
 
         // then
         assertThat(platform).isEqualTo(new Platform(OsFamily.WINDOWS, expected, null, RuntimeArch.X64));
+        assertThat(storedCheckAccepts(platform))
+                .as("the stored-report check accepts the normalizer's own output")
+                .isTrue();
     }
 
     @Test
@@ -122,6 +125,9 @@ final class PlatformNormalizerTest {
 
         // then
         assertThat(platform).isEqualTo(new Platform(OsFamily.MACOS, expected, null, RuntimeArch.ARM64));
+        assertThat(storedCheckAccepts(platform))
+                .as("the stored-report check accepts the normalizer's own output")
+                .isTrue();
     }
 
     @CsvSource({
@@ -165,6 +171,9 @@ final class PlatformNormalizerTest {
         // then
         assertThat(platform)
                 .isEqualTo(new Platform(OsFamily.LINUX, expectedRelease, expectedDistribution, RuntimeArch.X64));
+        assertThat(storedCheckAccepts(platform))
+                .as("the stored-report check accepts the normalizer's own output")
+                .isTrue();
     }
 
     @Test
@@ -178,6 +187,9 @@ final class PlatformNormalizerTest {
         // then
         assertThat(platform)
                 .isEqualTo(new Platform(OsFamily.LINUX, Platform.UNKNOWN, Platform.UNKNOWN, RuntimeArch.X64));
+        assertThat(storedCheckAccepts(platform))
+                .as("the stored-report check accepts the normalizer's own output")
+                .isTrue();
     }
 
     @Test
@@ -196,6 +208,9 @@ final class PlatformNormalizerTest {
         // then
         assertThat(platform)
                 .isEqualTo(new Platform(OsFamily.LINUX, Platform.UNKNOWN, Platform.OTHER, RuntimeArch.OTHER));
+        assertThat(storedCheckAccepts(platform))
+                .as("the stored-report check accepts the normalizer's own output")
+                .isTrue();
     }
 
     @Test
@@ -208,5 +223,12 @@ final class PlatformNormalizerTest {
 
         // then
         assertThat(platform).isEqualTo(new Platform(OsFamily.OTHER, Platform.UNKNOWN, null, RuntimeArch.X64));
+        assertThat(storedCheckAccepts(platform))
+                .as("the stored-report check accepts the normalizer's own output")
+                .isTrue();
+    }
+
+    private static boolean storedCheckAccepts(Platform platform) {
+        return PlatformNormalizer.isNormalized(platform.osFamily(), platform.osRelease(), platform.linuxDistribution());
     }
 }

@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.telemetry;
 
+import com.google.common.collect.ImmutableSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -41,9 +42,19 @@ final class PlatformNormalizer {
             "linuxmint",
             "elementary",
             "zorin");
+    /// Every distribution ID a heartbeat may name besides `other` and `unknown`.
+    static final Set<String> ALLOWLISTED_DISTRIBUTIONS = ImmutableSet.<String>builder()
+            .addAll(ROLLING_DISTRIBUTIONS)
+            .addAll(MAJOR_MINOR_DISTRIBUTIONS)
+            .addAll(MAJOR_DISTRIBUTIONS)
+            .build();
     private static final Pattern RELEASE_NUMBER = Pattern.compile("^(\\d{1,4})(?:\\.(\\d{1,4}))?(?:[.\\-+].*)?$");
-    private static final Pattern WINDOWS_SERVER = Pattern.compile("^Server (\\d{4})$");
+    private static final String SERVER_YEAR = "(\\d{4})";
+    private static final String SERVER_PREFIX = "server_";
+    private static final Pattern WINDOWS_SERVER = Pattern.compile("^Server " + SERVER_YEAR + "$");
+    private static final Pattern NORMALIZED_WINDOWS_SERVER = Pattern.compile("^" + SERVER_PREFIX + SERVER_YEAR + "$");
     private static final int MACOS_LEGACY_MAJOR = 10;
+    private static final String VERSION_ID = "VERSION_ID";
 
     private PlatformNormalizer() {}
 
@@ -72,7 +83,7 @@ final class PlatformNormalizer {
             return version;
         }
         Matcher server = WINDOWS_SERVER.matcher(version);
-        return server.matches() ? "server_" + server.group(1) : Platform.UNKNOWN;
+        return server.matches() ? SERVER_PREFIX + server.group(1) : Platform.UNKNOWN;
     }
 
     /// macOS 11 and later are identified by the product major release; 10.x keeps the minor release
@@ -96,19 +107,14 @@ final class PlatformNormalizer {
             return osRelease.isEmpty() ? Platform.UNKNOWN : Platform.OTHER;
         }
         String normalized = id.strip().toLowerCase(Locale.ROOT);
-        if (ROLLING_DISTRIBUTIONS.contains(normalized)
-                || MAJOR_MINOR_DISTRIBUTIONS.contains(normalized)
-                || MAJOR_DISTRIBUTIONS.contains(normalized)) {
-            return normalized;
-        }
-        return Platform.OTHER;
+        return ALLOWLISTED_DISTRIBUTIONS.contains(normalized) ? normalized : Platform.OTHER;
     }
 
     static String linuxRelease(String distribution, Map<String, String> osRelease) {
         if (ROLLING_DISTRIBUTIONS.contains(distribution)) {
             return Platform.ROLLING;
         }
-        Matcher matcher = releaseNumber(osRelease.get("VERSION_ID"));
+        Matcher matcher = releaseNumber(osRelease.get(VERSION_ID));
         if (matcher == null) {
             return Platform.UNKNOWN;
         }
@@ -120,6 +126,40 @@ final class PlatformNormalizer {
             return matcher.group(1);
         }
         return Platform.UNKNOWN;
+    }
+
+    /// Whether [#normalize] can return this combination. A stored pending report is input, so a
+    /// hand-edited value must not reach the wire. The macOS and Linux release rules map each of
+    /// their own outputs onto itself, so those checks rerun the rule instead of restating it.
+    static boolean isNormalized(OsFamily family, String osRelease, @Nullable String linuxDistribution) {
+        if (family == OsFamily.LINUX) {
+            if (!isLinuxDistribution(linuxDistribution)) {
+                return false;
+            }
+        } else if (linuxDistribution != null) {
+            return false;
+        }
+        if (Platform.UNKNOWN.equals(osRelease)) {
+            return true;
+        }
+        return switch (family) {
+            case WINDOWS ->
+                windowsRelease(osRelease).equals(osRelease)
+                        || NORMALIZED_WINDOWS_SERVER.matcher(osRelease).matches();
+            case MACOS -> macosRelease(osRelease).equals(osRelease);
+            case LINUX ->
+                linuxDistribution != null
+                        && linuxRelease(linuxDistribution, Map.of(VERSION_ID, osRelease))
+                                .equals(osRelease);
+            case OTHER, UNKNOWN -> false;
+        };
+    }
+
+    private static boolean isLinuxDistribution(@Nullable String distribution) {
+        return distribution != null
+                && (ALLOWLISTED_DISTRIBUTIONS.contains(distribution)
+                        || Platform.OTHER.equals(distribution)
+                        || Platform.UNKNOWN.equals(distribution));
     }
 
     private static @Nullable Matcher releaseNumber(@Nullable String value) {

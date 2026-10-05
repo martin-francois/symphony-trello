@@ -8,7 +8,6 @@ import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.Optional;
 import java.util.Set;
-import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 
 /// The allowlisted `properties` object of one heartbeat. Only these fields exist; nothing else is
@@ -46,9 +45,7 @@ public record HeartbeatProperties(
         @JsonProperty(Names.BOARD_CREATIONS_TOTAL) long boardCreationsTotal) {
 
     public static final int SCHEMA_VERSION = 1;
-    private static final Set<String> OS_FAMILIES = WireVocabulary.wireNames(OsFamily.class);
     private static final Set<String> RUNTIME_ARCHITECTURES = WireVocabulary.wireNames(RuntimeArch.class);
-    private static final Pattern RELEASE_TOKEN = Pattern.compile("^[a-z0-9_.-]{1,32}$");
 
     /// Always true so PostHog adds no location data derived from the connection.
     @JsonProperty(Names.GEOIP_DISABLE)
@@ -68,17 +65,12 @@ public record HeartbeatProperties(
         if (telemetrySchemaVersion != SCHEMA_VERSION) {
             return Optional.of("pending report has schema version " + telemetrySchemaVersion);
         }
-        if (osFamily == null
-                || !OS_FAMILIES.contains(osFamily)
-                || runtimeArch == null
-                || !RUNTIME_ARCHITECTURES.contains(runtimeArch)) {
+        Optional<OsFamily> family = OsFamily.fromWireName(osFamily);
+        if (family.isEmpty() || runtimeArch == null || !RUNTIME_ARCHITECTURES.contains(runtimeArch)) {
             return Optional.of("pending report has an unknown platform value");
         }
-        if (osRelease == null
-                || !RELEASE_TOKEN.matcher(osRelease).matches()
-                || linuxDistribution != null
-                        && !RELEASE_TOKEN.matcher(linuxDistribution).matches()) {
-            return Optional.of("pending report has a free-text platform release");
+        if (osRelease == null || !PlatformNormalizer.isNormalized(family.get(), osRelease, linuxDistribution)) {
+            return Optional.of("pending report has a platform release the normalizer never produces");
         }
         if (appVersion != null && InstalledVersion.normalize(appVersion).isEmpty()) {
             return Optional.of("pending report has an unusable app version");
