@@ -4,7 +4,7 @@ import java.util.Locale;
 import org.jspecify.annotations.Nullable;
 
 /// The coarse operating-system buckets a heartbeat may name.
-enum OsFamily {
+enum OsFamily implements WireVocabulary {
     WINDOWS("windows"),
     MACOS("macos"),
     LINUX("linux"),
@@ -17,7 +17,8 @@ enum OsFamily {
         this.wireName = wireName;
     }
 
-    String wireName() {
+    @Override
+    public String wireName() {
         return wireName;
     }
 

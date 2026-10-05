@@ -42,10 +42,10 @@ public final class HeartbeatSnapshots {
                 HeartbeatProperties.SCHEMA_VERSION,
                 state.registration().map(Object::toString).orElse(null),
                 observation.installedVersion(),
-                detected.osFamily(),
+                detected.osFamily().wireName(),
                 detected.osRelease(),
                 detected.linuxDistribution(),
-                detected.runtimeArch(),
+                detected.runtimeArch().wireName(),
                 observation.connectedBoardCount(),
                 state.boardImportsTotal(),
                 state.boardCreationsTotal());

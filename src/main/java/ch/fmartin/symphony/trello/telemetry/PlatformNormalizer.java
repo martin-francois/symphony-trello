@@ -49,28 +49,15 @@ final class PlatformNormalizer {
 
     static Platform normalize(PlatformFacts facts) {
         OsFamily family = OsFamily.fromOsName(facts.osName());
-        String arch = runtimeArch(facts.osArch());
+        RuntimeArch arch = RuntimeArch.fromOsArch(facts.osArch());
         return switch (family) {
-            case WINDOWS -> new Platform(family.wireName(), windowsRelease(facts.detectedVersion()), null, arch);
-            case MACOS -> new Platform(family.wireName(), macosRelease(facts.detectedVersion()), null, arch);
+            case WINDOWS -> new Platform(family, windowsRelease(facts.detectedVersion()), null, arch);
+            case MACOS -> new Platform(family, macosRelease(facts.detectedVersion()), null, arch);
             case LINUX -> {
                 String distribution = linuxDistribution(facts.osRelease());
-                yield new Platform(
-                        family.wireName(), linuxRelease(distribution, facts.osRelease()), distribution, arch);
+                yield new Platform(family, linuxRelease(distribution, facts.osRelease()), distribution, arch);
             }
-            case OTHER, UNKNOWN -> new Platform(family.wireName(), Platform.UNKNOWN, null, arch);
-        };
-    }
-
-    static String runtimeArch(@Nullable String osArch) {
-        if (osArch == null || osArch.isBlank()) {
-            return Platform.UNKNOWN;
-        }
-        return switch (osArch.toLowerCase(Locale.ROOT)) {
-            case "amd64", "x86_64", "x64" -> "x64";
-            case "aarch64", "arm64" -> "arm64";
-            case "x86", "i386", "i486", "i586", "i686" -> "x86";
-            default -> Platform.OTHER;
+            case OTHER, UNKNOWN -> new Platform(family, Platform.UNKNOWN, null, arch);
         };
     }
 

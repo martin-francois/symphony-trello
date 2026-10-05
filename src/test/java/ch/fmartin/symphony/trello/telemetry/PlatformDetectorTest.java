@@ -67,7 +67,7 @@ final class PlatformDetectorTest {
         List<Platform> platforms = List.of(detector.platform(), detector.platform(), detector.platform());
 
         // then
-        assertThat(platforms).containsOnly(new Platform("linux", "13", "debian", "arm64"));
+        assertThat(platforms).containsOnly(new Platform(OsFamily.LINUX, "13", "debian", RuntimeArch.ARM64));
         assertThat(calls).hasValue(1);
     }
 
@@ -94,8 +94,12 @@ final class PlatformDetectorTest {
         Platform platform = detector.platform();
 
         // then
-        assertThat(platform.osFamily()).isIn("windows", "macos", "linux", "other", "unknown");
-        assertThat(platform.runtimeArch()).isIn("x64", "arm64", "x86", "other", "unknown");
+        assertThat(platform.osFamily())
+                .as("the JVM always names its operating system")
+                .isNotEqualTo(OsFamily.UNKNOWN);
+        assertThat(platform.runtimeArch())
+                .as("the JVM always names its architecture")
+                .isNotEqualTo(RuntimeArch.UNKNOWN);
         assertThat(platform.osRelease()).matches("[a-z0-9_.]{1,16}");
     }
 }

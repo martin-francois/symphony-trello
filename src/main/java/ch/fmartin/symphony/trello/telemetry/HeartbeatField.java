@@ -28,7 +28,7 @@ public enum HeartbeatField {
             Names.APP_VERSION,
             Envelope.PROPERTY,
             "The installed Symphony for Trello release from the installer's metadata, or null when unknown."),
-    OS_FAMILY(Names.OS_FAMILY, Envelope.PROPERTY, "One of `windows`, `macos`, `linux`, `other`, or `unknown`."),
+    OS_FAMILY(Names.OS_FAMILY, Envelope.PROPERTY, "One of " + WireVocabulary.describe(OsFamily.class) + "."),
     OS_RELEASE(
             Names.OS_RELEASE,
             Envelope.PROPERTY,
@@ -42,7 +42,7 @@ public enum HeartbeatField {
     RUNTIME_ARCH(
             Names.RUNTIME_ARCH,
             Envelope.PROPERTY,
-            "The Java runtime architecture: `x64`, `arm64`, `x86`, `other`, or `unknown`."),
+            "The Java runtime architecture: " + WireVocabulary.describe(RuntimeArch.class) + "."),
     CONNECTED_BOARD_COUNT(
             Names.CONNECTED_BOARD_COUNT,
             Envelope.PROPERTY,

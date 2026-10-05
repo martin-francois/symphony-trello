@@ -28,7 +28,7 @@ final class PlatformNormalizerTest {
         Platform platform = PlatformNormalizer.normalize(facts);
 
         // then
-        assertThat(platform.osFamily()).isEqualTo(expected);
+        assertThat(platform.osFamily().wireName()).isEqualTo(expected);
     }
 
     @CsvSource({
@@ -50,7 +50,7 @@ final class PlatformNormalizerTest {
         Platform platform = PlatformNormalizer.normalize(facts);
 
         // then
-        assertThat(platform.runtimeArch()).isEqualTo(expected);
+        assertThat(platform.runtimeArch().wireName()).isEqualTo(expected);
     }
 
     @NullAndEmptySource
@@ -86,7 +86,7 @@ final class PlatformNormalizerTest {
         Platform platform = PlatformNormalizer.normalize(facts);
 
         // then
-        assertThat(platform).isEqualTo(new Platform("windows", expected, null, "x64"));
+        assertThat(platform).isEqualTo(new Platform(OsFamily.WINDOWS, expected, null, RuntimeArch.X64));
     }
 
     @Test
@@ -121,7 +121,7 @@ final class PlatformNormalizerTest {
         Platform platform = PlatformNormalizer.normalize(facts);
 
         // then
-        assertThat(platform).isEqualTo(new Platform("macos", expected, null, "arm64"));
+        assertThat(platform).isEqualTo(new Platform(OsFamily.MACOS, expected, null, RuntimeArch.ARM64));
     }
 
     @CsvSource({
@@ -163,7 +163,8 @@ final class PlatformNormalizerTest {
         Platform platform = PlatformNormalizer.normalize(facts);
 
         // then
-        assertThat(platform).isEqualTo(new Platform("linux", expectedRelease, expectedDistribution, "x64"));
+        assertThat(platform)
+                .isEqualTo(new Platform(OsFamily.LINUX, expectedRelease, expectedDistribution, RuntimeArch.X64));
     }
 
     @Test
@@ -175,7 +176,8 @@ final class PlatformNormalizerTest {
         Platform platform = PlatformNormalizer.normalize(facts);
 
         // then
-        assertThat(platform).isEqualTo(new Platform("linux", Platform.UNKNOWN, Platform.UNKNOWN, "x64"));
+        assertThat(platform)
+                .isEqualTo(new Platform(OsFamily.LINUX, Platform.UNKNOWN, Platform.UNKNOWN, RuntimeArch.X64));
     }
 
     @Test
@@ -192,7 +194,8 @@ final class PlatformNormalizerTest {
         Platform platform = PlatformNormalizer.normalize(facts);
 
         // then
-        assertThat(platform).isEqualTo(new Platform("linux", Platform.UNKNOWN, Platform.OTHER, Platform.OTHER));
+        assertThat(platform)
+                .isEqualTo(new Platform(OsFamily.LINUX, Platform.UNKNOWN, Platform.OTHER, RuntimeArch.OTHER));
     }
 
     @Test
@@ -204,6 +207,6 @@ final class PlatformNormalizerTest {
         Platform platform = PlatformNormalizer.normalize(facts);
 
         // then
-        assertThat(platform).isEqualTo(new Platform(Platform.OTHER, Platform.UNKNOWN, null, "x64"));
+        assertThat(platform).isEqualTo(new Platform(OsFamily.OTHER, Platform.UNKNOWN, null, RuntimeArch.X64));
     }
 }

@@ -40,10 +40,8 @@ public record HeartbeatProperties(
         @JsonProperty(Names.BOARD_CREATIONS_TOTAL) long boardCreationsTotal) {
 
     public static final int SCHEMA_VERSION = 1;
-    private static final Set<String> OS_FAMILIES =
-            Set.of("windows", "macos", "linux", Platform.OTHER, Platform.UNKNOWN);
-    private static final Set<String> RUNTIME_ARCHITECTURES =
-            Set.of("x64", "arm64", "x86", Platform.OTHER, Platform.UNKNOWN);
+    private static final Set<String> OS_FAMILIES = WireVocabulary.wireNames(OsFamily.class);
+    private static final Set<String> RUNTIME_ARCHITECTURES = WireVocabulary.wireNames(RuntimeArch.class);
     private static final Pattern RELEASE_TOKEN = Pattern.compile("^[a-z0-9_.-]{1,32}$");
 
     /// The stored form of a pending report, which still carries both protocol flags. A file whose
