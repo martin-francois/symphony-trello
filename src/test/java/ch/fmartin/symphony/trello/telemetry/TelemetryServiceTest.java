@@ -2,10 +2,10 @@ package ch.fmartin.symphony.trello.telemetry;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import ch.fmartin.symphony.trello.telemetry.TelemetryFixture.MutableClock;
 import ch.fmartin.symphony.trello.telemetry.TelemetryService.DisableRequest;
 import ch.fmartin.symphony.trello.telemetry.TelemetryStateStore.StateRead;
 import ch.fmartin.symphony.trello.telemetry.TelemetryStateStore.Update;
+import ch.fmartin.symphony.trello.testsupport.MutableClock;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;

@@ -9,8 +9,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import ch.fmartin.symphony.trello.telemetry.HeartbeatReporter.CheckResult;
-import ch.fmartin.symphony.trello.telemetry.TelemetryFixture.MutableClock;
 import ch.fmartin.symphony.trello.telemetry.TelemetryStateStore.Update;
+import ch.fmartin.symphony.trello.testsupport.MutableClock;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;

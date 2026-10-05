@@ -8,6 +8,7 @@ import ch.fmartin.symphony.trello.telemetry.HeartbeatReporter.CheckResult;
 import ch.fmartin.symphony.trello.telemetry.PostHogManagementClient.Response;
 import ch.fmartin.symphony.trello.telemetry.TelemetryService.DisableRequest;
 import ch.fmartin.symphony.trello.telemetry.TelemetryStateStore.Update;
+import ch.fmartin.symphony.trello.testsupport.MutableClock;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
@@ -271,11 +272,11 @@ final class ErasureExperiment {
             require(after.pending().isEmpty(), name + " kept a pending report");
             // Ordinary worker restarts and checks past the grace period while disabled: no send.
             List<String> output = new ArrayList<>();
-            HeartbeatReporter restarted = installation.reporter(
-                    new TelemetryFixture.MutableClock(clock.instant().plus(PAST_GRACE)), output);
+            HeartbeatReporter restarted =
+                    installation.reporter(new MutableClock(clock.instant().plus(PAST_GRACE)), output);
             CheckResult first = restarted.check();
             CheckResult second = installation
-                    .reporter(new TelemetryFixture.MutableClock(clock.instant().plus(PAST_GRACE.plus(ONE_DAY))), output)
+                    .reporter(new MutableClock(clock.instant().plus(PAST_GRACE.plus(ONE_DAY))), output)
                     .check();
             require(
                     first == CheckResult.DISABLED && second == CheckResult.DISABLED,
@@ -722,7 +723,7 @@ final class ErasureExperiment {
 
     private String sendHeartbeat(Subject subject, String version, Instant at) {
         Installation installation = installation(subject, version, at);
-        TelemetryFixture.MutableClock subjectClock = new TelemetryFixture.MutableClock(at);
+        MutableClock subjectClock = new MutableClock(at);
         List<String> output = new ArrayList<>();
         HeartbeatReporter reporter = installation.reporter(subjectClock, output);
         CheckResult result = reporter.check();

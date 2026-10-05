@@ -19,6 +19,7 @@ import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.BlockerRef;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
+import ch.fmartin.symphony.trello.testsupport.MutableClock;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.TrackerClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
@@ -33,7 +34,6 @@ import java.nio.file.attribute.FileTime;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -940,39 +940,6 @@ final class SymphonyOrchestratorTestSupport {
         @Override
         public Map<String, CardLookupResult> fetchCardStatesByIds(EffectiveConfig config, List<String> cardIds) {
             return Map.of();
-        }
-    }
-
-    static final class MutableClock extends Clock {
-        final AtomicReference<Instant> now;
-        final ZoneId zone;
-
-        MutableClock(Instant now) {
-            this(now, ZoneOffset.UTC);
-        }
-
-        MutableClock(Instant now, ZoneId zone) {
-            this.now = new AtomicReference<>(now);
-            this.zone = zone;
-        }
-
-        void advance(Duration duration) {
-            now.updateAndGet(instant -> instant.plus(duration));
-        }
-
-        @Override
-        public ZoneId getZone() {
-            return zone;
-        }
-
-        @Override
-        public Clock withZone(ZoneId zone) {
-            return new MutableClock(now.get(), zone);
-        }
-
-        @Override
-        public Instant instant() {
-            return now.get();
         }
     }
 

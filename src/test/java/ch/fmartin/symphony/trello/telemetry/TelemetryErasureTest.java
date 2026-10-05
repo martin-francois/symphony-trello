@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import ch.fmartin.symphony.trello.telemetry.TelemetryOwnership.Phase;
 import ch.fmartin.symphony.trello.telemetry.TelemetryStateStore.Update;
+import ch.fmartin.symphony.trello.testsupport.MutableClock;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -48,7 +49,7 @@ final class TelemetryErasureTest {
     private TelemetryStateStore store;
     private TelemetryInstallation installation;
     private TelemetryErasure erasure;
-    private final TelemetryFixture.MutableClock clock = new TelemetryFixture.MutableClock(TelemetryFixture.NOON);
+    private final MutableClock clock = new MutableClock(TelemetryFixture.NOON);
     private final AtomicReference<String> status = new AtomicReference<>("pending");
     private final AtomicReference<Runnable> onIssue = new AtomicReference<>(() -> {});
     private final AtomicReference<Runnable> onStatus = new AtomicReference<>(() -> {});

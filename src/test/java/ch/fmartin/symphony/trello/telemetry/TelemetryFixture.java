@@ -4,15 +4,10 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
-import java.util.concurrent.atomic.AtomicReference;
 
 /// Shared telemetry test scaffolding: an installed state directory, a mutable UTC clock, a fixed
 /// platform, and a loopback distribution that can never reach production.
@@ -65,37 +60,5 @@ final class TelemetryFixture {
 
     static HeartbeatSnapshots snapshots(TelemetryInstallation installation) {
         return new HeartbeatSnapshots(installation, fixedPlatform());
-    }
-
-    /// A clock tests move forward explicitly; no test waits for real time.
-    static final class MutableClock extends Clock {
-        private final AtomicReference<Instant> now;
-
-        MutableClock(Instant start) {
-            this.now = new AtomicReference<>(start);
-        }
-
-        void advance(Duration duration) {
-            now.updateAndGet(current -> current.plus(duration));
-        }
-
-        void set(Instant instant) {
-            now.set(instant);
-        }
-
-        @Override
-        public ZoneOffset getZone() {
-            return ZoneOffset.UTC;
-        }
-
-        @Override
-        public Clock withZone(ZoneId zone) {
-            return this;
-        }
-
-        @Override
-        public Instant instant() {
-            return now.get();
-        }
     }
 }

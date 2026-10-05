@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 
 import ch.fmartin.symphony.trello.telemetry.ErasureExperiment.Outcome;
 import ch.fmartin.symphony.trello.telemetry.ExperimentCheckpoint.Phase;
+import ch.fmartin.symphony.trello.testsupport.MutableClock;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -38,7 +39,7 @@ final class ErasureExperimentSafetyTest {
 
     private FakePostHog posthog;
     private Path keyFile;
-    private TelemetryFixture.MutableClock clock;
+    private MutableClock clock;
     private ByteArrayOutputStream console;
 
     @BeforeEach
@@ -46,7 +47,7 @@ final class ErasureExperimentSafetyTest {
         posthog = new FakePostHog();
         keyFile = tempDir.resolve("key");
         Files.writeString(keyFile, FakePostHog.KEY + "\n");
-        clock = new TelemetryFixture.MutableClock(START);
+        clock = new MutableClock(START);
         posthog.clock = clock;
         console = new ByteArrayOutputStream();
     }
