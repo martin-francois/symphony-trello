@@ -81,10 +81,13 @@ organization decision, not a Symphony one.
       settings, and the DPA states no third party may use it to train AI models. The control is the
       organization field `is_ai_training_opted_in`, read as false on 2026-09-22 (not opted in);
       `verify` reports it. It is an organization-wide setting; keep it false.
-- [ ] Collection basis review: the design is opt-out with a notice and a five-minute first-worker
+- [x] Collection basis review: the design is opt-out with a notice and a five-minute first-worker
       grace period. That is a product decision, not a legal finding. Whether Swiss, EU, or other
       rules on device access and consent apply to this globally published tool has not been settled.
-      Record the maintainer's decision and any advice obtained. Status: open.
+      Decision on 2026-10-05: the maintainer, a private person, accepts opt-out with a notice. The
+      reasons are that a report carries a random installation ID and counters, PostHog discards the
+      source address, any user can disable reporting and request erasure, and opt-in would leave
+      too few reports to be useful. No legal advice was obtained.
 - [ ] Dashboard access: only the maintainer's account has access to the organization. Keep it that
       way, or restrict the project with PostHog's access control if more members join.
 - [ ] Retention: the API returned no `event_retention_months` or `events_retention_enforced`
