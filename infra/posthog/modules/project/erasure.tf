@@ -12,7 +12,9 @@ variable "erasure_secrets" {
     master_keys = map(string)
     api_key     = string
   })
-  default = { active_key = "k1", master_keys = {}, api_key = "" }
+  # The root passes null for a role without secrets; nullable = false turns that into this default.
+  default  = { active_key = "k1", master_keys = {}, api_key = "" }
+  nullable = false
 }
 
 locals {

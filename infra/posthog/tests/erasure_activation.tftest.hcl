@@ -43,3 +43,11 @@ run "the_test_role_needs_no_pass" {
     erasure_enabled = { production = false, test = true }
   }
 }
+
+run "a_role_without_secrets_gets_the_module_default" {
+  command = plan
+  variables {
+    erasure_enabled = { production = false, test = false }
+    erasure_secrets = {}
+  }
+}
