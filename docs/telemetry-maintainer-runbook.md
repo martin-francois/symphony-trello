@@ -59,9 +59,11 @@ organization decision, not a Symphony one.
 - [ ] The release that ships the token is the first release that reports. Its release notes must
       state that usage reporting is on by default and how to turn it off; the README and the first
       setup run after the update show the notice.
-- [ ] Data processing agreement: PostHog's DPA is self-serve from the organization's legal page
+- [x] Data processing agreement: PostHog's DPA is self-serve from the organization's legal page
       (`app.posthog.com/legal` in PostHog's documentation; use the `eu.posthog.com` equivalent for
-      this organization). Status: not executed. Generate, sign, and file it before release.
+      this organization). The maintainer signed it on 2026-10-05 as a private person, in the plain
+      format; PostHog countersigns the generated document and PandaDoc delivers the signed copy by
+      email. Keep that copy outside the repository.
 - [ ] Subprocessors and transfers: read `https://posthog.com/subprocessors` for the EU data center
       and note the date read. Read on 2026-10-05 (page dated June 12, 2026): the core list names
       Amazon Web Services (storage, Germany for EU Cloud), Wiz (vulnerability detection, Germany and
@@ -70,7 +72,10 @@ organization decision, not a Symphony one.
       for data in transit). A second list applies only with AI features enabled, which this
       organization keeps off. The DPA references the EU-US, UK, and Swiss-US Data Privacy Framework
       and Standard Contractual Clauses for transfers; confirm that covers the maintainer's Swiss
-      obligations. Status: unknown, needs the maintainer's review or advice.
+      obligations. Reading on 2026-10-05, without legal advice: the EU Cloud stores the data in
+      Germany, which Switzerland lists as a state with adequate data protection, and the signed DPA
+      supplies the framework and clauses for any access from the United States. Status: the
+      maintainer has not confirmed this reading.
 - [x] Product and model development opt-out: PostHog's privacy policy states customer content may be
       used for product and model development unless the customer opts out through the service
       settings, and the DPA states no third party may use it to train AI models. The control is the
