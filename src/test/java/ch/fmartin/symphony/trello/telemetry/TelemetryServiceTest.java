@@ -417,7 +417,25 @@ final class TelemetryServiceTest {
 
         // then
         assertThat(exit).isEqualTo(TelemetryService.EXIT_FAILURE);
-        assertThat(errors()).contains("Erasure could not be confirmed").contains("not valid JSON");
+        assertThat(errors())
+                .contains("Erasure could not be confirmed")
+                .contains("not valid JSON")
+                .contains("The previous preference is unchanged. Set " + TelemetryEnvironment.DISABLED_VARIABLE);
+    }
+
+    @Test
+    void eraseWithoutAutomaticErasureBeforeAnyIdentityDisablesAndSucceeds() {
+        // given
+        TelemetryService service = service(TelemetryEnvironment.none());
+
+        // when
+        int exit = service.erase(out, err);
+
+        // then
+        assertThat(exit).isEqualTo(TelemetryService.EXIT_OK);
+        assertThat(output()).contains("nothing to erase");
+        assertThat(errors()).isEmpty();
+        assertThat(store.read().stateOrInitial().mode()).isEqualTo(TelemetryMode.DISABLED);
     }
 
     @Test

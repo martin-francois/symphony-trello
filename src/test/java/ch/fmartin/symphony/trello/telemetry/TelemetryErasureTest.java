@@ -16,6 +16,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -211,6 +212,7 @@ final class TelemetryErasureTest {
     @ValueSource(booleans = {true, false})
     void unavailableErasureDisablesOnlyOnAnEraseRequest(boolean request) {
         // given
+        store.update(state -> Update.write(state.withIdentity(UUID.randomUUID(), LocalDate.of(2026, 9, 20)), null));
         TelemetryDistribution distribution = new TelemetryDistribution(
                 installation.distribution().endpoint(), Optional.of(TelemetryFixture.TEST_TOKEN));
         TelemetryInstallation unavailable =
@@ -456,6 +458,25 @@ final class TelemetryErasureTest {
         assertThat(result).isEqualTo(TelemetryService.EXIT_OK);
         assertThat(output.toString(StandardCharsets.UTF_8)).contains("nothing to erase");
         assertThat(store.read().stateOrInitial().mode()).isEqualTo(TelemetryMode.DISABLED);
+        assertThat(requests).isEmpty();
+    }
+
+    @Test
+    void eraseThatCannotStoreTheDisabledPreferenceSaysTheOldPreferenceStillApplies() throws IOException {
+        // given
+        Files.writeString(store.stateFile(), "{corrupt");
+        TelemetryService service = new TelemetryService(installation, TelemetryFixture.snapshots(installation), clock);
+        var output = new ByteArrayOutputStream();
+        var out = new PrintStream(output, true, StandardCharsets.UTF_8);
+
+        // when
+        int result = service.erase(out, out);
+
+        // then
+        assertThat(result).isEqualTo(TelemetryService.EXIT_FAILURE);
+        assertThat(output.toString(StandardCharsets.UTF_8))
+                .contains("Erasure could not be confirmed")
+                .contains("The previous preference is unchanged. Set " + TelemetryEnvironment.DISABLED_VARIABLE);
         assertThat(requests).isEmpty();
     }
 

@@ -21,8 +21,8 @@ import org.jspecify.annotations.Nullable;
 public final class TelemetryService {
     public static final int EXIT_OK = 0;
     public static final int EXIT_FAILURE = 1;
-    private static final String NOT_INSTALLED_LINE =
-            "This run is not inside an installed Symphony for Trello context, so reports are never sent.";
+    private static final String NOT_INSTALLED_LINE = "This run is not inside an installed "
+            + TelemetryNotice.PRODUCT_NAME + " context, so reports are never sent.";
     private static final String NOT_CONFIGURED_LINE =
             "No project token is configured in this build, so reports are never sent.";
     private static final String PREVIEW_NOT_SENT_LINE = "This preview is not sent.";
@@ -239,22 +239,46 @@ public final class TelemetryService {
         try {
             if (erasureUnavailable()) {
                 // The user asked to stop reporting even though this build cannot erase automatically.
-                installation
-                        .installedStore()
-                        .ifPresent(store -> store.update(state -> state.mode() == TelemetryMode.DISABLED
-                                ? Update.unchanged(null)
-                                : Update.write(state.withMode(TelemetryMode.DISABLED), null)));
+                if (!disableBeforeManualErasure()) {
+                    return printNothingToErase(out);
+                }
                 return printErasureUnavailable(err);
             }
             TelemetryStateStore store = installation.installedStore().orElseThrow();
             if (new TelemetryErasure(installation, clock).request(store) == TelemetryErasure.Request.NOTHING_SENT) {
-                out.println("Reporting is off. This installation never sent a report, so there is nothing to erase.");
-                return EXIT_OK;
+                return printNothingToErase(out);
             }
             return printErasure(store, out);
+        } catch (TelemetryErasure.NotDisabledException exception) {
+            printErasureFailure(err, exception.getMessage());
+            printPreferenceUnchanged(err);
+            return EXIT_FAILURE;
         } catch (TelemetryStateException exception) {
-            return printErasureFailure(err, exception);
+            return printErasureFailure(err, exception.getMessage());
         }
+    }
+
+    /// Stores the disabled preference and tells whether this installation has an identity, so
+    /// reports may have left it. Without an installed state nothing was ever sent.
+    private boolean disableBeforeManualErasure() {
+        Optional<TelemetryStateStore> installed = installation.installedStore();
+        if (installed.isEmpty()) {
+            return false;
+        }
+        try {
+            return installed
+                    .get()
+                    .update(state -> state.mode() == TelemetryMode.DISABLED
+                            ? Update.unchanged(state.hasIdentity())
+                            : Update.write(state.withMode(TelemetryMode.DISABLED), state.hasIdentity()));
+        } catch (TelemetryStateException exception) {
+            throw new TelemetryErasure.NotDisabledException(exception);
+        }
+    }
+
+    private static int printNothingToErase(PrintStream out) {
+        out.println("Reporting is off. This installation never sent a report, so there is nothing to erase.");
+        return EXIT_OK;
     }
 
     public int erasureStatus(PrintStream out, PrintStream err) {
@@ -266,7 +290,7 @@ public final class TelemetryService {
             new TelemetryErasure(installation, clock).refresh(store);
             return printErasure(store, out);
         } catch (TelemetryStateException exception) {
-            return printErasureFailure(err, exception);
+            return printErasureFailure(err, exception.getMessage());
         }
     }
 
@@ -280,8 +304,8 @@ public final class TelemetryService {
         return EXIT_FAILURE;
     }
 
-    private static int printErasureFailure(PrintStream err, TelemetryStateException exception) {
-        err.println("Erasure could not be confirmed: " + exception.getMessage());
+    private static int printErasureFailure(PrintStream err, String problem) {
+        err.println("Erasure could not be confirmed: " + problem);
         return EXIT_FAILURE;
     }
 
@@ -483,10 +507,14 @@ public final class TelemetryService {
             return EXIT_OK;
         } catch (TelemetryStateException exception) {
             err.println("Telemetry could not be disabled: " + exception.getMessage());
-            err.println("The previous preference is unchanged. Set " + TelemetryEnvironment.DISABLED_VARIABLE
-                    + "=1 for workers you start until the state directory is writable again.");
+            printPreferenceUnchanged(err);
             return EXIT_FAILURE;
         }
+    }
+
+    private static void printPreferenceUnchanged(PrintStream err) {
+        err.println("The previous preference is unchanged. Set " + TelemetryEnvironment.DISABLED_VARIABLE
+                + "=1 for workers you start until the state directory is writable again.");
     }
 
     private void printPreview(PrintStream out, TelemetryState state, StateRead read) {

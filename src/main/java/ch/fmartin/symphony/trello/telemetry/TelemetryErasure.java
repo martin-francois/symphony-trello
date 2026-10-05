@@ -111,23 +111,30 @@ final class TelemetryErasure {
         }
     }
 
+    /// @throws NotDisabledException when the disabled preference could not be written
     Request request(TelemetryStateStore store) {
-        OwnershipCase ownershipCase = store.update(state -> {
-            TelemetryOwnership owner = state.ownership();
-            TelemetryState disabled = state.withMode(TelemetryMode.DISABLED);
-            if (owner == null) {
-                return Update.write(disabled, state.hasIdentity() ? OwnershipCase.LEGACY : OwnershipCase.NOTHING_SENT);
-            }
-            if (owner.erasure() != null) {
-                return Update.write(disabled, OwnershipCase.OWNED);
-            }
-            Instant now = clock.instant();
-            // Let a dispatched heartbeat finish its transport and ingestion before looking up its profile.
-            Instant notBefore = owner.settledAt(now);
-            Phase phase = owner.used() ? Phase.REQUESTED : Phase.COMPLETE;
-            Erasure job = new Erasure(UUID.randomUUID(), now, notBefore, phase);
-            return Update.write(disabled.withOwnership(owner.withErasure(job)), OwnershipCase.OWNED);
-        });
+        OwnershipCase ownershipCase;
+        try {
+            ownershipCase = store.update(state -> {
+                TelemetryOwnership owner = state.ownership();
+                TelemetryState disabled = state.withMode(TelemetryMode.DISABLED);
+                if (owner == null) {
+                    return Update.write(
+                            disabled, state.hasIdentity() ? OwnershipCase.LEGACY : OwnershipCase.NOTHING_SENT);
+                }
+                if (owner.erasure() != null) {
+                    return Update.write(disabled, OwnershipCase.OWNED);
+                }
+                Instant now = clock.instant();
+                // Let a dispatched heartbeat finish its transport and ingestion before looking up its profile.
+                Instant notBefore = owner.settledAt(now);
+                Phase phase = owner.used() ? Phase.REQUESTED : Phase.COMPLETE;
+                Erasure job = new Erasure(UUID.randomUUID(), now, notBefore, phase);
+                return Update.write(disabled.withOwnership(owner.withErasure(job)), OwnershipCase.OWNED);
+            });
+        } catch (TelemetryStateException exception) {
+            throw new NotDisabledException(exception);
+        }
         return switch (ownershipCase) {
             case LEGACY ->
                 throw new TelemetryStateException(
@@ -138,6 +145,16 @@ final class TelemetryErasure {
                 yield Request.SUBMITTED;
             }
         };
+    }
+
+    /// The erase request could not store the disabled preference, so the previous preference,
+    /// possibly enabled, still applies. The cause carries the state-store problem.
+    static final class NotDisabledException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
+        NotDisabledException(TelemetryStateException cause) {
+            super(cause.getMessage(), cause);
+        }
     }
 
     /// What the installation can prove about its reports when erasure is requested.
