@@ -817,15 +817,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         Optional<Path> appHome = Optional.empty();
 
         private void validateCliPaths() {
-            CliInputValidation.rejectBlankPath("--config-dir", configDir, "--config-dir must not be empty.");
-            CliInputValidation.rejectBlankPath("--state-home", stateHome, "--state-home must not be empty.");
-            CliInputValidation.rejectBlankPath(
-                    "--workspace-root", workspaceRoot, "--workspace-root must not be empty.");
-            CliInputValidation.rejectBlankPath("--app-home", appHome, "--app-home must not be empty.");
-            CliInputValidation.rejectControlCharacters("--config-dir", configDir);
-            CliInputValidation.rejectControlCharacters("--state-home", stateHome);
-            CliInputValidation.rejectControlCharacters("--workspace-root", workspaceRoot);
-            CliInputValidation.rejectControlCharacters("--app-home", appHome);
+            validateLocationPaths(configDir, workspaceRoot, stateHome, appHome);
         }
     }
 
@@ -853,16 +845,23 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             CliInputValidation.rejectBlankWorkflowSelector(workflow);
             CliInputValidation.rejectControlCharactersInText("--board", board);
             CliInputValidation.rejectControlCharacters("--workflow", workflow);
-            CliInputValidation.rejectBlankPath("--config-dir", configDir, "--config-dir must not be empty.");
-            CliInputValidation.rejectBlankPath(
-                    "--workspace-root", workspaceRoot, "--workspace-root must not be empty.");
-            CliInputValidation.rejectBlankPath("--state-home", stateHome, "--state-home must not be empty.");
-            CliInputValidation.rejectBlankPath("--app-home", appHome, "--app-home must not be empty.");
-            CliInputValidation.rejectControlCharacters("--config-dir", configDir);
-            CliInputValidation.rejectControlCharacters("--workspace-root", workspaceRoot);
-            CliInputValidation.rejectControlCharacters("--state-home", stateHome);
-            CliInputValidation.rejectControlCharacters("--app-home", appHome);
+            validateLocationPaths(configDir, workspaceRoot, stateHome, appHome);
         }
+    }
+
+    /// The installation location options that lifecycle and telemetry commands share. Their option
+    /// declarations stay separate because the help differs: telemetry hides `--workspace-root` and
+    /// describes `--state-home` by the telemetry file it holds.
+    private static void validateLocationPaths(
+            Optional<Path> configDir, Optional<Path> workspaceRoot, Optional<Path> stateHome, Optional<Path> appHome) {
+        CliInputValidation.rejectBlankPath("--config-dir", configDir, "--config-dir must not be empty.");
+        CliInputValidation.rejectBlankPath("--workspace-root", workspaceRoot, "--workspace-root must not be empty.");
+        CliInputValidation.rejectBlankPath("--state-home", stateHome, "--state-home must not be empty.");
+        CliInputValidation.rejectBlankPath("--app-home", appHome, "--app-home must not be empty.");
+        CliInputValidation.rejectControlCharacters("--config-dir", configDir);
+        CliInputValidation.rejectControlCharacters("--workspace-root", workspaceRoot);
+        CliInputValidation.rejectControlCharacters("--state-home", stateHome);
+        CliInputValidation.rejectControlCharacters("--app-home", appHome);
     }
 
     static final class DiagnosticsOptions {
