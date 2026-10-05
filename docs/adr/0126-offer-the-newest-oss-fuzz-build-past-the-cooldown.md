@@ -117,7 +117,7 @@ The built-in dockerfile manager also extracts these `FROM` lines. A package rule
 the two images, because its docker datasource lookup would add a second digest update that stays
 pending forever.
 
-A Renovate 44.116.1 lookup dry run on 2026-10-05 at about 21:00 UTC read the live feeds:
+A Renovate 44.116.1 lookup dry run on 2026-10-05 at 19:02 UTC read the live feeds:
 
 | Image                         | Pinned build | Proposed build                       | Held, younger than seven days                         |
 | ----------------------------- | ------------ | ------------------------------------ | ----------------------------------------------------- |
