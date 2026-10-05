@@ -1,0 +1,21 @@
+exitCode: 0
+--- stdout ---
+
+Saving Trello credentials...
+  OK  Credentials saved: <TEMP>/new-board/.env
+  OK  Trello API key: sent***************************************
+  OK  Trello token: sent*****************************************
+Created Trello board: "Snapshot Queue"
+Board URL: https://trello.com/b/abc123/board
+Board identifier for WORKFLOW.md: abc123
+Created lists: "Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Merging", "Done"
+Wrote workflow: <TEMP>/new-board/WORKFLOW.snapshot-queue.md
+Repository clone URL saved in repository.default_url
+To add or change it later, edit repository.default_url in:
+  <TEMP>/new-board/WORKFLOW.snapshot-queue.md
+HTTP status port: 18080
+
+Next:
+  symphony-trello start --env '<TEMP>/new-board/.env' --workflow '<TEMP>/new-board/WORKFLOW.snapshot-queue.md'
+  symphony-trello logs --workflow '<TEMP>/new-board/WORKFLOW.snapshot-queue.md'
+--- stderr ---

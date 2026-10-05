@@ -14,6 +14,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <argLine/>
+    <approvaltests.version>31.0.0</approvaltests.version>
     <archunit.version>1.5.1</archunit.version>
     <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
     <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
@@ -51,6 +52,7 @@
     <spotbugs-maven-plugin.version>4.10.4.1</spotbugs-maven-plugin.version>
     <spotless.version>3.10.3</spotless.version>
     <surefire.version>3.6.0</surefire.version>
+    <symphony.snapshots.update>false</symphony.snapshots.update>
     <test.jvm.instrumentation.args>-XX:+EnableDynamicAgentLoading --enable-native-access=ALL-UNNAMED</test.jvm.instrumentation.args>
   </properties>
 
@@ -157,6 +159,12 @@
       <version>${jazzer.version}</version>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>com.approvaltests</groupId>
+      <artifactId>approvaltests</artifactId>
+      <version>${approvaltests.version}</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
@@ -261,8 +269,15 @@
         <version>${surefire.version}</version>
         <configuration>
           <argLine>@{argLine} ${test.jvm.instrumentation.args} -Xshare:off -javaagent:${org.mockito:mockito-core:jar}</argLine>
+          <environmentVariables>
+            <!-- ApprovalTests otherwise downloads helper scripts from GitHub during tests (ADR 0092). -->
+            <APPROVALTESTS_DISABLE_SCRIPT_DOWNLOADS>1</APPROVALTESTS_DISABLE_SCRIPT_DOWNLOADS>
+          </environmentVariables>
           <systemPropertyVariables>
             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+            <symphony.snapshots.update>${symphony.snapshots.update}</symphony.snapshots.update>
+            <!-- In-process CLI snapshots must not follow a developer's CLICOLOR_FORCE (ADR 0092). -->
+            <picocli.ansi>false</picocli.ansi>
             <junit.jupiter.execution.parallel.config.fixed.parallelism>${junit.parallel.config.fixed.parallelism}</junit.jupiter.execution.parallel.config.fixed.parallelism>
             <junit.jupiter.execution.parallel.config.fixed.max-pool-size>${junit.parallel.config.fixed.parallelism}</junit.jupiter.execution.parallel.config.fixed.max-pool-size>
             <junit.jupiter.execution.parallel.config.strategy>fixed</junit.jupiter.execution.parallel.config.strategy>
@@ -279,8 +294,15 @@
         <version>${maven-failsafe-plugin.version}</version>
         <configuration>
           <argLine>@{argLine} ${test.jvm.instrumentation.args} -Xshare:off -javaagent:${org.mockito:mockito-core:jar}</argLine>
+          <environmentVariables>
+            <!-- ApprovalTests otherwise downloads helper scripts from GitHub during tests (ADR 0092). -->
+            <APPROVALTESTS_DISABLE_SCRIPT_DOWNLOADS>1</APPROVALTESTS_DISABLE_SCRIPT_DOWNLOADS>
+          </environmentVariables>
           <systemPropertyVariables>
             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+            <symphony.snapshots.update>${symphony.snapshots.update}</symphony.snapshots.update>
+            <!-- In-process CLI snapshots must not follow a developer's CLICOLOR_FORCE (ADR 0092). -->
+            <picocli.ansi>false</picocli.ansi>
             <junit.jupiter.execution.parallel.config.fixed.parallelism>${junit.parallel.config.fixed.parallelism}</junit.jupiter.execution.parallel.config.fixed.parallelism>
             <junit.jupiter.execution.parallel.config.fixed.max-pool-size>${junit.parallel.config.fixed.parallelism}</junit.jupiter.execution.parallel.config.fixed.max-pool-size>
             <junit.jupiter.execution.parallel.config.strategy>fixed</junit.jupiter.execution.parallel.config.strategy>

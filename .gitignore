@@ -4,6 +4,8 @@ node_modules/
 docs/demo/snapshots/
 docs/demo/renders/
 .cifuzz-corpus/
+# ApprovalTests run logs for the terminal snapshot tests.
+.approval_tests_temp/
 .idea/
 .vscode/
 *.iml

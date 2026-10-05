@@ -240,6 +240,44 @@ SYMPHONY_TRELLO_TEST_PWSH=./scripts/pwsh-docker.sh ./mvnw -Dtest=InstallerScript
 
 Prefix these commands with `SYMPHONY_TRELLO_CONTAINER_RUNTIME=podman` on a Podman host.
 
+## Terminal Output Snapshots
+
+Snapshot tests compare the complete output of every `symphony-trello` command, the `install.sh`
+dry run, a guided installation in a pseudo-terminal, and the installed command against reviewed
+baselines in `src/test/snapshots`. Each scenario has its own `.approved.txt` file. A normal command
+record shows the exit code, stdout, and stderr separately; a pseudo-terminal record shows the one
+transcript the terminal produced. Control characters appear as markers such as `<ESC>` and `<CR>`,
+and volatile values such as temporary paths appear as named placeholders such as `<TEMP>`.
+[ADR 0092](docs/adr/0092-approvaltests-terminal-output-snapshots.md) explains the design.
+
+The normal gate verifies the snapshots and never changes them:
+
+```bash
+./mvnw -q spotless:check verify
+```
+
+When a snapshot test fails, it prints a line diff and writes the new transcript under
+`target/snapshot-candidates`. If the change is intended, update the baselines, then review and
+commit the diff in `src/test/snapshots`:
+
+```bash
+./mvnw test -Dtest='*SnapshotTest' -Dsymphony.snapshots.update=true
+git diff src/test/snapshots
+```
+
+CI refuses `-Dsymphony.snapshots.update=true`. The snapshots need Linux, Bash, and a real
+pseudo-terminal. On Windows or macOS, run them in the Linux Java 25 container instead. Extra
+arguments go to Maven, so the same wrapper also updates baselines:
+
+```bash
+./scripts/snapshot-tests-docker.sh
+./scripts/snapshot-tests-docker.sh -Dsymphony.snapshots.update=true
+SYMPHONY_TRELLO_CONTAINER_RUNTIME=podman ./scripts/snapshot-tests-docker.sh
+```
+
+The wrapper uses Docker by default and keeps its Maven cache under
+`${XDG_CACHE_HOME:-$HOME/.cache}/symphony-trello/snapshot-tests`.
+
 ## OpenRewrite Maintenance
 
 The opt-in OpenRewrite profile provides a curated semantic-maintenance pipeline without changing

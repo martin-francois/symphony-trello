@@ -124,6 +124,17 @@
       ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^scripts/snapshot-tests-docker\\.sh$/"
+      ],
+      "matchStrings": [
+        "docker\\.io/library/(?<depName>maven):(?<currentValue>\\d+\\.\\d+\\.\\d+-eclipse-temurin-\\d+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
     }
   ],
   "customDatasources": {

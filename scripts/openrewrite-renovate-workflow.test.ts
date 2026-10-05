@@ -1126,6 +1126,7 @@ test("Renovate owns immutable tool-image declarations", () => {
     "betterleaks-docker.sh",
     "pwsh-docker.sh",
     "semgrep-docker.sh",
+    "snapshot-tests-docker.sh",
   ]) {
     const source = readFileSync(new URL(script, SCRIPTS), "utf8");
     assert.match(source, /:[^\s"'}]+@sha256:[a-f0-9]{64}/u);
