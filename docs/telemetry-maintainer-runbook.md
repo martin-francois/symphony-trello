@@ -110,7 +110,9 @@ organization decision, not a Symphony one.
       Status: open.
 - [x] Wire check in the test project only: `scripts/posthog-infra fixture` sends the documented
       synthetic installations to the test project through the documented event shape and checks
-      every panel; it passed on the rebuilt test project (id 281083) on 2026-09-22. The erasure
+      every panel; it passed on the rebuilt test project (id 281083) on 2026-09-22, and again on
+      2026-10-05 after the panel queries that count an installation once across reporting periods
+      were applied to both projects. The erasure
       harness (see [docs/telemetry-erasure-verification.md](telemetry-erasure-verification.md))
       sends heartbeats through the application's own serializer and client with that project's
       token; a read-only query of one of its stored events on the same day showed exactly the
