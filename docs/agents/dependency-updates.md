@@ -33,7 +33,9 @@ requirements.
   version list. OSS-Fuzz rebuilds these images daily, so the digest a tag points to is never seven
   days old. The registry keeps every build with its push time, and the datasource offers the newest
   build of the pinned tag's lineage pushed at least seven days ago as a release named after that
-  tag. Renovate then replaces only the digest. The script test `Renovate offers each OSS-Fuzz base
+  tag. Renovate then replaces only the digest. A new build passes the cooldown every day, so a
+  package rule scoped to these datasources limits their pull requests to the `lockFileMaintenance`
+  window, Friday `* 0-4 * * 5`. The script test `Renovate offers each OSS-Fuzz base
   image's newest v1 build past the cooldown` asserts this; see
   [ADR 0126](../adr/0126-offer-the-newest-oss-fuzz-build-past-the-cooldown.md).
 - BetterLeaks image updates automerge like other non-major updates, gated by the required check
@@ -70,7 +72,10 @@ requirements.
   required checks, linear history, and thread resolution, and the script test `major update pull
   requests require manual merge` asserts the major-update policy.
 - This public repository groups dependencies by release or compatibility contract. Unrelated
-  non-major updates have separate pull requests and no weekly update schedule.
+  non-major updates have separate pull requests and no weekly update schedule. The one exception
+  is the `gcr.io/oss-fuzz-base` digest updates above, which would otherwise open a pull request
+  every day. No other package rule and no top-level setting may add a schedule
+  (`lockFileMaintenance` keeps its own), and the OSS-Fuzz test fails if one does.
 - Keep majors reviewed and separate from non-major updates. Keep the coordinated OpenRewrite
   group and the Quarkus and vendored-guidance review exceptions intact. A passing check MUST NOT
   enable automatic merging for a dependency whose rule requires manual review.

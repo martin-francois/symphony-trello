@@ -132,6 +132,7 @@ const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
     readonly groupName?: string | null;
     readonly groupSlug?: string;
     readonly internalChecksFilter?: string;
+    readonly matchDatasources?: readonly string[];
     readonly matchDepTypes?: readonly string[];
     readonly matchManagers?: readonly string[];
     readonly matchPackageNames?: readonly string[];
@@ -139,8 +140,10 @@ const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
     readonly minimumReleaseAge?: string;
     readonly minimumReleaseAgeBehaviour?: string;
     readonly platformAutomerge?: boolean;
+    readonly schedule?: readonly string[];
   }[];
   readonly prConcurrentLimit?: number;
+  readonly schedule?: readonly string[];
   readonly statusCheckWhen?: {
     readonly minimumReleaseAge?: string;
   };
@@ -1213,6 +1216,7 @@ test("Renovate offers each OSS-Fuzz base image's newest v1 build past the cooldo
   );
 
   assert.equal(ossFuzzPins.length, 3);
+  const ossFuzzDatasources = new Set<string>();
   for (const {line, path} of ossFuzzPins) {
     const owners = RENOVATE_CONFIG.customManagers.flatMap((manager) =>
       (manager.managerFilePatterns ?? []).some((pattern) =>
@@ -1231,6 +1235,7 @@ test("Renovate offers each OSS-Fuzz base image's newest v1 build past the cooldo
     assert.match(groups.currentDigest ?? "", /^sha256:[a-f0-9]{64}$/u);
 
     const datasourceName = /^custom\.(.+)$/u.exec(manager.datasourceTemplate ?? "")?.[1] ?? "";
+    ossFuzzDatasources.add(`custom.${datasourceName}`);
     const datasource = RENOVATE_CONFIG.customDatasources?.[datasourceName];
     assert.equal(
       datasource?.defaultRegistryUrlTemplate,
@@ -1263,6 +1268,24 @@ test("Renovate offers each OSS-Fuzz base image's newest v1 build past the cooldo
       `the dockerfile manager must leave ${groups.depName} to the custom manager`,
     );
   }
+
+  // A new v1 build passes the cooldown every day, so without a window each image would get an
+  // automerged pull request every day. Apart from the lockfile refresh, these two feeds are the
+  // only updates with a window, and they share the refresh's window.
+  assert.equal(RENOVATE_CONFIG.schedule, undefined, "ordinary updates have no schedule");
+  const scheduledRules = RENOVATE_CONFIG.packageRules.filter(({schedule}) => schedule);
+  assert.equal(
+    scheduledRules.length,
+    1,
+    "exactly one package rule, the OSS-Fuzz one, sets a schedule",
+  );
+  const [ossFuzzSchedule] = scheduledRules;
+  assert.deepEqual(
+    [...(ossFuzzSchedule?.matchDatasources ?? [])].sort(),
+    [...ossFuzzDatasources].sort(),
+  );
+  assert.deepEqual(ossFuzzSchedule?.schedule, RENOVATE_CONFIG.lockFileMaintenance?.schedule);
+  assert.equal(ossFuzzSchedule?.automerge, undefined, "the digest updates keep automerge");
 });
 
 test("BetterLeaks image updates automerge only after a scan with the image they pin", () => {

@@ -283,6 +283,16 @@
         "gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers"
       ],
       "enabled": false
+    },
+    {
+      "description": "A new OSS-Fuzz v1 build turns seven days old every day, so without a window each of these two images would get an automerged digest pull request every day. They use the Friday early-morning window of lockFileMaintenance instead, one pull request per image per week. The seven-day wait and automerge apply as to every digest update. See ADR 0126.",
+      "matchDatasources": [
+        "custom.oss-fuzz-base-builder-jvm",
+        "custom.oss-fuzz-clusterfuzzlite-run-fuzzers"
+      ],
+      "schedule": [
+        "* 0-4 * * 5"
+      ]
     }
   ]
 }

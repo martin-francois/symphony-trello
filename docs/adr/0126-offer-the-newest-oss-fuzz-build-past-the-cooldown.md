@@ -117,6 +117,15 @@ The built-in dockerfile manager also extracts these `FROM` lines. A package rule
 the two images, because its docker datasource lookup would add a second digest update that stays
 pending forever.
 
+A new `v1` build passes the seven days every day, so Renovate would open an automerged digest pull
+request for each image every day. A second package rule, scoped to the two datasources, gives them
+the `lockFileMaintenance` window, `schedule: ["* 0-4 * * 5"]` (Friday between 00:00 and 04:59 in
+the bot's timezone), which the maintainer's other repositories also use for dependency work. This
+is the one exception to this repository's rule that ordinary updates have no weekly schedule
+([ADR 0076](0076-separate-major-updates-from-the-automergeable-bundle.md)). The rule only decides
+when Renovate opens the pull request. The seven-day wait and automerge apply as to any digest
+update, and automerge is not limited to the window.
+
 A Renovate 44.116.1 lookup dry run on 2026-10-05 at 19:02 UTC read the live feeds:
 
 | Image                         | Pinned build | Proposed build                       | Held, younger than seven days                         |
@@ -136,8 +145,11 @@ Renovate marked both updates `pendingChecks`.
 * Good, because the update changes only the digest in the `FROM` line.
 * Good, because a change in OSS-Fuzz's tagging stops the updates and shows a failed lookup on the
   Dependency Dashboard instead of switching lineage.
-* Bad, because a new `v1` build becomes seven days old every day. Renovate will offer a new digest
-  daily, so these images get a pull request about once a day per image.
+* Good, because the Friday window turns a daily automerged pull request per image into a weekly
+  one. The build it proposes is still the newest one at least seven days old on that Friday.
+* Bad, because a build that passed the cooldown on Saturday waits up to six more days. A security
+  rebuild of these images has no vulnerability alert to bypass the window, so it also waits for
+  Friday.
 * Bad, because the lineage rules depend on how OSS-Fuzz tags and pushes the images and on how
   Artifact Registry records tag moves, none of which is a documented contract. The check on the
   newest build catches a change once it reaches the newest build. A one-off push under a new tag
@@ -156,6 +168,8 @@ This decision remains implemented when:
 * the custom managers for the three `FROM` lines use `custom.oss-fuzz-base-builder-jvm` and
   `custom.oss-fuzz-clusterfuzzlite-run-fuzzers` with current value `v1`, and the dockerfile manager
   is disabled for both images;
+* the only package rule with a schedule matches exactly those two datasources and uses the
+  `lockFileMaintenance` window, and the top level sets no schedule;
 * the script test `Renovate offers each OSS-Fuzz base image's newest v1 build past the cooldown`
   passes; and
 * the Dependency Dashboard lists no failed lookup for either datasource and opens digest pull
