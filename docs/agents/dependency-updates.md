@@ -78,7 +78,8 @@ or a regex custom manager in `renovate.json` plus a regression test in
 job's command). Known nonstandard declarations and their owners: the pnpm version in the workflow
 run steps, the Renovate validator version, the commitlint versions, the container images in the
 `*-docker.sh` scripts, the Tessl tile, and the OpenTofu version in the `posthog-infra` CI job
-(paired with the mise pin in `infra/posthog/mise.toml` by a governance test). Enforcement: the
+(paired with the mise pin in `infra/posthog/mise.toml` by a governance test, and grouped with it
+in `renovate.json` so one pull request updates both). Enforcement: the
 validator in CI, the governance tests in `pnpm run verify:scripts`, and this dry run cited in the
 pull request when a declaration changed.
 
