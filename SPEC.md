@@ -942,10 +942,12 @@ This Java implementation provides:
   shown in a `board_hash` or `key_hash` row, or a `<path:...>` token. It is valid only with
   `--show-private-context`. That output is for local troubleshooting only and MUST NOT be pasted into
   public issue reports.
-- `telemetry status|preview|privacy|enable|disable [--yes]|debug`: shows, previews, or changes the
-  optional installation usage reporting defined in Section 19.6. `preview`, `status`, and `privacy`
-  are read-only; `disable` reviews the exact report body in an interactive terminal before changing
-  the stored preference.
+- `telemetry status|preview|privacy|enable|disable [--yes]|debug|erase|erase-status`: shows,
+  previews, or changes the optional installation usage reporting defined in Section 19.6.
+  `preview`, `status`, and `privacy` are read-only; `disable` reviews the exact report body in an
+  interactive terminal before changing the stored preference. `erase` persistently disables
+  reporting and requests deletion of the installation's analytics; `erase-status` checks or retries
+  a pending deletion. Section 19.6 defines both.
 
 During guided `setup-local` board creation or import, when `--max-agents` is omitted, the Java
 implementation prompts for the per-board concurrency value before writing the workflow. A blank
