@@ -113,10 +113,15 @@ const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
     readonly enabled?: boolean;
   };
   readonly customDatasources?: Readonly<
-    Record<string, {readonly defaultRegistryUrlTemplate?: string}>
+    Record<
+      string,
+      {readonly defaultRegistryUrlTemplate?: string; readonly transformTemplates?: readonly string[]}
+    >
   >;
   readonly customManagers: readonly {
+    readonly currentValueTemplate?: string;
     readonly datasourceTemplate?: string;
+    readonly managerFilePatterns?: readonly string[];
     readonly matchStrings?: readonly string[];
   }[];
   readonly packageRules: readonly {
@@ -127,14 +132,18 @@ const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
     readonly groupName?: string | null;
     readonly groupSlug?: string;
     readonly internalChecksFilter?: string;
+    readonly matchDatasources?: readonly string[];
     readonly matchDepTypes?: readonly string[];
+    readonly matchManagers?: readonly string[];
     readonly matchPackageNames?: readonly string[];
     readonly matchUpdateTypes?: readonly string[];
     readonly minimumReleaseAge?: string;
     readonly minimumReleaseAgeBehaviour?: string;
     readonly platformAutomerge?: boolean;
+    readonly schedule?: readonly string[];
   }[];
   readonly prConcurrentLimit?: number;
+  readonly schedule?: readonly string[];
   readonly statusCheckWhen?: {
     readonly minimumReleaseAge?: string;
   };
@@ -1161,6 +1170,122 @@ test("Renovate looks up GHCR images through a feed with release timestamps", () 
       /^https:\/\/api\.github\.com\/users\/[^/]+\/packages\/container\/[^/]+\/versions\?per_page=100$/u,
     );
   }
+});
+
+test("Renovate looks up MCR images through the catalog's push times", () => {
+  // Renovate's docker datasource reads release timestamps only from Docker Hub. Under
+  // timestamp-required, an MCR image looked up through it stays pending forever.
+  const mcrManagers = RENOVATE_CONFIG.customManagers.filter(({matchStrings}) =>
+    matchStrings?.some((pattern) => pattern.includes("mcr\\.microsoft\\.com/")),
+  );
+
+  assert.ok(mcrManagers.length > 0);
+  for (const {datasourceTemplate} of mcrManagers) {
+    assert.match(datasourceTemplate ?? "", /^custom\./u, "an MCR image needs a custom datasource");
+    const datasourceName = datasourceTemplate?.slice("custom.".length) ?? "";
+    const datasource = RENOVATE_CONFIG.customDatasources?.[datasourceName];
+    assert.match(
+      datasource?.defaultRegistryUrlTemplate ?? "",
+      /^https:\/\/mcr\.microsoft\.com\/api\/v1\/catalog\/[^?]+\/tags\?reg=mar$/u,
+    );
+    // lastModifiedDate is the registry's time of the push that set the tag's current digest.
+    assert.match(
+      datasource?.transformTemplates?.join("\n") ?? "",
+      /"releaseTimestamp": \$tag\.lastModifiedDate/u,
+    );
+  }
+});
+
+test("Renovate offers each OSS-Fuzz base image's newest v1 build past the cooldown", () => {
+  // OSS-Fuzz rebuilds these images daily, so the digest a tag points to is never seven days
+  // old. Each pushed build keeps its digest and push time, and the feed offers the newest one
+  // that has served the cooldown. Renovate's docker datasource has no push times for gcr.io.
+  const cooldown = /^(\d+) days$/u.exec(RENOVATE_CONFIG.minimumReleaseAge ?? "")?.[1];
+  assert.ok(cooldown, "renovate.json must state the cooldown as a whole number of days");
+  const ossFuzzPins = [".clusterfuzzlite/", "oss-fuzz/"].flatMap((directory) =>
+    readdirSync(new URL(`../${directory}`, import.meta.url))
+      .filter((name) => name.endsWith("Dockerfile"))
+      .flatMap((name) => {
+        const path = `${directory}${name}`;
+        const source = readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+        return (source.match(/^FROM gcr\.io\/oss-fuzz-base\/\S+$/gmu) ?? []).map((line) => ({
+          line,
+          path,
+        }));
+      }),
+  );
+
+  assert.equal(ossFuzzPins.length, 3);
+  const ossFuzzDatasources = new Set<string>();
+  for (const {line, path} of ossFuzzPins) {
+    const owners = RENOVATE_CONFIG.customManagers.flatMap((manager) =>
+      (manager.managerFilePatterns ?? []).some((pattern) =>
+        new RegExp(pattern.slice(1, -1), "u").test(path),
+      )
+        ? (manager.matchStrings ?? []).flatMap((pattern) => {
+            const groups = new RegExp(pattern, "u").exec(line)?.groups;
+            return groups ? [{groups, manager}] : [];
+          })
+        : [],
+    );
+    const [owner, ...otherOwners] = owners;
+    assert.ok(owner, `${path}: ${line} needs a custom manager`);
+    assert.equal(otherOwners.length, 0, `${path}: ${line} needs exactly one custom manager`);
+    const {groups, manager} = owner;
+    assert.match(groups.currentDigest ?? "", /^sha256:[a-f0-9]{64}$/u);
+
+    const datasourceName = /^custom\.(.+)$/u.exec(manager.datasourceTemplate ?? "")?.[1] ?? "";
+    ossFuzzDatasources.add(`custom.${datasourceName}`);
+    const datasource = RENOVATE_CONFIG.customDatasources?.[datasourceName];
+    assert.equal(
+      datasource?.defaultRegistryUrlTemplate,
+      "https://artifactregistry.googleapis.com/v1/projects/oss-fuzz-base/locations/us/repositories/gcr.io/" +
+        `packages/${groups.depName?.split("/").at(-1)}/versions?view=FULL&orderBy=create_time+desc&pageSize=1000`,
+    );
+    const transform = datasource?.transformTemplates?.join("\n") ?? "";
+    // The feed decides which build is old enough, so its cutoff must be the configured cooldown.
+    assert.ok(
+      transform.includes(`$minimumAgeMs := ${cooldown} * 24 * 60 * 60 * 1000;`),
+      `${datasourceName} must count ${cooldown} days`,
+    );
+    assert.ok(transform.includes("$toMillis(createTime) <= $millis() - $minimumAgeMs"));
+    // createTime is Artifact Registry's record of the push.
+    assert.ok(transform.includes('"releaseTimestamp": $release.createTime'));
+    // The pin follows one tag, and the release must carry that tag's name, or Renovate would
+    // try to write a version into a FROM line that has none.
+    const followedTag = manager.currentValueTemplate ?? groups.currentValue;
+    assert.equal(followedTag, "v1");
+    assert.ok(transform.includes(`"version": "${followedTag}"`));
+
+    assert.ok(
+      RENOVATE_CONFIG.packageRules.some(
+        ({enabled, matchManagers, matchPackageNames}) =>
+          enabled === false &&
+          matchManagers?.length === 1 &&
+          matchManagers[0] === "dockerfile" &&
+          matchPackageNames?.includes(groups.depName ?? ""),
+      ),
+      `the dockerfile manager must leave ${groups.depName} to the custom manager`,
+    );
+  }
+
+  // A new v1 build passes the cooldown every day, so without a window each image would get an
+  // automerged pull request every day. Apart from the lockfile refresh, these two feeds are the
+  // only updates with a window, and they share the refresh's window.
+  assert.equal(RENOVATE_CONFIG.schedule, undefined, "ordinary updates have no schedule");
+  const scheduledRules = RENOVATE_CONFIG.packageRules.filter(({schedule}) => schedule);
+  assert.equal(
+    scheduledRules.length,
+    1,
+    "exactly one package rule, the OSS-Fuzz one, sets a schedule",
+  );
+  const [ossFuzzSchedule] = scheduledRules;
+  assert.deepEqual(
+    [...(ossFuzzSchedule?.matchDatasources ?? [])].sort(),
+    [...ossFuzzDatasources].sort(),
+  );
+  assert.deepEqual(ossFuzzSchedule?.schedule, RENOVATE_CONFIG.lockFileMaintenance?.schedule);
+  assert.equal(ossFuzzSchedule?.automerge, undefined, "the digest updates keep automerge");
 });
 
 test("BetterLeaks image updates automerge only after a scan with the image they pin", () => {

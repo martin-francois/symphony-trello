@@ -25,6 +25,19 @@ requirements.
   timestamps only for Docker Hub, so a GHCR image looked up through it never passes the cooldown.
   The script test `Renovate looks up GHCR images through a feed with release timestamps` asserts
   this; see [ADR 0124](../adr/0124-look-up-betterleaks-through-the-github-package-feed.md).
+- Look up an MCR image through a custom datasource that reads the Microsoft Artifact Registry tag
+  catalog. Its `lastModifiedDate` is the time MCR last pushed the tag, and its `digest` is the tag's
+  current digest. The script test `Renovate looks up MCR images through the catalog's push times`
+  asserts this; see [ADR 0125](../adr/0125-read-mcr-push-times-for-the-dotnet-sdk-image.md).
+- Look up a `gcr.io/oss-fuzz-base` image through a custom datasource that reads Artifact Registry's
+  version list. OSS-Fuzz rebuilds these images daily, so the digest a tag points to is never seven
+  days old. The registry keeps every build with its push time, and the datasource offers the newest
+  build of the pinned tag's lineage pushed at least seven days ago as a release named after that
+  tag. Renovate then replaces only the digest. A new build passes the cooldown every day, so a
+  package rule scoped to these datasources limits their pull requests to the `lockFileMaintenance`
+  window, Friday `* 0-4 * * 5`. The script test `Renovate offers each OSS-Fuzz base
+  image's newest v1 build past the cooldown` asserts this; see
+  [ADR 0126](../adr/0126-offer-the-newest-oss-fuzz-build-past-the-cooldown.md).
 - BetterLeaks image updates automerge like other non-major updates, gated by the required check
   `pinned-betterleaks-image`. It runs the base branch's scanner with the image the pull request
   pins, because the `private-context` job scans with the base branch's image and would never run a
@@ -59,7 +72,10 @@ requirements.
   required checks, linear history, and thread resolution, and the script test `major update pull
   requests require manual merge` asserts the major-update policy.
 - This public repository groups dependencies by release or compatibility contract. Unrelated
-  non-major updates have separate pull requests and no weekly update schedule.
+  non-major updates have separate pull requests and no weekly update schedule. The one exception
+  is the `gcr.io/oss-fuzz-base` digest updates above, which would otherwise open a pull request
+  every day. No other package rule and no top-level setting may add a schedule
+  (`lockFileMaintenance` keeps its own), and the OSS-Fuzz test fails if one does.
 - Keep majors reviewed and separate from non-major updates. Keep the coordinated OpenRewrite
   group and the Quarkus and vendored-guidance review exceptions intact. A passing check MUST NOT
   enable automatic merging for a dependency whose rule requires manual review.
@@ -77,3 +93,5 @@ requirements.
 - [Testing](testing.md)
 - [ADR 0008](../adr/0008-renovate-and-github-actions-hardening.md)
 - [ADR 0124](../adr/0124-look-up-betterleaks-through-the-github-package-feed.md)
+- [ADR 0125](../adr/0125-read-mcr-push-times-for-the-dotnet-sdk-image.md)
+- [ADR 0126](../adr/0126-offer-the-newest-oss-fuzz-build-past-the-cooldown.md)

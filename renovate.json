@@ -108,8 +108,9 @@
       "matchStrings": [
         "(?<depName>mcr\\.microsoft\\.com/dotnet/sdk):(?<currentValue>\\d+\\.\\d+)@(?<currentDigest>sha256:[a-f0-9]{64})"
       ],
-      "datasourceTemplate": "docker",
-      "versioningTemplate": "docker"
+      "datasourceTemplate": "custom.mcr-dotnet-sdk",
+      "versioningTemplate": "docker",
+      "description": "Renovate's docker datasource reads release timestamps only from Docker Hub, so under timestamp-required every .NET SDK digest update would stay pending forever. The mcr-dotnet-sdk feed supplies the time MCR last pushed each tag and the tag's current digest; see ADR 0125."
     },
     {
       "customType": "regex",
@@ -133,6 +134,32 @@
       "datasourceTemplate": "custom.betterleaks-ghcr",
       "versioningTemplate": "semver",
       "description": "BetterLeaks publishes its image only on GHCR, where Renovate's docker datasource reads no release timestamps, so timestamp-required would hold every update forever. The betterleaks-ghcr feed supplies the timestamp and the manifest digest for each version; see ADR 0124."
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.clusterfuzzlite/Dockerfile$/",
+        "/^oss-fuzz/Dockerfile$/"
+      ],
+      "matchStrings": [
+        "FROM (?<depName>gcr\\.io/oss-fuzz-base/base-builder-jvm)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "currentValueTemplate": "v1",
+      "datasourceTemplate": "custom.oss-fuzz-base-builder-jvm",
+      "versioningTemplate": "docker",
+      "description": "The FROM line pins a digest without a tag; the digest is a build OSS-Fuzz tagged v1. The oss-fuzz-base-builder-jvm feed offers the newest v1 build pushed at least seven days ago as release v1, so Renovate replaces only the digest. See ADR 0126."
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.clusterfuzzlite/coverage-runner\\.Dockerfile$/"
+      ],
+      "matchStrings": [
+        "FROM (?<depName>gcr\\.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers):(?<currentValue>v1)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "custom.oss-fuzz-clusterfuzzlite-run-fuzzers",
+      "versioningTemplate": "docker",
+      "description": "The oss-fuzz-clusterfuzzlite-run-fuzzers feed offers the newest v1 build pushed at least seven days ago as release v1, so Renovate replaces only the digest and keeps the v1 tag. See ADR 0126."
     }
   ],
   "customDatasources": {
@@ -142,6 +169,30 @@
       "format": "json",
       "transformTemplates": [
         "($semver := /^v[0-9]+\\.[0-9]+\\.[0-9]+$/; $releases := $reduce($, function($all, $record) { ($tags := $filter($record.metadata.container.tags, function($tag) { $match($tag, $semver) }); $append($all, $map($tags, function($tag) { {\"version\": $substringAfter($tag, \"v\"), \"releaseTimestamp\": $record.created_at, \"digest\": $record.name} }))) }, []); {\"releases\": [$releases], \"sourceUrl\": \"https://github.com/betterleaks/betterleaks\"})"
+      ]
+    },
+    "mcr-dotnet-sdk": {
+      "description": "Microsoft Artifact Registry's tag catalog for mcr.microsoft.com/dotnet/sdk. Every major.minor tag, such as 8.0, becomes a release with the catalog's lastModifiedDate, the time MCR last pushed that tag, as its release timestamp and the tag's current manifest-list digest. Patch, distribution and architecture tags are left out because the pin follows a major.minor tag.",
+      "defaultRegistryUrlTemplate": "https://mcr.microsoft.com/api/v1/catalog/dotnet/sdk/tags?reg=mar",
+      "format": "json",
+      "transformTemplates": [
+        "($tags := $filter($, function($tag) { $match($tag.name, /^[0-9]+\\.[0-9]+$/) }); {\"releases\": [$map($tags, function($tag) { {\"version\": $tag.name, \"releaseTimestamp\": $tag.lastModifiedDate, \"digest\": $tag.digest} })], \"sourceUrl\": \"https://github.com/dotnet/sdk\"})"
+      ]
+    },
+    "oss-fuzz-base-builder-jvm": {
+      "description": "Artifact Registry's newest 1,000 versions of gcr.io/oss-fuzz-base/base-builder-jvm. OSS-Fuzz pushes three builds a day: the v1 build, tagged v1 and latest, and the ubuntu-20-04 and ubuntu-24-04 builds with one tag each. Pushing a one-tag build moves the tag off the previous build in the same write, so the previous build's updateTime equals the new build's createTime. A v1 build moves its second tag minutes after the push, so the v1 builds are the image manifests whose createTime is no other version's updateTime. The newest v1 build pushed at least seven days ago becomes release v1 with its createTime and digest. The lookup fails if the newest build the rule selects is not the one tagged v1.",
+      "defaultRegistryUrlTemplate": "https://artifactregistry.googleapis.com/v1/projects/oss-fuzz-base/locations/us/repositories/gcr.io/packages/base-builder-jvm/versions?view=FULL&orderBy=create_time+desc&pageSize=1000",
+      "format": "json",
+      "transformTemplates": [
+        "($minimumAgeMs := 7 * 24 * 60 * 60 * 1000; $tags := function($v) { $map($v.relatedTags, function($t) { $substringAfter($t.name, \"/tags/\") }) }; $images := versions[metadata.mediaType = \"application/vnd.docker.distribution.manifest.v2+json\"]; $untagTimes := versions.updateTime; $lineage := $images[$not(createTime in $untagTimes) and $count($tags($)[$not($ in [\"v1\", \"latest\"])]) = 0]; $newest := function($candidates) { $candidates[$toMillis(createTime) = $max($candidates.createTime.$toMillis($))] }; \"v1\" in $tags($newest($lineage)) ? ($release := $newest($lineage[$toMillis(createTime) <= $millis() - $minimumAgeMs]); {\"releases\": $exists($release) ? [{\"version\": \"v1\", \"releaseTimestamp\": $release.createTime, \"digest\": $substringAfter($release.name, \"/versions/\")}] : [], \"sourceUrl\": \"https://github.com/google/oss-fuzz\"}) : $error(\"The newest base-builder-jvm image the v1-build rule selects does not carry the v1 tag; see ADR 0126.\"))"
+      ]
+    },
+    "oss-fuzz-clusterfuzzlite-run-fuzzers": {
+      "description": "Artifact Registry's newest 1,000 versions of gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers. Each OSS-Fuzz build pushes the v1 image and then the ubuntu-24-04 image, 0.5 to 2 seconds apart, and separate builds are more than 8 seconds apart. Both images carry two tags, so the update times do not tell them apart. The v1 builds are the image manifests that start such a pair: the previous image manifest is more than 5 seconds older and the next one at most 5 seconds newer. The newest v1 build pushed at least seven days ago becomes release v1 with its createTime and digest. The lookup fails if the newest build the rule selects is not the one tagged v1.",
+      "defaultRegistryUrlTemplate": "https://artifactregistry.googleapis.com/v1/projects/oss-fuzz-base/locations/us/repositories/gcr.io/packages/clusterfuzzlite-run-fuzzers/versions?view=FULL&orderBy=create_time+desc&pageSize=1000",
+      "format": "json",
+      "transformTemplates": [
+        "($minimumAgeMs := 7 * 24 * 60 * 60 * 1000; $pairGapMs := 5000; $tags := function($v) { $map($v.relatedTags, function($t) { $substringAfter($t.name, \"/tags/\") }) }; $images := versions[metadata.mediaType = \"application/vnd.docker.distribution.manifest.v2+json\"]^(createTime); $pushed := $images.$toMillis(createTime); $last := $count($images) - 1; $firstOfPair := $filter($images, function($v, $i) { ($i = 0 ? true : $pushed[$i] - $pushed[$i - 1] > $pairGapMs) and ($i < $last ? $pushed[$i + 1] - $pushed[$i] <= $pairGapMs : false) }); $lineage := $firstOfPair[$count($tags($)[$not($ in [\"v1\", \"latest\"])]) = 0]; $newest := function($candidates) { $candidates[$toMillis(createTime) = $max($candidates.createTime.$toMillis($))] }; \"v1\" in $tags($newest($lineage)) ? ($release := $newest($lineage[$toMillis(createTime) <= $millis() - $minimumAgeMs]); {\"releases\": $exists($release) ? [{\"version\": \"v1\", \"releaseTimestamp\": $release.createTime, \"digest\": $substringAfter($release.name, \"/versions/\")}] : [], \"sourceUrl\": \"https://github.com/google/oss-fuzz\"}) : $error(\"The newest clusterfuzzlite-run-fuzzers image the v1-build rule selects does not carry the v1 tag; see ADR 0126.\"))"
       ]
     },
     "tessl-tile": {
@@ -228,6 +279,27 @@
       "automerge": false,
       "addLabels": [
         "major update"
+      ]
+    },
+    {
+      "description": "The OSS-Fuzz custom managers own these FROM lines. The dockerfile manager would look the images up through the docker datasource, which has no release timestamps for gcr.io, and add a second digest update that stays pending forever. See ADR 0126.",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchPackageNames": [
+        "gcr.io/oss-fuzz-base/base-builder-jvm",
+        "gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "A new OSS-Fuzz v1 build turns seven days old every day, so without a window each of these two images would get an automerged digest pull request every day. They use the Friday early-morning window of lockFileMaintenance instead, one pull request per image per week. The seven-day wait and automerge apply as to every digest update. See ADR 0126.",
+      "matchDatasources": [
+        "custom.oss-fuzz-base-builder-jvm",
+        "custom.oss-fuzz-clusterfuzzlite-run-fuzzers"
+      ],
+      "schedule": [
+        "* 0-4 * * 5"
       ]
     }
   ]
