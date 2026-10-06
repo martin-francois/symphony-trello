@@ -126,9 +126,12 @@ request with the base branch's image.
   datasource at a fixture.
 * Bad, because the datasource only sees the newest 100 package records. A release older than that
   window cannot be selected, which matters only if the pin falls about 16 releases behind.
-* Neutral, because other images in registries without release timestamps, such as
-  `mcr.microsoft.com/dotnet/sdk` and the `gcr.io/oss-fuzz-base` images, keep the behavior ADR 0008
-  describes: their digest updates stay pending.
+* Neutral, because other images in registries without release timestamps keep the behavior ADR 0008
+  describes until a decision of their own changes it.
+  [ADR 0125](0125-read-mcr-push-times-for-the-dotnet-sdk-image.md) covers
+  `mcr.microsoft.com/dotnet/sdk`, and
+  [ADR 0126](0126-offer-the-newest-oss-fuzz-build-past-the-cooldown.md) the `gcr.io/oss-fuzz-base`
+  images.
 
 ### Confirmation
 
