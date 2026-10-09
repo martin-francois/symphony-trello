@@ -12,7 +12,7 @@
 
 FROM eclipse-temurin:25.0.4_7-jdk@sha256:97014c4b396021f9ddb7d592a7dbedb0c4e4215c29e03dc01c393558aefb71c2 AS jdk
 
-FROM gcr.io/oss-fuzz-base/base-builder-jvm@sha256:6d8d75febebc2fe98d2ecb426eba503afdd9e310bdb249c37470ce4950c0d83b
+FROM gcr.io/oss-fuzz-base/base-builder-jvm@sha256:09b8394f9b11bec7b8b40e3a0ba72335f699ccad39eb98ca0be792a5d26af2a1
 
 ENV JAVA_HOME=/opt/jdk-25
 ENV PATH="$JAVA_HOME/bin:$PATH"
