@@ -12,7 +12,7 @@
 
 FROM eclipse-temurin:25.0.4_7-jdk@sha256:97014c4b396021f9ddb7d592a7dbedb0c4e4215c29e03dc01c393558aefb71c2 AS jdk
 
-FROM gcr.io/oss-fuzz-base/base-builder-jvm@sha256:09b8394f9b11bec7b8b40e3a0ba72335f699ccad39eb98ca0be792a5d26af2a1
+FROM gcr.io/oss-fuzz-base/base-builder-jvm@sha256:ce90dc71b10b689a0d2cafa39681b0a7d7886b2c6d44953bb01b27928bcbb5e9
 
 ARG SYMPHONY_TRELLO_REPO=https://github.com/martin-francois/symphony-trello.git
 ARG SYMPHONY_TRELLO_REF=main
