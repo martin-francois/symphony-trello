@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ORIGINAL_PATH="$PATH"
-DEFAULT_VERSION="1.2.0" # x-release-please-version
+DEFAULT_VERSION="1.3.0" # x-release-please-version
 VERSION="${SYMPHONY_TRELLO_VERSION:-$DEFAULT_VERSION}"
 RELEASE_TAG="${SYMPHONY_TRELLO_RELEASE_TAG:-v$VERSION}"
 RELEASE_BASE_URL="${SYMPHONY_TRELLO_RELEASE_BASE_URL:-https://github.com/martin-francois/symphony-trello/releases/download/$RELEASE_TAG}"
