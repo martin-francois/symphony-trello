@@ -1658,7 +1658,13 @@ final class TrelloBoardSetupMainTest {
                         TRELLO_API_KEY=
                         TRELLO_API_TOKEN=
                         """),
-                Arguments.of("whitespace-only dotenv values", "TRELLO_API_KEY=   \nTRELLO_API_TOKEN=   \n"));
+                Arguments.of("whitespace-only dotenv values", "TRELLO_API_KEY=   \nTRELLO_API_TOKEN=   \n"),
+                Arguments.of(
+                        "comments after empty dotenv values",
+                        """
+                        TRELLO_API_KEY= # paste your API key here
+                        TRELLO_API_TOKEN= # paste your token here
+                        """));
     }
 
     @Test

@@ -162,6 +162,26 @@ final class LocalEnvironmentTest {
         assertThat(workflowPath).hasValue("C:\\Users\\Jane Doe\\WORKFLOW.md");
     }
 
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(
+            strings = {
+                "TRELLO_API_TOKEN= # paste your token here",
+                "TRELLO_API_TOKEN=\t# paste your token here",
+                "TRELLO_API_TOKEN =   #",
+                "export TRELLO_API_TOKEN= # paste your token here"
+            })
+    void commentRightAfterTheSeparatorReadsAsAnEmptyValue(String line) throws Exception {
+        // given
+        Path dotenv = tempDir.resolve(".env");
+        Files.writeString(dotenv, line + "\n");
+
+        // when
+        Map<String, String> values = LocalEnvironment.load(dotenv);
+
+        // then
+        assertThat(values).containsExactly(Map.entry("TRELLO_API_TOKEN", ""));
+    }
+
     @Test
     void configuredDotenvPathCanOverrideDefaultDotenvLocation() {
         // given
@@ -204,6 +224,7 @@ final class LocalEnvironmentTest {
                 TRELLO_API_TOKEN='synthetic-token' # token comment
                 PLAIN=plain-value # plain comment
                 HASH_IN_VALUE=abc#def
+                HASH_STARTS_VALUE=#def
                 HASH_IN_QUOTES="value # not a comment"
                 """);
 
@@ -216,6 +237,7 @@ final class LocalEnvironmentTest {
                 .containsEntry("TRELLO_API_TOKEN", "synthetic-token")
                 .containsEntry("PLAIN", "plain-value")
                 .containsEntry("HASH_IN_VALUE", "abc#def")
+                .containsEntry("HASH_STARTS_VALUE", "#def")
                 .containsEntry("HASH_IN_QUOTES", "value # not a comment");
     }
 }
