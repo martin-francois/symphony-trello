@@ -1,6 +1,13 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.SLASHES;
+import static ch.fmartin.symphony.trello.setup.GitHubIssueTarget.REPOSITORY;
+import static ch.fmartin.symphony.trello.setup.SetupCliOptionNames.STATE_HOME;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.APP_HOME_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.CONFIG_DIR_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.STATE_HOME_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.SYMPHONY_HOME_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.WORKSPACE_ROOT_ENV;
 
 import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
@@ -52,7 +59,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 final class SetupDiagnosticReporter {
-    private static final String CONFIG_DIR_ENV = "SYMPHONY_TRELLO_CONFIG_DIR";
     private static final DateTimeFormatter FILE_TIMESTAMP =
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneOffset.UTC);
     private static final Duration PROBE_TIMEOUT = Duration.ofSeconds(2);
@@ -209,7 +215,7 @@ final class SetupDiagnosticReporter {
             "--workflow",
             "--workspace-root",
             "--config-dir",
-            "--state-home",
+            STATE_HOME,
             "--manifest",
             "--env",
             "--output",
@@ -973,7 +979,7 @@ final class SetupDiagnosticReporter {
                     pathOption(args, "--app-home"),
                     pathOption(args, "--config-dir"),
                     pathOption(args, "--workspace-root"),
-                    pathOption(args, "--state-home"),
+                    pathOption(args, STATE_HOME),
                     environment);
             Path manifestPath = pathOption(args, "--manifest")
                     .map(path -> resolveUserDataPath(path, paths.configDir()))
@@ -987,7 +993,7 @@ final class SetupDiagnosticReporter {
     private Optional<Path> write(Exception exception, LocalSetupRequest request) {
         try {
             LocalWorkerPaths paths = LocalWorkerPaths.from(
-                    Optional.empty(), request.configDir(), request.workspaceRoot(), Optional.empty(), environment);
+                    Optional.empty(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
             Path manifestPath = request.manifestPath()
                     .map(path -> resolveUserDataPath(path, paths.configDir()))
                     .orElseGet(paths::manifestPath);
@@ -2301,7 +2307,7 @@ final class SetupDiagnosticReporter {
                     "issue",
                     "create",
                     "--repo",
-                    "martin-francois/symphony-trello",
+                    REPOSITORY,
                     "--title",
                     "Local setup failed",
                     "--body-file",
@@ -2343,6 +2349,7 @@ final class SetupDiagnosticReporter {
         request.workflowPath().ifPresent(path -> addOption(args, "--workflow", path.toString()));
         request.workspaceRoot().ifPresent(path -> addOption(args, "--workspace-root", path.toString()));
         request.configDir().ifPresent(path -> addOption(args, "--config-dir", path.toString()));
+        request.stateHome().ifPresent(path -> addOption(args, STATE_HOME, path.toString()));
         request.manifestPath().ifPresent(path -> addOption(args, "--manifest", path.toString()));
         request.serverPort().ifPresent(port -> addOption(args, "--server-port", String.valueOf(port)));
         request.envPath().ifPresent(path -> addOption(args, "--env", path.toString()));
@@ -2364,7 +2371,7 @@ final class SetupDiagnosticReporter {
         request.configDir().ifPresent(path -> addOption(args, "--config-dir", path.toString()));
         request.manifestPath().ifPresent(path -> addOption(args, "--manifest", path.toString()));
         request.workspaceRoot().ifPresent(path -> addOption(args, "--workspace-root", path.toString()));
-        request.stateHome().ifPresent(path -> addOption(args, "--state-home", path.toString()));
+        request.stateHome().ifPresent(path -> addOption(args, STATE_HOME, path.toString()));
         request.workflow().ifPresent(path -> addOption(args, "--workflow", path.toString()));
         addFlag(args, request.json(), "--json");
         addFlag(args, request.deep(), "--deep");
@@ -2814,11 +2821,11 @@ final class SetupDiagnosticReporter {
     private List<String> sensitivePaths() {
         List<String> paths = new ArrayList<>();
         addPath(paths, System.getProperty("user.home"));
-        addPath(paths, environment.get("SYMPHONY_HOME"));
-        addPath(paths, environment.get("SYMPHONY_TRELLO_APP_HOME"));
+        addPath(paths, environment.get(SYMPHONY_HOME_ENV));
+        addPath(paths, environment.get(APP_HOME_ENV));
         addPath(paths, environment.get(CONFIG_DIR_ENV));
-        addPath(paths, environment.get("SYMPHONY_TRELLO_WORKSPACE_ROOT"));
-        addPath(paths, environment.get("SYMPHONY_TRELLO_STATE_HOME"));
+        addPath(paths, environment.get(WORKSPACE_ROOT_ENV));
+        addPath(paths, environment.get(STATE_HOME_ENV));
         addPath(paths, environment.get("SYMPHONY_TRELLO_DOTENV"));
         return paths.stream()
                 .distinct()

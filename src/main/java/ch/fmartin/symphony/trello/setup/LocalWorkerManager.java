@@ -1,5 +1,9 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.CONFIG_DIR_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.STATE_HOME_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.WORKSPACE_ROOT_ENV;
+
 import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.EnvironmentReferences;
@@ -336,10 +340,14 @@ final class LocalWorkerManager {
                 paths.appHome().resolve("target/quarkus-app/quarkus-run.jar").toString(),
                 board.workflowPath().toString());
         Map<String, String> processEnvironment = Map.of(
-                "SYMPHONY_TRELLO_DOTENV", envPath.toString(),
-                "SYMPHONY_TRELLO_CONFIG_DIR", paths.configDir().toString(),
-                "SYMPHONY_TRELLO_WORKSPACE_ROOT", paths.workspaceRoot().toString(),
-                "SYMPHONY_TRELLO_STATE_HOME", paths.stateHome().toString());
+                "SYMPHONY_TRELLO_DOTENV",
+                envPath.toString(),
+                CONFIG_DIR_ENV,
+                paths.configDir().toString(),
+                WORKSPACE_ROOT_ENV,
+                paths.workspaceRoot().toString(),
+                STATE_HOME_ENV,
+                paths.stateHome().toString());
         StartupLogOffsets logOffsets = StartupLogOffsets.capture(files);
         ManagedProcessHandle handle =
                 platform.start(command, paths.appHome(), processEnvironment, files.stdoutLog(), files.stderrLog());
