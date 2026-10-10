@@ -301,6 +301,9 @@ skill's advice.
 - Mark intentional null contracts with `@Nullable` on the type use that is nullable, including record
   components, constructor parameters, method parameters, and return values. Do not rely on prose
   comments alone when an annotated boundary accepts or returns `null`.
+- A package whose `package-info.java` carries `@NullMarked` has passed the audit, and every type
+  added to it inherits the non-null default. Annotate each nullable type use in new or changed code
+  there. When you audit and mark another package, add it to `NullnessConventionTest`.
 - Do not add broad mechanical nullness churn or a blocking nullness checker unless an issue and ADR
   define the baseline and expected noise level.
 
