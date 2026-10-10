@@ -423,36 +423,34 @@ final class SetupDiagnosticReporter {
 
     private static String trelloAuthFailureHint(
             String apiKeyName,
-            TrelloBoardSetupException.TrelloCredentialSource apiKeySource,
+            TrelloCredentialSource apiKeySource,
             String apiTokenName,
-            TrelloBoardSetupException.TrelloCredentialSource apiTokenSource,
+            TrelloCredentialSource apiTokenSource,
             Path dotenvPath) {
-        if (apiKeySource == TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT
-                && apiTokenSource == TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT) {
+        if (apiKeySource == TrelloCredentialSource.SHELL_ENVIRONMENT
+                && apiTokenSource == TrelloCredentialSource.SHELL_ENVIRONMENT) {
             return "Check " + apiKeyName + " and " + apiTokenName
                     + " from the shell environment. Shell variables take precedence over the .env file passed with --env.";
         }
-        if (apiKeySource == TrelloBoardSetupException.TrelloCredentialSource.DOTENV_FILE
-                && apiTokenSource == TrelloBoardSetupException.TrelloCredentialSource.DOTENV_FILE) {
+        if (apiKeySource == TrelloCredentialSource.DOTENV_FILE
+                && apiTokenSource == TrelloCredentialSource.DOTENV_FILE) {
             return "Check " + apiKeyName + " and " + apiTokenName + " in this .env credential file:\n  "
                     + displayPath(dotenvPath);
         }
         String hint = "Check these Trello credential sources:\n"
                 + credentialSourceLine(apiKeyName, "tracker.api_key", apiKeySource, dotenvPath) + "\n"
                 + credentialSourceLine(apiTokenName, "tracker.api_token", apiTokenSource, dotenvPath);
-        if (apiKeySource == TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT
-                || apiTokenSource == TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT) {
+        if (apiKeySource == TrelloCredentialSource.SHELL_ENVIRONMENT
+                || apiTokenSource == TrelloCredentialSource.SHELL_ENVIRONMENT) {
             hint += " Shell variables take precedence over the .env file passed with --env.";
         }
         return hint;
     }
 
     private static String credentialSourceLine(
-            String name,
-            String workflowField,
-            TrelloBoardSetupException.TrelloCredentialSource source,
-            Path dotenvPath) {
+            String name, String workflowField, TrelloCredentialSource source, Path dotenvPath) {
         return switch (source) {
+            case DIRECT_INPUT -> "  " + name + ": entered directly with --key, --token, or the setup prompt";
             case SHELL_ENVIRONMENT -> "  " + name + ": shell environment";
             case DOTENV_FILE -> "  " + name + ": .env credential file\n    " + displayPath(dotenvPath);
             case WORKFLOW_CONFIG -> "  " + workflowField + ": workflow configuration";
