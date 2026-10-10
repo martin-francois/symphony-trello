@@ -16,6 +16,7 @@ function validCoverageReport() {
         files: [
           "repository/RepositorySourceResolver.java",
           "tracker/TrelloCardReferenceParser.java",
+          "tracker/TrelloClient.java",
           "tracker/TrelloChecklistClassifier.java",
           "workflow/WorkflowLoader.java",
         ].map((filename) => ({

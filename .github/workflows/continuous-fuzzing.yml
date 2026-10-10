@@ -26,7 +26,7 @@ on:
           - coverage
           - build
       fuzz_seconds:
-        description: "Per-target batch budget; continuous cycles use 4500 or 4950 seconds."
+        description: "Full-share batch budget per target; continuous cycles use 4500 or 4950 seconds."
         required: true
         type: number
         default: 300
@@ -135,6 +135,7 @@ jobs:
       matrix:
         target:
           - RepositorySourceFuzzer
+          - TrelloCardPayloadFuzzer
           - TrelloCardReferenceParserFuzzer
           - TrelloChecklistClassifierFuzzer
           - WorkflowLoaderFuzzer
@@ -158,15 +159,16 @@ jobs:
           language: jvm
           sanitizer: address
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Select one fuzz target for complete crash reporting
-        run: scripts/select-clusterfuzzlite-target "${{ matrix.target }}"
+      - name: Select one fuzz target and its budget
+        id: target
+        run: scripts/select-clusterfuzzlite-target "${{ matrix.target }}" "${{ inputs.fuzz_seconds }}"
       - name: Run batch fuzzing
         id: fuzz
         continue-on-error: true
         uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          fuzz-seconds: ${{ inputs.fuzz_seconds }}
+          fuzz-seconds: ${{ steps.target.outputs.fuzz_seconds }}
           language: jvm
           minimize-crashes: true
           mode: batch
@@ -248,6 +250,7 @@ jobs:
         run: >-
           scripts/verify-clusterfuzzlite-storage corpus
           RepositorySourceFuzzer
+          TrelloCardPayloadFuzzer
           TrelloCardReferenceParserFuzzer
           TrelloChecklistClassifierFuzzer
           WorkflowLoaderFuzzer

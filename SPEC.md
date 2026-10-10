@@ -2388,6 +2388,9 @@ Additional normalization details:
 - `priority` -> integer from configured `tracker.priority_labels`, using the best/highest priority
   label match.
 - `created_at` -> derived from Trello ObjectId timestamp when possible, otherwise null.
+- A malformed `idShort` (not a whole number), `dateLastActivity`, `due`, or comment `date` (not an
+  ISO-8601 instant), or `pos` (not a decimal number) fails normalization of that card with
+  `trello_unknown_payload`.
 - `blocked_by` -> empty by default unless populated by the Trello prerequisite checklist convention.
 
 ### 11.4 Trello Prerequisite Checklist Convention
@@ -3542,6 +3545,8 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - If blocker derivation is implemented, blockers are normalized according to the documented
   convention
 - Card state refresh by ID returns minimal normalized cards or typed per-card missing results
+- Card state refresh by ID reports a card whose payload fails normalization as a typed per-card
+  failure and still returns the other requested cards
 - Error mapping covers request errors, non-2xx statuses, rate limits, missing list mappings, auth
   failures, permission failures, not-found cards, and malformed payloads
 
