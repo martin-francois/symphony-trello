@@ -1,0 +1,7 @@
+---
+workspace:
+  root: "workspaces\0"
+codex:
+  additional_writable_roots: ["shared\0"]
+---
+A NUL character makes a path invalid.

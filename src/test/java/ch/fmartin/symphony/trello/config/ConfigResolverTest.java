@@ -8,6 +8,7 @@ import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -20,7 +21,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 final class ConfigResolverTest {
-    private static final String NUL_IN_REPOSITORY_PATH = "\u0000";
+    private static final String NUL_IN_PATH = "\u0000";
 
     @TempDir
     Path tempDir;
@@ -295,7 +296,7 @@ final class ConfigResolverTest {
                 "default_url",
                 "https://github.com/example/project.git",
                 "default_path",
-                "bad" + NUL_IN_REPOSITORY_PATH + "path")));
+                "bad" + NUL_IN_PATH + "path")));
 
         // then
         assertThat(config.repository().defaultUrl()).isEqualTo("https://github.com/example/project.git");
@@ -311,7 +312,7 @@ final class ConfigResolverTest {
             case "SYMPHONY_DEFAULT_REPOSITORY_URL" -> Optional.of("ssh://git@example.com/team/project.git");
             case "SYMPHONY_DEFAULT_REPOSITORY_PATH" -> {
                 pathEnvironmentRequests.incrementAndGet();
-                yield Optional.of("bad" + NUL_IN_REPOSITORY_PATH + "path");
+                yield Optional.of("bad" + NUL_IN_PATH + "path");
             }
             default -> Optional.empty();
         });
@@ -361,12 +362,44 @@ final class ConfigResolverTest {
         // when
         ConfigException error = catchThrowableOfType(
                 ConfigException.class,
-                () -> resolver.resolve(workflowDefinitionWithRepository(
-                        Map.of("default_path", "bad" + NUL_IN_REPOSITORY_PATH + "path"))));
+                () -> resolver.resolve(
+                        workflowDefinitionWithRepository(Map.of("default_path", "bad" + NUL_IN_PATH + "path"))));
 
         // then
         assertThat(error.code()).isEqualTo("config_value_error");
         assertThat(error).hasMessage("repository.default_path must be a valid local path");
+    }
+
+    @MethodSource("malformedLocalPathSettings")
+    @ParameterizedTest(name = "{0}")
+    void malformedLocalPathFailsAsConfigurationErrorNamingTheSetting(
+            String setting, Map<String, Object> config, Map<String, String> environment) {
+        // given
+        var resolver = new ConfigResolver(name -> Optional.ofNullable(environment.get(name)));
+        var workflow = new WorkflowDefinition(tempDir.resolve("WORKFLOW.md"), config, "Prompt");
+
+        // when
+        ConfigException error = catchThrowableOfType(ConfigException.class, () -> resolver.resolve(workflow));
+
+        // then
+        assertThat(error.code()).isEqualTo("config_value_error");
+        assertThat(error).hasMessage("%s must be a valid local path", setting);
+    }
+
+    @MethodSource("listSettingsWithEmptyItems")
+    @ParameterizedTest(name = "{0}.{1}")
+    void emptyListItemFailsAsConfigurationErrorNamingTheKey(String section, String key) {
+        // given
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
+        var workflow = new WorkflowDefinition(
+                tempDir.resolve("WORKFLOW.md"), Map.of(section, Map.of(key, Arrays.asList("Todo", null))), "Prompt");
+
+        // when
+        ConfigException error = catchThrowableOfType(ConfigException.class, () -> resolver.resolve(workflow));
+
+        // then
+        assertThat(error.code()).isEqualTo("config_type_error");
+        assertThat(error).hasMessage("%s must not contain empty items", key);
     }
 
     @MethodSource("fractionalNumericValues")
@@ -1189,6 +1222,31 @@ final class ConfigResolverTest {
                 "turn_sandbox_policy:\n  type: futurePolicy\n",
                 "turn_sandbox_policy:\n  type: workspaceWrite\n  networkAccess: \"true\"\n",
                 "additional_writable_roots: /ignored-when-danger-is-forced");
+    }
+
+    private static Stream<Arguments> malformedLocalPathSettings() {
+        String malformed = "bad" + NUL_IN_PATH + "path";
+        return Stream.of(
+                Arguments.of("workspace.root", Map.of("workspace", Map.of("root", malformed)), Map.of()),
+                Arguments.of(
+                        "codex.additional_writable_roots",
+                        Map.of("codex", Map.of("additional_writable_roots", List.of(malformed))),
+                        Map.of()),
+                Arguments.of(
+                        ConfigResolver.ADDITIONAL_WRITABLE_ROOTS_ENVIRONMENT,
+                        Map.of(),
+                        Map.of(ConfigResolver.ADDITIONAL_WRITABLE_ROOTS_ENVIRONMENT, malformed)),
+                Arguments.of(
+                        "tracker.api_key secret file",
+                        Map.of("tracker", Map.of("api_key", "file:" + malformed)),
+                        Map.of()));
+    }
+
+    private static Stream<Arguments> listSettingsWithEmptyItems() {
+        return Stream.of(
+                Arguments.of("tracker", "active_states"),
+                Arguments.of("tracker", "terminal_list_ids"),
+                Arguments.of("trello_tools", "allowed_move_list_names"));
     }
 
     private Path writeDefaultWorkflow(String fileName, String extraFrontMatter) throws Exception {

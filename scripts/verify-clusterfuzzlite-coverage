@@ -7,11 +7,12 @@ coverage_files=(
   report/linux/jacoco.xml
   "$aggregate_report"
 )
+# Each contract names a fuzzer, then every production source its report must cover, separated by "|".
 target_contracts=(
   "RepositorySourceFuzzer|src/main/java/ch/fmartin/symphony/trello/repository/RepositorySourceResolver.java"
   "TrelloCardReferenceParserFuzzer|src/main/java/ch/fmartin/symphony/trello/tracker/TrelloCardReferenceParser.java"
   "TrelloChecklistClassifierFuzzer|src/main/java/ch/fmartin/symphony/trello/tracker/TrelloChecklistClassifier.java"
-  "WorkflowLoaderFuzzer|src/main/java/ch/fmartin/symphony/trello/workflow/WorkflowLoader.java"
+  "WorkflowLoaderFuzzer|src/main/java/ch/fmartin/symphony/trello/workflow/WorkflowLoader.java|src/main/java/ch/fmartin/symphony/trello/config/ConfigResolver.java"
 )
 
 list_target_report_files() {
@@ -35,7 +36,7 @@ list_required_files() {
 
 verify_json_reports() {
   local coverage_root="$1"
-  local contract expected_source target target_report
+  local contract expected_source expected_sources target target_report
 
   if ! jq -e '
       .type == "oss-fuzz.java.coverage.json.export"
@@ -49,20 +50,22 @@ verify_json_reports() {
 
   for contract in "${target_contracts[@]}"; do
     target="${contract%%|*}"
-    expected_source="${contract#*|}"
+    IFS='|' read -r -a expected_sources <<<"${contract#*|}"
     target_report="$coverage_root/fuzzer_stats/$target.json"
-    if ! jq -e --arg expected_source "$expected_source" '
-        .type == "oss-fuzz.java.coverage.json.export"
-        and .version == "1.0.0"
-        and any(
-          .data[0].files[]?;
-          (.filename | endswith($expected_source))
-          and .summary.lines.covered > 0
-        )
-      ' "$target_report" >/dev/null; then
-      echo "$target coverage is malformed or does not reach $expected_source." >&2
-      return 1
-    fi
+    for expected_source in "${expected_sources[@]}"; do
+      if ! jq -e --arg expected_source "$expected_source" '
+          .type == "oss-fuzz.java.coverage.json.export"
+          and .version == "1.0.0"
+          and any(
+            .data[0].files[]?;
+            (.filename | endswith($expected_source))
+            and .summary.lines.covered > 0
+          )
+        ' "$target_report" >/dev/null; then
+        echo "$target coverage is malformed or does not reach $expected_source." >&2
+        return 1
+      fi
+    done
   done
 }
 

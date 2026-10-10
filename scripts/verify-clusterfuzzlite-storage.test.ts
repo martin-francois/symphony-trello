@@ -18,6 +18,7 @@ function validCoverageReport() {
           "tracker/TrelloCardReferenceParser.java",
           "tracker/TrelloChecklistClassifier.java",
           "workflow/WorkflowLoader.java",
+          "config/ConfigResolver.java",
         ].map((filename) => ({
           filename: `src/main/java/ch/fmartin/symphony/trello/${filename}`,
           summary: {lines: {covered: 42}},

@@ -1,0 +1,9 @@
+---
+tracker:
+  request_timeout_ms: trello
+  api_key: literal-api-key
+  api_token: literal-api-token
+  board_id: board-terminal_lpst_ids1
+  active_states:
+    - ---
+Bgreal_states:---lap.
