@@ -116,7 +116,7 @@ public class ConfigResolver {
                         typedWorkflow.pollingIntervalMs(), "interval_ms", ConfigDefaults.DEFAULT_POLLING_INTERVAL_MS)),
                 new EffectiveConfig.WorkspaceConfig(
                         path(workflow.path().getParent(), string(workspace, "root", systemTempRoot()))),
-                repositoryConfig(workflow.path().getParent(), repository),
+                repositoryConfig(workflow.path().getParent(), repository, typedWorkflow),
                 new EffectiveConfig.HooksConfig(
                         string(hooks, "after_create", null),
                         string(hooks, "before_run", null),
@@ -257,13 +257,21 @@ public class ConfigResolver {
         return configured;
     }
 
-    private EffectiveConfig.RepositoryConfig repositoryConfig(Path workflowDirectory, Map<String, Object> repository) {
+    private EffectiveConfig.RepositoryConfig repositoryConfig(
+            Path workflowDirectory, Map<String, Object> repository, TypedWorkflowConfig typedWorkflow) {
+        var codexReview = new EffectiveConfig.CodexReviewConfig(
+                strictRepositoryFlag(
+                        repository, "codex_review_before_handoff", ConfigDefaults.DEFAULT_CODEX_REVIEW_BEFORE_HANDOFF),
+                integer(
+                        typedWorkflow.repositoryCodexReviewMaxCycles(),
+                        ConfigDefaults.DEFAULT_CODEX_REVIEW_MAX_CYCLES));
         String defaultUrl = optionalEnvironmentString(repository, "default_url");
         if (defaultUrl != null) {
             return new EffectiveConfig.RepositoryConfig(
-                    defaultUrl, optionalLowerPriorityRepositoryPath(workflowDirectory, repository));
+                    defaultUrl, optionalLowerPriorityRepositoryPath(workflowDirectory, repository), codexReview);
         }
-        return new EffectiveConfig.RepositoryConfig(null, optionalRepositoryPath(workflowDirectory, repository));
+        return new EffectiveConfig.RepositoryConfig(
+                null, optionalRepositoryPath(workflowDirectory, repository), codexReview);
     }
 
     private Path optionalLowerPriorityRepositoryPath(Path workflowDirectory, Map<String, Object> repository) {
@@ -370,6 +378,23 @@ public class ConfigResolver {
     private static boolean bool(Map<String, Object> root, String key, boolean defaultValue) {
         Object value = root.get(key);
         return value == null ? defaultValue : Boolean.parseBoolean(value.toString());
+    }
+
+    /// Unlike the lenient trello_tools flags, a typo in an opt-in workflow switch must not silently
+    /// read as `false`, so only YAML booleans and their plain `true`/`false` spellings are accepted.
+    private static boolean strictRepositoryFlag(Map<String, Object> repository, String key, boolean defaultValue) {
+        Object value = repository.get(key);
+        if (value == null) {
+            return defaultValue;
+        }
+        if (value instanceof Boolean flag) {
+            return flag;
+        }
+        String text = value.toString().trim();
+        if ("true".equalsIgnoreCase(text) || "false".equalsIgnoreCase(text)) {
+            return Boolean.parseBoolean(text);
+        }
+        throw new ConfigException("config_value_error", "repository." + key + " must be true or false");
     }
 
     @SuppressWarnings("unchecked")

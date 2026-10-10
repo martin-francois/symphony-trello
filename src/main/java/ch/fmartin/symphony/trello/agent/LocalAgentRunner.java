@@ -4,6 +4,7 @@ import static com.google.common.base.Strings.nullToEmpty;
 
 import ch.fmartin.symphony.trello.codex.CodexSkillCatalog;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
+import ch.fmartin.symphony.trello.repository.CodexReviewPrompt;
 import ch.fmartin.symphony.trello.repository.RepositorySourcePrompt;
 import ch.fmartin.symphony.trello.repository.RepositorySourceResolver;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
@@ -80,7 +81,7 @@ public class LocalAgentRunner implements AgentRunner {
                     workspace.path(),
                     request.config().hooks());
             boolean installBundledSkills = usesBundledCodexSkills(request.prompt());
-            String prompt = withRepositorySourceContext(request);
+            String prompt = withRuntimeContext(request);
             if (installBundledSkills) {
                 codexSkills.installInto(workspace.path());
             }
@@ -113,18 +114,15 @@ public class LocalAgentRunner implements AgentRunner {
         return prompt != null && prompt.contains(".codex/skills/" + CodexSkillCatalog.INSTALLED_SKILL_PREFIX);
     }
 
-    private String withRepositorySourceContext(AgentRunRequest request) {
-        return withRepositorySourceContext(
-                request.prompt(),
-                RepositorySourcePrompt.render(
-                        repositorySources.select(
-                                request.card(), request.config().repository()),
-                        request.config().repository()));
-    }
-
-    private static String withRepositorySourceContext(String prompt, String repositoryContext) {
-        String basePrompt = nullToEmpty(prompt).stripTrailing();
-        return basePrompt + "\n\n" + repositoryContext;
+    private String withRuntimeContext(AgentRunRequest request) {
+        String repositoryContext = RepositorySourcePrompt.render(
+                repositorySources.select(request.card(), request.config().repository()),
+                request.config().repository());
+        String codexReviewContext =
+                CodexReviewPrompt.render(request.config().repository().codexReview());
+        String basePrompt = nullToEmpty(request.prompt()).stripTrailing();
+        String prompt = basePrompt + "\n\n" + repositoryContext;
+        return codexReviewContext.isEmpty() ? prompt : prompt + "\n\n" + codexReviewContext;
     }
 
     private CodexAppServerClient.TurnDecision continuationDecision(AgentRunRequest request, int completedTurns) {
