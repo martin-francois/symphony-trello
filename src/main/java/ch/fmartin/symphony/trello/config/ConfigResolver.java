@@ -14,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -163,7 +164,8 @@ public class ConfigResolver {
                         bool(trelloTools, "allow_checklists", writes),
                         bool(trelloTools, "allow_url_attachments", writes),
                         bool(trelloTools, "allow_destructive_operations", false),
-                        bool(trelloTools, "assume_write_scope", false)),
+                        bool(trelloTools, "assume_write_scope", false),
+                        followUpCards(object(trelloTools, "follow_up_cards"))),
                 new EffectiveConfig.ServerConfig(optionalInt(typedWorkflow.serverPort())));
     }
 
@@ -210,6 +212,55 @@ public class ConfigResolver {
             return (Map<String, Object>) map;
         }
         throw new ConfigException("config_type_error", key + " must be an object");
+    }
+
+    private static EffectiveConfig.FollowUpCardsConfig followUpCards(Map<String, Object> followUpCards) {
+        String path = "trello_tools.follow_up_cards.";
+        String listName = string(followUpCards, "list_name", ConfigDefaults.DEFAULT_FOLLOW_UP_LIST_NAME);
+        if (blank(listName)) {
+            throw new ConfigException("config_value_error", path + "list_name must not be blank");
+        }
+        Map<FollowUpRelationship, String> relationshipLabels = new EnumMap<>(FollowUpRelationship.class);
+        object(followUpCards, "relationship_labels").forEach((key, value) -> {
+            FollowUpRelationship relationship = FollowUpRelationship.fromValue(key)
+                    .orElseThrow(() -> new ConfigException(
+                            "config_value_error",
+                            path + "relationship_labels keys must be one of "
+                                    + String.join(", ", FollowUpRelationship.toolValues())));
+            if (value != null && !value.toString().isBlank()) {
+                relationshipLabels.put(relationship, value.toString().strip());
+            }
+        });
+        return new EffectiveConfig.FollowUpCardsConfig(
+                bool(followUpCards, "enabled", false),
+                listName.strip(),
+                optionalString(followUpCards, "list_id"),
+                string(followUpCards, "label", ConfigDefaults.DEFAULT_FOLLOW_UP_LABEL)
+                        .strip(),
+                relationshipLabels,
+                bool(followUpCards, "move_current_card_to_blocked", false),
+                positiveWholeNumber(
+                        followUpCards,
+                        "max_cards_per_source_card",
+                        path,
+                        ConfigDefaults.DEFAULT_FOLLOW_UP_MAX_CARDS_PER_SOURCE_CARD),
+                positiveWholeNumber(
+                        followUpCards,
+                        "max_cards_per_hour",
+                        path,
+                        ConfigDefaults.DEFAULT_FOLLOW_UP_MAX_CARDS_PER_HOUR));
+    }
+
+    private static int positiveWholeNumber(Map<String, Object> root, String key, String path, int defaultValue) {
+        Object value = root.get(key);
+        if (value == null) {
+            return defaultValue;
+        }
+        WholeNumbers.Classified classified = WholeNumbers.classify(value.toString());
+        if (classified.kind() != WholeNumbers.Kind.WHOLE || classified.value() < 1) {
+            throw new ConfigException("config_value_error", path + key + " must be a positive whole number");
+        }
+        return classified.value();
     }
 
     private static String string(Map<String, Object> root, String key, String defaultValue) {

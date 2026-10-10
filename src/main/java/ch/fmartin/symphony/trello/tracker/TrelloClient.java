@@ -42,6 +42,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.jboss.logging.Logger;
+import org.jspecify.annotations.Nullable;
 
 @ApplicationScoped
 public class TrelloClient implements TrackerClient {
@@ -759,21 +760,37 @@ public class TrelloClient implements TrackerClient {
                 && !Objects.equals(card.boardId(), config.tracker().resolvedBoardId())) {
             return false;
         }
-        if (card.listId() != null && !config.tracker().activeListIds().isEmpty()) {
-            return config.tracker().activeListIds().contains(card.listId());
+        return isActiveList(config, card.listId(), card.state());
+    }
+
+    /// Whether Symphony dispatches cards from this open board list under the tracker configuration.
+    public static boolean isActiveList(EffectiveConfig config, BoardList list) {
+        return isActiveList(config, list.id(), list.name());
+    }
+
+    private static boolean isActiveList(EffectiveConfig config, @Nullable String listId, String state) {
+        if (listId != null && !config.tracker().activeListIds().isEmpty()) {
+            return config.tracker().activeListIds().contains(listId);
         }
         return config.tracker().activeStates().stream()
                 .map(StateNames::normalize)
-                .anyMatch(state -> state.equals(StateNames.normalize(card.state())));
+                .anyMatch(StateNames.normalize(state)::equals);
     }
 
     public static boolean isTerminal(Card card, EffectiveConfig config) {
-        if (isOpenListBacked(card)
-                && card.listId() != null
-                && !config.tracker().terminalListIds().isEmpty()) {
-            return config.tracker().terminalListIds().contains(card.listId());
+        return isTerminalList(config, isOpenListBacked(card) ? card.listId() : null, card.state());
+    }
+
+    /// Whether cards in this open board list count as finished under the tracker configuration.
+    public static boolean isTerminalList(EffectiveConfig config, BoardList list) {
+        return isTerminalList(config, list.id(), list.name());
+    }
+
+    private static boolean isTerminalList(EffectiveConfig config, @Nullable String listId, String state) {
+        if (listId != null && !config.tracker().terminalListIds().isEmpty()) {
+            return config.tracker().terminalListIds().contains(listId);
         }
-        return config.tracker().terminalStates().contains(StateNames.normalize(card.state()));
+        return config.tracker().terminalStates().contains(StateNames.normalize(state));
     }
 
     private static boolean isOpenListBacked(Card card) {
@@ -865,20 +882,40 @@ public class TrelloClient implements TrackerClient {
 
         Card.ChecklistItem item = singleCheckItemByName(checklist, itemName);
         if (item == null) {
-            // Preserve query parameter order for deterministic request logs and tests.
-            Map<String, String> query = new LinkedHashMap<>();
-            query.put("name", itemName);
-            query.put("checked", Boolean.toString(complete));
-            Map<String, Object> created =
-                    postMap(config, "checklists/" + encodeSegment(checklist.id()) + "/checkItems", query);
-            return new ChecklistItemWrite(
-                    checklist.id(), requiredString(created, "id", "trello_unknown_payload"), complete, "created");
+            return createCheckItem(config, checklist, itemName, complete);
         }
         if (item.complete() == complete) {
             return new ChecklistItemWrite(checklist.id(), item.id(), complete, "unchanged");
         }
         updateCheckItemState(config, cardId, item.id(), complete);
         return new ChecklistItemWrite(checklist.id(), item.id(), complete, "updated");
+    }
+
+    /// Adds an unchecked item when the named checklist does not hold it yet. An existing item keeps
+    /// its state, because prerequisite sync owns the checkmark of a prerequisite item.
+    public ChecklistItemWrite addChecklistItemIfMissing(
+            EffectiveConfig config, String cardId, String checklistName, String itemName) {
+        Card.Checklist checklist = singleChecklistByName(fetchChecklists(config, cardId), checklistName);
+        if (checklist == null) {
+            checklist = createChecklist(config, cardId, checklistName);
+        }
+        Card.ChecklistItem item = singleCheckItemByName(checklist, itemName);
+        if (item != null) {
+            return new ChecklistItemWrite(checklist.id(), item.id(), item.complete(), "unchanged");
+        }
+        return createCheckItem(config, checklist, itemName, false);
+    }
+
+    private ChecklistItemWrite createCheckItem(
+            EffectiveConfig config, Card.Checklist checklist, String itemName, boolean complete) {
+        // Preserve query parameter order for deterministic request logs and tests.
+        Map<String, String> query = new LinkedHashMap<>();
+        query.put("name", itemName);
+        query.put("checked", Boolean.toString(complete));
+        Map<String, Object> created =
+                postMap(config, "checklists/" + encodeSegment(checklist.id()) + "/checkItems", query);
+        return new ChecklistItemWrite(
+                checklist.id(), requiredString(created, "id", "trello_unknown_payload"), complete, "created");
     }
 
     public UrlAttachmentWrite addUrlAttachment(EffectiveConfig config, String cardId, String url, String name) {
@@ -890,6 +927,110 @@ public class TrelloClient implements TrackerClient {
         }
         JsonNode created = postJson(config, "cards/" + encodeSegment(cardId) + "/attachments", query);
         return new UrlAttachmentWrite(attachmentId(created));
+    }
+
+    /// Open cards on the configured board with the fields the follow-up card tool needs to find
+    /// cards it created earlier. One request covers the whole board.
+    public List<BoardCard> fetchOpenBoardCards(EffectiveConfig config) {
+        return getList(
+                        config,
+                        "boards/" + encodeSegment(config.tracker().resolvedBoardId()) + "/cards/open",
+                        Map.of("fields", "id,name,desc,shortLink,idList,idLabels"))
+                .stream()
+                .map(payload -> new BoardCard(
+                        requiredString(payload, "id", "trello_unknown_payload"),
+                        nullToEmpty(string(payload.get("shortLink"))),
+                        nullToEmpty(string(payload.get("name"))),
+                        nullToEmpty(string(payload.get("desc"))),
+                        string(payload.get("idList")),
+                        stringList(payload.get("idLabels"))))
+                .toList();
+    }
+
+    public List<BoardLabel> fetchBoardLabels(EffectiveConfig config) {
+        return getList(
+                        config,
+                        "boards/" + encodeSegment(config.tracker().resolvedBoardId()) + "/labels",
+                        Map.of("fields", "id,name", "limit", "1000"))
+                .stream()
+                .map(payload -> new BoardLabel(
+                        requiredString(payload, "id", "trello_unknown_payload"),
+                        nullToEmpty(string(payload.get("name")))))
+                .toList();
+    }
+
+    public BoardLabel createBoardLabel(EffectiveConfig config, String name, String color) {
+        // Preserve query parameter order for deterministic request logs and tests.
+        Map<String, String> query = new LinkedHashMap<>();
+        query.put("idBoard", config.tracker().resolvedBoardId());
+        query.put("name", name);
+        query.put("color", color);
+        Map<String, Object> created = postMap(config, "labels", query);
+        return new BoardLabel(requiredString(created, "id", "trello_unknown_payload"), name);
+    }
+
+    public void addLabelToCard(EffectiveConfig config, String cardId, String labelId) {
+        postMap(config, "cards/" + encodeSegment(cardId) + "/idLabels", Map.of("value", labelId));
+    }
+
+    public CreatedCard createCard(
+            EffectiveConfig config, String listId, String name, String description, List<String> labelIds) {
+        // Preserve query parameter order for deterministic request logs and tests.
+        Map<String, String> query = new LinkedHashMap<>();
+        query.put("idList", listId);
+        query.put("name", name);
+        query.put("desc", description);
+        query.put("pos", "bottom");
+        if (!labelIds.isEmpty()) {
+            query.put("idLabels", String.join(",", labelIds));
+        }
+        Map<String, Object> created = postMap(config, "cards", query);
+        return new CreatedCard(
+                requiredString(created, "id", "trello_unknown_payload"),
+                requiredString(created, "shortLink", "trello_unknown_payload"));
+    }
+
+    public List<String> fetchAttachmentUrls(EffectiveConfig config, String cardId) {
+        return getList(config, "cards/" + encodeSegment(cardId) + "/attachments", Map.of("fields", "url")).stream()
+                .map(payload -> nullToEmpty(string(payload.get("url"))))
+                .filter(url -> !url.isBlank())
+                .toList();
+    }
+
+    /// Explains why adding an exact card reference to the named checklist would break the
+    /// prerequisite checklist convention, or returns empty when the checklist is missing, empty,
+    /// or already holds only exact prerequisite references.
+    public Optional<String> prerequisiteChecklistConflict(EffectiveConfig config, String cardId, String checklistName) {
+        List<Card.Checklist> matches = fetchChecklists(config, cardId).stream()
+                .filter(checklist -> Objects.equals(checklist.name(), checklistName))
+                .toList();
+        if (matches.size() > 1) {
+            return Optional.of("More than one checklist on the current card is named " + checklistName + ".");
+        }
+        if (matches.isEmpty()) {
+            return Optional.empty();
+        }
+        Card.Checklist checklist = matches.getFirst();
+        TrelloChecklistClassifier.ChecklistAnalysis analysis = TrelloChecklistClassifier.analyze(checklist);
+        boolean hasNonBlankItem = checklist.items().stream()
+                .anyMatch(item -> !nullToEmpty(item.text()).isBlank());
+        boolean onlyExactReferences = analysis.problems().isEmpty()
+                && (!hasNonBlankItem || !analysis.prerequisites().isEmpty());
+        return onlyExactReferences
+                ? Optional.empty()
+                : Optional.of("The current card's " + checklistName
+                        + " checklist holds notes or links that are not exact card references, so adding a"
+                        + " prerequisite to it would make it ambiguous.");
+    }
+
+    private static List<String> stringList(Object value) {
+        if (!(value instanceof List<?> list)) {
+            return List.of();
+        }
+        return list.stream()
+                .map(TrelloClient::string)
+                .filter(item -> !blank(item))
+                .toList();
     }
 
     private Card.Checklist createChecklist(EffectiveConfig config, String cardId, String checklistName) {
@@ -1514,6 +1655,22 @@ public class TrelloClient implements TrackerClient {
     public record ChecklistItemWrite(String checklistId, String checkItemId, boolean complete, String status) {}
 
     public record UrlAttachmentWrite(String attachmentId) {}
+
+    public record BoardCard(
+            String id,
+            String shortLink,
+            String name,
+            String description,
+            @Nullable String listId,
+            List<String> labelIds) {
+        public BoardCard {
+            labelIds = List.copyOf(labelIds);
+        }
+    }
+
+    public record BoardLabel(String id, String name) {}
+
+    public record CreatedCard(String id, String shortLink) {}
 
     private record PrerequisitePlan(
             List<TrelloChecklistClassifier.PrerequisiteItem> items, List<Card.PrerequisiteProblem> problems) {}

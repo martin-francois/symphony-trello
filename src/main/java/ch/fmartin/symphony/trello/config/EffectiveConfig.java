@@ -146,10 +146,42 @@ public record EffectiveConfig(
             boolean allowChecklists,
             boolean allowUrlAttachments,
             boolean allowDestructiveOperations,
-            boolean assumeWriteScope) {
+            boolean assumeWriteScope,
+            FollowUpCardsConfig followUpCards) {
         public TrelloToolsConfig {
             allowedMoveListIds = List.copyOf(allowedMoveListIds);
             allowedMoveListNames = List.copyOf(allowedMoveListNames);
+        }
+    }
+
+    /// Opt-in policy for `trello_create_follow_up_card` under `trello_tools.follow_up_cards`.
+    ///
+    /// `label` is the visible label added to every follow-up card; an empty value disables it.
+    /// `listId` wins over `listName` when both are set, like the move allowlists prefer ids.
+    @NullMarked
+    public record FollowUpCardsConfig(
+            boolean enabled,
+            String listName,
+            @Nullable String listId,
+            String label,
+            Map<FollowUpRelationship, String> relationshipLabels,
+            boolean moveCurrentCardToBlocked,
+            int maxCardsPerSourceCard,
+            int maxCardsPerHour) {
+        public FollowUpCardsConfig {
+            relationshipLabels = Map.copyOf(relationshipLabels);
+        }
+
+        public static FollowUpCardsConfig disabled() {
+            return new FollowUpCardsConfig(
+                    false,
+                    ConfigDefaults.DEFAULT_FOLLOW_UP_LIST_NAME,
+                    null,
+                    ConfigDefaults.DEFAULT_FOLLOW_UP_LABEL,
+                    Map.of(),
+                    false,
+                    ConfigDefaults.DEFAULT_FOLLOW_UP_MAX_CARDS_PER_SOURCE_CARD,
+                    ConfigDefaults.DEFAULT_FOLLOW_UP_MAX_CARDS_PER_HOUR);
         }
     }
 

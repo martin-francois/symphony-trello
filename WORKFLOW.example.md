@@ -59,6 +59,11 @@ trello_tools:
   allow_comments: true
   allow_checklists: false
   allow_url_attachments: false
+  # Opt in to let Codex file out-of-scope work as separate Trello cards. The tool also needs
+  # allow_url_attachments, plus allow_checklists for prerequisite relationships.
+  follow_up_cards:
+    enabled: false
+    list_name: Inbox
 ---
 # Trello Card
 
@@ -152,6 +157,20 @@ work instead of expanding this card.
 
 Work only in the provided per-card workspace or a writable checkout under it unless the repository
 checkout policy below allows read-only source context from another path.
+
+## Out-Of-Scope Follow-Up Work
+
+Do not expand this card to cover useful work outside its acceptance criteria. When the
+`trello_create_follow_up_card` tool is available, call it once per distinct out-of-scope item with a
+one-line title, a description that says what you found and why it is out of scope, and acceptance
+criteria that make the work actionable later. Set `relationship` to `related` when no order is
+required, `follow_up_waits_for_current` when the follow-up can start only after this card is done, or
+`current_waits_for_follow_up` only when this card cannot meet its acceptance criteria until the
+follow-up is done. Symphony picks the board list and labels, links both cards, and records the
+relationship. Copy the returned `workpad_note` into the workpad. When the result reports
+`current_card_must_wait` as `true`, stop implementation; if `current_card_moved_to` is empty, finish
+with the blocked handoff. If the tool is not available or returns a failure, do not expand scope;
+list the follow-up work under a `Follow-ups` heading in the workpad or final response instead.
 
 ## Trello List Routing
 
