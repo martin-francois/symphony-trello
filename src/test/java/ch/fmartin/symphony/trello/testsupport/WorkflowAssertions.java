@@ -28,7 +28,8 @@ public final class WorkflowAssertions {
     }
 
     public WorkflowAssertions hasNoGithubFlow() {
-        assertThat(content).doesNotContain("## Pull Request Publication", "linked PR comments");
+        assertThat(content)
+                .doesNotContain("## Pull Request Publication", "## GitHub Issue Assignment", "linked PR comments");
         return this;
     }
 

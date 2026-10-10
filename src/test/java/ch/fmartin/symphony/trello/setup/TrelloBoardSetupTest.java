@@ -9,6 +9,7 @@ import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.respond;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.trelloList;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.workspaceJson;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.workspacesJson;
+import static ch.fmartin.symphony.trello.testsupport.WorkflowAssertions.assertThatWorkflow;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
@@ -45,6 +46,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 final class TrelloBoardSetupTest {
     private static final String REPOSITORY_POLICY_HEADING = "## Classify Repository Need Before Source Blocking";
+    private static final String GITHUB_ISSUE_ASSIGNMENT_HEADING = "## GitHub Issue Assignment";
     private static final String REPOSITORY_SOURCE_PRECEDENCE_HEADING = "## Repository Source Precedence";
 
     private FakeTrelloServer trello;
@@ -917,6 +919,87 @@ final class TrelloBoardSetupTest {
                 .isEqualTo(Map.of("type", "workspaceWrite", "networkAccess", true));
         assertThat(config.trelloTools().allowedMoveListNames())
                 .containsExactly("in progress", "human review", "blocked", "done");
+    }
+
+    @Test
+    void githubWorkflowAssignsImplementedIssuesBeforeImplementation() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("github-issue-assignment.md");
+
+        // when
+        createRecommendedBoardWorkflow(workflow, TrelloBoardSetup.GitHubIntegration.ENABLED);
+
+        // then
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains(GITHUB_ISSUE_ASSIGNMENT_HEADING)
+                .containsIgnoringWhitespaces(
+                        "After the initial `checking` call succeeds and no stale blocker stops this card, and before you implement the change",
+                        "skip the number when the response has a `pull_request` field",
+                        "`gh issue edit <number> --repo <owner>/<repository> --add-assignee @me`",
+                        "`gh issue view <number> --repo <owner>/<repository> --json assignees`",
+                        "record in the workpad which issue was not assigned and why",
+                        "Do not treat a failed assignment as a blocker.");
+        assertThat(markdownSection(Files.readString(Path.of("WORKFLOW.example.md")), GITHUB_ISSUE_ASSIGNMENT_HEADING))
+                .as("shipped workflow example GitHub issue assignment section")
+                .isEqualToNormalizingWhitespace(
+                        markdownSection(Files.readString(workflow), GITHUB_ISSUE_ASSIGNMENT_HEADING));
+    }
+
+    @Test
+    void nonGithubWorkflowDoesNotAssignGithubIssues() {
+        // given
+        Path workflow = tempDir.resolve("non-github-issue-assignment.md");
+
+        // when
+        createRecommendedBoardWorkflow(workflow, TrelloBoardSetup.GitHubIntegration.DISABLED);
+
+        // then
+        assertThatWorkflow(workflow).hasNoGithubFlow().doesNotContain("--add-assignee");
+    }
+
+    @Test
+    void githubWorkflowWithoutTrelloHandoffToolsRecordsSkippedIssueAssignmentInFinalResponse() {
+        // given
+        boardListsResponse.set(listsJson(trelloList("list-ready", "Ready for Codex", 1)));
+        Path workflow = tempDir.resolve("read-only-github-issue-assignment.md");
+
+        // when
+        setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "input",
+                List.of("Ready for Codex"),
+                List.of(),
+                null,
+                workflow,
+                Path.of("./agent-workspaces"),
+                1,
+                false));
+
+        // then
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("trello_tools:\n  enabled: false", GITHUB_ISSUE_ASSIGNMENT_HEADING)
+                .containsIgnoringWhitespaces(
+                        "Before you implement the change, assign",
+                        "record in the final response which issue was not assigned and why")
+                .doesNotContain("After the initial `checking` call succeeds");
+    }
+
+    private void createRecommendedBoardWorkflow(Path workflow, TrelloBoardSetup.GitHubIntegration githubIntegration) {
+        setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "Issue Assignment",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                null,
+                1,
+                false,
+                false,
+                githubIntegration));
     }
 
     @Test
@@ -2937,9 +3020,21 @@ final class TrelloBoardSetupTest {
         assertThat(start).as("repository policy heading offset").isNotNegative();
         int precedence = workflow.indexOf(REPOSITORY_SOURCE_PRECEDENCE_HEADING, start);
         assertThat(precedence).as("repository source precedence heading offset").isGreaterThan(start);
-        int end = workflow.indexOf("\n## ", precedence + REPOSITORY_SOURCE_PRECEDENCE_HEADING.length());
-        assertThat(end).as("next workflow section heading offset").isGreaterThan(precedence);
-        return workflow.substring(start, end);
+        return workflow.substring(start, sectionEnd(workflow, REPOSITORY_SOURCE_PRECEDENCE_HEADING, precedence));
+    }
+
+    private static String markdownSection(String workflow, String heading) {
+        int start = workflow.indexOf(heading);
+        assertThat(start).as("%s heading offset", heading).isNotNegative();
+        return workflow.substring(start, sectionEnd(workflow, heading, start));
+    }
+
+    private static int sectionEnd(String workflow, String heading, int headingOffset) {
+        int end = workflow.indexOf("\n## ", headingOffset + heading.length());
+        assertThat(end)
+                .as("next workflow section heading offset after %s", heading)
+                .isGreaterThan(headingOffset);
+        return end;
     }
 
     private static void assertGeneratedStaleBlockerRecheckPolicy(Path workflow) {
