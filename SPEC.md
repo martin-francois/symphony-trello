@@ -4199,6 +4199,9 @@ When this profile is used:
 - Renovate SHOULD keep Maven dependencies, GitHub Actions, and pinned tool versions current
 - GitHub Actions SHOULD be pinned to full commit SHAs, with Renovate allowed to update non-major
   action pins after the configured release-age delay
+- the release workflow MAY publish the jar, sources jar, Javadoc jar, and POM to Maven Central with
+  JReleaser after the GitHub Release is published; that publication MUST NOT build, replace, or
+  re-sign the GitHub Release assets, `checksums.txt`, or the release attestation bundle
 
 ## Appendix A. SSH Worker Extension (OPTIONAL)
 

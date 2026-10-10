@@ -11,6 +11,9 @@ jobs:
   release-please:
     name: Create or update release PR
     runs-on: ubuntu-24.04
+    outputs:
+      upload_assets: ${{ steps.release-assets.outputs.upload_assets }}
+      checkout_ref: ${{ steps.release-assets.outputs.checkout_ref }}
     permissions:
       attestations: write
       contents: write
@@ -90,3 +93,34 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.release-assets.outputs.tag_name }}
         run: gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+
+  maven-central:
+    name: Publish Maven Central artifacts
+    needs: release-please
+    # Off until the owner sets the MAVEN_CENTRAL_STAGE repository variable (CONTRIBUTING.md).
+    if: ${{ needs.release-please.outputs.upload_assets == 'true' && vars.MAVEN_CENTRAL_STAGE != '' }}
+    runs-on: ubuntu-24.04
+    environment: maven-central
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release-please.outputs.checkout_ref }}
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "25.0.4+7.0.LTS"
+      - name: Stage Maven Central artifacts
+        run: scripts/stage-maven-central-artifacts
+      - name: Deploy to Maven Central
+        env:
+          JRELEASER_MAVENCENTRAL_STAGE: ${{ vars.MAVEN_CENTRAL_STAGE }}
+          JRELEASER_MAVENCENTRAL_USERNAME: ${{ secrets.JRELEASER_MAVENCENTRAL_USERNAME }}
+          JRELEASER_MAVENCENTRAL_PASSWORD: ${{ secrets.JRELEASER_MAVENCENTRAL_PASSWORD }}
+          JRELEASER_GPG_PUBLIC_KEY: ${{ secrets.JRELEASER_GPG_PUBLIC_KEY }}
+          JRELEASER_GPG_SECRET_KEY: ${{ secrets.JRELEASER_GPG_SECRET_KEY }}
+          JRELEASER_GPG_PASSPHRASE: ${{ secrets.JRELEASER_GPG_PASSPHRASE }}
+        run: scripts/deploy-maven-central
