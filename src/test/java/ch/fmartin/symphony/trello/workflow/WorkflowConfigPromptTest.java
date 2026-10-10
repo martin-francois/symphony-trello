@@ -7,10 +7,12 @@ import ch.fmartin.symphony.trello.TestCards;
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.config.ConfigException;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
+import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.StateNames;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.Test;
@@ -137,6 +139,24 @@ final class WorkflowConfigPromptTest {
         // then
         assertThat(error.code()).isEqualTo("invalid_in_progress_state");
         assertThat(error).hasMessageContaining("tracker.in_progress_state");
+    }
+
+    @Test
+    void exampleWorkflowSelectsBranchOnlyHandoffForCardsWithTheNoPrLabel() {
+        // given
+        WorkflowDefinition definition = loader.load(Path.of("WORKFLOW.example.md"));
+        var config = configs.resolve(definition);
+        var card = TestCards.cardWithLabels("1", "TRELLO-abc", "Todo", List.of(ConfigDefaults.DEFAULT_NO_PR_LABEL));
+
+        // when
+        // attempt 1 because the example fails to render with a null first attempt, see #843.
+        String renderedPrompt = prompts.render(definition.promptTemplate(), card, 1, config.github());
+
+        // then
+        assertThat(config.github()).isEqualTo(EffectiveConfig.GitHubConfig.DEFAULTS);
+        assertThat(renderedPrompt)
+                .contains("- Effective mode for this run: `branch_only`, selected by\n  `card_label`.")
+                .contains("- Card label from `github.no_pr_label`: `No PR`. This card has it: yes.");
     }
 
     @Test

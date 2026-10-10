@@ -17,9 +17,11 @@ import ch.fmartin.symphony.trello.TestCards;
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
+import ch.fmartin.symphony.trello.config.PullRequestMode;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
+import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
@@ -37,13 +39,20 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 final class TrelloBoardSetupTest {
+    private static final String GENERATED_GITHUB_SECTION =
+            "github:\n  pull_request_mode: create\n  no_pr_label: \"No PR\"\n";
+
     private static final String REPOSITORY_POLICY_HEADING = "## Classify Repository Need Before Source Blocking";
     private static final String REPOSITORY_SOURCE_PRECEDENCE_HEADING = "## Repository Source Precedence";
 
@@ -908,6 +917,8 @@ final class TrelloBoardSetupTest {
                 .contains("turn_sandbox_policy:", "type: workspaceWrite", "networkAccess: true")
                 .doesNotContain("Merging")
                 .doesNotContain("## Pull Request Publication")
+                .doesNotContain("## Pull Request Handoff Mode")
+                .doesNotContain("github:")
                 .doesNotContain("linked PR comments")
                 .doesNotContain("PR feedback sweep")
                 .doesNotContain("## Merge From \"Merging\"");
@@ -2885,6 +2896,113 @@ final class TrelloBoardSetupTest {
                 .containsExactly(
                         "- source=description status=found terminal=true identifier=TRELLO-desc state=Done title=Description reference url=https://trello.com/c/DESC123 text=See https://trello.com/c/DESC123",
                         "- source=comment status=found terminal=false identifier=TRELLO-comment state=Ready for Codex title=Comment reference url=https://trello.com/c/COMM123 text=See https://trello.com/c/COMM123");
+    }
+
+    @Test
+    void generatedGithubWorkflowEnablesTheNoPrLabelAndDescribesBranchOnlyHandoff() {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.branch-only.md");
+
+        // when
+        createRecommendedGithubBoard(workflow);
+
+        // then
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains(GENERATED_GITHUB_SECTION + "server:")
+                .contains("## Pull Request Handoff Mode")
+                .contains("A workflow default of `branch_only` is strict")
+                .contains("explicitly asks Symphony to create a pull request")
+                .contains("### Branch-Only Handoff")
+                .contains("run the local checks that would normally gate CI")
+                .contains("`PR.md` in the root of the task")
+                .contains("`PR-2.md`, `PR-3.md`")
+                .contains("Never stage or commit the proposed description file")
+                .contains("git rev-parse --git-path info/exclude")
+                .contains("Do not create a pull request.")
+                .contains("`Branch: <https://github.com/owner/repo/tree/branch-name>`")
+                .contains("Move the card to \"Human Review\".")
+                .contains("### Creating The Pull Request Later")
+                .contains("after a human removed the label")
+                .contains("or push the branch without one when the Pull Request Handoff Mode section selects")
+                .contains("section selects a branch-only handoff")
+                .contains("keep that file uncommitted")
+                .contains("skip the PR steps above and merge the branch itself")
+                .contains("If the branch commits are already on the target\nbranch, skip the merge.")
+                .contains("Do not apply pull\nrequest review-thread handling.");
+        assertThat(resolve(workflow).github())
+                .isEqualTo(new EffectiveConfig.GitHubConfig(PullRequestMode.CREATE, "No PR"));
+    }
+
+    @MethodSource("generatedHandoffModes")
+    @ParameterizedTest(name = "{0}")
+    void generatedGithubWorkflowRendersTheResolvedPullRequestHandoffMode(
+            String name, String githubSection, List<String> cardLabels, String modeLine, String labelLine)
+            throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.handoff-" + name + ".md");
+        createRecommendedGithubBoard(workflow);
+        Files.writeString(workflow, Files.readString(workflow).replace(GENERATED_GITHUB_SECTION, githubSection));
+        WorkflowDefinition definition = new WorkflowLoader().load(workflow);
+        Card card = TestCards.cardWithLabels("card-1", "TRELLO-123", "Ready for Codex", cardLabels);
+
+        // when
+        String prompt = new PromptRenderer()
+                .render(
+                        definition.promptTemplate(),
+                        card,
+                        null,
+                        resolve(workflow).github());
+
+        // then
+        assertThat(prompt)
+                .contains(modeLine)
+                .contains(labelLine)
+                .as("the rule list must stay a separate paragraph after the template tags")
+                .containsPattern("(it: yes|it: no|in this workflow)\\.\\n\\nApply these rules in order:")
+                .doesNotContain("{%")
+                .doesNotContain("{{");
+    }
+
+    private static Stream<Arguments> generatedHandoffModes() {
+        return Stream.of(
+                Arguments.of(
+                        "create-board-unlabelled",
+                        GENERATED_GITHUB_SECTION,
+                        List.of(),
+                        "- Effective mode for this run: `create`, selected by\n  `workflow`.",
+                        "- Card label from `github.no_pr_label`: `No PR`. This card has it: no."),
+                Arguments.of(
+                        "create-board-labelled",
+                        GENERATED_GITHUB_SECTION,
+                        List.of("no pr"),
+                        "- Effective mode for this run: `branch_only`, selected by\n  `card_label`.",
+                        "- Card label from `github.no_pr_label`: `No PR`. This card has it: yes."),
+                Arguments.of(
+                        "branch-only-board",
+                        "github:\n  pull_request_mode: branch_only\n",
+                        List.of(),
+                        "- Effective mode for this run: `branch_only`, selected by\n  `workflow`.",
+                        "- Workflow default from `github.pull_request_mode`: `branch_only`."),
+                Arguments.of(
+                        "label-disabled",
+                        "github:\n  no_pr_label: \"\"\n",
+                        List.of("no pr"),
+                        "- Effective mode for this run: `create`, selected by\n  `workflow`.",
+                        "- Card label from `github.no_pr_label`: turned off in this workflow."));
+    }
+
+    private void createRecommendedGithubBoard(Path workflow) {
+        setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "Branch Only Board",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                false));
     }
 
     @Test
