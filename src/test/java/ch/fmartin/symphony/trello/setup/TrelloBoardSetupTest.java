@@ -135,6 +135,29 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
+    void generatedWorkflowRoutingNamesTheQueueAndReviewListsForBoardSessions() {
+        // given
+        Path workflow = tempDir.resolve("routing-workflow.md");
+        setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "Synthetic Board",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                false));
+
+        // when
+        WorkflowConfigEditor.GeneratedRoutingLists routing = new WorkflowConfigEditor().generatedRoutingLists(workflow);
+
+        // then
+        assertThat(routing.queueLists()).containsExactly("Ready for Codex");
+        assertThat(routing.reviewList()).hasValue("Human Review");
+    }
+
+    @Test
     void newBoardDerivesBoardKeyFromUrlWhenCreateResponseOmitsShortLink() {
         // given
         trello.remove("/1/boards/");

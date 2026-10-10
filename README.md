@@ -647,6 +647,80 @@ public-safe checks. Use `--show-private-context` only locally when you need to m
 back to your own board, workflow, log file, or PID/state file. Add `--lookup <token>` when you only
 need one mapping. Do not paste private-context output into public issues.
 
+### Ask Codex about your board
+
+`symphony-trello codex` opens the normal interactive Codex session in your current directory and
+connects it to one Trello board. Codex already knows the board name, the workflow's list roles, and
+which list new cards go to, so you can ask things like "Create a card to add snapshot testing for
+the CLI output" or "What is waiting for review?". You can also ask questions that have nothing to do
+with Trello.
+
+```bash
+symphony-trello codex
+symphony-trello codex --board "Symphony Work Queue"
+symphony-trello codex --board abc123
+symphony-trello codex --workflow /path/to/WORKFLOW.board.md
+```
+
+`--board` accepts the connected board's name in any letter case, its Trello board id, its short
+link, or its board URL. `--workflow` takes the path of a connected workflow file. Use one or the
+other. Without either, Symphony uses the only connected board, or shows a numbered list when several
+boards are connected. Press Enter at the list to cancel; nothing starts and Trello is not contacted.
+Without a terminal, such as in a script, pass `--board` or `--workflow`. Boards whose workflow file is
+missing or invalid are skipped, and Symphony prints the reason.
+
+What Codex can do on the board:
+
+- read the board, its lists and their workflow roles, and list or search open cards
+- read one card with its description, checklists, links, and recent comments
+- create cards, change titles and descriptions, add comments, and set checklist items
+- move cards to the lists in `trello_tools.allowed_move_list_names` or `allowed_move_list_ids`
+- archive a card after you confirm its exact title; Trello keeps archived cards and you can restore
+  them, and the session never deletes cards
+
+Cards can be given as a card URL, a short link, or a card id. Codex can only change cards on the
+selected board. When you ask for a new card without naming a list, it goes to the workflow's queue
+list, which is `Ready for Codex` on the recommended board, and a running Symphony worker can pick it
+up. If the workflow has several queue lists, Codex asks you which one to use.
+
+The workflow's `trello_tools` settings still apply. `enabled: false` turns off all board tools,
+`allow_writes: false` leaves only reading, and `allow_comments` and `allow_checklists` control those
+writes. Codex may also ask you to approve a write, depending on your Codex approval settings.
+
+How access works:
+
+- Codex uses your own Codex login and your own Codex settings for model, sandbox, and approvals. The
+  board's worker settings, including full host access, do not apply to this session. The session
+  sets Codex's `developer_instructions` to the board context, so a `developer_instructions` value in
+  your own Codex configuration is not used while the session runs.
+- Trello credentials come from the same place as for `symphony-trello start`: the board's credential
+  file, with `TRELLO_API_KEY` and `TRELLO_API_TOKEN` from your shell taking precedence. Codex login
+  and Trello credentials are separate.
+- The Trello key and token stay in the `symphony-trello` process. Codex reaches Trello through a
+  local tool server that only exists while the session runs, using a random session token. Codex
+  does not receive the Trello key or token, even when your shell sets them.
+- This keeps the token out of Codex, but it is not an operating-system security boundary. Codex runs
+  as your user, so your Codex sandbox settings decide which files it can read.
+
+Troubleshooting:
+
+- `setup_codex_missing`: install the Codex CLI and check that `codex --version` works.
+- `setup_codex_auth_required`: run `codex login`, then start the session again.
+- `setup_codex_no_connected_board`: connect a board with `symphony-trello setup-local`, or fix the
+  workflow files listed as skipped.
+- `setup_codex_board_required`: several boards are connected and there is no terminal for the list;
+  pass `--board` or `--workflow`.
+- `setup_worker_missing_api_key`, `setup_worker_missing_api_token`, or `trello_auth_failed`: fix the
+  Trello credentials shown in the message, then start the session again.
+- A tool answers `trello_tools_disabled`, `trello_writes_disabled`, `trello_comments_disabled`,
+  `trello_checklists_disabled`, or `trello_move_allowlist_required`: change that setting in the
+  workflow's `trello_tools` section if you want Codex to do it.
+- Codex shows "Running without the shared background server": this is expected because the session
+  passes its settings on the Codex command line. After Ctrl+C, Codex can take up to about 20 seconds
+  to exit in this mode; press Ctrl+C again to stop it sooner.
+- `codex resume` does not reconnect the board tools. Start a new `symphony-trello codex` session
+  instead.
+
 ## Installer Reference
 
 The installer downloads the latest GitHub Release archive, verifies its SHA3-256 checksum, and

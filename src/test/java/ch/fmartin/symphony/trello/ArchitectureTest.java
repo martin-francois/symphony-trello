@@ -36,6 +36,15 @@ final class ArchitectureTest {
             .resideInAnyPackage("..agent..", "..api..", "..orchestrator..", "..prompt..", "..workspace..");
 
     @ArchTest
+    static final ArchRule BOARD_SESSION_TOOLS_DO_NOT_DEPEND_ON_COMMANDS_OR_RUNTIME_ORCHESTRATION = noClasses()
+            .that()
+            .resideInAPackage("..boardsession..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage("..agent..", "..api..", "..orchestrator..", "..setup..", "..workspace..")
+            .because("the interactive board tools only need Trello, workflow config, and process helpers");
+
+    @ArchTest
     static final ArchRule SETUP_SERVICES_DO_NOT_DEPEND_ON_PICOCLI = noClasses()
             .that(setupServiceClasses())
             .should()

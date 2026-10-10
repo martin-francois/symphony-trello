@@ -62,6 +62,30 @@ final class WorkflowConfigEditorTest {
     }
 
     @Test
+    void handWrittenWorkflowsHaveNoGeneratedRoutingLists() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.hand.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "board-1"
+                ---
+                - "Escaped \\"name\\"": human review.
+                Move reviewed cards to Done.
+                """);
+
+        // when
+        WorkflowConfigEditor.GeneratedRoutingLists routing = new WorkflowConfigEditor().generatedRoutingLists(workflow);
+
+        // then
+        assertThat(routing.reviewList()).isEmpty();
+        assertThat(routing.queueLists()).isEmpty();
+    }
+
+    @Test
     void updatesOneCharacterWorkflowFileName() throws Exception {
         // given
         Path workflow = tempDir.resolve("x");
