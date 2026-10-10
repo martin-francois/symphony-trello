@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
+import com.sun.net.httpserver.HttpServer;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -24,11 +25,18 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 final class InstallerScriptTest {
     private static final String INSTALL_CONTEXT_PROPERTIES = "install-context.properties";
+    private static final String SIGNED_RELEASE_VERSION = "9.8.7";
+    private static final String UNSIGNED_RELEASE_VERSION = "1.1.1";
+    private static final String RELEASE_SIGNER_IDENTITY =
+            "https://github.com/martin-francois/symphony-trello/.github/workflows/release-please.yml@refs/heads/main";
+    private static final String SECURITY_REPORT_URL =
+            "https://github.com/martin-francois/symphony-trello/security/advisories/new";
 
     @TempDir
     Path temporaryDirectory;
@@ -4136,6 +4144,7 @@ final class InstallerScriptTest {
                         "Version: " + installerDefaultRef().substring(1),
                         "WOULD download release archive:",
                         "WOULD verify SHA3-256 checksum from:",
+                        "WOULD skip release signature check: install GitHub CLI (gh) 2.49 or newer to check it",
                         "WOULD offer to install Java 25+ JDK",
                         "WOULD offer to install Codex CLI with Symphony-managed npm:",
                         "Node.js/npm installed: no");
@@ -8187,6 +8196,132 @@ final class InstallerScriptTest {
         assertThat(result.output()).contains("rm -rf " + appHome, "git clone");
     }
 
+    @EnumSource(ReleaseSignatureCheck.class)
+    @ParameterizedTest(name = "{0}")
+    void posixInstallerChecksReleaseSignatureBeforeUnpackingArchive(ReleaseSignatureCheck check) throws Exception {
+        // given
+        assumeFalse(isWindows());
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("curl"));
+        assumeTrue(commandExists("tar"));
+
+        // when
+        ReleaseArchiveInstall install = runReleaseArchiveInstall(List.of("bash", "install.sh"), check.release);
+
+        // then
+        install.result().assertSuccess();
+        assertReleaseSignatureCheck(install, check);
+    }
+
+    @EnumSource(RejectedReleaseSignature.class)
+    @ParameterizedTest(name = "{0}")
+    void posixInstallerRefusesReleaseArchiveWhenSignatureCannotBeVerified(RejectedReleaseSignature rejection)
+            throws Exception {
+        // given
+        assumeFalse(isWindows());
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("curl"));
+        assumeTrue(commandExists("tar"));
+
+        // when
+        ReleaseArchiveInstall install = runReleaseArchiveInstall(List.of("bash", "install.sh"), rejection.release);
+
+        // then
+        assertThat(install.result().exitCode()).as(install.result().output()).isEqualTo(2);
+        assertThat(install.result().output()).contains(rejection.expectedOutput);
+        assertThat(install.appHome()).doesNotExist();
+    }
+
+    @EnumSource(ReleaseSignatureCheck.class)
+    @ParameterizedTest(name = "{0}")
+    void powershellInstallerChecksReleaseSignatureBeforeExpandingArchiveOnWindows(ReleaseSignatureCheck check)
+            throws Exception {
+        // given
+        assumeTrue(isWindows());
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+
+        // when
+        ReleaseArchiveInstall install =
+                runReleaseArchiveInstall(command(pwsh, "-NoProfile", "-File", "./install.ps1"), check.release);
+
+        // then
+        install.result().assertSuccess();
+        assertReleaseSignatureCheck(install, check);
+    }
+
+    @EnumSource(RejectedReleaseSignature.class)
+    @ParameterizedTest(name = "{0}")
+    void powershellInstallerRefusesReleaseArchiveWhenSignatureCannotBeVerifiedOnWindows(
+            RejectedReleaseSignature rejection) throws Exception {
+        // given
+        assumeTrue(isWindows());
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+
+        // when
+        ReleaseArchiveInstall install =
+                runReleaseArchiveInstall(command(pwsh, "-NoProfile", "-File", "./install.ps1"), rejection.release);
+
+        // then
+        assertThat(install.result().exitCode()).as(install.result().output()).isNotZero();
+        assertThat(install.result().output()).contains(rejection.expectedOutput);
+        assertThat(install.appHome()).doesNotExist();
+    }
+
+    private ReleaseArchiveInstall runReleaseArchiveInstall(List<String> installer, ReleaseArchiveScenario release)
+            throws Exception {
+        Path assets = createReleaseAssets(temporaryDirectory, release.version(), release.withSignatureBundle());
+        Path fakeGitHubCli = createFakeGitHubCli(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve("release-archive-home");
+        Path appHome = symphonyHome.resolve("app");
+        Path fakeLog = temporaryDirectory.resolve("release-archive.log");
+        Files.writeString(fakeLog, "");
+        Path javaBin = Path.of(System.getProperty("java.home"), "bin");
+        HttpServer server = serveReleaseAssets(assets);
+        try {
+            Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
+            environment.put(
+                    "PATH",
+                    String.join(
+                            File.pathSeparator, fakeGitHubCli.toString(), javaBin.toString(), System.getenv("PATH")));
+            environment.put("SYMPHONY_HOME", symphonyHome.toString());
+            environment.put("SYMPHONY_TRELLO_RELEASE_BASE_URL", releaseAssetsUrl(server));
+            environment.put("SYMPHONY_FAKE_LOG", fakeLog.toString());
+            environment.put("SYMPHONY_FAKE_GH_ATTESTATION", release.gitHubCli().mode);
+            List<String> command = new ArrayList<>(installer);
+            command.addAll(List.of(
+                    "--no-onboard",
+                    "--no-update-path",
+                    "--version",
+                    release.version(),
+                    "--prefix",
+                    appHome.toString(),
+                    "--bin-dir",
+                    temporaryDirectory.resolve("release-archive-bin").toString()));
+            return new ReleaseArchiveInstall(run(environment, command.toArray(String[]::new)), appHome, fakeLog);
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    private static void assertReleaseSignatureCheck(ReleaseArchiveInstall install, ReleaseSignatureCheck check) {
+        assertThat(install.result().output()).contains(check.expectedOutput);
+        assertThat(install.appHome().resolve("target/quarkus-app/quarkus-run.jar"))
+                .isRegularFile();
+        if (check == ReleaseSignatureCheck.VERIFIED_WITH_GITHUB_CLI) {
+            assertThat(install.fakeLog())
+                    .content()
+                    .contains(
+                            "gh GH_HOST=github.com attestation verify ",
+                            " --bundle ",
+                            "symphony-trello-" + SIGNED_RELEASE_VERSION + ".intoto.jsonl",
+                            " --repo martin-francois/symphony-trello --cert-identity " + RELEASE_SIGNER_IDENTITY);
+        } else {
+            assertThat(install.fakeLog()).content().doesNotContain("--bundle");
+        }
+    }
+
     @Test
     void powershellInstallerRefusesUnmarkedUnrelatedExistingCheckoutWhenAvailable() throws Exception {
         // given
@@ -8791,6 +8926,73 @@ final class InstallerScriptTest {
         Path root = Path.of("").toAbsolutePath().getRoot();
         return root == null ? "/" : root.toString();
     }
+
+    private enum ReleaseSignatureCheck {
+        VERIFIED_WITH_GITHUB_CLI(
+                ReleaseArchiveScenario.signed(FakeGitHubCli.VERIFIES),
+                "OK  Release signature verified with GitHub CLI"),
+        SKIPPED_WITHOUT_GITHUB_CLI_ATTESTATION_SUPPORT(
+                ReleaseArchiveScenario.signed(FakeGitHubCli.LACKS_ATTESTATION_SUPPORT),
+                "NOTE  Release signature not checked: install GitHub CLI (gh) 2.49 or newer to check it."
+                        + " SHA3-256 checksum verified."),
+        SKIPPED_FOR_RELEASE_BEFORE_SIGNED_ASSETS(
+                new ReleaseArchiveScenario(UNSIGNED_RELEASE_VERSION, false, FakeGitHubCli.VERIFIES),
+                "NOTE  Release signature not checked: release " + UNSIGNED_RELEASE_VERSION
+                        + " predates signed release assets. SHA3-256 checksum verified.");
+
+        private final ReleaseArchiveScenario release;
+        private final String expectedOutput;
+
+        ReleaseSignatureCheck(ReleaseArchiveScenario release, String expectedOutput) {
+            this.release = release;
+            this.expectedOutput = expectedOutput;
+        }
+    }
+
+    private enum RejectedReleaseSignature {
+        SIGNATURE_REJECTED_BY_GITHUB_CLI(
+                ReleaseArchiveScenario.signed(FakeGitHubCli.REJECTS),
+                "Release signature verification failed. Symphony for Trello was not installed or updated."
+                        + " Archive:",
+                "  symphony-trello-" + SIGNED_RELEASE_VERSION + ".",
+                "  gh: Error: verifying with issuer \"sigstore.dev\"",
+                "If gh could not reach Sigstore, check your network and rerun the installer.",
+                SECURITY_REPORT_URL),
+        SIGNATURE_BUNDLE_MISSING(
+                new ReleaseArchiveScenario(SIGNED_RELEASE_VERSION, false, FakeGitHubCli.VERIFIES),
+                "Could not download the release signature bundle:",
+                "/symphony-trello-" + SIGNED_RELEASE_VERSION + ".intoto.jsonl",
+                "Symphony for Trello was not installed or updated. Check your network and rerun the installer.");
+
+        private final ReleaseArchiveScenario release;
+        private final String[] expectedOutput;
+
+        RejectedReleaseSignature(ReleaseArchiveScenario release, String... expectedOutput) {
+            this.release = release;
+            this.expectedOutput = expectedOutput;
+        }
+    }
+
+    /// Behaviors of the fake GitHub CLI; `mode` is its `SYMPHONY_FAKE_GH_ATTESTATION` value.
+    private enum FakeGitHubCli {
+        VERIFIES("verified"),
+        REJECTS("rejected"),
+        LACKS_ATTESTATION_SUPPORT("unsupported");
+
+        private final String mode;
+
+        FakeGitHubCli(String mode) {
+            this.mode = mode;
+        }
+    }
+
+    private record ReleaseArchiveScenario(String version, boolean withSignatureBundle, FakeGitHubCli gitHubCli) {
+        static ReleaseArchiveScenario signed(FakeGitHubCli gitHubCli) {
+            return new ReleaseArchiveScenario(SIGNED_RELEASE_VERSION, true, gitHubCli);
+        }
+    }
+
+    private record ReleaseArchiveInstall(ProcessResult result, Path appHome, Path fakeLog) {}
 
     private enum OutputStyle {
         RAW {

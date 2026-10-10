@@ -74,9 +74,10 @@ The public install URLs live under `https://symphony-trello.fmartin.ch/`. Cloudf
 stable paths to the latest GitHub Release download assets. That keeps README commands stable while
 the release asset implementation stays on GitHub Releases.
 
-Signing is not part of this decision.
-[GitHub issue #364](https://github.com/martin-francois/symphony-trello/issues/364) tracks future
-signing evaluation.
+Signing is not part of this decision. [ADR 0103](0103-verify-release-signatures-with-github-attestations.md)
+records the signing decision from
+[GitHub issue #364](https://github.com/martin-francois/symphony-trello/issues/364). The installers
+keep this checksum check and add a signature check when GitHub CLI is available.
 
 ### Consequences
 
@@ -90,7 +91,8 @@ signing evaluation.
   packaging checks.
 * Bad, because a broken public release requires a new patch release instead of a same-tag asset
   repair.
-* Bad, because checksum verification is weaker than signing. Signing remains a follow-up.
+* Bad, because checksum verification alone is weaker than signing.
+  [ADR 0103](0103-verify-release-signatures-with-github-attestations.md) adds the signature check.
 
 ### Confirmation
 

@@ -1,0 +1,25 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# install.sh and install.ps1 pin the same signer identity (ADR 0103). Checking it here stops a
+# release whose signer no longer matches the installers before the release is published.
+signer_identity="https://github.com/$GITHUB_REPOSITORY/.github/workflows/release-please.yml@refs/heads/main"
+bundle_name="symphony-trello-$RELEASE_VERSION.intoto.jsonl"
+bundle="$ASSET_DIR/$bundle_name"
+if [[ ! -f "$bundle" ]]; then
+  echo "release signature bundle was not created: $bundle_name" >&2
+  exit 2
+fi
+release_asset_list="$(scripts/list-release-assets "$RELEASE_VERSION")"
+mapfile -t expected_assets <<<"$release_asset_list"
+for asset in "${expected_assets[@]}"; do
+  if [[ "$asset" == "$bundle_name" ]]; then
+    continue
+  fi
+  if ! GH_HOST=github.com gh attestation verify "$ASSET_DIR/$asset" --bundle "$bundle" \
+    --repo "$GITHUB_REPOSITORY" --cert-identity "$signer_identity" >/dev/null; then
+    echo "release asset signature does not match the installer signer identity: $asset" >&2
+    exit 2
+  fi
+done

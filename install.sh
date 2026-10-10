@@ -9,6 +9,12 @@ RELEASE_BASE_URL="${SYMPHONY_TRELLO_RELEASE_BASE_URL:-https://github.com/martin-
 REPO_URL="${SYMPHONY_TRELLO_REPO_URL:-https://github.com/martin-francois/symphony-trello.git}"
 DEFAULT_REF="v$DEFAULT_VERSION"
 REF="${SYMPHONY_TRELLO_REF:-$DEFAULT_REF}"
+# The signer identity pins the release workflow and branch, so a valid Sigstore bundle from another
+# workflow, branch, or repository still fails. ADR 0103 explains the choice.
+RELEASE_REPOSITORY="martin-francois/symphony-trello"
+RELEASE_SIGNER_IDENTITY="https://github.com/$RELEASE_REPOSITORY/.github/workflows/release-please.yml@refs/heads/main"
+FIRST_SIGNED_RELEASE_VERSION="1.2.0"
+SECURITY_REPORT_URL="https://github.com/$RELEASE_REPOSITORY/security/advisories/new"
 if [[ -n "${SYMPHONY_TRELLO_INSTALL_SOURCE:-}" ]]; then
   INSTALL_SOURCE="$SYMPHONY_TRELLO_INSTALL_SOURCE"
 elif [[ -n "${SYMPHONY_TRELLO_REPO_URL:-}" || -n "${SYMPHONY_TRELLO_REF:-}" ]]; then
@@ -1365,6 +1371,66 @@ verify_release_archive_checksum() {
   fi
 }
 
+release_signature_bundle_name() {
+  printf 'symphony-trello-%s.intoto.jsonl\n' "$VERSION"
+}
+
+padded_release_version() {
+  local major minor patch
+  IFS=. read -r major minor patch <<<"${1%%[-+]*}"
+  printf '%06d%06d%06d\n' "$((10#$major))" "$((10#$minor))" "$((10#$patch))"
+}
+
+# Prints verify, unsigned-release, or no-github-cli.
+release_signature_check_mode() {
+  if [[ "$(padded_release_version "$VERSION")" < "$(padded_release_version "$FIRST_SIGNED_RELEASE_VERSION")" ]]; then
+    echo "unsigned-release"
+  elif need gh && gh attestation verify --help >/dev/null 2>&1; then
+    echo "verify"
+  else
+    echo "no-github-cli"
+  fi
+}
+
+release_signature_skip_reason() {
+  case "$1" in
+  unsigned-release) echo "release $VERSION predates signed release assets" ;;
+  *) echo "install GitHub CLI (gh) 2.49 or newer to check it" ;;
+  esac
+}
+
+verify_release_archive_signature() {
+  local archive="$1"
+  local temp_dir="$2"
+  local mode archive_name bundle_name bundle output
+  mode="$(release_signature_check_mode)"
+  if [[ "$mode" != "verify" ]]; then
+    echo "  NOTE  Release signature not checked: $(release_signature_skip_reason "$mode"). SHA3-256 checksum verified."
+    return
+  fi
+  archive_name="$(basename "$archive")"
+  bundle_name="$(release_signature_bundle_name)"
+  bundle="$temp_dir/$bundle_name"
+  if ! download_file "$RELEASE_BASE_URL/$bundle_name" "$bundle"; then
+    echo "Could not download the release signature bundle: $RELEASE_BASE_URL/$bundle_name" >&2
+    echo "Symphony for Trello was not installed or updated. Check your network and rerun the installer." >&2
+    exit 2
+  fi
+  if ! output="$(GH_HOST=github.com gh attestation verify "$archive" --bundle "$bundle" --repo "$RELEASE_REPOSITORY" --cert-identity "$RELEASE_SIGNER_IDENTITY" 2>&1)"; then
+    echo "Release signature verification failed. Symphony for Trello was not installed or updated. Archive:" >&2
+    echo "  $archive_name" >&2
+    if [[ -n "$output" ]]; then
+      sed -e '/^ *$/d' -e 's/^/  gh: /' <<<"$output" >&2
+    fi
+    echo "GitHub CLI could not confirm that the $RELEASE_REPOSITORY release workflow built this archive." >&2
+    echo "If gh could not reach Sigstore, check your network and rerun the installer." >&2
+    echo "Otherwise, do not install this archive and report it privately:" >&2
+    echo "  $SECURITY_REPORT_URL" >&2
+    exit 2
+  fi
+  echo "  OK  Release signature verified with GitHub CLI"
+}
+
 install_release_archive() {
   local archive_name archive_url checksums_url temp_dir archive checksums extracted_root
   assert_existing_app_safe
@@ -1377,6 +1443,7 @@ install_release_archive() {
   download_file "$archive_url" "$archive"
   download_file "$checksums_url" "$checksums"
   verify_release_archive_checksum "$archive" "$checksums"
+  verify_release_archive_signature "$archive" "$temp_dir"
   mkdir -p "$temp_dir/extract"
   run tar -xzf "$archive" -C "$temp_dir/extract"
   extracted_root="$temp_dir/extract/symphony-trello-$VERSION"
@@ -2623,6 +2690,12 @@ if [[ "$DRY_RUN" == true ]]; then
   else
     echo "  WOULD download release archive: $RELEASE_BASE_URL/symphony-trello-$VERSION.tar.gz"
     echo "  WOULD verify SHA3-256 checksum from: $RELEASE_BASE_URL/checksums.txt"
+    signature_check_mode="$(release_signature_check_mode)"
+    if [[ "$signature_check_mode" == "verify" ]]; then
+      echo "  WOULD verify release signature with GitHub CLI: $RELEASE_BASE_URL/$(release_signature_bundle_name)"
+    else
+      echo "  WOULD skip release signature check: $(release_signature_skip_reason "$signature_check_mode")"
+    fi
     echo "  WOULD unpack release archive into: $APP_DIR"
   fi
   echo "  WOULD install command: $BIN_DIR/symphony-trello"
