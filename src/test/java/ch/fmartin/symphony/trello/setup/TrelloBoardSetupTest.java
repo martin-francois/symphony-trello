@@ -9,6 +9,7 @@ import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.respond;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.trelloList;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.workspaceJson;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.workspacesJson;
+import static ch.fmartin.symphony.trello.testsupport.TestFileContents.INVALID_UTF_8_READ_FAILURE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
@@ -20,6 +21,7 @@ import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
+import ch.fmartin.symphony.trello.testsupport.TestFileContents;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
@@ -1219,6 +1221,9 @@ final class TrelloBoardSetupTest {
 
         // then
         assertUnknownWriteOutcome(thrown, workflow);
+        assertThat(thrown)
+                .hasMessageStartingWith(
+                        "Trello write outcome is unknown. Inspect Trello before retrying setup. (IOException");
     }
 
     @Test
@@ -2169,6 +2174,34 @@ final class TrelloBoardSetupTest {
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
             assertThat(failure.code()).isEqualTo("setup_invalid_server_port");
             assertThat(failure.getMessage()).contains("WORKFLOW.fractional.md");
+        });
+        assertThat(workflow).doesNotExist();
+    }
+
+    @Test
+    void newBoardNamesTheCauseWhenASiblingWorkflowCannotBeRead() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Path siblingWorkflow = tempDir.resolve("WORKFLOW.unreadable.md");
+        Files.write(siblingWorkflow, TestFileContents.invalidUtf8());
+
+        // when
+        Throwable thrown = catchThrowable(() -> setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "My Project",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                true)));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_workflow_scan_failed");
+            assertThat(failure.getMessage())
+                    .isEqualTo("Could not read workflow file: %s (%s)", siblingWorkflow, INVALID_UTF_8_READ_FAILURE);
         });
         assertThat(workflow).doesNotExist();
     }

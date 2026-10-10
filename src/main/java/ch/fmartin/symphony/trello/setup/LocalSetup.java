@@ -257,7 +257,8 @@ public final class LocalSetup {
             printFinalHandoffUnlessDeferred(out, manifest, options.command());
             return 0;
         } catch (TrelloBoardSetupException | IllegalArgumentException | IOException e) {
-            err.println("setup_failed code=%s message=%s".formatted(errorCode(e), e.getMessage()));
+            err.println("setup_failed code=%s message=%s"
+                    .formatted(errorCode(e), SetupFailureCauses.commandBoundaryMessage(e)));
             Optional<Path> hintEnvPath = Optional.ofNullable(options).map(Options::envPath);
             SetupDiagnosticReporter.userActionHint(e, hintEnvPath).ifPresent(hint -> err.println("Next step: " + hint));
             if (!completionOnly) {
@@ -1326,10 +1327,9 @@ public final class LocalSetup {
         try {
             workerManager.start(localWorkerPaths(options), board, board.envPath(), out);
         } catch (IOException e) {
-            throw new TrelloBoardSetupException(
+            throw SetupFailureCauses.setupFailure(
                     "setup_start_failed",
-                    "Could not start Symphony for " + DisplayNames.quotedName(board.boardName()) + ": "
-                            + e.getMessage(),
+                    "Could not start Symphony for " + DisplayNames.quotedName(board.boardName()),
                     e);
         }
         out.println("  OK  Symphony is connected to " + DisplayNames.quotedName(board.boardName()));
@@ -1355,10 +1355,8 @@ public final class LocalSetup {
                 workerManager.stop(localWorkerPaths(options), board, out);
             }
         } catch (IOException e) {
-            throw new TrelloBoardSetupException(
-                    "setup_stop_failed",
-                    "Could not stop Symphony for " + DisplayNames.quotedName(boardName) + ": " + e.getMessage(),
-                    e);
+            throw SetupFailureCauses.setupFailure(
+                    "setup_stop_failed", "Could not stop Symphony for " + DisplayNames.quotedName(boardName), e);
         }
     }
 
@@ -1371,10 +1369,9 @@ public final class LocalSetup {
                 return;
             }
         } catch (IOException e) {
-            throw new TrelloBoardSetupException(
+            throw SetupFailureCauses.setupFailure(
                     "setup_worker_state_unreadable",
-                    "Could not inspect managed worker state for " + DisplayNames.quotedName(board.boardName()) + ": "
-                            + e.getMessage(),
+                    "Could not inspect managed worker state for " + DisplayNames.quotedName(board.boardName()),
                     e);
         }
         throw new TrelloBoardSetupException(

@@ -27,6 +27,7 @@ final class InstallerScriptLifecycleTest {
     @TempDir
     Path temporaryDirectory;
 
+    // TODO Flaky: #778
     @Test
     void posixInstallerLifecycleInstallsUpdatesStartsAndUninstallsWithTestDoubles() throws Exception {
         // given

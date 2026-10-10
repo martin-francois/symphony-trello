@@ -3612,6 +3612,61 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void surfacedFailureCauseKeepsItsTypeAndDetailButNotPrivateContextInTheReport() throws Exception {
+        // given
+        // The report must stay within the public-safe diagnostics contract in SPEC.md while still
+        // carrying the cause summary that setup failure messages now append.
+        Path configDir = tempDir.resolve("cause-config");
+        Path workspaceRoot = tempDir.resolve("cause-workspaces");
+        Path manifest = configDir.resolve(ConnectedBoardManifest.FILE_NAME);
+        Path workflow = configDir.resolve("WORKFLOW.cause.md");
+        Path env = configDir.resolve(".env");
+        Path privateJava = tempDir.resolve("private-runtime").resolve("bin").resolve("java");
+        Files.createDirectories(configDir);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19093));
+        new ConnectedBoardRepository(manifest)
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "000000000000000000000001",
+                        "SYNTH001",
+                        "Private Cause Board",
+                        "https://trello.com/b/SYNTH001/private-cause-board",
+                        workflow,
+                        env,
+                        workspaceRoot,
+                        19093,
+                        false,
+                        List.of(),
+                        false))));
+        var launchFailure = new IOException("Cannot run program \"" + privateJava + "\" (in directory \""
+                + workspaceRoot + "\"): error=13, Permission denied");
+        var failure = new TrelloBoardSetupException(
+                "setup_start_failed",
+                SetupFailureCauses.withCause(
+                        "Could not start Symphony for " + DisplayNames.quotedName("Private Cause Board"),
+                        launchFailure),
+                launchFailure);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        Optional<Path> report = reporter.reportFailure(
+                failure, request(configDir, workspaceRoot, manifest, workflow, env), new RecordingTerminal());
+
+        // then
+        assertThat(report).hasValueSatisfying(path -> assertThat(path)
+                .content(StandardCharsets.UTF_8)
+                .contains(
+                        "error_code:** setup_start_failed",
+                        "(IOException: Cannot run program \"<path:",
+                        "error=13, Permission denied)")
+                .doesNotContain(
+                        "Private Cause Board",
+                        "000000000000000000000001",
+                        "SYNTH001",
+                        privateJava.toString(),
+                        tempDir.toString()));
+    }
+
+    @Test
     void handledSetupFailureUsesRequestPathsForReportContext() throws Exception {
         // given
         Path configDir = tempDir.resolve("custom-config");

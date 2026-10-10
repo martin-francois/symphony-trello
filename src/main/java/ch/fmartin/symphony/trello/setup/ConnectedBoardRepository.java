@@ -14,6 +14,9 @@ import java.util.List;
 import java.util.stream.StreamSupport;
 
 final class ConnectedBoardRepository {
+    private static final String INVALID_MANIFEST_PATH =
+            "--manifest must be a readable connected-board manifest JSON file.";
+
     private final ObjectMapper json;
     private final Path manifestPath;
 
@@ -166,13 +169,11 @@ final class ConnectedBoardRepository {
     }
 
     private static TrelloBoardSetupException invalidManifestPath() {
-        return new TrelloBoardSetupException(
-                "setup_invalid_arguments", "--manifest must be a readable connected-board manifest JSON file.");
+        return new TrelloBoardSetupException("setup_invalid_arguments", INVALID_MANIFEST_PATH);
     }
 
     private static TrelloBoardSetupException invalidManifestPath(IOException cause) {
-        return new TrelloBoardSetupException(
-                "setup_invalid_arguments", "--manifest must be a readable connected-board manifest JSON file.", cause);
+        return SetupFailureCauses.setupFailure("setup_invalid_arguments", INVALID_MANIFEST_PATH, cause);
     }
 
     private static void rejectNonDirectoryManifestParent(Path manifestPath) {
