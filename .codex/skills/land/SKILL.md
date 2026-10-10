@@ -17,6 +17,8 @@ description: >
 - Update the Trello workpad and move the card to the configured merge
   completion list after a successful merge. The recommended workflow uses
   `Done`.
+- Close a card that has nothing to merge in the configured merge completion
+  list instead of sending it back to review.
 
 ## Preconditions
 
@@ -24,7 +26,8 @@ description: >
   current list as the merge approval list.
 - `gh` is installed and authenticated.
 - The working tree is clean or changes are intentionally committed.
-- A PR can be identified for the current branch or Trello card.
+- A PR can be identified for the current branch or Trello card, unless there
+  is nothing to merge. See the Merge Decision Table.
 
 ## Steps
 
@@ -64,12 +67,21 @@ description: >
 
 If merging cannot proceed, use `trello-handoff` to move the card to `Blocked`
 with a concise explanation. Include the exact class of blocker: auth, merge
-conflict, failing checks, outstanding feedback, missing PR, or unclear policy.
+conflict, failing checks, outstanding feedback, missing PR for work that needs
+one, or unclear policy.
 
 ## Merge Decision Table
 
-- Move to the configured merge completion list only after the PR merged
-  successfully.
+- If no PR for this card's work is linked from the card description, Trello
+  comments, or workpad, no open PR exists for the card's branch, and the
+  completed work did not need one, there is nothing to merge. This covers
+  question-only, repository-independent, and explicitly local-only or no-push
+  work. Record in the workpad that no merge was needed, and move the card to
+  the configured merge completion list. Do not send it back to the configured
+  review handoff list and do not block it. A human moving such a card to the merge approval list
+  means the work is accepted.
+- For work with a PR, move to the configured merge completion list only after
+  the PR merged successfully.
 - If a human moved the card from the configured review handoff list to the
   merge approval list without adding new feedback, treat that as approval to
   merge when the PR is identifiable, checks and mergeability are clean, required
@@ -90,7 +102,7 @@ conflict, failing checks, outstanding feedback, missing PR, or unclear policy.
 
 - The card is in the configured review handoff list rather than the merge
   approval list.
-- The PR cannot be identified.
+- The PR cannot be identified for work that needs one.
 - CI/checks are failing, pending beyond a reasonable wait, or unavailable when
   required.
 - Review feedback is unresolved.

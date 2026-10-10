@@ -209,6 +209,12 @@ Use `Merging` only when a human has approved the work and the workflow enables a
 merge flow. After successful merge, update the workpad, add a concise
 completion comment when useful, and move to `Done`.
 
+`Merging` is only for pull requests. When work that has nothing to merge goes to
+`Human Review`, say in the handoff comment that a human can move the card
+straight to `Done` after review. If such a card reaches `Merging` anyway, record
+in the workpad that no merge was needed and move it to `Done` instead of back to
+`Human Review`.
+
 ## Stop Conditions
 
 - The destination list is not in the configured move allowlist.

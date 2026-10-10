@@ -294,6 +294,8 @@ Use the generated board like this:
    policy, and moves successfully merged work to `Done`.
 10. If you merge outside Codex instead, move the card to `Done` yourself after the work is accepted and
    merged.
+11. If there is nothing to merge, such as a question-only card or local-only work, move the card from
+   `Human Review` straight to `Done` after review. Codex says so in its handoff comment.
 
 ### Fast Path: Import An Existing Board
 
@@ -565,6 +567,13 @@ clean checks. If the feedback needs a broader change or is unclear, Codex should
 to `Human Review` with the reason. If merging is blocked by an unresolved review, required approval,
 failing check, auth problem, or repository rule, Codex should move the card to `Blocked` with the
 next human action.
+
+`Merging` is only for pull requests. If a card with nothing to merge lands in `Merging` anyway,
+Codex records that no merge was needed and moves it to `Done` instead of back to `Human Review`.
+Codex can tell which list a card is in because generated workflow prompts include the line
+`Current Trello list: {{ card.state }}`. A hand-written or older workflow file without that line
+makes Codex treat a `Merging` card like new work and return it to `Human Review`. Add the line under
+the card title, or regenerate the workflow with `--force` if you have no local edits to keep.
 
 `Blocked` is for work that needs attention before Codex can continue. Common examples are missing
 credentials, missing allowed file access, unclear requirements, failing external services, or a PR
