@@ -37,7 +37,7 @@ public final class LocalSetup {
     private static final Path DEFAULT_ENV_PATH = Path.of(".env");
     private static final String DEFAULT_COMMAND = "symphony-trello";
     private static final String CONFIG_DIR_ENV = "SYMPHONY_TRELLO_CONFIG_DIR";
-    private static final String COMMAND_ENV = "SYMPHONY_TRELLO_COMMAND";
+    static final String COMMAND_ENV = "SYMPHONY_TRELLO_COMMAND";
     private static final String CALLER_DIR_ENV = "SYMPHONY_TRELLO_CALLER_DIR";
     static final String INSTALLER_COMPLETION_ENV = "SYMPHONY_TRELLO_INSTALLER_COMPLETION";
     private static final String INSTALLER_COMPLETION_DEFER = "defer";

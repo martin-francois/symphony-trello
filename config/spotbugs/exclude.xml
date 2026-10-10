@@ -9,13 +9,13 @@
   <!-- Running external commands is the product boundary for Codex, hooks, worker startup, and setup probes. Command lists are constructed explicitly and reviewed at call sites. -->
   <Match>
     <Bug pattern="COMMAND_INJECTION"/>
-    <Class name="~ch\.fmartin\.symphony\.trello\.(agent\.CodexAppServerClient|setup\.(CodexModelDefaultsResolver|ProcessCommandRunner|ProcessHandleManagedProcessPlatform|WindowsManagedProcessPlatform)|workspace\.HookRunner)"/>
+    <Class name="~ch\.fmartin\.symphony\.trello\.(agent\.CodexAppServerClient|setup\.(CodexModelDefaultsResolver|ProcessCodexInvestigationRunner|ProcessCommandRunner|ProcessHandleManagedProcessPlatform|WindowsManagedProcessPlatform)|workspace\.HookRunner)"/>
   </Match>
 
   <!-- These methods generate stable HTML, Markdown, YAML, or prompt text that must use LF separators independent of the host platform. -->
   <Match>
     <Bug pattern="VA_FORMAT_STRING_USES_NEWLINE"/>
-    <Class name="~ch\.fmartin\.symphony\.trello\.(api\.StatusResource|prompt\.PromptRenderer|setup\.TrelloBoardSetup)"/>
+    <Class name="~ch\.fmartin\.symphony\.trello\.(api\.StatusResource|prompt\.PromptRenderer|setup\.(SetupFailureFollowUp|TrelloBoardSetup))"/>
   </Match>
 
   <!-- The health checker only probes loopback HTTP ports exposed by this local process. TLS is not expected for that local availability check. -->
