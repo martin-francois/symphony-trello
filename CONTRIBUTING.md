@@ -464,6 +464,22 @@ The active exploration window is not passive waiting time. Codex should keep tes
 inspecting code, gathering evidence, cleaning up, or reporting while useful work remains. It should
 not sleep or poll timestamps just to consume the window.
 
+### Repeatable harness
+
+The scenarios from earlier bug bashes are also a repeatable harness that runs without Codex driving
+it. It uses fakes unless you pass real-service flags:
+
+```bash
+pnpm install --frozen-lockfile
+scripts/live-bugbash/run.sh                       # quick profile against fakes
+scripts/live-bugbash/run.sh --profile release     # every automated fake-mode scenario
+scripts/live-bugbash/run.sh --profile trello-live --trello real
+```
+
+Reports land in the same `target/live-bugbash/<RUN_ID>/` layout. See
+[docs/live-bugbash.md](docs/live-bugbash.md) for profiles, real-service opt-ins, statuses, and how
+to add a scenario.
+
 ### Publish reviewed findings
 
 After the run, review the drafts in:
