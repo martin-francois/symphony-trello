@@ -80,6 +80,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     }
 
     public static void main(String... args) {
+        SystemConsole.enableLineEditing();
         System.exit(run(args, System.out, System.err));
     }
 
