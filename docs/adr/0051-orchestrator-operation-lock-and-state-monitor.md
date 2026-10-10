@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by [ADR 0105](0105-orchestrator-published-read-view.md)
 date: 2026-06-10
 decision-makers: ["martinfrancois"]
 consulted:
@@ -9,6 +9,12 @@ informed: ["repository contributors"]
 ---
 
 # Orchestrator Operation Lock And State Monitor Split
+
+Superseded: [ADR 0105](0105-orchestrator-published-read-view.md) replaced the state monitor with a
+published read view in
+[GitHub issue #815](https://github.com/martin-francois/symphony-trello/issues/815). The operation
+lock described here stays. [ADR 0102](0102-orchestrator-concurrency-mutation-audit.md) maps every
+synchronization element of this design to its owning test, or records why no unit test can own it.
 
 ## Context and Problem Statement
 

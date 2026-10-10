@@ -91,17 +91,19 @@ public class SymphonyOrchestrator {
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private final ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor();
 
-    /// Serializes the long-running operations (start, stop, tick, worker exit, retry timers, agent
-    /// events) against each other, exactly like the previous synchronized methods did. Trello and
-    /// filesystem I/O may run while holding this lock, but never while holding the instance
-    /// monitor: status reads take only the monitor, so they must never queue behind a Trello
-    /// round-trip. Every write to reader-visible state happens under both locks; reads inside
-    /// operations need no monitor because all writers hold this lock. Exception: config and
-    /// workflowPath are volatile and written under this lock only, because the lock-free
-    /// local-status getters read each as one immutable reference and need no cross-field
-    /// consistency; workflow and workflowLastModified are confined to lock holders and have no
-    /// lock-free readers.
+    /// Serializes the long-running operations (start, stop, tick, worker exit, retry timers, usage
+    /// deadlines, agent events) against each other. Trello and filesystem I/O run while holding
+    /// this lock. Every field below except the tick schedule, the status view, workflowPath, the
+    /// workflow watcher's reload flag and the watch service is read and written only by holders of
+    /// this lock, so it needs no other synchronization.
+    /// Status readers never take this lock: they read [#statusView]. See
+    /// docs/adr/0105-orchestrator-published-read-view.md.
     private final ReentrantLock operationLock = new ReentrantLock();
+
+    private final TickSchedule tickSchedule = new TickSchedule();
+
+    /// What status readers see. Only operation-lock holders replace it, through [#publishStatus()].
+    private volatile StatusView statusView = StatusView.NOT_STARTED;
 
     private final Map<RuntimeCardKey, RunningEntry> running = new LinkedHashMap<>();
     private final Map<RuntimeCardKey, RetryEntry> retryAttempts = new LinkedHashMap<>();
@@ -116,10 +118,11 @@ public class SymphonyOrchestrator {
             new LinkedHashMap<>();
     private final Map<String, Object> rateLimitsByCommand = new HashMap<>();
 
-    private volatile EffectiveConfig config;
+    /// Not volatile: lock-free readers use the config of [#statusView]. The workflow watcher thread
+    /// reads it once, after start() set it and started that thread.
+    private EffectiveConfig config;
     private WorkflowDefinition workflow;
     private Instant workflowLastModified;
-    private ScheduledFuture<?> tickTimer;
     private ScheduledFuture<?> dispatchPauseTimer;
     private WatchService workflowWatchService;
     private long endedRuntimeMillis;
@@ -128,16 +131,14 @@ public class SymphonyOrchestrator {
     private long totalTokens;
     private long retryGeneration;
     private long dispatchPauseGeneration;
-    private final AtomicBoolean refreshRequested = new AtomicBoolean();
+    /// Set by the workflow watcher thread without the operation lock, consumed by the next tick.
     private final AtomicBoolean workflowReloadRequested = new AtomicBoolean();
     private WorkflowProcessLock workflowProcessLock;
-    private boolean tickRunning;
-    private boolean started;
     private DispatchPause dispatchPause;
 
-    /// Runs inside finishTickAndScheduleNext between refresh consumption and the next schedule,
-    /// the exact boundary where a concurrent refresh used to be overwritten by the interval
-    /// schedule. Tests use it to pin the boundary contract; production keeps the no-op.
+    /// Runs inside TickSchedule.finishTickAndScheduleNext between refresh consumption and the next
+    /// schedule, the exact boundary where a concurrent refresh used to be overwritten by the
+    /// interval schedule. Tests use it to pin the boundary contract; production keeps the no-op.
     Runnable tickCompletionHookForTests = () -> {};
 
     Runnable dispatchPauseScheduleHookForTests = () -> {};
@@ -145,7 +146,14 @@ public class SymphonyOrchestrator {
     Runnable retryTimerWaitingHookForTests = () -> {};
     Runnable workerExitCompletionHookForTests = () -> {};
     Runnable workerLaunchHookForTests = () -> {};
-    Runnable executorsStoppedHookForTests = () -> {};
+    /// Runs right after stop() shuts the scheduler down. A refresh that reached the scheduler now
+    /// would be rejected, so tests use this point to check that stop() marked the orchestrator as
+    /// stopped first.
+    Runnable schedulerStoppedHookForTests = () -> {};
+
+    /// Runs in TickSchedule.requestRefresh between the started/idle check and scheduling the
+    /// tick, the window in which a concurrent stop() could shut the scheduler down.
+    Runnable refreshScheduleHookForTests = () -> {};
 
     @ConfigProperty(name = "symphony.workflow.path")
     volatile Path workflowPath;
@@ -213,19 +221,16 @@ public class SymphonyOrchestrator {
         boolean releaseLockOnFailure = false;
         boolean startupComplete = false;
         try {
-            synchronized (this) {
-                if (started) {
-                    return;
-                }
+            if (tickSchedule.isStarted()) {
+                return;
             }
             releaseLockOnFailure = true;
             reloadOrThrow();
+            // Local-status probes read the selected board from the view during the startup I/O below.
+            publishStatus();
             startWorkflowWatcher();
             startupTerminalWorkspaceCleanup();
-            synchronized (this) {
-                started = true;
-                scheduleTick(Duration.ZERO);
-            }
+            tickSchedule.markStartedAndScheduleFirstTick();
             startupComplete = true;
         } finally {
             try {
@@ -233,7 +238,7 @@ public class SymphonyOrchestrator {
                     releaseWorkflowProcessLock();
                 }
             } finally {
-                operationLock.unlock();
+                publishStatusAndUnlock();
             }
         }
     }
@@ -241,24 +246,24 @@ public class SymphonyOrchestrator {
     public void stop() {
         operationLock.lock();
         try {
-            markStoppingAndCancelTick();
-            stopWorkflowWatcher();
-            List<RunningEntry> entries;
-            List<RetryEntry> retries;
-            synchronized (this) {
-                entries = List.copyOf(running.values());
-                retries = List.copyOf(retryAttempts.values());
-                entries.forEach(entry ->
-                        ignoredWorkers.put(entry.workerIdentity, clock.instant().plus(IGNORED_WORKER_TTL)));
-                entries.forEach(this::addRuntime);
-                running.clear();
-                retryAttempts.clear();
-                claimed.clear();
-                trimIgnoredWorkers();
-                usageWorkpadMessages.forEach((target, state) -> queueUsageWorkpadCleanup(target, state.ownerConfig()));
-                usageWorkpadMessages.clear();
-                dispatchPause = null;
+            tickSchedule.markStoppingAndCancelTick();
+            if (dispatchPauseTimer != null) {
+                dispatchPauseTimer.cancel(false);
             }
+            stopWorkflowWatcher();
+            List<RunningEntry> entries = List.copyOf(running.values());
+            List<RetryEntry> retries = List.copyOf(retryAttempts.values());
+            entries.forEach(entry ->
+                    ignoredWorkers.put(entry.workerIdentity, clock.instant().plus(IGNORED_WORKER_TTL)));
+            entries.forEach(this::addRuntime);
+            running.clear();
+            retryAttempts.clear();
+            claimed.clear();
+            trimIgnoredWorkers();
+            usageWorkpadMessages.forEach((target, state) -> queueUsageWorkpadCleanup(target, state.ownerConfig()));
+            usageWorkpadMessages.clear();
+            dispatchPause = null;
+            publishStatus();
             retries.forEach(retry -> retry.timer().cancel(false));
             entries.forEach(entry -> {
                 agentRunner.cancel(entry.workerIdentity);
@@ -266,24 +271,11 @@ public class SymphonyOrchestrator {
             });
             retryPendingUsageWorkpadCleanup(true);
             scheduler.shutdownNow();
+            schedulerStoppedHookForTests.run();
             workers.shutdownNow();
-            executorsStoppedHookForTests.run();
             releaseWorkflowProcessLock();
         } finally {
-            operationLock.unlock();
-        }
-    }
-
-    /// Marking not-started before anything else closes the refresh window: once this ran, a
-    /// concurrent requestRefresh() is a no-op and cannot schedule a tick against the scheduler
-    /// that stop is about to shut down.
-    private synchronized void markStoppingAndCancelTick() {
-        started = false;
-        if (tickTimer != null) {
-            tickTimer.cancel(false);
-        }
-        if (dispatchPauseTimer != null) {
-            dispatchPauseTimer.cancel(false);
+            publishStatusAndUnlock();
         }
     }
 
@@ -292,63 +284,45 @@ public class SymphonyOrchestrator {
         // is loading the workflow waits for the operation boundary and is then rejected.
         operationLock.lock();
         try {
-            synchronized (this) {
-                checkState(!started, "Workflow path cannot be changed after orchestrator start");
-                this.workflowPath = workflowPath;
-            }
+            checkState(!tickSchedule.isStarted(), "Workflow path cannot be changed after orchestrator start");
+            this.workflowPath = workflowPath;
         } finally {
-            operationLock.unlock();
+            publishStatusAndUnlock();
         }
     }
 
-    public synchronized boolean isStarted() {
-        return started;
+    public boolean isStarted() {
+        return statusView.started();
     }
 
     // Lock-free on purpose: local-status health probes call these and must never wait for an
-    // in-flight Trello poll. Both fields are volatile and the config value is immutable.
+    // in-flight Trello poll. workflowPath is volatile and the published config is immutable.
     public Path selectedWorkflowPath() {
-        EffectiveConfig current = config;
+        EffectiveConfig current = statusView.config();
         Path selected = current == null ? workflowPath : current.workflowPath();
         return selected.toAbsolutePath().normalize();
     }
 
     public String selectedBoardId() {
-        EffectiveConfig current = config;
+        EffectiveConfig current = statusView.config();
         return current == null ? null : current.tracker().resolvedBoardId();
     }
 
     public String selectedConfiguredBoardId() {
-        EffectiveConfig current = config;
+        EffectiveConfig current = statusView.config();
         return current == null ? null : current.tracker().boardId();
     }
 
     /// The configured card identifier prefix, or the documented default before configuration loads.
     public String cardIdentifierPrefix() {
-        EffectiveConfig current = config;
+        EffectiveConfig current = statusView.config();
         return current == null
                 ? ConfigDefaults.DEFAULT_CARD_IDENTIFIER_PREFIX
                 : current.tracker().cardIdentifierPrefix();
     }
 
     public void requestRefresh() {
-        refreshRequested.set(true);
-        scheduleRefreshIfStartedAndIdle();
-    }
-
-    /// The monitor makes this atomic with tick completion: it runs entirely before or entirely
-    /// after finishTickAndScheduleNext, so a refresh either gets consumed by the finishing tick or
-    /// replaces the interval schedule with a zero-delay tick, never the other way around. After
-    /// stop marked the orchestrator as not started, this is a no-op, so a late refresh cannot
-    /// schedule against the shut-down scheduler.
-    private synchronized void scheduleRefreshIfStartedAndIdle() {
-        if (started && !tickRunning) {
-            scheduleTick(Duration.ZERO);
-        }
-    }
-
-    private boolean consumeRefreshRequest() {
-        return refreshRequested.getAndSet(false);
+        tickSchedule.requestRefresh();
     }
 
     public void tickNowForTests() {
@@ -360,45 +334,44 @@ public class SymphonyOrchestrator {
     }
 
     void retryNowForTests(String cardId) {
-        RetryEntry retry;
-        synchronized (this) {
-            retry = retryAttempts.get(currentRuntimeKey(cardId));
-        }
-        if (retry != null) {
-            onRetryTimer(runtimeKey(retry), retry.generation());
-        }
+        StatusView view = statusView;
+        RuntimeCardKey currentKey = runtimeKey(Objects.requireNonNull(view.config()), cardId);
+        view.retrying().stream()
+                .map(StatusView.RetryingCard::retry)
+                .filter(retry -> runtimeKey(retry).equals(currentKey))
+                .findAny()
+                .ifPresent(retry -> onRetryTimer(currentKey, retry.generation()));
     }
 
+    /// Reads the current tracker target from the published view: a test starts this on another
+    /// thread from inside an operation's hook and waits for it to reach the retry timer, so taking
+    /// the operation lock first would deadlock.
     void retryNowForTests(String cardId, long generation) {
-        onRetryTimer(currentRuntimeKey(cardId), generation);
+        onRetryTimer(runtimeKey(Objects.requireNonNull(statusView.config()), cardId), generation);
     }
 
+    // The deadline helpers read the pause from the published view like a status reader, so a test
+    // that calls them during an operation still exercises the deadline's own operation lock.
     void dispatchPauseDeadlineNowForTests(Instant expectedUntil) {
-        DispatchPause pause;
-        synchronized (this) {
-            pause = dispatchPause;
-        }
-        if (pause != null) {
-            onDispatchPauseDeadline(pause.command(), pause.generation(), expectedUntil);
-        }
+        statusView
+                .dispatchPause()
+                .ifPresent(pause -> onDispatchPauseDeadline(pause.command(), pause.generation(), expectedUntil));
     }
 
     void dispatchPauseDeadlineNowForTests(String expectedCommand, Instant expectedUntil) {
-        long generation;
-        synchronized (this) {
-            generation = dispatchPause == null ? Long.MIN_VALUE : dispatchPause.generation();
-        }
+        long generation =
+                statusView.dispatchPause().map(DispatchPause::generation).orElse(Long.MIN_VALUE);
         onDispatchPauseDeadline(expectedCommand, generation, expectedUntil);
     }
 
     private void tick() {
         operationLock.lock();
         try {
-            if (!beginTick()) {
+            if (!tickSchedule.beginTick()) {
                 return;
             }
             try {
-                consumeRefreshRequest();
+                tickSchedule.consumeRefreshRequest();
                 reloadIfChanged();
                 retryPendingUsageWorkpadCleanup(false);
                 reconcileRunningCards();
@@ -406,32 +379,11 @@ public class SymphonyOrchestrator {
             } catch (RuntimeException e) {
                 LOG.errorf("tick outcome=skipped reason=%s", e.getMessage());
             } finally {
-                finishTickAndScheduleNext();
+                tickSchedule.finishTickAndScheduleNext(config.polling().interval());
             }
         } finally {
-            operationLock.unlock();
+            publishStatusAndUnlock();
         }
-    }
-
-    private synchronized boolean beginTick() {
-        if (!started) {
-            return false;
-        }
-        tickRunning = true;
-        return true;
-    }
-
-    /// Tick completion is atomic: clearing tickRunning, consuming the refresh flag, and scheduling
-    /// the next tick happen under one monitor section. A concurrent requestRefresh() therefore
-    /// runs entirely before this (and is consumed here as the zero-delay schedule) or entirely
-    /// after it (and replaces the interval schedule), so a refresh at the completion boundary can
-    /// never be overwritten by the normal polling interval.
-    private synchronized void finishTickAndScheduleNext() {
-        tickRunning = false;
-        boolean refreshRequestedDuringTick = consumeRefreshRequest();
-        tickCompletionHookForTests.run();
-        scheduleTick(
-                refreshRequestedDuringTick ? Duration.ZERO : config.polling().interval());
     }
 
     private void reloadOrThrow() {
@@ -490,25 +442,24 @@ public class SymphonyOrchestrator {
     }
 
     private void applyValidReload(WorkflowDefinition nextWorkflow, EffectiveConfig nextConfig, Instant modified) {
-        synchronized (this) {
-            EffectiveConfig previousConfig = config;
-            boolean commandChanged = !Objects.equals(
-                    previousConfig.codex().command(), nextConfig.codex().command());
-            boolean trackerTargetChanged = !TrackerTarget.from(previousConfig).equals(TrackerTarget.from(nextConfig));
-            if (trackerTargetChanged) {
-                rotateTrackerTarget(nextConfig, !commandChanged);
-            }
-            if (commandChanged) {
-                rotateCodexCommandScope(previousConfig, nextConfig);
-            }
-            refreshUsageOwnership(nextConfig);
-            workflow = nextWorkflow;
-            config = nextConfig;
-            workflowLastModified = modified;
+        EffectiveConfig previousConfig = config;
+        boolean commandChanged = !Objects.equals(
+                previousConfig.codex().command(), nextConfig.codex().command());
+        boolean trackerTargetChanged = !TrackerTarget.from(previousConfig).equals(TrackerTarget.from(nextConfig));
+        if (trackerTargetChanged) {
+            rotateTrackerTarget(nextConfig, !commandChanged);
         }
+        if (commandChanged) {
+            rotateCodexCommandScope(previousConfig, nextConfig);
+        }
+        refreshUsageOwnership(nextConfig);
+        workflow = nextWorkflow;
+        config = nextConfig;
+        workflowLastModified = modified;
+        publishStatus();
     }
 
-    /// Called with the state monitor held after reload rotations have detached prior ownership.
+    /// Called after reload rotations have detached prior ownership.
     private void refreshUsageOwnership(EffectiveConfig nextConfig) {
         TrackerTarget currentTarget = TrackerTarget.from(nextConfig);
         usageWorkpadMessages.replaceAll(
@@ -521,7 +472,7 @@ public class SymphonyOrchestrator {
                         : cleanup);
     }
 
-    /// Called with the state monitor held and the operation lock owned by the reload tick.
+    /// Called by the reload tick before the new config is applied.
     private void rotateTrackerTarget(EffectiveConfig nextConfig, boolean retainCommandPause) {
         TrackerTarget nextTarget = TrackerTarget.from(nextConfig);
 
@@ -557,7 +508,7 @@ public class SymphonyOrchestrator {
         }
     }
 
-    /// Called with the state monitor held and the operation lock owned by the reload tick.
+    /// Called by the reload tick before the new config is applied.
     private void rotateCodexCommandScope(EffectiveConfig previousConfig, EffectiveConfig nextConfig) {
         String previousCommand = previousConfig.codex().command();
         if (dispatchPause != null && Objects.equals(dispatchPause.command(), previousCommand)) {
@@ -694,10 +645,9 @@ public class SymphonyOrchestrator {
                         terminateRunning(entryKey, true, true, "card terminal");
                     } else if (TrelloClient.isActive(card, launchConfig)) {
                         if (hasRequiredLabels(card, launchConfig)) {
-                            synchronized (this) {
-                                if (Objects.equals(running.get(entryKey), entry)) {
-                                    entry.card = card;
-                                }
+                            if (Objects.equals(running.get(entryKey), entry)) {
+                                entry.card = card;
+                                publishStatus();
                             }
                         } else {
                             terminateRunning(
@@ -725,21 +675,18 @@ public class SymphonyOrchestrator {
 
     private void terminateRunning(
             RuntimeCardKey cardKey, boolean cleanupWorkspace, boolean suppressRetry, String reason) {
-        RunningEntry entry;
-        boolean usageProbe;
-        synchronized (this) {
-            entry = running.remove(cardKey);
-            if (entry == null) {
-                return;
-            }
-            usageProbe = isBoundUsageProbe(entry.launchTarget, entry.cardId, entry.workerIdentity);
-            ignoredWorkers.put(entry.workerIdentity, clock.instant().plus(IGNORED_WORKER_TTL));
-            trimIgnoredWorkers();
-            addRuntime(entry);
-            if (suppressRetry) {
-                claimed.remove(cardKey);
-            }
+        RunningEntry entry = running.remove(cardKey);
+        if (entry == null) {
+            return;
         }
+        boolean usageProbe = isBoundUsageProbe(entry.launchTarget, entry.cardId, entry.workerIdentity);
+        ignoredWorkers.put(entry.workerIdentity, clock.instant().plus(IGNORED_WORKER_TTL));
+        trimIgnoredWorkers();
+        addRuntime(entry);
+        if (suppressRetry) {
+            claimed.remove(cardKey);
+        }
+        publishStatus();
         if (usageProbe) {
             try {
                 agentRunner.cancel(entry.workerIdentity);
@@ -815,7 +762,7 @@ public class SymphonyOrchestrator {
         }
     }
 
-    private synchronized boolean isDispatchPaused() {
+    private boolean isDispatchPaused() {
         return dispatchPause != null
                 && Objects.equals(dispatchPause.command(), config.codex().command());
     }
@@ -824,11 +771,8 @@ public class SymphonyOrchestrator {
         EffectiveConfig launchConfig = config;
         RuntimeCardKey launchKey = runtimeKey(launchConfig, card.id());
         reconcileStaleUsageWorkpad(card);
-        RetryEntry retry;
-        synchronized (this) {
-            claimed.add(launchKey);
-            retry = retryAttempts.remove(launchKey);
-        }
+        claimed.add(launchKey);
+        RetryEntry retry = retryAttempts.remove(launchKey);
         if (retry != null) {
             retry.timer().cancel(false);
         }
@@ -836,9 +780,7 @@ public class SymphonyOrchestrator {
         try {
             dispatchCard = tracker.prepareForDispatch(launchConfig, card);
         } catch (RuntimeException e) {
-            synchronized (this) {
-                claimed.remove(launchKey);
-            }
+            claimed.remove(launchKey);
             releaseCurrentFromDispatch(card, card, "prepare for dispatch failed");
             scheduleRetry(card.id(), nextAttempt(attempt), card.identifier(), card.cardUrl(), e.getMessage(), false);
             return Optional.empty();
@@ -846,20 +788,18 @@ public class SymphonyOrchestrator {
         String workerIdentity = UUID.randomUUID().toString();
         var entry = new RunningEntry(dispatchCard, card, workerIdentity, attempt, clock.instant(), launchConfig);
         RuntimeCardKey runningKey = runtimeKey(entry);
-        synchronized (this) {
-            if (!runningKey.equals(launchKey)) {
-                claimed.remove(launchKey);
-                claimed.add(runningKey);
-            }
-            running.put(runningKey, entry);
+        if (!runningKey.equals(launchKey)) {
+            claimed.remove(launchKey);
+            claimed.add(runningKey);
         }
+        running.put(runningKey, entry);
+        publishStatus();
         String prompt;
         try {
             prompt = prompts.render(workflow.promptTemplate(), dispatchCard, attempt);
         } catch (RuntimeException e) {
-            synchronized (this) {
-                running.remove(runningKey);
-            }
+            running.remove(runningKey);
+            publishStatus();
             releaseFromDispatch(dispatchCard, card, "prompt render failed");
             scheduleRetry(
                     dispatchCard.id(),
@@ -883,9 +823,8 @@ public class SymphonyOrchestrator {
                 }
             });
         } catch (RuntimeException e) {
-            synchronized (this) {
-                running.remove(runningKey);
-            }
+            running.remove(runningKey);
+            publishStatus();
             releaseFromDispatch(dispatchCard, card, "worker submission failed");
             scheduleRetry(
                     dispatchCard.id(),
@@ -943,6 +882,7 @@ public class SymphonyOrchestrator {
                     .ifPresent(entry -> handleWorkerExit(cardKey, workerIdentity, result, entry));
         } finally {
             try {
+                publishStatus();
                 workerExitCompletionHookForTests.run();
             } finally {
                 operationLock.unlock();
@@ -963,16 +903,15 @@ public class SymphonyOrchestrator {
                 }
             });
         } finally {
-            operationLock.unlock();
+            publishStatusAndUnlock();
         }
     }
 
     private void handleWorkerExit(
             RuntimeCardKey cardKey, String workerIdentity, AgentRunResult result, RunningEntry entry) {
-        synchronized (this) {
-            running.remove(cardKey);
-            addRuntime(entry);
-        }
+        running.remove(cardKey);
+        addRuntime(entry);
+        publishStatus();
         boolean currentTrackerTarget = isCurrentTrackerTarget(entry.launchTarget);
         boolean typedUsageLimit = result.failureCategory() == AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT;
         boolean commandScopedUsageLimit = typedUsageLimit && isCurrentCodexCommand(entry.launchCommand);
@@ -987,9 +926,7 @@ public class SymphonyOrchestrator {
             return;
         }
         if (result.success()) {
-            synchronized (this) {
-                completed.add(cardKey);
-            }
+            completed.add(cardKey);
             if (state.retry()) {
                 scheduleRetry(cardKey.cardId(), 1, entry.identifier(), entry.card.cardUrl(), null, true);
             } else {
@@ -1064,9 +1001,7 @@ public class SymphonyOrchestrator {
     }
 
     private void completeWorkerExit(RuntimeCardKey cardKey, RunningEntry entry, WorkerExitState state) {
-        synchronized (this) {
-            claimed.remove(cardKey);
-        }
+        claimed.remove(cardKey);
         if (state.cleanupWorkspace()) {
             workspaces.removeForIdentifierIfPresent(entry.identifier(), entry.launchConfig);
         }
@@ -1107,7 +1042,7 @@ public class SymphonyOrchestrator {
             applyAgentEvent(cardKey, currentEntry.orElseThrow(), event);
             return true;
         } finally {
-            operationLock.unlock();
+            publishStatusAndUnlock();
         }
     }
 
@@ -1125,7 +1060,7 @@ public class SymphonyOrchestrator {
         };
     }
 
-    private synchronized void applyAgentEvent(RuntimeCardKey cardKey, RunningEntry entry, AgentEvent event) {
+    private void applyAgentEvent(RuntimeCardKey cardKey, RunningEntry entry, AgentEvent event) {
         entry.lastEvent = event.event();
         entry.lastMessage = event.message();
         entry.lastEventAt = event.timestamp();
@@ -1148,7 +1083,7 @@ public class SymphonyOrchestrator {
         addRecentEvent(cardKey, new CardDebugDetails.EventInfo(event.timestamp(), event.event(), event.message()));
     }
 
-    private synchronized Optional<RunningEntry> currentRunningEntry(RuntimeCardKey cardKey, String workerIdentity) {
+    private Optional<RunningEntry> currentRunningEntry(RuntimeCardKey cardKey, String workerIdentity) {
         removeExpiredIgnoredWorkers();
         if (ignoredWorkers.remove(workerIdentity) != null) {
             LOG.debugf("card_id=%s worker_identity=%s outcome=ignored_stale_worker", cardKey.cardId(), workerIdentity);
@@ -1193,35 +1128,33 @@ public class SymphonyOrchestrator {
                 .filter(candidate -> candidate.isAfter(detectedAt))
                 .orElseGet(() -> detectedAt.plus(usageProbeFallbackDelay(currentConfig)));
         String message = usageLimitMessage(result.reason());
-        DispatchPause pause;
-        Map<UsageWorkpadTarget, UsageWorkpadState> workpadsToUpdate;
-        synchronized (this) {
-            pendingUsageWorkpadCleanup.remove(workpadTarget);
-            usageWorkpadMessages.put(workpadTarget, new UsageWorkpadState(workpadOwnerConfig, message));
-            if (dispatchPause == null) {
-                dispatchPauseGeneration++;
-                dispatchPause = new DispatchPause(
-                        entry.launchCommand, dispatchPauseGeneration, detectedAt, reportedReset, Optional.empty());
-            } else {
-                Optional<UsageProbe> retainedProbe =
-                        dispatchPause.probe().filter(probe -> !probe.matches(workpadTarget, workerIdentity));
-                Instant extendedUntil =
-                        reportedReset.isAfter(dispatchPause.until()) ? reportedReset : dispatchPause.until();
-                dispatchPause = new DispatchPause(
-                        dispatchPause.command(),
-                        dispatchPause.generation(),
-                        dispatchPause.detectedAt(),
-                        extendedUntil,
-                        retainedProbe);
-            }
-            pause = dispatchPause;
-            scheduleDispatchPauseDeadline(pause);
-            for (RetryEntry retry : List.copyOf(retryAttempts.values())) {
-                Instant deferredUntil = retry.dueAt().isAfter(pause.until()) ? retry.dueAt() : pause.until();
-                rescheduleRetryEntry(retry, deferredUntil);
-            }
-            workpadsToUpdate = Map.copyOf(usageWorkpadMessages);
+        pendingUsageWorkpadCleanup.remove(workpadTarget);
+        usageWorkpadMessages.put(workpadTarget, new UsageWorkpadState(workpadOwnerConfig, message));
+        if (dispatchPause == null) {
+            dispatchPauseGeneration++;
+            dispatchPause = new DispatchPause(
+                    entry.launchCommand, dispatchPauseGeneration, detectedAt, reportedReset, Optional.empty());
+        } else {
+            Optional<UsageProbe> retainedProbe =
+                    dispatchPause.probe().filter(probe -> !probe.matches(workpadTarget, workerIdentity));
+            Instant extendedUntil =
+                    reportedReset.isAfter(dispatchPause.until()) ? reportedReset : dispatchPause.until();
+            dispatchPause = new DispatchPause(
+                    dispatchPause.command(),
+                    dispatchPause.generation(),
+                    dispatchPause.detectedAt(),
+                    extendedUntil,
+                    retainedProbe);
         }
+        DispatchPause pause = dispatchPause;
+        scheduleDispatchPauseDeadline(pause);
+        for (RetryEntry retry : List.copyOf(retryAttempts.values())) {
+            Instant deferredUntil = retry.dueAt().isAfter(pause.until()) ? retry.dueAt() : pause.until();
+            rescheduleRetryEntry(retry, deferredUntil);
+        }
+        Map<UsageWorkpadTarget, UsageWorkpadState> workpadsToUpdate = Map.copyOf(usageWorkpadMessages);
+        // Status readers must see the pause before the workpad and worker-exit Trello I/O below.
+        publishStatus();
         workpadsToUpdate.forEach((target, state) -> updateUsageWorkpad(
                 state.ownerConfig(), target.cardId(), CodexUsageWorkpadSection.paused(state.message(), pause.until())));
         LOG.infof(
@@ -1244,7 +1177,7 @@ public class SymphonyOrchestrator {
         return configured.isZero() || configured.isNegative() ? CONTINUATION_DELAY : configured;
     }
 
-    private synchronized void bindUsageProbe(String cardId, String workerIdentity, EffectiveConfig launchConfig) {
+    private void bindUsageProbe(String cardId, String workerIdentity, EffectiveConfig launchConfig) {
         if (dispatchPause == null
                 || !Objects.equals(dispatchPause.command(), launchConfig.codex().command())) {
             return;
@@ -1260,7 +1193,7 @@ public class SymphonyOrchestrator {
         }
     }
 
-    private synchronized boolean isUsageProbeCard(TrackerTarget trackerTarget, String cardId) {
+    private boolean isUsageProbeCard(TrackerTarget trackerTarget, String cardId) {
         var target = new UsageWorkpadTarget(trackerTarget, cardId);
         return dispatchPause != null
                 && dispatchPause
@@ -1270,7 +1203,7 @@ public class SymphonyOrchestrator {
                         .orElse(false);
     }
 
-    private synchronized boolean isBoundUsageProbe(TrackerTarget trackerTarget, String cardId, String workerIdentity) {
+    private boolean isBoundUsageProbe(TrackerTarget trackerTarget, String cardId, String workerIdentity) {
         var target = new UsageWorkpadTarget(trackerTarget, cardId);
         return dispatchPause != null
                 && dispatchPause
@@ -1279,7 +1212,7 @@ public class SymphonyOrchestrator {
                         .isPresent();
     }
 
-    private synchronized String usageWorkpadMessage(UsageWorkpadTarget target) {
+    private String usageWorkpadMessage(UsageWorkpadTarget target) {
         UsageWorkpadState state = usageWorkpadMessages.get(target);
         return state == null ? "Codex usage is temporarily unavailable." : state.message();
     }
@@ -1294,15 +1227,15 @@ public class SymphonyOrchestrator {
         return updated;
     }
 
-    private synchronized void queueUsageWorkpadCleanup(String cardId) {
+    private void queueUsageWorkpadCleanup(String cardId) {
         queueUsageWorkpadCleanup(cardId, config);
     }
 
-    private synchronized void queueUsageWorkpadCleanup(String cardId, EffectiveConfig ownerConfig) {
+    private void queueUsageWorkpadCleanup(String cardId, EffectiveConfig ownerConfig) {
         queueUsageWorkpadCleanup(usageWorkpadTarget(ownerConfig, cardId), ownerConfig);
     }
 
-    private synchronized void queueUsageWorkpadCleanup(UsageWorkpadTarget target, EffectiveConfig ownerConfig) {
+    private void queueUsageWorkpadCleanup(UsageWorkpadTarget target, EffectiveConfig ownerConfig) {
         Instant now = clock.instant();
         pendingUsageWorkpadCleanup.compute(
                 target,
@@ -1323,36 +1256,31 @@ public class SymphonyOrchestrator {
 
     private void retryPendingUsageWorkpadCleanup(boolean force) {
         Instant now = clock.instant();
-        List<PendingUsageWorkpadCleanup> pending;
-        synchronized (this) {
-            pendingUsageWorkpadCleanup
-                    .entrySet()
-                    .removeIf(entry -> !entry.getValue().expiresAt().isAfter(now));
-            pending = pendingUsageWorkpadCleanup.entrySet().stream()
-                    .filter(entry -> force || !entry.getValue().nextAttemptAt().isAfter(now))
-                    .map(entry -> new PendingUsageWorkpadCleanup(entry.getKey(), entry.getValue()))
-                    .toList();
-        }
+        pendingUsageWorkpadCleanup
+                .entrySet()
+                .removeIf(entry -> !entry.getValue().expiresAt().isAfter(now));
+        List<PendingUsageWorkpadCleanup> pending = pendingUsageWorkpadCleanup.entrySet().stream()
+                .filter(entry -> force || !entry.getValue().nextAttemptAt().isAfter(now))
+                .map(entry -> new PendingUsageWorkpadCleanup(entry.getKey(), entry.getValue()))
+                .toList();
         pending.forEach(pendingCleanup -> {
             UsageWorkpadTarget target = pendingCleanup.target();
             UsageWorkpadCleanup attempted = pendingCleanup.cleanup();
             boolean updated = updateUsageWorkpad(attempted.ownerConfig(), target.cardId(), null);
-            synchronized (this) {
-                if (updated) {
-                    pendingUsageWorkpadCleanup.remove(target);
-                } else {
-                    pendingUsageWorkpadCleanup.put(
-                            target,
-                            new UsageWorkpadCleanup(
-                                    attempted.ownerConfig(),
-                                    attempted.expiresAt(),
-                                    now.plus(USAGE_WORKPAD_CLEANUP_RETRY_DELAY)));
-                }
+            if (updated) {
+                pendingUsageWorkpadCleanup.remove(target);
+            } else {
+                pendingUsageWorkpadCleanup.put(
+                        target,
+                        new UsageWorkpadCleanup(
+                                attempted.ownerConfig(),
+                                attempted.expiresAt(),
+                                now.plus(USAGE_WORKPAD_CLEANUP_RETRY_DELAY)));
             }
         });
     }
 
-    private synchronized void scheduleDispatchPauseDeadline(DispatchPause pause) {
+    private void scheduleDispatchPauseDeadline(DispatchPause pause) {
         if (dispatchPauseTimer != null) {
             dispatchPauseTimer.cancel(false);
         }
@@ -1367,55 +1295,50 @@ public class SymphonyOrchestrator {
     private void onDispatchPauseDeadline(String expectedCommand, long expectedGeneration, Instant expectedUntil) {
         operationLock.lock();
         try {
-            if (!isStarted()) {
+            if (!tickSchedule.isStarted()) {
                 return;
             }
-            synchronized (this) {
-                if (dispatchPause == null
-                        || !Objects.equals(dispatchPause.command(), expectedCommand)
-                        || dispatchPause.generation() != expectedGeneration
-                        || !dispatchPause.until().equals(expectedUntil)) {
-                    return;
-                }
-                if (clock.instant().isBefore(expectedUntil)) {
-                    scheduleDispatchPauseDeadline(dispatchPause);
-                    return;
-                }
-                if (dispatchPause.probe().isPresent()) {
-                    return;
-                }
+            if (dispatchPause == null
+                    || !Objects.equals(dispatchPause.command(), expectedCommand)
+                    || dispatchPause.generation() != expectedGeneration
+                    || !dispatchPause.until().equals(expectedUntil)) {
+                return;
+            }
+            if (clock.instant().isBefore(expectedUntil)) {
+                scheduleDispatchPauseDeadline(dispatchPause);
+                return;
+            }
+            if (dispatchPause.probe().isPresent()) {
+                return;
             }
             selectUsageProbeAtDeadline();
         } finally {
-            operationLock.unlock();
+            publishStatusAndUnlock();
         }
     }
 
     private void selectUsageProbeAtDeadline() {
-        Optional<RetryEntry> selectedRetry;
-        synchronized (this) {
-            // Retry entries retain insertion order. Prefer the oldest due card that observed the
-            // usage limit, then the oldest due deferred retry, before probing a new candidate.
-            Instant now = clock.instant();
-            selectedRetry = retryAttempts.values().stream()
-                    .filter(retry -> Objects.equals(retry.codexCommand(), dispatchPause.command()))
-                    .filter(retry -> retry.trackerTarget().equals(TrackerTarget.from(config)))
-                    .filter(RetryEntry::codexUsageLimit)
-                    .filter(retry -> !retry.dueAt().isAfter(now))
-                    .findFirst()
-                    .or(() -> retryAttempts.values().stream()
-                            .filter(retry -> Objects.equals(retry.codexCommand(), dispatchPause.command()))
-                            .filter(retry -> retry.trackerTarget().equals(TrackerTarget.from(config)))
-                            .filter(retry -> !retry.dueAt().isAfter(now))
-                            .findFirst());
-            selectedRetry.filter(retry -> !retry.codexUsageLimit()).ifPresent(this::promoteToUsageProbeRetry);
-        }
+        // Retry entries retain insertion order. Prefer the oldest due card that observed the
+        // usage limit, then the oldest due deferred retry, before probing a new candidate.
+        Instant now = clock.instant();
+        Optional<RetryEntry> selectedRetry = retryAttempts.values().stream()
+                .filter(retry -> Objects.equals(retry.codexCommand(), dispatchPause.command()))
+                .filter(retry -> retry.trackerTarget().equals(TrackerTarget.from(config)))
+                .filter(RetryEntry::codexUsageLimit)
+                .filter(retry -> !retry.dueAt().isAfter(now))
+                .findFirst()
+                .or(() -> retryAttempts.values().stream()
+                        .filter(retry -> Objects.equals(retry.codexCommand(), dispatchPause.command()))
+                        .filter(retry -> retry.trackerTarget().equals(TrackerTarget.from(config)))
+                        .filter(retry -> !retry.dueAt().isAfter(now))
+                        .findFirst());
+        selectedRetry.filter(retry -> !retry.codexUsageLimit()).ifPresent(this::promoteToUsageProbeRetry);
         selectedRetry.ifPresentOrElse(
                 retry -> handleRetryTimer(runtimeKey(retry), retry.generation()),
                 this::probeOneCandidateAtUsageDeadline);
     }
 
-    private synchronized void promoteToUsageProbeRetry(RetryEntry retry) {
+    private void promoteToUsageProbeRetry(RetryEntry retry) {
         RuntimeCardKey retryKey = runtimeKey(retry);
         RetryEntry current = retryAttempts.get(retryKey);
         if (retry.equals(current)) {
@@ -1456,15 +1379,13 @@ public class SymphonyOrchestrator {
         }
         Card probeCard = candidate.orElseThrow();
         UsageWorkpadTarget workpadTarget = usageWorkpadTarget(config, probeCard.id());
-        synchronized (this) {
-            if (dispatchPause == null || dispatchPause.probe().isPresent()) {
-                return;
-            }
-            usageWorkpadMessages.putIfAbsent(
-                    workpadTarget, new UsageWorkpadState(config, "Codex usage is temporarily unavailable."));
-            pendingUsageWorkpadCleanup.remove(workpadTarget);
-            dispatchPause = dispatchPause.launching(workpadTarget);
+        if (dispatchPause == null || dispatchPause.probe().isPresent()) {
+            return;
         }
+        usageWorkpadMessages.putIfAbsent(
+                workpadTarget, new UsageWorkpadState(config, "Codex usage is temporarily unavailable."));
+        pendingUsageWorkpadCleanup.remove(workpadTarget);
+        dispatchPause = dispatchPause.launching(workpadTarget);
         updateUsageWorkpad(
                 config, probeCard.id(), CodexUsageWorkpadSection.rechecking(usageWorkpadMessage(workpadTarget)));
         boolean workerStarted = false;
@@ -1485,33 +1406,30 @@ public class SymphonyOrchestrator {
     }
 
     private void rearmUsagePauseWithoutProbe() {
-        DispatchPause pause;
-        Map<UsageWorkpadTarget, UsageWorkpadState> workpadsToUpdate;
-        synchronized (this) {
-            if (dispatchPause == null || dispatchPause.probe().isPresent()) {
-                return;
-            }
-            Instant now = clock.instant();
-            Instant fallbackDeadline = now.plus(usageProbeFallbackDelay());
-            Instant nextDeadline = retryAttempts.values().stream()
-                    .map(RetryEntry::dueAt)
-                    .filter(dueAt -> dueAt.isAfter(now) && dueAt.isBefore(fallbackDeadline))
-                    .min(Instant::compareTo)
-                    .orElse(fallbackDeadline);
-            dispatchPause = new DispatchPause(
-                    dispatchPause.command(),
-                    dispatchPause.generation(),
-                    dispatchPause.detectedAt(),
-                    nextDeadline,
-                    Optional.empty());
-            pause = dispatchPause;
-            scheduleDispatchPauseDeadline(pause);
-            for (RetryEntry retry : List.copyOf(retryAttempts.values())) {
-                Instant deferredUntil = retry.dueAt().isAfter(nextDeadline) ? retry.dueAt() : nextDeadline;
-                rescheduleRetryEntry(retry, deferredUntil);
-            }
-            workpadsToUpdate = Map.copyOf(usageWorkpadMessages);
+        if (dispatchPause == null || dispatchPause.probe().isPresent()) {
+            return;
         }
+        Instant now = clock.instant();
+        Instant fallbackDeadline = now.plus(usageProbeFallbackDelay());
+        Instant nextDeadline = retryAttempts.values().stream()
+                .map(RetryEntry::dueAt)
+                .filter(dueAt -> dueAt.isAfter(now) && dueAt.isBefore(fallbackDeadline))
+                .min(Instant::compareTo)
+                .orElse(fallbackDeadline);
+        dispatchPause = new DispatchPause(
+                dispatchPause.command(),
+                dispatchPause.generation(),
+                dispatchPause.detectedAt(),
+                nextDeadline,
+                Optional.empty());
+        DispatchPause pause = dispatchPause;
+        scheduleDispatchPauseDeadline(pause);
+        for (RetryEntry retry : List.copyOf(retryAttempts.values())) {
+            Instant deferredUntil = retry.dueAt().isAfter(nextDeadline) ? retry.dueAt() : nextDeadline;
+            rescheduleRetryEntry(retry, deferredUntil);
+        }
+        Map<UsageWorkpadTarget, UsageWorkpadState> workpadsToUpdate = Map.copyOf(usageWorkpadMessages);
+        publishStatus();
         workpadsToUpdate.forEach((target, state) -> updateUsageWorkpad(
                 state.ownerConfig(), target.cardId(), CodexUsageWorkpadSection.paused(state.message(), pause.until())));
         LOG.infof(
@@ -1527,64 +1445,55 @@ public class SymphonyOrchestrator {
     }
 
     private void clearUsagePause() {
-        Map<UsageWorkpadTarget, UsageWorkpadState> workpadsToClear;
-        synchronized (this) {
-            if (dispatchPause == null) {
-                return;
-            }
-            dispatchPause = null;
-            if (dispatchPauseTimer != null) {
-                dispatchPauseTimer.cancel(false);
-                dispatchPauseTimer = null;
-            }
-            workpadsToClear = Map.copyOf(usageWorkpadMessages);
-            for (Map.Entry<UsageWorkpadTarget, UsageWorkpadState> entry : workpadsToClear.entrySet()) {
-                queueUsageWorkpadCleanup(entry.getKey(), entry.getValue().ownerConfig());
-            }
-            usageWorkpadMessages.clear();
-            Instant now = clock.instant();
-            for (RetryEntry retry : List.copyOf(retryAttempts.values())) {
-                Instant dueAt = retry.naturalDueAt().isAfter(now) ? retry.naturalDueAt() : now;
-                rescheduleRetryEntry(retry, dueAt);
-            }
-            if (started) {
-                scheduleTick(Duration.ZERO);
-            }
+        if (dispatchPause == null) {
+            return;
         }
+        dispatchPause = null;
+        if (dispatchPauseTimer != null) {
+            dispatchPauseTimer.cancel(false);
+            dispatchPauseTimer = null;
+        }
+        Map<UsageWorkpadTarget, UsageWorkpadState> workpadsToClear = Map.copyOf(usageWorkpadMessages);
+        for (Map.Entry<UsageWorkpadTarget, UsageWorkpadState> entry : workpadsToClear.entrySet()) {
+            queueUsageWorkpadCleanup(entry.getKey(), entry.getValue().ownerConfig());
+        }
+        usageWorkpadMessages.clear();
+        Instant now = clock.instant();
+        for (RetryEntry retry : List.copyOf(retryAttempts.values())) {
+            Instant dueAt = retry.naturalDueAt().isAfter(now) ? retry.naturalDueAt() : now;
+            rescheduleRetryEntry(retry, dueAt);
+        }
+        tickSchedule.scheduleImmediateTickIfStarted();
+        publishStatus();
         retryPendingUsageWorkpadCleanup(false);
         LOG.infof("codex_dispatch_pause=%s outcome=cleared", CODEX_USAGE_LIMIT_PAUSE);
     }
 
     private void rearmUsageProbeWithoutResult(
             UsageWorkpadTarget workpadTarget, int attempt, String identifier, String cardUrl, String error) {
-        DispatchPause pause;
-        RetryEntry queued;
-        Map<UsageWorkpadTarget, UsageWorkpadState> workpadsToUpdate;
-        synchronized (this) {
-            if (!isUsageProbeCard(workpadTarget.trackerTarget(), workpadTarget.cardId())) {
-                return;
-            }
-            queued = retryAttempts.remove(runtimeKey(workpadTarget.trackerTarget(), workpadTarget.cardId()));
-            if (queued != null) {
-                queued.timer().cancel(false);
-            }
-            Instant fallbackDeadline = clock.instant().plus(usageProbeFallbackDelay());
-            Instant nextDeadline =
-                    fallbackDeadline.isAfter(dispatchPause.until()) ? fallbackDeadline : dispatchPause.until();
-            dispatchPause = new DispatchPause(
-                    dispatchPause.command(),
-                    dispatchPause.generation(),
-                    dispatchPause.detectedAt(),
-                    nextDeadline,
-                    Optional.empty());
-            pause = dispatchPause;
-            scheduleDispatchPauseDeadline(pause);
-            for (RetryEntry retry : List.copyOf(retryAttempts.values())) {
-                Instant deferredUntil = retry.dueAt().isAfter(nextDeadline) ? retry.dueAt() : nextDeadline;
-                rescheduleRetryEntry(retry, deferredUntil);
-            }
-            workpadsToUpdate = Map.copyOf(usageWorkpadMessages);
+        if (!isUsageProbeCard(workpadTarget.trackerTarget(), workpadTarget.cardId())) {
+            return;
         }
+        RetryEntry queued = retryAttempts.remove(runtimeKey(workpadTarget.trackerTarget(), workpadTarget.cardId()));
+        if (queued != null) {
+            queued.timer().cancel(false);
+        }
+        Instant fallbackDeadline = clock.instant().plus(usageProbeFallbackDelay());
+        Instant nextDeadline =
+                fallbackDeadline.isAfter(dispatchPause.until()) ? fallbackDeadline : dispatchPause.until();
+        dispatchPause = new DispatchPause(
+                dispatchPause.command(),
+                dispatchPause.generation(),
+                dispatchPause.detectedAt(),
+                nextDeadline,
+                Optional.empty());
+        DispatchPause pause = dispatchPause;
+        scheduleDispatchPauseDeadline(pause);
+        for (RetryEntry retry : List.copyOf(retryAttempts.values())) {
+            Instant deferredUntil = retry.dueAt().isAfter(nextDeadline) ? retry.dueAt() : nextDeadline;
+            rescheduleRetryEntry(retry, deferredUntil);
+        }
+        Map<UsageWorkpadTarget, UsageWorkpadState> workpadsToUpdate = Map.copyOf(usageWorkpadMessages);
         int retryAttempt = queued == null ? attempt : queued.attempt();
         String retryIdentifier = queued == null ? identifier : queued.identifier();
         String retryCardUrl = queued == null ? cardUrl : queued.cardUrl();
@@ -1645,41 +1554,38 @@ public class SymphonyOrchestrator {
             boolean codexUsageLimit,
             String codexCommand,
             TrackerTarget trackerTarget) {
-        Instant scheduledAt;
-        long delayMillis;
         RuntimeCardKey retryKey = runtimeKey(trackerTarget, cardId);
-        synchronized (this) {
-            scheduledAt = dispatchPause != null
-                            && Objects.equals(dispatchPause.command(), codexCommand)
-                            && dispatchPause.until().isAfter(naturalDueAt)
-                    ? dispatchPause.until()
-                    : naturalDueAt;
-            delayMillis = delayMillisUntil(scheduledAt);
-            RetryEntry existing = retryAttempts.remove(retryKey);
-            if (existing != null) {
-                existing.timer().cancel(false);
-            }
-            retryGeneration++;
-            long generation = retryGeneration;
-            ScheduledFuture<?> timer =
-                    scheduler.schedule(() -> onRetryTimer(retryKey, generation), delayMillis, TimeUnit.MILLISECONDS);
-            retryAttempts.put(
-                    retryKey,
-                    new RetryEntry(
-                            cardId,
-                            identifier,
-                            cardUrl,
-                            attempt,
-                            scheduledAt,
-                            naturalDueAt,
-                            codexCommand,
-                            trackerTarget,
-                            generation,
-                            timer,
-                            error,
-                            codexUsageLimit));
-            claimed.add(retryKey);
+        Instant scheduledAt = dispatchPause != null
+                        && Objects.equals(dispatchPause.command(), codexCommand)
+                        && dispatchPause.until().isAfter(naturalDueAt)
+                ? dispatchPause.until()
+                : naturalDueAt;
+        long delayMillis = delayMillisUntil(scheduledAt);
+        RetryEntry existing = retryAttempts.remove(retryKey);
+        if (existing != null) {
+            existing.timer().cancel(false);
         }
+        retryGeneration++;
+        long generation = retryGeneration;
+        ScheduledFuture<?> timer =
+                scheduler.schedule(() -> onRetryTimer(retryKey, generation), delayMillis, TimeUnit.MILLISECONDS);
+        retryAttempts.put(
+                retryKey,
+                new RetryEntry(
+                        cardId,
+                        identifier,
+                        cardUrl,
+                        attempt,
+                        scheduledAt,
+                        naturalDueAt,
+                        codexCommand,
+                        trackerTarget,
+                        generation,
+                        timer,
+                        error,
+                        codexUsageLimit));
+        claimed.add(retryKey);
+        publishStatus();
         LOG.infof(
                 "card_id=%s card_identifier=%s outcome=retrying attempt=%d delay_ms=%d",
                 cardId, identifier, attempt, delayMillis);
@@ -1689,33 +1595,28 @@ public class SymphonyOrchestrator {
         retryTimerWaitingHookForTests.run();
         operationLock.lock();
         try {
-            if (!isStarted()) {
+            if (!tickSchedule.isStarted()) {
                 return;
             }
             handleRetryTimer(cardKey, generation);
         } finally {
-            operationLock.unlock();
+            publishStatusAndUnlock();
         }
     }
 
     private void handleRetryTimer(RuntimeCardKey cardKey, long generation) {
-        RetryEntry pendingRetry;
-        synchronized (this) {
-            pendingRetry = retryAttempts.get(cardKey);
-        }
+        RetryEntry pendingRetry = retryAttempts.get(cardKey);
         if (pendingRetry == null
                 || pendingRetry.generation() != generation
                 || deferRetryForDispatchPause(pendingRetry)) {
             return;
         }
-        RetryEntry retry;
-        synchronized (this) {
-            RetryEntry current = retryAttempts.get(cardKey);
-            retry = current != null && current.generation() == generation ? retryAttempts.remove(cardKey) : null;
-        }
+        RetryEntry current = retryAttempts.get(cardKey);
+        RetryEntry retry = current != null && current.generation() == generation ? retryAttempts.remove(cardKey) : null;
         if (retry == null) {
             return;
         }
+        publishStatus();
         retry.timer().cancel(false);
         String cardId = cardKey.cardId();
         var workpadTarget = new UsageWorkpadTarget(retry.trackerTarget(), cardId);
@@ -1815,25 +1716,23 @@ public class SymphonyOrchestrator {
     }
 
     private void retireUsageProbeWithoutResult(UsageWorkpadTarget workpadTarget) {
-        boolean cleanupWorkpad;
-        synchronized (this) {
-            if (!isUsageProbeCard(workpadTarget.trackerTarget(), workpadTarget.cardId())) {
-                return;
-            }
-            UsageWorkpadState state = usageWorkpadMessages.remove(workpadTarget);
-            cleanupWorkpad = state != null;
-            if (cleanupWorkpad) {
-                queueUsageWorkpadCleanup(workpadTarget, state.ownerConfig());
-            }
-            Instant transferAt = clock.instant();
-            dispatchPause = new DispatchPause(
-                    dispatchPause.command(),
-                    dispatchPause.generation(),
-                    dispatchPause.detectedAt(),
-                    transferAt,
-                    Optional.empty());
-            scheduleDispatchPauseDeadline(dispatchPause);
+        if (!isUsageProbeCard(workpadTarget.trackerTarget(), workpadTarget.cardId())) {
+            return;
         }
+        UsageWorkpadState state = usageWorkpadMessages.remove(workpadTarget);
+        boolean cleanupWorkpad = state != null;
+        if (cleanupWorkpad) {
+            queueUsageWorkpadCleanup(workpadTarget, state.ownerConfig());
+        }
+        Instant transferAt = clock.instant();
+        dispatchPause = new DispatchPause(
+                dispatchPause.command(),
+                dispatchPause.generation(),
+                dispatchPause.detectedAt(),
+                transferAt,
+                Optional.empty());
+        scheduleDispatchPauseDeadline(dispatchPause);
+        publishStatus();
         if (cleanupWorkpad) {
             retryPendingUsageWorkpadCleanup(false);
         }
@@ -1841,67 +1740,56 @@ public class SymphonyOrchestrator {
     }
 
     private boolean deferRetryForDispatchPause(RetryEntry retry) {
-        DispatchPause pause;
-        boolean beginRecheck = false;
-        synchronized (this) {
-            pause = dispatchPause;
-            if (pause == null) {
-                return false;
-            }
-            if (!Objects.equals(pause.command(), retry.codexCommand())) {
-                return false;
-            }
-            if (pause.probe().isPresent()) {
-                return true;
-            }
-            Instant now = clock.instant();
-            if (now.isBefore(pause.until())) {
-                rescheduleRetryEntry(retry, pause.until());
-                return true;
-            }
-            if (!retry.codexUsageLimit()) {
-                return true;
-            }
-            var workpadTarget = new UsageWorkpadTarget(retry.trackerTarget(), retry.cardId());
-            usageWorkpadMessages.putIfAbsent(
-                    workpadTarget, new UsageWorkpadState(config, "Codex usage is temporarily unavailable."));
-            pendingUsageWorkpadCleanup.remove(workpadTarget);
-            dispatchPause = pause.launching(workpadTarget);
-            if (dispatchPauseTimer != null) {
-                dispatchPauseTimer.cancel(false);
-            }
-            beginRecheck = true;
+        DispatchPause pause = dispatchPause;
+        if (pause == null) {
+            return false;
         }
-        if (beginRecheck) {
-            var workpadTarget = new UsageWorkpadTarget(retry.trackerTarget(), retry.cardId());
-            UsageWorkpadState state = usageWorkpadMessages.get(workpadTarget);
-            updateUsageWorkpad(
-                    state.ownerConfig(),
-                    retry.cardId(),
-                    CodexUsageWorkpadSection.rechecking(usageWorkpadMessage(workpadTarget)));
+        if (!Objects.equals(pause.command(), retry.codexCommand())) {
+            return false;
         }
+        if (pause.probe().isPresent()) {
+            return true;
+        }
+        Instant now = clock.instant();
+        if (now.isBefore(pause.until())) {
+            rescheduleRetryEntry(retry, pause.until());
+            return true;
+        }
+        if (!retry.codexUsageLimit()) {
+            return true;
+        }
+        var workpadTarget = new UsageWorkpadTarget(retry.trackerTarget(), retry.cardId());
+        usageWorkpadMessages.putIfAbsent(
+                workpadTarget, new UsageWorkpadState(config, "Codex usage is temporarily unavailable."));
+        pendingUsageWorkpadCleanup.remove(workpadTarget);
+        dispatchPause = pause.launching(workpadTarget);
+        if (dispatchPauseTimer != null) {
+            dispatchPauseTimer.cancel(false);
+        }
+        UsageWorkpadState state = usageWorkpadMessages.get(workpadTarget);
+        updateUsageWorkpad(
+                state.ownerConfig(),
+                retry.cardId(),
+                CodexUsageWorkpadSection.rechecking(usageWorkpadMessage(workpadTarget)));
         return false;
     }
 
     private void rescheduleRetryEntry(RetryEntry retry, Instant dueAt) {
         retryEntryRescheduleHookForTests.accept(retry.cardId(), retry.generation());
-        synchronized (this) {
-            RetryEntry current = retryAttempts.get(runtimeKey(retry));
-            if (current == null) {
-                return;
-            }
-            retry.timer().cancel(false);
-            replaceRetryEntry(
-                    retry,
-                    dueAt,
-                    retry.naturalDueAt(),
-                    retry.codexCommand(),
-                    retry.trackerTarget(),
-                    retry.codexUsageLimit());
+        RetryEntry current = retryAttempts.get(runtimeKey(retry));
+        if (current == null) {
+            return;
         }
+        retry.timer().cancel(false);
+        replaceRetryEntry(
+                retry,
+                dueAt,
+                retry.naturalDueAt(),
+                retry.codexCommand(),
+                retry.trackerTarget(),
+                retry.codexUsageLimit());
     }
 
-    /// Called with the state monitor held.
     private void rescheduleRetryForCommandChange(RetryEntry retry, EffectiveConfig nextConfig, Instant now) {
         RetryEntry current = retryAttempts.get(runtimeKey(retry));
         if (current == null || current.generation() != retry.generation()) {
@@ -1914,7 +1802,7 @@ public class SymphonyOrchestrator {
                 retry, dueAt, naturalDueAt, nextConfig.codex().command(), TrackerTarget.from(nextConfig), false);
     }
 
-    /// Called with the state monitor held after the prior timer has been cancelled.
+    /// Called after the prior timer has been cancelled.
     private void replaceRetryEntry(
             RetryEntry retry,
             Instant dueAt,
@@ -1963,7 +1851,7 @@ public class SymphonyOrchestrator {
         }
     }
 
-    private synchronized void removeClaim(RuntimeCardKey cardKey) {
+    private void removeClaim(RuntimeCardKey cardKey) {
         claimed.remove(cardKey);
     }
 
@@ -2335,125 +2223,61 @@ public class SymphonyOrchestrator {
         return events == null ? List.of() : List.copyOf(events);
     }
 
-    private synchronized void removeExpiredIgnoredWorkers() {
+    private void removeExpiredIgnoredWorkers() {
         Instant now = clock.instant();
         ignoredWorkers.entrySet().removeIf(entry -> entry.getValue().isBefore(now));
     }
 
-    private synchronized void trimIgnoredWorkers() {
+    private void trimIgnoredWorkers() {
         while (ignoredWorkers.size() > IGNORED_WORKER_LIMIT) {
             String first = ignoredWorkers.keySet().iterator().next();
             ignoredWorkers.remove(first);
         }
     }
 
-    private synchronized void scheduleTick(Duration delay) {
-        if (tickTimer != null) {
-            tickTimer.cancel(false);
-        }
-        tickTimer = scheduler.schedule(this::tick, delay.toMillis(), TimeUnit.MILLISECONDS);
+    /// Status reads take no lock: they turn the last published view into a snapshot.
+    public RuntimeSnapshot snapshot() {
+        return statusView.snapshot(clock.instant());
     }
 
-    public synchronized RuntimeSnapshot snapshot() {
-        Instant now = clock.instant();
-        List<RuntimeSnapshot.RunningRow> runningRows =
-                running.values().stream().map(this::runningRow).toList();
-        List<RuntimeSnapshot.RetryRow> retryRows =
-                retryAttempts.values().stream().map(this::retryRow).toList();
-        double activeSeconds = running.values().stream()
-                        .mapToLong(
-                                entry -> Duration.between(entry.startedAt, now).toMillis())
-                        .sum()
-                / 1000.0;
-        return new RuntimeSnapshot(
-                now,
-                new RuntimeSnapshot.Counts(runningRows.size(), retryRows.size()),
-                routing(),
-                runningRows,
-                retryRows,
-                new RuntimeSnapshot.TokenTotals(
-                        totalInputTokens, totalOutputTokens, totalTokens, endedRuntimeMillis / 1000.0 + activeSeconds),
-                dispatchPause == null
-                                || !Objects.equals(
-                                        dispatchPause.command(), config.codex().command())
+    public Optional<CardDebugDetails> cardDetails(String cardIdentifier) {
+        return statusView.cardDetails(cardIdentifier);
+    }
+
+    /// Replaces the view that status readers see with the current state. Call it after a change to
+    /// reader-visible state when the operation does more Trello or filesystem I/O before it
+    /// releases the operation lock; [#publishStatusAndUnlock()] covers the end of every operation.
+    private void publishStatus() {
+        checkState(operationLock.isHeldByCurrentThread(), "Status view must be published under the operation lock");
+        EffectiveConfig currentConfig = config;
+        statusView = new StatusView(
+                tickSchedule.isStarted(),
+                currentConfig,
+                running.entrySet().stream()
+                        .map(entry -> new StatusView.RunningCard(
+                                entry.getKey().trackerTarget(),
+                                runningRow(entry.getValue()),
+                                entry.getValue().launchConfig.workspace().root(),
+                                recentEventsFor(entry.getKey())))
+                        .toList(),
+                retryAttempts.entrySet().stream()
+                        .map(entry -> new StatusView.RetryingCard(entry.getValue(), recentEventsFor(entry.getKey())))
+                        .toList(),
+                new StatusView.CodexTotals(totalInputTokens, totalOutputTokens, totalTokens, endedRuntimeMillis),
+                Optional.ofNullable(dispatchPause),
+                currentConfig == null
                         ? null
-                        : new RuntimeSnapshot.DispatchPause(
-                                CODEX_USAGE_LIMIT_PAUSE, dispatchPause.detectedAt(), dispatchPause.until()),
-                config == null ? null : rateLimitsByCommand.get(config.codex().command()));
+                        : rateLimitsByCommand.get(currentConfig.codex().command()));
     }
 
-    private RuntimeSnapshot.Routing routing() {
-        if (config == null) {
-            return new RuntimeSnapshot.Routing(List.of(), List.of(), List.of());
+    /// Ends every operation, so readers see its final state even where an intermediate publish is
+    /// missing.
+    private void publishStatusAndUnlock() {
+        try {
+            publishStatus();
+        } finally {
+            operationLock.unlock();
         }
-        return new RuntimeSnapshot.Routing(
-                List.copyOf(config.tracker().activeStates()),
-                List.copyOf(config.tracker().terminalStates()),
-                List.copyOf(config.trelloTools().allowedMoveListNames()));
-    }
-
-    public synchronized Optional<CardDebugDetails> cardDetails(String cardIdentifier) {
-        TrackerTarget currentTarget = config == null ? null : TrackerTarget.from(config);
-        Optional<CardDetailsSelection> selection = running.entrySet().stream()
-                .filter(entry -> Objects.equals(entry.getKey().trackerTarget(), currentTarget))
-                .filter(entry -> entry.getValue().identifier().equals(cardIdentifier))
-                .findFirst()
-                .map(this::runningCardDetailsSelection)
-                .or(() -> retryAttempts.entrySet().stream()
-                        .filter(entry -> Objects.equals(entry.getKey().trackerTarget(), currentTarget))
-                        .filter(entry -> entry.getValue().identifier().equals(cardIdentifier))
-                        .findFirst()
-                        .map(this::retryCardDetailsSelection))
-                .or(() -> running.entrySet().stream()
-                        .filter(entry -> entry.getValue().identifier().equals(cardIdentifier))
-                        .findFirst()
-                        .map(this::runningCardDetailsSelection))
-                .or(() -> retryAttempts.entrySet().stream()
-                        .filter(entry -> entry.getValue().identifier().equals(cardIdentifier))
-                        .findFirst()
-                        .map(this::retryCardDetailsSelection));
-        return selection.map(detailsSelection -> new CardDebugDetails(
-                cardIdentifier,
-                detailsSelection.cardKey().cardId(),
-                detailsSelection.status(),
-                new CardDebugDetails.WorkspaceInfo(
-                        detailsSelection.workspaceRoot().resolve(WorkspaceManager.sanitize(cardIdentifier))),
-                new CardDebugDetails.AttemptInfo(0, detailsSelection.currentRetryAttempt()),
-                detailsSelection.runningRow(),
-                detailsSelection.retryRow(),
-                new CardDebugDetails.LogInfo(List.of()),
-                recentEventsFor(detailsSelection.cardKey()),
-                detailsSelection.lastError(),
-                Map.of()));
-    }
-
-    private CardDetailsSelection runningCardDetailsSelection(Map.Entry<RuntimeCardKey, RunningEntry> ownedEntry) {
-        RunningEntry entry = ownedEntry.getValue();
-        return new CardDetailsSelection(
-                ownedEntry.getKey(),
-                "running",
-                entry.launchConfig.workspace().root(),
-                null,
-                runningRow(entry),
-                null,
-                null);
-    }
-
-    private CardDetailsSelection retryCardDetailsSelection(Map.Entry<RuntimeCardKey, RetryEntry> ownedRetry) {
-        RetryEntry retry = ownedRetry.getValue();
-        return new CardDetailsSelection(
-                ownedRetry.getKey(),
-                "retrying",
-                config.workspace().root(),
-                retry.attempt(),
-                null,
-                retryRow(retry),
-                retry.error());
-    }
-
-    private RuntimeSnapshot.RetryRow retryRow(RetryEntry retry) {
-        return new RuntimeSnapshot.RetryRow(
-                retry.cardId(), retry.identifier(), retry.cardUrl(), retry.attempt(), retry.dueAt(), retry.error());
     }
 
     private RuntimeSnapshot.RunningRow runningRow(RunningEntry entry) {
@@ -2475,6 +2299,85 @@ public class SymphonyOrchestrator {
                         entry.outputTokens,
                         "total_tokens",
                         entry.totalTokens));
+    }
+
+    /// The lifecycle flags and timer that refresh callers share with the polling tick. Its monitor
+    /// is never held during I/O and never while waiting for the operation lock, so
+    /// requestRefresh() never waits for a tick, and a tick never waits for a refresh caller for
+    /// longer than one schedule call.
+    private final class TickSchedule {
+        private boolean started;
+        private boolean tickRunning;
+        private boolean refreshRequested;
+        private ScheduledFuture<?> tickTimer;
+
+        synchronized boolean isStarted() {
+            return started;
+        }
+
+        synchronized void markStartedAndScheduleFirstTick() {
+            started = true;
+            schedule(Duration.ZERO);
+        }
+
+        /// Marking not-started before stop() does anything else closes the refresh window: once
+        /// this ran, a concurrent requestRefresh() is a no-op and cannot schedule a tick against
+        /// the scheduler that stop is about to shut down.
+        synchronized void markStoppingAndCancelTick() {
+            started = false;
+            if (tickTimer != null) {
+                tickTimer.cancel(false);
+            }
+        }
+
+        /// Atomic with tick completion: this runs entirely before or entirely after
+        /// finishTickAndScheduleNext, so a refresh either gets consumed by the finishing tick or
+        /// replaces the interval schedule with a zero-delay tick, never the other way around.
+        /// After stop marked the orchestrator as not started, this only records the request.
+        synchronized void requestRefresh() {
+            refreshRequested = true;
+            if (started && !tickRunning) {
+                refreshScheduleHookForTests.run();
+                schedule(Duration.ZERO);
+            }
+        }
+
+        synchronized boolean beginTick() {
+            if (!started) {
+                return false;
+            }
+            tickRunning = true;
+            return true;
+        }
+
+        /// A tick handles every refresh requested before it started.
+        synchronized void consumeRefreshRequest() {
+            refreshRequested = false;
+        }
+
+        /// Clearing tickRunning, consuming the refresh flag, and scheduling the next tick happen in
+        /// one monitor section, so a refresh at the completion boundary can never be overwritten
+        /// by the normal polling interval.
+        synchronized void finishTickAndScheduleNext(Duration pollInterval) {
+            tickRunning = false;
+            boolean refreshRequestedDuringTick = refreshRequested;
+            refreshRequested = false;
+            tickCompletionHookForTests.run();
+            schedule(refreshRequestedDuringTick ? Duration.ZERO : pollInterval);
+        }
+
+        synchronized void scheduleImmediateTickIfStarted() {
+            if (started) {
+                schedule(Duration.ZERO);
+            }
+        }
+
+        private void schedule(Duration delay) {
+            if (tickTimer != null) {
+                tickTimer.cancel(false);
+            }
+            tickTimer = scheduler.schedule(SymphonyOrchestrator.this::tick, delay.toMillis(), TimeUnit.MILLISECONDS);
+        }
     }
 
     private RuntimeCardKey currentRuntimeKey(String cardId) {
@@ -2499,17 +2402,13 @@ public class SymphonyOrchestrator {
 
     private record RuntimeCardKey(TrackerTarget trackerTarget, String cardId) {}
 
-    private record CardDetailsSelection(
-            RuntimeCardKey cardKey,
-            String status,
-            Path workspaceRoot,
-            Integer currentRetryAttempt,
-            RuntimeSnapshot.RunningRow runningRow,
-            RuntimeSnapshot.RetryRow retryRow,
-            String lastError) {}
-
-    private record DispatchPause(
+    /// Status readers see the pause through [StatusView]; the probe stays internal.
+    record DispatchPause(
             String command, long generation, Instant detectedAt, Instant until, Optional<UsageProbe> probe) {
+        RuntimeSnapshot.DispatchPause status() {
+            return new RuntimeSnapshot.DispatchPause(CODEX_USAGE_LIMIT_PAUSE, detectedAt, until);
+        }
+
         private DispatchPause launching(UsageWorkpadTarget target) {
             return new DispatchPause(
                     command, generation, detectedAt, until, Optional.of(new UsageProbe(target, Optional.empty())));

@@ -131,7 +131,8 @@ succeeds.
   breaker.
 * Good, because humans can see the reason and retry time from the Trello workpad or status page.
 * Good, because the operation lock installs the pause before subsequent Trello I/O while status
-  readers still take only the short state monitor.
+  readers take no lock. Since [ADR 0105](0105-orchestrator-published-read-view.md), the operation
+  publishes the pause to the status view before that I/O.
 * Bad, because restarting Symphony forgets the pause and may allow one new probe before detecting
   the same limit again; stale workpad cleanup is opportunistic when the card next becomes eligible.
 * Bad, because workpad visibility depends on configured Trello comment-write permissions.
@@ -177,5 +178,6 @@ deliberately consume quota or expose private account payloads.
 This decision refines ADR 0017 only while a typed Codex usage limit is active: failed pickup cards
 are still released from `In Progress`, but new pickup moves wait behind the workflow-wide pause. It
 extends ADR 0019 with one Symphony-managed section rather than a second progress comment. It keeps
-ADR 0051's lock split: long operations and Trello I/O use the operation lock, while snapshots copy
-pause state under the short monitor.
+ADR 0051's operation lock: long operations and Trello I/O use the operation lock. Snapshots read
+the pause from the published status view of
+[ADR 0105](0105-orchestrator-published-read-view.md), which replaced ADR 0051's short monitor.

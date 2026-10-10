@@ -780,13 +780,13 @@ final class SymphonyOrchestratorTest {
     }
 
     @Test
-    void refreshAtExecutorShutdownBoundaryIsANoOp() throws Exception {
+    void refreshAtSchedulerShutdownBoundaryIsANoOp() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflow(workflow, "60000");
         SymphonyOrchestrator orchestrator = orchestrator(workflow, new FakeTracker(List.of()), mock());
         var refreshFailure = new AtomicReference<Throwable>();
-        orchestrator.executorsStoppedHookForTests =
+        orchestrator.schedulerStoppedHookForTests =
                 () -> refreshFailure.set(catchThrowable(orchestrator::requestRefresh));
         orchestrator.start();
 
@@ -795,8 +795,46 @@ final class SymphonyOrchestratorTest {
 
         // then
         assertThat(refreshFailure)
-                .as("refresh at the executor shutdown boundary must observe the stopped lifecycle state")
+                .as("refresh at the scheduler shutdown boundary must observe the stopped lifecycle state")
                 .hasValue(null);
+    }
+
+    @Test
+    void refreshThatPassedTheStartedCheckSchedulesBeforeStopShutsTheSchedulerDown() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "60000");
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, new FakeTracker(List.of()), mock());
+        var refreshPausedBeforeScheduling = new CountDownLatch(1);
+        var resumeRefresh = new CountDownLatch(1);
+        orchestrator.refreshScheduleHookForTests = () -> {
+            refreshPausedBeforeScheduling.countDown();
+            awaitRelease(resumeRefresh, "the refresh paused before scheduling its tick");
+        };
+        var tickCompletions = new AtomicInteger();
+        orchestrator.tickCompletionHookForTests = tickCompletions::incrementAndGet;
+        orchestrator.start();
+        // A refresh during the startup tick only sets the refresh flag, so wait until it finished.
+        waitUntil(() -> tickCompletions.get() == 1);
+        CompletableFuture<Throwable> refreshFailure =
+                CompletableFuture.supplyAsync(() -> catchThrowable(orchestrator::requestRefresh));
+        assertThat(refreshPausedBeforeScheduling.await(5, TimeUnit.SECONDS))
+                .as("the refresh should pass the started check within 5 seconds")
+                .isTrue();
+
+        // when
+        CompletableFuture<Void> stopped = CompletableFuture.runAsync(orchestrator::stop);
+        waitForBoundedQuietPeriod(stopped::isDone);
+        resumeRefresh.countDown();
+
+        // then
+        assertThat(refreshFailure)
+                .as("a refresh that passed the started check must schedule before stop shuts the scheduler down")
+                .succeedsWithin(Duration.ofSeconds(5))
+                .isNull();
+        assertThat(stopped)
+                .as("stop should finish within 5 seconds once the racing refresh has scheduled")
+                .succeedsWithin(Duration.ofSeconds(5));
     }
 
     @Test
@@ -822,7 +860,7 @@ final class SymphonyOrchestratorTest {
         assertThat(changeAttempted.await(5, TimeUnit.SECONDS))
                 .as("the concurrent workflow-path change should be attempted within 5 seconds")
                 .isTrue();
-        waitForBoundedQuietPeriod(rejection);
+        waitForBoundedQuietPeriod(rejection::isDone);
         tracker.releaseTerminalFetch.countDown();
         assertThat(starter.join(Duration.ofSeconds(5)))
                 .as("the orchestrator startup thread terminates after the terminal fetch is released")
@@ -972,16 +1010,6 @@ final class SymphonyOrchestratorTest {
         restarted.start();
         restarted.stop();
         assertThat(restartedTracker.boardResolutions).hasValue(1);
-    }
-
-    /// Gives a racing change that does not block (the old bug) time to complete while startup is
-    /// still latched; a correctly blocking change leaves the future incomplete and this returns
-    /// after the bound.
-    private static void waitForBoundedQuietPeriod(CompletableFuture<Throwable> future) throws Exception {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
-        while (System.nanoTime() < deadline && !future.isDone()) {
-            pollDelayForBoundedConditionWait();
-        }
     }
 
     private static String workflowLockFileName(Path workflow) throws Exception {

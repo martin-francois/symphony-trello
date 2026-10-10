@@ -263,6 +263,16 @@ final class SymphonyOrchestratorTestSupport {
 
     static void writeWorkflow(Path workflow, String pollIntervalMs, String extraConfig, String prompt)
             throws Exception {
+        writeWorkflow(workflow, "[Todo]", pollIntervalMs, extraConfig, prompt);
+    }
+
+    static void writeWorkflowWithActiveStates(Path workflow, String activeStates, String extraConfig) throws Exception {
+        writeWorkflow(workflow, activeStates, "60000", extraConfig, "{{ card.title }}");
+    }
+
+    private static void writeWorkflow(
+            Path workflow, String activeStates, String pollIntervalMs, String extraConfig, String prompt)
+            throws Exception {
         Files.writeString(
                 workflow,
                 """
@@ -272,7 +282,7 @@ final class SymphonyOrchestratorTestSupport {
                   api_key: key
                   api_token: token
                   board_id: board-1
-                  active_states: [Todo]
+                  active_states: %s
                 workspace:
                   root: work
                 polling:
@@ -283,7 +293,7 @@ final class SymphonyOrchestratorTestSupport {
                 ---
                 %s
                 """
-                        .formatted(pollIntervalMs, extraConfig, prompt));
+                        .formatted(activeStates, pollIntervalMs, extraConfig, prompt));
     }
 
     static void writeWorkflowWithCommand(Path workflow, String command, String extraConfig) throws Exception {
@@ -631,6 +641,27 @@ final class SymphonyOrchestratorTestSupport {
         throw new AssertionError("Condition was not met before timeout");
     }
 
+    /// Gives an event that correct code keeps waiting one second to happen anyway. A missing lock
+    /// lets it happen inside this window, and the caller's later assertions detect the result.
+    static void waitForBoundedQuietPeriod(Condition forbiddenEvent) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+        while (System.nanoTime() < deadline && !forbiddenEvent.matches()) {
+            pollDelayForBoundedConditionWait();
+        }
+    }
+
+    /// Holds a paused operation inside a test hook until the test resumes it.
+    static void awaitRelease(CountDownLatch release, String pausedOperation) {
+        try {
+            assertThat(release.await(5, TimeUnit.SECONDS))
+                    .as("%s should be resumed within 5 seconds", pausedOperation)
+                    .isTrue();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(pausedOperation + " was interrupted", e);
+        }
+    }
+
     static boolean containsRetryingCard(RuntimeSnapshot snapshot, String cardIdentifier) {
         return snapshot.retrying().stream().anyMatch(row -> row.cardIdentifier().equals(cardIdentifier));
     }
@@ -889,14 +920,7 @@ final class SymphonyOrchestratorTestSupport {
         @Override
         public List<Card> fetchTerminalCards(EffectiveConfig config) {
             terminalFetchStarted.countDown();
-            try {
-                assertThat(releaseTerminalFetch.await(5, TimeUnit.SECONDS))
-                        .as("the blocked terminal-card fetch should be released within 5 seconds")
-                        .isTrue();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new AssertionError(e);
-            }
+            awaitRelease(releaseTerminalFetch, "the blocked terminal-card fetch");
             return List.of();
         }
 
@@ -920,14 +944,7 @@ final class SymphonyOrchestratorTestSupport {
         public List<Card> fetchCandidateCards(EffectiveConfig config) {
             if (candidateFetches.incrementAndGet() == 1) {
                 firstFetchStarted.countDown();
-                try {
-                    assertThat(releaseFirstFetch.await(5, TimeUnit.SECONDS))
-                            .as("the first blocked candidate-card fetch should be released within 5 seconds")
-                            .isTrue();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    throw new AssertionError(e);
-                }
+                awaitRelease(releaseFirstFetch, "the first blocked candidate-card fetch");
             }
             return List.of();
         }
