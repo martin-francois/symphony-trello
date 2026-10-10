@@ -985,7 +985,14 @@ It MUST NOT print credential values or log contents, but it MAY print private Tr
 identifiers and local paths because its purpose is to help the local operator translate public-safe
 tokens into the real local board, workflow, env file, workspace, state directory, worker log names,
 and file-backed secret paths. It MUST NOT print the secret values stored in those files.
-`--lookup TOKEN` MUST resolve only recognized public diagnostics tokens in that private context.
+`--lookup TOKEN` MUST resolve only recognized public diagnostics tokens in that private context. It
+SHOULD also resolve path tokens from the tool version lines of the public report, without running
+auth-status probes.
+When a path under a known local directory, such as the home, config, state, or workspace directory,
+is followed by more text on the same line, its `<path:...>` token SHOULD cover only the part that
+exists as a path, so the following text stays visible and `--lookup` can resolve a mapped path.
+When no such part exists, the whole match MUST stay in one token so no fragment of a private path
+is shown.
 Malformed lookup tokens MUST be rejected without searching arbitrary private strings. Ambiguous token
 collisions MUST be reported instead of choosing a value silently. The command output MUST warn that
 it is local-only and not for public issue reports.
