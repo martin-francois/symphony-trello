@@ -700,6 +700,16 @@ Windows it creates a per-user Scheduled Task, falling back to a Startup-folder c
 creation is denied. If the host does not support managed autostart, run
 `symphony-trello start --all` after a system restart or login.
 
+The installer first prints one plan: whether this run installs or updates, the release version or
+Git repository and ref, and the app, config, workspace, state/log, and command paths. It then works
+through numbered phases such as `[1/4] Checking prerequisites`, `[2/4] Installing Symphony`,
+`[3/4] Running setup`, and `[4/4] Starting managed workers`, with one `OK` line per finished step.
+Routine commands run without being echoed. Commands that need your approval are shown before they
+run. If a step fails, the installer prints the error, the phase it stopped in, and what to do next.
+`--dry-run` prints the same phases with `WOULD` lines and changes nothing. With `--no-onboard`, the
+run ends with `Symphony for Trello installed.` or `Symphony for Trello updated.` and the next command
+to run.
+
 The installer prints its final good-to-go handoff only after worker startup, autostart setup,
 lingering notes, and any direct-start fallback have finished successfully. The handoff names each
 connected Trello board with its normalized workflow path and ends with useful checks:

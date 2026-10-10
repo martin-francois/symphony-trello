@@ -217,3 +217,6 @@ The project would keep the existing operator-focused setup paths.
 [GitHub issue #35](https://github.com/martin-francois/symphony-trello/issues/35) contains the
 detailed Plan B UX target implemented here. Release artifacts and runtime-bundled distributions
 remain future Plan C/Plan D work.
+
+[ADR 0122](0122-phased-installer-progress-output.md) records how the installers structure their
+progress output around this handoff: one plan, numbered phases, and a named failed phase.

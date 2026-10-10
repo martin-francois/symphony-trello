@@ -52,7 +52,7 @@ The Windows CI job runs:
 ```powershell
 .\install.ps1 --dry-run --no-onboard
 .\uninstall.ps1 --dry-run --yes
-.\mvnw.cmd -q '-Djunit.parallel.enabled=false' '-Dtest=InstallerScriptTest#*powershell*+*powerShell*' test
+.\mvnw.cmd -q '-Djunit.parallel.enabled=false' '-Dtest=InstallerScriptTest#*powershell*+*powerShell*,InstallerProgressOutputTest#powershell*' test
 .\mvnw.cmd -q '-Djunit.parallel.enabled=false' -Dtest=InstallerScriptLifecycleTest#powershellInstallerLifecycleInstallsStartsStopsAndUninstallsWithFakeJavaOnWindows test
 ```
 
@@ -102,7 +102,7 @@ Normal local verification remains:
 PowerShell verification on Linux can be run with:
 
 ```bash
-SYMPHONY_TRELLO_TEST_PWSH=./scripts/pwsh-docker.sh ./mvnw -q '-Djunit.parallel.enabled=false' '-Dtest=InstallerScriptTest#*powershell*+*powerShell*' test
+SYMPHONY_TRELLO_TEST_PWSH=./scripts/pwsh-docker.sh ./mvnw -q '-Djunit.parallel.enabled=false' '-Dtest=InstallerScriptTest#*powershell*+*powerShell*,InstallerProgressOutputTest#powershell*' test
 ```
 
 That command should report all PowerShell-pattern tests executed with zero skips when Docker is

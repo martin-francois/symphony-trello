@@ -25,6 +25,13 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# Progress output: one plan, numbered phases, and one result line per milestone. Routine steps run
+# without a RUN line and name themselves only when they fail. Steps the user approves or answers
+# interactively still print RUN first. ADR 0122 records this output contract.
+$script:InstallerPhaseCount = 0
+$script:InstallerPhaseIndex = 0
+$script:InstallerPhaseTitle = ""
+$script:InstallerPhaseRecovery = ""
 trap {
   $message = if ($_.Exception -and -not [string]::IsNullOrWhiteSpace($_.Exception.Message)) {
     $_.Exception.Message
@@ -32,6 +39,11 @@ trap {
     $_.ToString()
   }
   [Console]::Error.WriteLine($message)
+  if (-not [string]::IsNullOrEmpty($script:InstallerPhaseTitle)) {
+    [Console]::Error.WriteLine("")
+    [Console]::Error.WriteLine("Installer stopped during [$($script:InstallerPhaseIndex)/$($script:InstallerPhaseCount)] $($script:InstallerPhaseTitle).")
+    [Console]::Error.WriteLine($script:InstallerPhaseRecovery)
+  }
   exit 1
 }
 $ScriptBoundParameters = @{} + $PSBoundParameters
@@ -48,6 +60,7 @@ $WindowsProfileRoot = if ($env:APPDATA) { $env:APPDATA } else { Join-Path $Windo
 $StartupFolder = Join-Path $WindowsProfileRoot "Microsoft\Windows\Start Menu\Programs\Startup"
 $StartupCommandPath = Join-Path $StartupFolder "Symphony for Trello.cmd"
 $InstallerCompletionEnvironmentName = "SYMPHONY_TRELLO_INSTALLER_COMPLETION"
+$ConnectedBoardsFileName = "connected-boards.json"
 $InstallerCompletionWasSet = Test-Path -LiteralPath "Env:$InstallerCompletionEnvironmentName"
 $InstallerCompletionPreviousValue = [Environment]::GetEnvironmentVariable($InstallerCompletionEnvironmentName, "Process")
 $ReleaseBaseUrl = if ($env:SYMPHONY_TRELLO_RELEASE_BASE_URL) {
@@ -599,16 +612,35 @@ $InstallContextFile = Join-Path $StateHome "install-context.properties"
 Assert-AppPaths
 Assert-CommandDirectory
 
-function Invoke-Step([string]$Label, [scriptblock]$Action) {
+function Start-InstallerPhase([string]$Title, [string]$Recovery) {
+  $script:InstallerPhaseIndex++
+  $script:InstallerPhaseTitle = $Title
+  $script:InstallerPhaseRecovery = $Recovery
+  Write-Host
+  Write-Host "[$($script:InstallerPhaseIndex)/$($script:InstallerPhaseCount)] $Title"
+}
+
+function Get-InstalledCommandDisplay {
+  if (Test-PathContains $BinDir $OriginalPath) {
+    return "symphony-trello"
+  }
+  return "& $(ConvertTo-PowerShellLiteral (Join-Path $BinDir 'symphony-trello.ps1'))"
+}
+
+function Invoke-VisibleStep([string]$Label, [scriptblock]$Action) {
   Write-Host "  RUN  $Label"
+  Invoke-Step $Label $Action
+}
+
+function Invoke-Step([string]$Label, [scriptblock]$Action) {
   if (-not $DryRun) {
     $global:LASTEXITCODE = 0
     & $Action
     if (-not $?) {
-      throw "$Label failed."
+      throw "Command failed: $Label"
     }
     if ($global:LASTEXITCODE -ne 0) {
-      throw "$Label failed with exit code $global:LASTEXITCODE."
+      throw "Command failed with exit code ${global:LASTEXITCODE}: $Label"
     }
   }
 }
@@ -860,24 +892,26 @@ function Enable-WindowsAutostart {
     } catch {
       Write-Host "  NOTE  Scheduled Task was installed but could not be started immediately. It will run at the next user logon."
       Invoke-Step "$BinDir\symphony-trello.ps1 start --all" { & "$BinDir\symphony-trello.ps1" start --all }
+      Write-Host "  OK  Managed workers started"
       return $true
     }
   }
   Write-Host "  NOTE  Could not create Windows Scheduled Task: $createResult"
   if (Install-StartupFolderCommand) {
     Invoke-Step "$BinDir\symphony-trello.ps1 start --all" { & "$BinDir\symphony-trello.ps1" start --all }
+    Write-Host "  OK  Managed workers started"
     return $true
   }
   return $false
 }
 
 function Start-ManagedWorkers {
-  Write-Host "Starting managed workers..."
   if (Enable-WindowsAutostart) {
     return
   }
   Write-Host "  NOTE  Autostart was not configured. Use '$BinDir\symphony-trello.ps1 start --all' after reboot or login."
   Invoke-Step "$BinDir\symphony-trello.ps1 start --all" { & "$BinDir\symphony-trello.ps1" start --all }
+  Write-Host "  OK  Managed workers started"
 }
 
 function Test-Command([string]$Name) {
@@ -926,8 +960,6 @@ function Write-PathSetupInstructions {
 function Add-BinDirToUserPath {
   $userPath = Get-UserPathValue
   if (Test-PathContains $BinDir $userPath) {
-    Write-Host "  OK  PATH setup already exists for the current user:"
-    Write-Host "      $BinDir"
     return
   }
   if ($DryRun) {
@@ -954,14 +986,6 @@ function Offer-PathSetup {
     Write-PathSetupInstructions
     return
   }
-  Write-Host
-  Write-Host "Command PATH setup"
-  if ($DryRun) {
-    Write-Host "Symphony would install the command here:"
-  } else {
-    Write-Host "Symphony installed the command here:"
-  }
-  Write-Host "  $BinDir\symphony-trello.ps1"
   Add-BinDirToUserPath
 }
 
@@ -1046,13 +1070,14 @@ function Install-PackageOrExit([string]$Label, [string]$Package, [string]$Fallba
   if (-not (Read-YesNo "Run this command now? [y/N]")) {
     throw "$Fallback`nThen rerun this installer."
   }
-  Invoke-Step $command { Invoke-Expression $command }
+  Invoke-VisibleStep $command { Invoke-Expression $command }
 }
 
 function Assert-AvailableAfterInstall([scriptblock]$Check, [string]$Label, [string]$Fix) {
   if (-not (& $Check)) {
     throw "$Label was installed, but it is not available in this PowerShell session.`n$Fix`nThen rerun this installer."
   }
+  Write-Host "  OK  $Label installed"
 }
 
 function Test-CodexAuthenticated {
@@ -1093,10 +1118,10 @@ function Install-CodexWithUserLocalNpm {
     if (-not $nodeCommand) {
       throw "Automatic Node.js/npm install requires the Windows Package Manager.`nInstall Node.js with npm from https://nodejs.org/ or the Windows Package Manager.`nThen rerun this installer."
     }
-    Invoke-Step $nodeCommand { Invoke-Expression $nodeCommand }
+    Invoke-VisibleStep $nodeCommand { Invoke-Expression $nodeCommand }
     Assert-AvailableAfterInstall { Test-Command "npm" } "Node.js/npm" "Open a new PowerShell window with npm on PATH."
   }
-  Invoke-Step (Get-CodexNpmInstallCommand) {
+  Invoke-VisibleStep (Get-CodexNpmInstallCommand) {
     & npm install --global --prefix $CodexNpmPrefix "@openai/codex"
   }
   Invoke-Step "make Codex CLI available from $BinDir" {
@@ -1174,8 +1199,6 @@ function Write-DryRunPrerequisitePlan {
     Write-Host "          Install location: $CodexNpmPrefix"
     Write-Host "          Command link: $(Join-Path $BinDir 'codex.cmd')"
     Write-Host "          Node.js/npm installed: $nodeStatus"
-  } elseif ($NoOnboard -and (-not (Test-Command "codex"))) {
-    Write-Host "  NOTE   Codex CLI setup is skipped because --no-onboard was passed."
   }
 }
 
@@ -1187,15 +1210,15 @@ function Test-RemoteBranch([string]$Remote, [string]$GitRef) {
 function Invoke-CheckoutRef([string]$CheckoutPath, [string]$GitRef) {
   & git -C $CheckoutPath show-ref --verify --quiet "refs/remotes/origin/$GitRef"
   if ($LASTEXITCODE -eq 0) {
-    Invoke-Step "git -C $CheckoutPath checkout -B $GitRef origin/$GitRef" {
-      & git -C $CheckoutPath checkout -B $GitRef "origin/$GitRef"
+    Invoke-Step "git -C $CheckoutPath checkout -q -B $GitRef origin/$GitRef" {
+      & git -C $CheckoutPath checkout -q -B $GitRef "origin/$GitRef"
     }
-    Invoke-Step "git -C $CheckoutPath pull --ff-only origin $GitRef" {
-      & git -C $CheckoutPath pull --ff-only origin $GitRef
+    Invoke-Step "git -C $CheckoutPath pull -q --ff-only origin $GitRef" {
+      & git -C $CheckoutPath pull -q --ff-only origin $GitRef
     }
   } else {
-    Invoke-Step "git -C $CheckoutPath checkout --detach $GitRef" {
-      & git -C $CheckoutPath checkout --detach $GitRef
+    Invoke-Step "git -C $CheckoutPath checkout -q --detach $GitRef" {
+      & git -C $CheckoutPath checkout -q --detach $GitRef
     }
   }
 }
@@ -1312,55 +1335,82 @@ function Install-ReleaseArchive {
   }
 }
 
-Write-Host "Symphony for Trello installer"
-Write-Host
 Enable-ManagedCodexPath
+$UpdatingExistingApp = Test-Path -LiteralPath $Prefix
+$RestartManagedWorkers = [bool]($UpdatingExistingApp -and (Get-ManagedPidFile))
+if ($UpdatingExistingApp) {
+  $PlanTitle = "Update plan"
+  $AppPhaseTitle = "Updating Symphony"
+} else {
+  $PlanTitle = "Install plan"
+  $AppPhaseTitle = "Installing Symphony"
+}
+$WorkerPhaseTitle = if ($RestartManagedWorkers) { "Restarting managed workers" } else { "Starting managed workers" }
+$script:InstallerPhaseCount = if (-not $NoOnboard) { 4 } elseif ($RestartManagedWorkers) { 3 } else { 2 }
+$InstalledCommand = Get-InstalledCommandDisplay
+$PrerequisitesRecovery = "Follow the prerequisite steps above, then rerun the installer."
+$AppRecovery = "Fix the problem above, then rerun the installer."
+$SetupRecovery = "Fix the problem above, then rerun the installer or run: $InstalledCommand setup-local"
+$WorkersRecovery = "Fix the problem above, then run: $InstalledCommand start --all"
+
+Write-Host "Symphony for Trello installer"
 Write-Host "Detected $(Get-PlatformLabel)"
+Write-Host
+Write-Host $PlanTitle
+if ($InstallSource -eq "source-checkout") {
+  Write-Host "Source: Git checkout"
+  Write-Host "Repository: $(Format-RepositoryForOutput $Repo)"
+  Write-Host "Ref: $Ref"
+} else {
+  Write-Host "Source: release archive"
+  Write-Host "Version: $Version"
+  Write-Host "Release assets: $ReleaseBaseUrl"
+}
 Write-Host "Install: $Prefix"
 Write-Host "Config: $ConfigDir"
 Write-Host "Workspaces: $WorkspaceRoot"
 Write-Host "State/logs: $StateHome"
 Write-Host "Command: $BinDir\symphony-trello.ps1"
-Write-Host "Install source: $InstallSource"
-if ($InstallSource -eq "source-checkout") {
-  Write-Host "Repository: $(Format-RepositoryForOutput $Repo)"
-  Write-Host "Ref: $Ref"
-} else {
-  Write-Host "Version: $Version"
-  Write-Host "Release assets: $ReleaseBaseUrl"
+if ($DryRun) {
+  Write-Host
+  Write-Host "Dry run: no files changed."
 }
-Write-Host
-Write-Host "Checking prerequisites..."
+
+Start-InstallerPhase "Checking prerequisites" $PrerequisitesRecovery
 if ($InstallSource -eq "source-checkout") {
-  Write-Host ($(if (Test-Command "git") { "  OK      Git available" } else { "  NEEDED  Git" }))
+  Write-Host ($(if (Test-Command "git") { "  OK  Git" } else { "  NEEDED  Git" }))
 }
-Write-Host ($(if (Test-Java25) { "  OK      Java 25+ JDK available" } else { "  NEEDED  Java 25+ JDK" }))
+Write-Host ($(if (Test-Java25) { "  OK  Java 25+ JDK" } else { "  NEEDED  Java 25+ JDK" }))
 Write-Host ($(if (Test-Command "codex") {
-      "  OK      Codex CLI available"
+      "  OK  Codex CLI"
     } elseif ($NoOnboard) {
-      "  NEEDED  Codex CLI (only needed for guided setup; skipped by --no-onboard)"
+      "  SKIP  Codex CLI (only needed for guided setup; skipped by --no-onboard)"
     } else {
       "  NEEDED  Codex CLI"
     }))
 
 if ($DryRun) {
-  Write-Host
-  Write-Host "Dry run: no files changed."
   Write-DryRunPrerequisitePlan
+  Start-InstallerPhase $AppPhaseTitle $AppRecovery
+  if ($RestartManagedWorkers) {
+    Write-Host "  WOULD stop managed workers before the update"
+  }
   if ($InstallSource -eq "source-checkout") {
     Write-Host "  WOULD clone or update: $Prefix"
     Write-Host "  WOULD build packaged Quarkus app with Maven wrapper"
   } else {
     Write-Host "  WOULD download release archive: $ReleaseBaseUrl/symphony-trello-$Version.zip"
-    Write-Host "  WOULD verify SHA3-256 checksum with: $ReleaseBaseUrl/checksums.txt"
-    Write-Host "  WOULD unpack release archive to: $Prefix"
+    Write-Host "  WOULD verify SHA3-256 checksum from: $ReleaseBaseUrl/checksums.txt"
+    Write-Host "  WOULD unpack release archive into: $Prefix"
   }
-  Write-Host "  WOULD install CLI executable: $BinDir\symphony-trello.ps1"
+  Write-Host "  WOULD install command: $BinDir\symphony-trello.ps1"
   Offer-PathSetup
   if (-not $NoOnboard) {
-    Write-Host
-    Write-Host "Starting setup..."
-    Write-Host "  WOULD run: $BinDir\symphony-trello.ps1 setup-local"
+    Start-InstallerPhase "Running setup" $SetupRecovery
+    Write-Host "  WOULD run guided setup: $BinDir\symphony-trello.ps1 setup-local"
+  }
+  if ((-not $NoOnboard) -or $RestartManagedWorkers) {
+    Start-InstallerPhase $WorkerPhaseTitle $WorkersRecovery
     Start-ManagedWorkersWithoutInstallerCompletion
   }
   exit 0
@@ -1376,19 +1426,20 @@ if (-not $NoOnboard) {
     $codexAuthenticated = $false
   }
   if (-not $codexAuthenticated) {
+    Write-Host
     Write-Host "Codex CLI is installed but not logged in."
     $browser = Read-Host "Can this machine open a browser for Codex login? [Y/n]"
     $loginCommand = "codex login"
     if ($browser -match '^[Nn]') {
       $loginCommand = "codex login --device-auth"
       try {
-        Invoke-Step $loginCommand { & codex login --device-auth }
+        Invoke-VisibleStep $loginCommand { & codex login --device-auth }
       } catch {
         throw "Codex login did not complete successfully.`nRun '$loginCommand', then rerun this installer."
       }
     } else {
       try {
-        Invoke-Step $loginCommand { & codex login }
+        Invoke-VisibleStep $loginCommand { & codex login }
       } catch {
         throw "Codex login did not complete successfully.`nRun '$loginCommand', then rerun this installer."
       }
@@ -1397,53 +1448,54 @@ if (-not $NoOnboard) {
     if ($LASTEXITCODE -ne 0) {
       throw "Codex login did not complete successfully.`nRun '$loginCommand', then rerun this installer."
     }
+    Write-Host "  OK  Codex CLI logged in"
   }
 }
 
-Write-Host
-Write-Host "Installing Symphony..."
-$UpdatingExistingApp = Test-Path -LiteralPath $Prefix
-$RestartManagedWorkers = $false
-if ($UpdatingExistingApp -and (Get-ManagedPidFile)) {
-  $RestartManagedWorkers = $true
-  Write-Host "Stopping managed workers before update..."
+Start-InstallerPhase $AppPhaseTitle $AppRecovery
+if ($RestartManagedWorkers) {
   Invoke-Step "$BinDir\symphony-trello.ps1 stop" { & "$BinDir\symphony-trello.ps1" stop }
+  Write-Host "  OK  Managed workers stopped for the update"
 }
 if ($InstallSource -eq "source-checkout") {
   $UpdatingExistingCheckout = Test-Path -LiteralPath (Join-Path $Prefix ".git")
   if (-not $UpdatingExistingCheckout) {
     if (Test-Path -LiteralPath $Prefix) {
       Assert-ExistingAppSafe
+      Write-Host "  NOTE  Replacing the installed release archive app with a Git checkout"
       Invoke-Step "remove existing release archive app $Prefix" {
         Remove-Item -Recurse -Force $Prefix
       }
     }
     $displayRepo = Format-RepositoryForOutput $Repo
     if (Test-RemoteBranch $Repo $Ref) {
-      Invoke-Step "git clone --branch $Ref $displayRepo $Prefix" {
+      Invoke-Step "git clone -q --branch $Ref $displayRepo $Prefix" {
         New-Item -ItemType Directory -Force -Path (Split-Path $Prefix) | Out-Null
-        & git clone --branch $Ref $Repo $Prefix
+        & git clone -q --branch $Ref $Repo $Prefix
       }
     } else {
-      Invoke-Step "git clone $displayRepo $Prefix" {
+      Invoke-Step "git clone -q $displayRepo $Prefix" {
         New-Item -ItemType Directory -Force -Path (Split-Path $Prefix) | Out-Null
-        & git clone $Repo $Prefix
+        & git clone -q $Repo $Prefix
       }
-      Invoke-Step "git -C $Prefix fetch --tags --prune origin" {
-        & git -C $Prefix fetch --tags --prune origin
+      Invoke-Step "git -C $Prefix fetch -q --tags --prune origin" {
+        & git -C $Prefix fetch -q --tags --prune origin
       }
       Invoke-CheckoutRef $Prefix $Ref
     }
   } else {
     Assert-ExistingCheckoutSafe
-    Invoke-Step "git -C $Prefix fetch --tags --prune origin" {
-      & git -C $Prefix fetch --tags --prune origin
+    Invoke-Step "git -C $Prefix fetch -q --tags --prune origin" {
+      & git -C $Prefix fetch -q --tags --prune origin
     }
     Invoke-CheckoutRef $Prefix $Ref
   }
+  Write-Host "  OK  Source checked out"
   Invoke-Step "$Prefix\mvnw.cmd -q -DskipTests clean package" { & "$Prefix\mvnw.cmd" -q -f "$Prefix\pom.xml" -DskipTests clean package }
+  Write-Host "  OK  App built with Maven wrapper"
 } else {
   Install-ReleaseArchive
+  Write-Host "  OK  Release $Version verified and unpacked"
 }
 Invoke-Step "create $BinDir\symphony-trello.ps1" {
   New-Item -ItemType Directory -Force -Path $BinDir, $ConfigDir, $WorkspaceRoot, $StateHome | Out-Null
@@ -1512,32 +1564,43 @@ set "SYMPHONY_TRELLO_WRAPPER_COMMAND=%~f0"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0symphony-trello.ps1" %*
 "@ | Set-Content -Encoding ASCII "$BinDir\symphony-trello.cmd"
 }
-Write-Host "  OK  Command installed: $BinDir\symphony-trello.ps1"
+Write-Host "  OK  Command installed"
 Write-InstallContext
 
 Offer-PathSetup
 
 if (-not $NoOnboard) {
-  Write-Host
-  if ($RestartManagedWorkers) {
-    Write-Host "Restarting managed workers after update..."
-  }
-  Write-Host "Starting setup..."
+  Start-InstallerPhase "Running setup" $SetupRecovery
   try {
     Set-InstallerCompletionMode "defer"
     try {
-      Invoke-Step "$BinDir\symphony-trello.ps1 setup-local" { & "$BinDir\symphony-trello.ps1" setup-local }
+      Invoke-VisibleStep "$BinDir\symphony-trello.ps1 setup-local" { & "$BinDir\symphony-trello.ps1" setup-local }
     } finally {
       Clear-InstallerCompletionMode
     }
+    Write-Host "  OK  Setup complete"
+    Start-InstallerPhase $WorkerPhaseTitle $WorkersRecovery
     Start-ManagedWorkersWithoutInstallerCompletion
     Set-InstallerCompletionMode "print"
     Invoke-Step "$BinDir\symphony-trello.ps1 setup-local" { & "$BinDir\symphony-trello.ps1" setup-local }
   } finally {
     Restore-InstallerCompletionEnvironment
   }
+  exit 0
 } elseif ($RestartManagedWorkers) {
-  Write-Host
-  Write-Host "Restarting managed workers after update..."
+  Start-InstallerPhase $WorkerPhaseTitle $WorkersRecovery
   Start-ManagedWorkersWithoutInstallerCompletion
+}
+Write-Host
+if ($UpdatingExistingApp) {
+  Write-Host "Symphony for Trello updated."
+} else {
+  Write-Host "Symphony for Trello installed."
+}
+if ($RestartManagedWorkers) {
+  Write-Host "Next step: check the managed workers with: $InstalledCommand status"
+} elseif (Test-Path -LiteralPath (Join-Path $ConfigDir $ConnectedBoardsFileName) -PathType Leaf) {
+  Write-Host "Next step: start the connected boards with: $InstalledCommand start --all"
+} else {
+  Write-Host "Next step: connect a Trello board with: $InstalledCommand setup-local"
 }
