@@ -52,6 +52,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.SplittableRandom;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -88,6 +89,7 @@ public class SymphonyOrchestrator {
     private final WorkspaceManager workspaces;
     private final Clock clock;
     private final Optional<TrelloHandoffToolHandler> usageWorkpads;
+    private final AdaptivePollInterval pollInterval;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private final ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor();
 
@@ -206,6 +208,8 @@ public class SymphonyOrchestrator {
         this.workspaces = workspaces;
         this.clock = clock;
         this.usageWorkpads = usageWorkpads;
+        // SplittableRandom is not thread-safe; the poll interval only runs under the instance monitor.
+        this.pollInterval = new AdaptivePollInterval(clock, new SplittableRandom());
     }
 
     public void start() {
@@ -425,13 +429,15 @@ public class SymphonyOrchestrator {
     /// the next tick happen under one monitor section. A concurrent requestRefresh() therefore
     /// runs entirely before this (and is consumed here as the zero-delay schedule) or entirely
     /// after it (and replaces the interval schedule), so a refresh at the completion boundary can
-    /// never be overwritten by the normal polling interval.
+    /// never be overwritten by the normal polling interval. The poll interval consumes the tick's
+    /// Trello rate-limit pressure even when a refresh wins, so the slowdown still applies to the
+    /// ticks after the refresh.
     private synchronized void finishTickAndScheduleNext() {
         tickRunning = false;
         boolean refreshRequestedDuringTick = consumeRefreshRequest();
         tickCompletionHookForTests.run();
-        scheduleTick(
-                refreshRequestedDuringTick ? Duration.ZERO : config.polling().interval());
+        Duration pollDelay = pollInterval.nextDelay(config.polling().interval(), tracker.drainRateLimitPressure());
+        scheduleTick(refreshRequestedDuringTick ? Duration.ZERO : pollDelay);
     }
 
     private void reloadOrThrow() {
@@ -2347,6 +2353,10 @@ public class SymphonyOrchestrator {
         }
     }
 
+    synchronized Duration scheduledTickDelayForTests() {
+        return Duration.ofMillis(tickTimer.getDelay(TimeUnit.MILLISECONDS));
+    }
+
     private synchronized void scheduleTick(Duration delay) {
         if (tickTimer != null) {
             tickTimer.cancel(false);
@@ -2379,7 +2389,8 @@ public class SymphonyOrchestrator {
                         ? null
                         : new RuntimeSnapshot.DispatchPause(
                                 CODEX_USAGE_LIMIT_PAUSE, dispatchPause.detectedAt(), dispatchPause.until()),
-                config == null ? null : rateLimitsByCommand.get(config.codex().command()));
+                config == null ? null : rateLimitsByCommand.get(config.codex().command()),
+                config == null ? null : pollInterval.status(config.polling().interval()));
     }
 
     private RuntimeSnapshot.Routing routing() {

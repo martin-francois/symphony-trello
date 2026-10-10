@@ -8,16 +8,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
-import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
-import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -179,19 +177,17 @@ final class TrelloClientChaosTest {
     }
 
     private EffectiveConfig config(Map<String, Object> trackerOverrides) {
-        Map<String, Object> tracker = new LinkedHashMap<>();
-        tracker.put("kind", "trello");
-        tracker.put("endpoint", trello.endpoint());
-        tracker.put("api_key", "key");
-        tracker.put("api_token", "token");
-        tracker.put("board_id", "input");
-        tracker.put("active_states", List.of("Todo"));
-        tracker.put("terminal_states", List.of("Done", "Archived", "ArchivedList", "ArchivedBoard", "Deleted"));
-        tracker.put("max_api_retries", 0);
-        tracker.put("api_retry_base_delay_ms", ConfigDefaults.DEFAULT_TRACKER_API_RETRY_BASE_DELAY_MS);
+        Map<String, Object> tracker = new HashMap<>(Map.of(
+                "active_states",
+                List.of("Todo"),
+                "terminal_states",
+                List.of("Done", "Archived", "ArchivedList", "ArchivedBoard", "Deleted"),
+                "max_api_retries",
+                0,
+                "api_retry_base_delay_ms",
+                ConfigDefaults.DEFAULT_TRACKER_API_RETRY_BASE_DELAY_MS));
         tracker.putAll(trackerOverrides);
-        return new ConfigResolver()
-                .resolve(new WorkflowDefinition(tempDir.resolve("WORKFLOW.md"), Map.of("tracker", tracker), ""))
+        return TrelloTestConfigs.trackerConfig(tempDir.resolve("WORKFLOW.md"), trello.endpoint(), "input", tracker)
                 .withResolvedBoardId("board-1");
     }
 

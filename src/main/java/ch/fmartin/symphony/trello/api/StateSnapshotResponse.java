@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 record StateSnapshotResponse(
@@ -16,7 +17,8 @@ record StateSnapshotResponse(
         List<RetryRow> retrying,
         TokenTotals codexTotals,
         DispatchPause dispatchPause,
-        Object rateLimits) {
+        Object rateLimits,
+        @Nullable Polling polling) {
     static StateSnapshotResponse from(RuntimeSnapshot snapshot) {
         return new StateSnapshotResponse(
                 snapshot.generatedAt(),
@@ -26,7 +28,8 @@ record StateSnapshotResponse(
                 snapshot.retrying().stream().map(RetryRow::from).toList(),
                 TokenTotals.from(snapshot.codexTotals()),
                 DispatchPause.from(snapshot.dispatchPause()),
-                snapshot.rateLimits());
+                snapshot.rateLimits(),
+                Polling.from(snapshot.polling()));
     }
 
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
@@ -92,6 +95,23 @@ record StateSnapshotResponse(
     record DispatchPause(String code, Instant detected, Instant until) {
         static DispatchPause from(RuntimeSnapshot.DispatchPause pause) {
             return pause == null ? null : new DispatchPause(pause.code(), pause.detected(), pause.until());
+        }
+    }
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    record Polling(
+            long configuredIntervalMs,
+            long effectiveIntervalMs,
+            @Nullable String slowdownReason,
+            @Nullable Instant lastRateLimitedAt) {
+        static @Nullable Polling from(RuntimeSnapshot.@Nullable Polling polling) {
+            return polling == null
+                    ? null
+                    : new Polling(
+                            polling.configuredInterval().toMillis(),
+                            polling.effectiveInterval().toMillis(),
+                            polling.slowdownReason().orElse(null),
+                            polling.lastRateLimitedAt().orElse(null));
         }
     }
 }

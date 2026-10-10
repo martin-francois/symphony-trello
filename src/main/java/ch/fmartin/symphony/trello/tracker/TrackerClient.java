@@ -27,4 +27,10 @@ public interface TrackerClient {
     default void releaseFromDispatch(EffectiveConfig config, Card card, Card dispatchSource) {
         releaseFromDispatch(config, card);
     }
+
+    /// Returns the Trello `429` responses received since the previous call and starts a new batch.
+    /// The orchestrator calls this once per poll tick to adapt its poll interval.
+    default RateLimitPressure drainRateLimitPressure() {
+        return RateLimitPressure.NONE;
+    }
 }

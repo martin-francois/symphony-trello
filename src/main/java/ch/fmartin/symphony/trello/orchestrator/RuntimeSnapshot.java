@@ -1,8 +1,11 @@
 package ch.fmartin.symphony.trello.orchestrator;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 
 public record RuntimeSnapshot(
         Instant generatedAt,
@@ -12,7 +15,8 @@ public record RuntimeSnapshot(
         List<RetryRow> retrying,
         TokenTotals codexTotals,
         DispatchPause dispatchPause,
-        Object rateLimits) {
+        Object rateLimits,
+        @Nullable Polling polling) {
     public RuntimeSnapshot {
         running = List.copyOf(running);
         retrying = List.copyOf(retrying);
@@ -51,4 +55,15 @@ public record RuntimeSnapshot(
     public record TokenTotals(long inputTokens, long outputTokens, long totalTokens, double secondsRunning) {}
 
     public record DispatchPause(String code, Instant detected, Instant until) {}
+
+    /// The configured `polling.interval_ms` next to the interval the worker currently uses.
+    ///
+    /// @param slowdownReason a stable code while the effective interval is longer than the
+    ///     configured one, otherwise empty
+    /// @param lastRateLimitedAt when Trello last answered with `429`, if it did since startup
+    public record Polling(
+            Duration configuredInterval,
+            Duration effectiveInterval,
+            Optional<String> slowdownReason,
+            Optional<Instant> lastRateLimitedAt) {}
 }

@@ -20,6 +20,7 @@ import ch.fmartin.symphony.trello.domain.BlockerRef;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
+import ch.fmartin.symphony.trello.tracker.RateLimitPressure;
 import ch.fmartin.symphony.trello.tracker.TrackerClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import ch.fmartin.symphony.trello.workspace.HookRunner;
@@ -758,6 +759,7 @@ final class SymphonyOrchestratorTestSupport {
         volatile RuntimeException prepareForDispatchFailure;
         volatile Runnable stateFetchHook = () -> {};
         volatile boolean resolveConfiguredBoardId;
+        final AtomicReference<RateLimitPressure> rateLimitPressure = new AtomicReference<>(RateLimitPressure.NONE);
 
         FakeTracker(List<Card> candidates) {
             setCandidates(candidates);
@@ -801,6 +803,11 @@ final class SymphonyOrchestratorTestSupport {
         public List<Card> fetchCandidateCards(EffectiveConfig config) {
             candidateFetches.incrementAndGet();
             return candidates;
+        }
+
+        @Override
+        public RateLimitPressure drainRateLimitPressure() {
+            return rateLimitPressure.getAndSet(RateLimitPressure.NONE);
         }
 
         @Override

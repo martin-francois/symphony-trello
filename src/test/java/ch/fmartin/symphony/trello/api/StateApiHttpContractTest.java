@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.api;
 
 import static io.restassured.RestAssured.given;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -13,9 +14,11 @@ import io.quarkus.test.junit.QuarkusMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.common.mapper.TypeRef;
 import io.restassured.response.Response;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
@@ -38,7 +41,8 @@ final class StateApiHttpContractTest {
                         active.retrying(),
                         active.codexTotals(),
                         null,
-                        active.rateLimits()));
+                        active.rateLimits(),
+                        active.polling()));
         QuarkusMock.installMockForType(orchestrator, SymphonyOrchestrator.class);
 
         // when
@@ -72,7 +76,8 @@ final class StateApiHttpContractTest {
                         "retrying",
                         "codex_totals",
                         "dispatch_pause",
-                        "rate_limits")
+                        "rate_limits",
+                        "polling")
                 .doesNotContainKeys("generatedAt", "codexTotals", "dispatchPause", "rateLimits");
 
         Map<String, Object> routing = map(payload.get("routing"));
@@ -137,6 +142,13 @@ final class StateApiHttpContractTest {
                 .containsEntry("detected", "2026-02-24T20:15:31Z")
                 .containsEntry("until", "2026-02-24T21:15:30Z");
 
+        assertThat(map(payload.get("polling")))
+                .containsOnly(
+                        entry("configured_interval_ms", 5000),
+                        entry("effective_interval_ms", 20000),
+                        entry("slowdown_reason", "trello_rate_limited"),
+                        entry("last_rate_limited_at", "2026-02-24T20:15:29Z"));
+
         Map<String, Object> rateLimits = map(payload.get("rate_limits"));
         assertThat(rateLimits)
                 .containsEntry("limitType", "tokens")
@@ -173,7 +185,12 @@ final class StateApiHttpContractTest {
                         "CODEX_USAGE_LIMIT",
                         Instant.parse("2026-02-24T20:15:31Z"),
                         Instant.parse("2026-02-24T21:15:30Z")),
-                codexRateLimitsPayload());
+                codexRateLimitsPayload(),
+                new RuntimeSnapshot.Polling(
+                        Duration.ofSeconds(5),
+                        Duration.ofSeconds(20),
+                        Optional.of("trello_rate_limited"),
+                        Optional.of(Instant.parse("2026-02-24T20:15:29Z"))));
     }
 
     private static ObjectNode codexRateLimitsPayload() {
