@@ -11,6 +11,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/// Resolves local settings from the process environment first and from a dotenv file second, and
+/// parses that dotenv file.
+///
+/// The parser is owned code on purpose. dotenv-java and the SmallRye Config `.env` source both read
+/// existing files differently (`export` lines, single quotes, escapes, `#` inside values, a byte
+/// order mark), and wrapping dotenv-java to keep this format still needs most of this parser. See
+/// docs/adr/0100-keep-the-hand-rolled-dotenv-parser.md.
 public final class LocalEnvironment {
     private static final Path DEFAULT_DOTENV = Path.of(".env");
     private static final String DOTENV_PATH_ENV = "SYMPHONY_TRELLO_DOTENV";
