@@ -433,6 +433,7 @@ final class WorkflowConfigEditor {
             case "secret_file_read_error" ->
                 publicSecretFileProblem(diagnosticsConfigDir, failure, "secret file cannot be read.");
             case "codex_sandbox_policy_invalid" -> publicCodexSandboxPolicyProblem(failure);
+            case "missing_path_environment_variable" -> publicMissingPathEnvironmentProblem(failure);
             case "workflow_file_unusable" -> publicWorkflowFileProblem(failure);
             case "workflow_yaml_invalid" -> "Workflow front matter is invalid YAML.";
             default -> "Workflow configuration is invalid.";
@@ -459,6 +460,16 @@ final class WorkflowConfigEditor {
             return message;
         }
         return "A numeric workflow setting is invalid.";
+    }
+
+    /// Start output uses fixed labels so text read from the workflow file never reaches it. The
+    /// setting name before the marker comes from ConfigResolver code; the variable name after it
+    /// comes from the workflow, so it stays in the logged cause only.
+    private static String publicMissingPathEnvironmentProblem(ConfigException failure) {
+        String message = failure.getMessage();
+        int marker = message == null ? -1 : message.indexOf(ConfigResolver.MISSING_PATH_ENVIRONMENT_MARKER);
+        String setting = marker > 0 ? message.substring(0, marker) : "A workflow path setting";
+        return setting + " references a missing environment variable.";
     }
 
     private static String publicConfigTypeProblem(ConfigException failure) {

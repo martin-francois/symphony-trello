@@ -651,6 +651,43 @@ final class WorkflowConfigEditorTest {
     }
 
     @Test
+    void launchValidationNamesPathSettingThatReferencesMissingEnvironmentVariable() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.unresolved-path-env.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "board-1"
+                  active_states:
+                    - "Ready for Codex"
+                  terminal_states:
+                    - "Done"
+                workspace:
+                  root: $SYMPHONY_MISSING_WORKSPACE_PARENT/workspaces
+                server:
+                  port: 18080
+                codex:
+                  command: codex app-server
+                ---
+                Body
+                """);
+        var editor = new WorkflowConfigEditor();
+
+        // when
+        Throwable thrown = catchThrowable(() -> editor.prepareLaunchWorkflow(workflow, trelloCredentials(), true));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_workflow_invalid");
+            assertThat(failure.getMessage())
+                    .contains("workspace.root references a missing environment variable.", "selected workflow file");
+        });
+    }
+
+    @Test
     void permitsDuplicateValuesWithinOneListRole() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.duplicate-role-values.md");
