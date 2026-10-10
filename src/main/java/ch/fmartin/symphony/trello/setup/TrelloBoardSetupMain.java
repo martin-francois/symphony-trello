@@ -9,6 +9,7 @@ import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.ImportBoardRequest;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.NewBoardRequest;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.WorkspaceListRequest;
+import ch.fmartin.symphony.trello.time.ApplicationClock;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -51,7 +52,8 @@ import picocli.CommandLine.Spec;
             TrelloBoardSetupMain.StopCommand.class,
             TrelloBoardSetupMain.StatusCommand.class,
             TrelloBoardSetupMain.LogsCommand.class,
-            TrelloBoardSetupMain.DiagnosticsCommand.class
+            TrelloBoardSetupMain.DiagnosticsCommand.class,
+            TrelloBoardSetupMain.MigrateWorkflowsCommand.class
         })
 public final class TrelloBoardSetupMain implements Callable<Integer> {
     private static final String CONFIG_DIR_PROPERTY = "symphony.trello.config.dir";
@@ -181,8 +183,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     static final class ProjectVersion implements CommandLine.IVersionProvider {
         @Override
         public String[] getVersion() {
-            String version = TrelloBoardSetupMain.class.getPackage().getImplementationVersion();
-            return new String[] {"symphony-trello " + (version == null ? "0.1.0-SNAPSHOT" : version)};
+            return new String[] {"symphony-trello " + SymphonyVersion.currentText()};
         }
     }
 
@@ -510,6 +511,84 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                             options.stateHome),
                     parent.out);
         }
+    }
+
+    @Command(
+            name = "migrate-workflows",
+            description = {
+                "Check generated workflow bodies after a Symphony update or supported downgrade.",
+                "Shows each workflow's classification and asks before replacing a generated body.",
+                "Without a terminal or with --non-interactive, it only reports."
+            },
+            versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
+            mixinStandardHelpOptions = true)
+    static final class MigrateWorkflowsCommand implements Callable<Integer> {
+        @ParentCommand
+        TrelloBoardSetupMain parent;
+
+        @ArgGroup(exclusive = true, multiplicity = "0..1")
+        MigrationSelector selector = new MigrationSelector();
+
+        @Option(names = "--config-dir", description = "Directory for local .env, workflows, and board manifest.")
+        Optional<Path> configDir = Optional.empty();
+
+        @Option(names = "--dry-run", description = "Show classifications and planned actions without writing files.")
+        boolean dryRun;
+
+        @Option(names = "--non-interactive", description = "Report only; never ask and never change a workflow.")
+        boolean nonInteractive;
+
+        @Option(
+                names = "--from-version",
+                description = "Symphony version that was installed before this update; installers pass it.")
+        Optional<String> fromVersion = Optional.empty();
+
+        @Option(
+                names = "--mark-migrated",
+                description = "Record a manually migrated workflow as current, so later updates compare against"
+                        + " the body this version generates.")
+        boolean markMigrated;
+
+        @Override
+        public Integer call() throws IOException {
+            CliInputValidation.rejectBlankBoardSelector(selector.board);
+            CliInputValidation.rejectBlankWorkflowSelector(selector.workflow);
+            CliInputValidation.rejectControlCharactersInText("--board", selector.board);
+            CliInputValidation.rejectControlCharacters("--workflow", selector.workflow);
+            CliInputValidation.rejectBlankPath("--config-dir", configDir, "--config-dir must not be empty.");
+            CliInputValidation.rejectControlCharacters("--config-dir", configDir);
+            CliInputValidation.rejectControlCharactersInText("--from-version", fromVersion);
+            Path resolvedConfigDir = LocalWorkerPaths.from(
+                            Optional.empty(),
+                            configDir,
+                            Optional.empty(),
+                            Optional.empty(),
+                            parent.boardSetup.environment())
+                    .configDir();
+            var migration = new WorkflowBodyMigration(
+                    SymphonyVersion.currentText(),
+                    new WorkflowBodyWriter(ApplicationClock.systemUtc()),
+                    shellCommand(installedCliCommand()),
+                    TrelloBoardSetupMain::shellQuote);
+            return migration.run(
+                    new WorkflowMigrationRequest(
+                            resolvedConfigDir,
+                            selector.board,
+                            selector.workflow,
+                            dryRun,
+                            nonInteractive,
+                            fromVersion,
+                            markMigrated),
+                    new StreamTerminal(parent.input, parent.out, parent.err));
+        }
+    }
+
+    static final class MigrationSelector {
+        @Option(names = "--board", description = "Connected Trello board name, id, or short link.")
+        Optional<String> board = Optional.empty();
+
+        @Option(names = "--workflow", description = "Connected or explicitly configured workflow file to check.")
+        Optional<Path> workflow = Optional.empty();
     }
 
     @Command(

@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.CliExitCodes.SETUP_FAILURE;
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -7817,18 +7818,23 @@ final class InstallerScriptTest {
             // then
             assertThat(install.exitCode()).as(install.output()).isZero();
             assertThat(update.exitCode()).as(update.output()).isZero();
+            assertThat(install.output()).doesNotContain("Checking generated workflows...");
             assertThat(update.output())
                     .contains(
                             "Stopping managed workers before update...",
                             "Restarting managed workers after update...",
                             "Stopped WORKFLOW.docs-queue.md",
+                            "Checking generated workflows...",
                             "Starting setup...");
             assertThat(fakeLog)
                     .content(StandardCharsets.UTF_8)
                     .contains("mvnw -q -f " + symphonyHome.resolve("app/pom.xml") + " -DskipTests clean package")
+                    .contains("TrelloBoardSetupMain migrate-workflows --from-version test dotenv=")
+                    .doesNotContain("migrate-workflows --from-version test --non-interactive")
                     .containsSubsequence(
                             "TrelloBoardSetupMain stop",
                             "mvnw -q -f " + symphonyHome.resolve("app/pom.xml") + " -DskipTests clean package",
+                            "TrelloBoardSetupMain migrate-workflows --from-version test",
                             "TrelloBoardSetupMain setup-local",
                             "TrelloBoardSetupMain start",
                             "--all");
@@ -7874,21 +7880,97 @@ final class InstallerScriptTest {
                     "--no-onboard",
                     "--bin-dir",
                     binDirectory.toString());
+            Map<String, String> withoutMigrationCommand = new LinkedHashMap<>(environment);
+            withoutMigrationCommand.put("SYMPHONY_FAKE_WITHOUT_WORKFLOW_MIGRATION", "true");
+            ProcessResult updateWithoutMigrationCommand = run(
+                    withoutMigrationCommand,
+                    "bash",
+                    installScript.toString(),
+                    "--no-onboard",
+                    "--bin-dir",
+                    binDirectory.toString());
+            Map<String, String> failingMigration = new LinkedHashMap<>(environment);
+            failingMigration.put("SYMPHONY_FAKE_WORKFLOW_MIGRATION_FAILURE", "true");
+            ProcessResult rejectedMigration = run(
+                    failingMigration,
+                    "bash",
+                    installScript.toString(),
+                    "--no-onboard",
+                    "--bin-dir",
+                    binDirectory.toString());
 
             // then
             assertThat(install.exitCode()).as(install.output()).isZero();
             assertThat(update.exitCode()).as(update.output()).isZero();
             assertThat(update.output())
                     .contains(
-                            "Stopping managed workers before update...", "Restarting managed workers after update...");
+                            "Stopping managed workers before update...",
+                            "Checking generated workflows...",
+                            "RUN  " + binDirectory.resolve("symphony-trello")
+                                    + " migrate-workflows --from-version test --non-interactive",
+                            "Restarting managed workers after update...");
             assertThat(fakeLog)
                     .content(StandardCharsets.UTF_8)
-                    .containsSubsequence("TrelloBoardSetupMain stop", "TrelloBoardSetupMain start", "--all");
+                    .containsSubsequence(
+                            "TrelloBoardSetupMain stop",
+                            "TrelloBoardSetupMain migrate-workflows --from-version test --non-interactive",
+                            "TrelloBoardSetupMain start",
+                            "--all");
+            assertThat(updateWithoutMigrationCommand.exitCode())
+                    .as(updateWithoutMigrationCommand.output())
+                    .isZero();
+            assertThat(updateWithoutMigrationCommand.output())
+                    .contains("NOTE  This Symphony version cannot check generated workflow bodies.")
+                    .doesNotContain("migrate-workflows --from-version");
+            assertThat(rejectedMigration.exitCode()).isNotZero();
+            assertThat(rejectedMigration.output())
+                    .contains("REJECTED  simulated workflow migration rejection")
+                    .doesNotContain("Restarting managed workers after update...");
         } finally {
             if (Files.exists(binDirectory.resolve("symphony-trello"))) {
                 run(environment, binDirectory.resolve("symphony-trello").toString(), "stop");
             }
         }
+    }
+
+    @Test
+    void posixReleaseInstallRejectsAMajorVersionDowngradeBeforeReplacingTheApp() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path installScript = Path.of("install.sh").toAbsolutePath();
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve("major-downgrade-home");
+        Path appHome = symphonyHome.resolve("app");
+        Path binDirectory = temporaryDirectory.resolve("major-downgrade-bin");
+        Path fakeLog = temporaryDirectory.resolve("major-downgrade-fake-tools.log");
+        Files.createDirectories(appHome);
+        Files.writeString(appHome.resolve(".symphony-trello-install"), "installer-managed archive\n");
+        Files.createDirectories(binDirectory);
+        writeExecutable(
+                binDirectory.resolve("symphony-trello"),
+                """
+                #!/usr/bin/env bash
+                echo "symphony-trello 99.0.0"
+                """);
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin + System.getProperty("path.separator") + System.getenv("PATH"),
+                "SYMPHONY_HOME", symphonyHome.toString(),
+                "SYMPHONY_FAKE_LOG", fakeLog.toString());
+
+        // when
+        ProcessResult result = run(
+                environment, "bash", installScript.toString(), "--no-onboard", "--bin-dir", binDirectory.toString());
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(SETUP_FAILURE);
+        assertThat(result.output())
+                .contains(
+                        "Symphony 99.0.0 is installed, and release "
+                                + installerDefaultRef().substring(1) + " belongs to an older major version.",
+                        "Downgrading to an older major version is not supported. Install a 99.x release instead.")
+                .doesNotContain("Checking generated workflows...");
+        assertThat(appHome).isDirectoryContaining("glob:**/.symphony-trello-install");
+        assertThat(appHome.resolve("target")).doesNotExist();
     }
 
     @Test
@@ -8290,6 +8372,35 @@ final class InstallerScriptTest {
                 .contains("install_source=source-checkout", "app_version=test", "source_commit=" + expectedCommit)
                 .doesNotContain(
                         "app_version=" + installerDefaultRef().substring(1), "release_tag=", "release_base_url=");
+    }
+
+    @Test
+    void powershellSourceCheckoutUpdateChecksGeneratedWorkflowsWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        assumeTrue(commandExists("git"));
+        Path sourceRepository = createPowerShellSourceRepository(temporaryDirectory);
+        Path fakeBin = createPowerShellFakeToolchain(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve("ps-workflow-check-home");
+        Path binDirectory = temporaryDirectory.resolve("ps-workflow-check-bin");
+        Path fakeLog = temporaryDirectory.resolve("ps-workflow-check.log");
+        ProcessResult install = runPowerShellSourceCheckoutInstall(
+                pwsh, sourceRepository, fakeBin, symphonyHome, binDirectory, fakeLog);
+
+        // when
+        ProcessResult update = runPowerShellSourceCheckoutInstall(
+                pwsh, sourceRepository, fakeBin, symphonyHome, binDirectory, fakeLog);
+
+        // then
+        install.assertSuccess();
+        update.assertSuccess();
+        assertThat(install.output()).doesNotContain("Checking generated workflows...");
+        assertThat(update.output())
+                .contains("Checking generated workflows...", "migrate-workflows --from-version test --non-interactive");
+        assertThat(fakeLog)
+                .content(StandardCharsets.UTF_8)
+                .contains("TrelloBoardSetupMain migrate-workflows --from-version test --non-interactive");
     }
 
     @ParameterizedTest(name = "PowerShell source checkout app_version fallback for {0} version output")

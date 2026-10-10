@@ -153,6 +153,12 @@ lives in [Testing](testing.md).
   Symphony skill paths, so workflows whose prompts do not use the shipped skills, such as
   hand-authored workflows that clone into an empty workspace root, keep their expected workspace
   shape.
+- The generated workflow body must depend only on `GeneratedWorkflowBodyInputs`, because workflow
+  body migration re-renders it from recorded inputs
+  ([ADR 0095](../adr/0095-generated-workflow-body-migration.md)). When a body change needs a new
+  setup input, add a field to that record whose missing-value default renders the previous body,
+  and never remove or rename a recorded field. Body text changes themselves need no migration
+  code.
 
 ## Local credentials
 

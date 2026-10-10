@@ -511,6 +511,10 @@ generated-template detection, or automatic upgrades unless an explicit issue, sp
 or ADR defines the supported compatibility contract. Temporary migration behavior MUST also define
 the condition that removes it.
 
+The Java implementation defines one such permanent compatibility contract: generated workflow body
+migration in Section 19.4.1. It compares bodies only with recorded generated text and never detects
+historical templates by fingerprint.
+
 Generated workflows explicitly configure Codex with `workspaceWrite` and `networkAccess: true` so
 selected repository URLs can be cloned while keeping filesystem writes limited to the workspace and
 configured roots. Hand-authored workflows keep their configured Codex sandbox policy and are
@@ -926,6 +930,9 @@ This Java implementation provides:
   responding local worker does not prove that every downstream Trello, GitHub, Codex, or network
   operation is succeeding. Installer-managed autostart remains a setup and deployment concern.
 - `logs [--board NAME | --workflow PATH] [--follow]`: prints or follows managed local worker logs
+- `migrate-workflows [--board NAME | --workflow PATH] [--dry-run] [--non-interactive]
+  [--from-version VERSION] [--mark-migrated]`: checks generated workflow bodies after an update or
+  a supported downgrade as defined in Section 19.4.1
 - `diagnostics [--board NAME | --workflow PATH] [--output PATH] [--json] [--deep]
   [--show-private-context [--lookup TOKEN]]`:
   prints sanitized issue-report diagnostics from local setup, connected-board metadata, workflow
@@ -964,7 +971,7 @@ later.
 
 The installed Bash and PowerShell wrappers dispatch `--help`, `-h`, `--version`, `setup-local`,
 `new-board`, `import-board`, `list-workspaces`, `start`, `stop`, `status`, `logs`, `diagnostics`,
-and unknown commands to this Java command boundary. The wrappers bootstrap paths, classpath, managed
+`migrate-workflows`, and unknown commands to this Java command boundary. The wrappers bootstrap paths, classpath, managed
 Codex/npm paths, dotenv defaults, config/workspace/state locations, and caller directory context;
 Java owns managed worker process selection, PID/log files, health checks, start/stop/status/logs,
 diagnostics behavior, and usage errors. Unknown commands MUST fail through Java command usage
@@ -3666,6 +3673,12 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - CLI surfaces startup failure cleanly
 - CLI exits with success when application starts and shuts down normally
 - CLI exits nonzero when startup fails or the host process exits abnormally
+- If generated workflow body migration (Section 19.4.1) is implemented, deterministic tests cover
+  every classification for updates and supported downgrades, metadata and prefix/suffix
+  preservation, LF and CRLF input, confirm, decline, batch, dry-run, and non-interactive runs,
+  backup, atomic replacement, validation, rollback, permission preservation, link and path-set
+  limits, major-downgrade rejection, provenance recording by setup, and the POSIX and PowerShell
+  installer calls
 
 ### 17.8 Trello Workflow Conformance
 
@@ -4176,6 +4189,122 @@ When this profile is used:
 - deterministic CI SHOULD exercise PowerShell installer smoke, option, and lifecycle paths on a
   native Windows PowerShell runner; local Linux machines MAY use the Microsoft .NET SDK container
   image through `scripts/pwsh-docker.sh` when a local PowerShell check is needed
+
+#### 19.4.1 Generated Workflow Body Migration
+
+Generated workflow bodies change between Symphony versions. This section is a permanent generated
+workflow compatibility contract; [ADR 0095](docs/adr/0095-generated-workflow-body-migration.md)
+records why it uses recorded generated bodies.
+
+Terms:
+
+- The workflow metadata is the YAML front matter from the opening `---` line through the closing
+  `---` line. The workflow body is all text after the closing line, split as in Section 5.2.
+- The source generated body is the body that the previously installed version generated for a
+  workflow. The target generated body is the body that the running version generates for the same
+  generation inputs.
+
+Version provenance:
+
+- Whenever setup writes a generated workflow (`setup-local` board creation or import,
+  `setup-local configure-github`, `new-board`, and `import-board`), it MUST record the exact
+  generated body, the Symphony version that generated it, and the generation inputs in
+  `generated-workflows.json` beside the connected-board manifest. A failure to record MUST be
+  reported as a warning and MUST NOT undo the finished setup.
+- The store keeps one record per workflow path: the latest body that Symphony generated, migrated,
+  confirmed as already current, or recorded with `--mark-migrated`. Records remain until that
+  workflow is regenerated, migrated, or marked again. The store is local user data, like the
+  connected-board manifest.
+- Readers MUST ignore unknown store and input fields, so a supported downgrade can read records
+  written by a newer version. A newer version MUST give missing input fields defaults that render
+  the older body. Removing or renaming a stored field is a breaking change.
+- A workflow without a record is unversioned. Its inputs MAY be read from its current metadata in
+  the shape setup writes, but the result MUST only be used to recognize a body that already
+  contains the target generated body or to produce a manual-migration preview. Symphony MUST NOT
+  assume that an unversioned workflow was generated by the installed version.
+
+Discovery:
+
+- The command MUST check only connected workflows from the selected config directory's manifest,
+  or the one workflow selected with `--board` or `--workflow`. It MUST NOT scan directories for
+  other workflow files.
+- A workflow path that is a symbolic link, missing, unreadable, or not a regular file MUST be
+  classified as needing a manual migration and MUST NOT be written.
+
+Classification, in this order, compares texts after converting CRLF line breaks to LF:
+
+1. No generated body change: the source and target generated bodies are equal. Nothing is shown
+   as a migration, even when the body was customized.
+2. Already current: the body contains the target generated body exactly once, alone or with other
+   text before or after it, and every occurrence of the source generated body lies inside that
+   block. The workflow is not changed; Symphony records the target body as the workflow's
+   provenance.
+3. Unchanged generated body: the whole body equals the source generated body.
+4. User prefix and/or suffix: the source generated body occurs exactly once, with other text only
+   before it, after it, or both.
+5. Manual migration: the source generated body was edited, reordered, partly removed, or occurs
+   more than once; old and new generated blocks both occur outside each other; the workflow is
+   unversioned and not current; or the file cannot be parsed or safely written.
+
+When one generated body contains the other, for example because a version only appended a section,
+an occurrence of the shorter body inside an occurrence of the longer body belongs to that block and
+does not count as a separate occurrence.
+
+Interaction:
+
+- The command MUST list every checked workflow with its classification before any write.
+- Classes 3 and 4 MAY be migrated only after explicit confirmation, either per workflow or for all
+  listed replaceable workflows at once. The explanation MUST state that only the body changes and
+  that the migration gives the workflow the target version's workflow fixes and features. Before
+  confirming class 4, the command MUST warn that kept additions can conflict with the new body.
+- A migration MUST keep the metadata and the text before and after the source generated body byte
+  for byte, and MUST write the target generated body in the body's existing line-ending style.
+- For manual migrations, an interactive run MUST write the target generated body next to the
+  workflow as `<workflow file>.symphony-<version>-body.txt` when an inputs record or
+  metadata-derived inputs are available, explain how to compare and copy it, print a durable link to the matching release
+  documentation for release versions, and explain `--mark-migrated`, which records the target
+  body as the workflow's provenance without changing the workflow.
+- `--dry-run` MUST show the same classifications and proposed actions without writing any file.
+- With `--non-interactive`, the command MUST NOT ask, MUST NOT change workflows, and MUST NOT write
+  preview files. It reports the classifications and tells the operator to run the command in a
+  terminal.
+- Before a replacement, the command MUST copy the workflow to
+  `<workflow file>.backup-<UTC timestamp>` with its file attributes, write a same-directory
+  temporary file that keeps the original attributes where the platform supports it, check that the
+  temporary file keeps the metadata and loads with the runtime workflow loader, replace the
+  workflow atomically, and check the result again. When the final check fails, it MUST restore the
+  backup. Every failure MUST be reported with the backup path and whether the original is in place,
+  and the command MUST then fail as an unexpected setup failure that writes a sanitized
+  troubleshooting report.
+- After a migration, the command MUST print the backup path and explain how to restore it and how
+  to return to the previous Symphony version.
+
+Supported downgrades:
+
+- When the source generated body comes from a newer version within the same major version, the
+  same classification and confirmation flow applies. The command MUST say that the workflow was
+  created for a newer Symphony version. When the operator declines, or only a manual migration is
+  possible, it MUST warn that the newer workflow may mention features that the running version does
+  not support and can behave unexpectedly.
+- When `--from-version` or a recorded source version has a higher major version than the running
+  version, the command MUST reject the downgrade, MUST NOT change any workflow, and MUST exit
+  nonzero.
+- Before replacing the app for a release-archive install, both installers MUST compare the major
+  version reported by the installed command with the requested release and refuse an older major
+  version. Source-checkout installs do not know the target version before building, so the
+  command's own rejection applies.
+
+Installers:
+
+- On an update of an existing installation, `install.sh` and `install.ps1` MUST run
+  `migrate-workflows` with `--from-version` set to the previously installed version when it is
+  known, after the new command is installed and before setup or worker restart. Without a usable
+  terminal, or with `--no-onboard`, they MUST pass `--non-interactive`. When the installed version
+  does not provide the command, they MUST print a note and continue. A nonzero exit from the
+  command MUST stop the installer.
+- Installer dry runs MUST say that the check would run after the update. The classification itself
+  is owned by the Java command, so a preview of a target version's classification needs that
+  version installed and `migrate-workflows --dry-run`.
 
 ### 19.5 Java Repository Quality Profile
 

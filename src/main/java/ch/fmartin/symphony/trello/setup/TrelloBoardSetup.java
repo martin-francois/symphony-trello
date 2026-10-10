@@ -234,26 +234,28 @@ public final class TrelloBoardSetup {
             createdLists.add(listName);
         }
 
+        var bodyInputs = new GeneratedWorkflowBodyInputs(
+                recommendedActiveStates(githubEnabled, request.detectInProgressState()),
+                RECOMMENDED_TERMINAL_STATES,
+                request.detectInProgressState() ? RECOMMENDED_IN_PROGRESS_STATE : null,
+                RECOMMENDED_REVIEW_STATE,
+                RECOMMENDED_BLOCKED_STATE,
+                githubEnabled ? RECOMMENDED_MERGING_STATE : null,
+                githubEnabled);
         writeWorkflow(
                 workflowPath,
                 request.force(),
                 workflowTemplate(
                         boardKey,
-                        recommendedActiveStates(githubEnabled, request.detectInProgressState()),
-                        RECOMMENDED_TERMINAL_STATES,
-                        request.detectInProgressState() ? RECOMMENDED_IN_PROGRESS_STATE : null,
-                        RECOMMENDED_REVIEW_STATE,
-                        RECOMMENDED_BLOCKED_STATE,
-                        githubEnabled ? RECOMMENDED_MERGING_STATE : null,
+                        bodyInputs,
                         request.workspaceRoot(),
                         serverPort,
                         request.maxConcurrentAgents(),
-                        githubEnabled,
                         selectedCodexModelDefaults,
                         request.repositoryDefaults()));
 
         return new NewBoardResult(
-                boardId, boardKey, request.boardName(), boardUrl, createdLists, workflowPath, serverPort);
+                boardId, boardKey, request.boardName(), boardUrl, createdLists, workflowPath, serverPort, bodyInputs);
     }
 
     private static List<String> recommendedLists(boolean githubEnabled, boolean includeInProgress) {
@@ -495,21 +497,23 @@ public final class TrelloBoardSetup {
         }
 
         String boardKey = boardKey(board);
+        var bodyInputs = new GeneratedWorkflowBodyInputs(
+                activeStates,
+                terminalStates,
+                inProgressState,
+                reviewState,
+                blockedState,
+                mergingState,
+                request.githubIntegration().enabled());
         writeWorkflow(
                 request.workflowPath(),
                 request.force(),
                 workflowTemplate(
                         boardKey,
-                        activeStates,
-                        terminalStates,
-                        inProgressState,
-                        reviewState,
-                        blockedState,
-                        mergingState,
+                        bodyInputs,
                         request.workspaceRoot(),
                         serverPort,
                         request.maxConcurrentAgents(),
-                        request.githubIntegration().enabled(),
                         selectedCodexModelDefaults,
                         request.repositoryDefaults()));
 
@@ -524,7 +528,8 @@ public final class TrelloBoardSetup {
                 inProgressState,
                 blockedState,
                 request.workflowPath(),
-                serverPort);
+                serverPort,
+                bodyInputs);
     }
 
     private Map<String, Object> getMap(
@@ -1011,22 +1016,20 @@ public final class TrelloBoardSetup {
         }
     }
 
-    private static String workflowTemplate(
+    static String workflowTemplate(
             String boardId,
-            List<String> activeStates,
-            List<String> terminalStates,
-            String inProgressState,
-            String reviewState,
-            String blockedState,
-            String mergingState,
+            GeneratedWorkflowBodyInputs bodyInputs,
             Path workspaceRoot,
             int serverPort,
             int maxAgents,
-            boolean githubEnabled,
             CodexModelDefaults codexModelDefaults,
             RepositoryDefaults repositoryDefaults) {
-        String doneState = landingDoneState(terminalStates);
-        List<String> handoffStates = allowedMoveStates(inProgressState, reviewState, blockedState, doneState);
+        List<String> activeStates = bodyInputs.activeStates();
+        List<String> handoffStates = allowedMoveStates(
+                bodyInputs.inProgressState(),
+                bodyInputs.reviewState(),
+                bodyInputs.blockedState(),
+                landingDoneState(bodyInputs.terminalStates()));
         return """
                 ---
                 tracker:
@@ -1062,6 +1065,46 @@ public final class TrelloBoardSetup {
                   read_timeout_ms: %d
                   stall_timeout_ms: %d
                 ---
+                """
+                        .formatted(
+                                TrelloEnvironment.API_KEY,
+                                TrelloEnvironment.API_TOKEN,
+                                yamlScalar(boardId),
+                                yamlList(activeStates),
+                                optionalTrackerStateYaml("in_progress_state", bodyInputs.inProgressState()),
+                                optionalTrackerStateYaml("blocked_state", bodyInputs.blockedState()),
+                                yamlList(activeStates),
+                                yamlList(withSystemTerminalStates(bodyInputs.terminalStates())),
+                                yamlScalar(workspaceRoot.toString()),
+                                optionalYamlScalar(repositoryDefaults.defaultUrl()),
+                                optionalYamlScalar(repositoryDefaults.defaultPath()),
+                                serverPort,
+                                ConfigDefaults.GENERATED_WORKFLOW_POLLING_INTERVAL_MS,
+                                trelloToolsYaml(handoffStates),
+                                maxAgents,
+                                ConfigDefaults.DEFAULT_CODEX_COMMAND,
+                                codexModelYaml(codexModelDefaults),
+                                codexSandboxPolicyYaml(),
+                                ConfigDefaults.DEFAULT_CODEX_TURN_TIMEOUT_MS,
+                                ConfigDefaults.DEFAULT_CODEX_READ_TIMEOUT_MS,
+                                ConfigDefaults.DEFAULT_CODEX_STALL_TIMEOUT_MS)
+                + generatedWorkflowBody(bodyInputs);
+    }
+
+    /// Renders the generated prompt body: the exact text after the closing front matter line. Workflow
+    /// body migration compares and replaces this text, so it must depend only on the inputs record;
+    /// see ADR 0095.
+    static String generatedWorkflowBody(GeneratedWorkflowBodyInputs inputs) {
+        List<String> activeStates = inputs.activeStates();
+        List<String> terminalStates = inputs.terminalStates();
+        String inProgressState = inputs.inProgressState();
+        String reviewState = inputs.reviewState();
+        String blockedState = inputs.blockedState();
+        String mergingState = inputs.mergingState();
+        boolean githubEnabled = inputs.githubEnabled();
+        String doneState = landingDoneState(terminalStates);
+        List<String> handoffStates = allowedMoveStates(inProgressState, reviewState, blockedState, doneState);
+        return """
                 # Trello Card
 
                 You are working on {{ card.identifier }}: {{ card.title }}.
@@ -1113,27 +1156,6 @@ public final class TrelloBoardSetup {
                 Card URL: {{ card.url }}
                 """
                 .formatted(
-                        TrelloEnvironment.API_KEY,
-                        TrelloEnvironment.API_TOKEN,
-                        yamlScalar(boardId),
-                        yamlList(activeStates),
-                        optionalTrackerStateYaml("in_progress_state", inProgressState),
-                        optionalTrackerStateYaml("blocked_state", blockedState),
-                        yamlList(activeStates),
-                        yamlList(withSystemTerminalStates(terminalStates)),
-                        yamlScalar(workspaceRoot.toString()),
-                        optionalYamlScalar(repositoryDefaults.defaultUrl()),
-                        optionalYamlScalar(repositoryDefaults.defaultPath()),
-                        serverPort,
-                        ConfigDefaults.GENERATED_WORKFLOW_POLLING_INTERVAL_MS,
-                        trelloToolsYaml(handoffStates),
-                        maxAgents,
-                        ConfigDefaults.DEFAULT_CODEX_COMMAND,
-                        codexModelYaml(codexModelDefaults),
-                        codexSandboxPolicyYaml(),
-                        ConfigDefaults.DEFAULT_CODEX_TURN_TIMEOUT_MS,
-                        ConfigDefaults.DEFAULT_CODEX_READ_TIMEOUT_MS,
-                        ConfigDefaults.DEFAULT_CODEX_STALL_TIMEOUT_MS,
                         trelloRelationshipContextPrompt(),
                         workpadPrompt(!handoffStates.isEmpty()),
                         repositorySkillsPrompt(githubEnabled),
@@ -2183,6 +2205,10 @@ public final class TrelloBoardSetup {
         return blank(blockedState) ? reviewState : blockedState;
     }
 
+    static boolean isSystemTerminalState(String state) {
+        return SYSTEM_TERMINAL_STATES.stream().anyMatch(systemState -> systemState.equalsIgnoreCase(state));
+    }
+
     private static List<String> withSystemTerminalStates(List<String> terminalStates) {
         List<String> combined = new ArrayList<>(terminalStates);
         for (String state : SYSTEM_TERMINAL_STATES) {
@@ -2286,7 +2312,7 @@ public final class TrelloBoardSetup {
                 .orElse(null);
     }
 
-    private static String landingDoneState(List<String> terminalStates) {
+    static String landingDoneState(List<String> terminalStates) {
         return terminalStates.stream()
                 .filter(state -> state.equalsIgnoreCase("Done"))
                 .findAny()
@@ -3086,7 +3112,8 @@ public final class TrelloBoardSetup {
             String boardUrl,
             List<String> lists,
             Path workflowPath,
-            int serverPort) {
+            int serverPort,
+            GeneratedWorkflowBodyInputs bodyInputs) {
         public NewBoardResult {
             lists = List.copyOf(lists);
         }
@@ -3145,7 +3172,8 @@ public final class TrelloBoardSetup {
             String inProgressState,
             String blockedState,
             Path workflowPath,
-            int serverPort) {
+            int serverPort,
+            GeneratedWorkflowBodyInputs bodyInputs) {
         public ImportBoardResult {
             openLists = List.copyOf(openLists);
             activeStates = List.copyOf(activeStates);
