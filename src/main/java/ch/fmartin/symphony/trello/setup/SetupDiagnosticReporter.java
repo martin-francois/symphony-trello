@@ -95,6 +95,9 @@ final class SetupDiagnosticReporter {
     private static final Pattern TRELLO_CARD_FIELD = Pattern.compile(
             "(?i)([\"']?(?:card[_-]?id|card[_-]?identifier|cardId|cardIdentifier)[\"']?\\s*[:=]\\s*[\"']?)([^\\s,\"'}]+)");
     private static final Pattern YAML_PARSER_CONTINUATION_LINE = Pattern.compile("(?m)^(\\s*\\.\\.\\.\\s+)[^\\r\\n]+$");
+    /// Optional child path after a private directory. It may contain spaces and brackets, because
+    /// directory names can, so it ends only at a line break or a character that delimits text.
+    private static final String CHILD_PATH_SUFFIX = "(?:[/\\\\][^\\r\\n\"'`<>|]*)?";
     private static final Pattern PATH_ASSIGNMENT =
             Pattern.compile("(?i)(\\b(?:path|file|directory|dir|workspace|config|state|home)=)([^\\r\\n]+)");
     private static final Pattern QUOTED_POSIX_PATH = Pattern.compile("([\"'`])(/[^\"'`\\r\\n]+)\\1");
@@ -108,6 +111,7 @@ final class SetupDiagnosticReporter {
     private static final CharMatcher POSIX_PATH_START = SLASHES;
     private static final CharMatcher URL_AUTHORITY_TERMINATOR =
             CharMatcher.whitespace().or(CharMatcher.anyOf("/?#")).precomputed();
+    private static final CharMatcher WHITESPACE = CharMatcher.whitespace().precomputed();
     private static final CharMatcher TOKEN_TERMINATOR =
             CharMatcher.whitespace().or(CharMatcher.anyOf(")>'\"`")).precomputed();
     private static final CharMatcher ASCII_WORD_CHARACTER = CharMatcher.inRange('a', 'z')
@@ -2428,13 +2432,14 @@ final class SetupDiagnosticReporter {
     /// Replaces a sensitive value. An absolute-path value extends over a following path remainder
     /// and always renders as a path token, so one private path renders as one stable token that
     /// matches the path tokens elsewhere in the report instead of a value token or adjacent value
-    /// and path tokens.
+    /// and path tokens. The remainder may contain spaces and ends like a path below a known root, so
+    /// a child directory name with a space cannot leave its tail visible.
     private String replaceSensitiveValue(String text, String sensitiveValue) {
         if (!looksLikeAbsolutePath(sensitiveValue)) {
             return text.replace(sensitiveValue, "<value:" + hash(sensitiveValue) + ">");
         }
-        Pattern sensitivePath = Pattern.compile(Pattern.quote(sensitiveValue) + "(?:[/\\\\][^\\s\"'`|)\\]]*)?");
-        return sensitivePath.matcher(text).replaceAll(match -> Matcher.quoteReplacement(pathToken(match.group())));
+        Pattern sensitivePath = Pattern.compile(Pattern.quote(sensitiveValue) + CHILD_PATH_SUFFIX);
+        return redactPathMatches(text, sensitivePath);
     }
 
     private static boolean looksLikeAbsolutePath(String value) {
@@ -2830,11 +2835,52 @@ final class SetupDiagnosticReporter {
         String redacted = value;
         for (String path : sensitivePaths()) {
             if (!path.isBlank()) {
-                Pattern pathWithChildren = Pattern.compile(Pattern.quote(path) + "(?:[/\\\\][^\\r\\n\"'`<>|]*)?");
+                Pattern pathWithChildren = Pattern.compile(Pattern.quote(path) + CHILD_PATH_SUFFIX);
                 redacted = pathWithChildren.matcher(redacted).replaceAll(match -> pathToken(match.group()));
             }
         }
         return redacted;
+    }
+
+    /// Replaces each match with one path token. A match can run past the end of the path into the
+    /// rest of a log line, because child paths may contain spaces. The token therefore ends at the
+    /// longest prefix that ends before whitespace and exists on disk, which keeps text such as
+    /// ` outcome=loaded` visible and lets the private-context lookup resolve the token. Without such
+    /// a prefix the whole match stays in the token, so no part of a private path leaks.
+    private String redactPathMatches(String value, Pattern pathPattern) {
+        Matcher matcher = pathPattern.matcher(value);
+        var redacted = new StringBuilder(value.length());
+        int cursor = 0;
+        while (matcher.find(cursor)) {
+            String path = existingPathPrefix(matcher.group());
+            redacted.append(value, cursor, matcher.start()).append(pathToken(path));
+            cursor = matcher.start() + path.length();
+        }
+        return redacted.append(value, cursor, value.length()).toString();
+    }
+
+    private static String existingPathPrefix(String candidate) {
+        if (WHITESPACE.matchesNoneOf(candidate) || existsAsPath(candidate)) {
+            return candidate;
+        }
+        for (int end = candidate.length() - 1; end > 0; end--) {
+            if (WHITESPACE.matches(candidate.charAt(end))
+                    && !WHITESPACE.matches(candidate.charAt(end - 1))
+                    && existsAsPath(candidate.substring(0, end))) {
+                return candidate.substring(0, end);
+            }
+        }
+        return candidate;
+    }
+
+    /// Text that is not a valid path on this platform is not an existing path, so the caller keeps
+    /// the whole match in one token.
+    private static boolean existsAsPath(String path) {
+        try {
+            return Files.exists(Path.of(path), LinkOption.NOFOLLOW_LINKS);
+        } catch (InvalidPathException e) {
+            return false;
+        }
     }
 
     private static void addPath(List<String> paths, String value) {
