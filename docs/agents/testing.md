@@ -159,6 +159,11 @@ parallel safety. Live end-to-end and deployed-verification rules live in
 
 ## What to test and what not to test
 
+- For generated workflow configuration, assert parsed YAML values rather than raw text or a map's
+  string representation. In setup tests, use the parsed `codex.additional_writable_roots` list for
+  access assertions so paths in prompts or other settings cannot satisfy the check. Enforcement:
+  `WorkflowAssertionsTest` covers unrelated path occurrences and alternate YAML layouts; review
+  checks setup tests for direct text assertions that bypass the shared workflow assertions.
 - Do not write low-value tests that only restate a constant. Do test parsing, policy enforcement,
   edge cases, failure modes, and cross-component contracts.
 - Do not add tests whose only purpose is to exercise POJOs, records, getters, setters, or generated
