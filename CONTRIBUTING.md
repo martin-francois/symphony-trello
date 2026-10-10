@@ -204,9 +204,10 @@ recovery do not depend on GitHub's scheduled-event delivery. Successful batch co
 the normal handoff.
 Contributors do not need to run continuous fuzzing before every pull request,
 but should use the 15- to 30-minute active fuzzing commands in
-[Fuzzing](docs/fuzzing.md) when changing parser, prompt-line safety, workflow loading, or Trello
-reference/checklist parsing logic. The same page also documents longer agent-requested fuzzing runs,
-hosted continuous fuzzing behavior, and the OSS-Fuzz project files.
+[Fuzzing](docs/fuzzing.md) when changing parser, prompt-line safety, workflow loading, Trello
+reference/checklist parsing logic, or the Trello handoff tool write checks. The same page also
+documents longer agent-requested fuzzing runs, hosted continuous fuzzing behavior, and the OSS-Fuzz
+project files.
 
 GitHub Secret Scanning is the hosted safety net for repository history, pull requests, issues,
 reviews, and comments. Maintainers should keep built-in secret scanning and push protection enabled.

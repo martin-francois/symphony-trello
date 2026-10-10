@@ -126,9 +126,10 @@ parallel safety. Live end-to-end and deployed-verification rules live in
   before calling a release ready; coverage percentages do not prove behavioral completeness.
   Pull-request review enforces both the update and the release-readiness review.
 - Fuzz tests are regression tests in normal Maven runs. When changing parser, prompt-line safety,
-  workflow loading, or Trello reference/checklist parsing logic, run the focused fuzzing and chaos
-  regression command from [Fuzzing](../fuzzing.md). If the user asks for active or continuous
-  fuzzing, run one Jazzer target per Maven process with `JAZZER_FUZZ=1`, the `fuzzing` Maven profile,
+  workflow loading, Trello reference/checklist parsing logic, or the Trello handoff tool write
+  checks, run the focused fuzzing and chaos regression command from [Fuzzing](../fuzzing.md). If the
+  user asks for active or continuous fuzzing, run one Jazzer target per Maven process with
+  `JAZZER_FUZZ=1`, the `fuzzing` Maven profile,
   `-Djacoco.skip=true`, an explicit `-Djazzer.max_duration=...` window, and
   `-Djazzer.max_executions=0` so the requested duration is not cut short by a method-level
   regression cap. Use the 15- to 30-minute loop in [Fuzzing](../fuzzing.md) for a short pass, or a
