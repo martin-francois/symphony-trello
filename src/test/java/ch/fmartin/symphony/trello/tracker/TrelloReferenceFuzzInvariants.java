@@ -3,6 +3,8 @@ package ch.fmartin.symphony.trello.tracker;
 import ch.fmartin.symphony.trello.domain.Card;
 import com.google.common.base.Splitter;
 import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 public final class TrelloReferenceFuzzInvariants {
     public static final int MAX_TEXT_LENGTH = 2_048;
@@ -38,6 +40,25 @@ public final class TrelloReferenceFuzzInvariants {
         if (!result.containsCardUrl() && !TrelloCardReferenceParser.allTrelloCardUrlsAreMarkdownLinks(text)) {
             throw new AssertionError("markdown-only URL detection disagrees with containsCardUrl");
         }
+        // Each reference consumes the URL prefix plus at least one id character, and references do not overlap.
+        if (result.references().size() > text.length() / (TRELLO_CARD_URL_PREFIX.length() + 1)) {
+            throw new AssertionError("more Trello references than the text can hold");
+        }
+        assertNormalizedUrlsParseBackToTheSameReferences(result.references());
+    }
+
+    private static void assertNormalizedUrlsParseBackToTheSameReferences(List<ParsedReference> references) {
+        List<String> urls = references.stream().map(ParsedReference::url).toList();
+        if (!parseReferences(String.join(" ", urls)).references().equals(references)) {
+            throw new AssertionError("normalized Trello URLs do not parse back to the same references");
+        }
+        for (ParsedReference reference : references) {
+            if (!TrelloCardReferenceParser.exactReference(reference.url())
+                    .map(exact -> new ParsedReference(exact.lookupId(), exact.url()))
+                    .equals(Optional.of(reference))) {
+                throw new AssertionError("a normalized Trello URL is not an exact reference to itself");
+            }
+        }
     }
 
     public static ChecklistClassificationResult analyzeChecklist(Card.Checklist checklist) {
@@ -67,6 +88,29 @@ public final class TrelloReferenceFuzzInvariants {
             if (!reference.url().equals(TRELLO_CARD_URL_PREFIX + reference.lookupId())) {
                 throw new AssertionError("Trello prerequisite URL is not normalized from the lookup id");
             }
+        }
+    }
+
+    /// Checks properties that compare the classification of `checklist` with related checklists: item
+    /// order must not change the outcome, and a checklist rebuilt from the normalized prerequisite URLs must
+    /// classify to the same prerequisites.
+    public static void assertChecklistClassificationIsStable(
+            Card.Checklist checklist, ChecklistClassificationResult result) {
+        ChecklistClassificationResult reversed = analyzeChecklist(new Card.Checklist(
+                checklist.id(), checklist.name(), checklist.items().reversed()));
+        if (!reversed.problemCodes().equals(result.problemCodes())
+                || !reversed.prerequisiteReferences()
+                        .equals(result.prerequisiteReferences().reversed())) {
+            throw new AssertionError("checklist classification depends on item order");
+        }
+        if (result.prerequisiteReferences().isEmpty()) {
+            return;
+        }
+        String normalized = result.prerequisiteReferences().stream()
+                .map(ParsedReference::url)
+                .collect(Collectors.joining("\n"));
+        if (!analyzeChecklist(checklist(normalized)).equals(result)) {
+            throw new AssertionError("normalized prerequisite URLs do not classify back to the same prerequisites");
         }
     }
 
