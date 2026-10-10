@@ -42,6 +42,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
 
 final class SymphonyOrchestratorUsageLimitPauseTest {
     @TempDir
@@ -635,8 +636,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         assertThat(snapshot.counts().retrying()).isZero();
     }
 
-    @Test
-    void exceptionalWorkerExitWaitsForAnInFlightOrchestratorOperation() throws Exception {
+    @EnumSource(WorkerExit.class)
+    @ParameterizedTest
+    void workerExitWaitsForAnInFlightOrchestratorOperation(WorkerExit workerExit) throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflow(workflow, "60000");
@@ -651,16 +653,16 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         when(runner.run(any())).thenAnswer(invocation -> {
             workerStarted.countDown();
             assertThat(releaseWorker.await(5, TimeUnit.SECONDS))
-                    .as("the exceptional worker should be released within 5 seconds")
+                    .as("the exiting worker should be released within 5 seconds")
                     .isTrue();
-            throw new IllegalStateException("agent process exited unexpectedly");
+            return workerExit.finish();
         });
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
         orchestrator.start();
         assertThat(workerStarted.await(5, TimeUnit.SECONDS))
-                .as("the worker that will exit exceptionally should start within 5 seconds")
+                .as("the worker that will exit should start within 5 seconds")
                 .isTrue();
         tracker.stateFetchHook = () -> {
             if (hookedFetches.incrementAndGet() == 1) {
@@ -2468,5 +2470,18 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                         endpointA + "/shared-board/token-a:clear",
                         endpointB + "/shared-board/token-b:set",
                         endpointB + "/shared-board/token-b:clear");
+    }
+
+    /// The two worker-exit callbacks: a failed result and an agent runner exception.
+    enum WorkerExit {
+        FAILED_RESULT,
+        EXCEPTION;
+
+        AgentRunResult finish() {
+            return switch (this) {
+                case FAILED_RESULT -> AgentRunResult.fail("agent run failed");
+                case EXCEPTION -> throw new IllegalStateException("agent process exited unexpectedly");
+            };
+        }
     }
 }
