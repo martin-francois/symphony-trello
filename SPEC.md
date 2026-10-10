@@ -633,9 +633,10 @@ Fields:
 
 Fields:
 
-- `root` (path string or `$VAR`)
+- `root` (path string, `$VAR`, or `${VAR}`)
   - Default: `<system-temp>/symphony_workspaces`
   - `~` is expanded.
+  - A leading `$VAR` or `${VAR}` is expanded as described in Section 6.1.
   - Relative paths are resolved relative to the directory containing `WORKFLOW.md`.
   - The effective workspace root is normalized to an absolute path before use.
 
@@ -1242,7 +1243,11 @@ Value coercion semantics:
 
 - Path/command fields support:
   - `~` home expansion
-  - `$VAR` expansion for env-backed path values
+  - `$VAR` and `${VAR}` expansion for env-backed path values. The reference is the whole value or
+    its first segment up to the first `/`, so `$VAR`, `${VAR}`, `$VAR/suffix`, and `${VAR}/suffix`
+    all expand, and the suffix is appended to the variable's value. The variable name starts with a
+    letter or `_` and continues with letters, digits, or `_`. Other shapes, such as
+    `${VAR:-default}/suffix`, `$VAR-suffix`, or a reference after the first segment, stay literal.
   - Apply expansion only to values intended to be local filesystem paths; do not rewrite URIs or
     arbitrary shell command strings.
 - Relative `workspace.root` values resolve relative to the directory containing the selected
@@ -1335,12 +1340,13 @@ implemented.
 - `tracker.api_retry_base_delay_ms`: integer, default `1000`
 - `polling.interval_ms`: integer, must be positive, runtime fallback default `30000`; generated
   workflows write `5000`
-- `workspace.root`: path resolved to absolute, default `<system-temp>/symphony_workspaces`
+- `workspace.root`: path resolved to absolute, may start with `$VAR` or `${VAR}`, default
+  `<system-temp>/symphony_workspaces`
 - `repository.default_url`: optional repository URL string or null, default null
-- `repository.default_path`: optional local repository path or null, resolved like other workflow
-  paths relative to the workflow file, default null; when both repository defaults are present, the
-  URL remains the selected fallback identity and the path remains available as its first checkout
-  candidate, subject to Git-remote identity matching
+- `repository.default_path`: optional local repository path or null, may start with `$VAR` or
+  `${VAR}`, resolved like other workflow paths relative to the workflow file, default null; when
+  both repository defaults are present, the URL remains the selected fallback identity and the path
+  remains available as its first checkout candidate, subject to Git-remote identity matching
 - `hooks.after_create`: shell script or null
 - `hooks.before_run`: shell script or null
 - `hooks.after_run`: shell script or null
@@ -1356,7 +1362,8 @@ implemented.
 - `codex.approval_policy`: Codex `AskForApproval` value, default implementation-defined
 - `codex.thread_sandbox`: Codex `SandboxMode` value, default implementation-defined
 - `codex.turn_sandbox_policy`: Codex `SandboxPolicy` value, default implementation-defined
-- `codex.additional_writable_roots`: list of path strings, default `[]`
+- `codex.additional_writable_roots`: list of path strings, each may start with `$VAR` or `${VAR}`,
+  default `[]`
 - `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`: implementation environment extension that appends
   host-managed allowed roots to `codex.additional_writable_roots`
 - `SYMPHONY_CODEX_DANGER_FULL_ACCESS`: implementation environment extension that forces the Codex
@@ -3485,6 +3492,7 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - `tracker.api_key` works, including `$VAR` indirection
 - `tracker.api_token` works, including `$VAR` indirection
 - `$VAR` resolution works for tracker API key, tracker API token, and path values
+- Path values expand a leading `${VAR}` or `${VAR}/suffix` the same way as `$VAR` and `$VAR/suffix`
 - `~` path expansion works
 - `tracker.blocker_enforced_states` defaults and normalization work
 - Tracker list-role overlap validation rejects one Trello list used by two roles and allows the
