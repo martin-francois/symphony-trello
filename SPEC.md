@@ -3666,6 +3666,9 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - CLI surfaces startup failure cleanly
 - CLI exits with success when application starts and shuts down normally
 - CLI exits nonzero when startup fails or the host process exits abnormally
+- If native Windows `setup-local` is implemented, its tool launches start npm batch shims found
+  through `PATH` and `PATHEXT` with unchanged arguments and exit status, and refuse arguments that
+  `cmd.exe` would change
 
 ### 17.8 Trello Workflow Conformance
 
@@ -4060,6 +4063,10 @@ When this profile is used:
   NOT continue as if newly scheduled packages were already available in the current system snapshot
 - if Codex CLI authentication is missing, the installer MUST ask whether the machine can open a
   browser before choosing `codex login` or `codex login --device-auth`
+- on native Windows, `setup-local` MUST find tools it starts by bare name, such as `codex`, through
+  `PATH` and `PATHEXT` like the Windows shell. It MUST start a `.cmd` or `.bat` match, such as the
+  npm `codex.cmd` shim, through `cmd.exe` with each argument unchanged, and MUST fail the launch
+  instead of passing an argument that `cmd.exe` would change
 - `setup-local` is the Java-owned setup/check command for local onboarding
 - `setup-local check` MUST validate core prerequisites, Codex auth, Trello credentials and member
   identity when credentials are available, GitHub auth for GitHub-enabled boards, workflow existence
