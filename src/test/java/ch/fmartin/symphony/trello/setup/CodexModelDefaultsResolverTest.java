@@ -1,8 +1,10 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
+import ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.CatalogModel;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.CodexModelDefaults;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
@@ -115,6 +117,7 @@ final class CodexModelDefaultsResolverTest {
         // given
         var model = json.createObjectNode();
         model.put("model", scenario.model());
+        model.put("displayName", scenario.displayName());
         model.put("defaultReasoningEffort", scenario.reasoningEffort());
         model.put("isDefault", true);
         var response = json.createObjectNode();
@@ -194,6 +197,76 @@ final class CodexModelDefaultsResolverTest {
 
         // then
         assertThat(defaults).isEqualTo(new CodexModelDefaults("gpt-visible-first", "high"));
+    }
+
+    @Test
+    void listsVisibleCatalogModelsForThePickerFromTheFirstUsableEntryOfEachModel() throws Exception {
+        // given
+        Path appServer = CodexModelAppServerFixture.createPaginated(
+                tempDir,
+                """
+                [{"model":"gpt-6.1-sol","displayName":"GPT-6.1-Sol","isDefault":true,"defaultReasoningEffort":"low"},{"model":"gpt-reserve","displayName":"GPT-Reserve","hidden":true},{"model":" "},{"displayName":"No model id"},"not-an-object",{"model":"gpt-5.5","displayName":" "}]
+                """,
+                """
+                [{"model":"gpt-5.6-terra","displayName":"GPT-5.6-Terra","defaultReasoningEffort":"medium"},{"model":"gpt-6.1-sol","displayName":"Duplicate Sol","defaultReasoningEffort":"ultra","supportedReasoningEfforts":[{"reasoningEffort":"ultra"}]}]
+                """);
+
+        // when
+        CodexModelSelectionDefaults defaults =
+                new CodexModelDefaultsResolver(json, List.of(appServer.toString())).resolveSelectionDefaults();
+
+        // then
+        assertThat(defaults.visibleModels())
+                .containsExactly(
+                        new CatalogModel("gpt-6.1-sol", "GPT-6.1-Sol", false),
+                        new CatalogModel("gpt-5.5", null, false),
+                        new CatalogModel("gpt-5.6-terra", "GPT-5.6-Terra", true));
+        assertThat(defaults.defaults()).isEqualTo(new CodexModelDefaults("gpt-5.6-terra", "medium"));
+        assertThat(defaults.reasoningEffortForModel("gpt-6.1-sol")).hasValue("low");
+        assertThat(defaults.reasoningEffortChoicesForModel("gpt-6.1-sol")).isEmpty();
+    }
+
+    @Test
+    void dropsADisplayNameWithControlCharactersWithoutRejectingTheCatalog() throws Exception {
+        // given
+        Path appServer = CodexModelAppServerFixture.createPaginated(
+                tempDir,
+                """
+                [{"model":"gpt-safe","displayName":"GPT\\u001b[2J Safe","defaultReasoningEffort":"medium"}]
+                """,
+                "[]");
+
+        // when
+        CodexModelSelectionDefaults defaults =
+                new CodexModelDefaultsResolver(json, List.of(appServer.toString())).resolveSelectionDefaults();
+
+        // then
+        assertThat(defaults.defaults()).isEqualTo(new CodexModelDefaults("gpt-safe", "medium"));
+        assertThat(defaults.visibleModels()).containsExactly(new CatalogModel("gpt-safe", null, true));
+    }
+
+    @Test
+    void recommendsTheFirstVisibleCatalogDefaultWhenSeveralEntriesAreMarkedDefault() throws Exception {
+        // given
+        Path appServer = CodexModelAppServerFixture.createPaginated(
+                tempDir,
+                """
+                [{"model":"gpt-first-visible"},{"model":"gpt-first-default","isDefault":true},{"model":"gpt-later-default","isDefault":true}]
+                """,
+                "[]");
+
+        // when
+        CodexModelSelectionDefaults defaults =
+                new CodexModelDefaultsResolver(json, List.of(appServer.toString())).resolveSelectionDefaults();
+
+        // then
+        assertThat(defaults.defaults().model()).isEqualTo("gpt-first-default");
+        assertThat(defaults.visibleModels())
+                .extracting(CatalogModel::model, CatalogModel::recommended)
+                .containsExactly(
+                        tuple("gpt-first-visible", false),
+                        tuple("gpt-first-default", true),
+                        tuple("gpt-later-default", false));
     }
 
     @Test
@@ -443,16 +516,17 @@ final class CodexModelDefaultsResolverTest {
 
     private static Stream<CatalogControlCharacterScenario> catalogControlCharacterScenarios() {
         return Stream.of(
-                new CatalogControlCharacterScenario("model", "gpt\nforged", "medium"),
+                new CatalogControlCharacterScenario("model", "gpt\nforged", "GPT Safe", "medium"),
                 new CatalogControlCharacterScenario(
-                        "default effort", "gpt-safe", "med" + Character.toString(0x1B) + "ium"));
+                        "default effort", "gpt-safe", "GPT Safe", "med" + Character.toString(0x1B) + "ium"));
     }
 
     private Path appServerScript(String body) throws Exception {
         return CodexModelAppServerFixture.create(tempDir, body);
     }
 
-    private record CatalogControlCharacterScenario(String name, String model, String reasoningEffort) {
+    private record CatalogControlCharacterScenario(
+            String name, String model, String displayName, String reasoningEffort) {
         @Override
         public String toString() {
             return name;
