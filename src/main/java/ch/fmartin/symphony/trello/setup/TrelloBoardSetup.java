@@ -1,6 +1,5 @@
 package ch.fmartin.symphony.trello.setup;
 
-import static ch.fmartin.symphony.trello.TextCharacterMatchers.SLASHES;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import ch.fmartin.symphony.trello.TrelloEnvironment;
@@ -12,24 +11,14 @@ import ch.fmartin.symphony.trello.config.TrelloListRoleValidator;
 import ch.fmartin.symphony.trello.config.WorkflowConfigIngestion;
 import ch.fmartin.symphony.trello.config.WorkflowIntegerSetting;
 import ch.fmartin.symphony.trello.repository.RepositorySourcePrompt;
-import ch.fmartin.symphony.trello.tracker.TrelloClient;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import jakarta.ws.rs.core.Response.Status;
-import jakarta.ws.rs.core.Response.Status.Family;
 import java.io.IOException;
 import java.net.URI;
-import java.net.URLEncoder;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -55,35 +44,37 @@ public final class TrelloBoardSetup {
     public static final String DEFAULT_CODEX_MODEL = "gpt-5.5";
     public static final String DEFAULT_CODEX_REASONING_EFFORT = "medium";
     private static final String CODEX_MODEL_DEFAULTS_LABEL = "codexModelDefaults";
+    public static final String RECOMMENDED_INBOX_LIST = "Inbox";
     public static final String RECOMMENDED_ACTIVE_STATE = "Ready for Codex";
     public static final String RECOMMENDED_IN_PROGRESS_STATE = "In Progress";
     public static final String RECOMMENDED_BLOCKED_STATE = "Blocked";
     public static final String RECOMMENDED_REVIEW_STATE = "Human Review";
     public static final String RECOMMENDED_MERGING_STATE = "Merging";
+    public static final String RECOMMENDED_DONE_STATE = "Done";
     // "Review" is a common review-list name on existing user boards, and import-board has no
     // option to pick the review list explicitly, so detection falls back to it when no
     // "Human Review" list exists.
     public static final String FALLBACK_REVIEW_STATE = "Review";
     public static final List<String> RECOMMENDED_LISTS = List.of(
-            "Inbox",
+            RECOMMENDED_INBOX_LIST,
             RECOMMENDED_ACTIVE_STATE,
             RECOMMENDED_IN_PROGRESS_STATE,
             RECOMMENDED_BLOCKED_STATE,
             RECOMMENDED_REVIEW_STATE,
             RECOMMENDED_MERGING_STATE,
-            "Done");
+            RECOMMENDED_DONE_STATE);
     public static final List<String> RECOMMENDED_NON_GITHUB_LISTS = List.of(
-            "Inbox",
+            RECOMMENDED_INBOX_LIST,
             RECOMMENDED_ACTIVE_STATE,
             RECOMMENDED_IN_PROGRESS_STATE,
             RECOMMENDED_BLOCKED_STATE,
             RECOMMENDED_REVIEW_STATE,
-            "Done");
+            RECOMMENDED_DONE_STATE);
     public static final List<String> RECOMMENDED_ACTIVE_STATES =
             List.of(RECOMMENDED_ACTIVE_STATE, RECOMMENDED_IN_PROGRESS_STATE, RECOMMENDED_MERGING_STATE);
     public static final List<String> RECOMMENDED_NON_GITHUB_ACTIVE_STATES =
             List.of(RECOMMENDED_ACTIVE_STATE, RECOMMENDED_IN_PROGRESS_STATE);
-    public static final List<String> RECOMMENDED_TERMINAL_STATES = List.of("Done");
+    public static final List<String> RECOMMENDED_TERMINAL_STATES = List.of(RECOMMENDED_DONE_STATE);
 
     private static final List<String> SYSTEM_TERMINAL_STATES =
             List.of("Archived", "ArchivedList", "ArchivedBoard", "Deleted");
@@ -99,11 +90,10 @@ public final class TrelloBoardSetup {
             locations, account names, or deployment-specific paths into Trello comments or the workpad; use
             labels such as "the requested path" and "the per-card workspace" instead.""";
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
-    private static final TypeReference<List<Map<String, Object>>> LIST_MAP_TYPE = new TypeReference<>() {};
 
     private final ObjectMapper json;
     private final ObjectMapper yaml;
-    private final HttpClient httpClient;
+    private final TrelloSetupApi trello;
     private final Supplier<CodexModelSelectionDefaults> codexModelSelectionDefaults;
     private final Optional<CodexModelSelectionDefaults> codexModelSelectionDefaultsForDryRun;
     private final Optional<String> codexModelOverride;
@@ -147,8 +137,7 @@ public final class TrelloBoardSetup {
             IntPredicate portInUse) {
         this.json = json;
         this.yaml = new ObjectMapper(new YAMLFactory());
-        this.httpClient =
-                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+        this.trello = new TrelloSetupApi(json);
         this.codexModelSelectionDefaults =
                 Objects.requireNonNull(codexModelSelectionDefaults, CODEX_MODEL_DEFAULTS_LABEL);
         this.codexModelSelectionDefaultsForDryRun =
@@ -225,12 +214,8 @@ public final class TrelloBoardSetup {
         List<String> createdLists = new ArrayList<>();
         List<String> recommendedLists = recommendedLists(githubEnabled, request.detectInProgressState());
         for (String listName : recommendedLists) {
-            postMap(
-                    request.endpoint(),
-                    "lists",
-                    orderedMap("name", listName, "idBoard", boardId, "pos", "bottom"),
-                    request.credentials(),
-                    "id");
+            trello.postMap(
+                    request.endpoint(), "lists", listCreationQuery(listName, boardId), request.credentials(), "id");
             createdLists.add(listName);
         }
 
@@ -274,7 +259,7 @@ public final class TrelloBoardSetup {
 
     private Map<String, Object> createBoard(NewBoardRequest request, String workspaceId) {
         try {
-            return postMap(
+            return trello.postMap(
                     request.endpoint(),
                     "boards/",
                     createBoardQuery(request.boardName(), workspaceId),
@@ -343,7 +328,8 @@ public final class TrelloBoardSetup {
 
     public List<WorkspaceInfo> listWorkspaces(WorkspaceListRequest request) {
         request.validate();
-        return getList(
+        return trello
+                .getList(
                         request.endpoint(),
                         "members/me/organizations",
                         Map.of("fields", "id,name,displayName,url"),
@@ -363,7 +349,7 @@ public final class TrelloBoardSetup {
 
     public MemberInfo getMemberInfo(MemberInfoRequest request) {
         request.validate();
-        Map<String, Object> member = getMap(
+        Map<String, Object> member = trello.getMap(
                 request.endpoint(), "members/me", Map.of("fields", "id,username,fullName"), request.credentials());
         String username = requiredString(member, "username");
         return new MemberInfo(
@@ -372,9 +358,9 @@ public final class TrelloBoardSetup {
 
     public BoardInfo getBoardInfo(BoardInfoRequest request) {
         request.validate();
-        Map<String, Object> board = getMap(
+        Map<String, Object> board = trello.getMap(
                 request.endpoint(),
-                "boards/" + encodeSegment(request.boardId()),
+                "boards/" + TrelloSetupApi.encodeSegment(request.boardId()),
                 Map.of("fields", "id,name,shortLink,url,closed"),
                 request.credentials());
         if (bool(board.get("closed"))) {
@@ -386,9 +372,10 @@ public final class TrelloBoardSetup {
 
     public List<String> getOpenBoardListNames(BoardInfoRequest request) {
         request.validate();
-        return getList(
+        return trello
+                .getList(
                         request.endpoint(),
-                        "boards/" + encodeSegment(request.boardId()) + "/lists",
+                        "boards/" + TrelloSetupApi.encodeSegment(request.boardId()) + "/lists",
                         Map.of("filter", "open", "fields", "id,name,closed,pos"),
                         request.credentials())
                 .stream()
@@ -400,9 +387,9 @@ public final class TrelloBoardSetup {
 
     private Map<String, Object> importBoardInfo(ImportBoardRequest request) {
         try {
-            return getMap(
+            return trello.getMap(
                     request.endpoint(),
-                    "boards/" + encodeSegment(request.boardId()),
+                    "boards/" + TrelloSetupApi.encodeSegment(request.boardId()),
                     Map.of("fields", "id,name,shortLink,url,closed"),
                     request.credentials());
         } catch (TrelloBoardSetupException e) {
@@ -429,9 +416,10 @@ public final class TrelloBoardSetup {
         }
 
         String resolvedBoardId = requiredString(board, "id");
-        List<BoardList> lists = getList(
+        List<BoardList> lists = trello
+                .getList(
                         request.endpoint(),
-                        "boards/" + encodeSegment(resolvedBoardId) + "/lists",
+                        "boards/" + TrelloSetupApi.encodeSegment(resolvedBoardId) + "/lists",
                         Map.of("filter", "all", "fields", "id,name,closed,pos"),
                         request.credentials())
                 .stream()
@@ -485,10 +473,10 @@ public final class TrelloBoardSetup {
         int serverPort =
                 resolveServerPort(request.workflowPath(), request.serverPort(), request.force(), request.envPath());
         if (shouldCreateMergingList) {
-            postMap(
+            trello.postMap(
                     request.endpoint(),
                     "lists",
-                    orderedMap("name", RECOMMENDED_MERGING_STATE, "idBoard", resolvedBoardId, "pos", "bottom"),
+                    listCreationQuery(RECOMMENDED_MERGING_STATE, resolvedBoardId),
                     request.credentials(),
                     "id");
             openListNames.add(RECOMMENDED_MERGING_STATE);
@@ -525,11 +513,6 @@ public final class TrelloBoardSetup {
                 blockedState,
                 request.workflowPath(),
                 serverPort);
-    }
-
-    private Map<String, Object> getMap(
-            URI endpoint, String path, Map<String, String> query, TrelloCredentials credentials) {
-        return request(TrelloRequestKind.READ, endpoint, path, query, credentials, MAP_TYPE);
     }
 
     private CodexModelSelectionDefaults codexModelSelectionDefaults() {
@@ -635,108 +618,6 @@ public final class TrelloBoardSetup {
             CodexModelSelectionDefaults codexModelSelectionDefaults) {
         Objects.requireNonNull(codexModelSelectionDefaults, CODEX_MODEL_DEFAULTS_LABEL);
         return () -> codexModelSelectionDefaults;
-    }
-
-    private List<Map<String, Object>> getList(
-            URI endpoint, String path, Map<String, String> query, TrelloCredentials credentials) {
-        return request(TrelloRequestKind.READ, endpoint, path, query, credentials, LIST_MAP_TYPE);
-    }
-
-    private Map<String, Object> postMap(
-            URI endpoint,
-            String path,
-            Map<String, String> query,
-            TrelloCredentials credentials,
-            String... requiredKeys) {
-        Map<String, Object> payload = request(TrelloRequestKind.WRITE, endpoint, path, query, credentials, MAP_TYPE);
-        if (payload == null) {
-            throw unknownTrelloWriteOutcome(
-                    new TrelloBoardSetupException("trello_unknown_payload", "Trello payload is empty"));
-        }
-        for (String requiredKey : requiredKeys) {
-            if (blank(string(payload.get(requiredKey)))) {
-                throw unknownTrelloWriteOutcome(new TrelloBoardSetupException(
-                        "trello_unknown_payload", "Trello payload is missing " + requiredKey));
-            }
-        }
-        return payload;
-    }
-
-    private <T> T request(
-            TrelloRequestKind requestKind,
-            URI endpoint,
-            String path,
-            Map<String, String> query,
-            TrelloCredentials credentials,
-            TypeReference<T> type) {
-        try {
-            HttpRequest.Builder builder = HttpRequest.newBuilder(uri(endpoint, path, query))
-                    .timeout(Duration.ofSeconds(30))
-                    .header("Accept", "application/json")
-                    .header("Authorization", TrelloClient.authorization(credentials.apiKey(), credentials.apiToken()));
-            HttpRequest request =
-                    switch (requestKind) {
-                        case READ -> builder.GET().build();
-                        case WRITE ->
-                            builder.POST(HttpRequest.BodyPublishers.noBody()).build();
-                    };
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            if (isSuccessfulStatus(response.statusCode())) {
-                try {
-                    return json.readValue(response.body(), type);
-                } catch (JsonProcessingException e) {
-                    throw trelloPayloadException(requestKind, e);
-                }
-            }
-            throw statusException(requestKind, response.statusCode(), response.body());
-        } catch (IOException e) {
-            throw trelloTransportException(requestKind, "Trello request failed", e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw trelloTransportException(requestKind, "Trello request interrupted", e);
-        }
-    }
-
-    private static TrelloBoardSetupException trelloPayloadException(
-            TrelloRequestKind requestKind, JsonProcessingException cause) {
-        return switch (requestKind) {
-            case READ ->
-                new TrelloBoardSetupException(
-                        "trello_unknown_payload", "Trello response payload could not be parsed", cause);
-            case WRITE -> unknownTrelloWriteOutcome(cause);
-        };
-    }
-
-    private static TrelloBoardSetupException trelloTransportException(
-            TrelloRequestKind requestKind, String message, Exception cause) {
-        return switch (requestKind) {
-            case READ -> new TrelloBoardSetupException("trello_api_request", message, cause);
-            case WRITE -> unknownTrelloWriteOutcome(cause);
-        };
-    }
-
-    private static TrelloBoardSetupException unknownTrelloWriteOutcome(Exception cause) {
-        return new TrelloBoardSetupException(
-                "trello_write_outcome_unknown",
-                "Trello write outcome is unknown. Inspect Trello before retrying setup.",
-                cause);
-    }
-
-    private static URI uri(URI endpoint, String path, Map<String, String> query) {
-        String normalizedPath = path.startsWith("/") ? path.substring(1) : path;
-        if (normalizedPath.contains("..") || normalizedPath.contains("?") || normalizedPath.contains("#")) {
-            throw new TrelloBoardSetupException("setup_invalid_path", "Invalid Trello API path");
-        }
-        String queryString = query.entrySet().stream()
-                .map(entry -> encode(entry.getKey()) + "=" + encode(entry.getValue()))
-                .collect(Collectors.joining("&"));
-        String base = SLASHES.trimTrailingFrom(endpoint.toString());
-        return URI.create(base + "/" + normalizedPath + (queryString.isBlank() ? "" : "?" + queryString));
-    }
-
-    private enum TrelloRequestKind {
-        READ,
-        WRITE
     }
 
     private static void writeWorkflow(Path workflowPath, boolean force, String workflow) {
@@ -2395,43 +2276,6 @@ public final class TrelloBoardSetup {
                 requiredString(payload, "id"), requiredString(payload, "name"), bool(payload.get("closed")));
     }
 
-    private static TrelloBoardSetupException statusException(
-            TrelloRequestKind requestKind, int statusCode, String responseBody) {
-        String detail = blank(responseBody)
-                ? ""
-                : ": " + responseBody.strip().lines().findFirst().orElse("");
-        Status status = Status.fromStatusCode(statusCode);
-        if (requestKind == TrelloRequestKind.WRITE && Family.SERVER_ERROR == Family.familyOf(statusCode)) {
-            return unknownTrelloWriteOutcome(new TrelloBoardSetupException(
-                    "trello_api_status", "Trello returned HTTP " + statusCode + detail, statusCode));
-        }
-        if (status == null) {
-            return new TrelloBoardSetupException(
-                    "trello_api_status", "Trello returned HTTP " + statusCode + detail, statusCode);
-        }
-        return switch (status) {
-            case BAD_REQUEST ->
-                new TrelloBoardSetupException(
-                        "trello_invalid_request", "Trello rejected the setup request" + detail, statusCode);
-            case UNAUTHORIZED ->
-                new TrelloBoardSetupException(
-                        "trello_auth_failed", "Trello authentication failed" + detail, statusCode);
-            case FORBIDDEN ->
-                new TrelloBoardSetupException(
-                        "trello_permission_denied", "Trello permission denied" + detail, statusCode);
-            case NOT_FOUND ->
-                new TrelloBoardSetupException(
-                        "trello_resource_not_found", "Trello resource not found" + detail, statusCode);
-            default ->
-                new TrelloBoardSetupException(
-                        "trello_api_status", "Trello returned HTTP " + statusCode + detail, statusCode);
-        };
-    }
-
-    private static boolean isSuccessfulStatus(int statusCode) {
-        return Family.SUCCESSFUL == Family.familyOf(statusCode);
-    }
-
     private static String boardKey(Map<String, Object> board) {
         String shortLink = string(board.get("shortLink"));
         if (!blank(shortLink)) {
@@ -2449,7 +2293,13 @@ public final class TrelloBoardSetup {
         return requiredString(board, "id");
     }
 
-    private static Map<String, String> createBoardQuery(String boardName, String workspaceId) {
+    /// Adds the list at the end of the board, so lists appear in the order they are created.
+    static Map<String, String> listCreationQuery(String listName, String boardId) {
+        return orderedMap("name", listName, "idBoard", boardId, "pos", "bottom");
+    }
+
+    /// Creates an empty board: Trello's default lists and labels would clutter the recommended layout.
+    static Map<String, String> createBoardQuery(String boardName, String workspaceId) {
         Map<String, String> query = orderedMap("name", boardName, "defaultLists", "false", "defaultLabels", "false");
         if (!blank(workspaceId)) {
             query.put("idOrganization", workspaceId);
@@ -2494,14 +2344,6 @@ public final class TrelloBoardSetup {
 
     private static String fallback(String value, String fallback) {
         return blank(value) ? fallback : value;
-    }
-
-    private static String encodeSegment(String value) {
-        return encode(value).replace("+", "%20");
-    }
-
-    private static String encode(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
     static String slugify(String value) {

@@ -942,6 +942,8 @@ This Java implementation provides:
   shown in a `board_hash` or `key_hash` row, or a `<path:...>` token. It is valid only with
   `--show-private-context`. That output is for local troubleshooting only and MUST NOT be pasted into
   public issue reports.
+- `tutorial [--github | --no-github] [--no-cleanup] [--workspace-id ID]`: optional guided tutorial on
+  a temporary Trello board, as defined in Section 19.4
 
 During guided `setup-local` board creation or import, when `--max-agents` is omitted, the Java
 implementation prompts for the per-board concurrency value before writing the workflow. A blank
@@ -964,7 +966,7 @@ later.
 
 The installed Bash and PowerShell wrappers dispatch `--help`, `-h`, `--version`, `setup-local`,
 `new-board`, `import-board`, `list-workspaces`, `start`, `stop`, `status`, `logs`, `diagnostics`,
-and unknown commands to this Java command boundary. The wrappers bootstrap paths, classpath, managed
+`tutorial`, and unknown commands to this Java command boundary. The wrappers bootstrap paths, classpath, managed
 Codex/npm paths, dotenv defaults, config/workspace/state locations, and caller directory context;
 Java owns managed worker process selection, PID/log files, health checks, start/stop/status/logs,
 diagnostics behavior, and usage errors. Unknown commands MUST fail through Java command usage
@@ -3667,6 +3669,12 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - CLI exits with success when application starts and shuts down normally
 - CLI exits nonzero when startup fails or the host process exits abnormally
 
+- If the guided tutorial in Section 19.4 is implemented, deterministic tests drive it against a
+  stateful fake Trello API and cover success on both paths, wrong-list and missing-comment
+  corrections, the bounded polling window with a later manual check, skip, stop, keep and archive
+  answers, archive after a failure, and a process-level interrupt that archives only the tutorial
+  board
+
 ### 17.8 Trello Workflow Conformance
 
 These checks are REQUIRED when the workflow expects the agent to perform Trello handoff transitions.
@@ -4144,12 +4152,42 @@ When this profile is used:
   `symphony-trello status` plus one shell-correct `symphony-trello logs --workflow PATH` command for
   each connected workflow. If setup or managed-worker handling leaves the install unsuccessful, the
   installer MUST NOT print the handoff
+- the final good-to-go handoff MUST name the `tutorial` command before its lifecycle commands
+  unless setup asks about the guided tutorial right after the handoff
+- interactive `setup-local` that creates or connects a board outside installer-deferred completion
+  MUST offer the optional guided tutorial after the final handoff with
+  `Want to try a guided walkthrough on a temporary Trello board? [y/N]`. A blank answer or end of
+  input declines it. Non-interactive setup and installer-deferred setup MUST NOT ask. A tutorial
+  failure MUST NOT turn a completed setup into a failed one
 - installer-to-Java completion coordination MUST remain process-local and MUST NOT be written to an
   autostart environment snapshot or inherited by a managed worker. A completion-only Java invocation
   MUST load only the connected board manifest and MUST NOT run prerequisites, prompts, Trello or
   Codex operations, worker starts, health/network checks, or file writes
 - the local CLI invoked through the managed-run wrapper MUST provide status, logs, start, and stop
   commands through Java lifecycle services
+- the guided `tutorial` command MUST create only one clearly named temporary Trello board with the
+  recommended lists for the selected path and one sample card on it. It MUST NOT change connected
+  boards, workflow files, the connected-board manifest, credentials, or repositories, and MUST NOT
+  start a worker, run Codex, or create a pull request. It plays Symphony's part itself: it moves the
+  sample card and writes a `## Codex Workpad` comment that says it is a tutorial demo
+- the tutorial MUST cover `Ready for Codex`, dispatch to `In Progress`, the workpad, `Human Review`,
+  rework through a new Trello comment plus a move back to `Ready for Codex`, the default of one card
+  per board with `agent.max_concurrent_agents`, and the terminal `Done` list. The GitHub path MUST
+  also cover the pull request line in the workpad, review on the pull request or the Trello card,
+  and `Merging` with resolving addressed review threads where possible. The non-GitHub path MUST
+  explain what GitHub integration adds, that setup adds `Merging` only when that integration is
+  configured, and print `setup-local configure-github`. `--github` and `--no-github` select the path;
+  otherwise the GitHub path runs when a connected board uses GitHub integration, and the setup offer
+  uses the integration of the board setup just connected
+- the tutorial MUST verify each user action through Trello API state. It MUST check at a bounded,
+  gentle interval for a bounded window, then check only on request, and MUST let the user check now,
+  have the tutorial perform the step, or stop. A wrong state MUST print the observed state, the
+  expected list, card, or comment state, and the board URL
+- the tutorial MUST end by asking `Archive the temporary tutorial board now? [Y/n]`, where a blank
+  answer or end of input archives. `--no-cleanup` keeps the board without asking. Unless
+  `--no-cleanup` is set, the tutorial MUST also archive the board after a failure and when the
+  process is interrupted, for example by Ctrl+C. It MUST archive at most once and only the board it
+  created in that run
 - on Linux hosts with user systemd, setup SHOULD register an installer-managed user service that
   starts connected boards with `start --all` on login or reboot when the host allows user lingering
 - on macOS hosts, setup SHOULD register an installer-managed per-user LaunchAgent that starts
