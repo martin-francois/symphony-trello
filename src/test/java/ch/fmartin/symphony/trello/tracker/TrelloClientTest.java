@@ -44,6 +44,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 final class TrelloClientTest {
     private static final String TRELLO_CARD_URL_PREFIX = "https://trello.com/c/";
+    private static final String SYMPHONY_FOOTER = "\n\n_Managed by Symphony_";
 
     private FakeTrelloServer trello;
     private final AtomicReference<String> authorization = new AtomicReference<>();
@@ -843,20 +844,59 @@ final class TrelloClientTest {
                 .startsWith("POST /1/cards/waiting-card/actions/comments?")
                 .contains("Symphony+Prerequisite+Status")
                 .contains("Status%3A+waiting+for+prerequisites"));
+        assertThat(queryValue(writeRequests.getFirst(), "text"))
+                .isEqualTo(withFooter(waitingTextForPrerequisite("TRELLO-PREREQ01", "Todo")));
     }
 
-    @Test
-    void fetchCandidateCardsLeavesCurrentPrerequisiteWaitingCommentUnchanged() throws Exception {
+    @MethodSource("currentWaitingStatuses")
+    @ParameterizedTest(name = "{0}")
+    void fetchCandidateCardsLeavesCurrentPrerequisiteWaitingCommentUnchanged(String scenario, String existingText)
+            throws Exception {
         // given
         configureDependencyBoard("Todo");
-        configureWaitingCardWithManagedComment(waitingTextForPrerequisite("TRELLO-PREREQ01", "Todo"));
+        configureWaitingCardWithManagedComment(existingText);
 
         // when
         List<Card> cards = fetchDependencyCandidates();
 
         // then
         assertWaitingBlockedWithoutProblems(cards);
-        assertThat(writeRequests).isEmpty();
+        assertThat(writeRequests)
+                .as("%s: an unchanged status is not rewritten only to add the footer", scenario)
+                .isEmpty();
+    }
+
+    private static Stream<Arguments> currentWaitingStatuses() {
+        String waitingText = waitingTextForPrerequisite("TRELLO-PREREQ01", "Todo");
+        return Stream.of(
+                Arguments.of("legacy status without footer", waitingText),
+                Arguments.of("status with footer", withFooter(waitingText)));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(
+            strings = {
+                "Ready for review" + SYMPHONY_FOOTER,
+                " ## Symphony Prerequisite Status\n\nStatus: waiting for prerequisites." + SYMPHONY_FOOTER,
+                "Symphony Prerequisite Status" + SYMPHONY_FOOTER
+            })
+    void prerequisiteSyncNeverUpdatesFooteredCommentsOutsideItsFamily(String otherComment) throws Exception {
+        // given
+        configureDependencyBoard("Todo");
+        configureWaitingCardWithManagedComment(otherComment);
+        trello.on("/1/actions/waiting-comment/text", exchange -> {
+            writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            respond(exchange, "{\"id\":\"waiting-comment\"}");
+        });
+
+        // when
+        List<Card> cards = fetchDependencyCandidates();
+
+        // then
+        assertWaitingBlockedWithoutProblems(cards);
+        assertThat(writeRequests).singleElement().satisfies(request -> assertThat(request)
+                .as("a separate managed status is created and the other comment stays unchanged")
+                .startsWith("POST /1/cards/waiting-card/actions/comments?"));
     }
 
     @Test
@@ -1020,9 +1060,8 @@ final class TrelloClientTest {
         assertThat(writeRequests).singleElement().satisfies(request -> assertThat(request)
                 .startsWith("PUT /1/actions/waiting-comment/text?"));
         assertThat(queryValue(writeRequests.getFirst(), "value"))
-                .startsWith(TrelloClient.PREREQUISITE_STATUS_COMMENT_MARKER)
-                .contains("Status: waiting for prerequisites")
-                .contains("TRELLO-PREREQ01");
+                .as("a legacy status gains the footer when its owning sync changes it")
+                .isEqualTo(withFooter(waitingTextForPrerequisite("TRELLO-PREREQ01", "Todo")));
         assertThat(writeRequests).noneMatch(request -> request.startsWith("POST /1/cards/waiting-card"));
     }
 
@@ -1659,6 +1698,10 @@ final class TrelloClientTest {
                 "- " + identifier + " (" + state + ")",
                 "",
                 "Fix by making prerequisite checklist items exactly one bare Trello card reference each, moving notes to a separate checklist, or writing non-prerequisite Trello references as Markdown links.");
+    }
+
+    private static String withFooter(String body) {
+        return body + SYMPHONY_FOOTER;
     }
 
     private static String cardUrl(String shortLink) {

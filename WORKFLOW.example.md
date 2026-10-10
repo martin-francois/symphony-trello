@@ -91,6 +91,14 @@ Maintain one Trello workpad comment by calling trello_upsert_workpad. Reuse the 
 with `## Codex Workpad`; do not create separate progress comments. Keep it current with the plan,
 acceptance criteria, progress, validation evidence, blockers, and handoff notes.
 
+## Comment Attribution
+
+Every Trello comment Symphony writes ends with a `Managed by Symphony` footer, including comments
+from trello_add_comment, trello_upsert_workpad, and trello_update_blocker_recheck_status. Do not
+type the footer yourself; Symphony adds it once and replaces a copied one. The footer only tells
+board users who wrote the comment. It does not turn a comment into a workpad or managed status, and
+a comment written by a person stays ordinary even when it repeats similar words.
+
 ## Stale Blocker Recheck
 
 The rendered prompt contains only recent Trello comments, so do not use it to decide whether a stale
@@ -99,7 +107,9 @@ blocker exists. Before changing code, always call trello_update_blocker_recheck_
 comment after ignoring the `## Codex Workpad` and Symphony-managed prerequisite comments. A
 Symphony-managed recheck status ends with the exact `Managed by Symphony` footer and a link to the
 qualifying blocker comment on the current card. Similar visible text, or a link to another card,
-remains an ordinary comment. Do not scan past a newer ordinary human comment to find an older blocker.
+remains an ordinary comment. A blocker handoff added through trello_add_comment ends with the plain
+footer and still counts as an ordinary comment for this check. Do not scan past a newer ordinary
+human comment to find an older blocker.
 The comment qualifies only when its first non-blank line starts with `Blocked:` or `Blocked by ...`,
 matched without case sensitivity; a human discussion that merely contains the word `blocked` does
 not qualify.

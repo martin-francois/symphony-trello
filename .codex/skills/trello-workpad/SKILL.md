@@ -41,6 +41,9 @@ Use the scoped Trello tool when it is available:
 ```
 
 Symphony scopes the tool to the current card. Do not include a card id.
+Symphony ends the workpad with a `Managed by Symphony` footer. Do not type the
+footer yourself; when you echo the previous workpad back, Symphony replaces the
+copied footer so the comment keeps exactly one.
 
 Update the workpad:
 

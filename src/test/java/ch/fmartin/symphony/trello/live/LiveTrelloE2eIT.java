@@ -9,6 +9,7 @@ import ch.fmartin.symphony.trello.setup.TrelloBoardSetup;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.ImportBoardRequest;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.NewBoardRequest;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
+import ch.fmartin.symphony.trello.tracker.SymphonyCommentFooter;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -187,11 +188,17 @@ final class LiveTrelloE2eIT {
                     boardALists.get(TrelloBoardSetup.RECOMMENDED_ACTIVE_STATE),
                     runId + " imported generated board",
                     "Disposable live E2E card for an imported generated board workflow.");
+            String humanComment = "Human note for " + runId + ": keep this comment exactly as written.";
+            trello.addComment(importedCard.id(), humanComment);
             try (SymphonyProcess importedProcess = startProcess(runDir, importedAWorkflow, freePort())) {
                 waitForStateEndpoint(importedProcess);
                 refresh(importedProcess);
 
-                waitForHandoff(trello, importedCard, boardALists.get(TrelloBoardSetup.RECOMMENDED_REVIEW_STATE));
+                waitForHandoff(
+                        trello,
+                        importedCard,
+                        boardALists.get(TrelloBoardSetup.RECOMMENDED_REVIEW_STATE),
+                        List.of(humanComment));
                 waitForSuccessfulFakeCodexTurns(completions, 6);
                 assertStateDrained(importedProcess);
                 assertSuccessfulFakeCodexTurns(completions, 6);
@@ -604,15 +611,37 @@ final class LiveTrelloE2eIT {
     }
 
     private void waitForHandoff(LiveTrelloClient trello, CardRef card, String expectedListId) {
+        waitForHandoff(trello, card, expectedListId, List.of());
+    }
+
+    private void waitForHandoff(
+            LiveTrelloClient trello, CardRef card, String expectedListId, List<String> humanComments) {
         waitUntil(
                 HANDOFF_TIMEOUT,
                 () -> {
                     CardState state = trello.cardState(card.id());
-                    return state.commentCount() >= 2
+                    return state.commentCount() >= 2 + humanComments.size()
                             && state.workpadCount() == 1
                             && expectedListId.equals(state.listId());
                 },
                 "card reaches expected handoff list with one workpad and one handoff comment");
+        assertCommentAttribution(trello.cardState(card.id()).commentTexts(), humanComments);
+    }
+
+    /// Every comment Symphony wrote carries one attribution footer, and comments a person wrote
+    /// before the run come back byte for byte without one.
+    private static void assertCommentAttribution(List<String> commentTexts, List<String> humanComments) {
+        assertThat(commentTexts)
+                .as("human comments stay unchanged")
+                .containsAll(humanComments)
+                .filteredOn(text -> !humanComments.contains(text))
+                .as("Symphony comments end with exactly one Managed by Symphony footer")
+                .isNotEmpty()
+                .allSatisfy(text -> {
+                    assertThat(text).containsOnlyOnce(SymphonyCommentFooter.ATTRIBUTION);
+                    assertThat(SymphonyCommentFooter.parse(text)).isPresent();
+                });
+        assertThat(humanComments).noneSatisfy(text -> assertThat(text).contains(SymphonyCommentFooter.ATTRIBUTION));
     }
 
     private void waitForCardAbove(LiveTrelloClient trello, String listId, CardRef higherCard, CardRef lowerCard) {
@@ -848,21 +877,31 @@ final class LiveTrelloE2eIT {
                             Integer.toString(TrelloClient.RECENT_COMMENT_ACTION_LIMIT)));
             Object actions = card.get("actions");
             List<?> comments = actions instanceof List<?> values ? values : List.of();
-            long workpadCount =
-                    comments.stream().filter(LiveTrelloClient::isWorkpadComment).count();
-            return new CardState(requiredText(card, "idList"), comments.size(), workpadCount);
+            List<String> commentTexts = new ArrayList<>();
+            long workpadCount = 0;
+            for (Object comment : comments) {
+                String text = commentText(comment);
+                commentTexts.add(text);
+                if (text.startsWith(TrelloClient.WORKPAD_MARKER)) {
+                    workpadCount++;
+                }
+            }
+            return new CardState(requiredText(card, "idList"), comments.size(), workpadCount, commentTexts);
         }
 
-        private static boolean isWorkpadComment(Object action) {
+        void addComment(String cardId, String text) {
+            postMap("cards/" + encodeSegment(cardId) + "/actions/comments", Map.of("text", text));
+        }
+
+        private static String commentText(Object action) {
             if (!(action instanceof Map<?, ?> actionMap)) {
-                return false;
+                return "";
             }
             Object data = actionMap.get("data");
             if (!(data instanceof Map<?, ?> dataMap)) {
-                return false;
+                return "";
             }
-            Object text = dataMap.get("text");
-            return text != null && text.toString().startsWith("## Codex Workpad");
+            return Objects.toString(dataMap.get("text"), "");
         }
 
         void archiveBoard(String boardId) {
@@ -1022,5 +1061,9 @@ final class LiveTrelloE2eIT {
 
     private record CardRef(String id) {}
 
-    private record CardState(String listId, int commentCount, long workpadCount) {}
+    private record CardState(String listId, int commentCount, long workpadCount, List<String> commentTexts) {
+        private CardState {
+            commentTexts = List.copyOf(commentTexts);
+        }
+    }
 }
