@@ -1,11 +1,14 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.testsupport.WindowsShimFixtures.NPM_PATHEXT;
+import static ch.fmartin.symphony.trello.testsupport.WindowsShimFixtures.WINDOWS_OS_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.CodexModelDefaults;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -365,6 +368,54 @@ final class CodexModelDefaultsResolverTest {
 
         // then
         assertThat(defaults).isEqualTo(CodexModelDefaults.unsupportedFirstClassFields());
+    }
+
+    @Test
+    void startsNpmCodexShimThroughTheCommandInterpreterOnWindows() throws Exception {
+        // given
+        Path npmPrefix = Files.createDirectories(tempDir.resolve("npm"));
+        Path codexShim = Files.writeString(npmPrefix.resolve("codex.CMD"), "");
+        Path interpreterArguments = tempDir.resolve("interpreter-arguments.txt");
+        Path commandInterpreter = tempDir.resolve("cmd.exe");
+        Files.writeString(
+                commandInterpreter,
+                """
+                #!/bin/bash
+                printf '%s\n' "$@" > "$CAPTURE"
+                while IFS= read -r line; do
+                  case "$line" in
+                    *'"method":"initialize"'*)
+                      printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{}}'
+                      ;;
+                    *'"method":"model/list"'*)
+                      printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"data":[{"model":"gpt-5.5","defaultReasoningEffort":"medium","isDefault":true}]}}'
+                      ;;
+                  esac
+                done
+                """);
+        commandInterpreter.toFile().setExecutable(true);
+
+        // when
+        CodexModelDefaults defaults = new CodexModelDefaultsResolver(
+                        json,
+                        List.of("codex", "app-server"),
+                        Map.of(
+                                "PATH",
+                                npmPrefix.toString(),
+                                "PATHEXT",
+                                NPM_PATHEXT,
+                                "ComSpec",
+                                commandInterpreter.toString(),
+                                "CAPTURE",
+                                interpreterArguments.toString()),
+                        Duration.ofSeconds(5),
+                        WINDOWS_OS_NAME)
+                .resolve();
+
+        // then
+        assertThat(defaults).isEqualTo(new CodexModelDefaults("gpt-5.5", "medium"));
+        assertThat(Files.readAllLines(interpreterArguments))
+                .containsExactly("/d", "/s", "/c", "\"\"" + codexShim + "\" \"app-server\"\"");
     }
 
     @Test
