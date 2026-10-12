@@ -35,7 +35,7 @@ requirements.
   build of the pinned tag's lineage pushed at least seven days ago as a release named after that
   tag. Renovate then replaces only the digest. A new build passes the cooldown every day, so a
   package rule scoped to these datasources limits their pull requests to the `lockFileMaintenance`
-  window, Friday `* 0-4 * * 5`. The script test `Renovate offers each OSS-Fuzz base
+  window, Friday `* * * * 5`. The script test `Renovate offers each OSS-Fuzz base
   image's newest v1 build past the cooldown` asserts this; see
   [ADR 0126](../adr/0126-offer-the-newest-oss-fuzz-build-past-the-cooldown.md).
 - BetterLeaks image updates automerge like other non-major updates, gated by the required check
@@ -62,7 +62,7 @@ requirements.
   seven days expressed in minutes, and pnpm refuses at resolution time to select a version younger
   than that cutoff. The script test `The lockfile refresh path enforces the same seven-day cooldown`
   derives the pnpm value from `renovate.json` and fails if the two ever disagree.
-- Keep `lockFileMaintenance` enabled on a weekly off-hours schedule with automatic merge. Renovate
+- Keep `lockFileMaintenance` enabled on a weekly Friday schedule with automatic merge. Renovate
   and `vulnerabilityAlerts` reach only the declarations a manifest names, so an advisory against a
   package that exists only inside a lockfile stays open until that lockfile is regenerated. The
   refresh is its own pull request and merges only after required checks pass, and the package

@@ -1447,8 +1447,9 @@ test("Renovate refreshes lockfiles on a schedule so transitive advisories are fi
   assert.equal(RENOVATE_CONFIG.lockFileMaintenance?.enabled, true);
 
   // Renovate's own default window for this rule is Monday before 04:00. The repository moves it
-  // to Friday between 00:00 and 04:59, which is when scheduled dependency work happens here.
-  assert.deepEqual(RENOVATE_CONFIG.lockFileMaintenance?.schedule, ["* 0-4 * * 5"]);
+  // to all of Friday, which is when scheduled dependency work happens here. A window of a few
+  // hours is too short, because the hosted Renovate app often does not run inside it.
+  assert.deepEqual(RENOVATE_CONFIG.lockFileMaintenance?.schedule, ["* * * * 5"]);
 
   // A refresh that no one merges leaves the advisories open, which is the state this rule
   // exists to end. Required status checks still gate the merge, so a refresh that breaks a

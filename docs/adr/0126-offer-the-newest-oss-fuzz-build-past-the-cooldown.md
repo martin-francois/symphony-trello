@@ -119,8 +119,8 @@ pending forever.
 
 A new `v1` build passes the seven days every day, so Renovate would open an automerged digest pull
 request for each image every day. A second package rule, scoped to the two datasources, gives them
-the `lockFileMaintenance` window, `schedule: ["* 0-4 * * 5"]` (Friday between 00:00 and 04:59 in
-the bot's timezone), which the maintainer's other repositories also use for dependency work. This
+the `lockFileMaintenance` window, `schedule: ["* * * * 5"]` (Friday, 00:00 to 23:59 UTC), which the
+maintainer's other repositories also use for dependency work. This
 is the one exception to this repository's rule that ordinary updates have no weekly schedule
 ([ADR 0076](0076-separate-major-updates-from-the-automergeable-bundle.md)). The rule only decides
 when Renovate opens the pull request. The seven-day wait and automerge apply as to any digest

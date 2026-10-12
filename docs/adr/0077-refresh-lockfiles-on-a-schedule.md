@@ -74,11 +74,15 @@ the seven-day release age in the package manager", because it is the only option
 transitive pins current without a maintainer having to notice that they are not, and the only one
 that does so without suspending the release-age rule on the refresh path.
 
-The rule sets `schedule: ["* 0-4 * * 5"]`, which restricts the refresh to Friday between 00:00 and
-04:59 in the bot's timezone. Renovate's own default window for this rule is Monday before 04:00.
-Friday is chosen instead because it is when scheduled dependency work happens in this repository;
-the off-hours part of the window is kept because a refresh that lands overnight does not compete for
-CI capacity with a working maintainer.
+The rule sets `schedule: ["* * * * 5"]`, which restricts the refresh to Friday, 00:00 to 23:59 UTC;
+the configuration sets no `timezone`. Renovate's own default window for this rule is Monday before
+04:00. Friday is chosen instead because it is when scheduled dependency work happens in this
+repository. Until 2026-10-12 the rule used `* 0-4 * * 5`, Friday 00:00 to 04:59, so that a refresh
+landing overnight would not compete for CI capacity with a working maintainer. The hosted Renovate
+app often did not run at all inside those five hours on a quiet repository, and every missed window
+delayed the refresh by a week. On that date the maintainer widened the window to the whole day
+here and in the other repositories that used it. Actions minutes are unlimited for a public
+repository, so a daytime refresh takes no capacity that matters.
 
 The rule sets `automerge: true`, matching the non-major bundle policy in
 [ADR 0076](0076-separate-major-updates-from-the-automergeable-bundle.md). Automatic merge still
@@ -154,7 +158,7 @@ value of the rule is that it is in place before the first transitive advisory, n
 This decision remains implemented when:
 
 * `lockFileMaintenance.enabled` is `true`;
-* `lockFileMaintenance.schedule` restricts the refresh to a weekly off-hours window;
+* `lockFileMaintenance.schedule` restricts the refresh to one day a week, Friday;
 * `lockFileMaintenance.automerge` is `true`;
 * `vulnerabilityAlerts.enabled` is `true`, since the two rules cover different halves of the
   dependency graph and neither substitutes for the other;

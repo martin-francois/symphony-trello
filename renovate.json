@@ -40,10 +40,10 @@
     "groupSlug": null
   },
   "lockFileMaintenance": {
-    "description": "Refresh the committed lockfiles on a schedule so transitive advisories get fixed. Renovate only proposes updates for the direct declarations it manages, so a vulnerable package that no manifest names is never reached by an ordinary update or by a vulnerability alert, and its advisory stays open until the lockfile is regenerated. The Friday early-morning window matches the maintainer's preference for scheduled dependency work, and automerge matches the non-major automerge policy: required status checks still gate the merge, so a refresh that breaks a check stays open for review.",
+    "description": "Refresh the committed lockfiles on a schedule so transitive advisories get fixed. Renovate only proposes updates for the direct declarations it manages, so a vulnerable package that no manifest names is never reached by an ordinary update or by a vulnerability alert, and its advisory stays open until the lockfile is regenerated. All of Friday, in UTC, matches the maintainer's preference for scheduled dependency work. A window of a few early-morning hours was too short: the hosted Renovate app often did not run inside it, and the refresh then slipped a week. Automerge matches the non-major automerge policy: required status checks still gate the merge, so a refresh that breaks a check stays open for review.",
     "enabled": true,
     "schedule": [
-      "* 0-4 * * 5"
+      "* * * * 5"
     ],
     "automerge": true
   },
@@ -292,13 +292,13 @@
       "enabled": false
     },
     {
-      "description": "A new OSS-Fuzz v1 build turns seven days old every day, so without a window each of these two images would get an automerged digest pull request every day. They use the Friday early-morning window of lockFileMaintenance instead, one pull request per image per week. The seven-day wait and automerge apply as to every digest update. See ADR 0126.",
+      "description": "A new OSS-Fuzz v1 build turns seven days old every day, so without a window each of these two images would get an automerged digest pull request every day. They use the Friday window of lockFileMaintenance instead, one pull request per image per week. The seven-day wait and automerge apply as to every digest update. See ADR 0126.",
       "matchDatasources": [
         "custom.oss-fuzz-base-builder-jvm",
         "custom.oss-fuzz-clusterfuzzlite-run-fuzzers"
       ],
       "schedule": [
-        "* 0-4 * * 5"
+        "* * * * 5"
       ]
     }
   ]
