@@ -13,4 +13,5 @@
 
 set -euo pipefail
 
-exec bash "$SRC/symphony-trello/oss-fuzz/build.sh"
+bash "$SRC/symphony-trello/oss-fuzz/build.sh"
+"$SRC/symphony-trello/.clusterfuzzlite/check-unsafe-memory-access-workaround"

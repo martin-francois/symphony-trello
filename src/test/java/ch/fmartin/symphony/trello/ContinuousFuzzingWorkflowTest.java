@@ -19,6 +19,9 @@ final class ContinuousFuzzingWorkflowTest {
     private static final Path WORKFLOW = of(".github/workflows/continuous-fuzzing.yml");
     private static final Path WATCHDOG = of(".github/workflows/continuous-fuzzing-watchdog.yml");
     private static final Path WATCHDOG_MONITOR = of("scripts/monitor-clusterfuzzlite-running");
+    private static final Path OSS_FUZZ_BUILD = of("oss-fuzz/build.sh");
+    private static final String UNSAFE_WORKAROUND_EXPIRY_CHECK =
+            ".clusterfuzzlite/check-unsafe-memory-access-workaround";
     private static final String CLUSTERFUZZLITE_COMMIT = "884713a6c30a92e5e8544c39945cd7cb630abcd1";
     private static final Pattern UNPINNED_ACTION = Pattern.compile("uses: [^\\s]+@(?![0-9a-f]{40}(?:\\s|$))");
     private static final Pattern PINNED_TEMURIN_IMAGE =
@@ -327,11 +330,36 @@ final class ContinuousFuzzingWorkflowTest {
                 .containsPattern(PINNED_TEMURIN_IMAGE)
                 .contains("COPY --from=jdk /opt/java/openjdk/ \"$JAVA_HOME/\"")
                 .doesNotContain("api.adoptium.net/v3/binary/latest");
-        assertThat(buildScript).contains("exec bash \"$SRC/symphony-trello/oss-fuzz/build.sh\"");
-        assertThat(of("oss-fuzz/build.sh"))
+        assertThat(buildScript).contains("bash \"$SRC/symphony-trello/oss-fuzz/build.sh\"");
+        assertThat(OSS_FUZZ_BUILD)
                 .content(StandardCharsets.UTF_8)
                 .contains("TestRepositoryUris*.class", "ch/fmartin/symphony/trello/testsupport");
         assertThat(project).contains("language: jvm");
+    }
+
+    @Test
+    void fuzzerJvmGrantsJazzerNativeAccessAndChecksTheUnsafeWorkaroundForExpiry() throws IOException {
+        // given
+        String ossFuzzBuild = Files.readString(OSS_FUZZ_BUILD);
+        String clusterFuzzLiteBuild = Files.readString(of(".clusterfuzzlite/build.sh"));
+
+        // when
+        String expiryCheck = Files.readString(of(UNSAFE_WORKAROUND_EXPIRY_CHECK));
+
+        // then
+        assertThat(ossFuzzBuild)
+                .contains(
+                        "jvm_permissions='--enable-native-access=ALL-UNNAMED:-Xshare\\\\:off'",
+                        "--sun-misc-unsafe-memory-access=\\${SYMPHONY_TRELLO_FUZZ_UNSAFE_MEMORY_ACCESS:-allow}",
+                        "--jvm_args=\"\\$mem_settings:-Djava.awt.headless=true:\\$jvm_permissions:\\$unsafe_memory_access\"");
+        assertThat(clusterFuzzLiteBuild)
+                .as("the Unsafe workaround (#913) runs only together with its expiry check")
+                .contains("bash \"$SRC/symphony-trello/oss-fuzz/build.sh\"\n" + "\"$SRC/symphony-trello/"
+                        + UNSAFE_WORKAROUND_EXPIRY_CHECK + "\"\n");
+        assertThat(expiryCheck)
+                .contains(
+                        "SYMPHONY_TRELLO_FUZZ_UNSAFE_MEMORY_ACCESS=warn",
+                        "WARNING: A terminally deprecated method in sun.misc.Unsafe has been called");
     }
 
     @Test

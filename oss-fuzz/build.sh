@@ -117,6 +117,13 @@ if [[ " \$* " =~ " -runs=" ]]; then
 else
   mem_settings='-Xmx2048m:-Xss1024k'
 fi
+# Jazzer loads its JNI library from the class path, so grant native access (ADR 0007). Jazzer also
+# appends its runtime to the boot class path, where CDS can share only part of the classes and warns
+# about it, so CDS is off. Jazzer splits --jvm_args on ':', hence the escaped one in -Xshare:off.
+# Workaround: allow sun.misc.Unsafe memory access only to silence the JDK warning Jazzer's runtime
+# triggers. Remove it once .clusterfuzzlite/check-unsafe-memory-access-workaround fails (#913).
+jvm_permissions='--enable-native-access=ALL-UNNAMED:-Xshare\\:off'
+unsafe_memory_access="--sun-misc-unsafe-memory-access=\${SYMPHONY_TRELLO_FUZZ_UNSAFE_MEMORY_ACCESS:-allow}"
 JAVA_HOME="\$runtime_java_home" \\
 PATH="\$runtime_java_home/bin:\$PATH" \\
 LD_LIBRARY_PATH="\$runtime_ld_library_path" \\
@@ -124,7 +131,7 @@ LD_LIBRARY_PATH="\$runtime_ld_library_path" \\
   --agent_path="\$this_dir/jazzer_agent_deploy.jar" \\
   --cp="\$runtime_classpath" \\
   --target_class="$target_class" \\
-  --jvm_args="\$mem_settings:-Djava.awt.headless=true" \\
+  --jvm_args="\$mem_settings:-Djava.awt.headless=true:\$jvm_permissions:\$unsafe_memory_access" \\
   "\$@"
 EOF
   chmod +x "$OUT/$fuzzer_name"
