@@ -214,6 +214,7 @@
       "automerge": true
     },
     {
+      "description": "One pull request for the whole toolchain, because the OpenRewrite Renovate automation accepts only the renovate/openrewrite-toolchain branch and runs the ordered OpenRewrite and Spotless pipeline over the combined update. Error Prone Core moves with the Picnic annotation processor and Refaster runner because Picnic's serialized Refaster templates require the Error Prone version used to produce them. See ADR 0071.",
       "matchDatasources": [
         "maven"
       ],
