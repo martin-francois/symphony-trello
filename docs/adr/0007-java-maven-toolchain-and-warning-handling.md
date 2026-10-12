@@ -56,6 +56,15 @@ Generated Automatic Dependency Submission is disabled in repository settings. De
   library instead of leaving Java 25 warnings unresolved.
 * Good, because `maven-dependency-plugin:properties` resolves the Mockito jar path without a
   brittle local repository expression.
+* Good, because the OSS-Fuzz and ClusterFuzzLite wrappers that `oss-fuzz/build.sh` generates apply the
+  same rules to the fuzzing JVM: `--enable-native-access=ALL-UNNAMED` for Jazzer's JNI library and
+  `-Xshare:off`, because Jazzer appends its runtime to the boot class path and CDS then warns that it
+  can share only boot loader classes. Turning CDS off cost about 30 ms of a two-second fuzzer start.
+* Neutral, because the fuzzing JVM also gets `--sun-misc-unsafe-memory-access=allow`, which only
+  silences the warning that Jazzer's own runtime triggers through `sun.misc.Unsafe` memory access.
+  It is a workaround with an expiry check: `.clusterfuzzlite/check-unsafe-memory-access-workaround`
+  fails once the OSS-Fuzz base image's Jazzer no longer triggers the warning. Issue
+  [#913](https://github.com/martin-francois/symphony-trello/issues/913) tracks the removal.
 * Bad, because the build has additional Surefire and dependency-plugin configuration.
 
 ### Confirmation

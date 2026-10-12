@@ -205,6 +205,16 @@ the generated wrappers launch OSS-Fuzz's `jazzer_driver`, pass OSS-Fuzz's
 `jazzer_agent_deploy.jar` through `--agent_path`, and use only project classes, standalone fuzzer
 classes, OSS-Fuzz's agent jar, and the curated runtime dependency jars on the wrapper classpath.
 
+The wrappers start the fuzzing JVM with three options beyond memory settings:
+`--enable-native-access=ALL-UNNAMED` because Jazzer loads its JNI library from the class path,
+`-Xshare:off` because Jazzer appends its runtime to the boot class path, where CDS can share only part
+of the classes and warns about it, and `--sun-misc-unsafe-memory-access=allow`. The last one is a
+workaround that only silences the JDK warning Jazzer's own runtime triggers through
+`sun.misc.Unsafe`. `.clusterfuzzlite/build.sh` runs `.clusterfuzzlite/check-unsafe-memory-access-workaround`
+after packaging; it runs one fuzzer with the warning on and fails the ClusterFuzzLite build once the
+OSS-Fuzz base image's Jazzer no longer triggers it. Issue
+[#913](https://github.com/martin-francois/symphony-trello/issues/913) tracks the removal steps.
+
 The Dockerfile is written for the upstream OSS-Fuzz project context, where `Dockerfile` and
 `build.sh` are copied into `google/oss-fuzz/projects/symphony-trello/`. It clones this repository and
 installs a Java 25 JDK before compiling the Maven project. A direct Docker build is only a quick
