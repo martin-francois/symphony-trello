@@ -69,6 +69,7 @@ public final class WorkflowConfigIngestion {
         Map<String, Object> agent = object(root, "agent");
         Map<String, Object> codex = object(root, "codex");
         Map<String, Object> server = object(root, "server");
+        Map<String, Object> repository = object(root, "repository");
 
         WorkflowIntegerSetting serverPort = serverPort(server, environmentResolver, unresolvedEnvironmentPolicy);
         add(findings, serverPort);
@@ -96,6 +97,8 @@ public final class WorkflowConfigIngestion {
         WorkflowIntegerSetting codexTurnTimeoutMs = integerSetting(codex, "turn_timeout_ms", "turn_timeout_ms");
         WorkflowIntegerSetting codexReadTimeoutMs = integerSetting(codex, "read_timeout_ms", "read_timeout_ms");
         WorkflowIntegerSetting codexStallTimeoutMs = integerSetting(codex, "stall_timeout_ms", "stall_timeout_ms");
+        WorkflowIntegerSetting repositoryCodexReviewMaxCycles =
+                positiveIntegerSetting(repository, "codex_review_max_cycles", "repository.codex_review_max_cycles");
 
         add(
                 findings,
@@ -109,7 +112,8 @@ public final class WorkflowConfigIngestion {
                 agentMaxRetryBackoffMs,
                 codexTurnTimeoutMs,
                 codexReadTimeoutMs,
-                codexStallTimeoutMs);
+                codexStallTimeoutMs,
+                repositoryCodexReviewMaxCycles);
         return new TypedWorkflowConfig(
                 trackerRequestTimeoutMs,
                 trackerMaxApiRetries,
@@ -123,6 +127,7 @@ public final class WorkflowConfigIngestion {
                 codexReadTimeoutMs,
                 codexStallTimeoutMs,
                 serverPort,
+                repositoryCodexReviewMaxCycles,
                 priorityLabels,
                 maxConcurrentAgentsByState,
                 findings);

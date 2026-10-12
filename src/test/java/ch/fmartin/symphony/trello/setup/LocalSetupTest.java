@@ -6724,7 +6724,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 workflow,
                 Files.readString(workflow)
                         .replace("default_url: null", "default_url: " + REPOSITORY_URL_REFERENCE)
-                        .replace("default_path: null", "default_path: " + REPOSITORY_PATH_REFERENCE));
+                        .replace("default_path: null", "default_path: " + REPOSITORY_PATH_REFERENCE)
+                        .replace("codex_review_before_handoff: false", "codex_review_before_handoff: true")
+                        .replace("codex_review_max_cycles: 3", "codex_review_max_cycles: 5"));
         commands.githubAuthenticated = true;
         commands.startedWorkflows.clear();
         commands.startedEnvFiles.clear();
@@ -6742,7 +6744,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Object repository = new WorkflowLoader().load(workflow).config().get("repository");
         assertThat(repository).isInstanceOfSatisfying(Map.class, defaults -> assertThat(defaults)
                 .containsEntry("default_url", REPOSITORY_URL_REFERENCE)
-                .containsEntry("default_path", REPOSITORY_PATH_REFERENCE));
+                .containsEntry("default_path", REPOSITORY_PATH_REFERENCE)
+                .containsEntry("codex_review_before_handoff", true)
+                .containsEntry("codex_review_max_cycles", 5));
         assertThat(trello.createdLists()).containsExactly("Merging");
         assertThat(commands.stoppedWorkflows).containsExactly(workflow.toString());
         assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
