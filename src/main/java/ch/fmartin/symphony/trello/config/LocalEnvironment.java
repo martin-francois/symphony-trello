@@ -13,7 +13,7 @@ import java.util.Optional;
 
 public final class LocalEnvironment {
     private static final Path DEFAULT_DOTENV = Path.of(".env");
-    private static final String DOTENV_PATH_ENV = "SYMPHONY_TRELLO_DOTENV";
+    public static final String DOTENV_PATH_ENV = "SYMPHONY_TRELLO_DOTENV";
 
     private LocalEnvironment() {}
 

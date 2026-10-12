@@ -942,6 +942,50 @@ This Java implementation provides:
   shown in a `board_hash` or `key_hash` row, or a `<path:...>` token. It is valid only with
   `--show-private-context`. That output is for local troubleshooting only and MUST NOT be pasted into
   public issue reports.
+- `codex [--board NAME | --workflow PATH]`: opens the installed interactive Codex CLI for one
+  connected Trello board with board-scoped Trello tools, as described below.
+
+The Java implementation's `codex` command is an optional board-aware interactive Codex session
+extension. It is not part of runtime dispatch. If implemented this way, it MUST behave as follows:
+
+- `--board` MUST accept the same connected-board selectors as the lifecycle commands: board name
+  without regard to letter case, board id, short link, and a stored Trello board URL. `--workflow`
+  MUST select a connected workflow by its normalized path, and an unconnected workflow MUST fail
+  with an actionable error. `--board` and `--workflow` MUST be mutually exclusive.
+- Without a selector, the command MUST consider only connected-board rows whose workflow exists and
+  loads with the same workflow loading as `start`, and MUST print a reason for every skipped row.
+  Credential checks run after a board is chosen. Zero
+  eligible rows MUST fail with guidance to connect or repair a board. One eligible row MAY be used
+  directly. Several eligible rows MUST show a numbered picker that identifies each row by board
+  name, short link, and workflow file name when terminal input is available, and MUST fail with a
+  `--board` or `--workflow` hint otherwise. Cancelling the picker MUST exit without starting Codex
+  or contacting Trello.
+- Before contacting Trello, the command MUST check that Codex is installed and logged in and MUST
+  report failures without printing Codex auth paths or command output.
+- The command MUST resolve the selected workflow's Trello credentials with the same credential-file
+  and environment precedence and credential checks as `start`.
+- The command MUST start the installed `codex` executable with structured arguments, the caller's
+  standard input, output, and error streams, and the caller's working directory, and MUST exit with
+  the Codex exit status. It MUST NOT pass model, sandbox, approval, or full-access options, and a
+  connected board's worker Codex access settings MUST NOT apply to the session.
+- Board context MUST reach Codex before the first user request: the selected board name, the
+  workflow list roles, the default list for new cards when the workflow has exactly one queue list,
+  and the fact that no current card exists.
+- Trello access MUST go through Symphony-provided board tools served by a loopback MCP server inside
+  the Symphony process. The server MUST require a per-session bearer token that reaches Codex only
+  through the Codex child environment. Trello API keys and tokens MUST NOT appear in Codex
+  arguments, the Codex environment, the Codex context, tool results, standard output or error,
+  logs, or persistent configuration. The Codex child environment MUST NOT contain the default
+  Trello credential variables or the variables the workflow names as credential sources.
+- The board tools MUST resolve every card argument against the selected board and MUST refuse cards
+  from other boards. `trello_tools.enabled=false` MUST withhold every board tool,
+  `allow_writes=false` MUST leave only read tools, comment and checklist writes MUST honor their
+  allow flags, and moves MUST use the same move allowlist as `trello_move_current_card`. A card
+  creation request without a list name MUST use the workflow's single queue list or fail so the
+  user can choose. Archiving MUST require the card's exact current title as confirmation. The
+  session MUST NOT offer card deletion. Current-card tool names MUST NOT be reused.
+- When Codex exits or the command is interrupted, the command MUST stop Codex and close the board
+  tool server.
 
 During guided `setup-local` board creation or import, when `--max-agents` is omitted, the Java
 implementation prompts for the per-board concurrency value before writing the workflow. A blank
@@ -964,7 +1008,7 @@ later.
 
 The installed Bash and PowerShell wrappers dispatch `--help`, `-h`, `--version`, `setup-local`,
 `new-board`, `import-board`, `list-workspaces`, `start`, `stop`, `status`, `logs`, `diagnostics`,
-and unknown commands to this Java command boundary. The wrappers bootstrap paths, classpath, managed
+`codex`, and unknown commands to this Java command boundary. The wrappers bootstrap paths, classpath, managed
 Codex/npm paths, dotenv defaults, config/workspace/state locations, and caller directory context;
 Java owns managed worker process selection, PID/log files, health checks, start/stop/status/logs,
 diagnostics behavior, and usage errors. Unknown commands MUST fail through Java command usage
@@ -3666,6 +3710,12 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - CLI surfaces startup failure cleanly
 - CLI exits with success when application starts and shuts down normally
 - CLI exits nonzero when startup fails or the host process exits abnormally
+- Board-aware `codex` session, when implemented: selector forms, picker eligibility, non-interactive
+  rejection, cancellation, Codex install and login checks, credential precedence, structured Codex
+  arguments with an inherited terminal, exit-code propagation, credential absence from Codex
+  arguments, environment, tool results, and output, board-scoped tools that refuse foreign cards,
+  `trello_tools` enforcement, the archive confirmation, and cleanup after exit and interruption,
+  proven with a fake Codex executable and a synthetic Trello board
 
 ### 17.8 Trello Workflow Conformance
 

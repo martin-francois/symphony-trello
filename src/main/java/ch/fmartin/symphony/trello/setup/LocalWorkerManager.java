@@ -310,14 +310,14 @@ final class LocalWorkerManager {
         boolean workflowServerPortUsed = workflowServerPortUsed(envPath);
         EffectiveConfig launchConfig = workflowConfig.prepareLaunchWorkflow(
                 board.workflowPath(), workflowEnvironment, workflowServerPortUsed, paths.configDir());
-        credentialUsage.ifPresent(this::validateWorkerCredentials);
+        credentialUsage.ifPresent(usage -> validateWorkerCredentials(usage, CredentialUse.WORKER_START));
         workflowConfig.validateLaunchDispatch(board.workflowPath(), launchConfig);
 
         if (!restartManagedWorker) {
             rejectPortConflict(board, existingHealth, healthPort);
         }
 
-        verifyTrelloCredentialsBeforeLaunch(launchConfig, credentialUsage);
+        verifyTrelloCredentialsBeforeLaunch(launchConfig, credentialUsage, CredentialUse.WORKER_START);
         if (restartManagedWorker) {
             stopPid(store, files, existingPid);
             BoardHealth postStopHealth =
@@ -370,6 +370,24 @@ final class LocalWorkerManager {
                             + startupPrivateContextHint(paths, board, files));
         }
         out.println("Started Symphony for Trello: " + DisplayNames.quotedName(board.boardName()));
+    }
+
+    /// Resolves a connected workflow's launch configuration and checks the Trello credentials it
+    /// would use, with the same credential-file precedence, local validation, and Trello preflight
+    /// as `start`, but without starting or inspecting a managed worker.
+    EffectiveConfig resolveVerifiedWorkflowConfig(LocalWorkerPaths paths, ConnectedBoard board) {
+        Path envPath = paths.envPath(board).toAbsolutePath().normalize();
+        validateWorkerEnvPath(envPath);
+        Optional<WorkerCredentialUsage> credentialUsage = workerCredentialUsage(board.workflowPath(), envPath);
+        EffectiveConfig config = workflowConfig.prepareLaunchWorkflow(
+                board.workflowPath(),
+                WorkflowEnvironmentResolver.resolver(environment, envPath),
+                false,
+                paths.configDir());
+        credentialUsage.ifPresent(usage -> validateWorkerCredentials(usage, CredentialUse.BOARD_SESSION));
+        workflowConfig.validateLaunchDispatch(board.workflowPath(), config);
+        verifyTrelloCredentialsBeforeLaunch(config, credentialUsage, CredentialUse.BOARD_SESSION);
+        return config;
     }
 
     private boolean workflowServerPortUsed(Path envPath) {
@@ -544,7 +562,7 @@ final class LocalWorkerManager {
     }
 
     private void verifyTrelloCredentialsBeforeLaunch(
-            EffectiveConfig launchConfig, Optional<WorkerCredentialUsage> credentialUsage) {
+            EffectiveConfig launchConfig, Optional<WorkerCredentialUsage> credentialUsage, CredentialUse use) {
         try {
             credentialPreflight.verify(
                     URI.create(launchConfig.tracker().endpoint()),
@@ -561,7 +579,7 @@ final class LocalWorkerManager {
                 throw withCredentialContext(
                         new TrelloBoardSetupException(
                                 "trello_auth_failed",
-                                "Trello rejected the resolved API credentials while starting Symphony.",
+                                "Trello rejected the resolved API credentials " + use.activity() + ".",
                                 e),
                         credentialUsage);
             }
@@ -590,20 +608,22 @@ final class LocalWorkerManager {
                 .orElse(exception);
     }
 
-    private void validateWorkerCredentials(WorkerCredentialUsage usage) {
+    private void validateWorkerCredentials(WorkerCredentialUsage usage, CredentialUse use) {
         boolean hasApiKey = usage.apiKeySource() != TrelloBoardSetupException.TrelloCredentialSource.MISSING;
         boolean hasApiToken = usage.apiTokenSource() != TrelloBoardSetupException.TrelloCredentialSource.MISSING;
         if (!hasApiKey && !hasApiToken) {
             throw missingWorkerCredentialException(
-                    "setup_worker_missing_trello_credentials", "Missing Trello credentials for worker start.", usage);
+                    "setup_worker_missing_trello_credentials",
+                    "Missing Trello credentials for " + use.purpose() + ".",
+                    usage);
         }
         if (!hasApiKey) {
             throw missingWorkerCredentialException(
-                    "setup_worker_missing_api_key", "Missing Trello API key for worker start.", usage);
+                    "setup_worker_missing_api_key", "Missing Trello API key for " + use.purpose() + ".", usage);
         }
         if (!hasApiToken) {
             throw missingWorkerCredentialException(
-                    "setup_worker_missing_api_token", "Missing Trello API token for worker start.", usage);
+                    "setup_worker_missing_api_token", "Missing Trello API token for " + use.purpose() + ".", usage);
         }
         rejectReferenceLookingDotenvCredential(
                 usage.envPath(), usage.apiKeyEnvironment(), usage.apiKeySource(), usage.apiKeyDotenvValue());
@@ -733,6 +753,29 @@ final class LocalWorkerManager {
         static StartupLogOffsets capture(ManagedProcessStore.ManagedProcessFiles files) {
             return new StartupLogOffsets(
                     StartupLogSnapshot.snapshot(files.stdoutLog()), StartupLogSnapshot.snapshot(files.stderrLog()));
+        }
+    }
+
+    /// Names the operation in credential errors so a failed board session is not reported as a
+    /// failed worker start.
+    private enum CredentialUse {
+        WORKER_START("worker start", "while starting Symphony"),
+        BOARD_SESSION("the Codex board session", "while starting the Codex board session");
+
+        private final String purpose;
+        private final String activity;
+
+        CredentialUse(String purpose, String activity) {
+            this.purpose = purpose;
+            this.activity = activity;
+        }
+
+        String purpose() {
+            return purpose;
+        }
+
+        String activity() {
+            return activity;
         }
     }
 
@@ -1173,11 +1216,8 @@ final class LocalWorkerManager {
             Optional<Path> explicitWorkflowEnvPath,
             Path fallbackWorkflowEnvPath,
             boolean validateServerPort) {
-        if (board.isPresent() && workflow.isPresent()) {
-            throw new TrelloBoardSetupException(
-                    "setup_worker_selection_conflict", "--board and --workflow cannot be used together.");
-        }
-        return board.map(selector -> selectedBoard(manifest, selector))
+        ConnectedBoardSelection.rejectConflictingSelectors(board, workflow);
+        return board.map(selector -> ConnectedBoardSelection.byBoard(manifest, selector))
                 .or(() -> workflow.map(workflowSelector -> selectedWorkflow(
                         manifest,
                         workflowSelector,
@@ -1187,20 +1227,6 @@ final class LocalWorkerManager {
                 .orElseGet(() -> defaultSelectedBoard(manifest, command));
     }
 
-    private ConnectedBoard selectedBoard(ConnectedBoardManifest manifest, String selector) {
-        List<ConnectedBoard> matches = manifest.findAllByBoard(selector);
-        if (matches.isEmpty()) {
-            throw new TrelloBoardSetupException(
-                    "setup_worker_board_not_found", "No connected Trello board matches \"" + selector + "\".");
-        }
-        if (matches.size() > 1) {
-            throw new TrelloBoardSetupException(
-                    "setup_worker_board_ambiguous",
-                    "Multiple connected boards match --board. Re-run with a board id, short link, or --workflow.");
-        }
-        return matches.getFirst();
-    }
-
     private ConnectedBoard selectedWorkflow(
             ConnectedBoardManifest manifest,
             Path workflowSelector,
@@ -1208,16 +1234,9 @@ final class LocalWorkerManager {
             Path fallbackWorkflowEnvPath,
             boolean validateServerPort) {
         Path workflowPath = workflowSelector.toAbsolutePath().normalize();
-        List<ConnectedBoard> matches = manifest.findAllByWorkflow(workflowPath);
-        if (matches.size() > 1) {
-            throw new TrelloBoardSetupException(
-                    "setup_worker_workflow_ambiguous",
-                    "Multiple connected-board rows reference --workflow. Repair "
-                            + ConnectedBoardManifest.FILE_NAME
-                            + ", then rerun the command.");
-        }
         Path validationEnvPath = explicitWorkflowEnvPath.orElse(fallbackWorkflowEnvPath);
-        ConnectedBoard board = matches.isEmpty() ? workflowBoard(workflowPath, validationEnvPath) : matches.getFirst();
+        ConnectedBoard board = ConnectedBoardSelection.byWorkflow(manifest, workflowPath)
+                .orElseGet(() -> workflowBoard(workflowPath, validationEnvPath));
         validateExplicitWorkflowSelector(
                 workflowPath,
                 selectedWorkflowEnvPath(board, explicitWorkflowEnvPath, fallbackWorkflowEnvPath),

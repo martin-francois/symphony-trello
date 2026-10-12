@@ -40,6 +40,13 @@ final class WorkflowConfigEditor {
     private static final TypeReference<SequencedMap<String, Object>> YAML_MAP_TYPE = new TypeReference<>() {};
     private static final Pattern FRONT_MATTER =
             Pattern.compile("\\A---\\R(?<yaml>.*?)\\R---\\R(?<body>.*)\\z", Pattern.DOTALL);
+    /// Routing lines that TrelloBoardSetup writes into the "Trello List Routing" workflow section.
+    /// Names that needed escaping do not match and leave the role unknown.
+    private static final Pattern GENERATED_REVIEW_ROUTE =
+            Pattern.compile("(?m)^- \"(?<name>[^\"\\\\]+)\": human review\\.");
+    private static final Pattern GENERATED_QUEUE_ROUTE =
+            Pattern.compile("(?m)^- (?<names>\"[^\"\\\\]+\"(?:, \"[^\"\\\\]+\")*): queued work;");
+    private static final Pattern GENERATED_QUOTED_NAME = Pattern.compile("\"([^\"\\\\]+)\"");
     private static final Set<PosixFilePermission> POSIX_WRITE_PERMISSIONS =
             Set.of(PosixFilePermission.OWNER_WRITE, PosixFilePermission.GROUP_WRITE, PosixFilePermission.OTHERS_WRITE);
 
@@ -276,6 +283,19 @@ final class WorkflowConfigEditor {
                     invalidListSetting(tracker, "terminal_states"));
         } catch (IOException | RuntimeException ignored) {
             return WorkflowListConfiguration.empty();
+        }
+    }
+
+    /// Review and queue lists exist only in the routing text that setup generates into the workflow
+    /// body, so hand-written workflows report none.
+    GeneratedRoutingLists generatedRoutingLists(Path workflowPath) {
+        try {
+            String body = read(workflowPath).body();
+            return new GeneratedRoutingLists(reviewStateFromWorkflowBody(body), queueStatesFromWorkflowBody(body));
+        } catch (IOException | RuntimeException ignored) {
+            // A workflow that cannot be read has no generated routing text; launch validation reports
+            // the unreadable workflow itself.
+            return new GeneratedRoutingLists(Optional.empty(), List.of());
         }
     }
 
@@ -888,6 +908,23 @@ final class WorkflowConfigEditor {
         return matcher.find() ? Optional.of(matcher.group("name")) : Optional.empty();
     }
 
+    private static Optional<String> reviewStateFromWorkflowBody(String body) {
+        var matcher = GENERATED_REVIEW_ROUTE.matcher(body);
+        return matcher.find() ? Optional.of(matcher.group("name")) : Optional.empty();
+    }
+
+    private static List<String> queueStatesFromWorkflowBody(String body) {
+        var matcher = GENERATED_QUEUE_ROUTE.matcher(body);
+        if (!matcher.find()) {
+            return List.of();
+        }
+        return GENERATED_QUOTED_NAME
+                .matcher(matcher.group("names"))
+                .results()
+                .map(result -> result.group(1))
+                .toList();
+    }
+
     private static List<String> stringList(Object value) {
         if (!(value instanceof List<?> list)) {
             return List.of();
@@ -929,6 +966,12 @@ final class WorkflowConfigEditor {
     }
 
     record ReadWorkflow(String content, FrontMatter frontMatter) {}
+
+    record GeneratedRoutingLists(Optional<String> reviewList, List<String> queueLists) {
+        GeneratedRoutingLists {
+            queueLists = List.copyOf(queueLists);
+        }
+    }
 
     record TrackerCredentialReferences(Optional<String> apiKey, Optional<String> apiToken) {}
 }
