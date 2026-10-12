@@ -1611,7 +1611,7 @@ public final class LocalSetup {
             Path workflow = request.workflowPath().orElse(TrelloBoardSetup.DEFAULT_WORKFLOW_PATH);
             boolean workflowPathExplicit = request.workflowPath().isPresent();
             Path workspaceRoot = request.workspaceRoot().orElseGet(() -> defaultWorkspaceRoot(environment));
-            Path manifest = request.manifestPath().orElse(Path.of(ConnectedBoardManifest.FILE_NAME));
+            Path manifest = request.manifestPath().orElseGet(() -> Path.of(ConnectedBoardManifest.FILE_NAME));
             boolean manifestPathExplicit = request.manifestPath().isPresent();
             Path envPath = request.envPath().orElse(DEFAULT_ENV_PATH);
             List<Path> additionalWritableRoots = request.additionalWritableRoots().stream()

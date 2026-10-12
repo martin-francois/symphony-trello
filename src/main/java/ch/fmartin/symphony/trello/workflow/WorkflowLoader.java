@@ -55,7 +55,7 @@ public class WorkflowLoader {
         }
     }
 
-    private static void rejectNullTopLevelEntries(LinkedHashMap<String, Object> parsed) {
+    private static void rejectNullTopLevelEntries(Map<String, Object> parsed) {
         if (parsed.entrySet().stream().anyMatch(WorkflowLoader::hasNullKeyOrValue)) {
             throw new WorkflowException(
                     "workflow_parse_error", "Workflow front matter top-level keys and values must not be null");

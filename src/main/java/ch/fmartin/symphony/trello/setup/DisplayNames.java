@@ -1,7 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
-import static com.google.common.base.Strings.nullToEmpty;
-
+import com.google.common.base.Strings;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -13,7 +12,7 @@ final class DisplayNames {
     private DisplayNames() {}
 
     static String quotedName(String name) {
-        return "\"" + escape(nullToEmpty(name)) + "\"";
+        return "\"" + escape(Strings.nullToEmpty(name)) + "\"";
     }
 
     static String quotedList(List<String> names) {

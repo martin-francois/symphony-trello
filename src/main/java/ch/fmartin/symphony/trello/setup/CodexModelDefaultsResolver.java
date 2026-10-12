@@ -302,10 +302,13 @@ final class CodexModelDefaultsResolver {
     }
 
     private static final class AppServerResponseReader {
-        private static final Object END_OF_STREAM = new Object();
+        /// Queued after the last stdout line so a waiting reader can tell end of stream from a timeout.
+        private enum EndOfStream {
+            INSTANCE
+        }
 
         private final BlockingQueue<Object> lines = new LinkedBlockingQueue<>();
-        // Enqueuing END_OF_STREAM publishes the preceding failure assignment to the reader.
+        // Enqueuing EndOfStream.INSTANCE publishes the preceding failure assignment to the reader.
         private Throwable failure;
         private final BufferedReader reader;
 
@@ -320,7 +323,7 @@ final class CodexModelDefaultsResolver {
                 if (item == null) {
                     throw new IOException("Timed out waiting for Codex app-server response");
                 }
-                if (item == END_OF_STREAM) {
+                if (item instanceof EndOfStream) {
                     Throwable cause = failure;
                     if (cause instanceof IOException ioException) {
                         throw ioException;
@@ -347,7 +350,7 @@ final class CodexModelDefaultsResolver {
             } catch (Exception e) {
                 failure = e;
             } finally {
-                lines.add(END_OF_STREAM);
+                lines.add(EndOfStream.INSTANCE);
             }
         }
 

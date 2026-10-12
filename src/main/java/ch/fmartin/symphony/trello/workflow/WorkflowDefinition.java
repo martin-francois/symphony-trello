@@ -1,7 +1,6 @@
 package ch.fmartin.symphony.trello.workflow;
 
-import static com.google.common.base.Strings.nullToEmpty;
-
+import com.google.common.base.Strings;
 import java.nio.file.Path;
 import java.util.Map;
 import org.jspecify.annotations.NullMarked;
@@ -12,6 +11,6 @@ public record WorkflowDefinition(Path path, Map<String, Object> config, String p
     public WorkflowDefinition(Path path, Map<String, Object> config, @Nullable String promptTemplate) {
         this.path = path;
         this.config = Map.copyOf(config);
-        this.promptTemplate = nullToEmpty(promptTemplate).trim();
+        this.promptTemplate = Strings.nullToEmpty(promptTemplate).trim();
     }
 }

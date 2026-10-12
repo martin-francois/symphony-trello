@@ -1,8 +1,7 @@
 package ch.fmartin.symphony.trello.tracker;
 
-import static com.google.common.base.Strings.nullToEmpty;
-
 import ch.fmartin.symphony.trello.domain.Card;
+import com.google.common.base.Strings;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -17,7 +16,7 @@ final class TrelloChecklistClassifier {
         boolean hasAmbiguousItem = false;
         boolean hasOrdinaryItem = false;
         for (Card.ChecklistItem item : checklist.items()) {
-            String text = nullToEmpty(item.text()).strip();
+            String text = Strings.nullToEmpty(item.text()).strip();
             if (text.isEmpty()) {
                 continue;
             }
