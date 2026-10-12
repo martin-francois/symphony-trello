@@ -9,6 +9,7 @@ coverage_files=(
 )
 target_contracts=(
   "RepositorySourceFuzzer|src/main/java/ch/fmartin/symphony/trello/repository/RepositorySourceResolver.java"
+  "TrelloCardPayloadFuzzer|src/main/java/ch/fmartin/symphony/trello/tracker/TrelloClient.java"
   "TrelloCardReferenceParserFuzzer|src/main/java/ch/fmartin/symphony/trello/tracker/TrelloCardReferenceParser.java"
   "TrelloChecklistClassifierFuzzer|src/main/java/ch/fmartin/symphony/trello/tracker/TrelloChecklistClassifier.java"
   "WorkflowLoaderFuzzer|src/main/java/ch/fmartin/symphony/trello/workflow/WorkflowLoader.java"

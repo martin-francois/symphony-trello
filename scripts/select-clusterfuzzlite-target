@@ -3,24 +3,24 @@
 set -euo pipefail
 
 selected_target="${1:-}"
+full_share_seconds="${2:-}"
 build_out="${CFL_BUILD_OUT:-build-out}"
-fuzz_targets=(
-  RepositorySourceFuzzer
-  TrelloCardReferenceParserFuzzer
-  TrelloChecklistClassifierFuzzer
-  WorkflowLoaderFuzzer
+# Batch budget per target in halves of the full share. The aggregate budget stays four full shares:
+# the two reference-parsing targets stopped finding new branches, so they share one slot.
+declare -A budget_halves=(
+  [RepositorySourceFuzzer]=2
+  [TrelloCardPayloadFuzzer]=2
+  [TrelloCardReferenceParserFuzzer]=1
+  [TrelloChecklistClassifierFuzzer]=1
+  [WorkflowLoaderFuzzer]=2
 )
 
-target_is_known=false
-for fuzz_target in "${fuzz_targets[@]}"; do
-  if [[ "$fuzz_target" == "$selected_target" ]]; then
-    target_is_known=true
-    break
-  fi
-done
-
-if [[ "$target_is_known" != true ]]; then
+if [[ -z "$selected_target" || -z "${budget_halves[$selected_target]+known}" ]]; then
   echo "Unknown ClusterFuzzLite target: $selected_target" >&2
+  exit 2
+fi
+if [[ ! "$full_share_seconds" =~ ^[1-9][0-9]*$ ]]; then
+  echo "Full-share fuzzing seconds must be a positive whole number: $full_share_seconds" >&2
   exit 2
 fi
 if [[ ! -x "$build_out/$selected_target" ]]; then
@@ -35,7 +35,7 @@ if [[ ! -w "$build_out" ]]; then
   sudo chown -R -- "$(id -u):$(id -g)" "$build_out"
 fi
 
-for fuzz_target in "${fuzz_targets[@]}"; do
+for fuzz_target in "${!budget_halves[@]}"; do
   if [[ "$fuzz_target" == "$selected_target" ]]; then
     continue
   fi
@@ -45,3 +45,10 @@ for fuzz_target in "${fuzz_targets[@]}"; do
     "$build_out/$fuzz_target.options" \
     "$build_out/${fuzz_target}_seed_corpus.zip"
 done
+
+# Round a half share up so a one-second smoke run still fuzzes every target.
+fuzz_seconds=$(((full_share_seconds * budget_halves[$selected_target] + 1) / 2))
+echo "Selected $selected_target for $fuzz_seconds seconds of batch fuzzing."
+if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+  printf 'fuzz_seconds=%s\n' "$fuzz_seconds" >>"$GITHUB_OUTPUT"
+fi

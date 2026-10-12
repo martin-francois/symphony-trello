@@ -6,8 +6,10 @@ import {join, resolve} from "node:path";
 import test from "node:test";
 
 const script = resolve("scripts/select-clusterfuzzlite-target");
+const fullShareSeconds = "4950";
 const fuzzTargets = [
   "RepositorySourceFuzzer",
+  "TrelloCardPayloadFuzzer",
   "TrelloCardReferenceParserFuzzer",
   "TrelloChecklistClassifierFuzzer",
   "WorkflowLoaderFuzzer",
@@ -32,7 +34,7 @@ test("keeps the selected fuzzer and removes every other target artifact", () => 
   const buildOut = buildFixture();
   const selected = "RepositorySourceFuzzer";
 
-  const result = spawnSync("bash", [script, selected], {
+  const result = spawnSync("bash", [script, selected, fullShareSeconds], {
     encoding: "utf8",
     env: {...process.env, CFL_BUILD_OUT: buildOut},
   });
@@ -51,7 +53,7 @@ test("rejects an unknown target before changing the build", () => {
   const buildOut = buildFixture();
   const before = readdirSync(buildOut).sort();
 
-  const result = spawnSync("bash", [script, "UnknownFuzzer"], {
+  const result = spawnSync("bash", [script, "UnknownFuzzer", fullShareSeconds], {
     encoding: "utf8",
     env: {...process.env, CFL_BUILD_OUT: buildOut},
   });
@@ -84,7 +86,7 @@ chmod u+w "$last_argument"
   chmodSync(sudo, 0o755);
   chmodSync(buildOut, 0o555);
 
-  const result = spawnSync("bash", [script, selected], {
+  const result = spawnSync("bash", [script, selected, fullShareSeconds], {
     encoding: "utf8",
     env: {
       ...process.env,
@@ -104,3 +106,55 @@ chmod u+w "$last_argument"
     "jazzer_driver",
   ]);
 });
+
+function selectedSeconds(target: string, fullShare: string) {
+  const buildOut = buildFixture();
+  const output = join(buildOut, "github-output");
+  const result = spawnSync("bash", [script, target, fullShare], {
+    encoding: "utf8",
+    env: {...process.env, CFL_BUILD_OUT: buildOut, GITHUB_OUTPUT: output},
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const written = readFileSync(output, "utf8");
+  assert.match(written, /^fuzz_seconds=\d+\n$/);
+  return Number(written.replace("fuzz_seconds=", ""));
+}
+
+for (const scenario of [
+  {target: "TrelloCardPayloadFuzzer", fullShare: "4950", seconds: "4950"},
+  {target: "TrelloCardReferenceParserFuzzer", fullShare: "4950", seconds: "2475"},
+  {target: "TrelloChecklistClassifierFuzzer", fullShare: "4500", seconds: "2250"},
+  {target: "TrelloChecklistClassifierFuzzer", fullShare: "1", seconds: "1"},
+]) {
+  test(`gives ${scenario.target} ${scenario.seconds} of ${scenario.fullShare} full-share seconds`, () => {
+    assert.equal(selectedSeconds(scenario.target, scenario.fullShare), Number(scenario.seconds));
+  });
+}
+
+// ADR 0078 fixes the batch cycle at four full shares; adding a target must not grow it.
+const aggregateFullShares = 4;
+
+test("keeps the aggregate budget at four full shares", () => {
+  const seconds = fuzzTargets.map((target) => selectedSeconds(target, fullShareSeconds));
+
+  assert.equal(
+    seconds.reduce((total, value) => total + value, 0),
+    aggregateFullShares * Number(fullShareSeconds),
+  );
+});
+
+for (const fullShare of ["", "0", "4950s", "-60"]) {
+  test(`rejects the full-share budget ${JSON.stringify(fullShare)} before changing the build`, () => {
+    const buildOut = buildFixture();
+    const before = readdirSync(buildOut).sort();
+
+    const result = spawnSync("bash", [script, "WorkflowLoaderFuzzer", fullShare], {
+      encoding: "utf8",
+      env: {...process.env, CFL_BUILD_OUT: buildOut},
+    });
+
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /Full-share fuzzing seconds must be a positive whole number/);
+    assert.deepEqual(readdirSync(buildOut).sort(), before);
+  });
+}

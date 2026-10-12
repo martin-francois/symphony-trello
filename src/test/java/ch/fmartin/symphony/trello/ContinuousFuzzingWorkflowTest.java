@@ -19,6 +19,9 @@ final class ContinuousFuzzingWorkflowTest {
     private static final Path WORKFLOW = of(".github/workflows/continuous-fuzzing.yml");
     private static final Path WATCHDOG = of(".github/workflows/continuous-fuzzing-watchdog.yml");
     private static final Path WATCHDOG_MONITOR = of("scripts/monitor-clusterfuzzlite-running");
+    private static final Path STANDALONE_FUZZERS = of("src/test/java/ch/fmartin/symphony/trello/fuzz");
+    private static final Path TARGET_SELECTOR = of("scripts/select-clusterfuzzlite-target");
+    private static final Path COVERAGE_VERIFIER = of("scripts/verify-clusterfuzzlite-coverage");
     private static final String CLUSTERFUZZLITE_COMMIT = "884713a6c30a92e5e8544c39945cd7cb630abcd1";
     private static final Pattern UNPINNED_ACTION = Pattern.compile("uses: [^\\s]+@(?![0-9a-f]{40}(?:\\s|$))");
     private static final Pattern PINNED_TEMURIN_IMAGE =
@@ -41,14 +44,10 @@ final class ContinuousFuzzingWorkflowTest {
                         "fail-fast: false",
                         "max-parallel: 1",
                         "group: continuous-fuzzing-batch-main-${{ matrix.target }}",
-                        "RepositorySourceFuzzer",
-                        "TrelloCardReferenceParserFuzzer",
-                        "TrelloChecklistClassifierFuzzer",
-                        "WorkflowLoaderFuzzer",
-                        "scripts/select-clusterfuzzlite-target \"${{ matrix.target }}\"",
+                        "scripts/select-clusterfuzzlite-target \"${{ matrix.target }}\" \"${{ inputs.fuzz_seconds }}\"",
                         "google/clusterfuzzlite/actions/build_fuzzers@" + CLUSTERFUZZLITE_COMMIT,
                         "google/clusterfuzzlite/actions/run_fuzzers@" + CLUSTERFUZZLITE_COMMIT,
-                        "fuzz-seconds: ${{ inputs.fuzz_seconds }}",
+                        "fuzz-seconds: ${{ steps.target.outputs.fuzz_seconds }}",
                         "language: jvm",
                         "minimize-crashes: true",
                         "mode: batch",
@@ -330,23 +329,51 @@ final class ContinuousFuzzingWorkflowTest {
         assertThat(buildScript).contains("exec bash \"$SRC/symphony-trello/oss-fuzz/build.sh\"");
         assertThat(of("oss-fuzz/build.sh"))
                 .content(StandardCharsets.UTF_8)
-                .contains("TestRepositoryUris*.class", "ch/fmartin/symphony/trello/testsupport");
+                .contains(
+                        "TestRepositoryUris*.class",
+                        "ch/fmartin/symphony/trello/testsupport",
+                        "TrelloReferenceFuzzInvariants",
+                        "TrelloCardPayloadFuzzInvariants");
         assertThat(project).contains("language: jvm");
+    }
+
+    @Test
+    void everyStandaloneFuzzerIsWiredIntoBatchPruneAndCoverage() throws IOException {
+        // given
+        Set<String> fuzzerNames = standaloneFuzzerNames();
+        String source = workflowSource();
+
+        // when
+        int matrixStart = source.indexOf("      matrix:");
+        String batchMatrix = source.substring(matrixStart, source.indexOf("    concurrency:", matrixStart));
+        String prunedCorpora = source.substring(
+                source.indexOf("          scripts/verify-clusterfuzzlite-storage corpus"),
+                source.indexOf("  coverage:"));
+
+        // then
+        assertThat(fuzzerNames)
+                .as("a standalone fuzzer missing from one place is never fuzzed, pruned, or coverage-checked")
+                .allSatisfy(fuzzer -> {
+                    assertThat(batchMatrix).as("batch matrix").contains("- " + fuzzer + "\n");
+                    assertThat(prunedCorpora).as("pruned corpus verification").contains(" " + fuzzer + "\n");
+                    assertThat(TARGET_SELECTOR)
+                            .as("target budget")
+                            .content(StandardCharsets.UTF_8)
+                            .contains("[" + fuzzer + "]=");
+                    assertThat(COVERAGE_VERIFIER)
+                            .as("coverage contract")
+                            .content(StandardCharsets.UTF_8)
+                            .contains("\"" + fuzzer + "|");
+                });
     }
 
     @Test
     void everyStandaloneFuzzerHasASeedCorpus() throws IOException {
         // given
         Path corpora = of("oss-fuzz/corpora");
-        Path fuzzers = of("src/test/java/ch/fmartin/symphony/trello/fuzz");
 
         // when
-        Set<String> fuzzerNames = new TreeSet<>();
-        try (var sources = Files.newDirectoryStream(fuzzers, "*Fuzzer.java")) {
-            for (Path source : sources) {
-                fuzzerNames.add(source.getFileName().toString().replace(".java", ""));
-            }
-        }
+        Set<String> fuzzerNames = standaloneFuzzerNames();
         Map<String, Integer> seedCounts = new TreeMap<>();
         try (var directories = Files.newDirectoryStream(corpora)) {
             for (Path directory : directories) {
@@ -366,6 +393,16 @@ final class ContinuousFuzzingWorkflowTest {
         assertThat(seedCounts.keySet())
                 .as("every standalone fuzzer has exactly one corpus directory")
                 .containsExactlyElementsOf(fuzzerNames);
+    }
+
+    private static Set<String> standaloneFuzzerNames() throws IOException {
+        Set<String> fuzzerNames = new TreeSet<>();
+        try (var sources = Files.newDirectoryStream(STANDALONE_FUZZERS, "*Fuzzer.java")) {
+            for (Path source : sources) {
+                fuzzerNames.add(source.getFileName().toString().replace(".java", ""));
+            }
+        }
+        return fuzzerNames;
     }
 
     private static String workflowSource() throws IOException {
