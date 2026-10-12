@@ -100,6 +100,9 @@ public final class TrelloBoardSetup {
             labels such as "the requested path" and "the per-card workspace" instead.""";
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
     private static final TypeReference<List<Map<String, Object>>> LIST_MAP_TYPE = new TypeReference<>() {};
+    private static final String UNKNOWN_WRITE_OUTCOME_CODE = "trello_write_outcome_unknown";
+    private static final String UNKNOWN_WRITE_OUTCOME =
+            "Trello write outcome is unknown. Inspect Trello before retrying setup.";
 
     private final ObjectMapper json;
     private final ObjectMapper yaml;
@@ -710,16 +713,13 @@ public final class TrelloBoardSetup {
     private static TrelloBoardSetupException trelloTransportException(
             TrelloRequestKind requestKind, String message, Exception cause) {
         return switch (requestKind) {
-            case READ -> new TrelloBoardSetupException("trello_api_request", message, cause);
-            case WRITE -> unknownTrelloWriteOutcome(cause);
+            case READ -> SetupFailureCauses.setupFailure("trello_api_request", message, cause);
+            case WRITE -> SetupFailureCauses.setupFailure(UNKNOWN_WRITE_OUTCOME_CODE, UNKNOWN_WRITE_OUTCOME, cause);
         };
     }
 
     private static TrelloBoardSetupException unknownTrelloWriteOutcome(Exception cause) {
-        return new TrelloBoardSetupException(
-                "trello_write_outcome_unknown",
-                "Trello write outcome is unknown. Inspect Trello before retrying setup.",
-                cause);
+        return new TrelloBoardSetupException(UNKNOWN_WRITE_OUTCOME_CODE, UNKNOWN_WRITE_OUTCOME, cause);
     }
 
     private static URI uri(URI endpoint, String path, Map<String, String> query) {
@@ -752,7 +752,7 @@ public final class TrelloBoardSetup {
                 Files.writeString(absolute, workflow, StandardOpenOption.CREATE_NEW);
             }
         } catch (IOException e) {
-            throw new TrelloBoardSetupException(
+            throw SetupFailureCauses.setupFailure(
                     "setup_workflow_write_failed", "Could not write workflow file: " + absolute, e);
         }
     }
@@ -869,7 +869,7 @@ public final class TrelloBoardSetup {
                     .filter(path -> !path.equals(absolute))
                     .toList();
         } catch (IOException e) {
-            throw new TrelloBoardSetupException(
+            throw SetupFailureCauses.setupFailure(
                     "setup_workflow_scan_failed", "Could not scan workflow directory: " + parent, e);
         }
     }
@@ -917,7 +917,7 @@ public final class TrelloBoardSetup {
             String text = Files.readString(workflowPath);
             return readYamlFrontMatter(text);
         } catch (IOException e) {
-            throw new TrelloBoardSetupException(
+            throw SetupFailureCauses.setupFailure(
                     "setup_workflow_scan_failed", "Could not read workflow file: " + workflowPath, e);
         }
     }

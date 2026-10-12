@@ -1120,7 +1120,8 @@ final class LocalWorkerManager {
                 out.println("The stale managed pid file was already removed. The unrelated process was not stopped.");
             }
         } catch (IOException e) {
-            out.println("Could not remove the stale managed pid file. The unrelated process was not stopped.");
+            out.println(SetupFailureCauses.withCause(
+                    "Could not remove the stale managed pid file. The unrelated process was not stopped.", e));
             String pidToken = pathToken(paths, pidFile);
             out.println("Remove the stale managed pid file manually, then rerun stop. pid_file_token=" + pidToken
                     + lookupHint(pidToken));

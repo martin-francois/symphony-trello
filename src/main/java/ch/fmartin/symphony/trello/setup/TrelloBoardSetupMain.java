@@ -584,7 +584,9 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 writeOutput(path, body);
             } catch (IOException e) {
                 throw new ParameterException(
-                        spec.commandLine(), "Could not write diagnostics output. Choose a writable file.", e);
+                        spec.commandLine(),
+                        SetupFailureCauses.withCause("Could not write diagnostics output. Choose a writable file.", e),
+                        e);
             }
             parent.out.println("Diagnostics written.");
             if (privateContext) {
@@ -850,15 +852,11 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             }
         }
 
-        /// The appended cause summary keeps local CLI stderr diagnosable: without it the underlying
-        /// filesystem exception is invisible and a transient write-probe failure cannot be
-        /// root-caused (issue #388). The actionable first sentences stay unchanged so existing user
-        /// guidance and the `setup_env_write_failed` hint mapping remain valid.
         private static TrelloBoardSetupException envWriteFailure(IOException exception) {
-            return new TrelloBoardSetupException(
+            return SetupFailureCauses.setupFailure(
                     "setup_env_write_failed",
                     "Could not write Trello credentials to the selected .env file. Choose a writable .env or"
-                            + " .env.NAME file. (" + SetupDiagnosticReporter.pathFreeExceptionSummary(exception) + ")",
+                            + " .env.NAME file.",
                     exception);
         }
 
