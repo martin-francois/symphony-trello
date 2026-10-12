@@ -11,10 +11,13 @@ import ch.fmartin.symphony.trello.config.WholeNumbers.Classified;
 import ch.fmartin.symphony.trello.config.WholeNumbers.Kind;
 import ch.fmartin.symphony.trello.domain.BlockerRef;
 import ch.fmartin.symphony.trello.domain.Card;
+import ch.fmartin.symphony.trello.time.ApplicationClock;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.collect.Comparators;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.ws.rs.core.Response.Status;
 import jakarta.ws.rs.core.Response.Status.Family;
 import java.io.IOException;
@@ -25,8 +28,11 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -61,11 +67,25 @@ public class TrelloClient implements TrackerClient {
 
     private final ObjectMapper json;
     private final HttpClient httpClient;
+    private final Clock clock;
+    private final RateLimitPressureRecorder rateLimitPressure;
 
     public TrelloClient(ObjectMapper json) {
+        this(json, ApplicationClock.systemUtc());
+    }
+
+    @Inject
+    public TrelloClient(ObjectMapper json, Clock clock) {
         this.json = json;
         this.httpClient =
                 HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+        this.clock = clock;
+        this.rateLimitPressure = new RateLimitPressureRecorder(clock);
+    }
+
+    @Override
+    public RateLimitPressure drainRateLimitPressure() {
+        return rateLimitPressure.drain();
     }
 
     @Override
@@ -1241,20 +1261,21 @@ public class TrelloClient implements TrackerClient {
                 if (isSuccessfulStatus(response.statusCode())) {
                     return response.body();
                 }
-                if (isRateLimited(response.statusCode()) && attempt < maxAttempts) {
-                    LOG.warn(rateLimitWarning(config));
-                    sleep(backoff(config, attempt, response));
-                    continue;
-                }
                 if (isRateLimited(response.statusCode())) {
+                    Optional<Duration> retryAfter = retryAfter(response, clock.instant());
+                    rateLimitPressure.record(retryAfter);
                     LOG.warn(rateLimitWarning(config));
+                    if (attempt < maxAttempts) {
+                        sleep(backoff(config, attempt, retryAfter));
+                        continue;
+                    }
                 }
                 throw statusException(response.statusCode());
             } catch (IOException e) {
                 if (attempt == maxAttempts) {
                     throw new TrelloException("trello_api_request", "Trello request failed", e);
                 }
-                sleep(backoff(config, attempt, null));
+                sleep(backoff(config, attempt, Optional.empty()));
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new TrelloException("trello_api_request", "Trello request interrupted", e);
@@ -1296,11 +1317,19 @@ public class TrelloClient implements TrackerClient {
                 .formatted(config.polling().interval().toMillis(), config.workflowPath());
     }
 
-    static Duration backoff(EffectiveConfig config, int attempt, HttpResponse<?> response) {
-        Optional<Duration> retryAfter = response == null
-                ? Optional.empty()
-                : response.headers().firstValue("Retry-After").flatMap(TrelloClient::parseRetryAfter);
+    static Duration backoff(EffectiveConfig config, int attempt, Optional<Duration> retryAfter) {
         return retryAfter.orElseGet(() -> exponentialBackoffWithJitter(config, attempt));
+    }
+
+    /// The `Retry-After` wait, given in seconds or as an HTTP date, bounded by
+    /// [RateLimitPressure#MAX_WAIT]. Trello's rate-limit windows last 10 seconds, so a longer value
+    /// most likely comes from a proxy; waiting it out in full would block the poll tick and
+    /// shutdown for that long.
+    static Optional<Duration> retryAfter(HttpResponse<?> response, Instant now) {
+        return response.headers()
+                .firstValue("Retry-After")
+                .flatMap(value -> parseRetryAfterSeconds(value).or(() -> parseRetryAfterDate(value, now)))
+                .map(retryAfter -> Comparators.min(retryAfter, RateLimitPressure.MAX_WAIT));
     }
 
     private static Duration exponentialBackoffWithJitter(EffectiveConfig config, int attempt) {
@@ -1309,10 +1338,21 @@ public class TrelloClient implements TrackerClient {
         return Duration.ofMillis((base * (1L << Math.min(attempt - 1, 8))) + jitter);
     }
 
-    private static Optional<Duration> parseRetryAfter(String value) {
+    private static Optional<Duration> parseRetryAfterSeconds(String value) {
         try {
             return Optional.of(Duration.ofSeconds(Long.parseLong(value))).filter(duration -> !duration.isNegative());
         } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
+    }
+
+    /// A date in the past means Trello allows the retry now. A value that is neither a number nor
+    /// an HTTP date is ignored like a missing header, so the exponential backoff applies.
+    private static Optional<Duration> parseRetryAfterDate(String value, Instant now) {
+        try {
+            Instant retryAt = DateTimeFormatter.RFC_1123_DATE_TIME.parse(value, Instant::from);
+            return Optional.of(retryAt.isAfter(now) ? Duration.between(now, retryAt) : Duration.ZERO);
+        } catch (DateTimeParseException e) {
             return Optional.empty();
         }
     }

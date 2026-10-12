@@ -32,6 +32,9 @@ single poll/reconcile cycle is enough to observe the latest Trello state.
 - `dispatch_pause`: `null` normally; while Codex is usage-limited, contains `code`, `detected`, and
   `until` for the workflow-wide pickup pause.
 - `rate_limits`: latest Codex rate-limit payload when Codex reports one.
+- `polling`: `configured_interval_ms` from `polling.interval_ms`, the `effective_interval_ms` the
+  worker uses now, `slowdown_reason` (`null`, or `trello_rate_limited` while Trello rate limits
+  slowed polling down), and `last_rate_limited_at`. See [Trello rate limits](#trello-rate-limits).
 
 Each `running` row includes:
 
@@ -228,10 +231,24 @@ polls and graceful stop. The pause is process-local; after a service restart, on
 encounter and re-establish the same limit. When that card next becomes eligible, its normal prompt
 refresh lets Symphony remove a stale managed section before dispatch.
 
+### Trello Rate Limits
+
 Trello API rate limits are logged separately. Search logs for `Trello rate limit reached`. The
 warning includes the workflow file and current `polling.interval_ms`. Repeated warnings usually mean
 the workflow should poll less often, especially when more than 5-10 boards share the same Trello
 token.
+
+Each worker also slows itself down. `polling.interval_ms` is the shortest wait between two polls.
+After a poll that got a Trello `429` response, the worker doubles its effective interval, up to
+30 seconds. After 60 seconds without a `429`, it halves the interval again, step by step, until it
+is back at `polling.interval_ms`. If Trello sent `Retry-After`, the next poll also waits until that
+time has passed, for at most 30 seconds. Every wait gets up to 10 percent random jitter on top, so
+workers that share a token do not poll at the same moment. A manual refresh still polls at once.
+
+The status page shows the slowdown, for example `Polling: configured 5s, currently 20s because
+Trello asked Symphony to slow down.` The `polling` object in `/api/v1/state` has the same values,
+and the logs show each change as `polling outcome=slowed_down` or `polling outcome=recovering`. If
+the slowdown shows up often, raise `polling.interval_ms` instead of relying on it.
 
 ## Common States
 

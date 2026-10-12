@@ -16,6 +16,7 @@ import jakarta.ws.rs.core.Response;
 import java.lang.reflect.Constructor;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -23,7 +24,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 final class StatusResourceTest {
     @Test
@@ -110,6 +115,39 @@ final class StatusResourceTest {
                 .isUnmodifiable());
     }
 
+    @MethodSource("pollingStates")
+    @ParameterizedTest(name = "{0}")
+    void statusPageShowsConfiguredAndEffectivePollingInterval(
+            String scenario, RuntimeSnapshot.Polling polling, String expectedLine) {
+        // given
+        SymphonyOrchestrator orchestrator = mock();
+        when(orchestrator.snapshot()).thenReturn(withPolling(snapshotWithRunningCard(), polling));
+        var resource = new StatusResource(orchestrator);
+
+        // when
+        String html = resource.index();
+
+        // then
+        assertThat(html).as(scenario).contains(expectedLine);
+    }
+
+    private static Stream<Arguments> pollingStates() {
+        return Stream.of(
+                Arguments.of(
+                        "configured interval while Trello does not push back",
+                        new RuntimeSnapshot.Polling(
+                                Duration.ofSeconds(5), Duration.ofSeconds(5), Optional.empty(), Optional.empty()),
+                        "Polling: every <code>5s</code> (<code>polling.interval_ms</code>)."),
+                Arguments.of(
+                        "slowed interval after Trello rate limits",
+                        new RuntimeSnapshot.Polling(
+                                Duration.ofSeconds(5),
+                                Duration.ofMillis(7500),
+                                Optional.of("trello_rate_limited"),
+                                Optional.of(Instant.parse("2026-05-05T00:00:04Z"))),
+                        "Polling: configured <code>5s</code>, currently <code>7.5s</code> because Trello asked Symphony to slow down."));
+    }
+
     @Test
     void statusBannerDoesNotRenderRateLimitAccountProviderOrCommandDetails() {
         // given
@@ -125,7 +163,8 @@ final class StatusResourceTest {
                 Map.of(
                         "account", "private-account-marker",
                         "provider", "private-provider-marker",
-                        "command", "private-command-marker"));
+                        "command", "private-command-marker"),
+                base.polling());
         SymphonyOrchestrator orchestrator = mock();
         when(orchestrator.snapshot()).thenReturn(privateSnapshot);
         var resource = new StatusResource(orchestrator);
@@ -295,7 +334,22 @@ final class StatusResourceTest {
                 new RuntimeSnapshot.TokenTotals(4, 8, 12, 1.25),
                 new RuntimeSnapshot.DispatchPause(
                         "CODEX_<USAGE>&", Instant.parse("2026-05-05T00:00:03Z"), Instant.parse("2026-05-05T01:00:00Z")),
-                null);
+                null,
+                new RuntimeSnapshot.Polling(
+                        Duration.ofSeconds(5), Duration.ofSeconds(5), Optional.empty(), Optional.empty()));
+    }
+
+    private static RuntimeSnapshot withPolling(RuntimeSnapshot snapshot, RuntimeSnapshot.Polling polling) {
+        return new RuntimeSnapshot(
+                snapshot.generatedAt(),
+                snapshot.counts(),
+                snapshot.routing(),
+                snapshot.running(),
+                snapshot.retrying(),
+                snapshot.codexTotals(),
+                snapshot.dispatchPause(),
+                snapshot.rateLimits(),
+                polling);
     }
 
     private static RuntimeSnapshot withRunningRows(
@@ -308,6 +362,7 @@ final class StatusResourceTest {
                 snapshot.retrying(),
                 snapshot.codexTotals(),
                 snapshot.dispatchPause(),
-                snapshot.rateLimits());
+                snapshot.rateLimits(),
+                snapshot.polling());
     }
 }
