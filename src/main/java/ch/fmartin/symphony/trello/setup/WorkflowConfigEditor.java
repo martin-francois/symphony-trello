@@ -179,12 +179,12 @@ final class WorkflowConfigEditor {
             // This method only runs on the start launch path, which reports every
             // workflow-content failure, including missing front matter, through the
             // setup_workflow_invalid classification with the underlying cause.
-            throw invalidWorkflowForLaunch(workflowPath, e);
+            throw invalidWorkflowForLaunch(e);
         }
         try {
             validateStartEnvironmentReferences(yaml, environmentResolver, validateServerPort);
         } catch (ConfigException | TrelloBoardSetupException e) {
-            throw invalidWorkflowForLaunch(workflowPath, e);
+            throw invalidWorkflowForLaunch(e);
         }
     }
 
@@ -336,7 +336,6 @@ final class WorkflowConfigEditor {
             return config;
         } catch (IOException e) {
             throw invalidWorkflowForLaunch(
-                    workflowPath,
                     new TrelloBoardSetupException(
                             "setup_workflow_yaml_invalid", "Workflow front matter is invalid YAML.", e),
                     diagnosticsConfigDir);
@@ -345,7 +344,7 @@ final class WorkflowConfigEditor {
                 | TrelloBoardSetupException
                 | IllegalArgumentException
                 | ClassCastException e) {
-            throw invalidWorkflowForLaunch(workflowPath, e, diagnosticsConfigDir);
+            throw invalidWorkflowForLaunch(e, diagnosticsConfigDir);
         }
     }
 
@@ -357,49 +356,46 @@ final class WorkflowConfigEditor {
         }
         String problem =
                 Files.exists(workflowPath) ? "workflow path is not a regular workflow file" : "missing workflow file";
-        throw invalidWorkflowForLaunch(workflowPath, new ConfigException("workflow_file_unusable", problem));
+        throw invalidWorkflowForLaunch(new ConfigException("workflow_file_unusable", problem));
     }
 
     private ReadWorkflow readWorkflowForLaunch(Path workflowPath) {
         try {
             return readWorkflow(workflowPath);
         } catch (IOException e) {
-            throw invalidWorkflowForLaunch(
-                    workflowPath,
-                    new TrelloBoardSetupException(
-                            "setup_workflow_read_failed", "Workflow file cannot be read before worker start.", e));
+            throw invalidWorkflowForLaunch(new TrelloBoardSetupException(
+                    "setup_workflow_read_failed", "Workflow file cannot be read before worker start.", e));
         } catch (TrelloBoardSetupException e) {
-            throw invalidWorkflowForLaunch(workflowPath, e);
+            throw invalidWorkflowForLaunch(e);
         }
     }
 
-    void validateLaunchDispatch(Path workflowPath, EffectiveConfig launchConfig) {
+    void validateLaunchDispatch(EffectiveConfig launchConfig) {
         try {
             new ConfigResolver().validateForDispatch(launchConfig);
         } catch (ConfigException e) {
-            throw invalidWorkflowForLaunch(workflowPath, e);
+            throw invalidWorkflowForLaunch(e);
         }
     }
 
-    private static TrelloBoardSetupException invalidWorkflowForLaunch(Path workflowPath, RuntimeException cause) {
-        return invalidWorkflowForLaunch(workflowPath, cause, Optional.empty());
+    private static TrelloBoardSetupException invalidWorkflowForLaunch(RuntimeException cause) {
+        return invalidWorkflowForLaunch(cause, Optional.empty());
     }
 
     private static TrelloBoardSetupException invalidWorkflowForLaunch(
-            Path workflowPath, RuntimeException cause, Optional<Path> diagnosticsConfigDir) {
+            RuntimeException cause, Optional<Path> diagnosticsConfigDir) {
         return new TrelloBoardSetupException(
                 "setup_workflow_invalid",
                 "Invalid workflow configuration: "
-                        + publicWorkflowLaunchProblem(workflowPath, cause, diagnosticsConfigDir)
+                        + publicWorkflowLaunchProblem(cause, diagnosticsConfigDir)
                         + "\nWorkflow file:\n  selected workflow file"
                         + "\n" + publicWorkflowLaunchNextStep(cause),
                 cause);
     }
 
-    private static String publicWorkflowLaunchProblem(
-            Path workflowPath, RuntimeException cause, Optional<Path> diagnosticsConfigDir) {
+    private static String publicWorkflowLaunchProblem(RuntimeException cause, Optional<Path> diagnosticsConfigDir) {
         if (cause instanceof ConfigException config) {
-            return publicConfigProblem(workflowPath, config, diagnosticsConfigDir);
+            return publicConfigProblem(config, diagnosticsConfigDir);
         }
         if (cause instanceof WorkflowException workflow) {
             return publicWorkflowProblem(workflow);
@@ -413,8 +409,7 @@ final class WorkflowConfigEditor {
         return "Workflow front matter is invalid.";
     }
 
-    private static String publicConfigProblem(
-            Path workflowPath, ConfigException failure, Optional<Path> diagnosticsConfigDir) {
+    private static String publicConfigProblem(ConfigException failure, Optional<Path> diagnosticsConfigDir) {
         return switch (failure.code()) {
             case "invalid_server_port" -> "server.port must be an integer between 0 and " + LocalPort.MAX + ".";
             case "config_value_error" -> publicConfigValueProblem(failure);

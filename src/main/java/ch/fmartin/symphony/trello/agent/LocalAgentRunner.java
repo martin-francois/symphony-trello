@@ -1,7 +1,5 @@
 package ch.fmartin.symphony.trello.agent;
 
-import static com.google.common.base.Strings.nullToEmpty;
-
 import ch.fmartin.symphony.trello.codex.CodexSkillCatalog;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import ch.fmartin.symphony.trello.repository.RepositorySourcePrompt;
@@ -13,6 +11,7 @@ import ch.fmartin.symphony.trello.workspace.CodexSkillInstaller;
 import ch.fmartin.symphony.trello.workspace.HookRunner;
 import ch.fmartin.symphony.trello.workspace.Workspace;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
+import com.google.common.base.Strings;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.util.List;
@@ -123,7 +122,7 @@ public class LocalAgentRunner implements AgentRunner {
     }
 
     private static String withRepositorySourceContext(String prompt, String repositoryContext) {
-        String basePrompt = nullToEmpty(prompt).stripTrailing();
+        String basePrompt = Strings.nullToEmpty(prompt).stripTrailing();
         return basePrompt + "\n\n" + repositoryContext;
     }
 

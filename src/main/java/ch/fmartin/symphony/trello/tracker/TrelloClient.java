@@ -1,7 +1,6 @@
 package ch.fmartin.symphony.trello.tracker;
 
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.SLASHES;
-import static com.google.common.base.Strings.nullToEmpty;
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
 
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
@@ -14,6 +13,7 @@ import ch.fmartin.symphony.trello.domain.Card;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.base.Strings;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.core.Response.Status;
 import jakarta.ws.rs.core.Response.Status.Family;
@@ -567,10 +567,9 @@ public class TrelloClient implements TrackerClient {
             EffectiveConfig config, ReferencedText reference, CardLookupResult result) {
         if (result instanceof CardLookupResult.Found found) {
             Card card = found.card();
-            Boolean terminal = card.boardId() != null
-                            && !Objects.equals(card.boardId(), config.tracker().resolvedBoardId())
-                    ? null
-                    : isTerminal(card, config);
+            boolean crossBoard = card.boardId() != null
+                    && !Objects.equals(card.boardId(), config.tracker().resolvedBoardId());
+            Boolean terminal = crossBoard ? null : isTerminal(card, config);
             String status = terminal == null ? "unsupported_cross_board" : "found";
             return new Card.TrelloReference(
                     reference.source(),
@@ -1160,7 +1159,7 @@ public class TrelloClient implements TrackerClient {
             return "";
         }
         String text = string(dataMap.get("text"));
-        return nullToEmpty(text);
+        return Strings.nullToEmpty(text);
     }
 
     private static String commentAuthor(Object memberCreator) {
@@ -1544,7 +1543,7 @@ public class TrelloClient implements TrackerClient {
         }
 
         void addChecklist(Card.Checklist checklist) {
-            String source = "checklist:" + nullToEmpty(checklist.name());
+            String source = "checklist:" + Strings.nullToEmpty(checklist.name());
             for (Card.ChecklistItem item : checklist.items()) {
                 addExact(source, item.text());
                 add(source, item.text());

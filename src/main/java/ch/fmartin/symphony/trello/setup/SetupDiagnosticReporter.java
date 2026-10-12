@@ -105,6 +105,7 @@ final class SetupDiagnosticReporter {
     private static final Splitter LINE_BREAK_SPLITTER = Splitter.onPattern("\\R");
     private static final Splitter PATH_SEPARATOR_SPLITTER = Splitter.on(File.pathSeparator);
     private static final Splitter WINDOWS_PATH_SEPARATOR_SPLITTER = Splitter.on(';');
+    private static final List<String> DEFAULT_WINDOWS_PATH_EXTENSIONS = List.of(".COM", ".EXE", ".BAT", ".CMD");
     private static final CharMatcher POSIX_PATH_START = SLASHES;
     private static final CharMatcher URL_AUTHORITY_TERMINATOR =
             CharMatcher.whitespace().or(CharMatcher.anyOf("/?#")).precomputed();
@@ -1317,7 +1318,7 @@ final class SetupDiagnosticReporter {
                         .map(String::trim)
                         .filter(extension -> !extension.isBlank())
                         .toList())
-                .orElse(List.of(".COM", ".EXE", ".BAT", ".CMD"));
+                .orElse(DEFAULT_WINDOWS_PATH_EXTENSIONS);
     }
 
     private static boolean windowsBatchShim(Path path) {

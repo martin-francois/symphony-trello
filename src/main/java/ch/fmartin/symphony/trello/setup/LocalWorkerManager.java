@@ -311,7 +311,7 @@ final class LocalWorkerManager {
         EffectiveConfig launchConfig = workflowConfig.prepareLaunchWorkflow(
                 board.workflowPath(), workflowEnvironment, workflowServerPortUsed, paths.configDir());
         credentialUsage.ifPresent(this::validateWorkerCredentials);
-        workflowConfig.validateLaunchDispatch(board.workflowPath(), launchConfig);
+        workflowConfig.validateLaunchDispatch(launchConfig);
 
         if (!restartManagedWorker) {
             rejectPortConflict(board, existingHealth, healthPort);
