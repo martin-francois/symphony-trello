@@ -15,6 +15,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.ws.rs.core.Response.Status;
 import jakarta.ws.rs.core.Response.Status.Family;
 import java.io.IOException;
@@ -60,12 +61,22 @@ public class TrelloClient implements TrackerClient {
     public static final int WORKPAD_COMMENT_ACTION_LIMIT = 1000;
 
     private final ObjectMapper json;
-    private final HttpClient httpClient;
+    private final Transport transport;
 
+    @Inject
     public TrelloClient(ObjectMapper json) {
+        this(
+                json,
+                new HttpTransport(HttpClient.newBuilder()
+                        .connectTimeout(Duration.ofSeconds(10))
+                        .build()));
+    }
+
+    /// Lets a test in this package answer Trello requests from memory, so a fuzz target can drive the
+    /// whole client per execution without opening a socket.
+    TrelloClient(ObjectMapper json, Transport transport) {
         this.json = json;
-        this.httpClient =
-                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+        this.transport = transport;
     }
 
     @Override
@@ -1237,7 +1248,7 @@ public class TrelloClient implements TrackerClient {
                             case "DELETE" -> builder.DELETE().build();
                             default -> throw new IllegalArgumentException("Unsupported Trello method: " + method);
                         };
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                HttpResponse<String> response = transport.send(request);
                 if (isSuccessfulStatus(response.statusCode())) {
                     return response.body();
                 }
@@ -1508,6 +1519,20 @@ public class TrelloClient implements TrackerClient {
     }
 
     private record BoardContext(String boardId, boolean boardClosed, Map<String, BoardList> lists) {}
+
+    /// Sends one Trello API request and returns the response with its body as text.
+    @FunctionalInterface
+    interface Transport {
+        HttpResponse<String> send(HttpRequest request) throws IOException, InterruptedException;
+    }
+
+    /// The production transport. The client lives as long as this application-scoped bean.
+    private record HttpTransport(HttpClient httpClient) implements Transport {
+        @Override
+        public HttpResponse<String> send(HttpRequest request) throws IOException, InterruptedException {
+            return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        }
+    }
 
     public record BoardList(String id, String name, boolean closed) {}
 

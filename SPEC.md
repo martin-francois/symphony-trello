@@ -3682,6 +3682,8 @@ These checks are REQUIRED when the workflow expects the agent to perform Trello 
 - URL attachment writes are allowed only when `trello_tools.allow_url_attachments` permits them, and
   the attached URL is an HTTP(S) URL without credentials, query string, or fragment.
 - Destructive operations are disabled unless explicitly configured.
+- Every Trello write a handoff tool call sends targets the current card or that card's own comments
+  and checklists, and a call refused by `trello_tools` policy or argument validation sends no write.
 - Startup validates write capability or emits an operator-visible warning when verification is not
   possible without side effects.
 
