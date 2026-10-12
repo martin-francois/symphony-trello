@@ -166,6 +166,11 @@ Stop shipping `install.ps1` and `uninstall.ps1`; support Windows only through WS
 
 ## More Information
 
+[ADR 0127](0127-run-powershell-tests-on-the-pinned-dotnet-sdk-image.md) adds one exception to the
+Linux side: when a pull request changes `scripts/pwsh-docker.sh`, the required
+`pinned-powershell-image` job pulls the image and runs the PowerShell checks through the wrapper, so
+an image update is tested before it automerges. Other pull requests still do not pull the image.
+
 This decision is about where and how PowerShell installer checks run. It does not change the product
 setup recommendation: Windows users should prefer WSL2 with the Linux installer, while native
 Windows PowerShell remains best effort.

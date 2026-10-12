@@ -168,3 +168,33 @@ jobs:
       - name: PowerShell generated-wrapper lifecycle
         if: ${{ env.ISOLATE_OPENREWRITE != 'true' }}
         run: .\mvnw.cmd -q '-Djunit.parallel.enabled=false' -Dtest=InstallerScriptLifecycleTest#powershellInstallerLifecycleInstallsStartsStopsAndUninstallsWithFakeJavaOnWindows test
+
+  # A required check. The test job skips the PowerShell tests and windows-powershell runs the
+  # runner's own pwsh, so without this job a .NET SDK image update would automerge with nothing
+  # running the image it pins (ADR 0127).
+  pinned-powershell-image:
+    if: ${{ github.event_name == 'pull_request' && !startsWith(github.head_ref, 'release-please--branches--') }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The pull request's merge commit and its first parent, the base branch it merges into.
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Detect a PowerShell wrapper change
+        id: wrapper
+        run: git diff --quiet HEAD^1 HEAD -- scripts/pwsh-docker.sh || echo "changed=true" >> "$GITHUB_OUTPUT"
+      - name: Report the unchanged wrapper
+        if: steps.wrapper.outputs.changed != 'true'
+        run: echo "::notice::The pull request keeps the base branch's scripts/pwsh-docker.sh, so its image needs no new run."
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        if: steps.wrapper.outputs.changed == 'true'
+        with:
+          distribution: temurin
+          java-version: "25.0.4+7.0.LTS"
+          cache: maven
+      - name: PowerShell installer checks through the pinned image
+        if: steps.wrapper.outputs.changed == 'true'
+        run: scripts/check-pwsh-docker

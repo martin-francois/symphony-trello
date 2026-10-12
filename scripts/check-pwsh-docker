@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Runs the PowerShell installer checks through scripts/pwsh-docker.sh, on the .NET SDK image it pins.
+# The pinned-powershell-image CI job calls this when a pull request changes that wrapper (ADR 0127).
+# Extra arguments go to Maven.
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+repo_root="$(cd -- "$script_dir/.." && pwd -P)"
+wrapper="$repo_root/scripts/pwsh-docker.sh"
+report="$repo_root/target/surefire-reports/TEST-ch.fmartin.symphony.trello.setup.InstallerScriptTest.xml"
+
+cd "$repo_root"
+# The dry runs go first so they pull the image; one installer test may run for 60 seconds at most.
+"$wrapper" -NoProfile -File ./install.ps1 --dry-run --no-onboard
+"$wrapper" -NoProfile -File ./uninstall.ps1 --dry-run --yes
+SYMPHONY_TRELLO_TEST_PWSH="$wrapper" ./mvnw "$@" '-Djunit.parallel.enabled=false' \
+  '-Dtest=InstallerScriptTest#*powershell*+*powerShell*' test
+
+# A PowerShell test skips itself when SYMPHONY_TRELLO_TEST_PWSH is unusable, and Maven counts a
+# skip as a pass, so a run that never started PowerShell would succeed without this check.
+if ! grep -qE '<testsuite [^>]*skipped="0"' "$report"; then
+  printf 'PowerShell installer tests were skipped; see %s\n' "$report" >&2
+  exit 1
+fi

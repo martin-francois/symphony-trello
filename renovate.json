@@ -102,7 +102,6 @@
     {
       "customType": "regex",
       "managerFilePatterns": [
-        "/^\\.github/workflows/ci\\.yml$/",
         "/^scripts/pwsh-docker\\.sh$/"
       ],
       "matchStrings": [

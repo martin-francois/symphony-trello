@@ -240,6 +240,11 @@ SYMPHONY_TRELLO_TEST_PWSH=./scripts/pwsh-docker.sh ./mvnw -Dtest=InstallerScript
 
 Prefix these commands with `SYMPHONY_TRELLO_CONTAINER_RUNTIME=podman` on a Podman host.
 
+`scripts/check-pwsh-docker` runs both dry runs and the PowerShell installer option tests through the
+wrapper, and fails when one of those tests skipped. CI runs it in the required
+`pinned-powershell-image` check whenever a pull request changes `scripts/pwsh-docker.sh`, including
+Renovate's .NET SDK image updates.
+
 ## OpenRewrite Maintenance
 
 The opt-in OpenRewrite profile provides a curated semantic-maintenance pipeline without changing

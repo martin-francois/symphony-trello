@@ -44,6 +44,15 @@ requirements.
   new BetterLeaks rule before merge. Keep that check in the `Required merge checks` ruleset. The
   script test `BetterLeaks image updates automerge only after a scan with the image they pin`
   asserts the workflow side; see [ADR 0124](../adr/0124-look-up-betterleaks-through-the-github-package-feed.md).
+- .NET SDK image updates automerge like other non-major updates, gated by the required check
+  `pinned-powershell-image`. When a pull request changes `scripts/pwsh-docker.sh`, the check runs
+  `scripts/check-pwsh-docker`, which starts the PowerShell installer dry runs and option tests in the
+  image the pull request pins. The `test` job skips those tests and `windows-powershell` runs the
+  runner's own `pwsh`, so no other check starts the image. Keep the image pinned only in that
+  wrapper, because the check watches no other file, and keep the check in the `Required merge
+  checks` ruleset. The script test `.NET SDK image updates automerge only after PowerShell tests
+  through the image they pin` asserts the workflow side; see
+  [ADR 0127](../adr/0127-run-powershell-tests-on-the-pinned-dotnet-sdk-image.md).
 - Apply a seven-day minimum release age to ordinary dependency updates. Renovate security updates
   retain their documented cooldown bypass so disclosed vulnerabilities can be fixed immediately.
 - The seven-day release age MUST hold on every path that can move a version, including the paths
@@ -95,3 +104,4 @@ requirements.
 - [ADR 0124](../adr/0124-look-up-betterleaks-through-the-github-package-feed.md)
 - [ADR 0125](../adr/0125-read-mcr-push-times-for-the-dotnet-sdk-image.md)
 - [ADR 0126](../adr/0126-offer-the-newest-oss-fuzz-build-past-the-cooldown.md)
+- [ADR 0127](../adr/0127-run-powershell-tests-on-the-pinned-dotnet-sdk-image.md)

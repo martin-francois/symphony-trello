@@ -26,3 +26,8 @@ when the row naming that artifact leaves its primary failure surface or required
 The repository also pins and tests Node script tooling, GitHub Actions, and tool-container images.
 Their manifests, custom Renovate managers, config validation, and script tests are the confidence
 map for those non-Maven dependencies.
+Two tool images can only be tested by running them, so each has a required check that runs the
+image a pull request pins: `pinned-betterleaks-image` for BetterLeaks
+([ADR 0124](../adr/0124-look-up-betterleaks-through-the-github-package-feed.md)) and
+`pinned-powershell-image` for the .NET SDK image behind `scripts/pwsh-docker.sh`
+([ADR 0127](../adr/0127-run-powershell-tests-on-the-pinned-dotnet-sdk-image.md)).

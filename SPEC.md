@@ -4176,6 +4176,9 @@ When this profile is used:
 - deterministic CI SHOULD exercise PowerShell installer smoke, option, and lifecycle paths on a
   native Windows PowerShell runner; local Linux machines MAY use the Microsoft .NET SDK container
   image through `scripts/pwsh-docker.sh` when a local PowerShell check is needed
+- deterministic CI SHOULD run the PowerShell installer smoke and option paths through
+  `scripts/pwsh-docker.sh` when a pull request changes that wrapper, so an update of the container
+  image it pins is exercised before merge
 
 ### 19.5 Java Repository Quality Profile
 

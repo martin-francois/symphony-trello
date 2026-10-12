@@ -1360,6 +1360,79 @@ test("BetterLeaks image updates automerge only after a scan with the image they 
   );
 });
 
+test(".NET SDK image updates automerge only after PowerShell tests through the image they pin", () => {
+  // The test job skips the PowerShell tests and windows-powershell runs the runner's own pwsh.
+  // Without this job nothing would start the image a .NET SDK update pins before it merges.
+  const workflow = parse(CI_WORKFLOW) as {
+    readonly jobs?: Readonly<
+      Record<
+        string,
+        {
+          readonly if?: string;
+          readonly permissions?: unknown;
+          readonly "runs-on"?: unknown;
+          readonly steps?: readonly {
+            readonly env?: Readonly<Record<string, string>>;
+            readonly id?: string;
+            readonly if?: string;
+            readonly name?: string;
+            readonly run?: string;
+            readonly uses?: string;
+            readonly with?: Readonly<Record<string, unknown>>;
+          }[];
+        }
+      >
+    >;
+  };
+  const wrapperPath = "scripts/pwsh-docker.sh";
+  const job = workflow.jobs?.["pinned-powershell-image"];
+  const steps = job?.steps ?? [];
+  const checkout = steps.find(({uses}) => uses?.startsWith("actions/checkout@"));
+  const detect = steps.find(({name}) => name === "Detect a PowerShell wrapper change");
+  const check = steps.find(({name}) => name === "PowerShell installer checks through the pinned image");
+
+  // The job runs pull request code like the test job does, so it gets no secret and no write token.
+  assert.match(job?.if ?? "", /github\.event_name == 'pull_request'/u);
+  assert.equal(job?.["runs-on"], "ubuntu-24.04");
+  assert.deepEqual(job?.permissions, {contents: "read"});
+  assert.equal(checkout?.with?.["persist-credentials"], false);
+  // HEAD is the merge commit GitHub builds for the pull request; HEAD^1 is the base it merges into.
+  assert.equal(checkout?.with?.["fetch-depth"], 2);
+  assert.equal(detect?.id, "wrapper");
+  assert.equal(
+    detect?.run,
+    `git diff --quiet HEAD^1 HEAD -- ${wrapperPath} || echo "changed=true" >> "$GITHUB_OUTPUT"`,
+  );
+  assert.equal(check?.if, "steps.wrapper.outputs.changed == 'true'");
+  assert.equal(check?.run, "scripts/check-pwsh-docker");
+  for (const step of steps) {
+    assert.equal(step.env?.SYMPHONY_TRELLO_PWSH_DOCKER_IMAGE, undefined, "run the pinned image");
+  }
+
+  // The job watches one file, so Renovate must pin the image in that file alone.
+  const dotnetManagers = RENOVATE_CONFIG.customManagers.filter(({matchStrings}) =>
+    matchStrings?.some((pattern) => pattern.includes("mcr\\.microsoft\\.com/dotnet/sdk")),
+  );
+  assert.equal(dotnetManagers.length, 1);
+  const filePatterns = dotnetManagers[0]?.managerFilePatterns ?? [];
+  assert.equal(filePatterns.length, 1);
+  assert.match(wrapperPath, new RegExp(filePatterns[0]?.slice(1, -1) ?? "^$", "u"));
+
+  // A PowerShell test skips itself when the wrapper is unusable, so the script rejects skips.
+  const script = readFileSync(new URL("check-pwsh-docker", SCRIPTS), "utf8");
+  assert.ok(script.includes('wrapper="$repo_root/scripts/pwsh-docker.sh"'));
+  assert.ok(script.includes('SYMPHONY_TRELLO_TEST_PWSH="$wrapper" ./mvnw'));
+  assert.ok(script.includes(`grep -qE '<testsuite [^>]*skipped="0"' "$report"`));
+
+  // With the tests in place, a .NET SDK digest update follows the ordinary non-major automerge.
+  assert.ok(
+    RENOVATE_CONFIG.packageRules.every(
+      ({automerge, matchPackageNames}) =>
+        automerge !== false || !matchPackageNames?.includes("mcr.microsoft.com/dotnet/sdk"),
+    ),
+  );
+});
+
 test("Renovate permits unlimited concurrent branches and pull requests", () => {
   assert.equal(RENOVATE_CONFIG.branchConcurrentLimit, 0);
   assert.equal(RENOVATE_CONFIG.prConcurrentLimit, 0);
