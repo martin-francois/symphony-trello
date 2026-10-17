@@ -424,6 +424,12 @@ look while a card is running: it should say what Codex is doing, what it has lea
 and whether it is blocked. Symphony updates that same comment instead of creating a long stream of
 progress comments.
 
+Every comment Symphony writes on a card ends with a small italic `Managed by Symphony` line. That
+includes the workpad, handoff and blocker comments from Codex, the blocker-recheck status, and the
+prerequisite waiting comment. Comments you write yourself never get that line, so you can tell them
+apart even when Symphony posts through your Trello account. Older Symphony comments get the line the
+next time Symphony changes them.
+
 Use normal Trello checklists when one card must wait for another. Add a checklist such as
 `Must finish first`; the checklist name is only for people. Put one bare Trello card reference in
 each prerequisite item, for example `https://trello.com/c/abc123`. Symphony waits until each linked
