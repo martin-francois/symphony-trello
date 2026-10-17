@@ -7,7 +7,9 @@ public final class TestRepositoryUris {
     private static final int URI_PORT_ABSENT = -1;
     private static final int MIN_URI_PORT = 1;
     private static final int MAX_URI_PORT = 65_535;
-    private static final Pattern EXPLICIT_AUTHORITY_PORT = Pattern.compile("^(?:\\[[^]]+]|[^:]+):.*$");
+    /// A bracketed IPv6 host has a port only when a colon follows the closing bracket. The colons
+    /// inside the brackets belong to the address.
+    private static final Pattern EXPLICIT_AUTHORITY_PORT = Pattern.compile("^(?:\\[[^]]*]|(?!\\[)[^:]*):.*$");
 
     private TestRepositoryUris() {}
 

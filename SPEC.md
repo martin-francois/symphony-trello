@@ -1340,7 +1340,9 @@ implemented.
 - `repository.default_path`: optional local repository path or null, resolved like other workflow
   paths relative to the workflow file, default null; when both repository defaults are present, the
   URL remains the selected fallback identity and the path remains available as its first checkout
-  candidate, subject to Git-remote identity matching
+  candidate, subject to Git-remote identity matching. A resolved path that the platform rejects or
+  that contains a control character or a Unicode line or paragraph separator is a
+  `config_value_error`. When `repository.default_url` is also set, such a path is ignored instead
 - `hooks.after_create`: shell script or null
 - `hooks.before_run`: shell script or null
 - `hooks.after_run`: shell script or null
@@ -3486,6 +3488,9 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - `tracker.api_token` works, including `$VAR` indirection
 - `$VAR` resolution works for tracker API key, tracker API token, and path values
 - `~` path expansion works
+- `repository.default_path` that the platform rejects or that contains a control character or a
+  Unicode line or paragraph separator returns `config_value_error`, and is ignored when
+  `repository.default_url` is set
 - `tracker.blocker_enforced_states` defaults and normalization work
 - Tracker list-role overlap validation rejects one Trello list used by two roles and allows the
   in-progress pickup list inside the active lists

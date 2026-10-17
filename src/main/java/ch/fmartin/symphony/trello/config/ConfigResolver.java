@@ -415,11 +415,18 @@ public class ConfigResolver {
     }
 
     private Path optionalRepositoryPath(Path workflowDirectory, Map<String, Object> repository) {
+        Path path;
         try {
-            return optionalPath(workflowDirectory, repository, "default_path");
+            path = optionalPath(workflowDirectory, repository, "default_path");
         } catch (InvalidPathException e) {
             throw new ConfigException("config_value_error", "repository.default_path must be a valid local path", e);
         }
+        if (path != null && !EffectiveConfig.RepositoryConfig.usableDefaultPath(path)) {
+            throw new ConfigException(
+                    "config_value_error",
+                    "repository.default_path must not contain control characters or line separators");
+        }
+        return path;
     }
 
     private String optionalEnvironmentPathValue(String configured) {
