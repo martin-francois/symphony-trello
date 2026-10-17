@@ -27,6 +27,17 @@ Use these scoped tools when they are advertised:
 
 The move tool uses Trello's term `list_name` for a board list name.
 
+## Out-Of-Scope Follow-Ups
+
+When `trello_create_follow_up_card` is advertised, file useful work that is
+outside the current card's acceptance criteria with it instead of expanding the
+card. Give a one-line title, a description that says what was found and why it
+is out of scope, and acceptance criteria. Use `relationship` `related` unless
+one card really has to finish first. Copy the returned `workpad_note` into the
+workpad. If the result says `current_card_must_wait` is `true`, stop
+implementation and hand off as blocked unless `current_card_moved_to` shows the
+tool already moved the card.
+
 ## Pickup
 
 When a card starts in `Ready for Codex` and an `In Progress` list is
