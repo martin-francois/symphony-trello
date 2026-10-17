@@ -233,6 +233,10 @@ warning includes the workflow file and current `polling.interval_ms`. Repeated w
 the workflow should poll less often, especially when more than 5-10 boards share the same Trello
 token.
 
+The first poll after a start reads the comments of every card with comments in a
+Trello list named in `tracker.blocker_enforced_states`, to check its prerequisite status. Later polls read them again
+only for cards whose comments changed, so more requests right after a restart are expected.
+
 ## Common States
 
 - A card in `Ready for Codex` is queued.
