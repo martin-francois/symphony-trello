@@ -8,6 +8,8 @@ import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -17,10 +19,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 final class ConfigResolverTest {
     private static final String NUL_IN_REPOSITORY_PATH = "\u0000";
+    private static final String PARENT_VARIABLE = "SYMPHONY_PARENT";
+    private static final String PARENT_REFERENCE = "$" + PARENT_VARIABLE;
 
     @TempDir
     Path tempDir;
@@ -400,6 +405,82 @@ final class ConfigResolverTest {
                 Arguments.of("overflowing-float-port", "server:\n  port: 1e400", "server.port must be a whole number"));
     }
 
+    private static List<Arguments> pathSettingsReferencingMissingParentVariable() {
+        String tracker =
+                """
+                tracker:
+                  kind: trello
+                  api_key: %s
+                  api_token: %s
+                  board_id: board-1
+                """;
+        String literalTracker = tracker.formatted("literal-key", "literal-token");
+        List<PathSettingReference> settings = List.of(
+                new PathSettingReference(
+                        "workspace.root",
+                        "whole value",
+                        literalTracker + "workspace:\n  root: " + PARENT_REFERENCE,
+                        Map.of()),
+                new PathSettingReference(
+                        "workspace.root",
+                        "prefix",
+                        literalTracker + "workspace:\n  root: " + PARENT_REFERENCE + "/workspaces",
+                        Map.of()),
+                new PathSettingReference(
+                        "codex.additional_writable_roots",
+                        "prefix",
+                        literalTracker + "codex:\n  additional_writable_roots:\n    - " + PARENT_REFERENCE + "/shared",
+                        Map.of()),
+                new PathSettingReference(
+                        ConfigResolver.ADDITIONAL_WRITABLE_ROOTS_ENVIRONMENT,
+                        "prefix",
+                        literalTracker,
+                        Map.of(ConfigResolver.ADDITIONAL_WRITABLE_ROOTS_ENVIRONMENT, PARENT_REFERENCE + "/shared")),
+                new PathSettingReference(
+                        "tracker.api_key secret file",
+                        "prefix",
+                        tracker.formatted("file:" + PARENT_REFERENCE + "/api-key", "literal-token"),
+                        Map.of()),
+                new PathSettingReference(
+                        "tracker.api_token secret file",
+                        "prefix",
+                        tracker.formatted("literal-key", "file:" + PARENT_REFERENCE + "/api-token"),
+                        Map.of()));
+        List<Arguments> arguments = new ArrayList<>();
+        for (PathSettingReference setting : settings) {
+            for (MissingParentVariable missing : MissingParentVariable.values()) {
+                arguments.add(setting.withMissing(missing));
+            }
+        }
+        return arguments;
+    }
+
+    /// The ways [#PARENT_VARIABLE] can fail to supply a path prefix.
+    private enum MissingParentVariable {
+        UNSET("unset variable", Map.of()),
+        BLANK("blank variable", Map.of(PARENT_VARIABLE, " "));
+
+        private final String description;
+        private final Map<String, String> environment;
+
+        MissingParentVariable(String description, Map<String, String> environment) {
+            this.description = description;
+            this.environment = environment;
+        }
+    }
+
+    /// A path setting whose value starts with [#PARENT_REFERENCE], plus any other environment
+    /// the case needs. Each case runs once per [MissingParentVariable].
+    private record PathSettingReference(
+            String setting, String referenceShape, String frontMatter, Map<String, String> environment) {
+        Arguments withMissing(MissingParentVariable missing) {
+            var combined = new HashMap<>(environment);
+            combined.putAll(missing.environment);
+            return Arguments.of(
+                    setting, referenceShape + ", " + missing.description, frontMatter, Map.copyOf(combined));
+        }
+    }
+
     private static Stream<Arguments> missingOrBlankUrlWithValidPath() {
         return Stream.of(
                 Arguments.of("missing-url", Map.of()),
@@ -665,6 +746,47 @@ final class ConfigResolverTest {
         assertThat(config.tracker().boardId()).isNull();
         assertThat(error.code()).isEqualTo("missing_tracker_board_id");
         assertThat(error).hasMessage("tracker.board_id is required");
+    }
+
+    @MethodSource("pathSettingsReferencingMissingParentVariable")
+    @ParameterizedTest(name = "{0}: {1}")
+    void missingEnvironmentReferenceInPathSettingFailsConfigurationInsteadOfBecomingLiteralDirectory(
+            String setting, String scenario, String frontMatter, Map<String, String> environment) throws Exception {
+        // given
+        Path workflow = writeWorkflow("WORKFLOW.path-env-missing.md", frontMatter);
+        var resolver = new ConfigResolver(name -> Optional.ofNullable(environment.get(name)));
+
+        // when
+        Throwable error = catchThrowable(() -> resolver.resolve(new WorkflowLoader().load(workflow)));
+
+        // then
+        assertThat(error)
+                .as("%s must fail configuration, not resolve to a literal $%s directory", scenario, PARENT_VARIABLE)
+                .isInstanceOfSatisfying(ConfigException.class, failure -> assertThat(failure.code())
+                        .isEqualTo("missing_path_environment_variable"))
+                .hasMessage("%s references missing environment variable %s", setting, PARENT_VARIABLE);
+    }
+
+    @EnumSource(MissingParentVariable.class)
+    @ParameterizedTest
+    void missingEnvironmentReferenceInRepositoryDefaultPathPrefixResolvesToAbsent(MissingParentVariable missing)
+            throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.repository-path-env-prefix-missing.md",
+                """
+                repository:
+                  default_path: %s/project
+                """
+                        .formatted(PARENT_REFERENCE));
+        var resolver = new ConfigResolver(name -> Optional.ofNullable(missing.environment.get(name)));
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.repository().defaultPath()).as(missing.description).isNull();
+        assertThat(config.repository().selectedDefaultSource()).isEqualTo(EffectiveConfig.DefaultSource.NONE);
     }
 
     @Test
@@ -1063,7 +1185,7 @@ final class ConfigResolverTest {
                   turn_sandbox_policy:
                     type: readOnly
                 """);
-        var resolver = new ConfigResolver(name -> "SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS".equals(name)
+        var resolver = new ConfigResolver(name -> ConfigResolver.ADDITIONAL_WRITABLE_ROOTS_ENVIRONMENT.equals(name)
                 ? Optional.of("/allowed/env")
                 : Optional.empty());
 
