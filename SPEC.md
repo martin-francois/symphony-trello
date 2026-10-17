@@ -3700,6 +3700,10 @@ network access, or external service permissions are unavailable.
 - A skipped real-integration test SHOULD be reported as skipped, not silently treated as passed.
 - If a real-integration profile is explicitly enabled in CI or release validation, failures SHOULD
   fail that job.
+- Java implementation extension: `scripts/live-bugbash/run.sh` runs the live bug-bash scenario
+  manifest against real Trello, Codex, and GitHub sandbox resources when explicitly opted in, and
+  against local fakes otherwise. It reports skipped rows as skipped, keeps known-bug rows separate
+  from passes, and archives every run-owned Trello board it registered.
 
 ## 18. Implementation Checklist (Definition of Done)
 
