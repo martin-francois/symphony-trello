@@ -46,7 +46,7 @@ public final class CodexSandboxPolicy {
         return codexValue instanceof Map<?, ?> codex && codex.containsKey(TURN_SANDBOX_POLICY);
     }
 
-    public static void validateExplicitPolicy(Object value) {
+    public static void validateExplicitPolicy(@Nullable Object value) {
         if (!(value instanceof Map<?, ?> policy) || policy.isEmpty()) {
             throw invalid("codex.turn_sandbox_policy must be an object with a supported type.");
         }
@@ -121,11 +121,11 @@ public final class CodexSandboxPolicy {
         }
     }
 
-    private static void validateAdditionalWritableRoots(Object value) {
+    private static void validateAdditionalWritableRoots(@Nullable Object value) {
         validateStringList("codex.additional_writable_roots", value);
     }
 
-    private static void validateAdditionalWritableRootsPolicy(Object policyValue) {
+    private static void validateAdditionalWritableRootsPolicy(@Nullable Object policyValue) {
         if (policyValue == null) {
             return;
         }
@@ -139,7 +139,7 @@ public final class CodexSandboxPolicy {
         }
     }
 
-    private static void validateStringList(String field, Object value) {
+    private static void validateStringList(String field, @Nullable Object value) {
         if (!(value instanceof List<?> items)) {
             throw invalid(field + " must be a list of paths.");
         }
@@ -148,7 +148,7 @@ public final class CodexSandboxPolicy {
         }
     }
 
-    private static boolean invalidStringListItem(Object item) {
+    private static boolean invalidStringListItem(@Nullable Object item) {
         return !(item instanceof String text) || text.isBlank();
     }
 

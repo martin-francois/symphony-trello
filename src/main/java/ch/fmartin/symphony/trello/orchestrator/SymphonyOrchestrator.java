@@ -2037,7 +2037,7 @@ public class SymphonyOrchestrator {
     }
 
     private static int priorityOrDefault(Card card) {
-        return card.priority() == null ? Integer.MAX_VALUE : card.priority();
+        return Objects.requireNonNullElse(card.priority(), Integer.MAX_VALUE);
     }
 
     private Set<String> releaseIdleInProgressOverflow(List<Card> candidates) {
@@ -2307,7 +2307,7 @@ public class SymphonyOrchestrator {
 
     private static boolean isOutOfBoardScope(Card card, EffectiveConfig checkConfig) {
         return card.boardId() != null
-                && !card.boardId().equals(checkConfig.tracker().resolvedBoardId());
+                && !Objects.equals(card.boardId(), checkConfig.tracker().resolvedBoardId());
     }
 
     private Duration backoff(int attempt) {
