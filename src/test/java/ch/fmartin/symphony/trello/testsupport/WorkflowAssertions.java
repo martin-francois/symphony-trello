@@ -1,16 +1,22 @@
 package ch.fmartin.symphony.trello.testsupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.InstanceOfAssertFactories.LIST;
 
+import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
 
 public final class WorkflowAssertions {
     private final String content;
+    private final Path workflow;
 
     private WorkflowAssertions(Path workflow) {
+        this.workflow = workflow;
         try {
             this.content = Files.readString(workflow);
         } catch (IOException e) {
@@ -43,18 +49,36 @@ public final class WorkflowAssertions {
     }
 
     public WorkflowAssertions hasAdditionalWritableRoot(Path root) {
-        assertThat(content).contains(root.toString());
+        assertThat(additionalWritableRoots()).asInstanceOf(LIST).contains(root.toString());
         return this;
     }
 
     public WorkflowAssertions hasNoAdditionalWritableRoot(Path root) {
-        assertThat(content).doesNotContain(root.toString());
+        assertThat(additionalWritableRoots()).asInstanceOf(LIST).doesNotContain(root.toString());
         return this;
     }
 
     public WorkflowAssertions hasNoAdditionalWritableRoots() {
-        assertThat(content).doesNotContain("  additional_writable_roots:");
+        assertThat(additionalWritableRoots()).isEmpty();
         return this;
+    }
+
+    private List<?> additionalWritableRoots() {
+        Object codex = new WorkflowLoader().load(workflow).config().get("codex");
+        if (codex == null) {
+            return List.of();
+        }
+        if (!(codex instanceof Map<?, ?> settings)) {
+            throw new AssertionError("Workflow codex configuration must be a YAML map: " + workflow);
+        }
+        Object roots = settings.get("additional_writable_roots");
+        if (roots == null) {
+            return List.of();
+        }
+        if (roots instanceof List<?> values) {
+            return values;
+        }
+        throw new AssertionError("Workflow codex.additional_writable_roots must be a YAML list: " + workflow);
     }
 
     public WorkflowAssertions hasDangerFullAccess() {
