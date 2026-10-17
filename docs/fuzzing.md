@@ -130,6 +130,12 @@ contains and serves the HTML report. These checks cover open ClusterFuzzLite iss
 [#149](https://github.com/google/clusterfuzzlite/issues/149) and
 [#150](https://github.com/google/clusterfuzzlite/issues/150).
 
+Each coverage review is a file in `docs/fuzzing-reviews/` named after the last day of the period it
+covers. It records throughput, corpus size, coverage, and findings per target, and the input
+boundaries chosen for new targets. The [first-week review](fuzzing-reviews/2026-09-07-first-week.md)
+is the first one. A later review compares its numbers with the previous file and collects them with
+the commands listed there.
+
 For a 15- to 30-minute active fuzzing pass, run the public parser targets one at a time with an
 explicit duration:
 
