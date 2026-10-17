@@ -4040,6 +4040,14 @@ When this profile is used:
 - the default installer MUST download a release archive, verify its SHA3-256 checksum from the
   release's `checksums.txt`, and unpack it into the installer-managed app directory. It MUST NOT
   require Git or Maven for the default release-archive path
+- the release workflow MUST publish a Sigstore attestation bundle for the release assets, signed
+  without a long-lived key by the release workflow on the default branch. For releases from the
+  first signed release onward, when GitHub CLI with `gh attestation verify` is installed, the
+  default installer MUST verify the downloaded archive against that bundle with that signer identity
+  before unpacking, and MUST stop without unpacking when the bundle download or the verification
+  fails. When GitHub CLI or `gh attestation verify` is not installed, or the release predates the
+  first signed release, the installer MUST keep the checksum check, print one note that the
+  signature was not checked, and continue
 - the installer MAY support an explicit source-checkout mode for development and testing. In that
   mode it MUST clone or update the configured Git ref, run the Maven wrapper to build the packaged
   Quarkus app, and keep the rest of setup behavior equivalent to release-archive installs
