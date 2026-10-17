@@ -458,6 +458,13 @@ finding on the Trello card or, when there is a linked PR, on the PR. Then move t
 `Ready for Codex`. Codex treats that as rework, rereads the card, comments, workpad, PR feedback,
 and checks, and normally updates the existing PR instead of starting over.
 
+To get a pushed branch without a PR for one card, add the Trello label `No PR` to the card. Codex
+then runs the repository's local checks, pushes the branch, writes a proposed PR title and
+description to an untracked `PR.md` file in the task checkout, and moves the card to `Human Review`.
+The handoff comment names the checkout path, the branch, the branch link on GitHub, and the `PR.md`
+path. See [Branch-Only Handoff](#branch-only-handoff) for the details, how to ask for a PR later,
+and how to make a whole board branch-only.
+
 ### One Workflow For One Repository
 
 When every card in a workflow belongs to the same repository, set the workflow repository
@@ -1443,6 +1450,63 @@ and tell Codex to move with `list_id`.
 
 The standardized generic `trello_rest` dynamic tool extension is documented in [SPEC.md](SPEC.md).
 This Java implementation advertises the narrower handoff tools above.
+
+### Branch-Only Handoff
+
+Use branch-only handoff when you want Codex to push a branch but leave the decision to open a pull
+request to you. Generated GitHub workflows contain this section:
+
+```yaml
+github:
+  pull_request_mode: create
+  no_pr_label: "No PR"
+```
+
+- `pull_request_mode: create` keeps the normal flow: Codex creates or updates a PR before
+  `Human Review`.
+- `pull_request_mode: branch_only` makes every card on this board branch-only. This mode is strict:
+  no card on the board creates a PR, even when a comment asks for one. To get PRs again, change the
+  setting back to `create`.
+- `no_pr_label` names the Trello label that makes one card branch-only on a `create` board. The
+  default is `No PR`, matched without case sensitivity. Set another name to use your own label, or
+  set `no_pr_label: ""` to turn the label off.
+
+Setup does not ask about this. Most boards want PRs, and one more question would slow down the
+shortest setup path for everyone, so new GitHub workflows start with `create`. Edit the workflow
+file to change it; see [Find And Edit Workflow Files](#find-and-edit-workflow-files).
+
+If your board already uses a label named `No PR` for something else, cards with that label get
+branch-only handoff once you create, regenerate, or migrate the workflow with the current version.
+Rename the Trello label, or set `no_pr_label` to another name or to `""`, to keep the old meaning.
+Workflows you do not regenerate keep their current behavior.
+
+For a branch-only card, Codex:
+
+1. implements and commits the change on a task branch,
+2. runs the local checks that would normally gate CI and fixes failures caused by the change,
+3. writes a proposed PR title and description to `PR.md` in the task checkout root, or to
+   `PR-2.md`, `PR-3.md`, and so on when an unrelated `PR.md` already exists,
+4. pushes the branch without opening a PR,
+5. moves the card to `Human Review` with the checkout path, branch name, GitHub branch link,
+   `PR.md` path, and check results.
+
+`PR.md` stays untracked on purpose. It is a draft for you to read, edit, or paste into a PR, and it
+must not become part of the repository history. Codex adds it to the checkout's local Git exclude
+file and checks that it is never staged or committed.
+
+To ask for changes, comment on the card and move it back to `Ready for Codex`. Codex continues the
+same branch and updates the code and `PR.md`.
+
+To get a PR later on a `create` board, either remove the `No PR` label or add a comment that asks
+Symphony to create a PR, then move the card back to `Ready for Codex`. Codex opens the PR from
+`PR.md`, follows the repository's PR template, and moves the card to `Human Review`. From then on,
+the card uses the normal PR flow.
+
+When you move a branch-only card without a PR to `Merging`, Codex merges the branch into the
+repository's default branch, or into the target branch the card names, pushes it, and moves the
+card to `Done`. If the commits are already on the target branch, Codex skips the merge and moves the
+card to `Done`. The completion comment says which branch was merged or why no merge was needed.
+Branch protection that requires PRs makes this merge fail, and the card moves to `Blocked`.
 
 ## Operations
 
