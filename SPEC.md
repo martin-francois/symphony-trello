@@ -716,8 +716,8 @@ For a new workflow without an explicit or preserved model, catalog-derived model
 this precedence: the exact non-hidden `gpt-5.6-terra` entry when it has a usable model id, the first
 non-hidden usable entry marked `isDefault`, then the first non-hidden usable entry in catalog order.
 The Java setup flow MUST NOT treat `gpt-5.6-sol` as a special fallback when Terra is unavailable.
-An explicit setup model, a model newly typed during guided setup, or a preserved existing workflow
-model MUST take precedence over this catalog-derived recommendation. When no such model takes
+An explicit setup model, a model newly chosen or typed during guided setup, or a preserved existing
+workflow model MUST take precedence over this catalog-derived recommendation. When no such model takes
 precedence and supported discovery returns an empty catalog or no visible usable model id, model
 selection MUST use the deterministic compatibility fallback `gpt-5.5`.
 
@@ -737,7 +737,24 @@ The Java setup flow writes the selected `model` into generated workflows and wri
 `reasoning_effort` only when the precedence above resolves a value. It queries the installed Codex
 CLI with the app-server `model/list` method and uses the exact selected model's recommendation when
 one is present. Guided setup prompts for the model and reasoning effort and accepts a recommendation
-when the operator presses Enter. Non-interactive setup follows the same resolution unless explicit
+when the operator presses Enter.
+
+When `--codex-model` is omitted and supported discovery lists at least one non-hidden entry with a
+usable model id, guided setup MUST offer a numbered model picker. The picker MUST list every such
+entry once, in catalog order, keeping the first entry when a model id repeats across the response or
+its pages. Setup MUST read the display name, default marker, and reasoning metadata of a repeated
+model id from that same first entry, and MUST drop a display name that contains control characters
+instead of rejecting the catalog. It MUST identify the catalog-derived recommendation, MUST preselect the effective current
+model so that Enter keeps it, and MUST identify a preserved workflow model that is not the
+recommendation as current. A preserved workflow model that the picker does not list MUST appear as
+its own choice, and a workflow that omits the model MUST offer a choice that keeps the omission. The
+picker MUST end with an explicit other-model choice that accepts any non-blank single-line model id,
+and the prompt MUST also accept such a model id typed directly. Choosing the current model MUST
+count as keeping it. Choosing a different model MUST resolve reasoning effort as a newly selected
+model under the precedence above. The picker MAY shorten Codex display names to keep lines short but
+MUST show model ids in full. When discovery is unsupported or lists no non-hidden usable entry,
+guided setup MUST keep the free-text model prompt instead of showing an empty picker. Non-interactive
+setup and `--codex-model` MUST NOT show the picker. Non-interactive setup follows the same resolution unless explicit
 setup options provide different values. Existing workflow values remain the source of truth for a
 Trello board and take precedence over discovered defaults during workflow regeneration. The selected
 catalog model MAY omit `defaultReasoningEffort`; setup MUST NOT supply a model-specific effort from a
@@ -4073,6 +4090,9 @@ When this profile is used:
 - `setup-local repair-port --board NAME` MUST repair only the selected connected local workflow by
   assigning the next free managed HTTP port and updating the workflow plus connected-board manifest
 - `setup-local --dry-run` reports planned setup work without changing Trello or workflow files
+- when `--codex-model` is omitted and the installed Codex catalog lists visible models, guided
+  `setup-local` MUST offer the numbered model picker from Section 5.3.6, including an other-model
+  choice that accepts any non-blank single-line model id
 - guided `setup-local` MUST collect and validate an optional `repository.default_url` before Codex,
   GitHub, Trello, credential-persistence, or workflow-write side effects. A blank answer keeps the
   generated workflow repository-general, and dry-run MUST NOT prompt

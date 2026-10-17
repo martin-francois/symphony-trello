@@ -11,11 +11,13 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.jspecify.annotations.Nullable;
 
 record CodexModelSelectionDefaults(
         CodexModelDefaults defaults,
         Map<String, String> reasoningEffortsByModel,
         Map<String, List<ReasoningEffortOption>> reasoningEffortOptionsByModel,
+        List<CatalogModel> visibleModels,
         boolean firstClassFieldsSupported,
         String fallbackReasoningEffort,
         boolean preserveConfiguredReasoningEffort,
@@ -24,6 +26,7 @@ record CodexModelSelectionDefaults(
         Objects.requireNonNull(defaults, "defaults");
         reasoningEffortsByModel = sanitizeReasoningEfforts(reasoningEffortsByModel);
         reasoningEffortOptionsByModel = sanitizeReasoningEffortOptions(reasoningEffortOptionsByModel);
+        visibleModels = visibleModels == null ? List.of() : List.copyOf(visibleModels);
         fallbackReasoningEffort = blank(fallbackReasoningEffort) ? null : fallbackReasoningEffort.strip();
     }
 
@@ -39,6 +42,7 @@ record CodexModelSelectionDefaults(
                 defaults,
                 reasoningEffortsByModel,
                 toReasoningEffortOptions(reasoningEffortChoicesByModel),
+                List.of(),
                 defaults.firstClassFieldsSupported(),
                 defaults.reasoningEffort(),
                 false,
@@ -49,10 +53,22 @@ record CodexModelSelectionDefaults(
             CodexModelDefaults defaults,
             Map<String, String> reasoningEffortsByModel,
             Map<String, List<ReasoningEffortOption>> reasoningEffortOptionsByModel) {
+        return fromCatalog(defaults, List.of(), reasoningEffortsByModel, reasoningEffortOptionsByModel);
+    }
+
+    /// Builds selection defaults from a discovered catalog. `visibleModels` holds one entry per model
+    /// id in the catalog order that guided setup shows in its model picker; an empty list makes guided
+    /// setup fall back to the free-text model prompt.
+    static CodexModelSelectionDefaults fromCatalog(
+            CodexModelDefaults defaults,
+            List<CatalogModel> visibleModels,
+            Map<String, String> reasoningEffortsByModel,
+            Map<String, List<ReasoningEffortOption>> reasoningEffortOptionsByModel) {
         return new CodexModelSelectionDefaults(
                 defaults,
                 reasoningEffortsByModel,
                 reasoningEffortOptionsByModel,
+                visibleModels,
                 defaults.firstClassFieldsSupported(),
                 defaults.reasoningEffort(),
                 false,
@@ -79,6 +95,7 @@ record CodexModelSelectionDefaults(
                 defaults,
                 reasoningEffortsByModel,
                 reasoningEffortOptionsByModel,
+                visibleModels,
                 firstClassFieldsSupported,
                 fallbackReasoningEffort,
                 preserveConfiguredReasoningEffort,
@@ -232,6 +249,21 @@ record CodexModelSelectionDefaults(
             description = blank(description) ? null : description.strip();
             checkNoControlCharacters(reasoningEffort, "reasoningEffort");
             checkNoControlCharacters(description, "description");
+        }
+    }
+
+    /// One visible `model/list` entry that guided setup can offer in its model picker.
+    ///
+    /// @param model the exact model id written to `codex.model`
+    /// @param displayName Codex's human-readable name, or `null` when the catalog has none
+    /// @param recommended whether Symphony's catalog rules chose this entry for a new workflow
+    record CatalogModel(String model, @Nullable String displayName, boolean recommended) {
+        CatalogModel {
+            checkArgument(!blank(model), "model must not be blank");
+            model = model.strip();
+            displayName = blank(displayName) ? null : displayName.strip();
+            checkNoControlCharacters(model, "model");
+            checkNoControlCharacters(displayName, "displayName");
         }
     }
 }
