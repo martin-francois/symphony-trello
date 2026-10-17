@@ -2039,6 +2039,97 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void privateContextLookupResolvesWorkerLogPathTokenFollowedByText() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("log-line-lookup-config");
+        Path stateHome = tempDir.resolve("log-line-lookup-state");
+        Path workflow = configDir.resolve("WORKFLOW.log-line.md");
+        Files.createDirectories(configDir);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19205));
+        saveSyntheticBoard(configDir, workflow, 19205);
+        Path workerLog = new ManagedProcessStore(stateHome).files(workflow).stdoutLog();
+        Files.createDirectories(workerLog.getParent());
+        Files.writeString(
+                workerLog,
+                """
+                INFO (main) workflow=%s outcome=loaded
+                INFO (main) cloned into %s/private client/repo
+                """
+                        .formatted(workflow, configDir));
+        Map<String, String> environment = Map.of("SYMPHONY_TRELLO_CONFIG_DIR", configDir.toString());
+
+        // when
+        String report = renderWorkflowDiagnostics(
+                new SetupDiagnosticReporter(environment, new FakeCommandRunner()), configDir, stateHome, workflow);
+        String emittedToken = firstMatch(report, Pattern.compile("workflow=(<path:[0-9a-f]{12}>)"));
+        String lookup = lookupDiagnostics(
+                new SetupDiagnosticReporter(environment, new FakeCommandRunner()),
+                configDir,
+                stateHome,
+                Optional.of(workflow),
+                emittedToken);
+
+        // then
+        assertThat(report)
+                .contains("workflow=" + pathToken(diagnosticsKey(configDir), workflow) + " outcome=loaded")
+                .doesNotContain(configDir.toString(), "client/repo");
+        assertThat(lookup)
+                .contains(
+                        "- **lookup_status:** found",
+                        "| workflow | workflow_path | " + emittedToken + " | " + workflow + " |");
+    }
+
+    @Test
+    void privateContextLookupResolvesPathTokensFromToolVersionOutput() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("tool-output-lookup-config");
+        Path stateHome = tempDir.resolve("tool-output-lookup-state");
+        Path toolDirectory = fakeToolDirectory(tempDir, "codex", "docker");
+        Path codex = toolDirectory.resolve("codex");
+        Path docker = toolDirectory.resolve("docker");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        FakeCommandRunner commands = new FakeCommandRunner()
+                .returns(
+                        0,
+                        """
+                        Emulate Docker CLI using podman. Create /etc/containers/nodocker to quiet msg.
+                        podman version 6.0.2
+                        """,
+                        docker.toString(),
+                        "--version")
+                .returns(0, "codex-cli 1.2.3 at /opt/codex/bin/codex\n", codex.toString(), "--version")
+                .returns(0, "Logged in using ChatGPT\n", codex.toString(), "login", "status");
+        Map<String, String> environment = Map.of("PATH", toolDirectory.toString());
+
+        // when
+        String report = renderDeepDiagnostics(new SetupDiagnosticReporter(environment, commands), configDir, stateHome);
+        String dockerToken = firstMatch(
+                report,
+                Pattern.compile("\\| docker \\| available \\| Emulate Docker CLI using podman\\. Create "
+                        + "(<path:[0-9a-f]{12}>)"));
+        String codexToken = firstMatch(
+                report, Pattern.compile("\\| codex \\| available \\| codex-cli 1\\.2\\.3 at (<path:[0-9a-f]{12}>)"));
+        String dockerLookup = lookupDiagnostics(
+                new SetupDiagnosticReporter(environment, commands),
+                configDir,
+                stateHome,
+                Optional.empty(),
+                dockerToken);
+        String codexLookup = lookupDiagnostics(
+                new SetupDiagnosticReporter(environment, commands), configDir, stateHome, Optional.empty(), codexToken);
+
+        // then
+        assertThat(report).contains(codexToken + "; login=ok |");
+        assertThat(dockerLookup)
+                .contains(
+                        "- **lookup_status:** found",
+                        "| tool | docker | " + dockerToken + " | /etc/containers/nodocker");
+        assertThat(codexLookup)
+                .contains("- **lookup_status:** found", "| tool | codex | " + codexToken + " | /opt/codex/bin/codex |");
+    }
+
+    @Test
     void privateContextLookupResolvesFileBackedSecretTokenWithoutReadingSecretValue() throws Exception {
         // given
         Path configDir = tempDir.resolve("lookup-secret-config");
@@ -4039,6 +4130,25 @@ final class SetupDiagnosticReporterTest {
                 Optional.of(stateHome),
                 Optional.empty(),
                 Optional.empty()));
+    }
+
+    private static String lookupDiagnostics(
+            SetupDiagnosticReporter reporter, Path configDir, Path stateHome, Optional<Path> workflow, String token)
+            throws IOException {
+        return reporter.renderReport(
+                new SetupDiagnosticReporter.DiagnosticsRequest(
+                        Optional.empty(),
+                        Optional.empty(),
+                        false,
+                        false,
+                        Optional.empty(),
+                        Optional.of(configDir),
+                        Optional.empty(),
+                        Optional.of(stateHome),
+                        Optional.empty(),
+                        workflow,
+                        Optional.of(token)),
+                true);
     }
 
     private static String renderGlobalDiagnostics(

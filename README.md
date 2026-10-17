@@ -1479,8 +1479,9 @@ If a maintainer asks which local board, workflow, or log one of those tokens ref
 resolve only one token instead of printing the full private-context report. Private context maps
 tokens back to your local Trello board ids, board URLs, workflow paths, env file path, workspace
 root, state directory, worker log files, managed PID/state files, and file-backed secret paths. It
-does not print the secret values stored in those files. The lifecycle commands may also print one of
-these tokens when hiding a local path in an error. Use it to inspect your own machine or answer a
+does not print the secret values stored in those files. `--lookup` also resolves a path that a tool
+printed in its version line. The lifecycle commands may also print one of these tokens when hiding
+a local path in an error. Use it to inspect your own machine or answer a
 maintainer's question in your own words. Do not paste the `--show-private-context` output
 into public issues because it intentionally contains private Trello identifiers, URLs, and local
 paths. It does not include credential values or worker log contents.
