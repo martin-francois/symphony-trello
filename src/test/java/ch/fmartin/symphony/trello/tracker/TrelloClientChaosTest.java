@@ -14,12 +14,18 @@ import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,6 +50,11 @@ final class TrelloClientChaosTest {
             ]
             """
                     .formatted(CARD_ID);
+
+    private static final int CLASSIFICATION_MAX_API_RETRIES = 2;
+    private static final Duration LONG_RETRY_AFTER = Duration.ofSeconds(60);
+    private static final Duration TEST_WAIT_LIMIT = Duration.ofSeconds(10);
+    private static final Duration BACKOFF_POLL_INTERVAL = Duration.ofMillis(10);
 
     private final TrelloClient client = new TrelloClient(new ObjectMapper());
     private final List<String> writes = new ArrayList<>();
@@ -118,6 +129,121 @@ final class TrelloClientChaosTest {
                 Arguments.of("array response without an attachment object", "[]"),
                 Arguments.of("object response without id", "{\"name\":\"Pull request\"}"),
                 Arguments.of("non-object response", "\"attachment-1\""));
+    }
+
+    @MethodSource("readRetryClassifications")
+    @ParameterizedTest(name = "{0}")
+    void readRetriesOnlyRateLimitsAndTransportFailuresUpToConfiguredLimit(
+            String scenario, HttpHandler fault, int expectedRequests, String expectedCode) {
+        // given
+        var requests = new AtomicInteger();
+        trello.on("/1/boards/input", exchange -> {
+            requests.incrementAndGet();
+            fault.handle(exchange);
+        });
+        EffectiveConfig config =
+                config(Map.of("max_api_retries", CLASSIFICATION_MAX_API_RETRIES, "api_retry_base_delay_ms", 1));
+
+        // when
+        TrelloException failure = catchThrowableOfType(() -> client.resolveBoardId(config), TrelloException.class);
+
+        // then
+        assertThat(failure).as(scenario).extracting(TrelloException::code).isEqualTo(expectedCode);
+        assertThat(requests).as(scenario).hasValue(expectedRequests);
+    }
+
+    private static Stream<Arguments> readRetryClassifications() {
+        int everyAttempt = CLASSIFICATION_MAX_API_RETRIES + 1;
+        return Stream.of(
+                Arguments.of(
+                        "HTTP 429 is retried until the limit",
+                        (HttpHandler) exchange -> respond(exchange, 429, "{}"),
+                        everyAttempt,
+                        "trello_api_rate_limited"),
+                Arguments.of(
+                        "HTTP 500 is not retried",
+                        (HttpHandler) exchange -> respond(exchange, 500, "{}"),
+                        1,
+                        "trello_api_status"),
+                Arguments.of(
+                        "truncated response body is retried until the limit",
+                        (HttpHandler) TrelloClientChaosTest::respondWithTruncatedBody,
+                        everyAttempt,
+                        "trello_api_request"));
+    }
+
+    @Test
+    void interruptDuringRetryBackoffStopsWaitingAndKeepsInterruptFlag() throws InterruptedException {
+        // given
+        trello.on("/1/boards/input", exchange -> {
+            exchange.getResponseHeaders().add("Retry-After", String.valueOf(LONG_RETRY_AFTER.toSeconds()));
+            respond(exchange, 429, "{}");
+        });
+        EffectiveConfig config = config(Map.of("max_api_retries", 1));
+        var failure = new AtomicReference<Throwable>();
+        var interruptFlagKept = new AtomicBoolean();
+        Thread poller = Thread.ofPlatform().start(() -> {
+            try {
+                client.resolveBoardId(config);
+            } catch (RuntimeException e) {
+                failure.set(e);
+            }
+            interruptFlagKept.set(Thread.currentThread().isInterrupted());
+        });
+        try {
+            awaitRetryBackoff(poller);
+
+            // when
+            poller.interrupt();
+            poller.join(TEST_WAIT_LIMIT);
+        } finally {
+            poller.interrupt();
+        }
+
+        // then
+        assertThat(poller.isAlive())
+                .as("an interrupt ends the %s Retry-After wait within %s", LONG_RETRY_AFTER, TEST_WAIT_LIMIT)
+                .isFalse();
+        assertThat(failure.get()).isInstanceOfSatisfying(TrelloException.class, e -> assertThat(e)
+                .hasMessage("Trello retry sleep interrupted")
+                .extracting(TrelloException::code)
+                .isEqualTo("trello_api_request"));
+        assertThat(interruptFlagKept.get())
+                .as("the polling thread still sees its interrupt after the Trello client gives up")
+                .isTrue();
+    }
+
+    /// Waits until the poller sleeps in the retry backoff, so the interrupt cannot land in the HTTP
+    /// call instead and the test proves that the backoff wait itself is interruptible.
+    private static void awaitRetryBackoff(Thread poller) throws InterruptedException {
+        long deadline = System.nanoTime() + TEST_WAIT_LIMIT.toNanos();
+        while (!isInRetryBackoff(poller)) {
+            assertThat(System.nanoTime() - deadline)
+                    .as("the poller reaches the retry backoff within %s", TEST_WAIT_LIMIT)
+                    .isNegative();
+            Thread.sleep(BACKOFF_POLL_INTERVAL);
+        }
+    }
+
+    private static boolean isInRetryBackoff(Thread poller) {
+        for (StackTraceElement frame : poller.getStackTrace()) {
+            if (frame.getClassName().equals(TrelloClient.class.getName())
+                    && frame.getMethodName().equals("sleep")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void respondWithTruncatedBody(HttpExchange exchange) throws IOException {
+        // Flush before closing: when a connection closes before any response bytes arrive, the JDK
+        // HttpClient re-sends an idempotent GET on its own, which would double the request count.
+        // With headers received, the short body fails each attempt with exactly one IOException.
+        byte[] partialBody = "{\"id\":".getBytes(StandardCharsets.UTF_8);
+        exchange.sendResponseHeaders(200, partialBody.length * 2L);
+        exchange.getResponseBody().write(partialBody);
+        exchange.getResponseBody().flush();
+        exchange.close();
     }
 
     @Test
