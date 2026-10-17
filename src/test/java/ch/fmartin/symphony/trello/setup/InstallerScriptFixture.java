@@ -590,7 +590,7 @@ final class InstallerScriptFixture {
                   }
                   setup_local_value_option() {
                     case "$1" in
-                      --key|--token|--board-name|--board|--workspace-id|--active|--terminal|--in-progress|--blocked|--workflow|--workspace-root|--config-dir|--manifest|--server-port|--max-agents|--codex-model|--codex-reasoning-effort|--env|--add-path|--endpoint)
+                      --key|--token|--board-name|--board|--workspace-id|--active|--terminal|--in-progress|--blocked|--workflow|--workspace-root|--config-dir|--state-home|--manifest|--server-port|--max-agents|--codex-model|--codex-reasoning-effort|--env|--add-path|--endpoint)
                         return 0
                         ;;
                       *)
@@ -642,6 +642,9 @@ final class InstallerScriptFixture {
                           if [[ -n "$workspace_root" ]] && ! has_option --workspace-root "${raw_cli_args[@]}"; then
                             defaults+=("--workspace-root" "$workspace_root")
                           fi
+                          if [[ -n "$state_home" ]] && ! has_option --state-home "${raw_cli_args[@]}"; then
+                            defaults+=("--state-home" "$state_home")
+                          fi
                         else
                           if [[ "$workspace_from_user_environment" == true ]]; then
                             if ! has_option --workspace-root "${raw_cli_args[@]}"; then
@@ -650,6 +653,15 @@ final class InstallerScriptFixture {
                           else
                             if ! has_option --workspace-root "${raw_cli_args[@]}"; then
                               defaults+=("--workspace-root" "$(/usr/bin/readlink -m "$explicit_config")/workspaces")
+                            fi
+                          fi
+                          if [[ "$state_from_user_environment" == true ]]; then
+                            if ! has_option --state-home "${raw_cli_args[@]}"; then
+                              defaults+=("--state-home" "$state_home")
+                            fi
+                          else
+                            if ! has_option --state-home "${raw_cli_args[@]}"; then
+                              defaults+=("--state-home" "$(dirname "$(/usr/bin/readlink -m "$explicit_config")")/state")
                             fi
                           fi
                         fi
@@ -699,7 +711,7 @@ final class InstallerScriptFixture {
                   if [[ ${#defaults[@]} -gt 0 ]]; then
                     effective_cli_args=("${raw_cli_args[0]}" "${defaults[@]}" "${raw_cli_args[@]:1}")
                   fi
-                  echo "setup-cli cwd=$PWD ${java_args[*]} ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain ${effective_cli_args[*]} dotenv=${SYMPHONY_TRELLO_DOTENV:-} workspace_env=${SYMPHONY_TRELLO_WORKSPACE_ROOT:-} state_env=${SYMPHONY_TRELLO_STATE_HOME:-} completion_mode=${SYMPHONY_TRELLO_INSTALLER_COMPLETION:-}" >> "${SYMPHONY_FAKE_LOG:?}"
+                  echo "setup-cli cwd=$PWD ${java_args[*]} ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain ${effective_cli_args[*]} dotenv=${SYMPHONY_TRELLO_DOTENV:-} workspace_env=${SYMPHONY_TRELLO_WORKSPACE_ROOT:-} state_env=${SYMPHONY_TRELLO_STATE_HOME:-} completion_mode=${SYMPHONY_TRELLO_INSTALLER_COMPLETION:-} layout_feedback=${SYMPHONY_TRELLO_LAYOUT_FEEDBACK:-}" >> "${SYMPHONY_FAKE_LOG:?}"
                   if [[ "$*" == *"definitely-not-a-command"* ]]; then
                     echo "setup_failed code=setup_invalid_arguments message=Unmatched argument: 'definitely-not-a-command'" >&2
                     exit 2
@@ -816,6 +828,7 @@ final class InstallerScriptFixture {
 	                fi
 	                if [[ "${effective_cli_args[0]:-}" == "setup-local" ]]; then
                   config_dir="."
+                  state_home="."
                   cli_args=("${effective_cli_args[@]}")
                   for ((index = 1; index < ${#cli_args[@]}; index++)); do
                     if [[ "${cli_args[$index]}" == "--config-dir" && $((index + 1)) -lt ${#cli_args[@]} ]]; then
@@ -823,6 +836,11 @@ final class InstallerScriptFixture {
                       index=$((index + 1))
                     elif [[ "${cli_args[$index]}" == "--config-dir="* ]]; then
                       config_dir="${cli_args[$index]#--config-dir=}"
+                    elif [[ "${cli_args[$index]}" == "--state-home" && $((index + 1)) -lt ${#cli_args[@]} ]]; then
+                      state_home="${cli_args[$((index + 1))]}"
+                      index=$((index + 1))
+                    elif [[ "${cli_args[$index]}" == "--state-home="* ]]; then
+                      state_home="${cli_args[$index]#--state-home=}"
                     else
                       :
                     fi
@@ -851,7 +869,7 @@ final class InstallerScriptFixture {
                   printf -- '---\\ntracker:\\n  kind: trello\\n---\\n# %s\\n' "$board" > "$workflow"
                   printf '{"boards":[{"boardId":"board-1","boardName":"%s","workflowPath":"%s","envPath":"%s/.env"}]}\\n' "$board" "$workflow" "$config_dir" > "$config_dir/connected-boards.json"
 	                  echo "setup-local key=$key token=$token board=$board" >> "${SYMPHONY_FAKE_LOG:?}"
-	                  env -u SYMPHONY_TRELLO_INSTALLER_COMPLETION "${SYMPHONY_TRELLO_COMMAND:?}" start --env "$config_dir/.env" --workflow "$workflow"
+	                  env -u SYMPHONY_TRELLO_INSTALLER_COMPLETION "${SYMPHONY_TRELLO_COMMAND:?}" start --config-dir "$config_dir" --state-home "$state_home" --env "$config_dir/.env" --workflow "$workflow"
                   if [[ "${SYMPHONY_TRELLO_INSTALLER_COMPLETION:-}" != "defer" ]]; then
                     echo "You're good to go - your Trello board is now a queue for Codex work."
                   fi

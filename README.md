@@ -727,6 +727,23 @@ installer keeps the normal logical XDG paths under `$HOME`. Explicit path overri
 `SYMPHONY_HOME`, `SYMPHONY_TRELLO_CONFIG_DIR`, `SYMPHONY_TRELLO_WORKSPACE_ROOT`,
 `SYMPHONY_TRELLO_STATE_HOME`, `--prefix`, and `--bin-dir` still win.
 
+For a direct advanced setup, `symphony-trello setup-local --state-home PATH` selects the directory
+that stores managed worker PID files and logs. Installer-managed setup supplies this option from the
+chosen install layout, so normal users do not need to set it or remember it for later commands.
+
+When a fresh interactive install uses explicit layout variables, setup asks whether the layout
+follows a reusable platform or organization convention. If you opt in, setup shows the complete
+sanitized feature request before offering to create it with an authenticated GitHub CLI. If GitHub
+CLI creation is unavailable or declined, setup prints a prefilled browser link. Declining the
+feedback prompt skips issue creation entirely. Paths outside your home, usernames, hostnames,
+credentials, and account details are not included, and declining does not affect setup.
+
+Updates temporarily recognize managed workers whose PID files were written to the former
+config-sibling `state` directory. The updater stops those workers and restarts them in the configured
+state home; existing log files remain where they were as history. This migration is tracked in
+[issue #678](https://github.com/martin-francois/symphony-trello/issues/678) and will be reconsidered
+by August 30, 2027, or at the next breaking release, whichever comes first.
+
 The installer writes an install context in the selected config and state directories, plus stable
 default context locations under `$HOME`, so future updates and uninstall can find the selected paths
 without the original flags. Durable data is config and state/logs. Large generated data is app
