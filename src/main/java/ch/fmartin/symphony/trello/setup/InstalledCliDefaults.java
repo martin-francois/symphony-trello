@@ -55,6 +55,7 @@ final class InstalledCliDefaults {
             case "setup-local" -> setupLocal(args, paths);
             case "new-board", "import-board" -> boardSetup(args, paths);
             case "start", "stop", "status", "logs", "diagnostics" -> lifecycle(args, paths);
+            case "migrate-workflows" -> configDirOnly(args, paths);
             default -> args;
         };
     }
@@ -90,6 +91,12 @@ final class InstalledCliDefaults {
         // Keep connected-board rows in the installed manifest even for explicit external workflow
         // paths, so default diagnostics and board-selector lifecycle commands keep seeing them.
         addIfMissing(defaults, args, "--manifest", paths.configDir().map(InstalledCliDefaults::installedManifest));
+        return injectAfterCommand(args, defaults);
+    }
+
+    private static List<String> configDirOnly(List<String> args, InstalledPaths paths) {
+        List<String> defaults = new ArrayList<>();
+        addIfMissing(defaults, args, "--config-dir", paths.configDir());
         return injectAfterCommand(args, defaults);
     }
 

@@ -141,6 +141,8 @@ final class TrelloBoardSetupService {
             throws IOException {
         persistConnectedBoard(
                 ConnectedBoard.from(result, envPath, workspaceRoot, githubIntegration), manifestPath, out);
+        GeneratedWorkflowStore.recordGenerated(manifestPath, result.workflowPath(), result.bodyInputs())
+                .ifPresent(out::println);
     }
 
     void persistConnectedBoard(
@@ -153,6 +155,8 @@ final class TrelloBoardSetupService {
             throws IOException {
         persistConnectedBoard(
                 ConnectedBoard.from(result, envPath, workspaceRoot, githubIntegration), manifestPath, out);
+        GeneratedWorkflowStore.recordGenerated(manifestPath, result.workflowPath(), result.bodyInputs())
+                .ifPresent(out::println);
     }
 
     Map<String, String> environment() {
