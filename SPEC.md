@@ -1171,17 +1171,30 @@ blocking on any non-green check:
 - The workpad and visible Trello handoff comment MUST record the check state, local commands used
   when local validation was required, and any unavailable, flaky, or unrelated check caveat.
 
+Generated workflow prompts MUST render the card's current Trello list from `card.state` so the agent
+can route from that list.
+
+`Merging` exists for pull requests. Work with nothing to merge MAY move from `Human Review` straight
+to `Done` when a human accepts it, and generated workflows tell the agent to say so in the review
+handoff comment for such work.
+
 When a human moves the Trello card to `Merging`, generated workflows use this deterministic merge
 policy:
 
-- merge and move to `Done` only after the PR merged successfully
+- a card has nothing to merge when no PR for the card's work is linked from the card description,
+  Trello comments, or workpad, no open PR exists for the card's branch, and the completed work did
+  not need one, such as question-only, repository-independent, or explicitly local-only or no-push
+  work; the agent records in the workpad that no merge was needed and moves the card to `Done`, and
+  MUST NOT return it to `Human Review` or move it to `Blocked`
+- for work that needs a PR, merge and move to `Done` only after the PR merged successfully
 - `Human Review` -> `Merging` with no new feedback and a clean PR is approval to merge
 - exact, unambiguous feedback added before the card entered `Merging` that Codex addressed with
   current validation and clean checks can merge without another human review
 - material fixups, broad interpretation, or unverifiable changes return the card to `Human Review`
   with the reason and a request for renewed approval
-- unresolved actionable feedback, required reviews, mergeability, checks, auth, or repository policy
-  move the card to `Blocked` with the blocker class and next human action
+- for work that needs a PR, a missing PR or unresolved actionable feedback, required reviews,
+  mergeability, checks, auth, or repository policy move the card to `Blocked` with the blocker class
+  and next human action
 - the workflow SHOULD NOT leave the card parked in `Merging` after a failed merge attempt
 
 When `new-board` would otherwise write `WORKFLOW.md` and that file already exists, the Java
@@ -3684,6 +3697,8 @@ These checks are REQUIRED when the workflow expects the agent to perform Trello 
 - Destructive operations are disabled unless explicitly configured.
 - Startup validates write capability or emits an operator-visible warning when verification is not
   possible without side effects.
+- Generated workflow prompts render the card's current list, and a card in `Merging` with nothing to
+  merge moves to `Done` while a card whose work needs a PR keeps the merge or `Blocked` flow.
 
 ### 17.9 Real Integration Profile (RECOMMENDED)
 
