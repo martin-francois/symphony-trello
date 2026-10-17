@@ -1,0 +1,16 @@
+---
+tracker:
+  kind: trello
+  api_key: literal-api-key
+  api_token: literal-api-token
+  board_id: board-1
+  active_states:
+    - Todo
+    - In Progress
+  terminal_states: [Done, " todo "]
+  in_progress_state: In Progress
+  blocked_state: Blocked
+  active_list_ids: list-1
+  terminal_list_ids: [list-2, list-1]
+---
+Active and terminal list roles overlap.

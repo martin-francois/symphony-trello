@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.workflow;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.fmartin.symphony.trello.fuzz.WorkflowConfigInvariants;
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import java.io.IOException;
@@ -63,6 +64,7 @@ final class WorkflowLoaderFuzzTest {
             assertThat(result.definition().path()).isAbsolute();
             assertThat(result.definition().config()).isNotNull();
             assertThat(result.definition().promptTemplate()).isNotNull();
+            WorkflowConfigInvariants.assertResolutionProperties(result.definition());
         }
         if (result.failure() != null) {
             assertThat(result.failure().code())

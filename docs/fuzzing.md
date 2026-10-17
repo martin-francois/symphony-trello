@@ -67,6 +67,18 @@ a checked-in seed corpus under `oss-fuzz/corpora/`. These seeds cover representa
 declarations, Trello references and checklist forms, and valid and invalid workflow front matter so
 coverage-guided mutation starts inside useful parser paths.
 
+The workflow target does not stop after loading. `WorkflowConfigInvariants` resolves every loaded
+workflow with `ConfigResolver`, runs dispatch validation, builds the Codex sandbox policy, and reads
+the server port through the typed views that setup diagnostics use. It resolves each input three
+times: with a fixed set of environment variables, with
+`SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS` added, and with `SYMPHONY_CODEX_DANGER_FULL_ACCESS=true`
+added. The environment is a fixed map, and `file:` secrets come from in-memory files keyed by file
+name, so no execution reads the process environment, a `.env` file, or a host file. A
+`ConfigException` with a snake_case code is the expected rejection. Any other exception, and any
+broken property such as a relative resolved path or a sandbox policy that drops an additional
+writable root, is a finding. The workflow seeds use the variable and secret file names that
+`WorkflowConfigInvariants` defines, so mutation starts from references that resolve.
+
 ClusterFuzzLite's `v1` runner image bundles JaCoCo 0.8.7, which rejects Java 25 class files after
 the fuzzers run and then uploads an incomplete coverage directory. The coverage job therefore uses
 the same digest-pinned ClusterFuzzLite runner with its JaCoCo agent and CLI replaced by the version
@@ -74,7 +86,9 @@ declared in `pom.xml`. The repository-owned wrapper still delegates corpus downl
 execution, and publication to ClusterFuzzLite. Its post-run verifier requires the HTML report,
 well-formed JaCoCo XML, aggregate summary, and all four per-target summaries. It downloads and
 checks every published file, rejects empty aggregate coverage, and rejects any target report that
-does not cover lines in that target's production resolver, parser, classifier, or loader.
+does not cover lines in that target's production resolver, parser, classifier, or loader. The
+`WorkflowLoaderFuzzer` report must also cover lines in `ConfigResolver.java`, so a change that stops
+the workflow target before configuration resolution fails the coverage job.
 
 ClusterFuzzLite stores corpora on `main` and coverage on `gh-pages` in the dedicated public
 [`symphony-trello-fuzzing-storage`](https://github.com/martin-francois/symphony-trello-fuzzing-storage)
@@ -187,7 +201,9 @@ The JUnit fuzz tests and standalone OSS-Fuzz targets are related but separate:
   directly to their `@FuzzTest` methods and become seed inputs for active local Jazzer mutation runs.
   `WorkflowLoaderFuzzTest` uses `FuzzedDataProvider.consumeBytes(...)` for active fuzzing so the
   byte-size cap is enforced while the existing raw byte crash corpus stays valid; its curated
-  workflow seeds remain deterministic parameterized regression tests.
+  workflow seeds remain deterministic parameterized regression tests. `pom.xml` also copies
+  `oss-fuzz/corpora/WorkflowLoaderFuzzer` into its Jazzer regression inputs, so every standalone seed
+  is replayed in normal Maven runs.
 - `RepositorySourceFuzzer`, `WorkflowLoaderFuzzer`, `TrelloCardReferenceParserFuzzer`, and
   `TrelloChecklistClassifierFuzzer` are standalone `fuzzerTestOneInput` entry points. OSS-Fuzz wraps
   and runs these classes from compiled test output.

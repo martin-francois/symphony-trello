@@ -81,15 +81,19 @@ if [[ "$1" == run ]]; then
   printf '<report/>\n' >"$coverage/report/linux/jacoco.xml"
   write_report() {
     target_file="$1"
-    source_file="$2"
-    printf '{"type":"oss-fuzz.java.coverage.json.export","version":"1.0.0","data":[{"files":[{"filename":"src/main/java/ch/fmartin/symphony/trello/%s","summary":{"lines":{"covered":%s}}}],"totals":{"lines":{"covered":%s}}}]}' \
-      "$source_file" "$FAKE_COVERED_LINES" "$FAKE_COVERED_LINES" >"$target_file"
+    shift
+    files=""
+    for source_file in "$@"; do
+      files="$files\${files:+,}$(printf '{"filename":"src/main/java/ch/fmartin/symphony/trello/%s","summary":{"lines":{"covered":%s}}}' "$source_file" "$FAKE_COVERED_LINES")"
+    done
+    printf '{"type":"oss-fuzz.java.coverage.json.export","version":"1.0.0","data":[{"files":[%s],"totals":{"lines":{"covered":%s}}}]}' \
+      "$files" "$FAKE_COVERED_LINES" >"$target_file"
   }
   write_report "$coverage/report/linux/summary.json" "workflow/WorkflowLoader.java"
   write_report "$coverage/fuzzer_stats/RepositorySourceFuzzer.json" "repository/RepositorySourceResolver.java"
   write_report "$coverage/fuzzer_stats/TrelloCardReferenceParserFuzzer.json" "tracker/TrelloCardReferenceParser.java"
   write_report "$coverage/fuzzer_stats/TrelloChecklistClassifierFuzzer.json" "tracker/TrelloChecklistClassifier.java"
-  write_report "$coverage/fuzzer_stats/WorkflowLoaderFuzzer.json" "workflow/WorkflowLoader.java"
+  write_report "$coverage/fuzzer_stats/WorkflowLoaderFuzzer.json" "workflow/WorkflowLoader.java" "config/ConfigResolver.java"
 fi
 `,
   );
