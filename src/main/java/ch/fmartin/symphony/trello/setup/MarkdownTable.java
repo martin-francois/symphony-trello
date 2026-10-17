@@ -6,6 +6,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+/// Renders the GitHub-flavored Markdown tables in diagnostics reports.
+///
+/// Only table syntax is escaped: a pipe becomes `\|`, and each CR or LF becomes a space. Every
+/// other character stays verbatim, because users paste the report as plain text and readers and
+/// tests match column names and redaction markers literally. Callers redact values before adding a
+/// row. commonmark-java was evaluated as a replacement and rejected because its Markdown renderer
+/// changes those bytes; see docs/adr/0120-keep-local-diagnostics-markdown-table-helper.md.
 final class MarkdownTable {
     private final List<String> headers;
     private final List<Alignment> alignments;
