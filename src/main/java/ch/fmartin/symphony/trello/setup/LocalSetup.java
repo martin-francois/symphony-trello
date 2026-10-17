@@ -6,7 +6,7 @@ import static com.google.common.collect.ImmutableSet.toImmutableSet;
 import ch.fmartin.symphony.trello.CliExitCodes;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.GitHubIntegration;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
-import ch.fmartin.symphony.trello.setup.TrelloCredentialStore.CredentialSelection;
+import ch.fmartin.symphony.trello.setup.TrelloCredentialResolver.CredentialSelection;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.CharMatcher;
 import java.io.BufferedReader;
@@ -489,8 +489,7 @@ public final class LocalSetup {
     private boolean checkTrelloCredentials(Options options, ConnectedBoard board, PrintStream out) {
         try {
             CredentialSelection credentials = credentialStore.loadExisting(options, board.envPath());
-            if (TrelloCredentialStore.blank(credentials.apiKeyValue())
-                    || TrelloCredentialStore.blank(credentials.apiTokenValue())) {
+            if (credentials.apiKeyValue().blank() || credentials.apiTokenValue().blank()) {
                 out.println("  WARN    Trello credentials are missing for " + DisplayNames.quotedName(board.boardName())
                         + ": " + board.envPath());
                 return false;

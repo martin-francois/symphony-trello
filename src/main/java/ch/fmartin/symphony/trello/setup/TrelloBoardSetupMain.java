@@ -823,7 +823,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 return;
             }
             TrelloCredentialStore.validateEnvPath(runtimeEnvPath());
-            TrelloCredentialStore.CredentialSelection credentials = auth.credentialSelection(runtimeEnvPath());
+            TrelloCredentialResolver.CredentialSelection credentials = auth.credentialSelection(runtimeEnvPath());
             if (credentials.persist()) {
                 try {
                     TrelloCredentialStore.validateWritableEnvUpdate(credentials, runtimeEnvPath(), true);
@@ -838,7 +838,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             if (!shouldUseRuntimeEnvTarget()) {
                 return;
             }
-            TrelloCredentialStore.CredentialSelection credentials = auth.credentialSelection(runtimeEnvPath());
+            TrelloCredentialResolver.CredentialSelection credentials = auth.credentialSelection(runtimeEnvPath());
             if (!credentials.persist()) {
                 return;
             }
@@ -956,39 +956,22 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         }
 
         TrelloCredentials credentials(Path dotenv) {
-            TrelloCredentialStore.CredentialSelection selection = credentialSelection(dotenv);
+            TrelloCredentialResolver.CredentialSelection selection = credentialSelection(dotenv);
             return selection.credentials();
         }
 
-        TrelloCredentialStore.CredentialSelection credentialSelection() {
+        TrelloCredentialResolver.CredentialSelection credentialSelection() {
             return credentialSelection(LocalEnvironment.defaultDotenv());
         }
 
-        TrelloCredentialStore.CredentialSelection credentialSelection(Path dotenv) {
-            return new TrelloCredentialStore.CredentialSelection(
-                    credentialValue(key, TrelloEnvironment.API_KEY, dotenv),
-                    credentialValue(token, TrelloEnvironment.API_TOKEN, dotenv));
+        TrelloCredentialResolver.CredentialSelection credentialSelection(Path dotenv) {
+            return new TrelloCredentialResolver(System.getenv(), dotenv)
+                    .resolveTrelloCredentials(Optional.ofNullable(key), Optional.ofNullable(token));
         }
 
         boolean hasDirectCredentials() {
             return CliValueNormalizer.trimmedOrNull(key) != null || CliValueNormalizer.trimmedOrNull(token) != null;
         }
-
-        private static TrelloCredentialStore.CredentialValue credentialValue(
-                String directValue, String envName, Path dotenv) {
-            if (directValue != null) {
-                return TrelloCredentialStore.CredentialValue.direct(directValue);
-            }
-            return processEnv(envName)
-                    .map(TrelloCredentialStore.CredentialValue::environment)
-                    .orElseGet(() -> TrelloCredentialStore.dotenvCredential(
-                            envName, LocalEnvironment.get(envName, dotenv).orElse(null)));
-        }
-    }
-
-    private static Optional<String> processEnv(String name) {
-        String value = System.getenv(name);
-        return value == null || value.isBlank() ? Optional.empty() : Optional.of(value);
     }
 
     private static Optional<Path> configuredConfigDirManifestPath() {
