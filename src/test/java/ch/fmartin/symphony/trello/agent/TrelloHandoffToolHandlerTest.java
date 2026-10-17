@@ -32,11 +32,16 @@ import com.sun.net.httpserver.HttpExchange;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -68,6 +73,7 @@ final class TrelloHandoffToolHandlerTest {
     private static final String ROCKET_EMOJI = "\uD83D\uDE80";
     private static final JsonNode SUCCESS_NODE = JsonNodeFactory.instance.booleanNode(true);
     private static final JsonNode FAILURE_NODE = JsonNodeFactory.instance.booleanNode(false);
+    private static final Duration CONCURRENT_VALIDATION_TIMEOUT = Duration.ofSeconds(30);
 
     private final ObjectMapper json = new ObjectMapper();
     private final AtomicReference<String> commentText = new AtomicReference<>();
@@ -353,8 +359,10 @@ final class TrelloHandoffToolHandlerTest {
         assertThat(createdChecklistName.get()).isNull();
     }
 
-    @Test
-    void rejectsChecklistToolWithoutCompletionStateBeforeTrelloMutation() {
+    @MethodSource("argumentsOutsideTheAdvertisedSchema")
+    @ParameterizedTest
+    void rejectsArgumentsOutsideTheAdvertisedSchemaBeforeTrelloIo(String tool, String arguments, String expectedMessage)
+            throws Exception {
         // given
         TrelloHandoffToolHandler handler = handler();
 
@@ -362,25 +370,24 @@ final class TrelloHandoffToolHandlerTest {
         var result = handler.handle(
                 config(List.of("Review"), List.of()),
                 TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
-                json.createObjectNode()
-                        .put("tool", TrelloHandoffToolHandler.UPSERT_CHECKLIST_ITEM)
-                        .set(
-                                "arguments",
-                                json.createObjectNode()
-                                        .put("checklist_name", "Release tasks")
-                                        .put("item_name", "Publish release")));
+                json.createObjectNode().put("tool", tool).set("arguments", json.readTree(arguments)));
 
         // then
         assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
-        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("complete");
+        assertThat(json.readTree(result.path("contentItems").get(0).path("text").asText()))
+                .isEqualTo(json.createObjectNode()
+                        .put("error", "invalid_tool_arguments")
+                        .put("message", invalidArguments(tool, expectedMessage)));
+        assertThat(cardFetchCount).as("card refreshes before validation").hasValue(0);
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isNull();
         assertThat(checklistRequests).isEmpty();
-        assertThat(createdChecklistName.get()).isNull();
+        assertThat(attachmentUrl.get()).isNull();
+        assertThat(movedToListId.get()).isNull();
     }
 
-    @MethodSource("nonStringToolStringArguments")
-    @ParameterizedTest(name = "{0}")
-    void rejectsNonStringToolStringArgumentsBeforeTrelloMutation(
-            String scenario, String tool, JsonNode arguments, String argumentName) {
+    @Test
+    void rejectsToolCallWithoutArgumentsBeforeTrelloIo() throws Exception {
         // given
         TrelloHandoffToolHandler handler = handler();
 
@@ -388,18 +395,96 @@ final class TrelloHandoffToolHandlerTest {
         var result = handler.handle(
                 config(List.of("Review"), List.of()),
                 TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
-                json.createObjectNode().put("tool", tool).set("arguments", arguments));
+                json.createObjectNode().put("tool", TrelloHandoffToolHandler.MOVE_CURRENT_CARD));
 
         // then
-        assertThat(result.path("success")).as("%s success field", scenario).isEqualTo(FAILURE_NODE);
-        assertThat(result.path("contentItems").get(0).path("text").asText())
-                .contains("Argument " + argumentName + " must be a string");
-        assertThat(commentText.get()).isNull();
-        assertThat(updatedCommentText.get()).isNull();
-        assertThat(checklistRequests).isEmpty();
-        assertThat(createdChecklistName.get()).isNull();
-        assertThat(createdChecklistItemName.get()).isNull();
-        assertThat(attachmentUrl.get()).isNull();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
+        assertThat(json.readTree(result.path("contentItems").get(0).path("text").asText()))
+                .isEqualTo(json.createObjectNode()
+                        .put("error", "invalid_tool_arguments")
+                        .put(
+                                "message",
+                                invalidArguments(
+                                        TrelloHandoffToolHandler.MOVE_CURRENT_CARD, argumentsNotAnObject("unknown"))));
+        assertThat(movedToListId.get()).isNull();
+    }
+
+    @Test
+    void omitsRawArgumentValuesFromValidationFailures() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        String rawValue = "raw value from the model";
+
+        // when
+        var invalidEnum = updateBlockerRecheckStatus(handler, rawValue);
+        var unknownProperty = handler.handle(
+                config(List.of("Review"), List.of()),
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.ADD_COMMENT)
+                        .set(
+                                "arguments",
+                                json.createObjectNode().put("text", "Ready").put("note", rawValue)));
+
+        // then
+        assertThat(List.of(invalidEnum, unknownProperty))
+                .extracting(result ->
+                        result.path("contentItems").get(0).path("text").asText())
+                .allSatisfy(text ->
+                        assertThat(text).contains("invalid_tool_arguments").doesNotContain(rawValue));
+    }
+
+    @Test
+    void validatesConcurrentCallsAgainstTheSharedCompiledSchemas() throws Exception {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        EffectiveConfig config = config(List.of("Review"), List.of());
+        Card card = TestCards.card("card-1", "TRELLO-abc", "Ready for Codex");
+        Map<String, String> messagesByArguments = Map.of(
+                "{}", missing("text"),
+                "{\"text\":12}", wrongType("text", "integer", "string"),
+                "{\"text\":\"\"}", empty("text"),
+                "{\"text\":\"Ready\",\"card_id\":\"card-2\"}", unknownProperty("card_id"));
+        int threads = 8;
+        int roundsPerThread = 25;
+        var start = new CyclicBarrier(threads);
+        List<String> expected = new ArrayList<>();
+        List<Future<List<String>>> workers = new ArrayList<>();
+
+        // when
+        try (ExecutorService executor = Executors.newFixedThreadPool(threads)) {
+            for (int thread = 0; thread < threads; thread++) {
+                List<JsonNode> calls = new ArrayList<>();
+                for (int round = 0; round < roundsPerThread; round++) {
+                    for (Map.Entry<String, String> invalid : messagesByArguments.entrySet()) {
+                        calls.add(json.createObjectNode()
+                                .put("tool", TrelloHandoffToolHandler.ADD_COMMENT)
+                                .set("arguments", json.readTree(invalid.getKey())));
+                        expected.add(invalidArguments(TrelloHandoffToolHandler.ADD_COMMENT, invalid.getValue()));
+                    }
+                }
+                workers.add(executor.submit(() -> {
+                    start.await(CONCURRENT_VALIDATION_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
+                    List<String> results = new ArrayList<>();
+                    for (JsonNode params : calls) {
+                        String failure = handler.handle(config, card, params)
+                                .path("contentItems")
+                                .get(0)
+                                .path("text")
+                                .asText();
+                        results.add(json.readTree(failure).path("message").asText());
+                    }
+                    return results;
+                }));
+            }
+        }
+
+        // then
+        List<String> actual = new ArrayList<>();
+        for (Future<List<String>> worker : workers) {
+            actual.addAll(worker.get(CONCURRENT_VALIDATION_TIMEOUT.toSeconds(), TimeUnit.SECONDS));
+        }
+        assertThat(actual).containsExactlyElementsOf(expected);
     }
 
     @Test
@@ -965,21 +1050,6 @@ final class TrelloHandoffToolHandlerTest {
                 .contains("\"action_id\":\"action-blocker-recheck-older\"", "\"duplicate_statuses_found\":\"1\"");
         assertThat(updatedCommentText.get()).contains(TrelloHandoffToolHandler.DUPLICATE_BLOCKER_RECHECK_NOTE_PREFIX);
         assertThat(commentText.get()).isNull();
-    }
-
-    @Test
-    void rejectsUnknownBlockerRecheckStateBeforeReadingOrMutatingTrello() {
-        // given
-        TrelloHandoffToolHandler handler = handler();
-
-        // when
-        JsonNode result = updateBlockerRecheckStatus(handler, "complete");
-
-        // then
-        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
-        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("invalid_blocker_recheck_status");
-        assertThat(commentText.get()).isNull();
-        assertThat(updatedCommentText.get()).isNull();
     }
 
     @Test
@@ -2682,50 +2752,6 @@ final class TrelloHandoffToolHandlerTest {
                 TrelloClient.WAITING_COMMENT_MARKER);
     }
 
-    private static Stream<Arguments> nonStringToolStringArguments() {
-        return Stream.of(
-                Arguments.of(
-                        "comment text object",
-                        TrelloHandoffToolHandler.ADD_COMMENT,
-                        objectArgument("text", JsonNodeFactory.instance.objectNode()),
-                        "text"),
-                Arguments.of(
-                        "workpad text array",
-                        TrelloHandoffToolHandler.UPSERT_WORKPAD,
-                        objectArgument(
-                                "text", JsonNodeFactory.instance.arrayNode().add("Plan")),
-                        "text"),
-                Arguments.of(
-                        "blocker recheck status object",
-                        TrelloHandoffToolHandler.UPDATE_BLOCKER_RECHECK_STATUS,
-                        objectArgument("status", JsonNodeFactory.instance.objectNode()),
-                        "status"),
-                Arguments.of(
-                        "checklist name number",
-                        TrelloHandoffToolHandler.UPSERT_CHECKLIST_ITEM,
-                        checklistArguments(
-                                JsonNodeFactory.instance.numberNode(42),
-                                JsonNodeFactory.instance.textNode("Publish release")),
-                        "checklist_name"),
-                Arguments.of(
-                        "checklist item object",
-                        TrelloHandoffToolHandler.UPSERT_CHECKLIST_ITEM,
-                        checklistArguments(
-                                JsonNodeFactory.instance.textNode("Release tasks"),
-                                JsonNodeFactory.instance.objectNode()),
-                        "item_name"),
-                Arguments.of(
-                        "URL attachment URL number",
-                        TrelloHandoffToolHandler.ADD_URL_ATTACHMENT,
-                        objectArgument("url", JsonNodeFactory.instance.numberNode(12)),
-                        "url"),
-                Arguments.of(
-                        "URL attachment name object",
-                        TrelloHandoffToolHandler.ADD_URL_ATTACHMENT,
-                        urlAttachmentArguments(JsonNodeFactory.instance.objectNode()),
-                        "name"));
-    }
-
     private static Stream<Arguments> malformedManagedUsageSections() {
         String heading = "## Codex Workpad\n\n- Human plan: keep this.\n\n";
         String humanNote = "\n\n- Human note after malformed section.";
@@ -2760,25 +2786,110 @@ final class TrelloHandoffToolHandlerTest {
                                 + humanNote));
     }
 
-    private static ObjectNode objectArgument(String key, JsonNode value) {
-        ObjectNode arguments = JsonNodeFactory.instance.objectNode();
-        arguments.set(key, value);
-        return arguments;
+    /// Each case names the tool, the arguments Codex sends, and the first violation reported.
+    private static List<Arguments> argumentsOutsideTheAdvertisedSchema() {
+        String comment = TrelloHandoffToolHandler.ADD_COMMENT;
+        String workpad = TrelloHandoffToolHandler.UPSERT_WORKPAD;
+        String recheck = TrelloHandoffToolHandler.UPDATE_BLOCKER_RECHECK_STATUS;
+        String checklist = TrelloHandoffToolHandler.UPSERT_CHECKLIST_ITEM;
+        String attachment = TrelloHandoffToolHandler.ADD_URL_ATTACHMENT;
+        String move = TrelloHandoffToolHandler.MOVE_CURRENT_CARD;
+        String checklistItem = "\"checklist_name\":\"Release tasks\",\"item_name\":\"Publish release\"";
+        String pullRequestUrl = "\"url\":\"https://github.com/example/project/pull/12\"";
+        return List.of(
+                schemaCase(comment, "{}", missing("text")),
+                schemaCase(comment, "{\"text\":null}", wrongType("text", "null", "string")),
+                schemaCase(comment, "{\"text\":{}}", wrongType("text", "object", "string")),
+                schemaCase(comment, "{\"text\":\"\"}", empty("text")),
+                schemaCase(comment, "{\"text\":\"   \"}", onlyWhitespace("text")),
+                schemaCase(comment, "{\"text\":\"Ready\",\"card_id\":\"card-2\"}", unknownProperty("card_id")),
+                schemaCase(comment, "\"Ready\"", argumentsNotAnObject("string")),
+                schemaCase(workpad, "{}", missing("text")),
+                schemaCase(workpad, "{\"text\":null}", wrongType("text", "null", "string")),
+                schemaCase(workpad, "{\"text\":[\"Plan\"]}", wrongType("text", "array", "string")),
+                schemaCase(workpad, "{\"text\":\"\"}", empty("text")),
+                schemaCase(workpad, "{\"text\":\"\\n\\t\"}", onlyWhitespace("text")),
+                schemaCase(workpad, "{\"text\":\"Plan\",\"mode\":\"replace\"}", unknownProperty("mode")),
+                schemaCase(recheck, "{}", missing("status")),
+                schemaCase(recheck, "{\"status\":null}", wrongType("status", "null", "string")),
+                schemaCase(recheck, "{\"status\":{}}", wrongType("status", "object", "string")),
+                schemaCase(recheck, "{\"status\":\"\"}", empty("status")),
+                schemaCase(
+                        recheck,
+                        "{\"status\":\"complete\"}",
+                        "$.status: does not have a value in the enumeration [\"checking\", \"resumed\"]"),
+                schemaCase(recheck, "{\"status\":\"checking\",\"force\":true}", unknownProperty("force")),
+                schemaCase(checklist, "{" + checklistItem + "}", missing("complete")),
+                schemaCase(
+                        checklist,
+                        "{" + checklistItem + ",\"complete\":null}",
+                        wrongType("complete", "null", "boolean")),
+                schemaCase(
+                        checklist,
+                        "{" + checklistItem + ",\"complete\":\"true\"}",
+                        wrongType("complete", "string", "boolean")),
+                schemaCase(
+                        checklist,
+                        "{\"checklist_name\":42,\"item_name\":\"Publish release\",\"complete\":true}",
+                        wrongType("checklist_name", "integer", "string")),
+                schemaCase(
+                        checklist,
+                        "{\"checklist_name\":\"Release tasks\",\"item_name\":\"\",\"complete\":true}",
+                        empty("item_name")),
+                schemaCase(
+                        checklist,
+                        "{\"checklist_name\":\"Release tasks\",\"item_name\":\" \",\"complete\":true}",
+                        onlyWhitespace("item_name")),
+                schemaCase(
+                        checklist,
+                        "{" + checklistItem + ",\"complete\":true,\"due\":\"tomorrow\"}",
+                        unknownProperty("due")),
+                schemaCase(attachment, "{}", missing("url")),
+                schemaCase(attachment, "{\"url\":null}", wrongType("url", "null", "string")),
+                schemaCase(attachment, "{\"url\":12}", wrongType("url", "integer", "string")),
+                schemaCase(attachment, "{\"url\":\"\"}", empty("url")),
+                schemaCase(attachment, "{\"url\":\" \"}", onlyWhitespace("url")),
+                schemaCase(attachment, "{" + pullRequestUrl + ",\"name\":null}", wrongType("name", "null", "string")),
+                schemaCase(attachment, "{" + pullRequestUrl + ",\"name\":{}}", wrongType("name", "object", "string")),
+                schemaCase(attachment, "{" + pullRequestUrl + ",\"name\":\"\"}", empty("name")),
+                schemaCase(attachment, "{" + pullRequestUrl + ",\"card_id\":\"card-2\"}", unknownProperty("card_id")),
+                schemaCase(move, "{\"list_name\":null}", wrongType("list_name", "null", "string")),
+                schemaCase(move, "{\"list_id\":7}", wrongType("list_id", "integer", "string")),
+                schemaCase(move, "{\"list_name\":\"\"}", empty("list_name")),
+                schemaCase(move, "{\"list_name\":\"Review\",\"board_id\":\"board-2\"}", unknownProperty("board_id")));
     }
 
-    private static ObjectNode checklistArguments(JsonNode checklistName, JsonNode itemName) {
-        ObjectNode arguments = JsonNodeFactory.instance.objectNode();
-        arguments.set("checklist_name", checklistName);
-        arguments.set("item_name", itemName);
-        arguments.put("complete", true);
-        return arguments;
+    private static Arguments schemaCase(String tool, String arguments, String expectedMessage) {
+        return Arguments.argumentSet(tool + " " + arguments, tool, arguments, expectedMessage);
     }
 
-    private static ObjectNode urlAttachmentArguments(JsonNode name) {
-        ObjectNode arguments = JsonNodeFactory.instance.objectNode();
-        arguments.put("url", "https://github.com/example/project/pull/12");
-        arguments.set("name", name);
-        return arguments;
+    private static String missing(String name) {
+        return "$: required property '" + name + "' not found";
+    }
+
+    private static String wrongType(String name, String found, String expected) {
+        return "$." + name + ": " + found + " found, " + expected + " expected";
+    }
+
+    private static String argumentsNotAnObject(String found) {
+        return "$: " + found + " found, object expected";
+    }
+
+    private static String empty(String name) {
+        return "$." + name + ": must be at least 1 characters long";
+    }
+
+    private static String onlyWhitespace(String name) {
+        return "$." + name + ": must not be only whitespace";
+    }
+
+    private static String invalidArguments(String tool, String violation) {
+        return "Invalid " + tool + " arguments: " + violation;
+    }
+
+    private static String unknownProperty(String name) {
+        return "$: property '" + name
+                + "' is not defined in the schema and the schema does not allow additional properties";
     }
 
     private ObjectNode addUrlAttachment(TrelloHandoffToolHandler handler, String url) {
