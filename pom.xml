@@ -176,6 +176,28 @@
         </excludes>
       </resource>
     </resources>
+    <testResources>
+      <testResource>
+        <directory>src/test/resources</directory>
+      </testResource>
+      <!-- Jazzer regression mode replays these seed corpora through StandaloneFuzzerIsolationTest. -->
+      <testResource>
+        <targetPath>ch/fmartin/symphony/trello/StandaloneFuzzerIsolationTestInputs/repositorySourceFuzzer</targetPath>
+        <directory>oss-fuzz/corpora/RepositorySourceFuzzer</directory>
+      </testResource>
+      <testResource>
+        <targetPath>ch/fmartin/symphony/trello/StandaloneFuzzerIsolationTestInputs/trelloCardReferenceParserFuzzer</targetPath>
+        <directory>oss-fuzz/corpora/TrelloCardReferenceParserFuzzer</directory>
+      </testResource>
+      <testResource>
+        <targetPath>ch/fmartin/symphony/trello/StandaloneFuzzerIsolationTestInputs/trelloChecklistClassifierFuzzer</targetPath>
+        <directory>oss-fuzz/corpora/TrelloChecklistClassifierFuzzer</directory>
+      </testResource>
+      <testResource>
+        <targetPath>ch/fmartin/symphony/trello/StandaloneFuzzerIsolationTestInputs/workflowLoaderFuzzer</targetPath>
+        <directory>oss-fuzz/corpora/WorkflowLoaderFuzzer</directory>
+      </testResource>
+    </testResources>
     <plugins>
       <plugin>
         <groupId>${quarkus.platform.group-id}</groupId>
