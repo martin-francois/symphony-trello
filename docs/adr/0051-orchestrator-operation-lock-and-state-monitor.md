@@ -10,6 +10,13 @@ informed: ["repository contributors"]
 
 # Orchestrator Operation Lock And State Monitor Split
 
+[ADR 0102](0102-orchestrator-concurrency-mutation-audit.md) maps every synchronization element of
+this design to its owning test, or records why no unit test can own it.
+[ADR 0105](0105-orchestrator-published-read-view.md) decides to replace the state monitor with a
+published read view. Until
+[GitHub issue #815](https://github.com/martin-francois/symphony-trello/issues/815) implements that,
+this ADR describes the code.
+
 ## Context and Problem Statement
 
 `SymphonyOrchestrator` used one instance monitor both to serialize its long-running operations
