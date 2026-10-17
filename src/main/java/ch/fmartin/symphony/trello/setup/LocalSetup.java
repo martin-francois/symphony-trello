@@ -138,7 +138,8 @@ public final class LocalSetup {
         try {
             options = Options.from(request, environment);
             if (completionOnly) {
-                printFinalHandoff(out, connectedBoards(options).loadForLifecycle(), options.command());
+                printFinalHandoff(
+                        out, connectedBoards(options).loadForLifecycle(), options.command(), TutorialMention.COMMAND);
                 return 0;
             }
 
@@ -254,7 +255,17 @@ public final class LocalSetup {
             out.println();
             out.println("Board:");
             out.println("  " + result.boardUrl());
-            printFinalHandoffUnlessDeferred(out, manifest, options.command());
+            boolean offerTutorial = !options.nonInteractive() && !installerCompletionMode(INSTALLER_COMPLETION_DEFER);
+            if (!installerCompletionMode(INSTALLER_COMPLETION_DEFER)) {
+                printFinalHandoff(
+                        out,
+                        manifest,
+                        options.command(),
+                        offerTutorial ? TutorialMention.NONE : TutorialMention.COMMAND);
+            }
+            if (offerTutorial) {
+                offerTutorial(options, credentials, githubIntegration, terminal);
+            }
             return 0;
         } catch (TrelloBoardSetupException | IllegalArgumentException | IOException e) {
             err.println("setup_failed code=%s message=%s".formatted(errorCode(e), e.getMessage()));
@@ -273,7 +284,32 @@ public final class LocalSetup {
 
     private void printFinalHandoffUnlessDeferred(PrintStream out, ConnectedBoardManifest manifest, String cliCommand) {
         if (!installerCompletionMode(INSTALLER_COMPLETION_DEFER)) {
-            printFinalHandoff(out, manifest, cliCommand);
+            printFinalHandoff(out, manifest, cliCommand, TutorialMention.COMMAND);
+        }
+    }
+
+    /// Offers the guided tutorial after a successful interactive setup. The tutorial is optional,
+    /// so its failure never turns the finished setup into a failed one.
+    private static void offerTutorial(
+            Options options, TrelloCredentials credentials, GitHubIntegration githubIntegration, Terminal terminal)
+            throws IOException {
+        String command = ShellCommandRenderer.executable(
+                options.command(), SetupSystemProperties.get(ShellCommandRenderer.SHELL_PROPERTY));
+        terminal.info("");
+        if (!PromptSupport.yes(terminal, GuidedTutorial.OFFER_PROMPT)) {
+            terminal.info("You can start it later with:");
+            terminal.info("  " + GuidedTutorial.commandLine(command));
+            return;
+        }
+        try {
+            GuidedTutorial.forCli(options.endpoint(), credentials, terminal)
+                    .run(new GuidedTutorial.Options(githubIntegration.enabled(), true, options.workspaceId(), command));
+        } catch (IOException | RuntimeException e) {
+            // Setup already finished, so any tutorial failure, expected or not, is reported here
+            // instead of turning the completed setup into a failed one.
+            terminal.error("The guided tutorial stopped: " + e.getMessage());
+            terminal.error("Setup is complete. Start the tutorial again with:");
+            terminal.error("  " + GuidedTutorial.commandLine(command));
         }
     }
 
@@ -1501,7 +1537,8 @@ public final class LocalSetup {
         return options.configDir().resolve(options.workflowPath()).normalize();
     }
 
-    private static void printFinalHandoff(PrintStream out, ConnectedBoardManifest manifest, String cliCommand) {
+    private static void printFinalHandoff(
+            PrintStream out, ConnectedBoardManifest manifest, String cliCommand, TutorialMention tutorialMention) {
         if (manifest.boards().isEmpty()) {
             throw new TrelloBoardSetupException(
                     "setup_manifest_unavailable",
@@ -1527,10 +1564,15 @@ public final class LocalSetup {
             out.println(
                     "Create a Trello card with a clear task and move it to the matching workflow's configured queue list.");
         }
-        out.println();
-        out.println("Useful commands:");
         String shell = SetupSystemProperties.get(ShellCommandRenderer.SHELL_PROPERTY);
         String command = ShellCommandRenderer.executable(cliCommand, shell);
+        if (tutorialMention == TutorialMention.COMMAND) {
+            out.println();
+            out.println("To practice the card flow on a temporary Trello board first, run:");
+            out.println("  " + GuidedTutorial.commandLine(command));
+        }
+        out.println();
+        out.println("Useful commands:");
         out.println("  " + command + " status");
         manifest.boards()
                 .forEach(board -> out.println("  " + command + " logs --workflow "
@@ -1544,6 +1586,13 @@ public final class LocalSetup {
 
     private static String errorCode(Exception e) {
         return e instanceof TrelloBoardSetupException setupException ? setupException.code() : "setup_local_failed";
+    }
+
+    /// Whether the final handoff names the tutorial command. It does not when setup asks about the
+    /// tutorial right after the handoff.
+    private enum TutorialMention {
+        COMMAND,
+        NONE
     }
 
     private static String quoted(List<String> values) {
