@@ -247,8 +247,9 @@ final class TrelloCredentialStore {
     static List<String> upsertEnv(List<String> lines, String key, String value) {
         List<String> updated = new ArrayList<>();
         boolean replaced = false;
-        for (String line : lines) {
-            if (definesEnvKey(line, key)) {
+        for (int index = 0; index < lines.size(); index++) {
+            String line = lines.get(index);
+            if (LocalEnvironment.definesKeyOnLine(line, key, index == 0)) {
                 updated.add(key + "=" + dotenvValue(value));
                 replaced = true;
             } else {
@@ -283,18 +284,6 @@ final class TrelloCredentialStore {
         }
         escaped.append('"');
         return escaped.toString();
-    }
-
-    private static boolean definesEnvKey(String line, String expectedKey) {
-        String candidate = line.strip();
-        if (candidate.startsWith("export ")) {
-            candidate = candidate.substring("export ".length()).stripLeading();
-        }
-        int separator = candidate.indexOf('=');
-        if (separator <= 0) {
-            return false;
-        }
-        return candidate.substring(0, separator).strip().equals(expectedKey);
     }
 
     static String redact(String value) {

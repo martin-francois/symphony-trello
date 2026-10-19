@@ -72,6 +72,13 @@ public final class LocalEnvironment {
         }
     }
 
+    /// Applies the same line parsing rules used by {@link #load(Path)} when checking whether a
+    /// dotenv line defines a key. The byte order mark is ignored only for the first line.
+    public static boolean definesKeyOnLine(String rawLine, String expectedKey, boolean firstLine) {
+        String line = firstLine ? stripLeadingByteOrderMark(rawLine) : rawLine;
+        return parseLine(line).map(entry -> entry.key().equals(expectedKey)).orElse(false);
+    }
+
     /// UTF-8 editors, notably on Windows, commonly write a byte order mark at the start of the
     /// file. Exactly one leading mark is ignorable so the first key is not silently dropped.
     private static String stripLeadingByteOrderMark(String firstLine) {

@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_BYTE_ORDER_MARK;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
@@ -120,6 +121,65 @@ final class TrelloCredentialStoreTest {
 
         // then
         assertThat(values).containsExactly(Map.entry("TRELLO_API_TOKEN", value));
+    }
+
+    @Test
+    void upsertEnvReplacesFirstKeyBehindByteOrderMarkAndPreservesOtherKeys() throws Exception {
+        // given
+        Path env = tempDir.resolve(".env");
+        Files.writeString(
+                env,
+                UNICODE_BYTE_ORDER_MARK
+                        + "TRELLO_API_KEY=old-example-key\nTRELLO_API_TOKEN=stored-example-token\nOTHER=keep-me\n");
+        var credentials = new TrelloCredentialStore.CredentialSelection(
+                TrelloCredentialStore.CredentialValue.direct("new-example-key"),
+                TrelloCredentialStore.CredentialValue.dotenv("stored-example-token"));
+
+        // when
+        new TrelloCredentialStore(Map.of()).write(credentials, env, new RecordingTerminal());
+
+        // then
+        assertThat(Files.readAllLines(env))
+                .containsExactly(
+                        "TRELLO_API_KEY=new-example-key", "TRELLO_API_TOKEN=stored-example-token", "OTHER=keep-me")
+                .doesNotContain("TRELLO_API_KEY=old-example-key");
+        assertThat(LocalEnvironment.load(env))
+                .containsEntry("TRELLO_API_KEY", "new-example-key")
+                .containsEntry("TRELLO_API_TOKEN", "stored-example-token")
+                .containsEntry("OTHER", "keep-me");
+    }
+
+    @Test
+    void upsertEnvUsesReaderKeyRecognitionForExportAndWhitespace() {
+        // given
+        List<String> lines = List.of(
+                "  export TRELLO_API_KEY  = old-example-key # previous value",
+                "TRELLO_API_TOKEN=stored-example-token",
+                "OTHER=keep-me");
+
+        // when
+        List<String> updated = TrelloCredentialStore.upsertEnv(lines, "TRELLO_API_KEY", "new-example-key");
+
+        // then
+        assertThat(updated)
+                .containsExactly(
+                        "TRELLO_API_KEY=new-example-key", "TRELLO_API_TOKEN=stored-example-token", "OTHER=keep-me");
+    }
+
+    @Test
+    void upsertEnvOnlyIgnoresByteOrderMarkOnTheFirstLine() {
+        // given
+        List<String> lines = List.of("OTHER=keep-me", UNICODE_BYTE_ORDER_MARK + "TRELLO_API_KEY=invalid-later-bom");
+
+        // when
+        List<String> updated = TrelloCredentialStore.upsertEnv(lines, "TRELLO_API_KEY", "new-example-key");
+
+        // then
+        assertThat(updated)
+                .containsExactly(
+                        "OTHER=keep-me",
+                        UNICODE_BYTE_ORDER_MARK + "TRELLO_API_KEY=invalid-later-bom",
+                        "TRELLO_API_KEY=new-example-key");
     }
 
     @Test
