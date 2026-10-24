@@ -159,6 +159,8 @@ reproduces, the row reports `known-bug`. When it stops reproducing, the row repo
 `covered-with-caveat` and asks for the manifest row to change to `expected: covered`. Only failed assertions count as a reproduction: a product failure that stops
 the row before its assertions, such as a timeout, is reported as `failed` even on a known-bug row.
 A row with `expected: covered` may keep `linked_issue` to name the fixed bug it guards against.
+When such a row has no automation yet, its `notes` must say so, because a run then reports it as
+`not-yet-automated` and does not check the bug. A script test enforces this.
 
 ## Cleanup, resume, and soak
 
