@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
+import ch.fmartin.symphony.trello.testsupport.FuzzIsolationExtension;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.code_intelligence.jazzer.mutation.annotation.NotNull;
 import com.code_intelligence.jazzer.mutation.annotation.WithUtf8Length;
@@ -15,8 +16,12 @@ import java.time.Instant;
 import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.parallel.Isolated;
 import org.junit.jupiter.params.provider.MethodSource;
 
+@ExtendWith(FuzzIsolationExtension.class)
+@Isolated
 final class RepositorySourceResolverFuzzTest {
     private static final EffectiveConfig.RepositoryConfig NO_DEFAULT = new EffectiveConfig.RepositoryConfig(null, null);
     private static final String LINE_SEPARATOR = Character.toString(UNICODE_LINE_SEPARATOR);

@@ -6,7 +6,7 @@ Jazzer tests in regression mode, so fixed crash inputs stay part of the regular 
 Run the focused fuzzing and chaos tests:
 
 ```bash
-./mvnw -q -Dtest=RepositorySourceResolverFuzzTest,TrelloCardReferenceParserFuzzTest,WorkflowLoaderFuzzTest,StandaloneFuzzerIsolationTest,TrelloClientChaosTest test
+./mvnw -q -Dtest=RepositorySourceResolverFuzzTest,TrelloCardReferenceParserFuzzTest,WorkflowLoaderFuzzTest,StandaloneFuzzerIsolationTest,FuzzHarnessIsolationRulesTest,TrelloClientChaosTest test
 ```
 
 Run one target in active fuzzing mode:
@@ -211,12 +211,20 @@ deeper than 1,000 levels, and `WorkflowLoaderFuzzTest` keeps a 4,000-level seed 
 
 No target may touch files, the network, or user configuration. `WorkflowLoaderFuzzer` calls
 `WorkflowLoader.parse(Path, byte[])` instead of writing each input to a temporary file.
-`StandaloneFuzzerIsolationTest` records file and socket reads and writes with Java Flight Recorder
-while the seeds replay and fails on any that happen inside a target execution. It ignores class
-loading and writes to standard output or error, such as log lines. During ClusterFuzzLite and OSS-Fuzz runs, Jazzer's `ServerSideRequestForgery` detector
-reports every network connection as a finding. The same test fails if the fuzzing build files
-disable that detector. In JUnit regression mode the detector loads but does not fail on a
-connection, which is why the replay test records socket I/O itself.
+Every class with a `@FuzzTest` method uses `FuzzIsolationExtension` and runs `@Isolated`. The
+extension records file and socket reads and writes with Java Flight Recorder while the seeds replay
+and fails the class on any that happen inside a fuzz test execution. It ignores class loading and
+writes to standard output or error, such as log lines. Flight Recorder has no event for creating,
+deleting, or moving a file, or for a connection attempt or DNS lookup, so the replay does not see
+those. `FuzzHarnessIsolationRulesTest` fails when a class with a `@FuzzTest` method does not use the
+extension.
+
+During ClusterFuzzLite and OSS-Fuzz runs, Jazzer's `ServerSideRequestForgery` detector reports every
+network connection attempt as a finding. `FuzzHarnessIsolationRulesTest` also fails if `pom.xml` or
+any file under `oss-fuzz/` (seed corpora excluded), `.clusterfuzzlite/`, or `.github/workflows/`
+sets Jazzer's `disabled_hooks` option or turns `hooks` off, in any flag, property, environment
+variable, or `.options` spelling. In JUnit regression mode the detector loads but does not fail on a
+connection, which is why the replay records socket I/O itself.
 [ADR 0091](adr/0091-fuzz-harness-properties-and-isolation.md) records these choices and the
 throughput measurements behind them.
 

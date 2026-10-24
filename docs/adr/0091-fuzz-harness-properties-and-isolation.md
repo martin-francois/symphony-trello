@@ -51,6 +51,8 @@ For verifying isolation:
 * Rely on Jazzer's `ServerSideRequestForgery` detector alone.
 * A Security Manager that denies file and socket access.
 * Replay the corpora with the standalone Jazzer driver in a child JVM with a fresh home directory.
+* A custom default file system provider for the test JVM.
+* Jazzer custom method hooks on file operations.
 
 For workflow properties:
 
@@ -70,14 +72,18 @@ message, so the change has no user-facing effect. `WorkflowLoaderFuzzTest` check
 and an in-memory parse of every seed give the same result.
 
 `StandaloneFuzzerIsolationTest` replays each `oss-fuzz/corpora/<Fuzzer>` directory through the
-target's `fuzzerTestOneInput`. Each execution is wrapped in a custom Flight Recorder event, and the
-test fails on any `jdk.FileRead`, `jdk.FileWrite`, `jdk.FileForce`, `jdk.SocketRead`, or
-`jdk.SocketWrite` event on the same thread inside it. It ignores class and jar reads from class
-loading and file events without a path, which are writes to standard output or error. Production
-code that logs a warning for a malformed input writes to stderr, which leaves no state behind.
-Against the old `WorkflowLoaderFuzzer` it reported the temporary file writes and reads. During
-ClusterFuzzLite and OSS-Fuzz runs, Jazzer's network detector reports any connection attempt, and the
-test fails if the fuzzing build files disable it.
+target's `fuzzerTestOneInput`. The JUnit fuzz test classes replay their own seeds. Every class with a
+`@FuzzTest` method uses `FuzzIsolationExtension`, which wraps each fuzz test execution in a custom
+Flight Recorder event and fails the class on any `jdk.FileRead`, `jdk.FileWrite`, `jdk.FileForce`,
+`jdk.SocketRead`, or `jdk.SocketWrite` event on the same thread inside it. It ignores class and jar
+reads from class loading and writes without a path, which go to standard output or error.
+Production code that logs a warning for a malformed input writes to stderr, which leaves no state
+behind. Against the old `WorkflowLoaderFuzzer` it reported the temporary file writes and reads.
+`FuzzHarnessIsolationRulesTest` fails when a class with a `@FuzzTest` method does not use the
+extension. During ClusterFuzzLite and OSS-Fuzz runs, Jazzer's network detector reports any
+connection attempt. The same rules test fails if `pom.xml` or a file under `oss-fuzz/`,
+`.clusterfuzzlite/`, or `.github/workflows/` sets Jazzer's `disabled_hooks` option or turns `hooks`
+off.
 
 The properties live in shared helpers, `WorkflowLoaderInvariants` and
 `TrelloReferenceFuzzInvariants`, so the standalone target and the JUnit fuzz test check the same
@@ -88,33 +94,33 @@ rules. They throw `AssertionError` because AssertJ is not on the OSS-Fuzz runtim
 
 * Good, because a wrong config, prompt, or error code now fails fuzzing, not only an exception.
 * Good, because the property check found a lenient UTF-8 decoding mutation within three executions.
-* Good, because the build fails if any standalone target starts touching files or sockets.
+* Good, because the build fails if any standalone target or JUnit fuzz test starts reading or
+  writing files or sockets.
 * Good, because `WorkflowLoaderFuzzer` no longer writes files.
 * Neutral, because `WorkflowLoader` has one more public method that production code does not call
   directly.
 * Bad, because adding a standalone target now also needs a `pom.xml` test resource mapping and a
   `@FuzzTest` method in `StandaloneFuzzerIsolationTest`. A test fails when either is missing.
 * Bad, because the Trello targets run about a third as many executions per second.
-* Bad, because the replay test sees socket reads and writes but not a refused connection attempt.
-  The Jazzer network detector covers that case during real fuzzing only.
+* Bad, because Flight Recorder in Java 25 has no event for a connection attempt, a DNS lookup, or
+  creating, deleting, or moving a file. A target that only does those passes the replay. The Jazzer
+  network detector covers connection attempts during real fuzzing only.
 * Bad, because the replay test covers the checked-in seeds, not every input a fuzzing run generates,
   and only I/O on the thread that runs the target. No target starts threads today.
-* Bad, because the JUnit `@FuzzTest` harnesses are not replayed under Flight Recorder. They call the
-  same invariant helpers as the standalone targets, and only `fileLoadMatchesInMemoryParse` touches a
-  file, inside a JUnit temporary directory.
-* Bad, because the replay test runs isolated from other test classes for a few seconds. A JVM-wide
-  recording would otherwise collect every other test's file events.
+* Bad, because every fuzz test class runs isolated from other test classes, a few seconds in total.
+  A JVM-wide recording would otherwise collect every other test's file events. The extension fails a
+  class that is not `@Isolated`.
 * Neutral, because an isolation failure names the target and the file or host, not the seed. The
   seeds are checked in, so rerunning the test reproduces the failure.
 
 ### Confirmation
 
 ```bash
-./mvnw -q -Dtest=StandaloneFuzzerIsolationTest,WorkflowLoaderFuzzTest,TrelloCardReferenceParserFuzzTest test
+./mvnw -q -Dtest=StandaloneFuzzerIsolationTest,FuzzHarnessIsolationRulesTest,WorkflowLoaderFuzzTest,TrelloCardReferenceParserFuzzTest,RepositorySourceResolverFuzzTest test
 ```
 
-To confirm the isolation test still detects file access, make a standalone target write a temporary
-file and run `StandaloneFuzzerIsolationTest`. It must fail and name the file.
+To confirm the isolation check still detects file access, make a standalone target or a JUnit fuzz
+test write a temporary file and run its test class. It must fail and name the file.
 
 ## Pros and Cons of the Options
 
@@ -151,7 +157,8 @@ and checks recorded file and socket events per execution.
 
 * Good, because it runs in every Maven build and in pull request CI.
 * Good, because it covers file reads and writes anywhere, not only in known directories.
-* Bad, because Flight Recorder has no event for a refused connection or a DNS lookup.
+* Bad, because Flight Recorder has no event for a connection attempt, a DNS lookup, or creating,
+  deleting, or moving a file.
 
 ### Jazzer network detector alone
 
@@ -178,6 +185,23 @@ directory, and a fresh working directory, then checks that they stay empty.
 * Bad, because it adds several seconds of JVM and native driver startup per target.
 * Bad, because the driver extracts native libraries into the temporary directory, so an empty
   directory check needs exceptions.
+
+### Custom default file system provider
+
+The test JVM starts with `-Djava.nio.file.spi.DefaultFileSystemProvider` set to a provider that
+records every file operation during a fuzz test execution.
+
+* Good, because it sees creating, deleting, and moving files, which Flight Recorder misses.
+* Bad, because the provider has to be installed at JVM start for every test in the build, not only
+  for fuzz tests.
+
+### Jazzer custom method hooks
+
+Jazzer hooks on `Files` and `File` methods record calls made during a fuzz test execution.
+
+* Good, because they see creating, deleting, and moving files.
+* Bad, because Jazzer configures its agent once per JVM, when the first fuzz test starts, so the
+  hooks would have to be configured for the whole test run.
 
 ### Config round trip through a YAML writer
 
