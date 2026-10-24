@@ -3930,9 +3930,10 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
   preservation, LF and CRLF input, confirm, decline, batch, dry-run, and non-interactive runs,
   backup, atomic replacement, validation, rollback, permission preservation, link and path-set
   limits, major-downgrade rejection, and provenance recording by setup
-- If native Windows `setup-local` is implemented, its tool launches start npm batch shims found
-  through `PATH` and `PATHEXT` with unchanged arguments and exit status, and refuse arguments that
-  `cmd.exe` would change
+- If native Windows `setup-local` (Section 19.4) is implemented, it finds tools it starts by bare
+  name through `PATH` and `PATHEXT`, starts a `.cmd` or `.bat` match such as the npm `codex.cmd`
+  shim through `cmd.exe` with each argument and the exit status unchanged, and fails the launch
+  instead of passing an argument that `cmd.exe` would change
 
 ### 17.8 Trello Workflow Conformance
 
