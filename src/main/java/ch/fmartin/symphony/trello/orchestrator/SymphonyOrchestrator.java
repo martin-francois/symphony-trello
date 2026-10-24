@@ -62,6 +62,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
@@ -96,6 +97,7 @@ public class SymphonyOrchestrator {
     /// this lock. Every field below except the tick schedule, the status view, workflowPath, the
     /// workflow watcher's reload flag and the watch service is read and written only by holders of
     /// this lock, so it needs no other synchronization.
+    /// Operations take it only through [#runOperation(Runnable)] or [#callOperation(Supplier)].
     /// Status readers never take this lock: they read [#statusView]. See
     /// docs/adr/0105-orchestrator-published-read-view.md.
     private final ReentrantLock operationLock = new ReentrantLock();
@@ -137,8 +139,8 @@ public class SymphonyOrchestrator {
     private DispatchPause dispatchPause;
 
     /// Runs inside TickSchedule.finishTickAndScheduleNext between refresh consumption and the next
-    /// schedule, the exact boundary where a concurrent refresh used to be overwritten by the
-    /// interval schedule. Tests use it to pin the boundary contract; production keeps the no-op.
+    /// schedule, the boundary where the interval schedule must not overwrite a concurrent refresh.
+    /// Tests use it to pin the boundary contract; production keeps the no-op.
     Runnable tickCompletionHookForTests = () -> {};
 
     Runnable dispatchPauseScheduleHookForTests = () -> {};
@@ -217,35 +219,29 @@ public class SymphonyOrchestrator {
     }
 
     public void start() {
-        operationLock.lock();
-        boolean releaseLockOnFailure = false;
-        boolean startupComplete = false;
-        try {
+        runOperation(() -> {
             if (tickSchedule.isStarted()) {
                 return;
             }
-            releaseLockOnFailure = true;
-            reloadOrThrow();
-            // Local-status probes read the selected board from the view during the startup I/O below.
-            publishStatus();
-            startWorkflowWatcher();
-            startupTerminalWorkspaceCleanup();
-            tickSchedule.markStartedAndScheduleFirstTick();
-            startupComplete = true;
-        } finally {
+            boolean startupComplete = false;
             try {
-                if (releaseLockOnFailure && !startupComplete) {
+                reloadOrThrow();
+                // Local-status probes read the selected board from the view during the startup I/O below.
+                publishStatus();
+                startWorkflowWatcher();
+                startupTerminalWorkspaceCleanup();
+                tickSchedule.markStartedAndScheduleFirstTick();
+                startupComplete = true;
+            } finally {
+                if (!startupComplete) {
                     releaseWorkflowProcessLock();
                 }
-            } finally {
-                publishStatusAndUnlock();
             }
-        }
+        });
     }
 
     public void stop() {
-        operationLock.lock();
-        try {
+        runOperation(() -> {
             tickSchedule.markStoppingAndCancelTick();
             if (dispatchPauseTimer != null) {
                 dispatchPauseTimer.cancel(false);
@@ -274,21 +270,16 @@ public class SymphonyOrchestrator {
             schedulerStoppedHookForTests.run();
             workers.shutdownNow();
             releaseWorkflowProcessLock();
-        } finally {
-            publishStatusAndUnlock();
-        }
+        });
     }
 
     public void setWorkflowPath(Path workflowPath) {
         // The operation lock serializes this with start(): a path change requested while startup
         // is loading the workflow waits for the operation boundary and is then rejected.
-        operationLock.lock();
-        try {
+        runOperation(() -> {
             checkState(!tickSchedule.isStarted(), "Workflow path cannot be changed after orchestrator start");
             this.workflowPath = workflowPath;
-        } finally {
-            publishStatusAndUnlock();
-        }
+        });
     }
 
     public boolean isStarted() {
@@ -365,8 +356,7 @@ public class SymphonyOrchestrator {
     }
 
     private void tick() {
-        operationLock.lock();
-        try {
+        runOperation(() -> {
             if (!tickSchedule.beginTick()) {
                 return;
             }
@@ -381,9 +371,7 @@ public class SymphonyOrchestrator {
             } finally {
                 tickSchedule.finishTickAndScheduleNext(config.polling().interval());
             }
-        } finally {
-            publishStatusAndUnlock();
-        }
+        });
     }
 
     private void reloadOrThrow() {
@@ -876,23 +864,16 @@ public class SymphonyOrchestrator {
     }
 
     private void onWorkerExit(RuntimeCardKey cardKey, String workerIdentity, AgentRunResult result) {
-        operationLock.lock();
         try {
-            currentRunningEntry(cardKey, workerIdentity)
-                    .ifPresent(entry -> handleWorkerExit(cardKey, workerIdentity, result, entry));
+            runOperation(() -> currentRunningEntry(cardKey, workerIdentity)
+                    .ifPresent(entry -> handleWorkerExit(cardKey, workerIdentity, result, entry)));
         } finally {
-            try {
-                publishStatus();
-                workerExitCompletionHookForTests.run();
-            } finally {
-                operationLock.unlock();
-            }
+            workerExitCompletionHookForTests.run();
         }
     }
 
     private void onWorkerExitWithoutResult(RuntimeCardKey cardKey, String workerIdentity, RuntimeException failure) {
-        operationLock.lock();
-        try {
+        runOperation(() -> {
             currentRunningEntry(cardKey, workerIdentity).ifPresent(entry -> {
                 String reason =
                         blank(failure.getMessage()) ? "agent runner failed without a result" : failure.getMessage();
@@ -902,9 +883,7 @@ public class SymphonyOrchestrator {
                     handleWorkerExit(cardKey, workerIdentity, AgentRunResult.fail(reason), entry);
                 }
             });
-        } finally {
-            publishStatusAndUnlock();
-        }
+        });
     }
 
     private void handleWorkerExit(
@@ -1026,8 +1005,7 @@ public class SymphonyOrchestrator {
     }
 
     private boolean onAgentEventAndReportAccepted(AgentEvent event) {
-        operationLock.lock();
-        try {
+        return callOperation(() -> {
             Optional<Map.Entry<RuntimeCardKey, RunningEntry>> ownedEntry = running.entrySet().stream()
                     .filter(entry -> entry.getValue().workerIdentity.equals(event.workerIdentity()))
                     .findAny();
@@ -1041,9 +1019,7 @@ public class SymphonyOrchestrator {
             }
             applyAgentEvent(cardKey, currentEntry.orElseThrow(), event);
             return true;
-        } finally {
-            publishStatusAndUnlock();
-        }
+        });
     }
 
     private AgentEventListener agentEventListener() {
@@ -1293,8 +1269,7 @@ public class SymphonyOrchestrator {
     }
 
     private void onDispatchPauseDeadline(String expectedCommand, long expectedGeneration, Instant expectedUntil) {
-        operationLock.lock();
-        try {
+        runOperation(() -> {
             if (!tickSchedule.isStarted()) {
                 return;
             }
@@ -1312,9 +1287,7 @@ public class SymphonyOrchestrator {
                 return;
             }
             selectUsageProbeAtDeadline();
-        } finally {
-            publishStatusAndUnlock();
-        }
+        });
     }
 
     private void selectUsageProbeAtDeadline() {
@@ -1593,15 +1566,12 @@ public class SymphonyOrchestrator {
 
     private void onRetryTimer(RuntimeCardKey cardKey, long generation) {
         retryTimerWaitingHookForTests.run();
-        operationLock.lock();
-        try {
+        runOperation(() -> {
             if (!tickSchedule.isStarted()) {
                 return;
             }
             handleRetryTimer(cardKey, generation);
-        } finally {
-            publishStatusAndUnlock();
-        }
+        });
     }
 
     private void handleRetryTimer(RuntimeCardKey cardKey, long generation) {
@@ -2246,7 +2216,7 @@ public class SymphonyOrchestrator {
 
     /// Replaces the view that status readers see with the current state. Call it after a change to
     /// reader-visible state when the operation does more Trello or filesystem I/O before it
-    /// releases the operation lock; [#publishStatusAndUnlock()] covers the end of every operation.
+    /// releases the operation lock; [#callOperation(Supplier)] covers the end of every operation.
     private void publishStatus() {
         checkState(operationLock.isHeldByCurrentThread(), "Status view must be published under the operation lock");
         EffectiveConfig currentConfig = config;
@@ -2270,13 +2240,25 @@ public class SymphonyOrchestrator {
                         : rateLimitsByCommand.get(currentConfig.codex().command()));
     }
 
-    /// Ends every operation, so readers see its final state even where an intermediate publish is
-    /// missing.
-    private void publishStatusAndUnlock() {
+    /// Runs one operation under the operation lock and publishes its final state before releasing
+    /// the lock, so readers see that state even where an intermediate publish is missing.
+    private void runOperation(Runnable operation) {
+        callOperation(() -> {
+            operation.run();
+            return null;
+        });
+    }
+
+    private <T> T callOperation(Supplier<T> operation) {
+        operationLock.lock();
         try {
-            publishStatus();
+            return operation.get();
         } finally {
-            operationLock.unlock();
+            try {
+                publishStatus();
+            } finally {
+                operationLock.unlock();
+            }
         }
     }
 

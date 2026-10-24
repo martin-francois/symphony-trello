@@ -96,7 +96,7 @@ The design:
 ### Confirmation
 
 `SymphonyOrchestrator` contains no `synchronized (this)` block and no `synchronized` method outside
-`TickSchedule`. The ADR 0102 owning tests still fail against their mutants, and
+`TickSchedule`, and it calls `operationLock.lock()` only inside `callOperation()`. The ADR 0102 owning tests still fail against their mutants, and
 `SymphonyOrchestratorStatusViewTest` owns the publish points. To repeat the audit, apply each mutant
 in More Information on its own and run
 `./mvnw -q -Dtest='SymphonyOrchestrator*Test,UsageLimitPauseIntegrationTest' -Dsurefire.failIfNoSpecifiedTests=false test`,
@@ -178,8 +178,10 @@ These details were decided while implementing
 * `publishStatus()` builds the view from the operation state and fails with
   `IllegalStateException` when the caller does not hold the operation lock, so a publish from a
   thread that does not own the state fails at once instead of racing a writer.
-* `publishStatusAndUnlock()` ends every operation. The worker-exit operation publishes before its
-  test completion hook instead, because tests read the status right after that hook.
+* Every operation runs through `runOperation()` or `callOperation()`. They take the operation lock,
+  run the operation, publish and unlock, so the end-of-operation publish has one place in the code
+  and a new operation cannot skip it. The worker-exit test completion hook runs after the operation
+  has published and unlocked, because tests read the status right after that hook.
 * The effective config is no longer `volatile`. Operation-lock holders read and write the field.
   The only other reader is the workflow watcher thread, which reads it once when it starts; `start()`
   starts that thread under the operation lock after it set the config, so `Thread.start()` orders
@@ -207,12 +209,16 @@ These details were decided while implementing
 The harness from ADR 0102 ran again against the code of
 [GitHub issue #815](https://github.com/martin-francois/symphony-trello/issues/815): one mutant at a time, all orchestrator
 test classes, one Maven run per mutant. Every mutant ran once more after the code review, and the
-mutants that a new test kills ran at least twice with the same owning test. 27 of 48 mutants are killed. The 24 reader-only and 23 redundant monitor sections of
-ADR 0102 no longer exist. Mutant IDs: `L` operation lock, `T` `TickSchedule` monitor method, `P`
+mutants that a new test kills ran at least twice with the same owning test. 27 of 48 mutants were
+killed in that run. Every operation then moved to one locking helper, so the separate
+end-of-operation publishes E01 to E08 and the worker-exit end publish P10 no longer exist; E00 now
+covers all of them. The tables list the 39 mutants that remain: 25 killed and 14 survivors. The 24
+reader-only and 23 redundant monitor sections of ADR 0102 no longer exist. Mutant IDs: `L` operation lock, `T` `TickSchedule` monitor method, `P`
 intermediate publish, `E` end-of-operation publish, `O` statement order, `V` `volatile`, `A` atomic
 read-modify-write, `G` guard. There is no P06: it would remove the publish in `dispatch()` after a
-pending retry is dropped, which the code does not have (see above). Lock mutants also disable the guard in `publishStatus()` and make
-`unlock()` tolerate a lock that is not held, so they fail only through the tests.
+pending retry is dropped, which the code does not have (see above). A lock mutant runs one operation through a copy of `callOperation()` that
+publishes without taking the lock, with the guard in `publishStatus()` disabled, so it fails only
+through the tests.
 
 #### Killed mutants
 
@@ -242,9 +248,7 @@ pending retry is dropped, which the code does not have (see above). Lock mutants
 | P14 | Remove the publish in `clearUsagePause()` | `clearedUsagePauseIsVisibleBeforeItsWorkpadCleanup` |
 | P15 | Remove the publish in `scheduleRetryAt()` | `scheduledRetryIsVisibleWhileTheTickDispatchesTheNextCard` |
 | P16 | Remove the publish after the retry removal in `handleRetryTimer()` | `retryTimerCardRefreshSeesTheRetryLeaveTheQueue` |
-| E00 | `publishStatusAndUnlock()` only unlocks | `cardDetailsAndLifecycleReadsAnswerWhileATickIsBlockedInsideTrelloFetch`, `runningSnapshotCountsContinuationTurns` and others |
-| E01 | Unlock without publishing at the end of `start()` | `cardDetailsAndLifecycleReadsAnswerWhileATickIsBlockedInsideTrelloFetch` (`localStatusShowsTheSelectedBoardWhileStartupCleanupFetchesTerminalCards` fails too unless the first tick publishes before it reads) |
-| E06 | Unlock without publishing at the end of an agent event | `runningSnapshotCountsContinuationTurns`, `sameRawCardIdAcrossTargetsKeepsRecentEventsIsolated` and others |
+| E00 | `callOperation()` unlocks without publishing | `cardDetailsAndLifecycleReadsAnswerWhileATickIsBlockedInsideTrelloFetch`, `runningSnapshotCountsContinuationTurns` and others |
 
 #### Survivors
 
@@ -261,9 +265,7 @@ pending retry is dropped, which the code does not have (see above). Lock mutants
 | A02 | Split `getAndSet(false)` on the reload flag | Unchanged from ADR 0102. |
 | G01 | Remove the operation-lock guard in `publishStatus()` | An assertion: no code path publishes without the lock, so no test can reach it. |
 | P08, P09 | Remove the publish after a prompt render or worker submission failure in `dispatch()` | The release Trello call follows, then `scheduleRetryAt()` publishes. No test reads the status during that release; the view stays stale only for that call. |
-| P10 | Remove the publish at the end of `onWorkerExit()` | Every reader-visible change of a worker exit is already published by P11, P12, P14 or P15. A stale worker exit changes nothing readers see. |
 | P17 | Remove the publish in `retireUsageProbeWithoutResult()` | The workpad cleanup Trello call follows. No test reads the status during it; the end-of-operation publish covers it. |
-| E02 to E05, E07, E08 | Unlock without publishing at the end of `stop()`, `setWorkflowPath()`, `tick()`, `onWorkerExitWithoutResult()`, the usage deadline or the retry timer | Each operation's intermediate publishes already cover every reader-visible change the tests make. E00 shows that the end-of-operation publish is needed as a whole. |
 
 ### Polling state from adaptive polling
 
@@ -273,6 +275,6 @@ poll interval and was still open when this ADR was updated. It fits this design 
 runs and the tracker's rate-limit pressure is drained, and passes it to
 `TickSchedule.finishTickAndScheduleNext`, which still chooses between that delay and an immediate
 refresh tick. The polling status becomes one more `StatusView` component that `publishStatus()`
-fills and `StatusView.snapshot()` copies into `RuntimeSnapshot`. A tick always ends with
-`publishStatusAndUnlock()`, so the status shows the new interval as soon as the tick ends.
+fills and `StatusView.snapshot()` copies into `RuntimeSnapshot`. A tick always ends through
+`runOperation()`, which publishes, so the status shows the new interval as soon as the tick ends.
 `AdaptivePollInterval` is then confined to operation-lock holders and needs no monitor.
