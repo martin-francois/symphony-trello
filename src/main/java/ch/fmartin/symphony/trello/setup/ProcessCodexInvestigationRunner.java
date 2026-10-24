@@ -24,7 +24,7 @@ final class ProcessCodexInvestigationRunner implements CodexInvestigationRunner 
     private static final String STANDARD_INPUT_PROMPT = "-";
     private static final Duration TERMINATION_GRACE = Duration.ofSeconds(5);
     private static final String MARKER_VALUE = "1";
-    private static final String UNEXPECTED_ANSWER = "Codex returned an answer in an unexpected format";
+    static final String UNEXPECTED_ANSWER = "Codex returned an answer in an unexpected format";
 
     private final ObjectMapper json = new ObjectMapper();
 
@@ -63,12 +63,11 @@ final class ProcessCodexInvestigationRunner implements CodexInvestigationRunner 
         try {
             if (!process.waitFor(request.timeout())) {
                 stop(process);
-                return new Failed(
-                        "Codex did not finish within " + CodexInvestigationRunner.describe(request.timeout()));
+                return new Failed(timeoutReason(request.timeout()));
             }
             int exitCode = process.exitValue();
             if (exitCode != SUCCESS_EXIT_CODE) {
-                return new Failed("Codex exited with code " + exitCode);
+                return new Failed(exitCodeReason(exitCode));
             }
             return finding(files.result());
         } catch (InterruptedException e) {
@@ -78,6 +77,14 @@ final class ProcessCodexInvestigationRunner implements CodexInvestigationRunner 
         } finally {
             removeShutdownHookUnlessExiting(stopOnExit);
         }
+    }
+
+    static String timeoutReason(Duration timeout) {
+        return "Codex did not finish within " + CodexInvestigationRunner.describe(timeout);
+    }
+
+    static String exitCodeReason(int exitCode) {
+        return "Codex exited with code " + exitCode;
     }
 
     private static List<String> command(Request request, ScratchFiles files) {

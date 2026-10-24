@@ -1,6 +1,9 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.SLASHES;
+import static ch.fmartin.symphony.trello.setup.SetupReportMarkdown.firstLine;
+import static ch.fmartin.symphony.trello.setup.SetupReportMarkdown.line;
+import static ch.fmartin.symphony.trello.setup.SetupReportMarkdown.markdownFence;
 
 import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
@@ -532,11 +535,13 @@ final class SetupDiagnosticReporter {
     }
 
     private SetupFailureFollowUp.FailedSetup failedSetup(Exception exception, List<String> args, WrittenReport report) {
-        Optional<CodexInvestigationRunner.CodexCommand> codexCommand = executables
+        SetupFailureFollowUp.CodexCli codexCli = executables
                 .find("codex")
-                .map(executable -> arguments -> codexCommand(executable, arguments));
+                .<SetupFailureFollowUp.CodexCli>map(executable ->
+                        new SetupFailureFollowUp.CodexCli.OnPath(arguments -> codexCommand(executable, arguments)))
+                .orElseGet(SetupFailureFollowUp.CodexCli.NotOnPath::new);
         return new SetupFailureFollowUp.FailedSetup(
-                report.path(), errorCode(exception), commandName(args), report.paths(), codexCommand, this::sanitize);
+                report.path(), errorCode(exception), commandName(args), report.paths(), codexCli, this::sanitize);
     }
 
     private static String[] codexCommand(Path executable, String... arguments) {
@@ -546,6 +551,7 @@ final class SetupDiagnosticReporter {
         return command.toArray(String[]::new);
     }
 
+    /// The root command takes no options with values, so its first non-option argument is the subcommand.
     private static String commandName(List<String> args) {
         return args.stream().filter(arg -> !arg.startsWith("-")).findFirst().orElse("unknown");
     }
@@ -2913,13 +2919,6 @@ final class SetupDiagnosticReporter {
         return FileChannel.open(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS);
     }
 
-    static String firstLine(String value) {
-        if (value == null || value.isBlank()) {
-            return "";
-        }
-        return value.lines().findFirst().orElse("").trim();
-    }
-
     private static String truncate(String value, int maxLength) {
         if (value == null || value.length() <= maxLength) {
             return value == null ? "" : value;
@@ -2941,30 +2940,12 @@ final class SetupDiagnosticReporter {
         body.append(fence).append('\n');
     }
 
-    static String markdownFence(String content) {
-        int longestRun = 0;
-        int currentRun = 0;
-        for (int index = 0; index < content.length(); index++) {
-            if (content.charAt(index) == '`') {
-                currentRun++;
-                longestRun = Math.max(longestRun, currentRun);
-            } else {
-                currentRun = 0;
-            }
-        }
-        return "`".repeat(Math.max(3, longestRun + 1));
-    }
-
     private static Path resolveUserDataPath(Path path, Path configDir) {
         return path.isAbsolute() ? path.normalize() : configDir.resolve(path).normalize();
     }
 
     private static void section(StringBuilder body, String title) {
         body.append("\n## ").append(title).append("\n\n");
-    }
-
-    static void line(StringBuilder body, String label, Object value) {
-        body.append("- **").append(label).append(":** ").append(value).append('\n');
     }
 
     private Instant now() {

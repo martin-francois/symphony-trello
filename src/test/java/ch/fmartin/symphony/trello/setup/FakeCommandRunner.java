@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.setup;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,7 +23,8 @@ final class FakeCommandRunner implements CommandRunner {
     }
 
     /// Answers every command that starts with `prefix` and has no exact result, for commands whose
-    /// trailing arguments, such as a generated file path, the test cannot know in advance.
+    /// trailing arguments, such as a generated file path, the test cannot know in advance. When
+    /// several prefixes match, the longest one wins.
     FakeCommandRunner returnsForPrefix(int exitCode, String output, String... prefix) {
         prefixResults.put(List.of(prefix), new CommandResult(exitCode, output));
         return this;
@@ -42,12 +44,13 @@ final class FakeCommandRunner implements CommandRunner {
         commands.add(commandLine);
         Queue<CommandResult> queue = results.get(commandLine);
         if (queue == null || queue.isEmpty()) {
-            for (Map.Entry<List<String>, CommandResult> prefixResult : prefixResults.entrySet()) {
-                if (startsWith(commandLine, prefixResult.getKey())) {
-                    return prefixResult.getValue();
-                }
-            }
-            return new CommandResult(CommandResult.COMMAND_NOT_FOUND_EXIT_CODE, "missing: " + Arrays.toString(command));
+            return prefixResults.entrySet().stream()
+                    .filter(prefixResult -> startsWith(commandLine, prefixResult.getKey()))
+                    .max(Comparator.comparingInt(
+                            prefixResult -> prefixResult.getKey().size()))
+                    .map(Map.Entry::getValue)
+                    .orElseGet(() -> new CommandResult(
+                            CommandResult.COMMAND_NOT_FOUND_EXIT_CODE, "missing: " + Arrays.toString(command)));
         }
         CommandResult result = queue.peek();
         if (queue.size() > 1) {

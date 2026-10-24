@@ -4,6 +4,7 @@ import ch.fmartin.symphony.trello.setup.CodexInvestigationFinding.Classification
 import ch.fmartin.symphony.trello.setup.CodexInvestigationFinding.ValidationRun;
 import ch.fmartin.symphony.trello.setup.CodexInvestigationRunner.CodexCommand;
 import ch.fmartin.symphony.trello.setup.CodexInvestigationRunner.Outcome;
+import ch.fmartin.symphony.trello.setup.SetupFailureFollowUp.Investigation.Answered;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
@@ -33,6 +34,7 @@ final class SetupFailureFollowUp {
     private static final int ANSWER_LIST_LIMIT = 50;
     static final String ISSUE_DRAFT_SUFFIX = "-github-issue.md";
     static final String REPORT_SUFFIX = ".md";
+    private static final Investigation NO_ANSWER = new Investigation.NoAnswer();
 
     private final CommandRunner commands;
     private final CodexInvestigationRunner codexRunner;
@@ -69,18 +71,12 @@ final class SetupFailureFollowUp {
             return;
         }
         try {
-            Optional<CodexInvestigationFinding> finding = investigateWithCodex(failure, terminal);
-            Optional<CodexInvestigationFinding> localConfiguration =
-                    finding.filter(SetupFailureFollowUp::isLocalConfiguration);
-            if (localConfiguration.isPresent()) {
-                terminal.err()
-                        .println("Codex found a local configuration problem, so no GitHub issue is suggested. "
-                                + (localConfiguration.get().verifiedFix()
-                                        ? "Codex fixed it locally. Rerun the command."
-                                        : "Follow the next step above, then rerun the command."));
-                return;
+            switch (investigateWithCodex(failure, terminal)) {
+                case Answered answered
+                when isLocalConfiguration(answered.finding()) ->
+                    terminal.err().println(localConfigurationClosing(answered.finding()));
+                case Investigation investigation -> offerGithubIssue(failure, investigation, terminal);
             }
-            offerGithubIssue(failure, finding, terminal);
         } catch (IOException e) {
             terminal.err()
                     .println(failure.sanitizer()
@@ -92,15 +88,27 @@ final class SetupFailureFollowUp {
         return finding.classification() == Classification.LOCAL_CONFIGURATION;
     }
 
-    private Optional<CodexInvestigationFinding> investigateWithCodex(FailedSetup failure, Terminal terminal)
-            throws IOException {
+    private static String localConfigurationClosing(CodexInvestigationFinding finding) {
+        return "Codex found a local configuration problem, so no GitHub issue is suggested. "
+                + (finding.verifiedFix()
+                        ? "Codex fixed it locally. Rerun the command."
+                        : "Follow the next step above, then rerun the command.");
+    }
+
+    private Investigation investigateWithCodex(FailedSetup failure, Terminal terminal) throws IOException {
         if (environment.containsKey(CodexInvestigationRunner.INVESTIGATION_MARKER_ENV)) {
-            return Optional.empty();
+            return NO_ANSWER;
         }
-        Optional<CodexCommand> codex = failure.codex().filter(this::codexAuthenticated);
-        if (codex.isEmpty()) {
-            return Optional.empty();
-        }
+        return switch (failure.codex()) {
+            case CodexCli.OnPath onPath
+            when codexAuthenticated(onPath.command()) -> offerInvestigation(onPath.command(), failure, terminal);
+            case CodexCli.OnPath ignored -> NO_ANSWER;
+            case CodexCli.NotOnPath ignored -> NO_ANSWER;
+        };
+    }
+
+    private Investigation offerInvestigation(CodexCommand codex, FailedSetup failure, Terminal terminal)
+            throws IOException {
         List<Path> additionalWritableRoots = sourceCheckout(failure.paths())
                 .filter(root -> !root.equals(workingRoot(failure)))
                 .map(List::of)
@@ -120,23 +128,24 @@ final class SetupFailureFollowUp {
                         + " GitHub issue draft.");
         String answer = terminal.readLine("Ask Codex to investigate this failure? [y/N] ");
         if (!confirmed(answer)) {
-            return Optional.empty();
+            return NO_ANSWER;
         }
         terminal.err()
                 .println("Codex is investigating. This can take up to "
                         + CodexInvestigationRunner.describe(codexTimeout) + ". Press Ctrl+C to stop.");
         Outcome outcome = codexRunner.investigate(new CodexInvestigationRunner.Request(
-                codex.get(), prompt(failure), workingRoot(failure), additionalWritableRoots, codexTimeout));
+                codex, prompt(failure), workingRoot(failure), additionalWritableRoots, codexTimeout));
         return switch (outcome) {
             case Outcome.Completed completed -> {
-                printFinding(completed.finding(), failure.sanitizer(), terminal.err());
-                yield Optional.of(completed.finding());
+                CodexInvestigationFinding finding = sanitized(completed.finding(), failure.sanitizer());
+                printFinding(finding, terminal.err());
+                yield new Answered(finding);
             }
             case Outcome.Failed failed -> {
                 terminal.err()
                         .println("Codex investigation did not complete: "
                                 + failure.sanitizer().apply(failed.reason()) + ".");
-                yield Optional.empty();
+                yield NO_ANSWER;
             }
         };
     }
@@ -166,7 +175,7 @@ final class SetupFailureFollowUp {
     private String prompt(FailedSetup failure) throws IOException {
         UnaryOperator<String> sanitizer = failure.sanitizer();
         String report = Files.readString(failure.reportPath());
-        String fence = SetupDiagnosticReporter.markdownFence(report);
+        String fence = SetupReportMarkdown.markdownFence(report);
         return """
                 You are investigating an unexpected Symphony for Trello setup failure on this machine. The user \
                 asked for this investigation after the failure.
@@ -235,19 +244,36 @@ final class SetupFailureFollowUp {
         return "direct Java command";
     }
 
-    private static void printFinding(
-            CodexInvestigationFinding finding, UnaryOperator<String> sanitizer, PrintStream err) {
+    /// Applies the report sanitizer and the text length limit to every text Codex returned, once, so
+    /// the console output and the issue draft can only show sanitized text. List limits apply when
+    /// rendering, so [CodexInvestigationFinding#verifiedFix()] still sees every validation run.
+    private static CodexInvestigationFinding sanitized(
+            CodexInvestigationFinding finding, UnaryOperator<String> sanitizer) {
+        return new CodexInvestigationFinding(
+                finding.classification(),
+                sanitizedText(finding.diagnosis(), sanitizer),
+                finding.fixApplied(),
+                sanitizedText(finding.fixSummary(), sanitizer),
+                finding.changedFiles().stream()
+                        .map(value -> sanitizedText(value, sanitizer))
+                        .toList(),
+                finding.validation().stream()
+                        .map(run -> new ValidationRun(sanitizedText(run.command(), sanitizer), run.passed()))
+                        .toList(),
+                sanitizedText(finding.nextStep(), sanitizer));
+    }
+
+    private static void printFinding(CodexInvestigationFinding finding, PrintStream err) {
         err.println();
         err.println("Codex investigation");
         err.println("  Finding: " + finding.classification().label());
-        printField(err, "Diagnosis", sanitizedText(finding.diagnosis(), sanitizer));
-        List<String> changedFiles = sanitizedList(finding.changedFiles(), sanitizer);
-        err.println("  Changed files: " + (changedFiles.isEmpty() ? "none" : String.join(", ", changedFiles)));
+        printField(err, "Diagnosis", finding.diagnosis());
+        err.println("  Changed files: " + changedFiles(finding, UnaryOperator.identity()));
         if (finding.fixApplied()) {
-            printField(err, "Fix", sanitizedText(finding.fixSummary(), sanitizer));
+            printField(err, "Fix", finding.fixSummary());
         }
-        err.println("  Validation: " + validationSummary(finding.validation(), sanitizer));
-        printField(err, "Next step", sanitizedText(finding.nextStep(), sanitizer));
+        err.println("  Validation: " + validationSummary(finding));
+        printField(err, "Next step", finding.nextStep());
         if (finding.classification() == Classification.EXTERNAL_TOOL_OR_SERVICE) {
             err.println("  The failure comes from an external tool or service. A GitHub issue still helps when"
                     + " Symphony for Trello should detect or explain this failure better.");
@@ -260,31 +286,43 @@ final class SetupFailureFollowUp {
         }
     }
 
-    private static String validationSummary(List<ValidationRun> validation, UnaryOperator<String> sanitizer) {
-        if (validation.isEmpty()) {
+    private static String changedFiles(CodexInvestigationFinding finding, UnaryOperator<String> format) {
+        List<String> files = finding.changedFiles().stream()
+                .limit(ANSWER_LIST_LIMIT)
+                .filter(file -> !file.isBlank())
+                .map(format)
+                .toList();
+        return files.isEmpty() ? "none" : String.join(", ", files);
+    }
+
+    private static String validationSummary(CodexInvestigationFinding finding) {
+        if (finding.validation().isEmpty()) {
             return "none run";
         }
-        return validation.stream()
+        return finding.validation().stream()
                 .limit(ANSWER_LIST_LIMIT)
-                .map(run -> (run.passed() ? "passed" : "failed") + " `" + sanitizedText(run.command(), sanitizer) + "`")
+                .map(run -> (run.passed() ? "passed" : "failed") + " `" + run.command() + "`")
                 .collect(Collectors.joining("; "));
     }
 
-    private void offerGithubIssue(FailedSetup failure, Optional<CodexInvestigationFinding> finding, Terminal terminal)
+    private void offerGithubIssue(FailedSetup failure, Investigation investigation, Terminal terminal)
             throws IOException {
         if (!commands.run("gh", "auth", "status").success()) {
             return;
         }
-        boolean verifiedFix =
-                finding.map(CodexInvestigationFinding::verifiedFix).orElse(false);
-        String question = verifiedFix
-                ? "Codex changed files locally and validation passed. Open a GitHub issue that describes the"
-                        + " failure and the local fix? [y/N] "
-                : "GitHub CLI is authenticated. Open a GitHub issue with this report? [y/N] ";
+        String question =
+                investigation instanceof Answered answered && answered.finding().verifiedFix()
+                        ? "Codex changed files locally and validation passed. Open a GitHub issue that describes the"
+                                + " failure and the local fix? [y/N] "
+                        : "GitHub CLI is authenticated. Open a GitHub issue with this report? [y/N] ";
         if (!confirmed(terminal.readLine(question))) {
             return;
         }
-        Path bodyFile = finding.isPresent() ? writeIssueDraft(failure, finding.get()) : failure.reportPath();
+        Path bodyFile =
+                switch (investigation) {
+                    case Answered answered -> writeIssueDraft(failure, answered.finding());
+                    case Investigation.NoAnswer _ -> failure.reportPath();
+                };
         printIssueDraft(terminal.out(), Files.readString(bodyFile));
         if (!confirmed(terminal.readLine("Post this GitHub issue now? [y/N] "))) {
             return;
@@ -300,11 +338,11 @@ final class SetupFailureFollowUp {
                 "--body-file",
                 bodyFile.toString());
         if (result.success()) {
-            terminal.out().println(SetupDiagnosticReporter.firstLine(result.output()));
+            terminal.out().println(SetupReportMarkdown.firstLine(result.output()));
         } else {
             terminal.err()
                     .println("GitHub issue creation failed: "
-                            + failure.sanitizer().apply(SetupDiagnosticReporter.firstLine(result.output())));
+                            + failure.sanitizer().apply(SetupReportMarkdown.firstLine(result.output())));
         }
     }
 
@@ -328,25 +366,24 @@ final class SetupFailureFollowUp {
                         : reportName)
                 + ISSUE_DRAFT_SUFFIX;
         Path draft = report.resolveSibling(draftName);
-        Files.writeString(draft, issueBody(Files.readString(report), finding, failure.sanitizer()));
+        Files.writeString(draft, issueBody(Files.readString(report), finding));
         return draft;
     }
 
-    static String issueBody(String report, CodexInvestigationFinding finding, UnaryOperator<String> sanitizer) {
+    /// Appends the already sanitized Codex finding to the sanitized report.
+    private static String issueBody(String report, CodexInvestigationFinding finding) {
         var body = new StringBuilder(report.stripTrailing()).append("\n\n## Local Codex Investigation\n\n");
         body.append("Codex ran on the reporter's machine. Its changes were not committed or pushed.\n\n");
-        SetupDiagnosticReporter.line(
+        SetupReportMarkdown.line(
                 body, "classification", finding.classification().jsonValue());
-        SetupDiagnosticReporter.line(body, "diagnosis", sanitizedText(finding.diagnosis(), sanitizer));
-        SetupDiagnosticReporter.line(body, "fix_applied", finding.fixApplied());
+        SetupReportMarkdown.line(body, "diagnosis", finding.diagnosis());
+        SetupReportMarkdown.line(body, "fix_applied", finding.fixApplied());
         if (finding.fixApplied()) {
-            SetupDiagnosticReporter.line(body, "fix_summary", sanitizedText(finding.fixSummary(), sanitizer));
+            SetupReportMarkdown.line(body, "fix_summary", finding.fixSummary());
         }
-        List<String> changedFiles = sanitizedList(finding.changedFiles(), sanitizer);
-        SetupDiagnosticReporter.line(
-                body, "changed_files", changedFiles.isEmpty() ? "none" : "`" + String.join("`, `", changedFiles) + "`");
-        SetupDiagnosticReporter.line(body, "validation", validationSummary(finding.validation(), sanitizer));
-        SetupDiagnosticReporter.line(body, "next_step", sanitizedText(finding.nextStep(), sanitizer));
+        SetupReportMarkdown.line(body, "changed_files", changedFiles(finding, file -> "`" + file + "`"));
+        SetupReportMarkdown.line(body, "validation", validationSummary(finding));
+        SetupReportMarkdown.line(body, "next_step", finding.nextStep());
         return body.toString();
     }
 
@@ -355,27 +392,40 @@ final class SetupFailureFollowUp {
         return sanitized.length() <= ANSWER_TEXT_LIMIT ? sanitized : sanitized.substring(0, ANSWER_TEXT_LIMIT) + " ...";
     }
 
-    private static List<String> sanitizedList(List<String> values, UnaryOperator<String> sanitizer) {
-        return values.stream()
-                .limit(ANSWER_LIST_LIMIT)
-                .map(value -> sanitizedText(value, sanitizer))
-                .filter(value -> !value.isBlank())
-                .toList();
-    }
-
     private static boolean confirmed(String answer) {
         return answer != null && answer.strip().toLowerCase(Locale.ROOT).startsWith("y");
     }
 
     /// Everything the follow-up needs about one failure.
     ///
-    /// @param codex the resolved Codex executable, when one is on `PATH`
+    /// @param codex whether a Codex executable is on `PATH`
     /// @param sanitizer the report's sanitizer; it applies the same redaction to Codex answers
     record FailedSetup(
             Path reportPath,
             String errorCode,
             String commandName,
             LocalWorkerPaths paths,
-            Optional<CodexCommand> codex,
+            CodexCli codex,
             UnaryOperator<String> sanitizer) {}
+
+    /// Whether the diagnostics tool probe found Codex CLI on `PATH`.
+    sealed interface CodexCli {
+        record NotOnPath() implements CodexCli {}
+
+        /// Codex CLI was found on `PATH`.
+        ///
+        /// @param command builds the process command for the resolved executable
+        record OnPath(CodexCommand command) implements CodexCli {}
+    }
+
+    /// What the optional Codex step leaves for the closing message and the issue draft.
+    sealed interface Investigation {
+        /// Codex was not offered, was declined, or returned no usable answer.
+        record NoAnswer() implements Investigation {}
+
+        /// Codex returned a usable answer for the follow-up.
+        ///
+        /// @param finding the Codex answer after sanitizing
+        record Answered(CodexInvestigationFinding finding) implements Investigation {}
+    }
 }

@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.argumentSet;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -31,7 +32,6 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
 
 /// Covers the interactive follow-up after an unexpected setup failure: the opt-in Codex
 /// investigation and the GitHub issue prompt, driven through the real troubleshooting report and
@@ -96,8 +96,8 @@ final class SetupFailureFollowUpTest {
     }
 
     @MethodSource("unavailableCodex")
-    @ParameterizedTest(name = "{0}")
-    void unavailableCodexFallsBackToGithubIssuePrompt(String scenarioName, ScenarioOptions options) throws IOException {
+    @ParameterizedTest(name = "{argumentSetName}")
+    void unavailableCodexFallsBackToGithubIssuePrompt(ScenarioOptions options) throws IOException {
         // given
         Scenario scenario = scenario(options, "n");
 
@@ -111,9 +111,8 @@ final class SetupFailureFollowUpTest {
 
     static Stream<Arguments> unavailableCodex() {
         return Stream.of(
-                Arguments.of(
-                        "codex not on PATH", ScenarioOptions.signedInCodex().with(Condition.NO_CODEX_ON_PATH)),
-                Arguments.of("codex signed out", ScenarioOptions.signedInCodex().with(Condition.CODEX_SIGNED_OUT)));
+                argumentSet("codex not on PATH", ScenarioOptions.signedInCodex().with(Condition.NO_CODEX_ON_PATH)),
+                argumentSet("codex signed out", ScenarioOptions.signedInCodex().with(Condition.CODEX_SIGNED_OUT)));
     }
 
     @Test
@@ -291,13 +290,8 @@ final class SetupFailureFollowUpTest {
         assertThat(scenario.terminal().stdout()).doesNotContain(REPORT_ISSUE_QUESTION, FIX_ISSUE_QUESTION);
     }
 
+    @MethodSource("failedInvestigationReasons")
     @ParameterizedTest(name = "{0}")
-    @ValueSource(
-            strings = {
-                "Codex did not finish within 15 minutes",
-                "Codex exited with code 1",
-                "Codex returned an answer in an unexpected format"
-            })
     void failedInvestigationStillOffersTheExistingIssuePrompt(String reason) throws IOException {
         // given
         Scenario scenario =
@@ -311,11 +305,17 @@ final class SetupFailureFollowUpTest {
         assertThat(scenario.terminal().stdout()).containsSubsequence(CODEX_QUESTION, REPORT_ISSUE_QUESTION);
     }
 
+    static Stream<String> failedInvestigationReasons() {
+        return Stream.of(
+                ProcessCodexInvestigationRunner.timeoutReason(SetupFailureFollowUp.CODEX_INVESTIGATION_TIMEOUT),
+                ProcessCodexInvestigationRunner.exitCodeReason(1),
+                ProcessCodexInvestigationRunner.UNEXPECTED_ANSWER);
+    }
+
     @MethodSource("unverifiedFixes")
-    @ParameterizedTest(name = "{0}")
+    @ParameterizedTest(name = "{argumentSetName}")
     void unverifiedFixKeepsTheExistingIssuePromptAndAddsTheFindingToTheDraft(
-            String scenarioName, List<String> changedFiles, ValidationRun validation, String draftLine)
-            throws IOException {
+            List<String> changedFiles, ValidationRun validation, String draftLine) throws IOException {
         // given
         Scenario scenario = scenario(
                 ScenarioOptions.signedInCodex()
@@ -343,12 +343,12 @@ final class SetupFailureFollowUpTest {
 
     static Stream<Arguments> unverifiedFixes() {
         return Stream.of(
-                Arguments.of(
+                argumentSet(
                         "validation failed",
                         List.of("WORKFLOW.md"),
                         new ValidationRun("symphony-trello setup-local check", false),
                         "- **validation:** failed `symphony-trello setup-local check`"),
-                Arguments.of(
+                argumentSet(
                         "no changed files reported",
                         List.of(),
                         new ValidationRun("symphony-trello setup-local check", true),
@@ -356,9 +356,8 @@ final class SetupFailureFollowUpTest {
     }
 
     @MethodSource("codexNotOffered")
-    @ParameterizedTest(name = "{0}")
-    void codexIsNotOfferedOutsideAnInteractiveFirstFailure(String scenarioName, ScenarioOptions options)
-            throws IOException {
+    @ParameterizedTest(name = "{argumentSetName}")
+    void codexIsNotOfferedOutsideAnInteractiveFirstFailure(ScenarioOptions options) throws IOException {
         // given
         Scenario scenario = scenario(options, "y", "y", "y");
 
@@ -372,11 +371,10 @@ final class SetupFailureFollowUpTest {
 
     static Stream<Arguments> codexNotOffered() {
         return Stream.of(
-                Arguments.of(
-                        "--non-interactive", ScenarioOptions.signedInCodex().with(Condition.NON_INTERACTIVE)),
-                Arguments.of(
+                argumentSet("--non-interactive", ScenarioOptions.signedInCodex().with(Condition.NON_INTERACTIVE)),
+                argumentSet(
                         "no console attached", ScenarioOptions.signedInCodex().with(Condition.NO_CONSOLE)),
-                Arguments.of(
+                argumentSet(
                         "command started by a Codex investigation",
                         ScenarioOptions.signedInCodex().with(Condition.STARTED_BY_CODEX_INVESTIGATION)));
     }
