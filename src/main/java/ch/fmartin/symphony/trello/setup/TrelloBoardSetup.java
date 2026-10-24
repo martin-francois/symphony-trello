@@ -1366,13 +1366,13 @@ public final class TrelloBoardSetup {
                 blocker exists. Before changing code, always call trello_update_blocker_recheck_status with status
                 `checking`. The tool inspects the deep current-card comment window and classifies the newest ordinary
                 comment after ignoring the `## Codex Workpad` and Symphony-managed prerequisite comments. A
-                Symphony-managed recheck
-                status ends with the exact `Managed by Symphony` footer and a link to the qualifying blocker comment
-                on the current card. Similar visible text, or a link to another card, remains an ordinary comment.
-                A blocker handoff added through trello_add_comment ends with the plain footer and still counts as an
-                ordinary comment for this check. Do not scan past a newer ordinary human comment to find an older
-                blocker. The comment qualifies only when its first non-blank line starts with `Blocked:` or `Blocked by ...`, matched without case
-                sensitivity; a human discussion that merely contains the word `blocked` does not qualify.
+                Symphony-managed recheck status ends with the exact `Managed by Symphony` footer and a link to the
+                qualifying blocker comment on the current card. Similar visible text, or a link to another card,
+                remains an ordinary comment. A blocker handoff added through trello_add_comment ends with the plain
+                footer and still counts as an ordinary comment for this check. Do not scan past a newer ordinary human
+                comment to find an older blocker. The comment qualifies only when its first non-blank line starts with
+                `Blocked:` or `Blocked by ...`, matched without case sensitivity; a human discussion that merely
+                contains the word `blocked` does not qualify.
 
                 The newest ordinary `Blocked:` or `Blocked by ...` comment is the comment being rechecked; leave it
                 unchanged. Call `checking` to create or update a separate Symphony-managed status comment.

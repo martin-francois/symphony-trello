@@ -976,13 +976,14 @@ final class TrelloHandoffToolHandlerTest {
         assertThat(updatedCommentText.get()).isNull();
     }
 
-    @Test
-    void managedCheckingStatusMakesCrashRetryIdempotent() {
+    @MethodSource("blockerHandoffsWithAndWithoutFooter")
+    @ParameterizedTest(name = "{0}")
+    void managedCheckingStatusMakesCrashRetryIdempotent(String scenario, String blockerText) {
         // given
         TrelloHandoffToolHandler handler = handler();
         cardResponse.set(cardJson(actionsJson(
                 managedRecheckAction(BLOCKER_RECHECK_ACTION_ID, CHECKING_STATUS, BLOCKER_ACTION_ID),
-                commentAction(BLOCKER_ACTION_ID, "Blocked: transient repository mismatch"))));
+                commentAction(BLOCKER_ACTION_ID, blockerText))));
 
         // when
         JsonNode firstRetry = updateBlockerRecheckStatus(handler, "checking");
@@ -990,11 +991,19 @@ final class TrelloHandoffToolHandlerTest {
 
         // then
         assertThat(firstRetry.path("contentItems").get(0).path("text").asText())
+                .as(scenario)
                 .contains("blocker_recheck_already_started");
         assertThat(secondRetry.path("contentItems").get(0).path("text").asText())
                 .contains("blocker_recheck_already_started");
         assertThat(commentText.get()).isNull();
         assertThat(updatedCommentText.get()).isNull();
+    }
+
+    private static Stream<Arguments> blockerHandoffsWithAndWithoutFooter() {
+        String blocker = "Blocked: transient repository mismatch";
+        return Stream.of(
+                Arguments.of("blocker handoff written before the footer", blocker),
+                Arguments.of("blocker handoff with the plain footer", withFooter(blocker)));
     }
 
     @Test
@@ -1992,26 +2001,14 @@ final class TrelloHandoffToolHandlerTest {
                 .containsExactly("action-workpad-older");
     }
 
-    @Test
-    void reportsMissingActionIdWithoutDeletingAnyWorkpad() {
+    @MethodSource("workpadSuffixesWithAndWithoutFooter")
+    @ParameterizedTest(name = "{0}")
+    void reportsMissingActionIdWithoutDeletingAnyWorkpad(String scenario, String suffix) {
         // given
         TrelloHandoffToolHandler handler = handler();
-        cardResponse.set(
-                cardJson(
-                        """
-                [
-                  {
-                    "data":{"text":"## Codex Workpad\\n\\nNo id first"},
-                    "date":"2026-05-05T00:00:00.000Z",
-                    "memberCreator":{"fullName":"Codex"}
-                  },
-                  {
-                    "data":{"text":"## Codex Workpad\\n\\nNo id second"},
-                    "date":"2026-05-04T00:00:00.000Z",
-                    "memberCreator":{"fullName":"Codex"}
-                  }
-                ]
-                """));
+        cardResponse.set(cardJson(actionsJson(
+                commentAction(null, "## Codex Workpad\n\nNo id first" + suffix),
+                commentAction(null, "## Codex Workpad\n\nNo id second" + suffix))));
 
         // when
         JsonNode result = upsertWorkpadWithDestructiveOperations(handler);
@@ -2019,10 +2016,17 @@ final class TrelloHandoffToolHandlerTest {
         // then
         assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
+                .as(scenario)
                 .contains("trello_workpad_missing_action_id");
         assertThat(deletedActionIds).isEmpty();
         assertThat(managedCommentCallOrder).isEmpty();
         assertThat(commentText.get()).as("must not create a third workpad").isNull();
+    }
+
+    private static Stream<Arguments> workpadSuffixesWithAndWithoutFooter() {
+        return Stream.of(
+                Arguments.of("workpads written before the footer", ""),
+                Arguments.of("workpads with the plain footer", FOOTER));
     }
 
     private JsonNode upsertWorkpadWithDestructiveOperations(TrelloHandoffToolHandler handler) {
@@ -2777,6 +2781,7 @@ final class TrelloHandoffToolHandlerTest {
                 Arguments.of(
                         "blocker link footer without emphasis",
                         CHECKING_STATUS + "\n\n" + footerLine.substring(1, footerLine.length() - 1)),
+                Arguments.of("blocker link footer without an action id", managedRecheckText(CHECKING_STATUS, "")),
                 Arguments.of(
                         "blocker link footer with a different link label",
                         managed.replace(

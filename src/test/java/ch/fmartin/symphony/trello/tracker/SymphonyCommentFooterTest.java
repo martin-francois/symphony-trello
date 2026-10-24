@@ -124,6 +124,42 @@ final class SymphonyCommentFooterTest {
         assertThat(parsed).isEmpty();
     }
 
+    @MethodSource("footerOnlyTexts")
+    @ParameterizedTest(name = "{0}")
+    void footerOnlyTextIsRecognizedSoNoToolPostsIt(String scenario, String text) {
+        // given
+
+        // when
+        boolean footerOnly = SymphonyCommentFooter.isFooterOnly(text);
+
+        // then
+        assertThat(footerOnly)
+                .as("%s carries nothing besides the footer, so posting it must be refused", scenario)
+                .isTrue();
+    }
+
+    private static Stream<Arguments> footerOnlyTexts() {
+        return Stream.of(
+                Arguments.of("plain footer", PLAIN_FOOTER),
+                Arguments.of("footer with surrounding whitespace", "  \n\n" + PLAIN_FOOTER + "\n  "),
+                Arguments.of("duplicated footers", PLAIN_FOOTER + "\n\n" + PLAIN_FOOTER),
+                Arguments.of("detailed footer", SymphonyCommentFooter.append("", LINK_DETAIL)));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"Ready for review.", "Ready for review.\n\n" + PLAIN_FOOTER, "_Managed by Symphony"})
+    void textWithAnyBodyIsNotFooterOnly(String text) {
+        // given
+
+        // when
+        boolean footerOnly = SymphonyCommentFooter.isFooterOnly(text);
+
+        // then
+        assertThat(footerOnly)
+                .as("text with content besides a canonical footer must still be postable: %s", text)
+                .isFalse();
+    }
+
     @Test
     void stripsEveryDuplicateTrailingFooterSoReformattingProducesExactlyOne() {
         // given

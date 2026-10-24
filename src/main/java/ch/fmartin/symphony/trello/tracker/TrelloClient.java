@@ -671,7 +671,8 @@ public class TrelloClient implements TrackerClient {
 
     private void updateOrCreatePrerequisiteWaitingComment(
             EffectiveConfig config, Card card, Card.Comment existing, String text) {
-        if (sameStatusIgnoringFooter(text, existing.text())) {
+        // Ignoring the footer keeps an unchanged legacy status from being rewritten on every poll.
+        if (SymphonyCommentFooter.sameBody(text, existing.text())) {
             return;
         }
         if (blank(existing.id())) {
@@ -686,7 +687,8 @@ public class TrelloClient implements TrackerClient {
             Optional<Card.Comment> existing = prerequisiteWaitingComment(config, card.id());
             String text = resolvedPrerequisiteStatusText();
             existing.filter(comment -> !blank(comment.id()))
-                    .filter(comment -> !sameStatusIgnoringFooter(text, comment.text()))
+                    // Ignoring the footer keeps an unchanged legacy status from being rewritten on every poll.
+                    .filter(comment -> !SymphonyCommentFooter.sameBody(text, comment.text()))
                     .ifPresent(comment -> updateComment(config, comment.id(), text));
         } catch (RuntimeException e) {
             LOG.warnf("card_id=%s prerequisite_waiting_comment_clear=failed reason=%s", card.id(), e.getMessage());
@@ -711,12 +713,6 @@ public class TrelloClient implements TrackerClient {
         return comments(payload).stream()
                 .filter(comment -> isManagedPrerequisiteStatusComment(comment.text()))
                 .findFirst();
-    }
-
-    /// A status comment written before the attribution footer existed gains the footer only when
-    /// its visible status changes, so an unchanged legacy comment is not rewritten on every poll.
-    private static boolean sameStatusIgnoringFooter(String desired, @Nullable String existing) {
-        return SymphonyCommentFooter.sameBody(desired, existing);
     }
 
     private static boolean isManagedPrerequisiteStatusComment(String text) {
