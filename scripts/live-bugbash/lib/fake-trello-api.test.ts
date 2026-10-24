@@ -100,6 +100,25 @@ test("wrong credentials are rejected and unsupported routes are recorded", async
   });
 });
 
+test("malformed requests get a 400 reply and the fake keeps serving", async () => {
+  await withFake(async (trello, fake) => {
+    // given
+    const badEscape = `${fake.endpoint}/cards/%E0%A4%A`;
+    // A fake that drops the request leaves the client waiting, so fail fast instead.
+    const bounded = (): AbortSignal => AbortSignal.timeout(5_000);
+    const nullJson = {method: "POST", headers: {"content-type": "application/json"}, body: "null"};
+
+    // when
+    const escapeReply = await fetch(badEscape, {signal: bounded()});
+    const nullReply = await fetch(`${fake.endpoint}/boards`, {...nullJson, signal: bounded()});
+
+    // then
+    assert.equal(escapeReply.status, 400);
+    assert.equal(nullReply.status, 400);
+    assert.equal((await trello.member()).id, "fake-member");
+  });
+});
+
 test("state persists to the state file so cleanup-only can archive an earlier run's boards", async () => {
   // given
   const directory = mkdtempSync(join(tmpdir(), "live-bugbash-state-"));
