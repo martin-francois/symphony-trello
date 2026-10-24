@@ -52,6 +52,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -71,6 +72,11 @@ final class SymphonyOrchestratorTestSupport {
     static final RandomGenerator NO_JITTER = new FixedRandom(bound -> 0);
     static final RandomGenerator MAX_JITTER = new FixedRandom(bound -> bound - 1);
     private static final int PERCENT = 100;
+    /// Starts each task on a new platform thread, for operations that a contention wait must see.
+    /// ThreadMXBean lists only platform threads, and on a two-CPU machine the common pool has one
+    /// worker, so a competitor queued there behind a paused task never starts.
+    static final Executor OWN_PLATFORM_THREAD =
+            task -> Thread.ofPlatform().daemon().start(task);
 
     static UsageProbeScenario usageProbeScenario(Path workflow, MutableClock clock, Card first, Card second) {
         var tracker = new FakeTracker(List.of(first, second));
@@ -670,7 +676,8 @@ final class SymphonyOrchestratorTestSupport {
     /// Waits until another thread is blocked on a lock or monitor that `holder` owns, or until the
     /// event that lock prevents has already happened. Correct code reaches the first state and a
     /// missing lock the second, so the competing operation has reached the lock before the caller
-    /// releases `holder`, and the caller's later assertions tell the two outcomes apart.
+    /// releases `holder`, and the caller's later assertions tell the two outcomes apart. Run the
+    /// competing operation on `OWN_PLATFORM_THREAD` or another dedicated platform thread.
     static void waitUntilContendedOr(Thread holder, BooleanSupplier forbiddenEvent) throws InterruptedException {
         waitUntil(() -> forbiddenEvent.getAsBoolean() || anotherThreadWaitsForALockHeldBy(holder));
     }

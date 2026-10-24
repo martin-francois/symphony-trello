@@ -900,11 +900,11 @@ final class SymphonyOrchestratorTest {
         // A refresh during the startup tick only sets the refresh flag, so wait until it finished.
         waitUntil(() -> tickCompletions.get() == 1);
         CompletableFuture<Throwable> refreshFailure =
-                CompletableFuture.supplyAsync(() -> catchThrowable(orchestrator::requestRefresh));
+                CompletableFuture.supplyAsync(() -> catchThrowable(orchestrator::requestRefresh), OWN_PLATFORM_THREAD);
         refreshBeforeScheduling.awaitPaused();
 
         // when
-        CompletableFuture<Void> stopped = CompletableFuture.runAsync(orchestrator::stop);
+        CompletableFuture<Void> stopped = CompletableFuture.runAsync(orchestrator::stop, OWN_PLATFORM_THREAD);
         refreshBeforeScheduling.resumeWhenContendedOr(stopped::isDone);
 
         // then
@@ -933,10 +933,12 @@ final class SymphonyOrchestratorTest {
 
         // when
         var changeAttempted = new CountDownLatch(1);
-        CompletableFuture<Throwable> rejection = CompletableFuture.supplyAsync(() -> {
-            changeAttempted.countDown();
-            return catchThrowable(() -> orchestrator.setWorkflowPath(tempDir.resolve("WORKFLOW.other.md")));
-        });
+        CompletableFuture<Throwable> rejection = CompletableFuture.supplyAsync(
+                () -> {
+                    changeAttempted.countDown();
+                    return catchThrowable(() -> orchestrator.setWorkflowPath(tempDir.resolve("WORKFLOW.other.md")));
+                },
+                OWN_PLATFORM_THREAD);
         assertThat(changeAttempted.await(5, TimeUnit.SECONDS))
                 .as("the concurrent workflow-path change should be attempted within 5 seconds")
                 .isTrue();
