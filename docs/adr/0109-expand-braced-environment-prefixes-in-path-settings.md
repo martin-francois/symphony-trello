@@ -53,11 +53,13 @@ Chosen option: "Expand `${NAME}` and `${NAME}/suffix` in path settings through
 `EnvironmentReferences`", because it matches how the bare `$NAME/suffix` form behaves today and
 gives path settings the same grammar as the credential settings.
 
-`EnvironmentReferences.pathReference` splits a value at the first `/` and classifies the first
-segment with `referenceName`. `ConfigResolver.expandPath` and the `repository.default_path`
-resolution both use it, and so does setup diagnostics through `expandPath`. What each caller does
-with an unset variable does not change: `repository.default_path` treats it as absent, the other
-path settings keep the text.
+`EnvironmentReferences.pathValue` splits a value at the first `/` and classifies the first segment
+with `referenceName`, returning either a literal path or a reference. `ConfigResolver.expandPath`
+and the `repository.default_path` resolution both use it, and so does setup diagnostics through
+`expandPath`. What each caller does with an unset variable does not change:
+`repository.default_path` treats it as absent, as
+[ADR 0058](0058-generated-workflow-repository-source-precedence.md) decided, and the other path
+settings keep the text.
 
 The name check now applies to every path setting. Before, `workspace.root: $MY-DIR/x` looked up a
 variable named `MY-DIR`. Now `MY-DIR` is not a valid name, so the value stays literal. The `.env`

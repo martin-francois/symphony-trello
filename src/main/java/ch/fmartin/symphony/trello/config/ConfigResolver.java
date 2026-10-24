@@ -445,10 +445,9 @@ public class ConfigResolver {
         if (configured == null) {
             return null;
         }
-        // An unset or blank variable yields an absent path; a value without a reference stays as written.
-        return EnvironmentReferences.pathReference(configured)
-                .map(reference -> reference.resolve(this::nonBlankEnvironmentValue))
-                .orElseGet(() -> Optional.of(configured))
+        // ADR 0058 makes a missing or blank variable leave this optional path absent.
+        return EnvironmentReferences.pathValue(configured)
+                .resolve(this::nonBlankEnvironmentValue)
                 .orElse(null);
     }
 
@@ -458,8 +457,8 @@ public class ConfigResolver {
 
     public static String expandPath(String value, Function<String, Optional<String>> environmentResolver) {
         String homeExpanded = value.startsWith("~/") ? System.getProperty("user.home") + value.substring(1) : value;
-        return EnvironmentReferences.pathReference(homeExpanded)
-                .flatMap(reference -> reference.resolve(environmentResolver))
+        return EnvironmentReferences.pathValue(homeExpanded)
+                .resolve(environmentResolver)
                 .orElse(homeExpanded);
     }
 
