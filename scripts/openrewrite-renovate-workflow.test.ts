@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {readFileSync, readdirSync} from "node:fs";
 import test from "node:test";
 import {parse} from "yaml";
-import {matchesMajor, matchesNonMajor} from "./test-support/renovate-config.ts";
+import {matchesMajor, matchesNonMajor, RENOVATE_CONFIG} from "./test-support/renovate-config.ts";
 
 interface PullRequest {
   readonly base: {readonly ref: string; readonly repo: {readonly full_name: string}};
@@ -64,7 +64,6 @@ const PRIVATE_CONTEXT_WORKFLOW = readFileSync(
   new URL("../.github/workflows/private-context.yml", import.meta.url),
   "utf8",
 );
-const RENOVATE = readFileSync(new URL("../renovate.json", import.meta.url), "utf8");
 const PACKAGE = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8"),
 ) as {readonly packageManager?: string};
@@ -95,60 +94,6 @@ const OPENREWRITE_PUBLICATION = [
   .map((name) => readFileSync(new URL(name, SCRIPTS), "utf8"))
   .join("\n");
 const CI_OPENREWRITE = `${CI_WORKFLOW}\n${readFileSync(new URL("run-openrewrite-ci", SCRIPTS), "utf8")}`;
-const RENOVATE_CONFIG = JSON.parse(RENOVATE) as {
-  readonly branchConcurrentLimit?: number;
-  readonly dependencyDashboardApproval?: boolean;
-  readonly extends?: readonly string[];
-  readonly internalChecksFilter?: string;
-  readonly lockFileMaintenance?: {
-    readonly automerge?: boolean;
-    readonly enabled?: boolean;
-    readonly schedule?: readonly string[];
-  };
-  readonly minimumReleaseAge?: string;
-  readonly minimumReleaseAgeBehaviour?: string;
-  readonly pinDigests?: boolean;
-  readonly separateMajorMinor?: boolean;
-  readonly separateMultipleMajor?: boolean;
-  readonly vulnerabilityAlerts?: {
-    readonly enabled?: boolean;
-  };
-  readonly customDatasources?: Readonly<
-    Record<
-      string,
-      {readonly defaultRegistryUrlTemplate?: string; readonly transformTemplates?: readonly string[]}
-    >
-  >;
-  readonly customManagers: readonly {
-    readonly currentValueTemplate?: string;
-    readonly datasourceTemplate?: string;
-    readonly managerFilePatterns?: readonly string[];
-    readonly matchStrings?: readonly string[];
-  }[];
-  readonly packageRules: readonly {
-    readonly automerge?: boolean;
-    readonly branchTopic?: string;
-    readonly dependencyDashboardApproval?: boolean;
-    readonly enabled?: boolean;
-    readonly groupName?: string | null;
-    readonly groupSlug?: string;
-    readonly internalChecksFilter?: string;
-    readonly matchDatasources?: readonly string[];
-    readonly matchDepTypes?: readonly string[];
-    readonly matchManagers?: readonly string[];
-    readonly matchPackageNames?: readonly string[];
-    readonly matchUpdateTypes?: readonly string[];
-    readonly minimumReleaseAge?: string;
-    readonly minimumReleaseAgeBehaviour?: string;
-    readonly platformAutomerge?: boolean;
-    readonly schedule?: readonly string[];
-  }[];
-  readonly prConcurrentLimit?: number;
-  readonly schedule?: readonly string[];
-  readonly statusCheckWhen?: {
-    readonly minimumReleaseAge?: string;
-  };
-};
 const CANDIDATE: PullRequest = {
   base: {ref: "main", repo: {full_name: "owner/repo"}},
   head: {

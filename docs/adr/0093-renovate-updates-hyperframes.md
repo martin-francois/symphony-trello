@@ -115,10 +115,13 @@ a multi-minute Docker render many times for versions nobody merges.
   version file and requires exactly one npm dependency named `hyperframes` whose value is the
   exported version. It applies a simulated newer release the way Renovate replaces the matched value
   and requires the version, package name, and `pnpm dlx` arguments to follow. It fails when any
-  other tracked or untracked file names a `hyperframes@<version>` package or mentions HyperFrames
-  next to the current version. It requires the HyperFrames package rule to decide
-  `automerge: false` last for non-major updates, to come before the major-update rule, and to name
-  the render command and all three generated files.
+  other tracked file names a `hyperframes@<version>` package or mentions HyperFrames next to the
+  current version. It requires the HyperFrames package rule to decide `automerge: false` last for
+  non-major updates, to come before the major-update rule, and to name the render command and all
+  three generated files. To find the rules that apply to HyperFrames, it matches datasource,
+  manager, dependency type, and package name the way Renovate does, including glob, regular
+  expression, and `!` exclusion patterns, and it fails when a rule that sets `automerge` uses a
+  matcher it does not model.
 * `scripts/readme-demo-freshness.test.ts` changes only the version in a fixture the way Renovate
   does and requires a different source digest with unchanged media digests.
 

@@ -14,6 +14,7 @@ import {
 } from "./readme-demo-manifest.ts";
 import {
   matchesNonMajor,
+  matchesRegexOrGlobList,
   RENOVATE_CONFIG,
   type RenovatePackageRule,
 } from "./test-support/renovate-config.ts";
@@ -54,10 +55,32 @@ async function importPinModule(t: test.TestContext, source: string): Promise<Hyp
   return (await import(pathToFileURL(modulePath).href)) as HyperframesPin;
 }
 
-// Renovate applies a package rule unless one of its match lists excludes the package.
-function appliesToHyperframes(rule: RenovatePackageRule): boolean {
-  return (rule.matchDatasources ?? ["npm"]).includes("npm")
-    && (rule.matchPackageNames ?? ["hyperframes"]).includes("hyperframes");
+// Renovate reports a dependency found by a regex custom manager under this manager name.
+const REGEX_MANAGER_NAME = "custom.regex";
+// The package-rule matchers appliesTo models; update types are checked separately.
+const MODELLED_MATCHERS = new Set([
+  "matchDatasources",
+  "matchDepTypes",
+  "matchManagers",
+  "matchPackageNames",
+  "matchUpdateTypes",
+]);
+
+function unmodelledMatchers(rule: RenovatePackageRule): string[] {
+  return Object.keys(rule).filter((key) => key.startsWith("match") && !MODELLED_MATCHERS.has(key));
+}
+
+// Renovate applies a package rule unless one of its match lists excludes the dependency.
+function appliesTo(rule: RenovatePackageRule, dependency: RegexDependency): boolean {
+  const {datasource, depName} = dependency;
+  return (rule.matchDatasources === undefined
+      || (datasource !== undefined && rule.matchDatasources.includes(datasource)))
+    // A regex manager sets no dependency type, and Renovate never matches matchDepTypes without one.
+    && rule.matchDepTypes === undefined
+    && (rule.matchManagers === undefined
+      || matchesRegexOrGlobList(rule.matchManagers, REGEX_MANAGER_NAME))
+    && (rule.matchPackageNames === undefined
+      || (depName !== undefined && matchesRegexOrGlobList(rule.matchPackageNames, depName)));
 }
 
 test("Renovate discovers the canonical pin as the exact npm package hyperframes", () => {
@@ -103,7 +126,8 @@ test("no file other than the canonical pin names a HyperFrames version", () => {
   const result = spawnSync(
     "git",
     [
-      "grep", "--untracked", "-I", "-n", "-i", "-E",
+      // Tracked files only, so an uncommitted local note cannot fail the suite.
+      "grep", "-I", "-n", "-i", "-E",
       ...versionMentions.flatMap((pattern) => ["-e", pattern]),
       "--", ".", `:!${HYPERFRAMES_VERSION_PATH}`,
     ],
@@ -128,12 +152,20 @@ test("HyperFrames updates require a re-render, visual review, and manual merge",
     ({matchUpdateTypes}) => matchUpdateTypes?.includes("major"),
   );
 
+  const dependency = onlyHyperframesDependency(PIN_SOURCE);
+  const automergeRules = PACKAGE_RULES.filter(({automerge}) => automerge !== undefined);
+
   // when
-  const nonMajorAutomergeDecision = PACKAGE_RULES.filter(
-    (rule) => appliesToHyperframes(rule) && matchesNonMajor(rule) && rule.automerge !== undefined,
+  const nonMajorAutomergeDecision = automergeRules.filter(
+    (rule) => appliesTo(rule, dependency) && matchesNonMajor(rule),
   ).at(-1);
 
   // then
+  assert.deepEqual(
+    automergeRules.flatMap(unmodelledMatchers),
+    [],
+    "teach appliesTo every matcher an automerge rule uses, or this test can miss a later rule",
+  );
   assert.equal(hyperframesRules.length, 1);
   const [rule] = hyperframesRules;
   assert.equal(nonMajorAutomergeDecision, rule, "the HyperFrames rule must decide automerge last");
@@ -148,4 +180,31 @@ test("HyperFrames updates require a re-render, visual review, and manual merge",
   for (const instruction of ["node scripts/render-readme-demo.ts", ...RENDERED_ARTIFACTS]) {
     assert.ok(notes.includes(instruction), `pull request notes must mention ${instruction}`);
   }
+});
+
+test("the automerge-order check reads package rules the way Renovate matches them", () => {
+  // given
+  const dependency = onlyHyperframesDependency(PIN_SOURCE);
+  const cases: readonly {readonly rule: RenovatePackageRule; readonly applies: boolean}[] = [
+    {rule: {}, applies: true},
+    {rule: {matchPackageNames: ["*"]}, applies: true},
+    {rule: {matchPackageNames: ["hyper*"]}, applies: true},
+    {rule: {matchPackageNames: ["HyperFrames"]}, applies: true},
+    {rule: {matchPackageNames: ["/^hyper/"]}, applies: true},
+    {rule: {matchPackageNames: ["/^HYPER/i"]}, applies: true},
+    {rule: {matchPackageNames: ["!react"]}, applies: true},
+    {rule: {matchPackageNames: ["*", "!hyperframes"]}, applies: false},
+    {rule: {matchPackageNames: ["!/^hyper/"]}, applies: false},
+    {rule: {matchPackageNames: ["org.openrewrite:*"]}, applies: false},
+    {rule: {matchDatasources: ["maven"]}, applies: false},
+    {rule: {matchManagers: ["custom.regex"]}, applies: true},
+    {rule: {matchManagers: ["dockerfile"]}, applies: false},
+    {rule: {matchDepTypes: ["dependencies"]}, applies: false},
+  ];
+
+  // when
+  const results = cases.map(({rule}) => ({rule, applies: appliesTo(rule, dependency)}));
+
+  // then
+  assert.deepEqual(results, cases);
 });
