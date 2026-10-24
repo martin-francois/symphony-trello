@@ -2181,14 +2181,16 @@ Optional client-side tool extension:
   workflows need only that subset. Unsupported tool names still MUST return a structured tool
   failure instead of stalling the session.
 - Java implementation extension: each typed tool validates the call's `arguments` against the same
-  JSON Schema object it advertises as `inputSchema`, after the tool, policy-enablement, and
-  current-card checks and before any per-tool policy check or tracker request. Arguments that are
-  not a JSON object, omit a required property, use a wrong JSON type or `null`, use an empty string,
-  use a value outside an `enum`, or contain a property the schema does not declare MUST fail with
-  error code `invalid_tool_arguments`. A required string that contains only whitespace fails with
-  the same code. The message names the argument location, the violated rule, and, for an
-  undeclared property, that property's name. It MUST NOT contain the supplied value. Trello policy, control-character rules, attachment URL policy, move
-  allowlists, and managed-workpad rules remain implementation checks after schema validation.
+  JSON Schema object it advertises as `inputSchema`. Validation runs after the unsupported-tool,
+  `trello_tools.enabled`, `trello_tools.allow_writes`, and current-card checks and before any
+  per-tool allow flag, other per-tool policy check, or tracker request. Arguments that are not a
+  JSON object, omit a required property, use a wrong JSON type or `null`, use an empty string, use a
+  value outside an `enum`, or contain a property the schema does not declare MUST fail with error
+  code `invalid_tool_arguments`. A required string that contains only whitespace fails with the
+  same code. The message names the argument location, the violated rule, and, for an undeclared
+  property, that property's name. It MUST NOT contain the supplied value. Trello policy,
+  control-character rules, attachment URL policy, move allowlists, and managed-workpad rules remain
+  implementation checks after schema validation.
 - A Trello workpad tool, when implemented, SHOULD maintain one current-card comment whose text starts
   with `## Codex Workpad`, update that comment instead of creating duplicate progress comments, and
   fail visibly if the existing workpad cannot be updated.

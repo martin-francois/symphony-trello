@@ -56,11 +56,13 @@ schema node", because it removes the second copy of the rules and adds one point
 complexity in total.
 
 The handler builds each tool definition once, in a static constant. The `inputSchema` node in that
-definition is the node the validator compiles. `toolSpecs` advertises a deep copy, so a caller
+definition is the node the validator compiles, and the definition also holds the method that runs
+the tool, so the definition map is the only list of tools. `toolSpecs` advertises a deep copy, so a caller
 cannot edit the node after compilation. `handle` validates `arguments` after the unsupported-tool,
-`trello_tools.enabled`, `allow_writes`, and current-card checks and before per-tool policy or any
-Trello request. The registry uses draft 2020-12, fail-fast mode, English messages, JSON-path
-locations, and the JDK regular-expression engine. The schemas contain no `$ref` or `$schema`, and
+`trello_tools.enabled`, `allow_writes`, and current-card checks and before the per-tool allow flags,
+other per-tool policy, or any Trello request. The registry uses draft 2020-12, fail-fast mode, English messages, JSON-path
+locations, and the JDK regular-expression engine. The whitespace rule below builds its location with
+the same path type, so both kinds of message locate an argument the same way. The schemas contain no `$ref` or `$schema`, and
 the library's default loader does not fetch remote resources.
 
 Behavior that this decision sets:
@@ -69,8 +71,11 @@ Behavior that this decision sets:
   `Invalid <tool> arguments: <location>: <rule>`, for example
   `Invalid trello_add_comment arguments: $.text: integer found, string expected`. The library
   message names the argument and the rule, and for an undeclared property it repeats that
-  property's name, which Codex chose. It does not contain the supplied value. The message goes back
-  to Codex only; Symphony does not log it.
+  property's name, which Codex chose. It does not contain the supplied value. Symphony does not
+  write the message to its log. Codex repeats each dynamic tool call, with its `arguments` and
+  result `contentItems`, in its own `item/started` and `item/completed` notifications. Symphony
+  keeps those notifications as the card's last message and recent events in its state and card
+  debug API, as it did for every tool call before this decision.
 * Unknown properties are rejected. The advertised schemas have said `additionalProperties: false`
   since the tools were introduced, and the tool descriptions already tell Codex not to send a card
   id. Codex sees the failure in the same turn and can retry with the declared arguments.
@@ -84,12 +89,12 @@ Behavior that this decision sets:
   `Missing required argument: text`, and an invalid recheck status failed with
   `invalid_blocker_recheck_status`. Neither code was documented in `SPEC.md`, workflows, or skills.
 
-Measured on the handler (`TrelloHandoffToolHandler.java`), from `main` at `0d135edf` to this change:
+Measured on the handler (`TrelloHandoffToolHandler.java`), from `main` at `7ef9bf89` to this change:
 
 | Measure                                    | Before | After |
 | ------------------------------------------ | -----: | ----: |
-| Physical lines                             |  1,220 | 1,270 |
-| PMD 7 cognitive complexity, file total     |    198 |   199 |
+| Physical lines                             |  1,220 | 1,284 |
+| PMD 7 cognitive complexity, file total     |    197 |   198 |
 | `handle`                                   |      7 |     7 |
 | `toolSpecs`                                |      5 |     5 |
 | `updateBlockerRecheckStatus`               |      7 |     5 |
@@ -97,18 +102,18 @@ Measured on the handler (`TrelloHandoffToolHandler.java`), from `main` at `0d135
 | `argumentViolation` (new)                  |      - |     5 |
 | `addToolSpecs` (new)                       |      - |     1 |
 
-The change deletes 28 lines of local shape checks: the three helpers (19 lines), the status branch
-(3 lines), and the six-way unsupported-tool condition (6 lines). The registry configuration, the
-`argumentViolation` record method, and building the definitions once in a static constant add the
-rest, for a net gain of 50 lines, or 4% of the file. The registry configuration and its two key
-constants take 14 of them, and the `ToolDefinition` record with `argumentViolation` takes 20.
+The change deletes the local shape checks: the three helpers, the status branch, and the six-way
+unsupported-tool condition. It also replaces the six-way dispatch switch with one call through the
+definition. The registry configuration with its path type and key constants takes 17 lines, the
+`ToolCall` interface and the `ToolDefinition` record with `argumentViolation` take 30, and each tool
+definition gains one line for its handler method. The net gain is 64 lines, or 5% of the file.
 Together with the one PMD point, this is not a material expansion for removing a second rule set
-that had already drifted in three ways. Workpad, blocker-recheck, checklist,
-attachment, and move algorithms did not change, and the table claims no reduction for them.
+that had already drifted in three ways. Workpad, blocker-recheck, checklist, attachment, and move
+algorithms did not change, and the table claims no reduction for them.
 
 The dependency adds `json-schema-validator` 2.0.7 (580,450 bytes) and `com.ethlo.time:itu` 1.14.0
 (57,633 bytes), both Apache-2.0 and pure Java. Version 2.0.8 was published on 2026-10-02 and was
-still inside the repository's seven-day release-age window.
+still inside the repository's seven-day release-age window when this decision was made.
 
 ### Consequences
 
@@ -129,13 +134,15 @@ still inside the repository's seven-day release-age window.
 * `TrelloHandoffToolHandlerTest.rejectsArgumentsOutsideTheAdvertisedSchemaBeforeTrelloIo` covers
   every tool with missing, `null`, wrong-type, empty-string, whitespace-only, unknown-property, and
   invalid-enum cases. Each case asserts the exact failure and that no Trello request happened.
-* `validatesConcurrentCallsAgainstTheSharedCompiledSchemas` runs eight threads against one handler
-  and checks every result.
+* `validatesConcurrentCallsAgainstTheSharedCompiledSchemas` runs eight threads against one handler.
+  The calls go to five tools, and some pass the schema and stop at a later Symphony policy check.
+  The test checks every result and that no Trello request happened.
 * `omitsRawArgumentValuesFromValidationFailures` checks that a supplied value never appears in a
   failure.
 * `./mvnw -q dependency:tree -Dincludes='com.fasterxml.jackson*,tools.jackson*'` shows only Jackson
-  2.22.2 artifacts (annotations `2.22`) and no `tools.jackson` artifact. The validator itself
-  declares Jackson 2.22.1, and the Quarkus BOM raises it.
+  2.21.7 artifacts (annotations `2.21`) and no `tools.jackson` artifact. The validator itself
+  declares Jackson 2.22.1, and the Quarkus 3.40.1 BOM manages it to 2.21.7. The handler tests pass
+  against that version.
 * The row for `json-schema-validator` in
   [Dependency upgrade confidence](../testing/dependency-upgrade-confidence.md) names the tests that
   catch a bad update.
@@ -152,7 +159,7 @@ handler.
 * Good, because `Schema` instances are documented as thread-safe once built, so the handler can
   share them across Codex sessions.
 * Good, because the library needs no remote fetch, no Joni, and no GraalJS for these schemas.
-* Neutral, because the PMD total moves from 198 to 199, within the 0 to 3 points the issue
+* Neutral, because the PMD total moves from 197 to 198, within the 0 to 3 points the issue
   expected.
 * Bad, because messages follow the library's wording.
 
@@ -194,8 +201,9 @@ Use the newest networknt line.
 
 The prerequisite from [GitHub issue #584](https://github.com/martin-francois/symphony-trello/issues/584)
 was a patched Jackson for
-[GHSA-5jmj-h7xm-6q6v](https://github.com/advisories/GHSA-5jmj-h7xm-6q6v). The Quarkus 3.39.5 BOM
-provides Jackson 2.22.2, so the validator did not need its own Jackson override.
+[GHSA-5jmj-h7xm-6q6v](https://github.com/advisories/GHSA-5jmj-h7xm-6q6v). The Quarkus 3.40.1 BOM
+provides Jackson 2.21.7, and the advisory lists 2.21.5 as the first fixed 2.21 release, so the
+validator does not need its own Jackson override.
 
 Revisit this decision if Codex starts sending properties outside the advertised schema often enough
 to stop runs, if networknt ends the 2.x line, or if Quarkus moves to Jackson 3. In the last case,
