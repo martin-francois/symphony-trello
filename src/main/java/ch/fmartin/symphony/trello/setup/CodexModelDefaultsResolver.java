@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.ISO_CONTROL_CHARACTERS;
+import static ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.blank;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import ch.fmartin.symphony.trello.process.ProcessEnvironment;
@@ -130,7 +131,7 @@ final class CodexModelDefaultsResolver {
         return params;
     }
 
-    private CodexModelSelectionDefaults fromModelList(JsonNode models) {
+    private CodexModelSelectionDefaults fromModelList(ArrayNode models) {
         List<CatalogEntry> entries = catalogEntries(models);
         Map<String, String> reasoningEffortsByModel = new LinkedHashMap<>();
         Map<String, List<ReasoningEffortOption>> reasoningEffortOptionsByModel = new LinkedHashMap<>();
@@ -142,13 +143,14 @@ final class CodexModelDefaultsResolver {
                 reasoningEffortOptionsByModel.put(entry.model(), entry.reasoningEffortOptions());
             }
         }
-        Optional<CatalogEntry> recommended = recommendedEntry(entries);
+        List<CatalogEntry> visibleEntries =
+                entries.stream().filter(entry -> !entry.hidden()).toList();
+        Optional<CatalogEntry> recommended = recommendedEntry(visibleEntries);
         CodexModelDefaults defaults = recommended
                 .map(entry -> CodexModelDefaults.partial(entry.model(), entry.defaultReasoningEffort()))
                 .orElseGet(CodexModelDefaults::fallback);
         Optional<String> recommendedModel = recommended.map(CatalogEntry::model);
-        List<CatalogModel> visibleModels = entries.stream()
-                .filter(entry -> !entry.hidden())
+        List<CatalogModel> visibleModels = visibleEntries.stream()
                 .map(entry -> new CatalogModel(
                         entry.model(),
                         entry.displayName(),
@@ -160,7 +162,7 @@ final class CodexModelDefaultsResolver {
 
     /// Parses usable catalog entries in catalog order. A repeated model id keeps its first entry so
     /// the picker label, default selection, and reasoning metadata all come from the same entry.
-    private static List<CatalogEntry> catalogEntries(JsonNode models) {
+    private static List<CatalogEntry> catalogEntries(ArrayNode models) {
         Map<String, CatalogEntry> firstEntryPerModelInCatalogOrder = new LinkedHashMap<>();
         for (JsonNode model : models) {
             String modelName = validatedCatalogText(model, "model");
@@ -192,9 +194,7 @@ final class CodexModelDefaultsResolver {
 
     /// Applies the new-workflow precedence from ADR 0025: visible Terra, then the first visible
     /// Codex default, then the first visible entry. Catalog order decides between several defaults.
-    private static Optional<CatalogEntry> recommendedEntry(List<CatalogEntry> entries) {
-        List<CatalogEntry> visibleEntries =
-                entries.stream().filter(entry -> !entry.hidden()).toList();
+    private static Optional<CatalogEntry> recommendedEntry(List<CatalogEntry> visibleEntries) {
         return visibleEntries.stream()
                 .filter(entry -> SYMPHONY_PREFERRED_CODEX_MODEL.equals(entry.model()))
                 .findAny()
@@ -301,10 +301,6 @@ final class CodexModelDefaultsResolver {
         } catch (TimeoutException e) {
             return false;
         }
-    }
-
-    private static boolean blank(String value) {
-        return value == null || value.isBlank();
     }
 
     private static String implementationVersion() {

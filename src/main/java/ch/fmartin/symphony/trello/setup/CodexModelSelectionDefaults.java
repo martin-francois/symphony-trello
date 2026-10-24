@@ -231,7 +231,8 @@ record CodexModelSelectionDefaults(
         return Map.copyOf(sanitized);
     }
 
-    private static boolean blank(String value) {
+    /// Shared by the Codex model selection classes so they agree on what counts as an absent value.
+    static boolean blank(@Nullable String value) {
         return value == null || value.isBlank();
     }
 
