@@ -31,3 +31,6 @@ image a pull request pins: `pinned-betterleaks-image` for BetterLeaks
 ([ADR 0124](../adr/0124-look-up-betterleaks-through-the-github-package-feed.md)) and
 `pinned-powershell-image` for the .NET SDK image behind `scripts/pwsh-docker.sh`
 ([ADR 0127](../adr/0127-run-powershell-tests-on-the-pinned-dotnet-sdk-image.md)).
+HyperFrames, the README demo renderer, changes the committed video and poster. Its updates never
+merge automatically, and the README demo freshness script test blocks them until a maintainer
+commits media rendered with the new version.

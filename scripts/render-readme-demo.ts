@@ -9,8 +9,8 @@
  * Usage: node scripts/render-readme-demo.ts [--skip-check]
  *
  * Requires a Git working tree, Node 22.18+, Docker, FFmpeg, ffprobe, and pnpm. The HyperFrames
- * CLI is fetched on demand at the exact pinned version, and its Docker
- * renderer supplies the production browser, fonts, and encoder.
+ * CLI is fetched on demand at the exact version pinned in scripts/readme-demo-hyperframes.ts, and
+ * its Docker renderer supplies the production browser, fonts, and encoder.
  */
 
 import { spawnSync } from "node:child_process";
@@ -31,12 +31,13 @@ import {
   createReadmeDemoSourceSnapshot,
   writeReadmeDemoManifest,
 } from "./readme-demo-manifest.ts";
+import {runHyperframes} from "./readme-demo-hyperframes.ts";
+import {runRenderStep} from "./readme-demo-process.ts";
 import {
   type CompositionTiming,
   materializeReadmeDemoTiming,
 } from "./readme-demo-timing.ts";
 
-const HYPERFRAMES = "hyperframes@0.7.64";
 /** Constant quality spends fewer bits on static UI while keeping text crisp. */
 const VIDEO_CRF = "26";
 const MEBIBYTE = 1024 * 1024;
@@ -63,21 +64,6 @@ function textRegionSamples(timing: CompositionTiming): TextRegionSample[] {
     {label: "phone caption", time: sceneTime("s15", 1), crop: "crop=1150:220:60:30"},
     {label: "closing message", time: sceneTime("s16", 2), crop: "crop=1720:300:100:80"},
   ];
-}
-
-function run(command: string, args: string[], demoDir: string): void {
-  console.log(`\n$ ${command} ${args.join(" ")}`);
-  const windowsPnpm = process.platform === "win32" && command === "pnpm";
-  const executable = windowsPnpm ? "cmd.exe" : command;
-  const commandArgs = windowsPnpm ? ["/d", "/s", "/c", "pnpm.cmd", ...args] : args;
-  const result = spawnSync(executable, commandArgs, { cwd: demoDir, stdio: "inherit" });
-  if (result.status !== 0) {
-    const detail = result.error?.message;
-    throw new Error(
-      `${command} ${args[0] ?? ""} failed with status ${result.status}` +
-      (detail === undefined ? "" : `: ${detail}`),
-    );
-  }
 }
 
 function labelContainerMountForSelinux(path: string): void {
@@ -182,12 +168,10 @@ try {
   const skipCheck = process.argv.includes("--skip-check");
 
   if (!skipCheck) {
-    run("pnpm", ["dlx", HYPERFRAMES, "check"], snapshotDemoDir);
+    runHyperframes(["check"], snapshotDemoDir);
   }
 
-  run("pnpm", [
-    "dlx",
-    HYPERFRAMES,
+  runHyperframes([
     "render",
     "--docker",
     "--quality",
@@ -202,7 +186,7 @@ try {
   // and browser render as the MP4. HyperFrames' standalone snapshot path can
   // fail to load bundled fonts independently of the render path.
   const posterTimeSeconds = (expectedDurationSeconds - 0.5).toFixed(1);
-  run("ffmpeg", [
+  runRenderStep("ffmpeg", [
     "-y",
     "-loglevel",
     "error",
