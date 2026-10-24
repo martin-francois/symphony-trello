@@ -1,4 +1,8 @@
-import {RENOVATE_CONFIG, type RenovateRegexManager} from "./renovate-config.ts";
+import {
+  matchesRegexOrGlob,
+  RENOVATE_CONFIG,
+  type RenovateRegexManager,
+} from "./renovate-config.ts";
 
 export interface RegexDependency {
   readonly currentValue: string;
@@ -8,12 +12,8 @@ export interface RegexDependency {
   readonly valueOffset: number;
 }
 
-// Renovate treats a managerFilePatterns entry wrapped in slashes as a regular expression.
 function managesFile(manager: RenovateRegexManager, path: string): boolean {
-  return (manager.managerFilePatterns ?? []).some((pattern) => {
-    const regex = /^\/(.*)\/$/u.exec(pattern)?.[1];
-    return regex === undefined ? pattern === path : new RegExp(regex, "u").test(path);
-  });
+  return (manager.managerFilePatterns ?? []).some((pattern) => matchesRegexOrGlob(pattern, path));
 }
 
 /**
@@ -21,7 +21,7 @@ function managesFile(manager: RenovateRegexManager, path: string): boolean {
  * `matchStringsStrategy: "any"` does: every match string runs over the whole file.
  */
 export function extractRegexDependencies(path: string, content: string): RegexDependency[] {
-  return (RENOVATE_CONFIG.customManagers ?? [])
+  return RENOVATE_CONFIG.customManagers
     .filter((manager) => manager.customType === "regex" && managesFile(manager, path))
     .flatMap((manager) =>
       (manager.matchStrings ?? []).flatMap((matchString) =>
