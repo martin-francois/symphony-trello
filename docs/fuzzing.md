@@ -136,8 +136,8 @@ contains and serves the HTML report. These checks cover open ClusterFuzzLite iss
 [#150](https://github.com/google/clusterfuzzlite/issues/150).
 
 Each coverage review is a file in `docs/fuzzing-reviews/` named after the last day of the period it
-covers. It records throughput, corpus size, coverage, and findings per target, and the input
-boundaries chosen for new targets. The [first-week review](fuzzing-reviews/2026-09-07-first-week.md)
+covers. [ADR 0078](adr/0078-github-actions-continuous-fuzzing.md#decision-outcome) says how a review
+ranks new targets. The [first-week review](fuzzing-reviews/2026-09-07-first-week.md)
 is the first one. A later review compares its numbers with the previous file and collects them with
 the commands listed there.
 

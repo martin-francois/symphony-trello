@@ -207,9 +207,10 @@ This workflow does not replace hosted OSS-Fuzz. Hosted OSS-Fuzz remains the long
 it provides dedicated infrastructure, triage, and broader continuous operation. ClusterFuzzLite is
 the repository-owned bridge and continues to use the same fuzz targets.
 
-Changes to the target set follow dated coverage reviews in `docs/fuzzing-reviews/`. A review
-ranks production input boundaries by three things: the uncovered JaCoCo branches a target could
-reach, what a defect there would cost, and how much harness the target needs. It prefers extending a
+For the target set, the chosen option is "Choose new targets from dated coverage reviews". Every
+change to the target set follows a dated coverage review in `docs/fuzzing-reviews/`. A review ranks
+production input boundaries by three things: the uncovered JaCoCo branches a target could reach,
+what a defect there would cost, and how much harness the target needs. It prefers extending a
 target whose corpus already produces the input grammar over adding a matrix job, and it does not add
 a target for code an existing fuzzer already reaches. Each review records its own results, and this
 ADR keeps only the rule.
@@ -311,6 +312,10 @@ deliberately cover untrusted parsing boundaries, not network and orchestration c
 Inspect the per-target batch logs for timeouts and out-of-memory exits even when the batch job is
 green. Confirm that the storage repository's `gh-pages` branch contains
 `coverage/latest/report/linux/index.html` and that GitHub Pages serves that file.
+
+When a pull request adds or extends a fuzz target, confirm that it links the review in
+`docs/fuzzing-reviews/` that selected the target's input boundary, and that the target does not
+cover code an existing fuzzer already reaches.
 
 ## Pros and Cons of the Options
 
