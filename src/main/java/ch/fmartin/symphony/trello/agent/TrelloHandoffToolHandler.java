@@ -6,6 +6,7 @@ import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.StateNames;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
+import ch.fmartin.symphony.trello.tracker.SymphonyCommentFooter;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import ch.fmartin.symphony.trello.tracker.TrelloException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -20,7 +21,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.PrimitiveIterator;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.jboss.logging.Logger;
 import org.jspecify.annotations.Nullable;
@@ -40,11 +44,7 @@ public class TrelloHandoffToolHandler {
     static final String DUPLICATE_BLOCKER_RECHECK_NOTE_PREFIX = "> Duplicate Symphony blocker recheck statuses found: ";
     static final String BLOCKER_RECHECK_CHECKING = "Checking whether this card is still blocked...";
     static final String RESUMED_WORK_PREFIX = "No longer blocked; working on ";
-    static final String BLOCKER_RECHECK_FOOTER_PREFIX =
-            "_Managed by Symphony · [View the comment explaining why this card was previously blocked](";
-    static final String BLOCKER_RECHECK_FOOTER_SUFFIX = ")_";
-    private static final String TRELLO_CARD_URL_PREFIX = "https://trello.com/c/";
-    private static final String TRELLO_COMMENT_FRAGMENT = "#comment-";
+    static final String BLOCKER_RECHECK_LINK_TEXT = "View the comment explaining why this card was previously blocked";
     private static final String RECHECK_STATUS_CHECKING = "checking";
     private static final String RECHECK_STATUS_RESUMED = "resumed";
     private static final int VISIBLE_TASK_SUMMARY_CODE_POINT_LIMIT = 120;
@@ -83,7 +83,7 @@ public class TrelloHandoffToolHandler {
                             Map.of(
                                     "text",
                                     stringSchema(
-                                            "Concise human-readable comment text to add to the current Trello card.")),
+                                            "Concise human-readable comment text to add to the current Trello card. Symphony appends its Managed by Symphony footer; do not write it yourself.")),
                             List.of("text"))));
             tools.add(tool(
                     UPSERT_WORKPAD,
@@ -92,7 +92,7 @@ public class TrelloHandoffToolHandler {
                             Map.of(
                                     "text",
                                     stringSchema(
-                                            "Full Markdown workpad body. Symphony ensures it starts with ## Codex Workpad. Do not include Symphony's managed Codex usage-section markers.")),
+                                            "Full Markdown workpad body. Symphony ensures it starts with ## Codex Workpad and ends with its Managed by Symphony footer. Do not include Symphony's managed Codex usage-section markers.")),
                             List.of("text"))));
             tools.add(tool(
                     UPDATE_BLOCKER_RECHECK_STATUS,
@@ -189,8 +189,12 @@ public class TrelloHandoffToolHandler {
         if (!config.trelloTools().allowComments()) {
             return failure("trello_comments_disabled", "Trello comments are disabled by trello_tools.allow_comments.");
         }
-        String text = TrelloMarkdown.escapeLeadingHashtags(requiredText(arguments, "text"));
-        trello.addComment(config, card.id(), text);
+        String text = requiredText(arguments, "text");
+        if (SymphonyCommentFooter.isFooterOnly(text)) {
+            return failure("invalid_comment_text", "Comment text must contain more than the Symphony footer.");
+        }
+        String body = SymphonyCommentFooter.withoutTrailingFooters(text.stripTrailing());
+        trello.addComment(config, card.id(), SymphonyCommentFooter.append(TrelloMarkdown.escapeLeadingHashtags(body)));
         return success(Map.of("status", "comment_added", "card_id", card.id()));
     }
 
@@ -398,11 +402,12 @@ public class TrelloHandoffToolHandler {
     }
 
     private static String blockerRecheckTextWithManualCleanup(String text, int duplicatesFound) {
-        int footerStart = text.lastIndexOf("\n\n" + BLOCKER_RECHECK_FOOTER_PREFIX);
-        checkArgument(footerStart >= 0, "Managed blocker-recheck text must contain its footer");
-        return text.substring(0, footerStart)
-                + blockerRecheckManualCleanupNote(duplicatesFound)
-                + text.substring(footerStart);
+        SymphonyCommentFooter.Footer footer = SymphonyCommentFooter.parse(text)
+                .orElseThrow(
+                        () -> new IllegalArgumentException("Managed blocker-recheck text must contain its footer"));
+        String detail = footer.detail();
+        checkArgument(detail != null, "Managed blocker-recheck footer must link to the blocker comment");
+        return SymphonyCommentFooter.append(footer.body() + blockerRecheckManualCleanupNote(duplicatesFound), detail);
     }
 
     private static BlockerRecheckComments blockerRecheckComments(Card card) {
@@ -466,12 +471,10 @@ public class TrelloHandoffToolHandler {
     }
 
     private static boolean isManagedBlockerRecheckComment(Card.Comment candidate, Card card) {
-        String sourceActionId = blockerActionId(candidate.text(), card);
-        if (sourceActionId == null) {
-            return false;
-        }
-        return card.comments().stream()
-                .anyMatch(source -> isQualifyingBlockerSource(candidate, sourceActionId, source));
+        return blockerActionId(candidate.text(), card)
+                .filter(sourceActionId -> card.comments().stream()
+                        .anyMatch(source -> isQualifyingBlockerSource(candidate, sourceActionId, source)))
+                .isPresent();
     }
 
     private static boolean isQualifyingBlockerSource(
@@ -481,10 +484,11 @@ public class TrelloHandoffToolHandler {
                 && isExactBlockerHandoff(source.text());
     }
 
-    private static boolean managedTracksBlocker(Card.@Nullable Comment managed, Card card, String blockerActionId) {
+    private static boolean managedTracksBlocker(Card.@Nullable Comment managed, Card card, String expectedActionId) {
         return managed != null
-                && managed.text() != null
-                && blockerActionId.equals(blockerActionId(managed.text(), card));
+                && blockerActionId(managed.text(), card)
+                        .filter(expectedActionId::equals)
+                        .isPresent();
     }
 
     private static boolean isCheckingStatus(String text) {
@@ -496,32 +500,47 @@ public class TrelloHandoffToolHandler {
     }
 
     private static String blockerRecheckText(Card card, String visibleStatus, String blockerActionId) {
-        return visibleStatus + "\n\n" + blockerRecheckFooter(card, blockerActionId);
+        return SymphonyCommentFooter.append(visibleStatus, BlockerRecheckLink.format(card, blockerActionId));
     }
 
-    private static String blockerRecheckFooter(Card card, String blockerActionId) {
-        return BLOCKER_RECHECK_FOOTER_PREFIX
-                + TRELLO_CARD_URL_PREFIX
-                + card.shortLink()
-                + TRELLO_COMMENT_FRAGMENT
-                + blockerActionId
-                + BLOCKER_RECHECK_FOOTER_SUFFIX;
+    /// The shared footer only attributes the comment. Blocker-recheck ownership additionally needs
+    /// the footer detail to be this family's exact link to a comment on the current card.
+    private static Optional<String> blockerActionId(@Nullable String text, Card card) {
+        return SymphonyCommentFooter.parse(text)
+                .map(SymphonyCommentFooter.Footer::detail)
+                .flatMap(detail -> BlockerRecheckLink.actionId(detail, card));
     }
 
-    private static @Nullable String blockerActionId(String text, Card card) {
-        if (text == null || !safeShortLink(card.shortLink())) {
-            return null;
+    /// Formats and parses the blocker-recheck footer detail in one place, so both sides read the
+    /// same link shape.
+    private static final class BlockerRecheckLink {
+        private static final String LINK_PREFIX = "[" + BLOCKER_RECHECK_LINK_TEXT + "](https://trello.com/c/";
+        private static final String COMMENT_FRAGMENT = "#comment-";
+        private static final String LINK_SUFFIX = ")";
+        private static final String SHORT_LINK_GROUP = "shortLink";
+        private static final String ACTION_ID_GROUP = "actionId";
+        private static final Pattern LINK = Pattern.compile(Pattern.quote(LINK_PREFIX)
+                + "(?<" + SHORT_LINK_GROUP + ">[^#)]*)"
+                + Pattern.quote(COMMENT_FRAGMENT)
+                + "(?<" + ACTION_ID_GROUP + ">[^)]*)"
+                + Pattern.quote(LINK_SUFFIX));
+
+        private BlockerRecheckLink() {}
+
+        static String format(Card card, String actionId) {
+            return LINK_PREFIX + card.shortLink() + COMMENT_FRAGMENT + actionId + LINK_SUFFIX;
         }
-        String linkPrefix =
-                BLOCKER_RECHECK_FOOTER_PREFIX + TRELLO_CARD_URL_PREFIX + card.shortLink() + TRELLO_COMMENT_FRAGMENT;
-        int footerStart = text.lastIndexOf("\n\n" + linkPrefix);
-        if (footerStart < 0 || !text.endsWith(BLOCKER_RECHECK_FOOTER_SUFFIX)) {
-            return null;
+
+        /// Returns the linked action id only when the link points at a comment on `card`.
+        static Optional<String> actionId(String detail, Card card) {
+            Matcher link = LINK.matcher(detail);
+            if (!safeShortLink(card.shortLink())
+                    || !link.matches()
+                    || !card.shortLink().equals(link.group(SHORT_LINK_GROUP))) {
+                return Optional.empty();
+            }
+            return Optional.of(link.group(ACTION_ID_GROUP)).filter(TrelloHandoffToolHandler::safeActionId);
         }
-        int actionIdStart = footerStart + 2 + linkPrefix.length();
-        int actionIdEnd = text.length() - BLOCKER_RECHECK_FOOTER_SUFFIX.length();
-        String actionId = text.substring(actionIdStart, actionIdEnd);
-        return safeActionId(actionId) ? actionId : null;
     }
 
     private static String resumedWorkText(String title) {
@@ -629,6 +648,9 @@ public class TrelloHandoffToolHandler {
             return failure("trello_comments_disabled", "Trello comments are disabled by trello_tools.allow_comments.");
         }
         String proposedText = requiredText(arguments, "text");
+        if (SymphonyCommentFooter.isFooterOnly(proposedText)) {
+            return failure("invalid_workpad_text", "Workpad text must contain more than the Symphony footer.");
+        }
         if (CodexUsageWorkpadSection.hasMalformedManagedSectionMarkers(proposedText)) {
             return failure(
                     "trello_workpad_managed_section_malformed",
@@ -740,11 +762,13 @@ public class TrelloHandoffToolHandler {
                     "trello_workpad_managed_section_non_primary",
                     "Cannot safely change the Codex usage section while an older duplicate owns it and destructive duplicate cleanup is disabled.");
         }
+        String currentBody = SymphonyCommentFooter.withoutTrailingFooters(primary.text());
         String text = section == null
-                ? CodexUsageWorkpadSection.remove(primary.text())
-                : CodexUsageWorkpadSection.upsert(primary.text(), section);
+                ? CodexUsageWorkpadSection.remove(currentBody)
+                : CodexUsageWorkpadSection.upsert(currentBody, section);
         String canonicalText = stripManualCleanupNotes(text);
-        if (workpads.size() == 1 && canonicalText.equals(primary.text())) {
+        // Comparing bodies keeps a legacy workpad without a footer untouched until its content changes.
+        if (workpads.size() == 1 && SymphonyCommentFooter.sameBody(canonicalText, primary.text())) {
             return success(Map.of("status", "workpad_unchanged", "card_id", cardId));
         }
         return updateExistingWorkpad(config, cardId, workpads, primary, canonicalText, nonPrimaryOwner);
@@ -761,9 +785,10 @@ public class TrelloHandoffToolHandler {
         boolean destructiveAllowed = config.trelloTools().allowDestructiveOperations();
         // Without the destructive opt-in, the duplicates stay on the card, so the canonical
         // workpad itself must tell the next agent or human that manual cleanup is required.
-        String authoritativeText = duplicatesFound > 0 && !destructiveAllowed
-                ? canonicalText + manualCleanupNote(duplicatesFound)
-                : canonicalText;
+        String authoritativeText = SymphonyCommentFooter.append(
+                duplicatesFound > 0 && !destructiveAllowed
+                        ? canonicalText + manualCleanupNote(duplicatesFound)
+                        : canonicalText);
         // The authoritative update runs before any duplicate cleanup: if it fails, every workpad
         // stays in place and no comment content is lost to a delete that ran first.
         trello.updateComment(config, primary.id(), authoritativeText);
@@ -941,7 +966,7 @@ public class TrelloHandoffToolHandler {
         if (commentWindowMayBeIncomplete(currentCard)) {
             return incompleteWorkpadWindowFailure();
         }
-        Map<String, Object> created = trello.addComment(config, cardId, text);
+        Map<String, Object> created = trello.addComment(config, cardId, SymphonyCommentFooter.append(text));
         return success(Map.of("status", "workpad_created", "card_id", cardId, "action_id", string(created.get("id"))));
     }
 
@@ -956,7 +981,8 @@ public class TrelloHandoffToolHandler {
     }
 
     private static String workpadText(String text) {
-        String trimmed = stripManualCleanupNotes(text.strip());
+        // Agents often echo the previous workpad, footer included; the footer is re-added once on write.
+        String trimmed = SymphonyCommentFooter.withoutTrailingFooters(stripManualCleanupNotes(text.strip()));
         if (trimmed.startsWith(WORKPAD_MARKER)) {
             int markerEnd = markerLineEnd(trimmed);
             return trimmed.substring(0, markerEnd) + TrelloMarkdown.escapeLeadingHashtags(trimmed.substring(markerEnd));

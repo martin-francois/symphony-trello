@@ -46,7 +46,9 @@ The harness covers:
 5. `max_concurrent_agents: 1` ordering, including a later-created card moved above an older card.
 6. `max_concurrent_agents: 2` on one board.
 7. Two Symphony processes watching two boards at the same time.
-8. Fake app-server Trello comments and handoff moves.
+8. Fake app-server Trello comments and handoff moves. Every comment Symphony writes on a handed-off
+   card must end with exactly one `Managed by Symphony` footer, and a comment the harness writes
+   before pickup must come back byte for byte without one.
 9. A long-running external-project card with Docker fixture files, proving Trello shows
    `In Progress` while work is underway and `Human Review` after handoff.
 10. Final `/api/v1/state` drain to zero running and retrying entries.
@@ -170,8 +172,12 @@ Use a unique run id such as `live-e2e-YYYYMMDD-HHMMSS`.
    `trello_move_current_card`.
 7. Processed cards have one workpad comment, a handoff comment, and end in `Human Review` on
    recommended boards.
-8. Two Symphony processes can run against two boards at the same time on different ports.
-9. Cleanup archives all disposable boards created by the run.
+8. Every comment Symphony wrote ends with the readable `Managed by Symphony` footer as its last
+   paragraph, exactly once. Open the card in Trello and confirm the footer renders as one italic
+   line with no raw HTML or marker text. A comment you added by hand before pickup keeps its exact
+   text and shows no footer.
+9. Two Symphony processes can run against two boards at the same time on different ports.
+10. Cleanup archives all disposable boards created by the run.
 
 ## Reproducible Command Flow
 
@@ -787,9 +793,10 @@ GitHub and must not use a normal project board or repository.
    managed comment remains at `Checking whether this card is still blocked...` The card must never
    show `No longer blocked; working on ...` while the mismatch remains.
 5. Trigger a safe pickup retry for each variant. Fetch up to 1000 `commentCard` actions from the
-   Trello API and assert exactly one action ends with the exact `Managed by Symphony` footer and a
-   current-card `#comment-ACTION_ID` link. Verify repeated `checking` or `resumed` calls update that
-   action rather than creating another comment.
+   Trello API and assert exactly one action ends with the `Managed by Symphony` footer whose detail
+   is a current-card `#comment-ACTION_ID` link. Other Symphony comments end with the plain footer.
+   Verify repeated `checking` or `resumed` calls update that action rather than creating another
+   comment.
 6. Compare the raw action text with the rendered Trello card. The API text must retain both
    the exact human-readable Symphony footer and the permalink for the qualifying blocker action.
    The rendered footer must identify Symphony, expose no raw HTML marker, and let a board member open

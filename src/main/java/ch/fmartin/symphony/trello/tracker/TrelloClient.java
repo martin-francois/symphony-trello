@@ -635,7 +635,8 @@ public class TrelloClient implements TrackerClient {
 
     private void updateOrCreatePrerequisiteWaitingComment(
             EffectiveConfig config, Card card, Card.Comment existing, String text) {
-        if (text.equals(existing.text())) {
+        // Ignoring the footer keeps an unchanged legacy status from being rewritten on every poll.
+        if (SymphonyCommentFooter.sameBody(text, existing.text())) {
             return;
         }
         if (blank(existing.id())) {
@@ -650,7 +651,8 @@ public class TrelloClient implements TrackerClient {
             Optional<Card.Comment> existing = prerequisiteWaitingComment(config, card.id());
             String text = resolvedPrerequisiteStatusText();
             existing.filter(comment -> !blank(comment.id()))
-                    .filter(comment -> !text.equals(comment.text()))
+                    // Ignoring the footer keeps an unchanged legacy status from being rewritten on every poll.
+                    .filter(comment -> !SymphonyCommentFooter.sameBody(text, comment.text()))
                     .ifPresent(comment -> updateComment(config, comment.id(), text));
         } catch (RuntimeException e) {
             LOG.warnf("card_id=%s prerequisite_waiting_comment_clear=failed reason=%s", card.id(), e.getMessage());
@@ -707,17 +709,17 @@ public class TrelloClient implements TrackerClient {
         lines.add("");
         lines.add(
                 "Fix by making prerequisite checklist items exactly one bare Trello card reference each, moving notes to a separate checklist, or writing non-prerequisite Trello references as Markdown links.");
-        return String.join("\n", lines);
+        return SymphonyCommentFooter.append(String.join("\n", lines));
     }
 
     private static String resolvedPrerequisiteStatusText() {
-        return String.join(
+        return SymphonyCommentFooter.append(String.join(
                 "\n",
                 PREREQUISITE_STATUS_COMMENT_MARKER,
                 "",
                 "Status: prerequisites resolved.",
                 "",
-                "Symphony may start this Trello card when other dispatch rules allow.");
+                "Symphony may start this Trello card when other dispatch rules allow."));
     }
 
     private static String waitingBlockerText(BlockerRef blocker) {
