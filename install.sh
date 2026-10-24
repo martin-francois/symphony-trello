@@ -1907,7 +1907,7 @@ start_managed_workers() {
     print_status WOULD " skip autostart and start managed workers with: $BIN_DIR/symphony-trello start --all"
     return
   fi
-  print_status NOTE "  Autostart service was not configured. Use '$BIN_DIR/symphony-trello start --all' after reboot or login."
+  print_status NOTE "  Autostart service was not configured. After reboot or login, run: $INSTALLED_COMMAND start --all"
   run "$BIN_DIR/symphony-trello" start --all
   print_status OK "  Managed workers started"
 }
@@ -2834,7 +2834,7 @@ if [[ "$INSTALL_SOURCE" == "source-checkout" ]]; then
   print_status OK "  App built with Maven wrapper"
 else
   install_release_archive
-  print_status OK "  Release $VERSION verified and unpacked"
+  print_status OK "  Release verified and unpacked"
 fi
 run mkdir -p "$BIN_DIR" "$CONFIG_DIR" "$WORKSPACE_ROOT" "$STATE_HOME"
 if [[ "$DRY_RUN" == false ]]; then

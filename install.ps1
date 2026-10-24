@@ -974,7 +974,7 @@ function Start-ManagedWorkers {
   if (Enable-WindowsAutostart) {
     return
   }
-  Write-Status "NOTE" "  Autostart was not configured. Use '$BinDir\symphony-trello.ps1 start --all' after reboot or login."
+  Write-Status "NOTE" "  Autostart was not configured. After reboot or login, run: $InstalledCommand start --all"
   Invoke-Step "$BinDir\symphony-trello.ps1 start --all" { & "$BinDir\symphony-trello.ps1" start --all }
   Write-Status "OK" "  Managed workers started"
 }
@@ -1570,7 +1570,7 @@ if ($InstallSource -eq "source-checkout") {
   Write-Status "OK" "  App built with Maven wrapper"
 } else {
   Install-ReleaseArchive
-  Write-Status "OK" "  Release $Version verified and unpacked"
+  Write-Status "OK" "  Release verified and unpacked"
 }
 Invoke-Step "create $BinDir\symphony-trello.ps1" {
   New-Item -ItemType Directory -Force -Path $BinDir, $ConfigDir, $WorkspaceRoot, $StateHome | Out-Null
