@@ -1135,11 +1135,13 @@ If a card already has a pull request or branch, put the PR URL or branch name in
 Trello comment. Codex will use that link to sweep PR comments, inline review feedback, Codex review
 comments, and checks before it moves the card to `Human Review`.
 
-If the card implements a GitHub issue in the repository it changes, put the issue URL or
-`owner/repository#123` in the title, description, or a Trello comment. With GitHub integration
-enabled, Codex assigns that issue to the authenticated GitHub account before it starts, so others
-can see the work is taken. When the assignment fails, for example because the account lacks
-permission, Codex keeps working and notes the reason in the workpad.
+If the card implements a GitHub issue in the repository it changes, put the issue URL,
+`owner/repository#123`, or a bare `#123` in the title, description, or a Trello comment. A bare
+`#123` works only when Codex already knows the card's repository. With GitHub integration enabled,
+Codex assigns that issue to the authenticated GitHub account before it starts, so others can see the
+work is taken. When the assignment fails, for example because the account lacks permission, Codex
+keeps working and notes the reason in the workpad, or in its final response when the Trello handoff
+tools are disabled.
 
 The setup commands normally write the current full `WORKFLOW.md` prompt for you. If you create the
 board manually, copy [`WORKFLOW.example.md`](WORKFLOW.example.md), set `tracker.board_id`, and adjust

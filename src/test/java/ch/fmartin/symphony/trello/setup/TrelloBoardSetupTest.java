@@ -997,6 +997,7 @@ final class TrelloBoardSetupTest {
                 .contains("trello_tools:\n  enabled: false", GITHUB_ISSUE_ASSIGNMENT_HEADING)
                 .containsIgnoringWhitespaces(
                         "Before you implement the change, assign",
+                        "Do not assign anything when you stop the card on a blocker before implementation.",
                         "record in the final response which issue was not assigned and why")
                 .doesNotContain("After the initial `checking` call succeeds");
     }

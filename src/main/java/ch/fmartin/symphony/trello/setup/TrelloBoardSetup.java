@@ -1461,7 +1461,6 @@ public final class TrelloBoardSetup {
 
     private static String executionPrompt(
             String reviewState, String blockedDestination, boolean workpadToolEnabled, boolean githubEnabled) {
-        // GitHub workflows claim linked issues right after the execution flow, before implementation starts.
         String executionFlow = executionFlowPrompt(reviewState, blockedDestination, workpadToolEnabled, githubEnabled);
         return githubEnabled ? executionFlow + "\n\n" + githubIssueAssignmentPrompt(workpadToolEnabled) : executionFlow;
     }
@@ -1523,8 +1522,8 @@ public final class TrelloBoardSetup {
                 ## GitHub Issue Assignment
 
                 %s, assign the GitHub issues this card implements to the authenticated GitHub account so other
-                contributors can see that the work is taken. Do not assign anything when the card is blocked.
-                An issue qualifies only when the card clearly asks to implement it and the issue belongs to the
+                contributors can see that the work is taken. Do not assign anything when you stop the card on a
+                blocker before implementation. An issue qualifies only when the card clearly asks to implement it and the issue belongs to the
                 repository selected for this card under Repository Source Precedence. It can appear in the card
                 title, description, or Trello comments as a full GitHub issue URL, as `owner/repository#123`, or
                 as a bare `#123` when the selected repository is already known. Do not assign pull requests,
