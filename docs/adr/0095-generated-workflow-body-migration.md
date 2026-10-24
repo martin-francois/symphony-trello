@@ -87,6 +87,9 @@ restarts workers: a rejected major downgrade must not run, and a failed write ne
 read the backup message first. For release-archive installs, both installers also refuse an older
 major release before they replace the app.
 
+Version order. Versions compare by Semantic Versioning 2.0.0 precedence, including numeric
+pre-release identifiers, so a move from `1.5.0-rc.10` to `1.5.0-rc.9` counts as a downgrade.
+
 Files next to the workflow. A confirmed migration writes a timestamped backup next to the workflow,
 and an interactive manual migration writes the target body as a preview there. Both are one-off
 files that the operator asked for and can delete. Unattended runs write neither. This differs from

@@ -4284,6 +4284,8 @@ Interaction:
 
 Supported downgrades:
 
+- Versions are ordered by Semantic Versioning 2.0.0 precedence, including pre-release identifiers,
+  so `1.5.0-rc.10` is newer than `1.5.0-rc.9` and `1.5.0` is newer than both.
 - When the source generated body comes from a newer version within the same major version, the
   same classification and confirmation flow applies. The command MUST say that the workflow was
   created for a newer Symphony version. When the operator declines, or only a manual migration is

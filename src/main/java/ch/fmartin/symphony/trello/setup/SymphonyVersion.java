@@ -2,6 +2,8 @@ package ch.fmartin.symphony.trello.setup;
 
 import com.google.common.base.CharMatcher;
 import com.google.common.base.Splitter;
+import com.google.common.collect.Comparators;
+import java.math.BigInteger;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -19,20 +21,25 @@ record SymphonyVersion(int major, int minor, int patch, String qualifier) implem
             .or(CharMatcher.inRange('a', 'z'))
             .or(CharMatcher.inRange('A', 'Z'))
             .or(CharMatcher.anyOf(".-"));
+    private static final Splitter DOT_SPLITTER = Splitter.on('.');
     private static final int VERSION_NUMBER_COUNT = 3;
     private static final Comparator<SymphonyVersion> ORDER = Comparator.comparingInt(SymphonyVersion::major)
             .thenComparingInt(SymphonyVersion::minor)
             .thenComparingInt(SymphonyVersion::patch)
             // A release sorts after its own pre-releases, as in Semantic Versioning.
             .thenComparing(SymphonyVersion::release)
+            .thenComparing(
+                    SymphonyVersion::preReleaseIdentifiers,
+                    Comparators.lexicographical(SymphonyVersion::comparePreReleaseIdentifiers))
+            // Keeps compareTo consistent with equals when SemVer ranks two spellings alike, such as rc.01 and rc.1.
             .thenComparing(SymphonyVersion::qualifier);
 
     static Optional<SymphonyVersion> parse(String text) {
         String version = text.strip();
         int qualifierSeparator = version.indexOf('-');
         String qualifier = qualifierSeparator < 0 ? "" : version.substring(qualifierSeparator + 1);
-        List<String> numbers = Splitter.on('.')
-                .splitToList(qualifierSeparator < 0 ? version : version.substring(0, qualifierSeparator));
+        List<String> numbers =
+                DOT_SPLITTER.splitToList(qualifierSeparator < 0 ? version : version.substring(0, qualifierSeparator));
         boolean validQualifier =
                 qualifierSeparator < 0 || (!qualifier.isEmpty() && QUALIFIER_CHARACTER.matchesAllOf(qualifier));
         boolean validNumbers = numbers.size() == VERSION_NUMBER_COUNT
@@ -61,6 +68,28 @@ record SymphonyVersion(int major, int minor, int patch, String qualifier) implem
 
     boolean release() {
         return qualifier.isEmpty();
+    }
+
+    private List<String> preReleaseIdentifiers() {
+        return DOT_SPLITTER.splitToList(qualifier);
+    }
+
+    /// Semantic Versioning 2.0.0 precedence: numeric identifiers compare as numbers and sort before
+    /// alphanumeric ones, which compare in ASCII order. So `rc.10` follows `rc.9`.
+    private static int comparePreReleaseIdentifiers(String left, String right) {
+        boolean leftNumeric = numericIdentifier(left);
+        boolean rightNumeric = numericIdentifier(right);
+        if (leftNumeric && rightNumeric) {
+            return new BigInteger(left).compareTo(new BigInteger(right));
+        }
+        if (leftNumeric != rightNumeric) {
+            return leftNumeric ? -1 : 1;
+        }
+        return left.compareTo(right);
+    }
+
+    private static boolean numericIdentifier(String identifier) {
+        return !identifier.isEmpty() && ASCII_DIGIT.matchesAllOf(identifier);
     }
 
     @Override
