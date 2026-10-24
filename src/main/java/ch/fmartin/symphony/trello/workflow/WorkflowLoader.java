@@ -1,11 +1,15 @@
 package ch.fmartin.symphony.trello.workflow;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -23,16 +27,35 @@ public class WorkflowLoader {
 
     public WorkflowDefinition load(Path path) {
         Path absolute = path.toAbsolutePath().normalize();
-        List<String> lines;
+        byte[] content;
         try {
-            lines = Files.readAllLines(absolute);
+            content = Files.readAllBytes(absolute);
         } catch (IOException e) {
-            throw new WorkflowException("missing_workflow_file", "Workflow file cannot be read: " + absolute, e);
+            throw unreadable(absolute, e);
+        }
+        return parse(absolute, content);
+    }
+
+    /// Parses workflow file content as if [#load(Path)] had read it from `path`. Fuzz targets
+    /// call this directly so each input is parsed in memory instead of through a temporary file.
+    public WorkflowDefinition parse(Path path, byte[] content) {
+        Path absolute = path.toAbsolutePath().normalize();
+        String markdown;
+        try {
+            // newDecoder() reports malformed input: invalid UTF-8 is an unreadable file (SPEC.md 5.1), not U+FFFD text.
+            markdown = UTF_8.newDecoder().decode(ByteBuffer.wrap(content)).toString();
+        } catch (CharacterCodingException e) {
+            throw unreadable(absolute, e);
         }
 
-        ParsedMarkdown parsed = splitFrontMatter(lines);
+        // lines() breaks only at \n, \r, and \r\n, so U+2028 and other Unicode breaks stay inside a line.
+        ParsedMarkdown parsed = splitFrontMatter(markdown.lines().toList());
         Map<String, Object> config = parseYamlMap(parsed.frontMatter());
         return new WorkflowDefinition(absolute, config, parsed.body().trim());
+    }
+
+    private static WorkflowException unreadable(Path absolute, IOException cause) {
+        return new WorkflowException("missing_workflow_file", "Workflow file cannot be read: " + absolute, cause);
     }
 
     private Map<String, Object> parseYamlMap(@Nullable String frontMatter) {
