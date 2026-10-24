@@ -7,6 +7,7 @@ public record WorkflowConfigFinding(String path, Kind kind, String input, String
         NOT_A_NUMBER,
         NON_POSITIVE,
         NEGATIVE,
+        NOT_A_BOOLEAN,
         IGNORED_MAP_VALUE
     }
 

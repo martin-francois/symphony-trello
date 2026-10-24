@@ -715,7 +715,9 @@ final class TestConventionTest {
         assertThat(sources.get(Path.of("src/main/java/ch/fmartin/symphony/trello/repository/RepositorySource.java")))
                 .contains("@Nullable RepositoryIdentity identity", "@Nullable Path path");
         assertThat(sources.get(Path.of("src/main/java/ch/fmartin/symphony/trello/config/EffectiveConfig.java")))
-                .contains("record RepositoryConfig(@Nullable String defaultUrl, @Nullable Path defaultPath)");
+                .contains(
+                        "record RepositoryConfig(",
+                        "@Nullable String defaultUrl, @Nullable Path defaultPath, CodexReviewConfig codexReview)");
         assertThat(codexSandboxPolicySource)
                 .as("%s should document intentional nullable public contracts", codexSandboxPolicy)
                 .contains(

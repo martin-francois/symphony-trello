@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 final class ConfigResolverTest {
@@ -367,6 +368,88 @@ final class ConfigResolverTest {
         // then
         assertThat(error.code()).isEqualTo("config_value_error");
         assertThat(error).hasMessage("repository.default_path must be a valid local path");
+    }
+
+    @Test
+    void codexReviewBeforeHandoffIsDisabledByDefault() throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow("WORKFLOW.codex-review-default.md", "");
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.repository().codexReview())
+                .isEqualTo(
+                        new EffectiveConfig.CodexReviewConfig(false, ConfigDefaults.DEFAULT_CODEX_REVIEW_MAX_CYCLES));
+    }
+
+    @Test
+    void resolvesEnabledCodexReviewBeforeHandoffWithConfiguredMaxCycles() throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.codex-review-enabled.md",
+                """
+                repository:
+                  codex_review_before_handoff: true
+                  codex_review_max_cycles: 5
+                """);
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.repository().codexReview()).isEqualTo(new EffectiveConfig.CodexReviewConfig(true, 5));
+    }
+
+    @CsvSource({"'\"TRUE\"', true", "'\"False\"', false"})
+    @ParameterizedTest
+    void acceptsQuotedCodexReviewFlagIgnoringCase(String flag, boolean expected) throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.codex-review-quoted-" + expected + ".md",
+                "repository:\n  codex_review_before_handoff: " + flag);
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.repository().codexReview().enabled()).isEqualTo(expected);
+    }
+
+    @MethodSource("invalidCodexReviewSettings")
+    @ParameterizedTest
+    void rejectsInvalidCodexReviewSettingsInsteadOfGuessing(String name, String setting, String expectedMessage)
+            throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow("WORKFLOW." + name + ".md", "repository:\n  " + setting);
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        ConfigException error = catchThrowableOfType(
+                ConfigException.class, () -> resolver.resolve(new WorkflowLoader().load(workflow)));
+
+        // then
+        assertThat(error.code()).isEqualTo("config_value_error");
+        assertThat(error).hasMessage(expectedMessage);
+    }
+
+    private static Stream<Arguments> invalidCodexReviewSettings() {
+        String flagMessage = "repository.codex_review_before_handoff must be true or false";
+        return Stream.of(
+                Arguments.of("review-flag-word", "codex_review_before_handoff: \"yes please\"", flagMessage),
+                Arguments.of("review-flag-number", "codex_review_before_handoff: 1", flagMessage),
+                Arguments.of(
+                        "review-cycles-zero",
+                        "codex_review_max_cycles: 0",
+                        "repository.codex_review_max_cycles must be positive"),
+                Arguments.of(
+                        "review-cycles-fractional",
+                        "codex_review_max_cycles: 1.5",
+                        "repository.codex_review_max_cycles must be a whole number"));
     }
 
     @MethodSource("fractionalNumericValues")

@@ -136,7 +136,9 @@ Before moving to `Human Review`:
 1. For repository-changing work, create or update the PR unless the card
    explicitly asks for local-only/no-push work.
 2. Update the workpad with final summary, acceptance criteria status,
-   validation evidence, PR URL when applicable, and known limitations.
+   validation evidence, PR URL when applicable, and known limitations. When
+   the prompt has a `Codex Review Before Handoff` section, also record the
+   review loop outcome it asks for, in the workpad and in the handoff comment.
    Format PR links in Trello-visible text on their own line as
    `PR: <https://github.com/owner/repo/pull/123>` so punctuation cannot become
    part of the link.

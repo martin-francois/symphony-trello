@@ -116,7 +116,7 @@ public class ConfigResolver {
                         typedWorkflow.pollingIntervalMs(), "interval_ms", ConfigDefaults.DEFAULT_POLLING_INTERVAL_MS)),
                 new EffectiveConfig.WorkspaceConfig(
                         path(workflow.path().getParent(), string(workspace, "root", systemTempRoot()))),
-                repositoryConfig(workflow.path().getParent(), repository),
+                repositoryConfig(workflow.path().getParent(), repository, typedWorkflow),
                 new EffectiveConfig.HooksConfig(
                         string(hooks, "after_create", null),
                         string(hooks, "before_run", null),
@@ -257,13 +257,22 @@ public class ConfigResolver {
         return configured;
     }
 
-    private EffectiveConfig.RepositoryConfig repositoryConfig(Path workflowDirectory, Map<String, Object> repository) {
+    private EffectiveConfig.RepositoryConfig repositoryConfig(
+            Path workflowDirectory, Map<String, Object> repository, TypedWorkflowConfig typedWorkflow) {
+        var codexReview = new EffectiveConfig.CodexReviewConfig(
+                flag(
+                        typedWorkflow.repositoryCodexReviewBeforeHandoff(),
+                        ConfigDefaults.DEFAULT_CODEX_REVIEW_BEFORE_HANDOFF),
+                integer(
+                        typedWorkflow.repositoryCodexReviewMaxCycles(),
+                        ConfigDefaults.DEFAULT_CODEX_REVIEW_MAX_CYCLES));
         String defaultUrl = optionalEnvironmentString(repository, "default_url");
         if (defaultUrl != null) {
             return new EffectiveConfig.RepositoryConfig(
-                    defaultUrl, optionalLowerPriorityRepositoryPath(workflowDirectory, repository));
+                    defaultUrl, optionalLowerPriorityRepositoryPath(workflowDirectory, repository), codexReview);
         }
-        return new EffectiveConfig.RepositoryConfig(null, optionalRepositoryPath(workflowDirectory, repository));
+        return new EffectiveConfig.RepositoryConfig(
+                null, optionalRepositoryPath(workflowDirectory, repository), codexReview);
     }
 
     private Path optionalLowerPriorityRepositoryPath(Path workflowDirectory, Map<String, Object> repository) {
@@ -355,6 +364,13 @@ public class ConfigResolver {
 
     private static int integer(WorkflowIntegerSetting setting, int defaultValue) {
         setting.finding().filter(WorkflowConfigFinding::strict).ifPresent(finding -> {
+            throw new ConfigException("config_value_error", finding.message());
+        });
+        return setting.value().orElse(defaultValue);
+    }
+
+    private static boolean flag(WorkflowBooleanSetting setting, boolean defaultValue) {
+        setting.finding().ifPresent(finding -> {
             throw new ConfigException("config_value_error", finding.message());
         });
         return setting.value().orElse(defaultValue);
