@@ -11,7 +11,7 @@ permissions: read-all
 jobs:
   lint:
     if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     steps:
@@ -31,7 +31,7 @@ jobs:
 
   renovate:
     if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     steps:
@@ -50,7 +50,7 @@ jobs:
 
   script-tests:
     if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     steps:
@@ -73,7 +73,7 @@ jobs:
     # ADR 0048 keeps this job on 2 vCPU and matches hosted JUnit parallelism
     # to the runner's vCPU count to minimize normalized Blacksmith cost.
     if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: blacksmith-2vcpu-ubuntu-2604
     env:
       ISOLATE_OPENREWRITE: >-
         ${{ github.event_name == 'pull_request'
@@ -174,7 +174,7 @@ jobs:
   # running the image it pins (ADR 0127).
   pinned-powershell-image:
     if: ${{ github.event_name == 'pull_request' && !startsWith(github.head_ref, 'release-please--branches--') }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     steps:

@@ -39,6 +39,15 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # build-mode none asks Maven for the dependency classpath with the java on the PATH, and
+      # .mvn/jvm.config passes a flag that JDKs before 24 reject, so the lookup needs the project's JDK.
+      - name: Set up the project's JDK for the Maven dependency lookup
+        if: matrix.language == 'java-kotlin'
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "25.0.4+7.0.LTS"
+          cache: maven
       - name: Initialize CodeQL
         uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:

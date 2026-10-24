@@ -974,19 +974,32 @@ test("updated OpenRewrite artifacts remain isolated in pull request CI", () => {
 test("Blacksmith runners are reserved for the critical-path test jobs", () => {
   const workflowDirectory = new URL("../.github/workflows/", import.meta.url);
   const blacksmithJobs: string[] = [];
+  const hostedUbuntuVersions = new Set<string>();
 
   for (const fileName of readdirSync(workflowDirectory).filter((name) => /\.ya?ml$/u.test(name))) {
     const workflow = parse(readFileSync(new URL(fileName, workflowDirectory), "utf8")) as
       WorkflowDocument;
     for (const [jobName, job] of Object.entries(workflow.jobs ?? {})) {
-      if (typeof job["runs-on"] === "string" && job["runs-on"].startsWith("blacksmith-")) {
+      if (typeof job["runs-on"] !== "string") {
+        continue;
+      }
+      if (job["runs-on"].startsWith("blacksmith-")) {
         blacksmithJobs.push(`${fileName}:${jobName}:${job["runs-on"]}`);
+      }
+      const hostedUbuntu = /^ubuntu-(\d+)\.(\d+)$/u.exec(job["runs-on"]);
+      if (hostedUbuntu) {
+        hostedUbuntuVersions.add(`${hostedUbuntu[1]}${hostedUbuntu[2]}`);
       }
     }
   }
 
+  // Renovate moves the pinned GitHub-hosted Ubuntu labels but not the Blacksmith one, and the
+  // supporting jobs must run the same Ubuntu as the test job (ADR 0048).
+  const [ubuntuVersion, ...otherUbuntuVersions] = hostedUbuntuVersions;
+  assert.ok(ubuntuVersion, "the supporting jobs pin a GitHub-hosted Ubuntu version");
+  assert.deepEqual(otherUbuntuVersions, [], "the supporting jobs pin one Ubuntu version");
   assert.deepEqual(blacksmithJobs.sort(), [
-    "ci.yml:test:blacksmith-2vcpu-ubuntu-2404",
+    `ci.yml:test:blacksmith-2vcpu-ubuntu-${ubuntuVersion}`,
     "ci.yml:windows-powershell:blacksmith-2vcpu-windows-2025",
   ]);
 });
@@ -1188,11 +1201,12 @@ test("Renovate looks up MCR images through the catalog's push times", () => {
       datasource?.defaultRegistryUrlTemplate ?? "",
       /^https:\/\/mcr\.microsoft\.com\/api\/v1\/catalog\/[^?]+\/tags\?reg=mar$/u,
     );
+    const transform = datasource?.transformTemplates?.join("\n") ?? "";
     // lastModifiedDate is the registry's time of the push that set the tag's current digest.
-    assert.match(
-      datasource?.transformTemplates?.join("\n") ?? "",
-      /"releaseTimestamp": \$tag\.lastModifiedDate/u,
-    );
+    assert.match(transform, /"releaseTimestamp": \$tag\.lastModifiedDate/u);
+    // MCR points the major.minor tag of an unreleased major at its previews, so a release whose
+    // digest is also a preview or rc version must not count as stable (ADR 0125).
+    assert.match(transform, /"isStable": \$not\(\$tag\.digest in \$prereleaseDigests\)/u);
   }
 });
 
@@ -1393,7 +1407,8 @@ test(".NET SDK image updates automerge only after PowerShell tests through the i
 
   // The job runs pull request code like the test job does, so it gets no secret and no write token.
   assert.match(job?.if ?? "", /github\.event_name == 'pull_request'/u);
-  assert.equal(job?.["runs-on"], "ubuntu-24.04");
+  // A GitHub-hosted Ubuntu runner, where docker is Docker (ADR 0127).
+  assert.match(String(job?.["runs-on"]), /^ubuntu-\d+\.\d+$/u);
   assert.deepEqual(job?.permissions, {contents: "read"});
   assert.equal(checkout?.with?.["persist-credentials"], false);
   // HEAD is the merge commit GitHub builds for the pull request; HEAD^1 is the base it merges into.
