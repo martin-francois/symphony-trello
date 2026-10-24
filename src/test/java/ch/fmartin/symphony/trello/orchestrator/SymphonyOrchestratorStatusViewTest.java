@@ -52,8 +52,8 @@ final class SymphonyOrchestratorStatusViewTest {
         var tracker = new BlockingTracker();
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, mock());
         orchestrator.start();
-        assertThat(tracker.firstFetchStarted.await(5, TimeUnit.SECONDS))
-                .as("the blocked tick should enter its first tracker fetch within 5 seconds")
+        assertThat(tracker.firstFetchStarted.await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                .as("the blocked tick should enter its first tracker fetch within %d seconds", WAIT_TIMEOUT.toSeconds())
                 .isTrue();
 
         // when
@@ -65,11 +65,11 @@ final class SymphonyOrchestratorStatusViewTest {
         try {
             assertThat(details)
                     .as("card details must not wait for the in-flight Trello poll")
-                    .succeedsWithin(Duration.ofSeconds(2))
+                    .succeedsWithin(WAIT_TIMEOUT)
                     .isEqualTo(Optional.empty());
             assertThat(started)
                     .as("the started state must not wait for the in-flight Trello poll")
-                    .succeedsWithin(Duration.ofSeconds(2))
+                    .succeedsWithin(WAIT_TIMEOUT)
                     .isEqualTo(true);
         } finally {
             tracker.releaseFirstFetch.countDown();
@@ -87,14 +87,16 @@ final class SymphonyOrchestratorStatusViewTest {
         var starter = Thread.ofPlatform().start(orchestrator::start);
 
         // when
-        assertThat(tracker.terminalFetchStarted.await(5, TimeUnit.SECONDS))
-                .as("startup should enter terminal-card fetching within 5 seconds")
+        assertThat(tracker.terminalFetchStarted.await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                .as("startup should enter terminal-card fetching within %d seconds", WAIT_TIMEOUT.toSeconds())
                 .isTrue();
         String boardDuringStartup = orchestrator.selectedBoardId();
         boolean startedDuringStartup = orchestrator.isStarted();
         tracker.releaseTerminalFetch.countDown();
-        assertThat(starter.join(Duration.ofSeconds(5)))
-                .as("startup should finish within 5 seconds once the terminal fetch is released")
+        assertThat(starter.join(WAIT_TIMEOUT))
+                .as(
+                        "startup should finish within %d seconds once the terminal fetch is released",
+                        WAIT_TIMEOUT.toSeconds())
                 .isTrue();
         boolean startedAfterStartup = orchestrator.isStarted();
         orchestrator.stop();
@@ -146,11 +148,13 @@ final class SymphonyOrchestratorStatusViewTest {
 
         // when
         orchestrator.start();
-        assertThat(secondDispatchReached.await(5, TimeUnit.SECONDS))
-                .as("the tick should reach the second card's prompt refresh within 5 seconds")
+        assertThat(secondDispatchReached.await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                .as(
+                        "the tick should reach the second card's prompt refresh within %d seconds",
+                        WAIT_TIMEOUT.toSeconds())
                 .isTrue();
-        assertThat(firstWorkerRead.await(5, TimeUnit.SECONDS))
-                .as("the first worker should read the status within 5 seconds")
+        assertThat(firstWorkerRead.await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                .as("the first worker should read the status within %d seconds", WAIT_TIMEOUT.toSeconds())
                 .isTrue();
         orchestrator.stop();
 
@@ -242,8 +246,8 @@ final class SymphonyOrchestratorStatusViewTest {
         BlockingRun blockingRun = blockRunnerUntilCancelled(runner);
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
         orchestrator.start();
-        assertThat(blockingRun.started().await(5, TimeUnit.SECONDS))
-                .as("the worker should start within 5 seconds")
+        assertThat(blockingRun.started().await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                .as("the worker should start within %d seconds", WAIT_TIMEOUT.toSeconds())
                 .isTrue();
         // Only the manual tick below may reload, so the reload and its reconciliation share one tick.
         orchestrator.stopWorkflowWatcherForTests();
@@ -301,8 +305,8 @@ final class SymphonyOrchestratorStatusViewTest {
         BlockingRun blockingRun = blockRunnerUntilCancelled(runner);
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
         orchestrator.start();
-        assertThat(blockingRun.started().await(5, TimeUnit.SECONDS))
-                .as("the first worker should start within 5 seconds")
+        assertThat(blockingRun.started().await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                .as("the first worker should start within %d seconds", WAIT_TIMEOUT.toSeconds())
                 .isTrue();
         tracker.setCandidates(List.of(
                 TestCards.card("card-1", "TRELLO-first", "Doing"), TestCards.card("card-2", "TRELLO-second", "Todo")));
@@ -334,8 +338,8 @@ final class SymphonyOrchestratorStatusViewTest {
         BlockingRun blockingRun = blockRunnerUntilCancelled(runner);
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner, clock, successfulWorkpadHandler());
         orchestrator.start();
-        assertThat(blockingRun.started().await(5, TimeUnit.SECONDS))
-                .as("the first worker should start within 5 seconds")
+        assertThat(blockingRun.started().await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                .as("the first worker should start within %d seconds", WAIT_TIMEOUT.toSeconds())
                 .isTrue();
         tracker.setCandidates(List.of(
                 TestCards.card("card-1", "TRELLO-stalled", "Todo"), TestCards.card("card-2", "TRELLO-next", "Todo")));
@@ -452,8 +456,8 @@ final class SymphonyOrchestratorStatusViewTest {
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
         orchestratorRef.set(orchestrator);
         orchestrator.start();
-        assertThat(cancel.started().await(5, TimeUnit.SECONDS))
-                .as("the worker should start within 5 seconds")
+        assertThat(cancel.started().await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                .as("the worker should start within %d seconds", WAIT_TIMEOUT.toSeconds())
                 .isTrue();
         return new BlockedWorkerScenario(tracker, orchestrator, cancel);
     }
@@ -471,7 +475,7 @@ final class SymphonyOrchestratorStatusViewTest {
         doAnswer(invocation -> {
                     started.countDown();
                     try {
-                        blockUntilInterruptedOrTimedOut(Duration.ofSeconds(30));
+                        blockUntilInterruptedOrTimedOut(BLOCKED_WORKER_TIMEOUT);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                     }
