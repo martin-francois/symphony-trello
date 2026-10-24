@@ -30,7 +30,7 @@ final class StreamTerminal implements Terminal {
         Console console = SystemConsole.current();
         if (console != null) {
             flushOutput();
-            return interruptible(() -> console.readLine("%s", prompt));
+            return exitOnLineEditorInterrupt(() -> console.readLine("%s", prompt));
         }
         out.print(prompt);
         return input.readLine();
@@ -41,7 +41,7 @@ final class StreamTerminal implements Terminal {
         Console console = SystemConsole.current();
         if (console != null) {
             flushOutput();
-            return interruptible(() -> console.readPassword("%s", prompt));
+            return exitOnLineEditorInterrupt(() -> console.readPassword("%s", prompt));
         }
         String value = readLine(prompt);
         return value == null ? null : value.toCharArray();
@@ -57,7 +57,7 @@ final class StreamTerminal implements Terminal {
     /// While the line editor reads a line it handles SIGINT itself, so Ctrl+C makes the editor throw
     /// instead of ending the JVM. End the process the same way SIGINT ends it: exit status 130 with
     /// shutdown hooks, and no stack trace or setup failure report.
-    private static <T> T interruptible(Supplier<T> read) {
+    private static <T> T exitOnLineEditorInterrupt(Supplier<T> read) {
         try {
             return read.get();
         } catch (RuntimeException e) {
