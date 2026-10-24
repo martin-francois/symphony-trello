@@ -144,3 +144,7 @@ with a separate command when a maintainer asks for them.
 
 Diagnostics and troubleshooting reports are intended to be public-safe, but users are still told to
 review generated output before sharing it.
+
+[ADR 0104](0104-codex-investigation-before-setup-failure-issues.md) adds an opt-in local Codex
+investigation between the troubleshooting report and the GitHub issue offer for unexpected failures.
+Expected failures still offer neither.
