@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.StringWriter;
 import java.util.HashMap;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 
 @ApplicationScoped
 public class PromptRenderer {
@@ -18,10 +19,10 @@ public class PromptRenderer {
     private final PebbleEngine engine =
             new PebbleEngine.Builder().strictVariables(true).build();
 
-    public String render(String template, Card card, Integer attempt) {
+    public String render(@Nullable String template, Card card, @Nullable Integer attempt) {
         String effectiveTemplate = template == null || template.isBlank() ? DEFAULT_PROMPT : template;
-        Map<String, Object> cardData = card.toTemplateMap();
-        Map<String, Object> context = new HashMap<>();
+        Map<String, @Nullable Object> cardData = card.toTemplateMap();
+        Map<String, @Nullable Object> context = new HashMap<>();
         context.put("card", cardData);
         context.put("issue", cardData);
         context.put("attempt", attempt);
