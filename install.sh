@@ -70,6 +70,7 @@ LAUNCH_AGENT_DIR="$HOME/Library/LaunchAgents"
 LAUNCH_AGENT_LABEL="ch.fmartin.symphony-trello"
 LAUNCH_AGENT_PATH="$LAUNCH_AGENT_DIR/$LAUNCH_AGENT_LABEL.plist"
 INSTALLER_COMPLETION_ENV="SYMPHONY_TRELLO_INSTALLER_COMPLETION"
+LAYOUT_FEEDBACK_ENV="SYMPHONY_TRELLO_LAYOUT_FEEDBACK"
 
 usage() {
   cat <<USAGE
@@ -211,6 +212,25 @@ run_interactive() {
 
 run_setup_local_with_deferred_completion() {
   local -x "$INSTALLER_COMPLETION_ENV=defer"
+  local -x "$LAYOUT_FEEDBACK_ENV="
+  local feedback_context=""
+  if [[ "$UPDATING_EXISTING_APP" == false ]]; then
+    if [[ "$SYMPHONY_HOME_CONFIGURED" == true ]]; then
+      feedback_context="SYMPHONY_HOME"
+    fi
+    if [[ "$CONFIG_DIR_CONFIGURED" == true ]]; then
+      feedback_context="${feedback_context:+$feedback_context,}SYMPHONY_TRELLO_CONFIG_DIR"
+    fi
+    if [[ "$WORKSPACE_ROOT_CONFIGURED" == true ]]; then
+      feedback_context="${feedback_context:+$feedback_context,}SYMPHONY_TRELLO_WORKSPACE_ROOT"
+    fi
+    if [[ "$STATE_HOME_CONFIGURED" == true ]]; then
+      feedback_context="${feedback_context:+$feedback_context,}SYMPHONY_TRELLO_STATE_HOME"
+    fi
+  fi
+  if [[ -n "$feedback_context" ]]; then
+    printf -v "$LAYOUT_FEEDBACK_ENV" '%s' "$feedback_context"
+  fi
   run_interactive "$BIN_DIR/symphony-trello" setup-local
 }
 
@@ -1616,7 +1636,22 @@ activate_managed_codex_path() {
 }
 
 has_managed_pid_files() {
-  [[ -d "$STATE_HOME" ]] && find "$STATE_HOME" -maxdepth 1 -type f -name '*.pid' -print -quit | grep -q .
+  local state_root="$1"
+  [[ -d "$state_root" ]] && find "$state_root" -maxdepth 1 -type f -name '*.pid' -print -quit | grep -q .
+}
+
+legacy_state_home() {
+  printf '%s/state\n' "$(path_parent "$CONFIG_DIR")"
+}
+
+managed_state_roots_with_pid() {
+  local legacy_state
+  legacy_state="$(legacy_state_home)"
+  has_managed_pid_files "$STATE_HOME" && printf '%s\n' "$STATE_HOME"
+  if [[ "$(normalize_path "$legacy_state")" != "$(normalize_path "$STATE_HOME")" ]]; then
+    has_managed_pid_files "$legacy_state" && printf '%s\n' "$legacy_state"
+  fi
+  return 0
 }
 
 pid_command_line() {
@@ -1642,8 +1677,8 @@ is_live_managed_pid() {
 }
 
 has_live_managed_pid_files() {
-  local pid_file pid
-  if [[ ! -d "$STATE_HOME" ]]; then
+  local state_root="$1" pid_file pid
+  if [[ ! -d "$state_root" ]]; then
     return 1
   fi
   while IFS= read -r -d '' pid_file; do
@@ -1651,13 +1686,23 @@ has_live_managed_pid_files() {
     if is_live_managed_pid "$pid"; then
       return 0
     fi
-  done < <(find "$STATE_HOME" -maxdepth 1 -type f -name '*.pid' -print0)
+  done < <(find "$state_root" -maxdepth 1 -type f -name '*.pid' -print0)
+  return 1
+}
+
+any_live_managed_pid_files() {
+  local state_root
+  for state_root in "$@"; do
+    if has_live_managed_pid_files "$state_root"; then
+      return 0
+    fi
+  done
   return 1
 }
 
 remove_stale_managed_pid_files() {
-  local pid_file pid
-  if [[ ! -d "$STATE_HOME" ]]; then
+  local state_root="$1" pid_file pid
+  if [[ ! -d "$state_root" ]]; then
     return
   fi
   while IFS= read -r -d '' pid_file; do
@@ -1665,7 +1710,7 @@ remove_stale_managed_pid_files() {
     if ! is_live_managed_pid "$pid"; then
       rm -f "$pid_file"
     fi
-  done < <(find "$STATE_HOME" -maxdepth 1 -type f -name '*.pid' -print0)
+  done < <(find "$state_root" -maxdepth 1 -type f -name '*.pid' -print0)
 }
 
 user_systemd_available() {
@@ -2673,19 +2718,32 @@ if [[ -d "$APP_DIR" ]]; then
   UPDATING_EXISTING_APP=true
 fi
 RESTART_MANAGED_WORKERS=false
-if [[ "$UPDATING_EXISTING_APP" == true ]] && has_managed_pid_files; then
+MANAGED_STATE_ROOTS=()
+if [[ "$UPDATING_EXISTING_APP" == true ]]; then
+  while IFS= read -r state_root; do
+    [[ -n "$state_root" ]] && MANAGED_STATE_ROOTS+=("$state_root")
+  done < <(managed_state_roots_with_pid)
+fi
+# Temporary migration tracked by https://github.com/martin-francois/symphony-trello/issues/678:
+# stop workers tracked in the pre-fix sibling state directory so the corrected installer restarts
+# them only in the configured state home.
+if [[ "$UPDATING_EXISTING_APP" == true && "${#MANAGED_STATE_ROOTS[@]}" -gt 0 ]]; then
   if [[ -x "$BIN_DIR/symphony-trello" ]]; then
     RESTART_MANAGED_WORKERS=true
     echo "Stopping managed workers before update..."
-    run "$BIN_DIR/symphony-trello" stop
-  elif has_live_managed_pid_files; then
+    for state_root in "${MANAGED_STATE_ROOTS[@]}"; do
+      run "$BIN_DIR/symphony-trello" stop --state-home "$state_root"
+    done
+  elif any_live_managed_pid_files "${MANAGED_STATE_ROOTS[@]}"; then
     echo "Cannot stop managed workers because the installed command is missing: $BIN_DIR/symphony-trello" >&2
     echo "Stop the running Symphony worker processes manually, then rerun the installer." >&2
     exit 2
   else
     echo "Removing stale managed worker pid files before update..."
     if [[ "$DRY_RUN" == false ]]; then
-      remove_stale_managed_pid_files
+      for state_root in "${MANAGED_STATE_ROOTS[@]}"; do
+        remove_stale_managed_pid_files "$state_root"
+      done
     fi
   fi
 fi

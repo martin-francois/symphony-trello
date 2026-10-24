@@ -176,6 +176,7 @@ final class TrelloCredentialStoreTest {
                 options.workspaceRoot(),
                 options.workspaceRootExplicit(),
                 options.configDir(),
+                options.stateHome(),
                 options.manifestPath(),
                 options.serverPort(),
                 options.maxAgents(),
