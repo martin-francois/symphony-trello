@@ -215,9 +215,10 @@ final class StreamTerminalLineEditingTest {
         }
 
         @Override
-        public void close() throws IOException {
+        public void close() throws IOException, InterruptedException {
             process.getOutputStream().close();
-            process.destroyForcibly();
+            process.destroyForcibly().waitFor(TIMEOUT);
+            transcriptReader.join(TIMEOUT);
         }
     }
 }
