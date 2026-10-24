@@ -20,17 +20,16 @@ final class TrelloHandoffToolFuzzTest {
     @FuzzTest(maxDuration = "10s", maxExecutions = 20_000)
     void handoffToolCallsWriteOnlyWhatTheConfigurationAllows(FuzzedDataProvider data) {
         // given
-        FuzzedDataProvider fuzzedToolCall = data;
 
         // when
-        TrelloHandoffToolFuzzInvariants.Execution execution = execute(fuzzedToolCall);
+        TrelloHandoffToolFuzzInvariants.Execution execution = execute(data);
 
         // then
         assertCallStaysInWriteScope(execution);
     }
 
     @Test
-    void regressionInputsReplayEverySeed() throws NoSuchMethodException, URISyntaxException {
+    void pomCopiesEverySeedToRegressionInputs() throws NoSuchMethodException, URISyntaxException {
         // given
         Method fuzzTest = TrelloHandoffToolFuzzTest.class.getDeclaredMethod(FUZZ_TEST_METHOD, FuzzedDataProvider.class);
 

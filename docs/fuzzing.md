@@ -38,9 +38,9 @@ retried at the next check instead of ending the watchdog. Three cycles use a 330
 aggregate fuzzing budget; every fourth cycle uses 300
 aggregate minutes so daily maintenance can follow before the next batch. That aggregate is four full
 shares of 82.5 minutes, or 75 minutes in the maintenance cycle, however many targets run.
-`scripts/select-clusterfuzzlite-target` divides it among the targets by weight. Every target has
-the same weight today, so each fuzzes for the aggregate divided by the number of targets in the
-batch matrix. Each matrix job has a 100-minute timeout. Matrix jobs run one at a time because
+`scripts/select-clusterfuzzlite-target` divides it among the targets by weight. When every target
+has the same weight, each fuzzes for the aggregate divided by the number of targets in the batch
+matrix. Each matrix job has a 100-minute timeout. Matrix jobs run one at a time because
 ClusterFuzzLite pushes every corpus to the same Git branch; serialization prevents non-fast-forward
 races without changing the aggregate fuzzing budget. The workflow intentionally uses `ubuntu-latest`,
 not a Blacksmith runner. Each runner keeps one fuzzer wrapper before invoking ClusterFuzzLite. This

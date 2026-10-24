@@ -100,7 +100,7 @@ active run, plus the inputs that found each permission check removed in the expe
 
 `scripts/select-clusterfuzzlite-target` gives each target a weight. A batch cycle fuzzes four full
 shares in total, as ADR 0078 sets, and each target gets that aggregate in proportion to its weight.
-All five targets have weight 1 today, so each gets 66 minutes in a normal cycle and 60 minutes in the
+With five targets at weight 1, each gets 66 minutes in a normal cycle and 60 minutes in the
 maintenance cycle.
 
 ### Consequences
@@ -203,5 +203,9 @@ reaches.
 [GitHub PR #836](https://github.com/martin-francois/symphony-trello/pull/836) adds a card payload target and gives the two reference-parsing targets half a share
 each. When both changes meet, its targets keep their relative shares as weights in this selector.
 [GitHub PR #784](https://github.com/martin-francois/symphony-trello/pull/784) moves argument validation in front of the tools and reports it as
-`invalid_tool_arguments`. The refusal set already contains that code, so the target composes with
-that change without an edit. `trello_tool_failed` is then no longer expected for any arguments.
+`invalid_tool_arguments`. The refusal set lists only codes the handler on `main` can return, so
+whichever of the two changes merges second adds that code. The seeds named
+`<tool>--trello-tool-failed` carry arguments outside the advertised schema. Once validation refuses
+them with a code the set does not list, the Maven regression replay fails with an unknown failure
+code, so CI shows the missing entry. `trello_tool_failed` is then no longer expected for
+any arguments.
