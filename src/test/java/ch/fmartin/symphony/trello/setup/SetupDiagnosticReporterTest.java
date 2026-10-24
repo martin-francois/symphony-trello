@@ -48,6 +48,8 @@ final class SetupDiagnosticReporterTest {
     private static final String SYNTHETIC_BOARD_ID = "000000000000000000000001";
     private static final String ANSI_ESCAPE_IN_LOG = "\u001B";
     private static final String TERMINAL_BELL_IN_LOG = "\u0007";
+    private static final String SECRET_DIRECTORY = "secrets";
+    private static final String SECRET_DIRECTORY_VARIABLE = "SYMPHONY_SECRETS";
 
     @TempDir
     Path tempDir;
@@ -2038,14 +2040,16 @@ final class SetupDiagnosticReporterTest {
                 .doesNotContain("pid-key", "https://trello.com/b/pid-key/lookup-pid-board");
     }
 
-    @Test
-    void privateContextLookupResolvesFileBackedSecretTokenWithoutReadingSecretValue() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {SECRET_DIRECTORY, "$" + SECRET_DIRECTORY_VARIABLE, "${" + SECRET_DIRECTORY_VARIABLE + "}"})
+    void privateContextLookupResolvesFileBackedSecretTokenWithoutReadingSecretValue(String secretDirectory)
+            throws Exception {
         // given
         Path configDir = tempDir.resolve("lookup-secret-config");
         Path workspaceRoot = tempDir.resolve("lookup-secret-workspaces");
         Path stateHome = tempDir.resolve("lookup-secret-state");
         Path workflow = configDir.resolve("WORKFLOW.lookup-secret.md");
-        Path secretFile = configDir.resolve("secrets").resolve("trello-api-key");
+        Path secretFile = configDir.resolve(SECRET_DIRECTORY).resolve("trello-api-key");
         Files.createDirectories(configDir);
         Files.writeString(
                 workflow,
@@ -2054,13 +2058,14 @@ final class SetupDiagnosticReporterTest {
                 tracker:
                   kind: trello
                   board_id: lookup-secret-board-id
-                  api_key: file:secrets/trello-api-key
+                  api_key: file:%s/trello-api-key
                   api_token: literal-secret-token
                 server:
                   port: 19204
                 ---
                 # Lookup Secret
-                """);
+                """
+                        .formatted(secretDirectory));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "lookup-secret-board-id",
@@ -2076,7 +2081,8 @@ final class SetupDiagnosticReporterTest {
                         false))));
         DiagnosticsTokenHasher.load(configDir);
         String lookupToken = pathToken(diagnosticsKey(configDir), secretFile);
-        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+        var reporter = new SetupDiagnosticReporter(
+                Map.of(SECRET_DIRECTORY_VARIABLE, secretFile.getParent().toString()), new FakeCommandRunner());
 
         // when
         String report = reporter.renderReport(

@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.config;
 
 import java.util.Optional;
+import java.util.function.Function;
 import org.jspecify.annotations.Nullable;
 
 /// Parses workflow environment-variable references. Supports the generated `$NAME` form and
@@ -25,6 +26,44 @@ public final class EnvironmentReferences {
             name = name.substring(1, name.length() - 1);
         }
         return isValidName(name) ? Optional.of(name) : Optional.empty();
+    }
+
+    /// Splits a path value at its first `/` and classifies the first segment with
+    /// [#referenceName(String)], so path settings and credentials share one reference grammar.
+    /// `$NAME`, `${NAME}`, `$NAME/suffix` and `${NAME}/suffix` are references; any other value is
+    /// a literal path.
+    public static PathValue pathValue(String value) {
+        int separator = value.indexOf('/');
+        String firstSegment = separator < 0 ? value : value.substring(0, separator);
+        String suffix = separator < 0 ? "" : value.substring(separator);
+        return referenceName(firstSegment)
+                .<PathValue>map(name -> new PathReference(name, suffix))
+                .orElseGet(() -> new LiteralPath(value));
+    }
+
+    /// A path setting value, either written as a literal path or starting with an environment
+    /// reference.
+    public sealed interface PathValue {
+        /// Returns the path with a leading reference replaced through `lookup`, or empty when
+        /// `lookup` has no value for the referenced variable.
+        Optional<String> resolve(Function<String, Optional<String>> lookup);
+    }
+
+    /// A path value without a leading reference, which resolves to itself.
+    public record LiteralPath(String value) implements PathValue {
+        @Override
+        public Optional<String> resolve(Function<String, Optional<String>> lookup) {
+            return Optional.of(value);
+        }
+    }
+
+    /// A path value made of the environment variable `name` followed by `suffix`, which is empty or
+    /// starts with `/`.
+    public record PathReference(String name, String suffix) implements PathValue {
+        @Override
+        public Optional<String> resolve(Function<String, Optional<String>> lookup) {
+            return lookup.apply(name).map(value -> value + suffix);
+        }
     }
 
     private static boolean isValidName(String name) {

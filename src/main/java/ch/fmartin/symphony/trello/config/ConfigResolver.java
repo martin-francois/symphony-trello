@@ -426,45 +426,21 @@ public class ConfigResolver {
         if (configured == null) {
             return null;
         }
-        Optional<String> reference = EnvironmentReferences.referenceName(configured);
-        if (reference.isPresent()) {
-            return environmentValue(reference.get())
-                    .filter(value -> !blank(value))
-                    .orElse(null);
-        }
-        if (configured.startsWith("$")) {
-            int separator = configured.indexOf('/');
-            if (separator > 1) {
-                String name = configured.substring(1, separator);
-                if (EnvironmentReferences.referenceName("$" + name).isPresent()) {
-                    String suffix = configured.substring(separator);
-                    return environmentValue(name)
-                            .filter(value -> !blank(value))
-                            .map(value -> value + suffix)
-                            .orElse(null);
-                }
-            }
-        }
-        return configured;
+        // ADR 0058 makes a missing or blank variable leave this optional path absent.
+        return EnvironmentReferences.pathValue(configured)
+                .resolve(this::nonBlankEnvironmentValue)
+                .orElse(null);
+    }
+
+    private Optional<String> nonBlankEnvironmentValue(String environmentName) {
+        return environmentValue(environmentName).filter(value -> !blank(value));
     }
 
     public static String expandPath(String value, Function<String, Optional<String>> environmentResolver) {
-        String expanded = value;
-        if (expanded.startsWith("~/")) {
-            expanded = System.getProperty("user.home") + expanded.substring(1);
-        }
-        if (expanded.startsWith("$") && expanded.indexOf('/') < 0) {
-            expanded = environmentResolver.apply(expanded.substring(1)).orElse(expanded);
-        } else if (expanded.startsWith("$")) {
-            int separator = expanded.indexOf('/');
-            String name = expanded.substring(1, separator);
-            String suffix = expanded.substring(separator);
-            expanded = environmentResolver
-                    .apply(name)
-                    .map(envValue -> envValue + suffix)
-                    .orElse(expanded);
-        }
-        return expanded;
+        String homeExpanded = value.startsWith("~/") ? System.getProperty("user.home") + value.substring(1) : value;
+        return EnvironmentReferences.pathValue(homeExpanded)
+                .resolve(environmentResolver)
+                .orElse(homeExpanded);
     }
 
     private String expandPath(String value) {
