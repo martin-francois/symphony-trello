@@ -16,7 +16,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -3366,113 +3365,121 @@ final class SetupDiagnosticReporterTest {
     @Test
     void writesSanitizedReportWithInstallerToolWorkflowAndLogContext() throws Exception {
         // given
-        Path appHome = tempDir.resolve("app");
-        Path configDir = tempDir.resolve("config");
-        Path workspaceRoot = tempDir.resolve("workspaces");
-        Path stateHome = tempDir.resolve("state");
-        int port = freePort();
-        Files.createDirectories(configDir);
-        Files.createDirectories(stateHome);
-        Path workflow = configDir.resolve("WORKFLOW.private-board.md");
-        Path env = configDir.resolve(".env");
-        String workflowContent =
-                """
-                ---
-                tracker:
-                  board_id: "private-board-id"
-                  active_states:
-                    - "Ready for Codex"
-                  terminal_states:
-                    - "Done"
-                  in_progress_state: "In Progress"
-                server:
-                  port: %d
-                agent:
-                  max_concurrent_agents: 2
-                codex:
-                  additional_writable_roots:
-                    - "/home/alice/private-project"
-                ---
-                Body
-                """
-                        .formatted(port);
+        HttpServer server = fakeLocalServer();
+        int port = server.getAddress().getPort();
         String privateSourceCommit = "abcdef0123456789abcdef0123456789abcdef01";
-        Files.writeString(workflow, workflowContent);
-        new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "private-board-id",
-                        "private-key",
-                        "Sensitive Board Name",
-                        "https://trello.com/b/private-key/sensitive-board",
-                        workflow,
-                        env,
-                        workspaceRoot,
-                        port,
-                        true,
-                        List.of(tempDir.resolve("private-project")),
-                        false))));
-        Files.writeString(
-                stateHome.resolve("WORKFLOW.private-board.md.abc.err"),
-                """
-                token=secret-value
-                "api_token":"json-secret"
-                Authorization: Bearer bearer-secret
-                Authorization: Basic basic-secret
-                Authorization: token ghp-secret
-                Authorization: OAuth oauth_consumer_key="oauth-key-secret", oauth_token="oauth-token-secret"
-                path=/home/alice/private-project
-                trailing slash path /home/alice/private-project/: denied
-                backtick path /mnt/client`name/repo failed
-                non-ascii path é/home/alice/nonascii-path failed
-                path=/Volumes/Client Work/repo
-                unquoted workflow /Volumes/Client Work/repo/WORKFLOW.md failed
-                quoted="/Users/Jane Doe/project"
-                windows="C:\\Users\\Jane Doe\\repo"
-                pr url https://github.com/private-org/client-repo/pull/123
-                https remote https://github.com/private-org/client-repo.git
-                repository git@github.com:private/repo.git
-                prefixed remote repo:git@github.com:private/punctuated.git
-                non-ascii remote égit@github.com:private/nonascii.git
-                bare remote host git@github.com
-                ssh remote ssh://git@github.com/private-org/client-repo.git
-                branch feature/private-ref
-                card_id=private-log-card-id
-                card_identifier=TRELLO-private-short
-                {"cardId":"private-json-card-id","cardIdentifier":"TRELLO-private-json"}
-                nested parent path %s
-                """
-                        .formatted(appHome.resolve("Secret Client").resolve("repo")));
-        Files.writeString(
-                stateHome.resolve("install-context.properties"),
-                """
-                repo_url=git@github.com:private/repo.git
-                ref=feature/private-ref
-                source_commit=%s
-                TRELLO_TOKEN=secret-value
-                """
-                        .formatted(privateSourceCommit));
-        Files.writeString(stateHome.resolve("large.log"), largeLog());
-        Path toolDirectory = fakeToolDirectory(tempDir, "git", "codex");
-        FakeCommandRunner commands = new FakeCommandRunner()
-                .returns(0, "git version 2.45.0\n", toolDirectory.resolve("git").toString(), "--version")
-                .returns(0, "codex-cli 1.2.3\n", toolDirectory.resolve("codex").toString(), "--version")
-                .returns(1, "not logged in\n", toolDirectory.resolve("codex").toString(), "login", "status");
-        var reporter = new SetupDiagnosticReporter(
-                Map.of(
-                        "PATH", toolDirectory.toString(),
-                        "SYMPHONY_TRELLO_APP_HOME", appHome.toString(),
-                        "SYMPHONY_TRELLO_CONFIG_DIR", configDir.toString(),
-                        "SYMPHONY_TRELLO_WORKSPACE_ROOT", workspaceRoot.toString(),
-                        "SYMPHONY_TRELLO_STATE_HOME", stateHome.toString(),
-                        "SYMPHONY_TRELLO_DOTENV", env.toString(),
-                        "SYMPHONY_TRELLO_REPO_URL", "git@github.com:private/repo.git",
-                        "SYMPHONY_TRELLO_REF", "feature/private-ref",
-                        "SHELL", "/bin/bash"),
-                commands);
-
         Path report;
-        HttpServer server = fakeLocalServer(port);
         try {
+            Path appHome = tempDir.resolve("app");
+            Path configDir = tempDir.resolve("config");
+            Path workspaceRoot = tempDir.resolve("workspaces");
+            Path stateHome = tempDir.resolve("state");
+            Files.createDirectories(configDir);
+            Files.createDirectories(stateHome);
+            Path workflow = configDir.resolve("WORKFLOW.private-board.md");
+            Path env = configDir.resolve(".env");
+            String workflowContent =
+                    """
+                    ---
+                    tracker:
+                      board_id: "private-board-id"
+                      active_states:
+                        - "Ready for Codex"
+                      terminal_states:
+                        - "Done"
+                      in_progress_state: "In Progress"
+                    server:
+                      port: %d
+                    agent:
+                      max_concurrent_agents: 2
+                    codex:
+                      additional_writable_roots:
+                        - "/home/alice/private-project"
+                    ---
+                    Body
+                    """
+                            .formatted(port);
+            Files.writeString(workflow, workflowContent);
+            new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
+                    .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                            "private-board-id",
+                            "private-key",
+                            "Sensitive Board Name",
+                            "https://trello.com/b/private-key/sensitive-board",
+                            workflow,
+                            env,
+                            workspaceRoot,
+                            port,
+                            true,
+                            List.of(tempDir.resolve("private-project")),
+                            false))));
+            Files.writeString(
+                    stateHome.resolve("WORKFLOW.private-board.md.abc.err"),
+                    """
+                    token=secret-value
+                    "api_token":"json-secret"
+                    Authorization: Bearer bearer-secret
+                    Authorization: Basic basic-secret
+                    Authorization: token ghp-secret
+                    Authorization: OAuth oauth_consumer_key="oauth-key-secret", oauth_token="oauth-token-secret"
+                    path=/home/alice/private-project
+                    trailing slash path /home/alice/private-project/: denied
+                    backtick path /mnt/client`name/repo failed
+                    non-ascii path é/home/alice/nonascii-path failed
+                    path=/Volumes/Client Work/repo
+                    unquoted workflow /Volumes/Client Work/repo/WORKFLOW.md failed
+                    quoted="/Users/Jane Doe/project"
+                    windows="C:\\Users\\Jane Doe\\repo"
+                    pr url https://github.com/private-org/client-repo/pull/123
+                    https remote https://github.com/private-org/client-repo.git
+                    repository git@github.com:private/repo.git
+                    prefixed remote repo:git@github.com:private/punctuated.git
+                    non-ascii remote égit@github.com:private/nonascii.git
+                    bare remote host git@github.com
+                    ssh remote ssh://git@github.com/private-org/client-repo.git
+                    branch feature/private-ref
+                    card_id=private-log-card-id
+                    card_identifier=TRELLO-private-short
+                    {"cardId":"private-json-card-id","cardIdentifier":"TRELLO-private-json"}
+                    nested parent path %s
+                    """
+                            .formatted(appHome.resolve("Secret Client").resolve("repo")));
+            Files.writeString(
+                    stateHome.resolve("install-context.properties"),
+                    """
+                    repo_url=git@github.com:private/repo.git
+                    ref=feature/private-ref
+                    source_commit=%s
+                    TRELLO_TOKEN=secret-value
+                    """
+                            .formatted(privateSourceCommit));
+            Files.writeString(stateHome.resolve("large.log"), largeLog());
+            Path toolDirectory = fakeToolDirectory(tempDir, "git", "codex");
+            FakeCommandRunner commands = new FakeCommandRunner()
+                    .returns(
+                            0,
+                            "git version 2.45.0\n",
+                            toolDirectory.resolve("git").toString(),
+                            "--version")
+                    .returns(
+                            0,
+                            "codex-cli 1.2.3\n",
+                            toolDirectory.resolve("codex").toString(),
+                            "--version")
+                    .returns(
+                            1, "not logged in\n", toolDirectory.resolve("codex").toString(), "login", "status");
+            var reporter = new SetupDiagnosticReporter(
+                    Map.of(
+                            "PATH", toolDirectory.toString(),
+                            "SYMPHONY_TRELLO_APP_HOME", appHome.toString(),
+                            "SYMPHONY_TRELLO_CONFIG_DIR", configDir.toString(),
+                            "SYMPHONY_TRELLO_WORKSPACE_ROOT", workspaceRoot.toString(),
+                            "SYMPHONY_TRELLO_STATE_HOME", stateHome.toString(),
+                            "SYMPHONY_TRELLO_DOTENV", env.toString(),
+                            "SYMPHONY_TRELLO_REPO_URL", "git@github.com:private/repo.git",
+                            "SYMPHONY_TRELLO_REF", "feature/private-ref",
+                            "SHELL", "/bin/bash"),
+                    commands);
 
             // when
             report = reporter.write(
@@ -3727,32 +3734,38 @@ final class SetupDiagnosticReporterTest {
     @Test
     void healthProbesIncludeCustomMarkdownWorkflowWhenManifestIsMissing() throws Exception {
         // given
-        Path configDir = tempDir.resolve("custom-workflow-config");
-        Path workspaceRoot = tempDir.resolve("workspaces");
-        Path workflow = tempDir.resolve("custom-board.md");
-        Path env = configDir.resolve(".env");
-        int port = freePort();
-        Files.createDirectories(configDir);
-        Files.writeString(
-                workflow,
-                """
-                ---
-                tracker:
-                  board_id: "custom-board-id"
-                server:
-                  port: %d
-                ---
-                Body
-                """
-                        .formatted(port));
-        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
-        var terminal = new RecordingTerminal();
+        HttpServer server = fakeLocalServer();
+        int port = server.getAddress().getPort();
+        Optional<Path> report;
+        try {
+            Path configDir = tempDir.resolve("custom-workflow-config");
+            Path workspaceRoot = tempDir.resolve("workspaces");
+            Path workflow = tempDir.resolve("custom-board.md");
+            Path env = configDir.resolve(".env");
+            Files.createDirectories(configDir);
+            Files.writeString(
+                    workflow,
+                    """
+                    ---
+                    tracker:
+                      board_id: "custom-board-id"
+                    server:
+                      port: %d
+                    ---
+                    Body
+                    """
+                            .formatted(port));
+            var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+            var terminal = new RecordingTerminal();
 
-        // when
-        Optional<Path> report = reporter.reportFailure(
-                new TrelloBoardSetupException("setup_custom_workflow_failed", "setup failed"),
-                request(configDir, workspaceRoot, Path.of("missing-manifest.json"), workflow, env),
-                terminal);
+            // when
+            report = reporter.reportFailure(
+                    new TrelloBoardSetupException("setup_custom_workflow_failed", "setup failed"),
+                    request(configDir, workspaceRoot, Path.of("missing-manifest.json"), workflow, env),
+                    terminal);
+        } finally {
+            server.stop(0);
+        }
 
         // then
         assertThat(report).hasValueSatisfying(path -> assertThat(path)
@@ -4123,8 +4136,10 @@ final class SetupDiagnosticReporterTest {
         }
     }
 
-    private static HttpServer fakeLocalServer(int port) throws IOException {
-        HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
+    /// Binds an OS-assigned loopback port and keeps it until the caller stops the server, so no other
+    /// process can take the port between the fixture writing it and the reporter probing it.
+    private static HttpServer fakeLocalServer() throws IOException {
+        HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         server.createContext(
                 "/api/v1/local-status",
                 exchange -> writeJson(
@@ -4155,12 +4170,6 @@ final class SetupDiagnosticReporterTest {
         exchange.sendResponseHeaders(200, body.length);
         try (OutputStream response = exchange.getResponseBody()) {
             response.write(body);
-        }
-    }
-
-    private static int freePort() throws IOException {
-        try (var socket = new ServerSocket(0)) {
-            return socket.getLocalPort();
         }
     }
 
