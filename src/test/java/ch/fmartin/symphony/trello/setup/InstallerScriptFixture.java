@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.google.common.base.Splitter;
@@ -34,6 +35,29 @@ final class InstallerScriptFixture {
     private static final Splitter PS_LINES =
             Splitter.onPattern("\\R").trimResults().omitEmptyStrings();
     private static final int TEMP_FILE_DELETION_SECONDS = 5;
+    static final String FAKE_SLOW_TERM_DELAYED = "true";
+    static final String FAKE_SLOW_TERM_UNTIL_KILLED = "until-killed";
+    // The real start returns once the worker is healthy; the fake start waits this long for jar-start.
+    static final int FAKE_WORKER_READY_SECONDS = 30;
+    private static final String FAKE_WORKER_TERM_HANDLER = singleQuoteFree(
+            """
+            fake_worker_on_term() {
+              echo "jar-term-received pid=$$" >> "${SYMPHONY_FAKE_LOG:?}"
+              if [[ "${SYMPHONY_FAKE_SLOW_TERM:-}" == "%s" ]]; then sleep 2; fi
+              if [[ -d "$app_home" ]]; then
+                echo "app-present-before-exit" >> "${SYMPHONY_FAKE_LOG:?}"
+              else
+                echo "app-missing-before-exit" >> "${SYMPHONY_FAKE_LOG:?}"
+              fi
+              if [[ "${SYMPHONY_FAKE_SLOW_TERM:-}" == "%s" ]]; then
+                while true; do sleep 1; done
+              fi
+              echo "jar-stopped" >> "${SYMPHONY_FAKE_LOG:?}"
+              exit 0
+            }
+            trap fake_worker_on_term TERM
+            """
+                    .formatted(FAKE_SLOW_TERM_DELAYED, FAKE_SLOW_TERM_UNTIL_KILLED));
     private static final String REPOSITORY_ENVIRONMENT_PREFIX = "SYMPHONY_";
     private static final Pattern POSIX_INSTALLER_DEFAULT_VERSION =
             Pattern.compile("(?m)^DEFAULT_VERSION=\"([^\"]+)\" # x-release-please-version$");
@@ -393,14 +417,66 @@ final class InstallerScriptFixture {
     }
 
     static boolean processStopsWithin(long pid, int timeoutSeconds) throws IOException, InterruptedException {
+        return holdsWithin(timeoutSeconds, () -> !processIsRunning(pid));
+    }
+
+    static boolean fileContainsWithin(Path file, String text, int timeoutSeconds)
+            throws IOException, InterruptedException {
+        return holdsWithin(
+                timeoutSeconds,
+                () -> Files.exists(file) && Files.readString(file).contains(text));
+    }
+
+    private static boolean holdsWithin(int timeoutSeconds, PolledCondition condition)
+            throws IOException, InterruptedException {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
         while (System.nanoTime() < deadline) {
-            if (!processIsRunning(pid)) {
+            if (condition.holds()) {
                 return true;
             }
             pollDelayForBoundedProcessWait();
         }
-        return !processIsRunning(pid);
+        return condition.holds();
+    }
+
+    @FunctionalInterface
+    private interface PolledCondition {
+        boolean holds() throws IOException, InterruptedException;
+    }
+
+    /// The uninstaller's stop contract: it signals the worker, the worker is gone by the time the
+    /// service is disabled, and the worker never sees its app directory removed while stopping. The
+    /// uninstaller disables the service before it removes any installer-managed file, and it prints
+    /// its own STOP line before it sends TERM. The worker's trap only runs once its current sleep
+    /// ends, so a trap log line would not prove the signal on a stalled host. The contract holds
+    /// whether the worker exits on TERM or the uninstaller has to KILL it after its grace.
+    static void assertUninstallStoppedWorkerBeforeDisablingService(
+            ProcessResult uninstall, String uninstallLog, String workerLabel, long workerPid) {
+        assertThat(uninstall.output())
+                .containsSubsequence(
+                        "STOP  " + workerLabel + " pid=" + workerPid + "\n",
+                        "STOP  user systemd service: symphony-trello.service\n");
+        assertThat(uninstallLog)
+                .as("fake tool log during uninstall; uninstall output:%n%s", uninstall.output())
+                .containsSubsequence(
+                        "systemctl --user disable --now symphony-trello.service\n",
+                        "systemctl-disable worker pid=" + workerPid + " stopped\n")
+                .doesNotContain("systemctl-disable worker pid=" + workerPid + " alive", "app-missing-before-exit");
+    }
+
+    // The managed start path embeds the fake worker's TERM handler in a bash -c '...' script.
+    private static String singleQuoteFree(String script) {
+        checkArgument(!script.contains("'"), "script must not contain a single quote: %s", script);
+        return script;
+    }
+
+    private static String withPlaceholders(String script, Map<String, String> values) {
+        String filled = script;
+        for (Map.Entry<String, String> value : values.entrySet()) {
+            checkArgument(filled.contains(value.getKey()), "script has no placeholder %s", value.getKey());
+            filled = filled.replace(value.getKey(), value.getValue());
+        }
+        return filled;
     }
 
     private static void pollDelayForBoundedProcessWait() throws InterruptedException {
@@ -602,8 +678,17 @@ final class InstallerScriptFixture {
                 fi
                 if [[ "$*" == "--user restart symphony-trello.service" && -n "$command_path" ]]; then
                   "$command_path" start --all
-                elif [[ "$*" == "--user disable --now symphony-trello.service" && -n "$command_path" ]]; then
-                  "$command_path" stop
+                elif [[ "$*" == "--user disable --now symphony-trello.service" ]]; then
+                  while read -r worker_pid; do
+                    if kill -0 "$worker_pid" >/dev/null 2>&1; then
+                      echo "systemctl-disable worker pid=$worker_pid alive" >> "${SYMPHONY_FAKE_LOG:?}"
+                    else
+                      echo "systemctl-disable worker pid=$worker_pid stopped" >> "${SYMPHONY_FAKE_LOG:?}"
+                    fi
+                  done < <(sed -n 's/^jar-start pid=\\([0-9][0-9]*\\) .*/\\1/p' "${SYMPHONY_FAKE_LOG:?}")
+                  if [[ -n "$command_path" ]]; then
+                    "$command_path" stop
+                  fi
                 fi
                 exit 0
                 """);
@@ -864,11 +949,22 @@ final class InstallerScriptFixture {
                         app_home="$1"
                         workflow="$2"
                         env_file="$3"
-                        echo "jar-start cwd=$PWD args=-jar quarkus-run.jar $workflow dotenv=$env_file" >> "${SYMPHONY_FAKE_LOG:?}"
-                        trap '"'"'if [[ -n "${SYMPHONY_FAKE_SLOW_TERM:-}" ]]; then sleep 2; fi; if [[ -d "$app_home" ]]; then echo "app-present-before-exit" >> "${SYMPHONY_FAKE_LOG:?}"; else echo "app-missing-before-exit" >> "${SYMPHONY_FAKE_LOG:?}"; fi; echo "jar-stopped" >> "${SYMPHONY_FAKE_LOG:?}"; exit 0'"'"' TERM
+                        @FAKE_WORKER_TERM_HANDLER@
+                        echo "jar-start pid=$$ cwd=$PWD args=-jar quarkus-run.jar $workflow dotenv=$env_file" >> "${SYMPHONY_FAKE_LOG:?}"
                         while true; do sleep 1; done
                       ' symphony-worker "$app_home" "$workflow" "$env_file" "-Dsymphony.trello.managed.app_home=$app_home" "$app_home/target/quarkus-app/quarkus-run.jar" >"$log_file" 2>"$log_file.err" &
-	                      echo "$!" > "$pid_file"
+	                      worker_pid="$!"
+	                      # The real start returns only after the worker passes its health check. Waiting for
+	                      # jar-start means a stop that follows can never reach the worker before its TERM trap.
+	                      ready_deadline=$((SECONDS + @FAKE_WORKER_READY_SECONDS@))
+	                      until grep -q "^jar-start pid=$worker_pid " "${SYMPHONY_FAKE_LOG:?}"; do
+	                        if ! kill -0 "$worker_pid" >/dev/null 2>&1 || ((SECONDS >= ready_deadline)); then
+	                          echo "Fake worker pid=$worker_pid did not report jar-start" >&2
+	                          exit 1
+	                        fi
+	                        sleep 0.1
+	                      done
+	                      echo "$worker_pid" > "$pid_file"
 	                      echo "Started Symphony for Trello: $workflow"
 	                      echo "Log: $log_file"
 	                      exit 0
@@ -886,11 +982,23 @@ final class InstallerScriptFixture {
 	                    stop)
 	                      if [[ -f "$pid_file" ]]; then
 	                        worker_pid="$(cat "$pid_file")"
+	                        # Same TERM grace and KILL fallback as LocalWorkerManager, so "Stopped" always
+	                        # means the worker is gone and no late TERM-handler output can land after it.
+	                        worker_exits_within() {
+	                          local deadline=$((SECONDS + $1))
+	                          while kill -0 "$worker_pid" >/dev/null 2>&1 && ((SECONDS < deadline)); do
+	                            sleep 0.1
+	                          done
+	                          ! kill -0 "$worker_pid" >/dev/null 2>&1
+	                        }
 	                        kill "$worker_pid" >/dev/null 2>&1 || true
-	                        for _ in {1..50}; do
-	                          kill -0 "$worker_pid" >/dev/null 2>&1 || break
-	                          sleep 0.1
-	                        done
+	                        if ! worker_exits_within @WORKER_STOP_GRACE_SECONDS@; then
+	                          kill -KILL "$worker_pid" >/dev/null 2>&1 || true
+	                          if ! worker_exits_within @WORKER_KILL_WAIT_SECONDS@; then
+	                            echo "Fake worker pid=$worker_pid did not stop" >&2
+	                            exit 1
+	                          fi
+	                        fi
 	                        rm -f "$pid_file"
 	                      fi
 	                      echo "Stopped $display_name"
@@ -951,13 +1059,24 @@ final class InstallerScriptFixture {
                 fi
                 if [[ "$*" == *"-jar "* ]]; then
                   app_home="$PWD"
-                  echo "jar-start cwd=$PWD args=$* dotenv=${SYMPHONY_TRELLO_DOTENV:-}" >> "${SYMPHONY_FAKE_LOG:?}"
-                  trap 'if [[ -n "${SYMPHONY_FAKE_SLOW_TERM:-}" ]]; then sleep 2; fi; if [[ -d "$app_home" ]]; then echo "app-present-before-exit" >> "${SYMPHONY_FAKE_LOG:?}"; else echo "app-missing-before-exit" >> "${SYMPHONY_FAKE_LOG:?}"; fi; echo "jar-stopped" >> "${SYMPHONY_FAKE_LOG:?}"; exit 0' TERM
+                  @FAKE_WORKER_TERM_HANDLER@
+                  echo "jar-start pid=$$ cwd=$PWD args=$* dotenv=${SYMPHONY_TRELLO_DOTENV:-}" >> "${SYMPHONY_FAKE_LOG:?}"
                   while true; do sleep 1; done
                 fi
                 echo "java $*" >> "${SYMPHONY_FAKE_LOG:?}"
                 exit 0
-                """);
+                """
+                        .transform(script -> withPlaceholders(
+                                script,
+                                Map.of(
+                                        "@FAKE_WORKER_TERM_HANDLER@",
+                                        FAKE_WORKER_TERM_HANDLER,
+                                        "@FAKE_WORKER_READY_SECONDS@",
+                                        Integer.toString(FAKE_WORKER_READY_SECONDS),
+                                        "@WORKER_STOP_GRACE_SECONDS@",
+                                        Long.toString(LocalWorkerManager.WORKER_STOP_GRACE.toSeconds()),
+                                        "@WORKER_KILL_WAIT_SECONDS@",
+                                        Long.toString(LocalWorkerManager.WORKER_KILL_WAIT.toSeconds())))));
         writeExecutable(
                 fakeBin.resolve("javac"),
                 """
