@@ -2049,6 +2049,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         assertThat(oldTargetStarted.await(5, TimeUnit.SECONDS))
                 .as("the old-target worker should start within 5 seconds before target reload")
                 .isTrue();
+        // A watcher refresh tick racing the probe would see the card the probe moved to Human Review and
+        // retire the probe before its successful result could clear the pause.
+        orchestrator.stopWorkflowWatcherForTests();
         rewriteWorkflowWithTarget(workflow, endpoint, "board-b", "token-b", "same-command", "work-b", 120_000, 1);
         orchestrator.tickNowForTests();
         tracker.setCandidates(endpoint, "board-b", List.of(cardB));
