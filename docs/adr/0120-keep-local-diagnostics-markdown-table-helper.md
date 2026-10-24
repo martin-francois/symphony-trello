@@ -34,8 +34,8 @@ diagnostics tables keep the local helper or move to commonmark-java?
   uses `render: text`, so GitHub shows a pasted report as plain text.
 * Column names, redaction markers such as `<redacted>`, and path tokens such as
   `<path:0123456789ab>` must stay readable and searchable in that plain text.
-  `SetupDiagnosticReporterTest` matches more than 30 table rows or row fragments literally, and
-  several of them contain column names with underscores.
+  `SetupDiagnosticReporterTest` matches table rows and row fragments literally, and several of them
+  contain column names with underscores.
 * Row-length checks and table syntax escaping must stay explicit, local, and tested.
 * Markdown escaping must never be confused with redaction.
 * A new runtime dependency needs a benefit that outweighs its review, license, and update cost.
