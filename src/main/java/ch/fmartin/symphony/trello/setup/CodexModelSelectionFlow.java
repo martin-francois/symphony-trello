@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.blank;
+
 import ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.ReasoningEffortOption;
 import java.io.IOException;
 import java.util.List;
@@ -59,7 +61,7 @@ final class CodexModelSelectionFlow {
         if (!selectionDefaults.visibleModels().isEmpty()) {
             return modelPicker.choose(terminal, selectionDefaults.visibleModels(), currentModel);
         }
-        String answer = terminal.readLine("Model [" + defaultLabel(currentModel) + "]: ");
+        String answer = terminal.readLine(CodexModelPicker.modelPrompt(defaultLabel(currentModel)));
         return blank(answer) ? Optional.empty() : Optional.of(CodexModelPicker.typedModelId(answer));
     }
 
@@ -191,10 +193,6 @@ final class CodexModelSelectionFlow {
 
     private static String reasoningEffortPrompt(String reasoningEffort) {
         return blank(reasoningEffort) ? "Reasoning effort: " : "Reasoning effort [" + reasoningEffort + "]: ";
-    }
-
-    private static boolean blank(String value) {
-        return value == null || value.isBlank();
     }
 
     record Selection(

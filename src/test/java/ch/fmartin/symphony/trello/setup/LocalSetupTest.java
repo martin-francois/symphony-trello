@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.CliExitCodes.SETUP_FAILURE;
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_NEXT_LINE;
+import static ch.fmartin.symphony.trello.setup.TerminalInputFixture.ESCAPE;
 import static ch.fmartin.symphony.trello.testsupport.ManifestAssertions.assertThatManifest;
 import static ch.fmartin.symphony.trello.testsupport.TerminalTranscriptAssertions.assertThatTranscript;
 import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.HTTP;
@@ -32,6 +33,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -48,7 +50,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 final class LocalSetupTest extends LocalSetupFixtureSupport {
     private static final String REPOSITORY_URL_REFERENCE = "$SYNTHETIC_REPOSITORY_URL";
     private static final String REPOSITORY_PATH_REFERENCE = "$SYNTHETIC_REPOSITORY_PATH";
-    private static final String ANSI_ESCAPE_IN_CLI_INPUT = "\u001B";
     private static final String JAVA_TRIMMED_END_OF_TRANSMISSION = "\u0004";
     private static final String PRESERVED_EN_SPACE = "\u2002";
     private static final String RIGHT_SINGLE_QUOTATION_MARK = "\u2019";
@@ -590,8 +591,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @ValueSource(strings = {"--active", "--terminal", "--in-progress", "--blocked"})
     void dryRunRejectsControlCharactersInListSelectorsBeforePlannedSetupOutput(String optionName) {
         // given
-        String invalidValue =
-                "Bad\n# injected" + ANSI_ESCAPE_IN_CLI_INPUT + "[31mred" + ANSI_ESCAPE_IN_CLI_INPUT + "[0m";
+        String invalidValue = "Bad\n# injected" + ESCAPE + "[31mred" + ESCAPE + "[0m";
 
         // when
         SetupRunResult result = runSetup("--dry-run", "--non-interactive", "--no-start", optionName, invalidValue);
@@ -601,8 +601,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
                         optionName + " must not contain control characters.")
-                .stderrDoesNotContain(
-                        invalidValue, "\n# injected", ANSI_ESCAPE_IN_CLI_INPUT, "Troubleshooting report written")
+                .stderrDoesNotContain(invalidValue, "\n# injected", ESCAPE, "Troubleshooting report written")
                 .stdoutDoesNotContain("Dry run", "WOULD write workflows", invalidValue);
         assertThat(trello.createdLists()).isEmpty();
     }
@@ -2733,19 +2732,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetupWithInput(
                 resolverBackedSetup,
                 "\n" + scenario.modelAnswers() + "\n\n\n\nn\nn\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Catalog Picker Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+                catalogPickerArgs(workflow, env, "Catalog Picker Queue"));
 
         // then
         result.assertSuccess();
@@ -2778,20 +2765,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path workflow = tempDir.resolve("WORKFLOW.catalog-picker-bypass.md");
         Path env = tempDir.resolve(".env.catalog-picker-bypass");
         List<String> args = new ArrayList<>(scenario.modeArgs());
-        args.addAll(List.of(
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Catalog Picker Bypass Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github"));
+        args.addAll(Arrays.asList(catalogPickerArgs(workflow, env, "Catalog Picker Bypass Queue")));
 
         // when
         SetupRunResult result = runSetupWithInput(resolverBackedSetup, scenario.input(), args.toArray(String[]::new));
@@ -2823,20 +2797,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetupWithInput(
                 resolverBackedSetup,
                 "\n\n\n\nn\nn\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Catalog Picker Existing Queue",
-                "--workflow",
-                workflow.toString(),
-                "--force",
-                "--env",
-                env.toString(),
-                "--no-github");
+                catalogPickerArgs(workflow, env, "Catalog Picker Existing Queue", "--force"));
 
         // then
         result.assertSuccess();
@@ -2864,6 +2825,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetupWithInput(
                 resolverBackedSetup,
                 "\ngpt-7-preview\n\n\n\nn\nn\n",
+                catalogPickerArgs(workflow, env, "Empty Catalog Free Text Queue"));
+
+        // then
+        result.assertSuccess().stdoutContains("Model [gpt-5.5]: ").stdoutDoesNotContain("Models listed by");
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("model: \"gpt-7-preview\"");
+    }
+
+    private String[] catalogPickerArgs(Path workflow, Path env, String boardName, String... extraArgs) {
+        List<String> args = new ArrayList<>(List.of(
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -2871,16 +2841,14 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--token",
                 "token",
                 "--board-name",
-                "Empty Catalog Free Text Queue",
+                boardName,
                 "--workflow",
                 workflow.toString(),
                 "--env",
                 env.toString(),
-                "--no-github");
-
-        // then
-        result.assertSuccess().stdoutContains("Model [gpt-5.5]: ").stdoutDoesNotContain("Models listed by");
-        assertThat(workflow).content(StandardCharsets.UTF_8).contains("model: \"gpt-7-preview\"");
+                "--no-github"));
+        args.addAll(Arrays.asList(extraArgs));
+        return args.toArray(String[]::new);
     }
 
     private Path pickerCatalogAppServer() throws IOException {

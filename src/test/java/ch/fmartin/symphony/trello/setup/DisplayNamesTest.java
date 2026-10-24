@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.setup.TerminalInputFixture.ESCAPE;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
@@ -9,7 +10,6 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 final class DisplayNamesTest {
-    private static final String ESCAPE_IN_DISPLAY_NAME = "\u001B";
     private static final String NUL_IN_DISPLAY_NAME = "\u0000";
     private static final String NON_ASCII_DISPLAY_NAME = "\u00E9\u00FC\u4E16";
 
@@ -24,7 +24,7 @@ final class DisplayNamesTest {
 
         // then
         assertThat(quoted).as(scenario).isEqualTo(expected);
-        assertThat(quoted).doesNotContain("\n", "\r", "\t", ESCAPE_IN_DISPLAY_NAME, NUL_IN_DISPLAY_NAME);
+        assertThat(quoted).doesNotContain("\n", "\r", "\t", ESCAPE, NUL_IN_DISPLAY_NAME);
     }
 
     private static Stream<Arguments> escapedNames() {
@@ -35,7 +35,7 @@ final class DisplayNamesTest {
                 Arguments.of("line feed in name", "Line\nBreak", "\"Line\\nBreak\""),
                 Arguments.of("carriage return in name", "Carriage\rReturn", "\"Carriage\\rReturn\""),
                 Arguments.of("tab in name", "Tab\tStop", "\"Tab\\tStop\""),
-                Arguments.of("escape control in name", "Esc" + ESCAPE_IN_DISPLAY_NAME + "Seq", "\"Esc\\u001BSeq\""),
+                Arguments.of("escape control in name", "Esc" + ESCAPE + "Seq", "\"Esc\\u001BSeq\""),
                 Arguments.of("NUL in name", "Null" + NUL_IN_DISPLAY_NAME + "Byte", "\"Null\\u0000Byte\""),
                 Arguments.of(
                         "non-ASCII display name",

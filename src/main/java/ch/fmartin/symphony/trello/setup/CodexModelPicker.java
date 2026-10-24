@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNSAFE_SINGLE_LINE_CHARACTERS;
+import static ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.blank;
 
 import ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.CatalogModel;
 import com.google.common.base.CharMatcher;
@@ -38,19 +39,24 @@ final class CodexModelPicker {
         int preselectedChoice = preselectedChoice(choices, currentModel);
         terminal.info("Models listed by the installed Codex CLI:");
         for (int i = 0; i < choices.size(); i++) {
-            terminal.info("  " + (i + 1) + ". " + label(choices.get(i), currentModel));
+            terminal.info("  " + (i + 1) + ". " + choices.get(i).label(currentModel));
         }
         terminal.info("Press Enter to keep " + preselectedChoice + ", type another number, or type a model ID.");
-        String answer = terminal.readLine("Model [" + preselectedChoice + "]: ");
+        String answer = terminal.readLine(modelPrompt(String.valueOf(preselectedChoice)));
         if (blank(answer)) {
             return Optional.empty();
         }
         String trimmedAnswer = answer.strip();
         Optional<String> chosenModel = ASCII_DIGITS.matchesAllOf(trimmedAnswer)
-                ? chosenModel(
-                        terminal, choices.get(PromptSupport.parseBoundedChoice(trimmedAnswer, choices.size()) - 1))
+                ? choices.get(PromptSupport.parseBoundedChoice(trimmedAnswer, choices.size()) - 1)
+                        .chosenModel(terminal)
                 : Optional.of(typedModelId(answer));
         return chosenModel.filter(model -> !model.equals(currentModel));
+    }
+
+    /// The model prompt shared by the picker and the free-text fallback, so both read the same way.
+    static String modelPrompt(String preselected) {
+        return "Model [" + preselected + "]: ";
     }
 
     /// Validates a model id typed at a setup prompt. Any non-blank single-line value is accepted,
@@ -66,7 +72,7 @@ final class CodexModelPicker {
         return answer.strip();
     }
 
-    private static List<Choice> choices(List<CatalogModel> catalogModels, String currentModel) {
+    private static List<Choice> choices(List<CatalogModel> catalogModels, @Nullable String currentModel) {
         List<Choice> choices = new ArrayList<>();
         catalogModels.forEach(model -> choices.add(new Choice.Listed(model)));
         if (blank(currentModel)) {
@@ -78,60 +84,13 @@ final class CodexModelPicker {
         return List.copyOf(choices);
     }
 
-    private static int preselectedChoice(List<Choice> choices, String currentModel) {
+    private static int preselectedChoice(List<Choice> choices, @Nullable String currentModel) {
         for (int i = 0; i < choices.size(); i++) {
-            if (keepsCurrentModel(choices.get(i), currentModel)) {
+            if (choices.get(i).keepsCurrentModel(currentModel)) {
                 return i + 1;
             }
         }
         throw new IllegalStateException("The model picker always lists the current model.");
-    }
-
-    private static boolean keepsCurrentModel(Choice choice, String currentModel) {
-        return switch (choice) {
-            case Choice.Listed listed -> listed.model().model().equals(currentModel);
-            case Choice.UnlistedCurrent ignored -> true;
-            case Choice.KeepWorkflowDefault ignored -> true;
-            case Choice.OtherModelId ignored -> false;
-        };
-    }
-
-    private static Optional<String> chosenModel(Terminal terminal, Choice choice) throws IOException {
-        return switch (choice) {
-            case Choice.Listed listed -> Optional.of(listed.model().model());
-            case Choice.UnlistedCurrent current -> Optional.of(current.model());
-            case Choice.KeepWorkflowDefault ignored -> Optional.empty();
-            case Choice.OtherModelId ignored -> Optional.of(typedModelId(terminal.readLine(MODEL_ID_PROMPT)));
-        };
-    }
-
-    private static String label(Choice choice, String currentModel) {
-        return switch (choice) {
-            case Choice.Listed listed -> listedLabel(listed.model(), currentModel);
-            case Choice.UnlistedCurrent current -> current.model() + " (current, not listed by Codex)";
-            case Choice.KeepWorkflowDefault ignored -> KEEP_WORKFLOW_DEFAULT_LABEL;
-            case Choice.OtherModelId ignored -> OTHER_MODEL_LABEL;
-        };
-    }
-
-    private static String listedLabel(CatalogModel model, String currentModel) {
-        return model.model() + listedMarker(model, currentModel) + displayNameSuffix(model);
-    }
-
-    private static String listedMarker(CatalogModel model, String currentModel) {
-        if (model.recommended()) {
-            return " (recommended)";
-        }
-        // A preselected entry that is not the recommendation can only come from the workflow.
-        return model.model().equals(currentModel) ? " (current)" : "";
-    }
-
-    private static String displayNameSuffix(CatalogModel model) {
-        String displayName = model.displayName();
-        if (displayName == null || displayName.equalsIgnoreCase(model.model())) {
-            return "";
-        }
-        return " - " + shortened(displayName);
     }
 
     private static String shortened(String displayName) {
@@ -144,17 +103,96 @@ final class CodexModelPicker {
                 + ELLIPSIS;
     }
 
-    private static boolean blank(String value) {
-        return value == null || value.isBlank();
-    }
-
     private sealed interface Choice {
-        record Listed(CatalogModel model) implements Choice {}
+        boolean keepsCurrentModel(@Nullable String currentModel);
 
-        record UnlistedCurrent(String model) implements Choice {}
+        /// Returns the chosen model id, or empty when the choice keeps the workflow's omitted model.
+        Optional<String> chosenModel(Terminal terminal) throws IOException;
 
-        record KeepWorkflowDefault() implements Choice {}
+        String label(@Nullable String currentModel);
 
-        record OtherModelId() implements Choice {}
+        record Listed(CatalogModel model) implements Choice {
+            @Override
+            public boolean keepsCurrentModel(@Nullable String currentModel) {
+                return model.model().equals(currentModel);
+            }
+
+            @Override
+            public Optional<String> chosenModel(Terminal terminal) {
+                return Optional.of(model.model());
+            }
+
+            @Override
+            public String label(@Nullable String currentModel) {
+                return model.model() + marker(currentModel) + displayNameSuffix();
+            }
+
+            private String marker(@Nullable String currentModel) {
+                if (model.recommended()) {
+                    return " (recommended)";
+                }
+                // A preselected entry that is not the recommendation can only come from the workflow.
+                return keepsCurrentModel(currentModel) ? " (current)" : "";
+            }
+
+            private String displayNameSuffix() {
+                String displayName = model.displayName();
+                if (displayName == null || displayName.equalsIgnoreCase(model.model())) {
+                    return "";
+                }
+                return " - " + shortened(displayName);
+            }
+        }
+
+        record UnlistedCurrent(String model) implements Choice {
+            @Override
+            public boolean keepsCurrentModel(@Nullable String currentModel) {
+                return true;
+            }
+
+            @Override
+            public Optional<String> chosenModel(Terminal terminal) {
+                return Optional.of(model);
+            }
+
+            @Override
+            public String label(@Nullable String currentModel) {
+                return model + " (current, not listed by Codex)";
+            }
+        }
+
+        record KeepWorkflowDefault() implements Choice {
+            @Override
+            public boolean keepsCurrentModel(@Nullable String currentModel) {
+                return true;
+            }
+
+            @Override
+            public Optional<String> chosenModel(Terminal terminal) {
+                return Optional.empty();
+            }
+
+            @Override
+            public String label(@Nullable String currentModel) {
+                return KEEP_WORKFLOW_DEFAULT_LABEL;
+            }
+        }
+
+        record OtherModelId() implements Choice {
+            @Override
+            public boolean keepsCurrentModel(@Nullable String currentModel) {
+                return false;
+            }
+
+            @Override
+            public Optional<String> chosenModel(Terminal terminal) throws IOException {
+                return Optional.of(typedModelId(terminal.readLine(MODEL_ID_PROMPT)));
+            }
+
+            @Override
+            public String label(@Nullable String currentModel) {
+                return OTHER_MODEL_LABEL;
+            }
+        }
     }
 }
