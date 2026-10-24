@@ -350,6 +350,8 @@ final class InstallerProgressOutputTest {
 
         // when
         ProcessResult install = run(environment, installerCommand);
+        Files.writeString(
+                symphonyHome.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME), "{\"boards\":[]}\n");
         ProcessResult update = run(environment, installerCommand);
 
         // then
@@ -377,8 +379,10 @@ final class InstallerProgressOutputTest {
                         "Update plan",
                         "[2/2] Updating Symphony",
                         "OK  Source checked out",
-                        "Symphony for Trello updated.")
-                .doesNotContain(RUN_LINE, "Symphony for Trello installed.");
+                        "Symphony for Trello updated.",
+                        "Next step: start the connected boards with: ",
+                        "start --all")
+                .doesNotContain(RUN_LINE, "Symphony for Trello installed.", "setup-local");
     }
 
     @Test

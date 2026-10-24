@@ -134,7 +134,8 @@ a separate decision.
 transcript order. It covers a guided source install and update, a release-archive install and
 update with `--no-onboard`, the dry-run with and without onboarding, a release checksum failure,
 a PowerShell dry-run, a PowerShell source install and update, and a PowerShell prerequisite
-failure. The tests assert one plan, ordered phases, no `RUN` lines on the routine path, the
+failure. The `--no-onboard` updates in both installers check the `start --all` next step for a
+config directory that already has a connected-board manifest. The tests assert one plan, ordered phases, no `RUN` lines on the routine path, the
 handoff once and last, and no escape characters in redirected output.
 `InstallerScriptTest.installersOrderFinalHandoffAfterManagedWorkerSetupInSource` still guards the
 handoff order in the script source. SPEC.md Section 19.4 states the contract.
