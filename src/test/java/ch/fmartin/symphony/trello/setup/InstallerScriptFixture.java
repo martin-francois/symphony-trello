@@ -962,14 +962,17 @@ final class InstallerScriptFixture {
                   mkdir -p "$config_dir"
                   if [[ -t 0 ]] && command -v stty >/dev/null 2>&1; then
                     # Like Java's Console.readPassword, hide the echo before showing a secret prompt.
+                    # set -e exits on a failed read; the trap still restores the echo.
+                    trap 'stty echo' EXIT
                     stty -echo
                     printf 'Trello API key: '
                     IFS= read -r key
-                    printf '\n'
+                    printf '\\n'
                     printf 'Trello API token: '
                     IFS= read -r token
                     stty echo
-                    printf '\n'
+                    trap - EXIT
+                    printf '\\n'
                     printf 'Trello board name: '
                     IFS= read -r board
                   else
