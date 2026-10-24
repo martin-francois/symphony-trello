@@ -255,9 +255,7 @@ public class ConfigResolver {
         String configured = optionalString(root, key);
         Optional<String> reference = EnvironmentReferences.referenceName(configured);
         if (reference.isPresent()) {
-            return environmentValue(reference.get())
-                    .filter(value -> !blank(value))
-                    .orElse(null);
+            return nonBlankEnvironmentValue(reference.get()).orElse(null);
         }
         return configured;
     }
@@ -417,8 +415,7 @@ public class ConfigResolver {
     }
 
     private String requiredPathVariable(String setting, String environmentName) {
-        return environmentValue(environmentName)
-                .filter(value -> !blank(value))
+        return nonBlankEnvironmentValue(environmentName)
                 .orElseThrow(() -> new ConfigException(
                         "missing_path_environment_variable",
                         setting + MISSING_PATH_ENVIRONMENT_MARKER + environmentName));
@@ -452,9 +449,7 @@ public class ConfigResolver {
         }
         Optional<String> reference = EnvironmentReferences.referenceName(configured);
         if (reference.isPresent()) {
-            return environmentValue(reference.get())
-                    .filter(value -> !blank(value))
-                    .orElse(null);
+            return nonBlankEnvironmentValue(reference.get()).orElse(null);
         }
         if (configured.startsWith("$")) {
             int separator = configured.indexOf('/');
@@ -462,14 +457,17 @@ public class ConfigResolver {
                 String name = configured.substring(1, separator);
                 if (EnvironmentReferences.referenceName("$" + name).isPresent()) {
                     String suffix = configured.substring(separator);
-                    return environmentValue(name)
-                            .filter(value -> !blank(value))
+                    return nonBlankEnvironmentValue(name)
                             .map(value -> value + suffix)
                             .orElse(null);
                 }
             }
         }
         return configured;
+    }
+
+    private Optional<String> nonBlankEnvironmentValue(String environmentName) {
+        return environmentValue(environmentName).filter(value -> !blank(value));
     }
 
     public static String expandPath(String value, Function<String, Optional<String>> environmentResolver) {
