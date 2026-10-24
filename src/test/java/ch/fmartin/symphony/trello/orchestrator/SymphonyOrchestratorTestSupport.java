@@ -720,9 +720,13 @@ final class SymphonyOrchestratorTestSupport {
 
     /// Holds a paused operation inside a test hook until the test resumes it.
     static void awaitRelease(CountDownLatch release, String pausedOperation) {
+        awaitRelease(release, pausedOperation, WAIT_TIMEOUT);
+    }
+
+    private static void awaitRelease(CountDownLatch release, String pausedOperation, Duration timeout) {
         try {
-            assertThat(release.await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
-                    .as("%s should be resumed within %d seconds", pausedOperation, WAIT_TIMEOUT.toSeconds())
+            assertThat(release.await(timeout.toMillis(), TimeUnit.MILLISECONDS))
+                    .as("%s should be resumed within %d seconds", pausedOperation, timeout.toSeconds())
                     .isTrue();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -1035,6 +1039,7 @@ final class SymphonyOrchestratorTestSupport {
         final AtomicInteger candidateFetches = new AtomicInteger();
         final CountDownLatch firstFetchStarted = new CountDownLatch(1);
         final CountDownLatch releaseFirstFetch = new CountDownLatch(1);
+        final CompletableFuture<Void> firstFetchCompleted = new CompletableFuture<>();
 
         @Override
         public String resolveBoardId(EffectiveConfig config) {
@@ -1045,7 +1050,13 @@ final class SymphonyOrchestratorTestSupport {
         public List<Card> fetchCandidateCards(EffectiveConfig config) {
             if (candidateFetches.incrementAndGet() == 1) {
                 firstFetchStarted.countDown();
-                awaitRelease(releaseFirstFetch, "the first blocked candidate-card fetch");
+                try {
+                    awaitRelease(releaseFirstFetch, "the first blocked candidate-card fetch", BLOCKED_WORKER_TIMEOUT);
+                    firstFetchCompleted.complete(null);
+                } catch (RuntimeException | Error failure) {
+                    firstFetchCompleted.completeExceptionally(failure);
+                    throw failure;
+                }
             }
             return List.of();
         }

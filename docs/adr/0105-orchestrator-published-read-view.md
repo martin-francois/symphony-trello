@@ -297,7 +297,7 @@ through the tests.
 | H03 | `removeRunning()` does not mark the entry removed | `staleDeadlineTaskDoesNotCancelReplacementWorker` |
 | H06 | A failed move does not end the handoff protection | `deadlineThatStartedBeforeAFailedMoveDoesNotCancelTheTurn` |
 | H07 | A move after a failed move does not restore the protection | `moveAfterAFailedMoveRestoresTheDeadline` |
-| E00 | `callOperation()` unlocks without publishing | `cardDetailsAndLifecycleReadsAnswerWhileATickIsBlockedInsideTrelloFetch`, `runningSnapshotCountsContinuationTurns` and others |
+| E00 | `callOperation()` unlocks without publishing | `statusReadersAnswerWhileATickIsBlockedInsideTrelloFetch`, `runningSnapshotCountsContinuationTurns` and others |
 
 #### Survivors
 

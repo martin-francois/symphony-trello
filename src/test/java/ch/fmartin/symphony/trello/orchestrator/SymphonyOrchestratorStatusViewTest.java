@@ -38,6 +38,8 @@ import org.junit.jupiter.api.io.TempDir;
 /// ADR 0105 maps the publish points to these tests.
 final class SymphonyOrchestratorStatusViewTest {
     private static final Duration STALL_TIMEOUT = Duration.ofSeconds(1);
+    private static final String SLOW_POLL_INTERVAL_MILLIS = "60000";
+    private static final Duration MODIFICATION_TIME_ADVANCE = Duration.ofSeconds(2);
     /// Lets one tick dispatch a second card while the first one still runs.
     private static final String TWO_AGENTS = "agent:\n  max_concurrent_agents: 2";
     private static final Optional<RuntimeSnapshot.DispatchPause> NO_PAUSE = Optional.empty();
@@ -46,56 +48,77 @@ final class SymphonyOrchestratorStatusViewTest {
     Path tempDir;
 
     @Test
-    void cardDetailsAndLifecycleReadsAnswerWhileATickIsBlockedInsideTrelloFetch() throws Exception {
+    void statusReadersAnswerWhileATickIsBlockedInsideTrelloFetch() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        writeWorkflow(workflow, "60000");
+        writeWorkflow(workflow, SLOW_POLL_INTERVAL_MILLIS);
+        Duration expectedInterval = Duration.ofMillis(Long.parseLong(SLOW_POLL_INTERVAL_MILLIS));
         var tracker = new BlockingTracker();
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, mock());
         orchestrator.start();
-        assertThat(tracker.firstFetchStarted.await(5, TimeUnit.SECONDS))
-                .as("the blocked tick should enter its first tracker fetch within 5 seconds")
-                .isTrue();
-
-        // when
-        CompletableFuture<Optional<CardDebugDetails>> details =
-                CompletableFuture.supplyAsync(() -> orchestrator.cardDetails("TRELLO-abc"));
-        CompletableFuture<Boolean> started = CompletableFuture.supplyAsync(orchestrator::isStarted);
-
-        // then
         try {
+            assertThat(tracker.firstFetchStarted.await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                    .as(
+                            "the blocked tick should enter its first tracker fetch within %d seconds",
+                            WAIT_TIMEOUT.toSeconds())
+                    .isTrue();
+
+            // when
+            CompletableFuture<Optional<CardDebugDetails>> details =
+                    CompletableFuture.supplyAsync(() -> orchestrator.cardDetails("TRELLO-abc"), OWN_PLATFORM_THREAD);
+            CompletableFuture<Boolean> started =
+                    CompletableFuture.supplyAsync(orchestrator::isStarted, OWN_PLATFORM_THREAD);
+            CompletableFuture<RuntimeSnapshot> snapshot =
+                    CompletableFuture.supplyAsync(orchestrator::snapshot, OWN_PLATFORM_THREAD);
+
+            // then
             assertThat(details)
                     .as("card details must not wait for the in-flight Trello poll")
-                    .succeedsWithin(Duration.ofSeconds(2))
+                    .succeedsWithin(WAIT_TIMEOUT)
                     .isEqualTo(Optional.empty());
             assertThat(started)
                     .as("the started state must not wait for the in-flight Trello poll")
-                    .succeedsWithin(Duration.ofSeconds(2))
+                    .succeedsWithin(WAIT_TIMEOUT)
                     .isEqualTo(true);
+            assertThat(snapshot)
+                    .as("polling status must not wait for the in-flight Trello poll")
+                    .succeedsWithin(WAIT_TIMEOUT)
+                    .extracting(RuntimeSnapshot::polling)
+                    .isEqualTo(new RuntimeSnapshot.Polling(
+                            expectedInterval, expectedInterval, Optional.empty(), Optional.empty()));
+            assertThat(tracker.firstFetchCompleted)
+                    .as("the tracker remains blocked until all reader assertions finish")
+                    .isNotDone();
         } finally {
             tracker.releaseFirstFetch.countDown();
             orchestrator.stop();
         }
+        assertThat(tracker.firstFetchCompleted)
+                .as("the blocked tracker completes without a hidden timeout or failure")
+                .succeedsWithin(WAIT_TIMEOUT)
+                .isNull();
     }
 
     @Test
     void localStatusShowsTheSelectedBoardWhileStartupCleanupFetchesTerminalCards() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        writeWorkflow(workflow, "60000");
+        writeWorkflow(workflow, SLOW_POLL_INTERVAL_MILLIS);
         var tracker = new StartBlockingTracker();
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, mock());
         var starter = Thread.ofPlatform().start(orchestrator::start);
 
         // when
-        assertThat(tracker.terminalFetchStarted.await(5, TimeUnit.SECONDS))
-                .as("startup should enter terminal-card fetching within 5 seconds")
+        assertThat(tracker.terminalFetchStarted.await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                .as("startup should enter terminal-card fetching within %d seconds", WAIT_TIMEOUT.toSeconds())
                 .isTrue();
         String boardDuringStartup = orchestrator.selectedBoardId();
         boolean startedDuringStartup = orchestrator.isStarted();
         tracker.releaseTerminalFetch.countDown();
-        assertThat(starter.join(Duration.ofSeconds(5)))
-                .as("startup should finish within 5 seconds once the terminal fetch is released")
+        assertThat(starter.join(WAIT_TIMEOUT))
+                .as(
+                        "startup should finish within %d seconds once the terminal fetch is released",
+                        WAIT_TIMEOUT.toSeconds())
                 .isTrue();
         boolean startedAfterStartup = orchestrator.isStarted();
         orchestrator.stop();
@@ -116,7 +139,7 @@ final class SymphonyOrchestratorStatusViewTest {
     void workerSeesItsCardRunningWhileTheDispatchingTickContinues() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        writeWorkflow(workflow, "60000", TWO_AGENTS);
+        writeWorkflow(workflow, SLOW_POLL_INTERVAL_MILLIS, TWO_AGENTS);
         var tracker = new FakeTracker(List.of(
                 TestCards.card("card-1", "TRELLO-first", "Todo"), TestCards.card("card-2", "TRELLO-second", "Todo")));
         var firstWorkerRead = new CountDownLatch(1);
@@ -147,11 +170,13 @@ final class SymphonyOrchestratorStatusViewTest {
 
         // when
         orchestrator.start();
-        assertThat(secondDispatchReached.await(5, TimeUnit.SECONDS))
-                .as("the tick should reach the second card's prompt refresh within 5 seconds")
+        assertThat(secondDispatchReached.await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                .as(
+                        "the tick should reach the second card's prompt refresh within %d seconds",
+                        WAIT_TIMEOUT.toSeconds())
                 .isTrue();
-        assertThat(firstWorkerRead.await(5, TimeUnit.SECONDS))
-                .as("the first worker should read the status within 5 seconds")
+        assertThat(firstWorkerRead.await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                .as("the first worker should read the status within %d seconds", WAIT_TIMEOUT.toSeconds())
                 .isTrue();
         orchestrator.stop();
 
@@ -222,7 +247,7 @@ final class SymphonyOrchestratorStatusViewTest {
                 .as("startup fails while the workflow file is missing")
                 .isInstanceOf(RuntimeException.class);
         boolean startedAfterFailedStart = orchestrator.isStarted();
-        writeWorkflow(workflow, "60000");
+        writeWorkflow(workflow, SLOW_POLL_INTERVAL_MILLIS);
         orchestrator.start();
         boolean startedAfterStart = orchestrator.isStarted();
         orchestrator.start();
@@ -278,14 +303,15 @@ final class SymphonyOrchestratorStatusViewTest {
         BlockingRun blockingRun = blockRunnerUntilCancelled(runner);
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
         orchestrator.start();
-        assertThat(blockingRun.started().await(5, TimeUnit.SECONDS))
-                .as("the worker should start within 5 seconds")
+        assertThat(blockingRun.started().await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                .as("the worker should start within %d seconds", WAIT_TIMEOUT.toSeconds())
                 .isTrue();
         // Only the manual tick below may reload, so the reload and its reconciliation share one tick.
         orchestrator.stopWorkflowWatcherForTests();
         long previousModified = Files.getLastModifiedTime(workflow).toMillis();
         writeWorkflowWithActiveStates(workflow, "[Todo, Doing]", "");
-        Files.setLastModifiedTime(workflow, FileTime.fromMillis(previousModified + 2_000));
+        Files.setLastModifiedTime(
+                workflow, FileTime.fromMillis(previousModified + MODIFICATION_TIME_ADVANCE.toMillis()));
         var routingDuringReconcile = new AtomicReference<RuntimeSnapshot.Routing>();
         tracker.stateFetchHook = () -> routingDuringReconcile.compareAndSet(
                 null, orchestrator.snapshot().routing());
@@ -337,8 +363,8 @@ final class SymphonyOrchestratorStatusViewTest {
         BlockingRun blockingRun = blockRunnerUntilCancelled(runner);
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
         orchestrator.start();
-        assertThat(blockingRun.started().await(5, TimeUnit.SECONDS))
-                .as("the first worker should start within 5 seconds")
+        assertThat(blockingRun.started().await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                .as("the first worker should start within %d seconds", WAIT_TIMEOUT.toSeconds())
                 .isTrue();
         tracker.setCandidates(List.of(
                 TestCards.card("card-1", "TRELLO-first", "Doing"), TestCards.card("card-2", "TRELLO-second", "Todo")));
@@ -370,8 +396,8 @@ final class SymphonyOrchestratorStatusViewTest {
         BlockingRun blockingRun = blockRunnerUntilCancelled(runner);
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner, clock, successfulWorkpadHandler());
         orchestrator.start();
-        assertThat(blockingRun.started().await(5, TimeUnit.SECONDS))
-                .as("the first worker should start within 5 seconds")
+        assertThat(blockingRun.started().await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                .as("the first worker should start within %d seconds", WAIT_TIMEOUT.toSeconds())
                 .isTrue();
         tracker.setCandidates(List.of(
                 TestCards.card("card-1", "TRELLO-stalled", "Todo"), TestCards.card("card-2", "TRELLO-next", "Todo")));
@@ -396,7 +422,7 @@ final class SymphonyOrchestratorStatusViewTest {
     void rearmedUsagePauseIsVisibleBeforeItsWorkpadUpdate() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        writeWorkflow(workflow, "60000", "agent:\n  max_retry_backoff_ms: 0");
+        writeWorkflow(workflow, SLOW_POLL_INTERVAL_MILLIS, "agent:\n  max_retry_backoff_ms: 0");
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
         var clock = new MutableClock(now);
         var tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-first", "Todo")));
@@ -429,7 +455,7 @@ final class SymphonyOrchestratorStatusViewTest {
     void clearedUsagePauseIsVisibleBeforeItsWorkpadCleanup() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        writeWorkflow(workflow, "60000", "agent:\n  max_retry_backoff_ms: 60000");
+        writeWorkflow(workflow, SLOW_POLL_INTERVAL_MILLIS, "agent:\n  max_retry_backoff_ms: 60000");
         var clock = new MutableClock(Instant.parse("2026-07-10T12:00:00Z"));
         var tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
         var runs = new AtomicInteger();
@@ -463,7 +489,7 @@ final class SymphonyOrchestratorStatusViewTest {
     /// One card whose worker fails with a generic error, so the orchestrator schedules a retry.
     private FailingWorkerScenario failingWorkerScenario() throws Exception {
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        writeWorkflow(workflow, "60000");
+        writeWorkflow(workflow, SLOW_POLL_INTERVAL_MILLIS);
         var tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
         AgentRunner runner = mock();
         when(runner.run(any())).thenReturn(AgentRunResult.fail("generic failure"));
@@ -480,7 +506,7 @@ final class SymphonyOrchestratorStatusViewTest {
     /// Starts an orchestrator whose only card runs a worker that blocks until it is cancelled.
     private BlockedWorkerScenario startOneBlockedWorker() throws Exception {
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        writeWorkflow(workflow, "60000");
+        writeWorkflow(workflow, SLOW_POLL_INTERVAL_MILLIS);
         var tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
         var orchestratorRef = new AtomicReference<SymphonyOrchestrator>();
         AgentRunner runner = mock();
@@ -488,8 +514,8 @@ final class SymphonyOrchestratorStatusViewTest {
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
         orchestratorRef.set(orchestrator);
         orchestrator.start();
-        assertThat(cancel.started().await(5, TimeUnit.SECONDS))
-                .as("the worker should start within 5 seconds")
+        assertThat(cancel.started().await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                .as("the worker should start within %d seconds", WAIT_TIMEOUT.toSeconds())
                 .isTrue();
         return new BlockedWorkerScenario(tracker, orchestrator, cancel);
     }
@@ -507,7 +533,7 @@ final class SymphonyOrchestratorStatusViewTest {
         doAnswer(invocation -> {
                     started.countDown();
                     try {
-                        blockUntilInterruptedOrTimedOut(Duration.ofSeconds(30));
+                        blockUntilInterruptedOrTimedOut(BLOCKED_WORKER_TIMEOUT);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                     }
