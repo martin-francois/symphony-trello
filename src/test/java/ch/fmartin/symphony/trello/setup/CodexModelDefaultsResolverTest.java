@@ -9,6 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
+import ch.fmartin.symphony.trello.process.PlatformEnvironment;
 import ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.CatalogModel;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.CodexModelDefaults;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -522,17 +523,18 @@ final class CodexModelDefaultsResolverTest {
         CodexModelDefaults defaults = new CodexModelDefaultsResolver(
                         json,
                         List.of("codex", "app-server"),
-                        Map.of(
-                                "PATH",
-                                npmPrefix.toString(),
-                                "PATHEXT",
-                                NPM_PATHEXT,
-                                "ComSpec",
-                                commandInterpreter.toString(),
-                                "CAPTURE",
-                                interpreterArguments.toString()),
-                        Duration.ofSeconds(5),
-                        WINDOWS_OS_NAME)
+                        PlatformEnvironment.of(
+                                Map.of(
+                                        "PATH",
+                                        npmPrefix.toString(),
+                                        "PATHEXT",
+                                        NPM_PATHEXT,
+                                        "ComSpec",
+                                        commandInterpreter.toString(),
+                                        "CAPTURE",
+                                        interpreterArguments.toString()),
+                                WINDOWS_OS_NAME),
+                        Duration.ofSeconds(5))
                 .resolve();
 
         // then
