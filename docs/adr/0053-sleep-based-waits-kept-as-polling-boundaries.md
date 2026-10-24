@@ -180,9 +180,10 @@ loops, with jitter, attempt caps, and `Retry-After`-aware delay functions.
 - Bad, because a new runtime dependency for the two health probes and the log follower would
   replace small bounded loops that already handle deadlines and interruption correctly.
 
-Adopting a library for the Trello retry path specifically is tracked separately in
-[GitHub issue #403](https://github.com/martin-francois/symphony-trello/issues/403); this ADR keeps
-the polling decision independent of that implementation choice.
+Adopting a library for the Trello retry path specifically was evaluated in
+[GitHub issue #403](https://github.com/martin-francois/symphony-trello/issues/403) and rejected in
+[ADR 0097](0097-keep-hand-rolled-trello-retry-backoff.md); this ADR keeps the polling decision
+independent of that implementation choice.
 
 ## More Information
 

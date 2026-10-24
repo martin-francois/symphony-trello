@@ -19,6 +19,7 @@ import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.BlockerRef;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
+import ch.fmartin.symphony.trello.testsupport.BoundedWait;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.TrackerClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
@@ -47,11 +48,13 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 
 final class SymphonyOrchestratorTestSupport {
     static final Instant COMMENT_TIME = Instant.parse("2026-01-01T00:00:00Z");
     static final Duration POLL_INTERVAL = Duration.ofMillis(25);
+    private static final Duration CONDITION_TIMEOUT = Duration.ofSeconds(5);
 
     static UsageProbeScenario usageProbeScenario(Path workflow, MutableClock clock, Card first, Card second) {
         var tracker = new FakeTracker(List.of(first, second));
@@ -620,15 +623,8 @@ final class SymphonyOrchestratorTestSupport {
         return snapshot;
     }
 
-    static void waitUntil(Condition condition) throws Exception {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
-        while (System.nanoTime() < deadline) {
-            if (condition.matches()) {
-                return;
-            }
-            pollDelayForBoundedConditionWait();
-        }
-        throw new AssertionError("Condition was not met before timeout");
+    static void waitUntil(BooleanSupplier condition) throws InterruptedException {
+        BoundedWait.until(CONDITION_TIMEOUT, condition, "the orchestrator condition");
     }
 
     static boolean containsRetryingCard(RuntimeSnapshot snapshot, String cardIdentifier) {
@@ -641,11 +637,6 @@ final class SymphonyOrchestratorTestSupport {
 
     static void blockUntilInterruptedOrTimedOut(Duration timeout) throws InterruptedException {
         new CountDownLatch(1).await(timeout.toMillis(), TimeUnit.MILLISECONDS);
-    }
-
-    @FunctionalInterface
-    interface Condition {
-        boolean matches();
     }
 
     record ScopedRelease(String endpoint, String boardId, Path workspaceRoot, String cardId) {}

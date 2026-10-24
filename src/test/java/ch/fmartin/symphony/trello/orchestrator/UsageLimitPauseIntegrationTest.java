@@ -11,6 +11,7 @@ import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
+import ch.fmartin.symphony.trello.testsupport.BoundedWait;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.TrackerClient;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
@@ -20,12 +21,12 @@ import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -33,6 +34,7 @@ import org.junit.jupiter.api.io.TempDir;
 final class UsageLimitPauseIntegrationTest {
     private static final String FIRST_CARD = "TRELLO-first";
     private static final String SECOND_CARD = "TRELLO-second";
+    private static final Duration RETRY_SCHEDULING_TIMEOUT = Duration.ofSeconds(10);
 
     @TempDir
     Path tempDir;
@@ -84,7 +86,10 @@ final class UsageLimitPauseIntegrationTest {
 
         // when
         orchestrator.start();
-        waitUntil(() -> orchestrator.snapshot().counts().retrying() == 1);
+        BoundedWait.until(
+                RETRY_SCHEDULING_TIMEOUT,
+                () -> orchestrator.snapshot().counts().retrying() == 1,
+                "the usage-limited card retry");
         int candidateFetchesBeforeRefresh = tracker.candidateFetches.get();
         orchestrator.tickNowForTests();
         RuntimeSnapshot snapshot = orchestrator.snapshot();
@@ -129,22 +134,6 @@ final class UsageLimitPauseIntegrationTest {
                 """);
         script.toFile().setExecutable(true);
         return script;
-    }
-
-    private static void waitUntil(Condition condition) throws Exception {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-        while (System.nanoTime() < deadline) {
-            if (condition.matches()) {
-                return;
-            }
-            Thread.sleep(25);
-        }
-        throw new AssertionError("Condition was not met before timeout");
-    }
-
-    @FunctionalInterface
-    private interface Condition {
-        boolean matches();
     }
 
     private static final class LocalTracker implements TrackerClient {
