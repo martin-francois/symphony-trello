@@ -1893,16 +1893,20 @@ public final class TrelloBoardSetup {
                 merge from %2$s, and do not call `gh pr merge` directly from the workflow prompt. Open
                 `%3$s` and follow it.
 
-                Before merging, identify the PR, run the PR feedback sweep, run current card-specific validation,
-                check mergeability, branch state, required reviews, and CI/check status, and follow the repository's
-                merge policy. Do not enable auto-merge unless the repository policy explicitly requires it.
+                For work with a PR, identify the PR before merging, run the PR feedback sweep, run current
+                card-specific validation, check mergeability, branch state, required reviews, and CI/check status, and
+                follow the repository's merge policy. Do not enable auto-merge unless the repository policy explicitly
+                requires it.
 
                 Deterministic merge decisions:
-                - If no PR for this card's work is linked from the card description, Trello comments, or workpad, no
-                  open PR exists for the card's branch, and the completed work did not need one, there is nothing to
-                  merge. This covers question-only, repository-independent, and explicitly local-only or no-push
-                  work. Record in the workpad that no merge was needed, and move the card to %4$s. Do not move it back to %2$s
-                  and do not block it.
+                - If the workpad or a handoff comment shows that the card's work was completed and handed off for
+                  review, no PR for that work is linked from the card description, Trello comments, or workpad, no
+                  open PR exists for the card's branch, and the work did not need one, there is nothing to merge.
+                  This covers question-only, repository-independent, and explicitly local-only or no-push work.
+                  Record in the workpad that no merge was needed, and move the card to %4$s. Do not move it back to
+                  %2$s and do not block it.
+                - If no PR exists for the card and neither the workpad nor a handoff comment shows completed work
+                  handed off for review, the card is not ready to close. Update the workpad and %6$s.
                 - If the card moved from %2$s to %1$s with no new feedback and the PR is clean, merge it.
                 - If exact, unambiguous feedback added before the card entered %1$s was addressed with current
                   validation and clean checks, merge it.

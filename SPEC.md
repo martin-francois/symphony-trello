@@ -1248,11 +1248,14 @@ handoff comment for such work.
 When a human moves the Trello card to `Merging`, generated workflows use this deterministic merge
 policy:
 
-- a card has nothing to merge when no PR for the card's work is linked from the card description,
-  Trello comments, or workpad, no open PR exists for the card's branch, and the completed work did
-  not need one, such as question-only, repository-independent, or explicitly local-only or no-push
-  work; the agent records in the workpad that no merge was needed and moves the card to `Done`, and
-  MUST NOT return it to `Human Review` or move it to `Blocked`
+- a card has nothing to merge when the workpad or a handoff comment shows that its work was
+  completed and handed off for review, no PR for that work is linked from the card description,
+  Trello comments, or workpad, no open PR exists for the card's branch, and the work did not need
+  one, such as question-only, repository-independent, or explicitly local-only or no-push work; the
+  agent records in the workpad that no merge was needed and moves the card to `Done`, and MUST NOT
+  return it to `Human Review` or move it to `Blocked`
+- a card with no PR and no workpad or handoff comment showing completed work handed off for review
+  is not ready to close; the agent moves it to `Blocked` and MUST NOT move it to `Done`
 - for work that needs a PR, merge and move to `Done` only after the PR merged successfully
 - `Human Review` -> `Merging` with no new feedback and a clean PR is approval to merge
 - exact, unambiguous feedback added before the card entered `Merging` that Codex addressed with
@@ -4018,8 +4021,9 @@ These checks are REQUIRED when the workflow expects the agent to perform Trello 
   11.4 prerequisite checklists, and enforces its duplicate, per-card, and hourly bounds.
 - Startup validates write capability or emits an operator-visible warning when verification is not
   possible without side effects.
-- Generated workflow prompts render the card's current list, and a card in `Merging` with nothing to
-  merge moves to `Done` while a card whose work needs a PR keeps the merge or `Blocked` flow.
+- Generated workflow prompts render the card's current list, and a reviewed card in `Merging` with
+  nothing to merge moves to `Done` while a card with no review handoff or whose work needs a PR keeps
+  the merge or `Blocked` flow.
 
 ### 17.9 Real Integration Profile (RECOMMENDED)
 
