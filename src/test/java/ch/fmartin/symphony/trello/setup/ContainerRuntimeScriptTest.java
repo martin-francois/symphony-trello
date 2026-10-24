@@ -96,8 +96,8 @@ final class ContainerRuntimeScriptTest {
         // given
         Path invocation = installRecordingRuntime("docker");
         String pinnedImage = "ghcr.io/betterleaks/betterleaks:v9.9.9@sha256:" + "a".repeat(64);
-        Map<String, String> environment = new HashMap<>(runtimeEnvironment(null));
-        environment.put("SYMPHONY_TRELLO_BETTERLEAKS_IMAGE", pinnedImage);
+        Map<String, String> environment =
+                withEnvironment(runtimeEnvironment(null), Map.of("SYMPHONY_TRELLO_BETTERLEAKS_IMAGE", pinnedImage));
 
         // when
         ProcessResult result = runWrapper("betterleaks-docker.sh", environment);

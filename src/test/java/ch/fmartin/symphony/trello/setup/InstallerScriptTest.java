@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import static org.junit.jupiter.api.Named.named;
 
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
 import java.io.File;
@@ -21,6 +22,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -306,7 +308,7 @@ final class InstallerScriptTest {
 
     @MethodSource("colorTerminalScenarios")
     @ParameterizedTest(name = "{0}")
-    void posixUninstallerColorsTerminalOutputForColorCapableTerminals(String name, Map<String, String> colorEnvironment)
+    void posixUninstallerColorsTerminalOutputForColorCapableTerminals(Map<String, String> colorEnvironment)
             throws Exception {
         // given
         assumePosixPseudoTerminal();
@@ -324,8 +326,7 @@ final class InstallerScriptTest {
 
     @MethodSource("plainTerminalScenarios")
     @ParameterizedTest(name = "{0}")
-    void posixUninstallerKeepsTerminalOutputPlainWhenColorIsOff(String name, Map<String, String> colorEnvironment)
-            throws Exception {
+    void posixUninstallerKeepsTerminalOutputPlainWhenColorIsOff(Map<String, String> colorEnvironment) throws Exception {
         // given
         assumePosixPseudoTerminal();
 
@@ -339,20 +340,20 @@ final class InstallerScriptTest {
                 .doesNotContain(ANSI_ESCAPE_IN_INSTALLER_OUTPUT);
     }
 
-    private static Stream<Arguments> colorTerminalScenarios() {
+    private static Stream<Named<Map<String, String>>> colorTerminalScenarios() {
         return Stream.of(
-                Arguments.of("color terminal", Map.of("TERM", "xterm-256color")),
-                Arguments.of("empty NO_COLOR is unset", Map.of("TERM", "xterm-256color", "NO_COLOR", "")),
-                Arguments.of("CLICOLOR_FORCE on a dumb terminal", Map.of("TERM", "dumb", "CLICOLOR_FORCE", "1")));
+                named("color terminal", Map.of("TERM", "xterm-256color")),
+                named("empty NO_COLOR is unset", Map.of("TERM", "xterm-256color", "NO_COLOR", "")),
+                named("CLICOLOR_FORCE on a dumb terminal", Map.of("TERM", "dumb", "CLICOLOR_FORCE", "1")));
     }
 
-    private static Stream<Arguments> plainTerminalScenarios() {
+    private static Stream<Named<Map<String, String>>> plainTerminalScenarios() {
         return Stream.of(
-                Arguments.of("dumb terminal", Map.of("TERM", "dumb")),
-                Arguments.of("no terminal type", Map.of()),
-                Arguments.of("NO_COLOR", Map.of("TERM", "xterm-256color", "NO_COLOR", "1")),
-                Arguments.of("CLICOLOR=0", Map.of("TERM", "xterm-256color", "CLICOLOR", "0")),
-                Arguments.of("CLICOLOR_FORCE=0 is not forcing", Map.of("TERM", "dumb", "CLICOLOR_FORCE", "0")));
+                named("dumb terminal", Map.of("TERM", "dumb")),
+                named("no terminal type", Map.of()),
+                named("NO_COLOR", Map.of("TERM", "xterm-256color", "NO_COLOR", "1")),
+                named("CLICOLOR=0", Map.of("TERM", "xterm-256color", "CLICOLOR", "0")),
+                named("CLICOLOR_FORCE=0 is not forcing", Map.of("TERM", "dumb", "CLICOLOR_FORCE", "0")));
     }
 
     private static void assumePosixPseudoTerminal() {
@@ -5826,7 +5827,7 @@ final class InstallerScriptTest {
         "uninstall.ps1, --yes, Symphony for Trello uninstall"
     })
     @ParameterizedTest(name = "{0}")
-    void powershellScriptsColorRedirectedOutputOnlyWhenForcedWhenAvailable(String script, String flag, String heading)
+    void powershellScriptsKeepRedirectedOutputPlainUnlessForcedWhenAvailable(String script, String flag, String heading)
             throws Exception {
         // given
         List<String> pwsh = powershellCommand();
