@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.orchestrator;
 import static ch.fmartin.symphony.trello.orchestrator.SymphonyOrchestratorTestSupport.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.assertj.core.api.InstanceOfAssertFactories.DURATION;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -20,6 +21,7 @@ import ch.fmartin.symphony.trello.agent.AgentRunResult;
 import ch.fmartin.symphony.trello.agent.AgentRunner;
 import ch.fmartin.symphony.trello.domain.BlockerRef;
 import ch.fmartin.symphony.trello.domain.Card;
+import ch.fmartin.symphony.trello.tracker.RateLimitPressure;
 import ch.fmartin.symphony.trello.workflow.WorkflowException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
@@ -34,6 +36,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -694,6 +697,40 @@ final class SymphonyOrchestratorTest {
                 .as("a refresh at the tick completion boundary must schedule the next tick "
                         + "immediately instead of waiting for the 60s polling interval")
                 .isGreaterThanOrEqualTo(2);
+    }
+
+    @Test
+    void trelloRateLimitDuringATickSlowsTheNextTickAndShowsInTheSnapshot() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Duration configured = Duration.ofSeconds(5);
+        writeWorkflow(workflow, String.valueOf(configured.toMillis()));
+        var tracker = new FakeTracker(List.of());
+        Instant rateLimitedAt = Instant.parse("2026-10-04T10:00:00Z");
+        tracker.rateLimitPressure.set(new RateLimitPressure(1, Optional.of(rateLimitedAt), Optional.empty()));
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, mock(), NO_JITTER);
+        Duration slowed = configured.multipliedBy(AdaptivePollInterval.SLOWDOWN_FACTOR);
+        // The scheduled delay counts down between scheduling and reading it.
+        Duration elapsedSinceScheduling = Duration.ofSeconds(2);
+
+        // when
+        orchestrator.start();
+        waitUntil(() -> orchestrator.snapshot().polling().effectiveInterval().equals(slowed));
+        RuntimeSnapshot snapshot = orchestrator.snapshot();
+        Optional<Duration> nextTickDelay = orchestrator.scheduledTickDelayForTests();
+        orchestrator.stop();
+
+        // then
+        assertThat(snapshot.polling())
+                .isEqualTo(new RuntimeSnapshot.Polling(
+                        configured,
+                        slowed,
+                        Optional.of(RuntimeSnapshot.SlowdownReason.TRELLO_RATE_LIMITED),
+                        Optional.of(rateLimitedAt)));
+        assertThat(nextTickDelay)
+                .as("with jitter fixed at zero, the tick after a Trello 429 waits the slowed %s", slowed)
+                .get(DURATION)
+                .isBetween(slowed.minus(elapsedSinceScheduling), slowed);
     }
 
     @Test
