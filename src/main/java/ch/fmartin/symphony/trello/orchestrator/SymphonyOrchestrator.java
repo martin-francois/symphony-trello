@@ -63,6 +63,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
+import java.util.random.RandomGenerator;
 import java.util.stream.Collectors;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
@@ -167,7 +168,8 @@ public class SymphonyOrchestrator {
                 prompts,
                 workspaces,
                 ApplicationClock.systemUtc(),
-                Optional.empty());
+                Optional.empty(),
+                new SplittableRandom());
     }
 
     @Inject
@@ -188,10 +190,13 @@ public class SymphonyOrchestrator {
                 prompts,
                 workspaces,
                 clock,
-                Optional.of(usageWorkpads));
+                Optional.of(usageWorkpads),
+                new SplittableRandom());
     }
 
-    private SymphonyOrchestrator(
+    /// @param pollJitter draws the poll jitter; it is only used under the instance monitor, so a
+    ///     generator that is not thread-safe, such as [SplittableRandom], is fine
+    SymphonyOrchestrator(
             WorkflowLoader workflowLoader,
             ConfigResolver configResolver,
             TrackerClient tracker,
@@ -199,7 +204,8 @@ public class SymphonyOrchestrator {
             PromptRenderer prompts,
             WorkspaceManager workspaces,
             Clock clock,
-            Optional<TrelloHandoffToolHandler> usageWorkpads) {
+            Optional<TrelloHandoffToolHandler> usageWorkpads,
+            RandomGenerator pollJitter) {
         this.workflowLoader = workflowLoader;
         this.configResolver = configResolver;
         this.tracker = tracker;
@@ -208,8 +214,7 @@ public class SymphonyOrchestrator {
         this.workspaces = workspaces;
         this.clock = clock;
         this.usageWorkpads = usageWorkpads;
-        // SplittableRandom is not thread-safe; the poll interval only runs under the instance monitor.
-        this.pollInterval = new AdaptivePollInterval(clock, new SplittableRandom());
+        this.pollInterval = new AdaptivePollInterval(clock, pollJitter);
     }
 
     public void start() {
@@ -2353,8 +2358,8 @@ public class SymphonyOrchestrator {
         }
     }
 
-    synchronized Duration scheduledTickDelayForTests() {
-        return Duration.ofMillis(tickTimer.getDelay(TimeUnit.MILLISECONDS));
+    synchronized Optional<Duration> scheduledTickDelayForTests() {
+        return Optional.ofNullable(tickTimer).map(timer -> Duration.ofMillis(timer.getDelay(TimeUnit.MILLISECONDS)));
     }
 
     private synchronized void scheduleTick(Duration delay) {
