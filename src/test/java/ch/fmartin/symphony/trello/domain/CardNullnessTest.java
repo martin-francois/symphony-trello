@@ -5,10 +5,12 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 import com.google.common.base.CaseFormat;
 import java.io.IOException;
+import java.lang.reflect.Array;
 import java.lang.reflect.RecordComponent;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -16,6 +18,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 final class CardNullnessTest {
     private static final String CARD_SECTION_START = "#### 4.1.1 Card";
@@ -59,6 +62,30 @@ final class CardNullnessTest {
                 .containsExactlyInAnyOrderElementsOf(specified.nullableNames());
     }
 
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(classes = {Card.class, Card.Checklist.class})
+    void nonNullListComponentsTurnNullIntoAnEmptyList(Class<? extends Record> record)
+            throws ReflectiveOperationException {
+        // given
+        RecordComponent[] components = record.getRecordComponents();
+        Class<?>[] componentTypes =
+                Arrays.stream(components).map(RecordComponent::getType).toArray(Class<?>[]::new);
+        Object[] defaultValues = Arrays.stream(componentTypes)
+                .map(CardNullnessTest::defaultValue)
+                .toArray();
+
+        // when
+        Record created = record.getDeclaredConstructor(componentTypes).newInstance(defaultValues);
+
+        // then
+        assertThat(components)
+                .as("%s list components should never return null", record)
+                .filteredOn(component -> component.getType() == List.class)
+                .isNotEmpty()
+                .extracting(component -> component.getAccessor().invoke(created))
+                .containsOnly(List.of());
+    }
+
     private static List<String> cardSection(List<String> specification) {
         int start = specification.indexOf(CARD_SECTION_START);
         List<String> section = new ArrayList<>();
@@ -95,6 +122,11 @@ final class CardNullnessTest {
             }
         }
         return specified;
+    }
+
+    /// Returns `null` for reference types and the zero value for primitives.
+    private static @Nullable Object defaultValue(Class<?> type) {
+        return Array.get(Array.newInstance(type, 1), 0);
     }
 
     private static boolean nullable(RecordComponent component) {

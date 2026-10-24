@@ -42,15 +42,15 @@ public record Card(
         @Nullable BigDecimal position) {
 
     public Card {
-        labels = List.copyOf(labels == null ? List.of() : labels);
-        labelIds = List.copyOf(labelIds == null ? List.of() : labelIds);
-        members = List.copyOf(members == null ? List.of() : members);
-        checklists = List.copyOf(checklists == null ? List.of() : checklists);
-        attachments = List.copyOf(attachments == null ? List.of() : attachments);
-        trelloReferences = List.copyOf(trelloReferences == null ? List.of() : trelloReferences);
-        prerequisiteProblems = List.copyOf(prerequisiteProblems == null ? List.of() : prerequisiteProblems);
-        blockedBy = List.copyOf(blockedBy == null ? List.of() : blockedBy);
-        comments = List.copyOf(comments == null ? List.of() : comments);
+        labels = List.copyOf(orEmpty(labels));
+        labelIds = List.copyOf(orEmpty(labelIds));
+        members = List.copyOf(orEmpty(members));
+        checklists = List.copyOf(orEmpty(checklists));
+        attachments = List.copyOf(orEmpty(attachments));
+        trelloReferences = List.copyOf(orEmpty(trelloReferences));
+        prerequisiteProblems = List.copyOf(orEmpty(prerequisiteProblems));
+        blockedBy = List.copyOf(orEmpty(blockedBy));
+        comments = List.copyOf(orEmpty(comments));
     }
 
     public Map<String, @Nullable Object> toTemplateMap() {
@@ -152,6 +152,11 @@ public record Card(
                 position);
     }
 
+    // No nullness checker runs on callers, so a null list still becomes an empty one.
+    private static <T> List<T> orEmpty(@Nullable List<T> values) {
+        return values == null ? List.of() : values;
+    }
+
     private static boolean notBlank(@Nullable String value) {
         return value != null && !value.isBlank();
     }
@@ -225,7 +230,7 @@ public record Card(
 
     public record Checklist(@Nullable String id, @Nullable String name, List<ChecklistItem> items) {
         public Checklist {
-            items = List.copyOf(items == null ? List.of() : items);
+            items = List.copyOf(orEmpty(items));
         }
     }
 
