@@ -5,7 +5,7 @@ import {join} from "node:path";
 import test from "node:test";
 import {FAKE_TRELLO_CREDENTIALS, FakeTrelloApi} from "./fake-trello-api.ts";
 import {RunRoot} from "./run-root.ts";
-import {boardCreatedAt, TrelloApi, TrelloApiError} from "./trello.ts";
+import {boardCreatedAt, LIST_NAMES, TrelloApi, TrelloApiError} from "./trello.ts";
 import {patchWorkflow, readFrontMatter} from "./workflow.ts";
 
 const SYNTHETIC_BOARD_ID = "000000000000000000000001";
@@ -27,7 +27,7 @@ async function withFake(body: (trello: TrelloApi, fake: FakeTrelloApi, run: RunR
 test("boards are registered before lists are created and archive through the registry", async () => {
   await withFake(async (trello, fake) => {
     // given
-    const board = await trello.createBoard("sample-scenario", ["Ready for Codex", "Done"]);
+    const board = await trello.createBoard("sample-scenario", [LIST_NAMES.ready, LIST_NAMES.done]);
 
     // when
     await trello.archiveBoard(board.id);
@@ -35,7 +35,7 @@ test("boards are registered before lists are created and archive through the reg
     // then
     assert.equal(board.name, "test-run-sample-scenario");
     assert.deepEqual(trello.registeredBoards().map((entry) => entry.id), [board.id]);
-    assert.deepEqual(Object.keys(board.lists), ["Ready for Codex", "Done"]);
+    assert.deepEqual(Object.keys(board.lists), [LIST_NAMES.ready, LIST_NAMES.done]);
     assert.equal(await trello.boardClosed(board.id), true);
     assert.equal(fake.board(board.id)?.closed, true);
   });
@@ -54,16 +54,16 @@ test("the client refuses to touch a board this run did not register", async () =
 test("cards, moves, comments, and checklists behave like the Trello endpoints Symphony uses", async () => {
   await withFake(async (trello, fake) => {
     // given
-    const board = await trello.createBoard("cards", ["Ready for Codex", "Done"]);
-    const card = await trello.createCard(board, "Ready for Codex", "title", "desc", "cards");
+    const board = await trello.createBoard("cards", [LIST_NAMES.ready, LIST_NAMES.done]);
+    const card = await trello.createCard(board, LIST_NAMES.ready, "title", "desc", "cards");
 
     // when
-    await trello.moveCard(board, card.id, "Done");
+    await trello.moveCard(board, card.id, LIST_NAMES.done);
     await trello.request("POST", `cards/${card.id}/actions/comments`, {text: "first"});
     await trello.addChecklist(board, card.id, "Prerequisites", [SYNTHETIC_CARD_URL]);
 
     // then
-    assert.deepEqual(fake.state.moves.map((move) => [move.fromList, move.toList]), [["Ready for Codex", "Done"]]);
+    assert.deepEqual(fake.state.moves.map((move) => [move.fromList, move.toList]), [[LIST_NAMES.ready, LIST_NAMES.done]]);
     assert.deepEqual(await trello.comments(card.id), ["first"]);
     assert.deepEqual(
       (await trello.checklistItems(card.id)).map((item) => [item.name, item.state]),

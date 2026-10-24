@@ -4,6 +4,7 @@ import {homedir} from "node:os";
 import {join} from "node:path";
 import type {RunRoot} from "./run-root.ts";
 import {runCommand} from "./symphony.ts";
+import {LIST_NAMES} from "./trello.ts";
 
 /** Behaviors understood by scripts/FakeCodexAppServer.java, one per script line. */
 export type FakeCodexStep =
@@ -62,7 +63,7 @@ export function fakeCodex(
       `export SYMPHONY_FAKE_CODEX_PROMPT_DIR=${shellQuote(promptDir)}`,
       `export SYMPHONY_FAKE_CODEX_TOOL_DIR=${shellQuote(toolDir)}`,
       `export SYMPHONY_FAKE_CODEX_SCRIPT_DIR=${shellQuote(scriptDir)}`,
-      `export SYMPHONY_FAKE_CODEX_REVIEW_STATE=${shellQuote(options.reviewList ?? "Human Review")}`,
+      `export SYMPHONY_FAKE_CODEX_REVIEW_STATE=${shellQuote(options.reviewList ?? LIST_NAMES.humanReview)}`,
       `export SYMPHONY_FAKE_CODEX_SLEEP_MS=${options.sleepMs ?? 0}`,
       // The script directory argument is ignored by the fake; it lets cleanup and scenarios tell
       // fixtures apart by command line.

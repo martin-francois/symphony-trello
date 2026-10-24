@@ -1,6 +1,7 @@
 import {toolResponses, type FakeCodexStep, type ToolResponse} from "../lib/codex.ts";
 import type {ScenarioContext, ScenarioRegistry, ScenarioRunner} from "../lib/scenario.ts";
 import {sleep, waitFor} from "../lib/symphony.ts";
+import {LIST_NAMES} from "../lib/trello.ts";
 import type {WorkflowEdit} from "../lib/workflow.ts";
 import {addCard, cardList, script, serviceBoard, startWorker, stopWorker, type ServiceBoard} from "./support.ts";
 
@@ -14,7 +15,7 @@ const FIXTURES = {
     id: "tools-restricted",
     edits: [
       [["trello_tools", "allow_comments"], false],
-      [["trello_tools", "allowed_move_list_names"], ["In Progress", "Human Review", "Blocked"]],
+      [["trello_tools", "allowed_move_list_names"], [LIST_NAMES.inProgress, LIST_NAMES.humanReview, LIST_NAMES.blocked]],
       [["trello_tools", "allow_checklists"], true],
       [["trello_tools", "allow_url_attachments"], true],
     ],
@@ -23,7 +24,7 @@ const FIXTURES = {
   readOnly: {id: "tools-read-only", edits: [[["trello_tools", "allow_writes"], false]]},
 } satisfies Record<string, ToolFixture>;
 
-const MOVE_TO_REVIEW: FakeCodexStep = {kind: "tool", tool: "trello_move_current_card", arguments: {list_name: "Human Review"}};
+const MOVE_TO_REVIEW: FakeCodexStep = {kind: "tool", tool: "trello_move_current_card", arguments: {list_name: LIST_NAMES.humanReview}};
 
 interface ToolCase {
   fixture: ToolFixture;
@@ -45,7 +46,7 @@ function responseFor(run: CaseRun, request: string, index = 0): string {
 
 async function reachesReview(context: ScenarioContext, run: CaseRun): Promise<void> {
   const list = await cardList(context, run.service, run.cardId);
-  context.check.equal(list, "Human Review", "the card reaches Human Review");
+  context.check.equal(list, LIST_NAMES.humanReview, "the card reaches Human Review");
 }
 
 function comments(context: ScenarioContext, cardId: string): string[] {
@@ -66,13 +67,13 @@ const CASES: Readonly<Record<string, ToolCase>> = {
   },
   "trello-tool-move-allowlist-denied": {
     fixture: FIXTURES.restricted,
-    steps: [{kind: "tool", tool: "trello_move_current_card", arguments: {list_name: "Done"}}, MOVE_TO_REVIEW, {kind: "complete"}],
+    steps: [{kind: "tool", tool: "trello_move_current_card", arguments: {list_name: LIST_NAMES.done}}, MOVE_TO_REVIEW, {kind: "complete"}],
     responses: 2,
     assert: async (context, run) => {
       context.check.contains(responseFor(run, "trello_move_current_card", 0), "trello_move_not_allowed", "the Done move returns trello_move_not_allowed");
       const moves = context.fakeTrello?.state.moves.filter((move) => move.cardId === run.cardId).map((move) => move.toList);
       if (moves !== undefined) {
-        context.check.that(!moves.includes("Done"), "the card never enters Done");
+        context.check.that(!moves.includes(LIST_NAMES.done), "the card never enters Done");
       }
       await reachesReview(context, run);
     },
@@ -153,7 +154,7 @@ const CASES: Readonly<Record<string, ToolCase>> = {
       context.check.contains(responseFor(run, "trello_add_comment"), "trello_writes_disabled", "the comment call returns trello_writes_disabled");
       context.check.contains(responseFor(run, "trello_move_current_card"), "trello_writes_disabled", "the move call returns trello_writes_disabled");
       context.check.that(!comments(context, run.cardId).some((text) => text.includes("read-only check")), "the card has no comment from Codex");
-      context.check.that((await cardList(context, run.service, run.cardId)) !== "Human Review", "the card never reaches Human Review");
+      context.check.that((await cardList(context, run.service, run.cardId)) !== LIST_NAMES.humanReview, "the card never reaches Human Review");
     },
   },
 };

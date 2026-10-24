@@ -3,6 +3,7 @@ import {join} from "node:path";
 import {runOwnedProcesses, isAlive} from "../lib/processes.ts";
 import {outputOf, ProductFailure, type ScenarioContext, type ScenarioRegistry} from "../lib/scenario.ts";
 import {sleep, waitFor, workerState, type CliPaths} from "../lib/symphony.ts";
+import {LIST_NAMES} from "../lib/trello.ts";
 import {
   addCard,
   cli,
@@ -86,7 +87,7 @@ async function startAllStopOne(context: ScenarioContext): Promise<string> {
     context.check.that(statusLine(status.stdout, current.first.board.name).startsWith("stopped"), "the selected board is stopped");
     context.check.that(statusLine(status.stdout, current.second.board.name).startsWith("running"), "the sibling board keeps running");
     const cardId = await addCard(context, current.second, context.scenario.id, QUESTION);
-    await waitForCardIn(context, current.second, cardId, "Human Review");
+    await waitForCardIn(context, current.second, cardId, LIST_NAMES.humanReview);
   } finally {
     await stopAll(context, current);
   }
@@ -98,11 +99,11 @@ async function startAllTwoWorkflows(context: ScenarioContext): Promise<string> {
   await startAll(context, current);
   try {
     const cards = [
-      {service: current.first, id: await addCard(context, current.first, context.scenario.id, QUESTION, "Ready for Codex", "first board")},
-      {service: current.second, id: await addCard(context, current.second, context.scenario.id, QUESTION, "Ready for Codex", "second board")},
+      {service: current.first, id: await addCard(context, current.first, context.scenario.id, QUESTION, LIST_NAMES.ready, "first board")},
+      {service: current.second, id: await addCard(context, current.second, context.scenario.id, QUESTION, LIST_NAMES.ready, "second board")},
     ];
     for (const card of cards) {
-      await waitForCardIn(context, card.service, card.id, "Human Review");
+      await waitForCardIn(context, card.service, card.id, LIST_NAMES.humanReview);
       const local = await fetch(`http://127.0.0.1:${card.service.port}/api/v1/local-status`).then((response) => response.json() as Promise<Record<string, unknown>>);
       context.check.that(
         local["configuredBoardId"] === card.service.board.id || local["configuredBoardId"] === card.service.board.shortLink || local["boardId"] === card.service.board.id,
@@ -253,7 +254,7 @@ async function invalidReload(context: ScenarioContext): Promise<string> {
     await sleep(4_000);
     context.check.that((await workerState(service.port)) !== null, "the worker keeps answering /api/v1/state after the bad edit");
     const cardId = await addCard(context, service, context.scenario.id, QUESTION);
-    await waitForCardIn(context, service, cardId, "Human Review");
+    await waitForCardIn(context, service, cardId, LIST_NAMES.humanReview);
     const logs = filesIn(service.paths.stateHome)
       .filter((file) => file.endsWith(".log"))
       .map((file) => readFileSync(join(service.paths.stateHome, file), "utf8"))
@@ -273,7 +274,7 @@ async function telemetry(context: ScenarioContext): Promise<string> {
   await startWorker(context, service);
   try {
     const cardId = await addCard(context, service, context.scenario.id, QUESTION);
-    await waitForCardIn(context, service, cardId, "Human Review");
+    await waitForCardIn(context, service, cardId, LIST_NAMES.humanReview);
     const current = await state(service);
     context.evidence("state.json", JSON.stringify(current, null, 2));
     const totals = current["codex_totals"] as Record<string, number> | undefined;
@@ -331,6 +332,6 @@ export const LIFECYCLE_SCENARIOS: ScenarioRegistry = {
   "board-name-selector-unicode": unicodeBoardName,
   "invalid-workflow-reload-keeps-last-known-good": invalidReload,
   "state-api-codex-usage-and-rate-limit-telemetry": telemetry,
-  "external-terminal-move-while-worker-running": (context) => externalMove(context, "Done"),
-  "external-non-active-move-while-worker-running": (context) => externalMove(context, "Human Review"),
+  "external-terminal-move-while-worker-running": (context) => externalMove(context, LIST_NAMES.done),
+  "external-non-active-move-while-worker-running": (context) => externalMove(context, LIST_NAMES.humanReview),
 };

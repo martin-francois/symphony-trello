@@ -1,10 +1,11 @@
 import {publicFilesBeforeFinalReport, scanPublicFiles} from "../lib/private-context.ts";
 import {runOwnedProcesses} from "../lib/processes.ts";
 import {SkipScenario, type ScenarioContext, type ScenarioRegistry} from "../lib/scenario.ts";
+import {LIST_NAMES} from "../lib/trello.ts";
 
 async function interimBoardCleanup(context: ScenarioContext): Promise<string> {
   const trello = context.trello();
-  const board = await trello.createBoard(context.scenario.id, ["Ready for Codex"], context.options.trelloWorkspaceId);
+  const board = await trello.createBoard(context.scenario.id, [LIST_NAMES.ready], context.options.trelloWorkspaceId);
   await trello.archiveBoard(board.id);
   context.check.that(await trello.boardClosed(board.id), "the board is closed after the first archive");
   let secondArchive = true;

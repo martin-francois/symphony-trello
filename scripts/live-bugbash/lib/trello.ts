@@ -9,8 +9,17 @@ export function boardCreatedAt(id: string): number | null {
   return /^[0-9a-f]{24}$/i.test(id) ? Number.parseInt(id.slice(0, 8), 16) : null;
 }
 
+/** Names of the recommended Trello-only lists. */
+export const LIST_NAMES = {
+  ready: "Ready for Codex",
+  inProgress: "In Progress",
+  blocked: "Blocked",
+  humanReview: "Human Review",
+  done: "Done",
+} as const;
+
 /** The recommended Trello-only lists, in board order; also the lists of a standard disposable board. */
-export const STANDARD_LISTS = ["Ready for Codex", "In Progress", "Blocked", "Human Review", "Done"] as const;
+export const STANDARD_LISTS = [LIST_NAMES.ready, LIST_NAMES.inProgress, LIST_NAMES.blocked, LIST_NAMES.humanReview, LIST_NAMES.done] as const;
 
 export interface TrelloCredentials {
   key: string;

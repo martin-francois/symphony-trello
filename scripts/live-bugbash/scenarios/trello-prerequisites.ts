@@ -1,6 +1,7 @@
 import {promptsMentioning} from "../lib/codex.ts";
 import type {ScenarioContext, ScenarioRegistry} from "../lib/scenario.ts";
 import {sleep, waitFor} from "../lib/symphony.ts";
+import {LIST_NAMES} from "../lib/trello.ts";
 import {
   addCard,
   cardList,
@@ -44,15 +45,15 @@ async function statusComments(context: ScenarioContext, cardId: string): Promise
 async function mixedChecklist(context: ScenarioContext, secondItem: (dependencyUrl: string) => string): Promise<string> {
   const id = context.scenario.id;
   const service = await serviceBoard(context, id);
-  const dependency = await cardUrl(context, service, id, "Done", "finished dependency");
-  const target = await addCard(context, service, id, QUESTION, "Ready for Codex", "target");
+  const dependency = await cardUrl(context, service, id, LIST_NAMES.done, "finished dependency");
+  const target = await addCard(context, service, id, QUESTION, LIST_NAMES.ready, "target");
   await context.trello().addChecklist(service.board, target, "Prerequisites", [dependency.url, secondItem(dependency.url)]);
   await startWorker(context, service);
   try {
     await waitFor("the managed prerequisite status comment", async () => (await statusComments(context, target)).length > 0, 60_000);
     const neverDispatched = await observeNeverDispatched(service, target);
     context.check.that(neverDispatched, "the state API never lists the target as running or retrying");
-    context.check.equal(await cardList(context, service, target), "Ready for Codex", "the target card stays in Ready for Codex");
+    context.check.equal(await cardList(context, service, target), LIST_NAMES.ready, "the target card stays in Ready for Codex");
     context.check.equal(promptsMentioning(service.codex, `${id}: target`).length, 0, "fake Codex never sees the target card");
     const comments = await statusComments(context, target);
     context.evidence("status-comments.txt", comments.join("\n---\n"));
@@ -70,17 +71,17 @@ async function mixedChecklist(context: ScenarioContext, secondItem: (dependencyU
 async function exactPrerequisite(context: ScenarioContext): Promise<string> {
   const id = context.scenario.id;
   const service = await serviceBoard(context, id);
-  const prerequisite = await cardUrl(context, service, id, "Blocked", "prerequisite");
-  const target = await addCard(context, service, id, QUESTION, "Ready for Codex", "target");
+  const prerequisite = await cardUrl(context, service, id, LIST_NAMES.blocked, "prerequisite");
+  const target = await addCard(context, service, id, QUESTION, LIST_NAMES.ready, "target");
   await context.trello().addChecklist(service.board, target, "Prerequisites", [prerequisite.url]);
   await startWorker(context, service);
   try {
     await waitFor("the waiting status comment", async () => (await statusComments(context, target)).some((text) => text.includes("waiting for prerequisites")), 60_000);
     context.check.that(await observeNeverDispatched(service, target), "the target waits while the prerequisite is open");
     context.check.equal(promptsMentioning(service.codex, `${id}: target`).length, 0, "fake Codex does not see the target while it waits");
-    await context.trello().moveCard(service.board, prerequisite.id, "Done");
+    await context.trello().moveCard(service.board, prerequisite.id, LIST_NAMES.done);
     await waitForPrompt(service, `${id}: target`);
-    await waitForCardIn(context, service, target, "Human Review");
+    await waitForCardIn(context, service, target, LIST_NAMES.humanReview);
     const items = await context.trello().checklistItems(target);
     context.check.that(items.some((item) => item.name === prerequisite.url && item.state === "complete"), "the checklist item is complete after the prerequisite finished");
     const comments = await statusComments(context, target);
@@ -98,7 +99,7 @@ async function maxAgentsParallel(context: ScenarioContext): Promise<string> {
   const service = await serviceBoard(context, id, {edits: [[["agent", "max_concurrent_agents"], 99]], sleepMs: 5_000});
   const cards: string[] = [];
   for (let index = 1; index <= 3; index++) {
-    cards.push(await addCard(context, service, id, QUESTION, "Ready for Codex", `parallel ${index}`));
+    cards.push(await addCard(context, service, id, QUESTION, LIST_NAMES.ready, `parallel ${index}`));
   }
   await startWorker(context, service);
   let peak = 0;
@@ -107,14 +108,14 @@ async function maxAgentsParallel(context: ScenarioContext): Promise<string> {
     while (Date.now() < deadline) {
       peak = Math.max(peak, stateEntries(await state(service), "running").length);
       const lists = await Promise.all(cards.map((card) => cardList(context, service, card)));
-      if (lists.every((list) => list === "Human Review")) {
+      if (lists.every((list) => list === LIST_NAMES.humanReview)) {
         break;
       }
       await sleep(300);
     }
     context.check.that(peak >= 2, `at least two cards run at the same time (peak ${peak})`);
     for (const card of cards) {
-      context.check.equal(await cardList(context, service, card), "Human Review", "every card reaches Human Review");
+      context.check.equal(await cardList(context, service, card), LIST_NAMES.humanReview, "every card reaches Human Review");
     }
   } finally {
     await stopWorker(context, service);
@@ -126,14 +127,14 @@ async function requiredLabel(context: ScenarioContext): Promise<string> {
   const id = context.scenario.id;
   const service = await serviceBoard(context, id, {edits: [[["tracker", "required_labels"], ["bugbash-ready"]]]});
   const label = await context.trello().request<{id: string}>("POST", "labels", {idBoard: service.board.id, name: "bugbash-ready", color: "green"});
-  const labelled = await addCard(context, service, id, QUESTION, "Ready for Codex", "labelled");
+  const labelled = await addCard(context, service, id, QUESTION, LIST_NAMES.ready, "labelled");
   await context.trello().request("POST", `cards/${labelled}/idLabels`, {value: label.id});
-  const unlabelled = await addCard(context, service, id, QUESTION, "Ready for Codex", "unlabelled");
+  const unlabelled = await addCard(context, service, id, QUESTION, LIST_NAMES.ready, "unlabelled");
   await startWorker(context, service);
   try {
-    await waitForCardIn(context, service, labelled, "Human Review");
+    await waitForCardIn(context, service, labelled, LIST_NAMES.humanReview);
     await sleep(3_000);
-    context.check.equal(await cardList(context, service, unlabelled), "Ready for Codex", "the unlabelled card stays in Ready for Codex");
+    context.check.equal(await cardList(context, service, unlabelled), LIST_NAMES.ready, "the unlabelled card stays in Ready for Codex");
     context.check.equal(promptsMentioning(service.codex, `${id}: unlabelled`).length, 0, "fake Codex never sees the unlabelled card");
   } finally {
     await stopWorker(context, service);
@@ -146,7 +147,7 @@ async function relationshipContext(context: ScenarioContext, repeated: boolean):
   const service = await serviceBoard(context, id);
   const related: Array<{where: string; id: string; url: string}> = [];
   for (const where of ["description", "comment", "checklist", "attachment"]) {
-    related.push({where, ...(await cardUrl(context, service, id, "Done", `related via ${where}`))});
+    related.push({where, ...(await cardUrl(context, service, id, LIST_NAMES.done, `related via ${where}`))});
   }
   const byWhere = (where: string) => related.find((entry) => entry.where === where) as {id: string; url: string};
   const description = [
@@ -155,7 +156,7 @@ async function relationshipContext(context: ScenarioContext, repeated: boolean):
     "",
     QUESTION,
   ].join("\n");
-  const target = await addCard(context, service, id, description, "Ready for Codex", "target");
+  const target = await addCard(context, service, id, description, LIST_NAMES.ready, "target");
   await context.trello().request("POST", `cards/${target}/actions/comments`, {text: `Related: ${byWhere("comment").url}`});
   await context.trello().addChecklist(service.board, target, "Notes", [`[checklist reference](${byWhere("checklist").url})`]);
   await context.trello().request("POST", `cards/${target}/attachments`, {url: byWhere("attachment").url, name: "attachment reference"});
