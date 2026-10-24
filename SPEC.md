@@ -4097,9 +4097,13 @@ that a second formatting pass leaves the source unchanged.
 - If a snapshot API is implemented, it returns running rows, retry rows, token totals, and rate
   limits
 - If a snapshot API is implemented, snapshot and card-detail reads do not wait for an in-flight
-  orchestrator operation and show the state as of one point of that operation; a change an
-  operation makes to running rows, retry rows, the dispatch pause, or the effective config is
-  visible before that operation's next tracker, workspace, or worker call
+  orchestrator operation and show the state as of one point of that operation. These changes are
+  visible before the tracker, workspace, or worker call that follows them in the same operation:
+  the selected board at startup, the stopped state at stop, the new routing after a reload, a
+  dispatched card, a refreshed or terminated running card, a worker exit, a scheduled or fired
+  retry, and an installed, rearmed, or cleared dispatch pause. A handoff deadline cancels its worker
+  outside the operation lock, so those reads MAY show the canceled card until the deadline's
+  follow-up operation gets the lock and publishes
 - If a snapshot API is implemented, timeout/unavailable cases are surfaced
 
 - `SymphonyOrchestratorShutdownTest` holds a canceled runner and its `after_run` hook alive to verify
