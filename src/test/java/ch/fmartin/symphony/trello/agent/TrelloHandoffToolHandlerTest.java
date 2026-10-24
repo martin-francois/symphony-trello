@@ -374,10 +374,7 @@ final class TrelloHandoffToolHandlerTest {
 
         // then
         assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
-        assertThat(json.readTree(result.path("contentItems").get(0).path("text").asText()))
-                .isEqualTo(json.createObjectNode()
-                        .put("error", "invalid_tool_arguments")
-                        .put("message", invalidArguments(tool, expectedMessage)));
+        assertThat(failureBody(result)).isEqualTo(invalidArgumentsFailure(tool, expectedMessage));
         assertThat(cardFetchCount).as("card refreshes before validation").hasValue(0);
         assertThat(commentText.get()).isNull();
         assertThat(updatedCommentText.get()).isNull();
@@ -399,13 +396,9 @@ final class TrelloHandoffToolHandlerTest {
 
         // then
         assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
-        assertThat(json.readTree(result.path("contentItems").get(0).path("text").asText()))
-                .isEqualTo(json.createObjectNode()
-                        .put("error", "invalid_tool_arguments")
-                        .put(
-                                "message",
-                                invalidArguments(
-                                        TrelloHandoffToolHandler.MOVE_CURRENT_CARD, argumentsNotAnObject("unknown"))));
+        assertThat(failureBody(result))
+                .isEqualTo(invalidArgumentsFailure(
+                        TrelloHandoffToolHandler.MOVE_CURRENT_CARD, argumentsNotAnObject("unknown")));
         assertThat(movedToListId.get()).isNull();
     }
 
@@ -440,39 +433,62 @@ final class TrelloHandoffToolHandlerTest {
         TrelloHandoffToolHandler handler = handler();
         EffectiveConfig config = config(List.of("Review"), List.of());
         Card card = TestCards.card("card-1", "TRELLO-abc", "Ready for Codex");
-        Map<String, String> messagesByArguments = Map.of(
-                "{}", missing("text"),
-                "{\"text\":12}", wrongType("text", "integer", "string"),
-                "{\"text\":\"\"}", empty("text"),
-                "{\"text\":\"Ready\",\"card_id\":\"card-2\"}", unknownProperty("card_id"));
+        String comment = TrelloHandoffToolHandler.ADD_COMMENT;
+        String recheck = TrelloHandoffToolHandler.UPDATE_BLOCKER_RECHECK_STATUS;
+        String checklist = TrelloHandoffToolHandler.UPSERT_CHECKLIST_ITEM;
+        String attachment = TrelloHandoffToolHandler.ADD_URL_ATTACHMENT;
+        String move = TrelloHandoffToolHandler.MOVE_CURRENT_CARD;
+        // The last three calls pass the schema and stop at a later Symphony check before any Trello request.
+        List<ConcurrentCall> calls = List.of(
+                new ConcurrentCall(comment, "{}", invalidArgumentsFailure(comment, missing("text"))),
+                new ConcurrentCall(
+                        comment,
+                        "{\"text\":\"Ready\",\"card_id\":\"card-2\"}",
+                        invalidArgumentsFailure(comment, unknownProperty("card_id"))),
+                new ConcurrentCall(recheck, "{\"status\":\"\"}", invalidArgumentsFailure(recheck, empty("status"))),
+                new ConcurrentCall(
+                        checklist,
+                        "{\"checklist_name\":\"Release tasks\",\"item_name\":\"Publish release\",\"complete\":\"true\"}",
+                        invalidArgumentsFailure(checklist, wrongType("complete", "string", "boolean"))),
+                new ConcurrentCall(
+                        checklist,
+                        "{\"checklist_name\":\"Release tasks\",\"item_name\":\"Publish\\nrelease\",\"complete\":true}",
+                        failure(
+                                "invalid_checklist_item",
+                                "Checklist names and item names must be one non-control line.")),
+                new ConcurrentCall(
+                        attachment,
+                        "{\"url\":\"https://github.com/example/project/pull/12?tab=files\"}",
+                        failure(
+                                "invalid_url_attachment",
+                                "Provide an http or https URL without credentials, query string, or fragment.")),
+                new ConcurrentCall(
+                        move,
+                        "{}",
+                        failure("missing_destination_list", "Provide list_name or list_id for the destination list.")));
         int threads = 8;
         int roundsPerThread = 25;
         var start = new CyclicBarrier(threads);
-        List<String> expected = new ArrayList<>();
-        List<Future<List<String>>> workers = new ArrayList<>();
+        List<JsonNode> expected = new ArrayList<>();
+        List<Future<List<JsonNode>>> workers = new ArrayList<>();
 
         // when
         try (ExecutorService executor = Executors.newFixedThreadPool(threads)) {
             for (int thread = 0; thread < threads; thread++) {
-                List<JsonNode> calls = new ArrayList<>();
+                List<JsonNode> params = new ArrayList<>();
                 for (int round = 0; round < roundsPerThread; round++) {
-                    for (Map.Entry<String, String> invalid : messagesByArguments.entrySet()) {
-                        calls.add(json.createObjectNode()
-                                .put("tool", TrelloHandoffToolHandler.ADD_COMMENT)
-                                .set("arguments", json.readTree(invalid.getKey())));
-                        expected.add(invalidArguments(TrelloHandoffToolHandler.ADD_COMMENT, invalid.getValue()));
+                    for (ConcurrentCall call : calls) {
+                        params.add(json.createObjectNode()
+                                .put("tool", call.tool())
+                                .set("arguments", json.readTree(call.arguments())));
+                        expected.add(call.expectedFailure());
                     }
                 }
                 workers.add(executor.submit(() -> {
                     start.await(CONCURRENT_VALIDATION_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
-                    List<String> results = new ArrayList<>();
-                    for (JsonNode params : calls) {
-                        String failure = handler.handle(config, card, params)
-                                .path("contentItems")
-                                .get(0)
-                                .path("text")
-                                .asText();
-                        results.add(json.readTree(failure).path("message").asText());
+                    List<JsonNode> results = new ArrayList<>();
+                    for (JsonNode call : params) {
+                        results.add(failureBody(handler.handle(config, card, call)));
                     }
                     return results;
                 }));
@@ -480,11 +496,15 @@ final class TrelloHandoffToolHandlerTest {
         }
 
         // then
-        List<String> actual = new ArrayList<>();
-        for (Future<List<String>> worker : workers) {
+        List<JsonNode> actual = new ArrayList<>();
+        for (Future<List<JsonNode>> worker : workers) {
             actual.addAll(worker.get(CONCURRENT_VALIDATION_TIMEOUT.toSeconds(), TimeUnit.SECONDS));
         }
         assertThat(actual).containsExactlyElementsOf(expected);
+        assertThat(commentText.get()).isNull();
+        assertThat(checklistRequests).isEmpty();
+        assertThat(attachmentUrl.get()).isNull();
+        assertThat(movedToListId.get()).isNull();
     }
 
     @Test
@@ -2883,9 +2903,19 @@ final class TrelloHandoffToolHandlerTest {
         return "$." + name + ": must not be only whitespace";
     }
 
-    private static String invalidArguments(String tool, String violation) {
-        return "Invalid " + tool + " arguments: " + violation;
+    private static ObjectNode invalidArgumentsFailure(String tool, String violation) {
+        return failure("invalid_tool_arguments", "Invalid " + tool + " arguments: " + violation);
     }
+
+    private static ObjectNode failure(String error, String message) {
+        return JsonNodeFactory.instance.objectNode().put("error", error).put("message", message);
+    }
+
+    private JsonNode failureBody(JsonNode result) throws Exception {
+        return json.readTree(result.path("contentItems").get(0).path("text").asText());
+    }
+
+    private record ConcurrentCall(String tool, String arguments, ObjectNode expectedFailure) {}
 
     private static String unknownProperty(String name) {
         return "$: property '" + name
