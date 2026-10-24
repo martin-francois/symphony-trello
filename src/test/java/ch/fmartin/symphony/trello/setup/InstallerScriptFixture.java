@@ -1185,14 +1185,17 @@ final class InstallerScriptFixture {
                   mkdir -p "$config_dir"
                   if [[ -t 0 ]] && command -v stty >/dev/null 2>&1; then
                     # Like Java's Console.readPassword, hide the echo before showing a secret prompt.
+                    # set -e exits on a failed read; the trap still restores the echo.
+                    trap 'stty echo' EXIT
                     stty -echo
                     printf '@TRELLO_KEY_PROMPT@'
                     IFS= read -r key
-                    printf '\n'
+                    printf '\\n'
                     printf '@TRELLO_TOKEN_PROMPT@'
                     IFS= read -r token
                     stty echo
-                    printf '\n'
+                    trap - EXIT
+                    printf '\\n'
                     printf '@TRELLO_BOARD_PROMPT@'
                     IFS= read -r board
                   else
