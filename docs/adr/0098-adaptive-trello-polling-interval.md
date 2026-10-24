@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-10-04
-decision-makers: [François Martin, Claude]
+decision-makers: [François Martin]
 consulted:
   - "[GitHub issue #58](https://github.com/martin-francois/symphony-trello/issues/58)"
   - "[GitHub issue #403](https://github.com/martin-francois/symphony-trello/issues/403)"
@@ -82,6 +82,11 @@ How it works:
 - A tick with at least one `429` doubles the effective interval, up to 30000 ms. The effective
   interval is never shorter than `polling.interval_ms`. A configured interval of 30000 ms or more is
   therefore never slowed.
+- One `429` is enough, even one that a retried read recovered from. The issue speaks of repeated
+  `429` responses, but a single one already means the shared token budget for the current
+  10-second window is used up. A threshold would let a worker keep spending requests into that
+  window and would need another counter and another constant. The cost of slowing down early is
+  small: with a 5000 ms workflow, one `429` means polling every 10 seconds for about a minute.
 - After 60 seconds without a `429`, the effective interval halves. The check runs at the end of
   each tick, so a step lands on the first tick end after the 60 seconds. Every further quiet 60 seconds
   halves it again until it is back at `polling.interval_ms`. A `429` during recovery doubles it
@@ -115,8 +120,9 @@ true for `Retry-After` too.
   call received.
 - Good, because the retry contract from [GitHub PR #797](https://github.com/martin-francois/symphony-trello/pull/797) stays as it is, and its tests stay green
   unchanged.
-- Good, because no Trello-caused wait exceeds 30 seconds, so shutdown and the next tick are never
-  stuck behind a long `Retry-After`.
+- Good, because each `Retry-After` wait is capped at 30 seconds. Adaptive slowdown stops at
+  30 seconds before jitter; a longer configured interval stays unchanged. At the 30-second cap,
+  jitter adds at most 3 seconds.
 - Good, because jitter only lengthens delays: the configured interval and a pending `Retry-After`
   stay minimums, and workers that share a token drift apart instead of polling in step.
 - Good, because operators see the slowdown in `/api/v1/state`, on the status page, and in the
@@ -133,9 +139,9 @@ true for `Retry-After` too.
 ### Confirmation
 
 - `AdaptivePollIntervalTest` covers jitter bounds, doubling per rate-limited tick, the 30000 ms cap,
-  a `Retry-After` still ahead, a `Retry-After` already waited out, jitter on a `Retry-After`,
-  stepwise recovery, a `429` during recovery, a configured interval at the cap, and a reloaded
-  interval.
+  jitter on top of the cap, a `Retry-After` still ahead, a `Retry-After` already waited out, jitter
+  on a `Retry-After`, stepwise recovery, a `429` during recovery, a configured interval at the cap,
+  and a reloaded interval.
 - `RateLimitPressureRecorderTest.drainBetweenReadingAndPublishingAMergeCountsEveryResponseInExactlyOneBatch`
   pins the only new concurrency mechanism: a drain that runs between reading and publishing a
   merge must neither lose nor repeat a `429`. A non-atomic `get` plus `set` makes it fail.
@@ -143,6 +149,8 @@ true for `Retry-After` too.
   a `Retry-After` above 30 seconds is bounded. `TrelloClientTest.retryAfterHttpDateWaitsUntilThatDate`
   covers the HTTP-date form. `TrelloRateLimitPollingIntegrationTest` runs the real
   client against a fake Trello server that answers `429`.
+- `SymphonyOrchestratorTest.trelloRateLimitDuringATickSlowsTheNextTickAndShowsInTheSnapshot` fixes
+  the jitter through the orchestrator constructor and checks the scheduled delay and the snapshot.
 - `SPEC.md` sections 5.3.2, 8.1, 11.2, 13.3, 14.2, and 17 describe the behavior.
 - Revisit this decision if Trello starts sending `Retry-After` values above 30 seconds for real
   limits, or if operators need to tune the quiet period or the factor.
@@ -204,3 +212,8 @@ per 10 seconds per key.
 [GitHub PR #797](https://github.com/martin-francois/symphony-trello/pull/797) adds ADR 0097 (keep the hand-rolled Trello retry backoff). This ADR builds on it and
 should merge after it. The code lives in `AdaptivePollInterval`, `RateLimitPressure`,
 `RateLimitPressureRecorder`, and `SymphonyOrchestrator.finishTickAndScheduleNext`.
+
+The HTTP adapter uses one observation instant to parse `Retry-After` and record the pressure batch.
+Reading the clock again when recording a date-based header would move the server's absolute
+retry deadline by the elapsed time between the reads. The deadline regression advances the clock
+between calls and checks that the recorded deadline remains the one the response supplied.

@@ -75,6 +75,24 @@ final class AdaptivePollIntervalTest {
     }
 
     @Test
+    void jitterAtTheCapComesOnTopSoWorkersAtTheCapDoNotPollInStep() {
+        // given
+        var interval = new AdaptivePollInterval(clock, MAX_JITTER);
+        for (int tick = 0; tick < RATE_LIMITED_TICKS_TO_REACH_CAP - 1; tick++) {
+            interval.nextDelay(CONFIGURED, rateLimited(Optional.empty()));
+        }
+
+        // when
+        Duration delay = interval.nextDelay(CONFIGURED, rateLimited(Optional.empty()));
+
+        // then
+        assertThat(delay)
+                .as("the cap bounds the effective interval; jitter is added after it")
+                .isEqualTo(withLargestJitter(RateLimitPressure.MAX_WAIT));
+        assertThat(interval.status(CONFIGURED).effectiveInterval()).isEqualTo(RateLimitPressure.MAX_WAIT);
+    }
+
+    @Test
     void retryAfterStillAheadDelaysTheNextTickBeyondTheEffectiveInterval() {
         // given
         var interval = new AdaptivePollInterval(clock, NO_JITTER);

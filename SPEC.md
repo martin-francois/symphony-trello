@@ -1646,7 +1646,8 @@ Adaptive poll scheduling (Trello adaptation):
   to writes or agent tool calls in the same process. This Java implementation doubles the effective
   interval for each tick that observed at least one `429`.
 - The slowed effective interval MUST stay bounded. This Java implementation caps it at `30000 ms`, so
-  a configured interval of `30000 ms` or more is not slowed.
+  a configured interval of `30000 ms` or more is not slowed. Jitter comes on top of the cap, so a
+  scheduled delay at the cap can reach `33000 ms`.
 - After a quiet period without `429` responses, the effective interval SHOULD recover gradually
   toward `polling.interval_ms`. This Java implementation checks at the end of each tick and halves
   the interval once 60 seconds passed since the last tick that observed a `429` or since the last
