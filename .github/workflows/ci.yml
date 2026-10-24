@@ -73,7 +73,7 @@ jobs:
     # ADR 0048 keeps this job on 2 vCPU and matches hosted JUnit parallelism
     # to the runner's vCPU count to minimize normalized Blacksmith cost.
     if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: blacksmith-2vcpu-ubuntu-2604
     env:
       ISOLATE_OPENREWRITE: >-
         ${{ github.event_name == 'pull_request'
