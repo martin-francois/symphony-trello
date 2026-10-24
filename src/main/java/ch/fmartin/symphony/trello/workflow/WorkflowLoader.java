@@ -42,13 +42,13 @@ public class WorkflowLoader {
         Path absolute = path.toAbsolutePath().normalize();
         String markdown;
         try {
-            // A fresh decoder throws on malformed UTF-8 instead of replacing it, like Files.readAllLines did.
+            // newDecoder() reports malformed input: invalid UTF-8 is an unreadable file (SPEC.md 5.1), not U+FFFD text.
             markdown = UTF_8.newDecoder().decode(ByteBuffer.wrap(content)).toString();
         } catch (CharacterCodingException e) {
             throw unreadable(absolute, e);
         }
 
-        // String.lines() splits on the same \n, \r, and \r\n terminators as Files.readAllLines.
+        // lines() breaks only at \n, \r, and \r\n, so U+2028 and other Unicode breaks stay inside a line.
         ParsedMarkdown parsed = splitFrontMatter(markdown.lines().toList());
         Map<String, Object> config = parseYamlMap(parsed.frontMatter());
         return new WorkflowDefinition(absolute, config, parsed.body().trim());
