@@ -842,7 +842,8 @@ Before it replaces a prompt, Symphony copies the workflow to
 `WORKFLOW.<name>.md.backup-<UTC time>` in the same folder and keeps the file permissions. It checks
 the new file before and after the replacement and restores the backup if a check fails. To undo a
 migration, copy the backup over the workflow. If the new version causes problems, also reinstall the
-previous version with `--version`.
+previous version with `--version`. The new prompt uses the line endings (LF or CRLF) of the text
+after the closing `---` line. If that text mixes both, the new prompt is written with LF.
 
 For a `MANUAL` result, Symphony writes the new prompt to `WORKFLOW.<name>.md.symphony-<version>-body.txt`.
 Keep everything up to and including the closing `---` line, compare the text after it with the
@@ -866,13 +867,17 @@ symphony-trello migrate-workflows --board "My Board Name"
 
 `--dry-run` shows the results and planned changes without writing files. Without a terminal, or
 when you update with `--no-onboard`, the installer runs the check with `--non-interactive`: it only
-reports, leaves every workflow unchanged, and writes no preview files.
+reports, leaves every workflow unchanged, and writes no preview files. It still records `CURRENT`
+workflows in `generated-workflows.json`, so later checks compare against the prompt they already
+have.
 
 Downgrading to an older release of the same major version runs the same check in reverse. Symphony
 says that the workflow was made for a newer version. If you keep the newer prompt, it warns that the
 prompt may mention features the older version does not support, which can cause unexpected
-behavior. The installer refuses to install a release from an older major version before it changes
-anything.
+behavior. When you install a release, the installer refuses one from an older major version before
+it changes anything. A source checkout only knows its version after the build, so there the check
+itself rejects the older major version after the app was replaced: it changes no workflow and stops
+the installer with an error.
 
 ## Advanced Setup
 

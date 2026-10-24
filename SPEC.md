@@ -4261,7 +4261,9 @@ Interaction:
   that the migration gives the workflow the target version's workflow fixes and features. Before
   confirming class 4, the command MUST warn that kept additions can conflict with the new body.
 - A migration MUST keep the metadata and the text before and after the source generated body byte
-  for byte, and MUST write the target generated body in the body's existing line-ending style.
+  for byte, and MUST write the target generated body in the body's existing line-ending style. A
+  body without line breaks takes the style of the whole file. A body that mixes CRLF and LF line
+  breaks has no single style, so the target generated body is written with LF.
 - For manual migrations, an interactive run MUST write the target generated body next to the
   workflow as `<workflow file>.symphony-<version>-body.txt` when an inputs record or
   metadata-derived inputs are available, explain how to compare and copy it, print a durable link to the matching release

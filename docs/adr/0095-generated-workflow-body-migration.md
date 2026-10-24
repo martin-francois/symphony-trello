@@ -87,6 +87,12 @@ restarts workers: a rejected major downgrade must not run, and a failed write ne
 read the backup message first. For release-archive installs, both installers also refuse an older
 major release before they replace the app.
 
+Line endings. Classification compares bodies after turning CRLF into LF, so the line-ending style
+alone never counts as a customization. A migration writes the target body in the style of the
+existing body, or of the whole file when the body has no line break. A body that mixes CRLF and LF
+has no single style to keep, so the target body is written with LF, the style the generator
+produces. The kept text before and after the old body stays byte for byte in either case.
+
 Version order. Versions compare by Semantic Versioning 2.0.0 precedence, including numeric
 pre-release identifiers, so a move from `1.5.0-rc.10` to `1.5.0-rc.9` counts as a downgrade.
 
