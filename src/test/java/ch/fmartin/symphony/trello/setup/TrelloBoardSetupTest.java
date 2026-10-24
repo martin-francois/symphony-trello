@@ -3097,8 +3097,12 @@ final class TrelloBoardSetupTest {
                         List.of());
 
         // when
-        String prompt =
-                new PromptRenderer().render(new WorkflowLoader().load(workflow).promptTemplate(), card, null);
+        String prompt = new PromptRenderer()
+                .render(
+                        new WorkflowLoader().load(workflow).promptTemplate(),
+                        card,
+                        null,
+                        EffectiveConfig.GitHubConfig.DEFAULTS);
 
         // then
         assertThat(prompt.lines().filter(line -> line.startsWith("- source=")).toList())

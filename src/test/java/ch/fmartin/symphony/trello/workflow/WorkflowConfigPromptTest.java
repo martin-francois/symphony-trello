@@ -60,8 +60,8 @@ final class WorkflowConfigPromptTest {
         // when
         WorkflowDefinition definition = loader.load(workflow);
         var config = configs.resolve(definition);
-        String renderedPrompt =
-                prompts.render(definition.promptTemplate(), TestCards.card("1", "TRELLO-abc", "Todo"), 3);
+        String renderedPrompt = prompts.render(
+                definition.promptTemplate(), TestCards.card("1", "TRELLO-abc", "Todo"), 3, config.github());
 
         // then
         assertThat(config.tracker().activeStates()).containsExactly("Todo", "In Progress");
@@ -250,8 +250,11 @@ final class WorkflowConfigPromptTest {
     void missingWorkflowAndUnknownTemplateVariablesUseTypedErrors() {
         // given
         ThrowingCallable missingWorkflow = () -> loader.load(tempDir.resolve("missing.md"));
-        ThrowingCallable unknownTemplateVariable =
-                () -> prompts.render("{{ card.nope }}", TestCards.card("1", "TRELLO-abc", "Todo"), null);
+        ThrowingCallable unknownTemplateVariable = () -> prompts.render(
+                "{{ card.nope }}",
+                TestCards.card("1", "TRELLO-abc", "Todo"),
+                null,
+                EffectiveConfig.GitHubConfig.DEFAULTS);
 
         // when
         WorkflowException missingWorkflowError = catchThrowableOfType(WorkflowException.class, missingWorkflow);

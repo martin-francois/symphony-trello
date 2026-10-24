@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.prompt;
 
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
+import ch.fmartin.symphony.trello.config.PullRequestHandoffField;
 import ch.fmartin.symphony.trello.config.PullRequestMode;
 import ch.fmartin.symphony.trello.config.StateNames;
 import ch.fmartin.symphony.trello.domain.Card;
@@ -19,8 +20,6 @@ public record PullRequestHandoff(
         SelectedBy selectedBy,
         @Nullable String noPrLabel,
         boolean cardHasNoPrLabel) {
-
-    public static final String TEMPLATE_VARIABLE = "pull_request_handoff";
 
     /// Which structured source decided [#mode()].
     public enum SelectedBy {
@@ -57,12 +56,12 @@ public record PullRequestHandoff(
 
     public Map<String, Object> toTemplateMap() {
         Map<String, Object> values = new LinkedHashMap<>();
-        values.put("mode", mode.workflowValue());
-        values.put("workflow_mode", workflowMode.workflowValue());
-        values.put("selected_by", selectedBy.templateValue());
-        values.put("no_pr_label_enabled", noPrLabel != null);
-        values.put("no_pr_label", noPrLabel == null ? "" : noPrLabel);
-        values.put("card_has_no_pr_label", cardHasNoPrLabel);
+        values.put(PullRequestHandoffField.MODE.key(), mode.workflowValue());
+        values.put(PullRequestHandoffField.WORKFLOW_MODE.key(), workflowMode.workflowValue());
+        values.put(PullRequestHandoffField.SELECTED_BY.key(), selectedBy.templateValue());
+        values.put(PullRequestHandoffField.NO_PR_LABEL_ENABLED.key(), noPrLabel != null);
+        values.put(PullRequestHandoffField.NO_PR_LABEL.key(), noPrLabel == null ? "" : noPrLabel);
+        values.put(PullRequestHandoffField.CARD_HAS_NO_PR_LABEL.key(), cardHasNoPrLabel);
         return values;
     }
 }
