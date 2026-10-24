@@ -7602,9 +7602,9 @@ final class InstallerScriptTest {
         String posixInstaller = Files.readString(Path.of("install.sh"));
         String powershellInstaller = Files.readString(Path.of("install.ps1"));
         String posixOnboarding =
-                posixInstaller.substring(posixInstaller.lastIndexOf("if [[ \"$NO_ONBOARD\" == false ]]"));
+                posixInstaller.substring(posixInstaller.lastIndexOf("if [[ \"$SETUP_PHASE_PLANNED\" == true ]]"));
         String powershellOnboarding =
-                powershellInstaller.substring(powershellInstaller.lastIndexOf("if (-not $NoOnboard)"));
+                powershellInstaller.substring(powershellInstaller.lastIndexOf("if ($SetupPhasePlanned)"));
         String posixAutostartFilter = posixInstaller.substring(
                 posixInstaller.indexOf("autostart_environment_name()"),
                 posixInstaller.indexOf("has_control_character()"));
@@ -7652,7 +7652,7 @@ final class InstallerScriptTest {
                         "Start-ManagedWorkers",
                         "} finally {",
                         "Restore-InstallerCompletionEnvironment");
-        assertThat(powershellOnboarding.substring(powershellOnboarding.indexOf("elseif ($RestartManagedWorkers)")))
+        assertThat(powershellOnboarding.substring(powershellOnboarding.indexOf("elseif ($WorkerPhasePlanned)")))
                 .contains("Start-ManagedWorkersWithoutInstallerCompletion");
     }
 
@@ -7663,8 +7663,8 @@ final class InstallerScriptTest {
         String powershellInstaller = Files.readString(Path.of("install.ps1"));
 
         // when
-        int posixPathSetup = posixInstaller.indexOf("\noffer_path_setup\n\nif [[ \"$NO_ONBOARD\" == false ]]");
-        int powershellPathSetup = powershellInstaller.indexOf("\nOffer-PathSetup\n\nif (-not $NoOnboard)");
+        int posixPathSetup = posixInstaller.indexOf("\noffer_path_setup\n\nif [[ \"$SETUP_PHASE_PLANNED\" == true ]]");
+        int powershellPathSetup = powershellInstaller.indexOf("\nOffer-PathSetup\n\nif ($SetupPhasePlanned)");
 
         // then
         assertThat(posixPathSetup)

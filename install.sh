@@ -228,17 +228,22 @@ done
 # Progress output: one plan, numbered phases, and one result line per milestone. Routine commands
 # run without a RUN line and name themselves only when they fail. Commands the user approves or
 # answers interactively still print RUN first. ADR 0122 records this output contract.
-PHASE_COUNT=0
+PLANNED_PHASES=()
 PHASE_INDEX=0
 PHASE_TITLE=""
 PHASE_RECOVERY=""
 
 begin_phase() {
+  # The [n/N] total comes from PLANNED_PHASES, so a phase missing from the plan must fail loudly.
+  if [[ "${PLANNED_PHASES[$PHASE_INDEX]:-}" != "$1" ]]; then
+    printf 'Installer bug: phase "%s" is not next in the planned phases.\n' "$1" >&2
+    exit 70
+  fi
   PHASE_INDEX=$((PHASE_INDEX + 1))
   PHASE_TITLE="$1"
   PHASE_RECOVERY="$2"
   echo
-  print_heading "[$PHASE_INDEX/$PHASE_COUNT] $PHASE_TITLE"
+  print_heading "[$PHASE_INDEX/${#PLANNED_PHASES[@]}] $PHASE_TITLE"
 }
 
 report_failed_phase() {
@@ -246,7 +251,7 @@ report_failed_phase() {
   if [[ "$status" -ne 0 && -n "$PHASE_TITLE" ]]; then
     {
       echo
-      printf 'Installer stopped during [%s/%s] %s.\n' "$PHASE_INDEX" "$PHASE_COUNT" "$PHASE_TITLE"
+      printf 'Installer stopped during [%s/%s] %s.\n' "$PHASE_INDEX" "${#PLANNED_PHASES[@]}" "$PHASE_TITLE"
       printf '%s\n' "$PHASE_RECOVERY"
     } >&2
   fi
@@ -2681,12 +2686,22 @@ WORKER_PHASE_TITLE="Starting managed workers"
 if [[ "$RESTART_MANAGED_WORKERS" == true ]]; then
   WORKER_PHASE_TITLE="Restarting managed workers"
 fi
+PREREQUISITES_PHASE_TITLE="Checking prerequisites"
+SETUP_PHASE_TITLE="Running setup"
+SETUP_PHASE_PLANNED=false
+WORKER_PHASE_PLANNED=false
 if [[ "$NO_ONBOARD" == false ]]; then
-  PHASE_COUNT=4
+  SETUP_PHASE_PLANNED=true
+  WORKER_PHASE_PLANNED=true
 elif [[ "$RESTART_MANAGED_WORKERS" == true ]]; then
-  PHASE_COUNT=3
-else
-  PHASE_COUNT=2
+  WORKER_PHASE_PLANNED=true
+fi
+PLANNED_PHASES=("$PREREQUISITES_PHASE_TITLE" "$APP_PHASE_TITLE")
+if [[ "$SETUP_PHASE_PLANNED" == true ]]; then
+  PLANNED_PHASES+=("$SETUP_PHASE_TITLE")
+fi
+if [[ "$WORKER_PHASE_PLANNED" == true ]]; then
+  PLANNED_PHASES+=("$WORKER_PHASE_TITLE")
 fi
 INSTALLED_COMMAND="$(installed_command_display)"
 PREREQUISITES_RECOVERY="Follow the prerequisite steps above, then rerun the installer."
@@ -2718,7 +2733,7 @@ if [[ "$DRY_RUN" == true ]]; then
 fi
 trap report_failed_phase EXIT
 
-begin_phase "Checking prerequisites" "$PREREQUISITES_RECOVERY"
+begin_phase "$PREREQUISITES_PHASE_TITLE" "$PREREQUISITES_RECOVERY"
 if [[ "$INSTALL_SOURCE" == "source-checkout" ]]; then
   if need git; then print_status OK "  Git"; else print_status NEEDED "  Git"; fi
 fi
@@ -2751,11 +2766,11 @@ if [[ "$DRY_RUN" == true ]]; then
   fi
   print_status WOULD " install command: $BIN_DIR/symphony-trello"
   offer_path_setup
-  if [[ "$NO_ONBOARD" == false ]]; then
-    begin_phase "Running setup" "$SETUP_RECOVERY"
+  if [[ "$SETUP_PHASE_PLANNED" == true ]]; then
+    begin_phase "$SETUP_PHASE_TITLE" "$SETUP_RECOVERY"
     print_status WOULD " run guided setup: $BIN_DIR/symphony-trello setup-local"
   fi
-  if [[ "$NO_ONBOARD" == false || "$RESTART_MANAGED_WORKERS" == true ]]; then
+  if [[ "$WORKER_PHASE_PLANNED" == true ]]; then
     begin_phase "$WORKER_PHASE_TITLE" "$WORKERS_RECOVERY"
     start_managed_workers
   fi
@@ -2877,8 +2892,8 @@ write_install_context
 
 offer_path_setup
 
-if [[ "$NO_ONBOARD" == false ]]; then
-  begin_phase "Running setup" "$SETUP_RECOVERY"
+if [[ "$SETUP_PHASE_PLANNED" == true ]]; then
+  begin_phase "$SETUP_PHASE_TITLE" "$SETUP_RECOVERY"
   run_setup_local_with_deferred_completion
   print_status OK "  Setup complete"
   begin_phase "$WORKER_PHASE_TITLE" "$WORKERS_RECOVERY"
@@ -2886,7 +2901,7 @@ if [[ "$NO_ONBOARD" == false ]]; then
   print_installer_completion
   exit 0
 fi
-if [[ "$RESTART_MANAGED_WORKERS" == true ]]; then
+if [[ "$WORKER_PHASE_PLANNED" == true ]]; then
   begin_phase "$WORKER_PHASE_TITLE" "$WORKERS_RECOVERY"
   start_managed_workers_without_installer_completion
 fi

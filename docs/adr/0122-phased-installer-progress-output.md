@@ -95,6 +95,11 @@ The POSIX dry-run now previews the managed-worker phase through the same service
 functions as a real run, as the PowerShell dry-run already did. Dry-run never prints `OK` result
 lines for work it did not do.
 
+Each installer builds its list of planned phases once, before the plan is printed, and takes `N`
+from the length of that list. The code that runs a phase checks that its title is the next one in
+the list and stops with an installer bug message otherwise, so a phase added or removed in one
+place cannot print a wrong `[n/N]`.
+
 The phase logic lives in both scripts, not in Java. The prerequisites phase installs Java itself,
 and the install phase downloads or builds the Java app, so no Java code exists yet when most of
 the transcript is printed. The two copies use the same titles, status words, and recovery text,

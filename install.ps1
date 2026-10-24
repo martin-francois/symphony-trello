@@ -28,7 +28,7 @@ $ErrorActionPreference = "Stop"
 # Progress output: one plan, numbered phases, and one result line per milestone. Routine steps run
 # without a RUN line and name themselves only when they fail. Steps the user approves or answers
 # interactively still print RUN first. ADR 0122 records this output contract.
-$script:InstallerPhaseCount = 0
+$script:InstallerPlannedPhases = @()
 $script:InstallerPhaseIndex = 0
 $script:InstallerPhaseTitle = ""
 $script:InstallerPhaseRecovery = ""
@@ -41,7 +41,7 @@ trap {
   [Console]::Error.WriteLine($message)
   if (-not [string]::IsNullOrEmpty($script:InstallerPhaseTitle)) {
     [Console]::Error.WriteLine("")
-    [Console]::Error.WriteLine("Installer stopped during [$($script:InstallerPhaseIndex)/$($script:InstallerPhaseCount)] $($script:InstallerPhaseTitle).")
+    [Console]::Error.WriteLine("Installer stopped during [$($script:InstallerPhaseIndex)/$($script:InstallerPlannedPhases.Count)] $($script:InstallerPhaseTitle).")
     [Console]::Error.WriteLine($script:InstallerPhaseRecovery)
   }
   exit 1
@@ -669,11 +669,15 @@ Assert-AppPaths
 Assert-CommandDirectory
 
 function Start-InstallerPhase([string]$Title, [string]$Recovery) {
+  # The [n/N] total comes from the planned phases, so a phase missing from the plan must fail loudly.
+  if ($script:InstallerPhaseIndex -ge $script:InstallerPlannedPhases.Count -or $script:InstallerPlannedPhases[$script:InstallerPhaseIndex] -ne $Title) {
+    throw "Installer bug: phase '$Title' is not next in the planned phases."
+  }
   $script:InstallerPhaseIndex++
   $script:InstallerPhaseTitle = $Title
   $script:InstallerPhaseRecovery = $Recovery
   Write-Host
-  Write-Heading "[$($script:InstallerPhaseIndex)/$($script:InstallerPhaseCount)] $Title"
+  Write-Heading "[$($script:InstallerPhaseIndex)/$($script:InstallerPlannedPhases.Count)] $Title"
 }
 
 function Get-InstalledCommandDisplay {
@@ -1407,7 +1411,17 @@ if ($UpdatingExistingApp) {
   $AppPhaseTitle = "Installing Symphony"
 }
 $WorkerPhaseTitle = if ($RestartManagedWorkers) { "Restarting managed workers" } else { "Starting managed workers" }
-$script:InstallerPhaseCount = if (-not $NoOnboard) { 4 } elseif ($RestartManagedWorkers) { 3 } else { 2 }
+$PrerequisitesPhaseTitle = "Checking prerequisites"
+$SetupPhaseTitle = "Running setup"
+$SetupPhasePlanned = -not $NoOnboard
+$WorkerPhasePlanned = $SetupPhasePlanned -or $RestartManagedWorkers
+$script:InstallerPlannedPhases = @($PrerequisitesPhaseTitle, $AppPhaseTitle)
+if ($SetupPhasePlanned) {
+  $script:InstallerPlannedPhases += $SetupPhaseTitle
+}
+if ($WorkerPhasePlanned) {
+  $script:InstallerPlannedPhases += $WorkerPhaseTitle
+}
 $InstalledCommand = Get-InstalledCommandDisplay
 $PrerequisitesRecovery = "Follow the prerequisite steps above, then rerun the installer."
 $AppRecovery = "Fix the problem above, then rerun the installer."
@@ -1437,7 +1451,7 @@ if ($DryRun) {
   Write-Heading "Dry run: no files changed."
 }
 
-Start-InstallerPhase "Checking prerequisites" $PrerequisitesRecovery
+Start-InstallerPhase $PrerequisitesPhaseTitle $PrerequisitesRecovery
 if ($InstallSource -eq "source-checkout") {
   if (Test-Command "git") { Write-Status "OK" "  Git" } else { Write-Status "NEEDED" "  Git" }
 }
@@ -1466,11 +1480,11 @@ if ($DryRun) {
   }
   Write-Status "WOULD" " install command: $BinDir\symphony-trello.ps1"
   Offer-PathSetup
-  if (-not $NoOnboard) {
-    Start-InstallerPhase "Running setup" $SetupRecovery
+  if ($SetupPhasePlanned) {
+    Start-InstallerPhase $SetupPhaseTitle $SetupRecovery
     Write-Status "WOULD" " run guided setup: $BinDir\symphony-trello.ps1 setup-local"
   }
-  if ((-not $NoOnboard) -or $RestartManagedWorkers) {
+  if ($WorkerPhasePlanned) {
     Start-InstallerPhase $WorkerPhaseTitle $WorkersRecovery
     Start-ManagedWorkersWithoutInstallerCompletion
   }
@@ -1630,8 +1644,8 @@ Write-InstallContext
 
 Offer-PathSetup
 
-if (-not $NoOnboard) {
-  Start-InstallerPhase "Running setup" $SetupRecovery
+if ($SetupPhasePlanned) {
+  Start-InstallerPhase $SetupPhaseTitle $SetupRecovery
   try {
     Set-InstallerCompletionMode "defer"
     try {
@@ -1648,7 +1662,7 @@ if (-not $NoOnboard) {
     Restore-InstallerCompletionEnvironment
   }
   exit 0
-} elseif ($RestartManagedWorkers) {
+} elseif ($WorkerPhasePlanned) {
   Start-InstallerPhase $WorkerPhaseTitle $WorkersRecovery
   Start-ManagedWorkersWithoutInstallerCompletion
 }
