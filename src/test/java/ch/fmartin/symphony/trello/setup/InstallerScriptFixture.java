@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.setup;
 import static com.google.common.base.Preconditions.checkArgument;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.fmartin.symphony.trello.testsupport.CapturedStreams;
 import com.google.common.base.Splitter;
 import java.io.File;
 import java.io.IOException;
@@ -28,6 +29,9 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 final class InstallerScriptFixture {
+    static final String TRELLO_KEY_PROMPT = "Trello API key: ";
+    static final String TRELLO_TOKEN_PROMPT = "Trello API token: ";
+    static final String TRELLO_BOARD_PROMPT = "Trello board name: ";
     private static final int PROCESS_DESCENDANT_DISCOVERY_MILLIS = 1_000;
     private static final int PROCESS_TERMINATION_SECONDS = 5;
     private static final int PROCESS_STOP_SECONDS = 5;
@@ -687,12 +691,17 @@ final class InstallerScriptFixture {
     }
 
     static String installerDefaultRef() throws IOException {
+        return "v" + installerDefaultVersion();
+    }
+
+    /// The release version `install.sh` installs by default; Release Please bumps it every release.
+    static String installerDefaultVersion() throws IOException {
         String installScript = Files.readString(Path.of("install.sh"));
         return POSIX_INSTALLER_DEFAULT_VERSION
                 .matcher(installScript)
                 .results()
                 .findAny()
-                .map(match -> "v" + match.group(1))
+                .map(match -> match.group(1))
                 .orElseThrow(() -> new IllegalStateException("install.sh is missing the Release Please default ref"));
     }
 
@@ -1177,14 +1186,14 @@ final class InstallerScriptFixture {
                   if [[ -t 0 ]] && command -v stty >/dev/null 2>&1; then
                     # Like Java's Console.readPassword, hide the echo before showing a secret prompt.
                     stty -echo
-                    printf 'Trello API key: '
+                    printf '@TRELLO_KEY_PROMPT@'
                     IFS= read -r key
                     printf '\n'
-                    printf 'Trello API token: '
+                    printf '@TRELLO_TOKEN_PROMPT@'
                     IFS= read -r token
                     stty echo
                     printf '\n'
-                    printf 'Trello board name: '
+                    printf '@TRELLO_BOARD_PROMPT@'
                     IFS= read -r board
                   else
                     read -r key
@@ -1215,6 +1224,12 @@ final class InstallerScriptFixture {
                         .transform(script -> withPlaceholders(
                                 script,
                                 Map.of(
+                                        "@TRELLO_KEY_PROMPT@",
+                                        TRELLO_KEY_PROMPT,
+                                        "@TRELLO_TOKEN_PROMPT@",
+                                        TRELLO_TOKEN_PROMPT,
+                                        "@TRELLO_BOARD_PROMPT@",
+                                        TRELLO_BOARD_PROMPT,
                                         "@FAKE_WORKER_TERM_HANDLER@",
                                         FAKE_WORKER_TERM_HANDLER,
                                         "@FAKE_WORKER_READY_SECONDS@",
@@ -1429,7 +1444,7 @@ final class InstallerScriptFixture {
     }
 
     /// A child process whose standard output and standard error were captured separately.
-    record ProcessResult(int exitCode, String stdout, String stderr) {
+    record ProcessResult(int exitCode, String stdout, String stderr) implements CapturedStreams {
         /// Standard output followed by standard error, for fragment assertions that do not depend
         /// on stream placement. Use [#stdout()] and [#stderr()] when the stream matters.
         String output() {

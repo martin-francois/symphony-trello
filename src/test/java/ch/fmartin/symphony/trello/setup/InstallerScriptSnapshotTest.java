@@ -4,7 +4,7 @@ import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.HostEnviro
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.createFakeToolchain;
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.createSourceRepository;
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.hostCommandDirectory;
-import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.installerDefaultRef;
+import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.installerDefaultVersion;
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.run;
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.runPseudoTerminalDialog;
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.searchPathEntries;
@@ -52,7 +52,6 @@ import org.junit.jupiter.api.io.TempDir;
                 "The baselines record the Linux install.sh path; run scripts/snapshot-tests-docker.sh elsewhere")
 final class InstallerScriptSnapshotTest {
     private static final TerminalSnapshots SNAPSHOTS = TerminalSnapshots.repository();
-    private static final String BOARD_NAME = "Snapshot Queue";
     private static final List<String> HOST_COMMANDS = List.of(
             "awk",
             "basename",
@@ -110,8 +109,7 @@ final class InstallerScriptSnapshotTest {
                 "--no-onboard");
 
         // then
-        SNAPSHOTS.verifyStreams(
-                "installer/dry-run-no-onboard", result.exitCode(), result.stdout(), result.stderr(), normalizer());
+        SNAPSHOTS.verify("installer/dry-run-no-onboard", result, normalizer());
     }
 
     @Test
@@ -132,9 +130,9 @@ final class InstallerScriptSnapshotTest {
                             + shellQuote(binDirectory.toString()),
                     List.of(
                             new TerminalAnswer("Can this machine open a browser for Codex login? [Y/n] ", "n"),
-                            new TerminalAnswer("Trello API key: ", TRELLO_API_KEY),
-                            new TerminalAnswer("Trello API token: ", TRELLO_API_TOKEN),
-                            new TerminalAnswer("Trello board name: ", BOARD_NAME)));
+                            new TerminalAnswer(InstallerScriptFixture.TRELLO_KEY_PROMPT, TRELLO_API_KEY),
+                            new TerminalAnswer(InstallerScriptFixture.TRELLO_TOKEN_PROMPT, TRELLO_API_TOKEN),
+                            new TerminalAnswer(InstallerScriptFixture.TRELLO_BOARD_PROMPT, SnapshotBoard.NAME)));
         } finally {
             stopFakeWorkers(environment, binDirectory);
         }
@@ -156,8 +154,7 @@ final class InstallerScriptSnapshotTest {
                 run(CLEARED, baseEnvironment(realJavaPath()), temporaryDirectory, command.toString(), "--help");
 
         // then
-        SNAPSHOTS.verifyStreams(
-                "installer/installed-root-help", result.exitCode(), result.stdout(), result.stderr(), normalizer());
+        SNAPSHOTS.verify("installer/installed-root-help", result, normalizer());
     }
 
     @Test
@@ -176,7 +173,7 @@ final class InstallerScriptSnapshotTest {
                 "--token",
                 TRELLO_API_TOKEN,
                 "--name",
-                BOARD_NAME,
+                SnapshotBoard.NAME,
                 "--repository-url",
                 HTTPS,
                 "--server-port",
@@ -187,11 +184,9 @@ final class InstallerScriptSnapshotTest {
             ProcessResult result = run(CLEARED, baseEnvironment(realJavaPath()), temporaryDirectory, newBoard);
 
             // then
-            SNAPSHOTS.verifyStreams(
+            SNAPSHOTS.verify(
                     "installer/installed-new-board",
-                    result.exitCode(),
-                    result.stdout(),
-                    result.stderr(),
+                    result,
                     TranscriptNormalizer.builder()
                             .temporaryRoot(temporaryDirectory, TranscriptNormalizer.TEMPORARY_ROOT)
                             .literal("HTTP status port: " + serverPort, "HTTP status port: <SERVER_PORT>")
@@ -288,13 +283,8 @@ final class InstallerScriptSnapshotTest {
     private TranscriptNormalizer normalizer() throws IOException {
         return TranscriptNormalizer.builder()
                 .temporaryRoot(temporaryDirectory, TranscriptNormalizer.TEMPORARY_ROOT)
-                .literal(installerVersion(), "<INSTALLER_VERSION>")
+                .literal(installerDefaultVersion(), "<INSTALLER_VERSION>")
                 .build();
-    }
-
-    /// The release version `install.sh` installs by default; Release Please bumps it every release.
-    private static String installerVersion() throws IOException {
-        return installerDefaultRef().substring("v".length());
     }
 
     private Path installedConfig() {

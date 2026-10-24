@@ -64,14 +64,13 @@ public final class TerminalSnapshots {
     }
 
     /// Verifies a command whose stdout and stderr were captured separately.
-    public void verifyStreams(
-            String scenario, int exitCode, String stdout, String stderr, TranscriptNormalizer normalizer) {
+    void verifyStreams(String scenario, int exitCode, String stdout, String stderr, TranscriptNormalizer normalizer) {
         CredentialSentinels.assertAbsent(scenario, "stdout", stdout);
         CredentialSentinels.assertAbsent(scenario, "stderr", stderr);
         verifyRendered(scenario, TerminalTranscript.ofStreams(exitCode, stdout, stderr), normalizer);
     }
 
-    public void verify(String scenario, CliRunResult result, TranscriptNormalizer normalizer) {
+    public void verify(String scenario, CapturedStreams result, TranscriptNormalizer normalizer) {
         verifyStreams(scenario, result.exitCode(), result.stdout(), result.stderr(), normalizer);
     }
 

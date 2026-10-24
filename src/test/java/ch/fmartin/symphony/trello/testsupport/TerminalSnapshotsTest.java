@@ -21,6 +21,8 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 final class TerminalSnapshotsTest {
+    private static final int COMPARISON_TIMEOUT_SECONDS = 10;
+    private static final int OVERLAP_OBSERVATION_MILLIS = 200;
     private static final String SCENARIO = "suite/scenario";
     private static final char BELL = '\u0007';
     private static final char ESCAPE = TerminalTranscript.ESCAPE;
@@ -273,10 +275,10 @@ final class TerminalSnapshotsTest {
             // when
             Future<?> second = executor.submit(
                     () -> verifyHoldingComparison(snapshots, "concurrent/second", secondEntered::countDown));
-            boolean secondOverlappedFirst = secondEntered.await(200, TimeUnit.MILLISECONDS);
+            boolean secondOverlappedFirst = secondEntered.await(OVERLAP_OBSERVATION_MILLIS, TimeUnit.MILLISECONDS);
             releaseFirst.countDown();
-            first.get(10, TimeUnit.SECONDS);
-            second.get(10, TimeUnit.SECONDS);
+            first.get(COMPARISON_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            second.get(COMPARISON_TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
             // then
             assertThat(secondOverlappedFirst)
@@ -298,7 +300,7 @@ final class TerminalSnapshotsTest {
 
     private static void awaitLatch(CountDownLatch latch) {
         try {
-            if (!latch.await(10, TimeUnit.SECONDS)) {
+            if (!latch.await(COMPARISON_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                 throw new IllegalStateException("timed out waiting for the other comparison");
             }
         } catch (InterruptedException exception) {
