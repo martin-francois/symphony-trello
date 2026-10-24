@@ -8,12 +8,17 @@ import static ch.fmartin.symphony.trello.tracker.TrelloReferenceFuzzInvariants.c
 import static ch.fmartin.symphony.trello.tracker.TrelloReferenceFuzzInvariants.parseReferences;
 
 import ch.fmartin.symphony.trello.domain.Card;
+import ch.fmartin.symphony.trello.testsupport.FuzzIsolationExtension;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.code_intelligence.jazzer.mutation.annotation.NotNull;
 import com.code_intelligence.jazzer.mutation.annotation.WithUtf8Length;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.parallel.Isolated;
 import org.junit.jupiter.params.provider.MethodSource;
 
+@ExtendWith(FuzzIsolationExtension.class)
+@Isolated
 final class TrelloCardReferenceParserFuzzTest {
     @SuppressWarnings({"JUnitValueSource", "LexicographicalAnnotationListing"})
     @MethodSource("trelloReferenceTexts")
