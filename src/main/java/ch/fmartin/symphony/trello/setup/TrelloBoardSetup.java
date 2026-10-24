@@ -654,7 +654,7 @@ public final class TrelloBoardSetup {
                 Files.writeString(absolute, workflow, StandardOpenOption.CREATE_NEW);
             }
         } catch (IOException e) {
-            throw new TrelloBoardSetupException(
+            throw SetupFailureCauses.setupFailure(
                     "setup_workflow_write_failed", "Could not write workflow file: " + absolute, e);
         }
     }
@@ -771,7 +771,7 @@ public final class TrelloBoardSetup {
                     .filter(path -> !path.equals(absolute))
                     .toList();
         } catch (IOException e) {
-            throw new TrelloBoardSetupException(
+            throw SetupFailureCauses.setupFailure(
                     "setup_workflow_scan_failed", "Could not scan workflow directory: " + parent, e);
         }
     }
@@ -819,7 +819,7 @@ public final class TrelloBoardSetup {
             String text = Files.readString(workflowPath);
             return readYamlFrontMatter(text);
         } catch (IOException e) {
-            throw new TrelloBoardSetupException(
+            throw SetupFailureCauses.setupFailure(
                     "setup_workflow_scan_failed", "Could not read workflow file: " + workflowPath, e);
         }
     }

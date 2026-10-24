@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import ch.fmartin.symphony.trello.testsupport.SetupRunResult;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
@@ -408,20 +409,8 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
     @Test
     void rerunWithAddPathFailsBeforeChangingWorkflowWhenRunningWorkerIsUntracked() throws Exception {
         // given
-        Path workflow = tempDir.resolve("WORKFLOW.untracked-access-update.md");
+        Path workflow = givenRunningAccessUpdateWorker("untracked-access-update");
         Path allowedPath = tempDir.resolve("untracked access path");
-        writeWorkflow(workflow, "board-1", 18134);
-        writeManifest(
-                """
-                {"boards":[
-                  {"boardId":"board-1","boardKey":"one","boardName":"Untracked Access","boardUrl":"https://trello.example/one","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":18134,"githubEnabled":false,"additionalWritableRoots":[],"dangerFullAccess":false}
-                ]}
-                """
-                        .formatted(
-                                json(workflow),
-                                json(tempDir.resolve(".env.untracked-access-update")),
-                                json(tempDir.resolve("workspaces-one"))));
-        commands.startHealthServer(workflow, "board-1");
         when(workerManager.canStopManagedWorker(any(), any())).thenReturn(false);
 
         // when
@@ -432,6 +421,45 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
         assertThatWorkflow(workflow).doesNotContain(allowedPath.toString());
         assertThat(commands.startedWorkflows).isEmpty();
         assertThat(commands.stoppedWorkflows).isEmpty();
+    }
+
+    @Test
+    void rerunWithAddPathNamesThePathFreeCauseWhenWorkerStateIsUnreadable() throws Exception {
+        // given
+        Path workflow = givenRunningAccessUpdateWorker("unreadable-access-update");
+        Path allowedPath = tempDir.resolve("unreadable access path");
+        Path pidFile = tempDir.resolve("state").resolve("unreadable-access-update.pid");
+        when(workerManager.canStopManagedWorker(any(), any())).thenThrow(new AccessDeniedException(pidFile.toString()));
+
+        // when
+        SetupRunResult result = runSetup("--non-interactive", "--add-path", allowedPath.toString(), "--no-github");
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_worker_state_unreadable",
+                        "Could not inspect managed worker state for \"Access Update\" (AccessDeniedException)")
+                .stderrDoesNotContain(pidFile.toString());
+        assertThatWorkflow(workflow).doesNotContain(allowedPath.toString());
+        assertThat(commands.startedWorkflows).isEmpty();
+        assertThat(commands.stoppedWorkflows).isEmpty();
+    }
+
+    private Path givenRunningAccessUpdateWorker(String name) throws Exception {
+        Path workflow = tempDir.resolve("WORKFLOW." + name + ".md");
+        writeWorkflow(workflow, "board-1", 18134);
+        writeManifest(
+                """
+                {"boards":[
+                  {"boardId":"board-1","boardKey":"one","boardName":"Access Update","boardUrl":"https://trello.example/one","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":18134,"githubEnabled":false,"additionalWritableRoots":[],"dangerFullAccess":false}
+                ]}
+                """
+                        .formatted(
+                                json(workflow),
+                                json(tempDir.resolve(".env." + name)),
+                                json(tempDir.resolve("workspaces-one"))));
+        commands.startHealthServer(workflow, "board-1");
+        return workflow;
     }
 
     @Test

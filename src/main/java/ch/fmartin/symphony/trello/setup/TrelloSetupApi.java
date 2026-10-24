@@ -26,6 +26,9 @@ import java.util.stream.Collectors;
 final class TrelloSetupApi {
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
     private static final TypeReference<List<Map<String, Object>>> LIST_MAP_TYPE = new TypeReference<>() {};
+    private static final String UNKNOWN_WRITE_OUTCOME_CODE = "trello_write_outcome_unknown";
+    private static final String UNKNOWN_WRITE_OUTCOME =
+            "Trello write outcome is unknown. Inspect Trello before retrying setup.";
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
     /// The longest one request can take before it has an answer or fails.
@@ -57,13 +60,13 @@ final class TrelloSetupApi {
             String... requiredKeys) {
         Map<String, Object> payload = request(TrelloRequestKind.CREATE, endpoint, path, query, credentials, MAP_TYPE);
         if (payload == null) {
-            throw unknownTrelloWriteOutcome(
+            throw unknownTrelloWriteOutcomeWithoutCause(
                     new TrelloBoardSetupException("trello_unknown_payload", "Trello payload is empty"));
         }
         for (String requiredKey : requiredKeys) {
             Object value = payload.get(requiredKey);
             if (value == null || value.toString().isBlank()) {
-                throw unknownTrelloWriteOutcome(new TrelloBoardSetupException(
+                throw unknownTrelloWriteOutcomeWithoutCause(new TrelloBoardSetupException(
                         "trello_unknown_payload", "Trello payload is missing " + requiredKey));
             }
         }
@@ -118,7 +121,7 @@ final class TrelloSetupApi {
     private static TrelloBoardSetupException trelloPayloadException(
             TrelloRequestKind requestKind, JsonProcessingException cause) {
         return requestKind.write()
-                ? unknownTrelloWriteOutcome(cause)
+                ? unknownTrelloWriteOutcomeWithoutCause(cause)
                 : new TrelloBoardSetupException(
                         "trello_unknown_payload", "Trello response payload could not be parsed", cause);
     }
@@ -126,15 +129,13 @@ final class TrelloSetupApi {
     private static TrelloBoardSetupException trelloTransportException(
             TrelloRequestKind requestKind, String message, Exception cause) {
         return requestKind.write()
-                ? unknownTrelloWriteOutcome(cause)
-                : new TrelloBoardSetupException("trello_api_request", message, cause);
+                ? SetupFailureCauses.setupFailure(UNKNOWN_WRITE_OUTCOME_CODE, UNKNOWN_WRITE_OUTCOME, cause)
+                : SetupFailureCauses.setupFailure("trello_api_request", message, cause);
     }
 
-    private static TrelloBoardSetupException unknownTrelloWriteOutcome(Exception cause) {
-        return new TrelloBoardSetupException(
-                "trello_write_outcome_unknown",
-                "Trello write outcome is unknown. Inspect Trello before retrying setup.",
-                cause);
+    /// Payload and status causes can quote Trello response content, so the message leaves them out.
+    private static TrelloBoardSetupException unknownTrelloWriteOutcomeWithoutCause(Exception cause) {
+        return new TrelloBoardSetupException(UNKNOWN_WRITE_OUTCOME_CODE, UNKNOWN_WRITE_OUTCOME, cause);
     }
 
     private static URI uri(URI endpoint, String path, Map<String, String> query) {
@@ -156,7 +157,7 @@ final class TrelloSetupApi {
                 : ": " + responseBody.strip().lines().findFirst().orElse("");
         Status status = Status.fromStatusCode(statusCode);
         if (requestKind.write() && Family.SERVER_ERROR == Family.familyOf(statusCode)) {
-            return unknownTrelloWriteOutcome(new TrelloBoardSetupException(
+            return unknownTrelloWriteOutcomeWithoutCause(new TrelloBoardSetupException(
                     "trello_api_status", "Trello returned HTTP " + statusCode + detail, statusCode));
         }
         if (status == null) {

@@ -1049,6 +1049,16 @@ Setup and lifecycle commands that hide a local object such as a workflow file, w
 PID/state file, or file-backed secret path SHOULD include the same public-safe token and a
 `diagnostics --show-private-context --lookup` hint so operators can resolve only that object locally.
 
+When a Java setup or lifecycle command turns an I/O or transport failure into a setup failure or a
+warning, the message SHOULD keep its actionable text and append a cause summary in the form
+`(<ExceptionType>: <detail>)`, or `(<ExceptionType>)` when no detail remains, followed by
+`, caused by <RootType>` and its detail inside the parentheses when the failure wraps a different
+root cause. The summary MUST NOT repeat the file paths that a file-system exception message embeds,
+and MUST NOT include parser messages, which can quote file content. When an I/O failure reaches the
+command boundary without a wrapping setup failure, the printed failure message SHOULD be that cause
+summary. Setup failure troubleshooting reports MUST apply the public-safe redaction rules above to
+the whole message, cause summary included.
+
 Public-safe diagnostics tokens SHOULD be stable for a local installation and SHOULD be generated from
 private values with a local random diagnostics key using a keyed hash such as `HmacSHA3-256`. The
 local diagnostics key MUST NOT be printed in diagnostics output, private-context output, logs, issue
@@ -3959,6 +3969,10 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
   corrections, the bounded polling window with a later manual check, skip, stop, keep and archive
   answers, archive after a failure, and a process-level interrupt that archives only the tutorial
   board
+- If Java setup and lifecycle commands are implemented, a failure that wraps an I/O or transport
+  failure names its cause type and detail without file-system exception paths or parser content, and
+  the setup failure troubleshooting report redacts that message under the public-safe diagnostics
+  contract
 
 ### 17.8 Trello Workflow Conformance
 

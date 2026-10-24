@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystemException;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -137,6 +138,7 @@ final class LocalSetupTutorialOfferTest extends LocalSetupFixtureSupport {
     @Test
     void unreadableTutorialOfferLeavesCompletedSetupSuccessful() throws IOException {
         // given
+        String privateInputPath = tempDir.resolve("private-tutorial-input").toString();
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
         var input = new BufferedReader(new StringReader(DEFAULT_SETUP_ANSWERS)) {
@@ -144,7 +146,7 @@ final class LocalSetupTutorialOfferTest extends LocalSetupFixtureSupport {
             public String readLine() throws IOException {
                 String line = super.readLine();
                 if (line == null) {
-                    throw new IOException("fixture input failed");
+                    throw new FileSystemException(privateInputPath, null, "fixture input failed");
                 }
                 return line;
             }
@@ -163,8 +165,10 @@ final class LocalSetupTutorialOfferTest extends LocalSetupFixtureSupport {
         // then
         assertThat(exitCode).as("stderr:%n%s", stderr).isZero();
         assertThat(stderr.toString(StandardCharsets.UTF_8))
-                .contains("Setup is complete. Start the tutorial again with:")
-                .doesNotContain("Troubleshooting report written");
+                .contains(
+                        "The guided tutorial stopped: FileSystemException: fixture input failed",
+                        "Setup is complete. Start the tutorial again with:")
+                .doesNotContain("Troubleshooting report written", privateInputPath);
         assertThat(statefulTrello.boardNames()).containsExactly(BOARD_NAME);
     }
 
