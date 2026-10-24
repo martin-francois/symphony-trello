@@ -1,0 +1,5 @@
+---
+server:
+  port: $SYMPHONY_FUZZ_HIGH_PORT
+---
+Out-of-range port from the environment.

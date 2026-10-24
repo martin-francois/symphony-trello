@@ -1,0 +1,10 @@
+---
+tracker:
+  kind: trello
+  board_id: board-1
+codex:
+  turn_sandbox_policy:
+    type: readOnly
+    networkAccess: false
+---
+A read-only policy fails once an operator adds writable roots.

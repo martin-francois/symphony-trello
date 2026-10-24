@@ -3,18 +3,25 @@ package ch.fmartin.symphony.trello.workflow;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.fmartin.symphony.trello.fuzz.WorkflowConfigInvariants;
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
+import com.google.common.collect.MoreCollectors;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.List;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 final class WorkflowLoaderFuzzTest {
     private static final int MAX_MARKDOWN_BYTES = 8 * 1024;
+    private static final Path STANDALONE_SEED_CORPUS = Path.of("oss-fuzz/corpora/WorkflowLoaderFuzzer");
 
     @TempDir
     Path tempDir;
@@ -47,6 +54,33 @@ final class WorkflowLoaderFuzzTest {
         assertWorkflowLoadBoundary(candidate, result);
     }
 
+    // pom.xml copies the standalone seeds to Jazzer's <class>Inputs/<method> directory by literal path,
+    // so renaming this class or its fuzz test would silently stop replaying them.
+    @Test
+    void standaloneSeedCorpusReplaysAsFuzzTestInputs() throws IOException {
+        // given
+        String inputsDirectory = WorkflowLoaderFuzzTest.class.getSimpleName() + "Inputs/" + fuzzTestMethodName();
+
+        // when
+        List<String> seeds;
+        try (Stream<Path> files = Files.list(STANDALONE_SEED_CORPUS)) {
+            seeds = files.map(file -> file.getFileName().toString()).toList();
+        }
+
+        // then
+        assertThat(seeds).isNotEmpty().allSatisfy(seed -> assertThat(
+                        WorkflowLoaderFuzzTest.class.getResource(inputsDirectory + "/" + seed))
+                .as(seed)
+                .isNotNull());
+    }
+
+    private static String fuzzTestMethodName() {
+        return Arrays.stream(WorkflowLoaderFuzzTest.class.getDeclaredMethods())
+                .filter(method -> method.isAnnotationPresent(FuzzTest.class))
+                .map(Method::getName)
+                .collect(MoreCollectors.onlyElement());
+    }
+
     private WorkflowLoadBoundaryResult loadBoundary(byte[] markdown) throws IOException {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Files.write(workflow, markdown);
@@ -63,6 +97,7 @@ final class WorkflowLoaderFuzzTest {
             assertThat(result.definition().path()).isAbsolute();
             assertThat(result.definition().config()).isNotNull();
             assertThat(result.definition().promptTemplate()).isNotNull();
+            WorkflowConfigInvariants.assertResolutionProperties(result.definition());
         }
         if (result.failure() != null) {
             assertThat(result.failure().code())

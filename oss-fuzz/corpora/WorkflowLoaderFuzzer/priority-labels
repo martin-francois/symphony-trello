@@ -1,0 +1,18 @@
+---
+tracker:
+  kind: trello
+  board_id: board-1
+  priority_labels:
+    urgent: 1
+    "Priority:  High": 2.0
+    later: 0
+    someday: 1.5
+    never: soon
+    huge: 99999999999
+  request_timeout_ms: -1
+agent:
+  max_concurrent_agents_by_state:
+    Todo: 1
+    In Progress: 0
+---
+Priority labels and per-state limits with valid and ignored values.

@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.fuzz;
 
+import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workflow.WorkflowException;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
@@ -25,11 +26,14 @@ public final class WorkflowLoaderFuzzer {
     }
 
     private static void load(Path workflow) {
+        WorkflowDefinition definition;
         try {
-            LOADER.load(workflow);
+            definition = LOADER.load(workflow);
         } catch (WorkflowException expected) {
             // Invalid front matter is ordinary fuzzer input; crashes are anything outside the
             // loader's expected parse-failure contract.
+            return;
         }
+        WorkflowConfigInvariants.assertResolutionProperties(definition);
     }
 }
