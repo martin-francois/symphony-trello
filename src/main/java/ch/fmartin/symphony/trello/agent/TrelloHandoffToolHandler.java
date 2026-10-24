@@ -25,7 +25,9 @@ import com.networknt.schema.path.NodePath;
 import com.networknt.schema.path.PathType;
 import com.networknt.schema.regex.JDKRegularExpressionFactory;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import java.net.URI;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -53,8 +55,12 @@ public class TrelloHandoffToolHandler {
     static final String DUPLICATE_BLOCKER_RECHECK_NOTE_PREFIX = "> Duplicate Symphony blocker recheck statuses found: ";
     static final String BLOCKER_RECHECK_CHECKING = "Checking whether this card is still blocked...";
     static final String RESUMED_WORK_PREFIX = "No longer blocked; working on ";
-    static final String BLOCKER_RECHECK_FOOTER_PREFIX =
-            "_Managed by Symphony · [View the comment explaining why this card was previously blocked](";
+    // Symphony-written footers share this start so people can recognize text that Symphony manages.
+    static final String MANAGED_BY_SYMPHONY = "_Managed by Symphony";
+    static final String FOOTER_SEPARATOR = " · ";
+    static final String BLOCKER_RECHECK_FOOTER_PREFIX = MANAGED_BY_SYMPHONY
+            + FOOTER_SEPARATOR
+            + "[View the comment explaining why this card was previously blocked](";
     static final String BLOCKER_RECHECK_FOOTER_SUFFIX = ")_";
     static final String TRELLO_CARD_URL_PREFIX = "https://trello.com/c/";
     private static final String TRELLO_COMMENT_FRAGMENT = "#comment-";
@@ -91,9 +97,14 @@ public class TrelloHandoffToolHandler {
     private final TrelloFollowUpCardTool followUpCards;
 
     public TrelloHandoffToolHandler(ObjectMapper json, TrelloClient trello) {
+        this(json, trello, ApplicationClock.systemUtc());
+    }
+
+    @Inject
+    public TrelloHandoffToolHandler(ObjectMapper json, TrelloClient trello, Clock clock) {
         this.json = json;
         this.trello = trello;
-        this.followUpCards = new TrelloFollowUpCardTool(trello, ApplicationClock.systemUtc());
+        this.followUpCards = new TrelloFollowUpCardTool(trello, clock);
         for (int index = 0; index < workpadLocks.length; index++) {
             workpadLocks[index] = new Object();
         }
@@ -295,7 +306,7 @@ public class TrelloHandoffToolHandler {
                 arguments.path("complete").booleanValue());
         return success(Map.of(
                 "status",
-                "checklist_item_" + result.status(),
+                "checklist_item_" + result.status().toolValue(),
                 "card_id",
                 card.id(),
                 "checklist_id",

@@ -895,10 +895,10 @@ public class TrelloClient implements TrackerClient {
             return createCheckItem(config, checklist, itemName, complete);
         }
         if (item.complete() == complete) {
-            return new ChecklistItemWrite(checklist.id(), item.id(), complete, "unchanged");
+            return new ChecklistItemWrite(checklist.id(), item.id(), complete, ChecklistItemWrite.Status.UNCHANGED);
         }
         updateCheckItemState(config, cardId, item.id(), complete);
-        return new ChecklistItemWrite(checklist.id(), item.id(), complete, "updated");
+        return new ChecklistItemWrite(checklist.id(), item.id(), complete, ChecklistItemWrite.Status.UPDATED);
     }
 
     /// Adds an unchecked item when the named checklist does not hold it yet. An existing item keeps
@@ -911,7 +911,8 @@ public class TrelloClient implements TrackerClient {
         }
         Card.ChecklistItem item = singleCheckItemByName(checklist, itemName);
         if (item != null) {
-            return new ChecklistItemWrite(checklist.id(), item.id(), item.complete(), "unchanged");
+            return new ChecklistItemWrite(
+                    checklist.id(), item.id(), item.complete(), ChecklistItemWrite.Status.UNCHANGED);
         }
         return createCheckItem(config, checklist, itemName, false);
     }
@@ -925,7 +926,10 @@ public class TrelloClient implements TrackerClient {
         Map<String, Object> created =
                 postMap(config, "checklists/" + encodeSegment(checklist.id()) + "/checkItems", query);
         return new ChecklistItemWrite(
-                checklist.id(), requiredString(created, "id", "trello_unknown_payload"), complete, "created");
+                checklist.id(),
+                requiredString(created, "id", "trello_unknown_payload"),
+                complete,
+                ChecklistItemWrite.Status.CREATED);
     }
 
     public UrlAttachmentWrite addUrlAttachment(EffectiveConfig config, String cardId, String url, String name) {
@@ -1009,13 +1013,15 @@ public class TrelloClient implements TrackerClient {
 
     /// Explains why adding an exact card reference to the named checklist would break the
     /// prerequisite checklist convention, or returns empty when the checklist is missing, empty,
-    /// or already holds only exact prerequisite references.
-    public Optional<String> prerequisiteChecklistConflict(EffectiveConfig config, String cardId, String checklistName) {
+    /// or already holds only exact prerequisite references. `cardRole` names the checked card in
+    /// the message, such as `current card`.
+    public Optional<String> prerequisiteChecklistConflict(
+            EffectiveConfig config, String cardId, String cardRole, String checklistName) {
         List<Card.Checklist> matches = fetchChecklists(config, cardId).stream()
                 .filter(checklist -> Objects.equals(checklist.name(), checklistName))
                 .toList();
         if (matches.size() > 1) {
-            return Optional.of("More than one checklist on the current card is named " + checklistName + ".");
+            return Optional.of("More than one checklist on the " + cardRole + " is named " + checklistName + ".");
         }
         if (matches.isEmpty()) {
             return Optional.empty();
@@ -1028,7 +1034,7 @@ public class TrelloClient implements TrackerClient {
                 && (!hasNonBlankItem || !analysis.prerequisites().isEmpty());
         return onlyExactReferences
                 ? Optional.empty()
-                : Optional.of("The current card's " + checklistName
+                : Optional.of("The " + cardRole + "'s " + checklistName
                         + " checklist holds notes or links that are not exact card references, so adding a"
                         + " prerequisite to it would make it ambiguous.");
     }
@@ -1676,7 +1682,24 @@ public class TrelloClient implements TrackerClient {
 
     public record BoardList(String id, String name, boolean closed) {}
 
-    public record ChecklistItemWrite(String checklistId, String checkItemId, boolean complete, String status) {}
+    public record ChecklistItemWrite(String checklistId, String checkItemId, boolean complete, Status status) {
+        public enum Status {
+            CREATED("created"),
+            UNCHANGED("unchanged"),
+            UPDATED("updated");
+
+            private final String toolValue;
+
+            Status(String toolValue) {
+                this.toolValue = toolValue;
+            }
+
+            /// The suffix of the model-visible `checklist_item_<status>` tool result.
+            public String toolValue() {
+                return toolValue;
+            }
+        }
+    }
 
     public record UrlAttachmentWrite(String attachmentId) {}
 

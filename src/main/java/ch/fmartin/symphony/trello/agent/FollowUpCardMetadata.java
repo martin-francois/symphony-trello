@@ -15,7 +15,7 @@ import org.jspecify.annotations.Nullable;
 /// A description that does not end with this exact line carries no relationship meaning, so a
 /// pasted card link, an attachment, or an edited footer stays a plain reference.
 record FollowUpCardMetadata(String sourceShortLink, FollowUpRelationship relationship) {
-    static final String FOOTER_PREFIX = "_Managed by Symphony";
+    static final String FOOTER_PREFIX = TrelloHandoffToolHandler.MANAGED_BY_SYMPHONY;
     // Trello short links are 8 characters today; 24 also admits a full card id used as a link.
     static final int MIN_SHORT_LINK_LENGTH = 8;
     static final int MAX_SHORT_LINK_LENGTH = 24;
@@ -23,11 +23,12 @@ record FollowUpCardMetadata(String sourceShortLink, FollowUpRelationship relatio
             .or(CharMatcher.inRange('a', 'z'))
             .or(CharMatcher.inRange('0', '9'))
             .precomputed();
-    private static final String SEPARATOR = " · ";
+    private static final String SEPARATOR = TrelloHandoffToolHandler.FOOTER_SEPARATOR;
     private static final String SOURCE_LINK_PREFIX = "Follow-up of [the source card](";
+    // The short link group is loose on purpose: validShortLink owns the allowed characters and length.
     private static final Pattern FOOTER = Pattern.compile(Pattern.quote(
                     FOOTER_PREFIX + SEPARATOR + SOURCE_LINK_PREFIX + TrelloHandoffToolHandler.TRELLO_CARD_URL_PREFIX)
-            + "([A-Za-z0-9]+)" + Pattern.quote(")" + SEPARATOR) + "([^_\\n]+)_");
+            + "([^)\\s]+)" + Pattern.quote(")" + SEPARATOR) + "([^_\\n]+)_");
 
     static String cardUrl(String shortLink) {
         return TrelloHandoffToolHandler.TRELLO_CARD_URL_PREFIX + shortLink;

@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.agent;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
@@ -24,7 +25,6 @@ import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CyclicBarrier;
@@ -65,7 +65,7 @@ final class TrelloFollowUpCardToolTest {
 
     @BeforeEach
     void startBoard() throws IOException {
-        board.list(INBOX_ID, "Inbox")
+        board.list(INBOX_ID, ConfigDefaults.DEFAULT_FOLLOW_UP_LIST_NAME)
                 .list(READY_ID, "Ready for Codex")
                 .list(IN_PROGRESS_ID, "In Progress")
                 .list(BLOCKED_ID, "Blocked")
@@ -156,7 +156,7 @@ final class TrelloFollowUpCardToolTest {
                 .containsEntry("status", "follow_up_card_created")
                 .containsEntry("follow_up_card_id", followUp.id())
                 .containsEntry("follow_up_card_url", followUp.url())
-                .containsEntry("list_name", "Inbox")
+                .containsEntry("list_name", ConfigDefaults.DEFAULT_FOLLOW_UP_LIST_NAME)
                 .containsEntry("relationship", "related")
                 .containsEntry("current_card_must_wait", "false")
                 .containsEntry("current_card_moved_to", "");
@@ -168,7 +168,7 @@ final class TrelloFollowUpCardToolTest {
                 .endsWith("\n\n" + MANAGED_FOOTER_PREFIX + "Related work, no required order_");
         assertThat(board.labels())
                 .singleElement()
-                .satisfies(label -> assertThat(label.name()).isEqualTo("follow-up"))
+                .satisfies(label -> assertThat(label.name()).isEqualTo(ConfigDefaults.DEFAULT_FOLLOW_UP_LABEL))
                 .satisfies(label -> assertThat(followUp.labelIds()).containsExactly(label.id()));
         assertThat(followUp.attachments())
                 .singleElement()
@@ -195,7 +195,8 @@ final class TrelloFollowUpCardToolTest {
         FakeTrelloBoard.FakeCard followUp = board.cardByName(FOLLOW_UP_TITLE).orElseThrow();
         assertThat(followUp.checklists())
                 .singleElement()
-                .satisfies(checklist -> assertThat(checklist.name()).isEqualTo("Must finish first"))
+                .satisfies(checklist ->
+                        assertThat(checklist.name()).isEqualTo(TrelloFollowUpCardTool.PREREQUISITE_CHECKLIST_NAME))
                 .satisfies(checklist -> assertThat(checklist.items())
                         .singleElement()
                         .isEqualTo(new FakeTrelloBoard.ChecklistItem(
@@ -221,7 +222,8 @@ final class TrelloFollowUpCardToolTest {
                 .containsEntry("current_card_moved_to", "");
         assertThat(source.checklists())
                 .singleElement()
-                .satisfies(checklist -> assertThat(checklist.name()).isEqualTo("Must finish first"))
+                .satisfies(checklist ->
+                        assertThat(checklist.name()).isEqualTo(TrelloFollowUpCardTool.PREREQUISITE_CHECKLIST_NAME))
                 .satisfies(checklist -> assertThat(checklist.items())
                         .extracting(FakeTrelloBoard.ChecklistItem::name)
                         .containsExactly(followUp.url()));
@@ -267,7 +269,9 @@ final class TrelloFollowUpCardToolTest {
     @Test
     void currentCardChecklistWithNotesUnderThePrerequisiteNameFailsBeforeAnyWrite() {
         // given
-        board.cardByName(SOURCE_TITLE).orElseThrow().checklist("Must finish first", "Ask design first");
+        board.cardByName(SOURCE_TITLE)
+                .orElseThrow()
+                .checklist(TrelloFollowUpCardTool.PREREQUISITE_CHECKLIST_NAME, "Ask design first");
         EffectiveConfig config = config(Map.of(), Map.of());
 
         // when
@@ -275,6 +279,7 @@ final class TrelloFollowUpCardToolTest {
 
         // then
         assertFailure(result, "trello_follow_up_prerequisite_checklist_conflict");
+        assertThat(payload(result).get("message")).startsWith("The current card's ");
         assertThat(board.writeRequests()).isEmpty();
     }
 
@@ -453,7 +458,7 @@ final class TrelloFollowUpCardToolTest {
         board.card("card-existing", "SYNTH206", FOLLOW_UP_TITLE, INBOX_ID)
                 .description(
                         "Body\n\n" + MANAGED_FOOTER_PREFIX + "This card must wait for the source card to finish first_")
-                .checklist("Must finish first", "Ask design first");
+                .checklist(TrelloFollowUpCardTool.PREREQUISITE_CHECKLIST_NAME, "Ask design first");
         EffectiveConfig config = config(Map.of(), Map.of());
 
         // when
@@ -461,6 +466,7 @@ final class TrelloFollowUpCardToolTest {
 
         // then
         assertFailure(result, "trello_follow_up_prerequisite_checklist_conflict");
+        assertThat(payload(result).get("message")).startsWith("The follow-up card's ");
         assertThat(board.writeRequests()).isEmpty();
     }
 
@@ -501,15 +507,13 @@ final class TrelloFollowUpCardToolTest {
         };
         var concurrentHandler = new TrelloHandoffToolHandler(json, pausingClient);
         EffectiveConfig config = config(Map.of(), Map.of());
-        ObjectNode params = json.createObjectNode();
-        params.put("tool", TrelloFollowUpCardTool.NAME);
-        params.set("arguments", arguments(FOLLOW_UP_TITLE, "related"));
+        ObjectNode arguments = arguments(FOLLOW_UP_TITLE, "related");
 
         // when
         CompletableFuture<ObjectNode> first =
-                CompletableFuture.supplyAsync(() -> concurrentHandler.handle(config, sourceCard(), params));
+                CompletableFuture.supplyAsync(() -> call(concurrentHandler, config, sourceCard(), arguments));
         CompletableFuture<ObjectNode> second =
-                CompletableFuture.supplyAsync(() -> concurrentHandler.handle(config, sourceCard(), params));
+                CompletableFuture.supplyAsync(() -> call(concurrentHandler, config, sourceCard(), arguments));
         CompletableFuture.allOf(first, second).get(10, TimeUnit.SECONDS);
 
         // then
@@ -524,29 +528,20 @@ final class TrelloFollowUpCardToolTest {
     void hourlyRateLimitIsSharedAcrossSourceCardsAndReopensAfterTheWindow() {
         // given
         var clock = new MutableClock(Instant.parse("2026-10-01T10:00:00Z"));
-        var tool = new TrelloFollowUpCardTool(new TrelloClient(json), clock);
+        var clockedHandler = new TrelloHandoffToolHandler(json, new TrelloClient(json), clock);
         board.card("card-second", "SYNTH205", "Second source", IN_PROGRESS_ID);
+        Card secondSource = card("card-second", "SYNTH205", "Second source");
         EffectiveConfig config = config(Map.of(), Map.of("max_cards_per_hour", 1));
-        tool.handle(config, sourceCard(), arguments(FOLLOW_UP_TITLE, "related"), name -> Optional.empty());
+        call(clockedHandler, config, sourceCard(), arguments(FOLLOW_UP_TITLE, "related"));
 
         // when
-        TrelloFollowUpCardTool.Outcome limited = tool.handle(
-                config,
-                card("card-second", "SYNTH205", "Second source"),
-                arguments("Other work", "related"),
-                name -> Optional.empty());
+        ObjectNode limited = call(clockedHandler, config, secondSource, arguments("Other work", "related"));
         clock.advance(TrelloFollowUpCardTool.RATE_WINDOW);
-        TrelloFollowUpCardTool.Outcome reopened = tool.handle(
-                config,
-                card("card-second", "SYNTH205", "Second source"),
-                arguments("Other work", "related"),
-                name -> Optional.empty());
+        ObjectNode reopened = call(clockedHandler, config, secondSource, arguments("Other work", "related"));
 
         // then
-        assertThat(limited).isInstanceOfSatisfying(TrelloFollowUpCardTool.Outcome.Failure.class, failure -> assertThat(
-                        failure.code())
-                .isEqualTo("trello_follow_up_rate_limited"));
-        assertThat(reopened).isInstanceOf(TrelloFollowUpCardTool.Outcome.Success.class);
+        assertFailure(limited, "trello_follow_up_rate_limited");
+        assertThat(successPayload(reopened)).containsEntry("status", TrelloFollowUpCardTool.STATUS_CREATED);
         assertThat(board.createdCards()).hasSize(2);
     }
 
@@ -668,10 +663,15 @@ final class TrelloFollowUpCardToolTest {
     }
 
     private ObjectNode call(EffectiveConfig config, ObjectNode arguments) {
+        return call(handler, config, sourceCard(), arguments);
+    }
+
+    private ObjectNode call(
+            TrelloHandoffToolHandler toolHandler, EffectiveConfig config, Card card, ObjectNode arguments) {
         ObjectNode params = json.createObjectNode();
         params.put("tool", TrelloFollowUpCardTool.NAME);
         params.set("arguments", arguments);
-        return handler.handle(config, sourceCard(), params);
+        return toolHandler.handle(config, card, params);
     }
 
     private Map<String, String> successPayload(ObjectNode result) {
