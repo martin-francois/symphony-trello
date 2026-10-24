@@ -136,8 +136,6 @@ rootless Podman, the installer tests strip `SYMPHONY_TRELLO_CONTAINER_RUNTIME` a
 every run its own `HOME`. Per [ADR 0054](0054-powershell-installer-verification-runtime.md), the
 wrapper runs the runtime with the account's home from `getent passwd`, so the image is no longer
 pulled once per test home
-([GitHub issue #777](https://github.com/martin-francois/symphony-trello/issues/777)).
-`scripts/check-pwsh-docker` still meets
-[GitHub issue #823](https://github.com/martin-francois/symphony-trello/issues/823), no
-`--userns=keep-id` behind the podman-docker shim. That fix changes only how the wrapper calls the
-runtime, so this job runs it as soon as its pull request touches the wrapper.
+([GitHub issue #777](https://github.com/martin-francois/symphony-trello/issues/777)). Behind the
+podman-docker shim, the wrapper recognizes Podman from `docker --version` and adds `--userns=keep-id`
+([GitHub issue #823](https://github.com/martin-francois/symphony-trello/issues/823), ADR 0054).

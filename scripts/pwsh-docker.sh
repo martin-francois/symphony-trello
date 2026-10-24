@@ -56,6 +56,7 @@ mount_unless_covered "$PWD"
 # Installer tests keep their files in the JVM temp dir, which the test fixture exports as TMPDIR.
 temp_dir="${TMPDIR:-}"
 temp_dir="${temp_dir%/}"
+# $PWD may already be mounted above, and Docker rejects a duplicate mount point.
 if [[ "$temp_dir" == /* && -d "$temp_dir" && "$temp_dir" != "$PWD" ]]; then
   mount_unless_covered "$temp_dir"
 fi
