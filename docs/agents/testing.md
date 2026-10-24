@@ -95,6 +95,11 @@ parallel safety. Live end-to-end and deployed-verification rules live in
   controlled executors, or callbacks to force the interleaving; do not depend on repeated execution
   or timing luck. Map each concurrency mechanism changed by the pull request to its owning test in
   the pull request validation notes.
+- Give a test-held paused operation and every competitor it waits for their own platform threads,
+  for example through an executor passed to `CompletableFuture.supplyAsync`. Without one, the task
+  runs on the common pool, which has one worker on a two-CPU CI runner. A competitor queued behind
+  a paused task there never starts, and the contention wait times out. `ThreadMXBean` lists only
+  platform threads, so a contention check cannot see a competitor on a virtual thread.
 - When a test is confirmed flaky, search open and closed issues for that test before creating a
   focused issue. Create one only when no issue already owns it, and ensure the owning issue has the
   `flaky` label. Then add `// TODO Flaky: #123` immediately above the test method using the real
