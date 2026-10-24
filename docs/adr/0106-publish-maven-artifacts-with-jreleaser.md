@@ -104,6 +104,7 @@ The release workflow gets a `maven-central` job:
 2. It uses the `maven-central` GitHub environment and only `contents: read`.
 3. It checks out the release tag without persisted credentials.
 4. `scripts/stage-maven-central-artifacts` runs `package` and `deploy:deploy` into the staging
+   directory. The profile pins `maven-deploy-plugin`, so Renovate tracks the version that fills the
    directory. This step has no secrets.
 5. `scripts/deploy-maven-central` accepts only `UPLOAD` or `FULL` from `MAVEN_CENTRAL_STAGE` and
    runs `jreleaser:deploy`. Only this step receives the portal token and the PGP key.
@@ -133,8 +134,9 @@ portal, `FULL` lets JReleaser publish automatically.
 * Bad, because Maven Central now has a long-lived PGP key and portal token that the owner must
   protect and rotate. ADR 0103 avoided keys for GitHub Release assets, but Maven Central accepts
   only PGP signatures.
-* Bad, because pull request CI does not run JReleaser. Renovate therefore does not automerge
-  `jreleaser-maven-plugin` updates, and a maintainer runs the dry run before merging one.
+* Bad, because pull request CI does not run JReleaser or `deploy:deploy`. Renovate therefore does
+  not automerge `jreleaser-maven-plugin` or `maven-deploy-plugin` updates, and a maintainer runs
+  the dry run before merging one.
 * Bad, because the Maven Central jar is the plain application jar. It is not an install path: the
   installers keep downloading GitHub Release archives, as [ADR 0049](0049-release-archive-installer.md)
   decided.
@@ -145,11 +147,13 @@ portal, `FULL` lets JReleaser publish automatically.
   only the deploy step gets secrets, that the release job still builds and attests its own assets,
   that JReleaser skips tags and GitHub Releases and configures no release files or checksums, and
   that the POM metadata, sources jar, and Javadoc jar are present.
-* `scripts/maven-central-publication.test.ts` checks the Maven commands of both scripts and that the
-  deploy script refuses any stage other than `UPLOAD` or `FULL`.
+* `scripts/maven-central-publication.test.ts` checks the Maven commands of both scripts, that the
+  deploy script refuses any stage other than `UPLOAD` or `FULL`, and that Renovate does not
+  automerge the deploy plugin or JReleaser.
 * The local dry run in `CONTRIBUTING.md` under "Maven Central Publication" uses a throwaway PGP key
   and dummy portal credentials. It checks the POM, signs the staged files, and builds the bundle
-  without uploading it. Run it before merging a `jreleaser-maven-plugin` update.
+  without uploading it. Run it before merging a `jreleaser-maven-plugin` or `maven-deploy-plugin`
+  update.
 
 ## Pros and Cons of the Options
 
