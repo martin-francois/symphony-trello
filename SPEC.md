@@ -1247,8 +1247,9 @@ Value coercion semantics:
   - `$VAR` and `${VAR}` expansion for env-backed path values. The reference is the whole value or
     its first segment up to the first `/`, so `$VAR`, `${VAR}`, `$VAR/suffix`, and `${VAR}/suffix`
     all expand, and the suffix is appended to the variable's value. The variable name starts with a
-    letter or `_` and continues with letters, digits, or `_`. Other shapes, such as
-    `${VAR:-default}/suffix`, `$VAR-suffix`, or a reference after the first segment, stay literal.
+    Unicode letter or `_` and continues with Unicode letters, Unicode digits, or `_`. Other shapes,
+    such as `${VAR:-default}/suffix`, `$VAR-suffix`, or a reference after the first segment, stay
+    literal.
   - Apply expansion only to values intended to be local filesystem paths; do not rewrite URIs or
     arbitrary shell command strings.
   - When a path value starts with `$VAR` or `${VAR}` and the variable is unset or blank, the value
