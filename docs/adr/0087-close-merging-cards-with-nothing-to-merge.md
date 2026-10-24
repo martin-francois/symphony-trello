@@ -21,9 +21,8 @@ dispatches the card from `Merging` because `Merging` is an active list. The gene
 Codex to "start by determining the current Trello list", but it never rendered that list, and the
 scoped Trello tools cannot read it. Codex treated the run as new work and called
 `trello_move_current_card` with `Human Review`. In one replay it also posted its answer a second
-time. Even with the list known, the merge rules
-only covered pull requests: a missing PR meant `Blocked`, and the only path to `Done` was a
-successful merge.
+time. Even with the list known, the merge rules only covered pull requests: a missing PR meant
+`Blocked`, and the only path to `Done` was a successful merge.
 
 A card dropped straight on `Done` stayed there in the same replay. The scheduler never moves a card
 out of a terminal list, and it stops a running agent once its card reaches one, so that path needed
@@ -38,6 +37,7 @@ in `Merging` at all?
 * Cards that have a pull request must keep the existing merge flow, including `Blocked` for a
   missing or broken PR.
 * `Merging` keeps its meaning as approval to merge a pull request.
+* A card dragged to `Merging` before Codex worked on it must not close just because it has no PR.
 * Prefer workflow and skill guidance where the merge flow already lives over new scheduler logic.
 
 ## Considered Options
@@ -55,11 +55,14 @@ decisions in the generated workflow and the `land` skill.
 
 Generated prompts now show `Current Trello list: {{ card.state }}` under the card title, matching
 how upstream Symphony renders the issue state. The merge section and the `land` skill define
-"nothing to merge": no PR for the card's work linked from the card description, comments, or
-workpad, no open PR for the card's branch, and completed work that did not need one. Codex records that no merge was needed
+"nothing to merge": the workpad or a handoff comment shows the work was completed and handed off for
+review, no PR for that work is linked from the card description, comments, or workpad, no open PR
+exists for the card's branch, and the work did not need one. Codex records that no merge was needed
 and moves the card to the configured done list. It does not return the card to review or block it.
-Work that needs a PR keeps the old rules. The review handoff tells the human that a card with
-nothing to merge can go straight to `Done`.
+A card with no PR and no such handoff keeps the old rule and goes to the blocked destination, so a
+card moved to `Merging` before any work existed does not close. Work that needs a PR keeps the old
+rules. The review handoff tells the human that a card with nothing to merge can go straight to
+`Done`.
 
 ### Consequences
 
@@ -75,10 +78,13 @@ nothing to merge can go straight to `Done`.
 ### Confirmation
 
 `TrelloBoardSetupTest` renders a generated workflow for a card in `Merging` and checks for the
-current-list line, the nothing-to-merge rule, and the handoff hint. It also checks the shipped
-`land` skill. To confirm the behavior end to end, run real Codex against a disposable board: hand a
-question-only card to `Human Review`, move it to `Merging`, and check that it ends in `Done` with a
-workpad note. A card whose PR link is broken must still end in `Blocked`.
+current-list line, the nothing-to-merge rule with its review-handoff condition, and the handoff
+hint. It checks that the merge section of `WORKFLOW.example.md` matches the generated one, and it
+checks the shipped `land` and `trello-handoff` skills. To confirm the behavior end to end, run real
+Codex against a disposable board: hand a question-only card to `Human Review`, move it to
+`Merging`, and check that it ends in `Done` with a workpad note. A card moved from
+`Ready for Codex` straight to `Merging`, and a card whose PR link is broken, must both end in
+`Blocked`.
 
 ## Pros and Cons of the Options
 
