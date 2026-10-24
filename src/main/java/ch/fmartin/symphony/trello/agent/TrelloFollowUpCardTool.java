@@ -46,7 +46,9 @@ final class TrelloFollowUpCardTool {
     static final String NEW_LABEL_COLOR = "sky";
     static final String STATUS_CREATED = "follow_up_card_created";
     static final String STATUS_EXISTS = "follow_up_card_exists";
-    private static final String CHECKLIST_ITEM_CREATED = "created";
+    // Card roles named in prerequisite checklist conflict messages.
+    static final String CURRENT_CARD_ROLE = "current card";
+    static final String FOLLOW_UP_CARD_ROLE = "follow-up card";
     private static final Set<String> ARGUMENT_NAMES =
             Set.of("title", "description", "acceptance_criteria", "relationship");
 
@@ -109,24 +111,28 @@ final class TrelloFollowUpCardTool {
             Checked<TrelloClient.BoardList> destination = destinationList(config, policy, openLists);
             Checked<Optional<TrelloClient.BoardList>> blockedTarget =
                     blockedTarget(config, policy, request.relationship(), allowedMoveTarget);
-            Optional<Outcome> refusal = destination
+            return destination
                     .failure()
                     .or(blockedTarget::failure)
                     .or(() -> prerequisiteConflict(
-                            config, card.id(), request.relationship().sourceCardWaits()));
-            if (refusal.isPresent()) {
-                return refusal.get();
-            }
-            var plan = new Plan(config, policy, card, request, destination.value(), blockedTarget.value(), openLists);
-            List<ExistingFollowUp> existing = existingFollowUps(config, card.shortLink());
-            String normalizedTitle = StateNames.normalize(request.title());
-            return existing.stream()
-                    .filter(followUp ->
-                            StateNames.normalize(followUp.card().name()).equals(normalizedTitle))
-                    .findAny()
-                    .map(followUp -> repair(plan, followUp))
-                    .orElseGet(() -> create(plan, existing));
+                            config,
+                            card.id(),
+                            CURRENT_CARD_ROLE,
+                            request.relationship().sourceCardWaits()))
+                    .orElseGet(() -> createOrRepair(new Plan(
+                            config, policy, card, request, destination.value(), blockedTarget.value(), openLists)));
         }
+    }
+
+    private Outcome createOrRepair(Plan plan) {
+        List<ExistingFollowUp> existing =
+                existingFollowUps(plan.config(), plan.card().shortLink());
+        String normalizedTitle = StateNames.normalize(plan.request().title());
+        return existing.stream()
+                .filter(followUp -> StateNames.normalize(followUp.card().name()).equals(normalizedTitle))
+                .findAny()
+                .map(followUp -> repair(plan, followUp))
+                .orElseGet(() -> create(plan, existing));
     }
 
     private Outcome repair(Plan plan, ExistingFollowUp followUp) {
@@ -137,13 +143,13 @@ final class TrelloFollowUpCardTool {
                     "A follow-up card with this title already exists for the current card with relationship "
                             + recorded.value() + ".");
         }
-        if (recorded.prerequisiteSide() == FollowUpRelationship.PrerequisiteSide.FOLLOW_UP_CARD) {
-            Optional<Outcome> conflict =
-                    prerequisiteConflict(plan.config(), followUp.card().id(), true);
-            if (conflict.isPresent()) {
-                return conflict.get();
-            }
-        }
+        boolean followUpReceivesItem =
+                recorded.prerequisiteSide() == FollowUpRelationship.PrerequisiteSide.FOLLOW_UP_CARD;
+        return prerequisiteConflict(plan.config(), followUp.card().id(), FOLLOW_UP_CARD_ROLE, followUpReceivesItem)
+                .orElseGet(() -> relabelAndLink(plan, followUp));
+    }
+
+    private Outcome relabelAndLink(Plan plan, ExistingFollowUp followUp) {
         for (String labelId : labelIds(plan.config(), plan.labelNames())) {
             if (!followUp.card().labelIds().contains(labelId)) {
                 trello.addLabelToCard(plan.config(), followUp.card().id(), labelId);
@@ -188,10 +194,8 @@ final class TrelloFollowUpCardTool {
     /// a card in an archived list is effectively archived and does not count either.
     private static boolean unfinished(Plan plan, TrelloClient.BoardCard followUp) {
         return plan.openLists().stream()
-                .filter(list -> list.id().equals(followUp.listId()))
-                .findAny()
-                .filter(list -> !TrelloClient.isTerminalList(plan.config(), list))
-                .isPresent();
+                .anyMatch(list ->
+                        list.id().equals(followUp.listId()) && !TrelloClient.isTerminalList(plan.config(), list));
     }
 
     private Outcome linkAndRelate(Plan plan, FollowUpRef followUp, String status) {
@@ -206,26 +210,16 @@ final class TrelloFollowUpCardTool {
                 card.id(),
                 followUpUrl,
                 FOLLOW_UP_ATTACHMENT_PREFIX + plan.request().title());
-        String movedTo = "";
-        switch (relationship.prerequisiteSide()) {
-            case FOLLOW_UP_CARD ->
-                trello.addChecklistItemIfMissing(config, followUp.id(), PREREQUISITE_CHECKLIST_NAME, sourceUrl);
-            case SOURCE_CARD -> {
-                TrelloClient.ChecklistItemWrite item =
-                        trello.addChecklistItemIfMissing(config, card.id(), PREREQUISITE_CHECKLIST_NAME, followUpUrl);
-                // The blocked handoff belongs to the moment the prerequisite is recorded. A retry that
-                // finds the item already there must not repeat the comment or undo a person's unblock.
-                if (plan.blockedTarget().isPresent() && CHECKLIST_ITEM_CREATED.equals(item.status())) {
-                    TrelloClient.BoardList blocked = plan.blockedTarget().get();
-                    trello.addComment(config, card.id(), blockedHandoffText(followUpUrl));
-                    trello.moveCardToList(config, card.id(), blocked.id());
-                    movedTo = blocked.name();
-                }
-            }
-            case NONE -> {
-                // A related follow-up has no required order, so it gets no prerequisite checklist.
-            }
-        }
+        Optional<TrelloClient.BoardList> movedTo =
+                switch (relationship.prerequisiteSide()) {
+                    case FOLLOW_UP_CARD -> {
+                        trello.addChecklistItemIfMissing(config, followUp.id(), PREREQUISITE_CHECKLIST_NAME, sourceUrl);
+                        yield Optional.empty();
+                    }
+                    case SOURCE_CARD -> recordCurrentCardPrerequisite(plan, followUpUrl);
+                    // A related follow-up has no required order, so it gets no prerequisite checklist.
+                    case NONE -> Optional.empty();
+                };
         // LinkedHashMap keeps model-visible tool result fields in a stable diagnostic order.
         Map<String, String> payload = new LinkedHashMap<>();
         payload.put("status", status);
@@ -235,12 +229,32 @@ final class TrelloFollowUpCardTool {
         payload.put("list_name", plan.destination().name());
         payload.put("relationship", relationship.value());
         payload.put("current_card_must_wait", Boolean.toString(relationship.sourceCardWaits()));
-        payload.put("current_card_moved_to", movedTo);
+        payload.put(
+                "current_card_moved_to",
+                movedTo.map(TrelloClient.BoardList::name).orElse(""));
         payload.put(
                 "workpad_note",
                 "Follow-up card created: " + followUpUrl + " (" + plan.request().title() + "). "
                         + relationship.sourceCardNote());
         return Outcome.success(payload);
+    }
+
+    /// Adds the follow-up to the current card's prerequisite checklist and, when configured, blocks
+    /// the current card. Returns the list the current card moved to.
+    private Optional<TrelloClient.BoardList> recordCurrentCardPrerequisite(Plan plan, String followUpUrl) {
+        EffectiveConfig config = plan.config();
+        String cardId = plan.card().id();
+        TrelloClient.ChecklistItemWrite item =
+                trello.addChecklistItemIfMissing(config, cardId, PREREQUISITE_CHECKLIST_NAME, followUpUrl);
+        // The blocked handoff belongs to the moment the prerequisite is recorded. A retry that finds
+        // the item already there must not repeat the comment or undo a person's unblock.
+        Optional<TrelloClient.BoardList> moveTarget =
+                plan.blockedTarget().filter(blocked -> item.status() == TrelloClient.ChecklistItemWrite.Status.CREATED);
+        moveTarget.ifPresent(blocked -> {
+            trello.addComment(config, cardId, blockedHandoffText(followUpUrl));
+            trello.moveCardToList(config, cardId, blocked.id());
+        });
+        return moveTarget;
     }
 
     private void ensureCardLink(EffectiveConfig config, String cardId, String targetUrl, String name) {
@@ -251,11 +265,12 @@ final class TrelloFollowUpCardTool {
         }
     }
 
-    private Optional<Outcome> prerequisiteConflict(EffectiveConfig config, String cardId, boolean receivesItem) {
+    private Optional<Outcome> prerequisiteConflict(
+            EffectiveConfig config, String cardId, String cardRole, boolean receivesItem) {
         if (!receivesItem) {
             return Optional.empty();
         }
-        return trello.prerequisiteChecklistConflict(config, cardId, PREREQUISITE_CHECKLIST_NAME)
+        return trello.prerequisiteChecklistConflict(config, cardId, cardRole, PREREQUISITE_CHECKLIST_NAME)
                 .map(message -> Outcome.failure("trello_follow_up_prerequisite_checklist_conflict", message));
     }
 
