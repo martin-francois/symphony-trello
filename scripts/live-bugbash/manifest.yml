@@ -729,6 +729,7 @@ scenarios:
     cleanup: Stop the worker; final cleanup archives the board.
     expected: covered
     linked_issue: 496
+    notes: Not automated yet, so a run reports not-yet-automated and does not check the regression for issue 496. Cover it manually with the live-bugbash skill until the row runs under --codex real.
 
   - id: default-https-url-network-real-codex
     family: repository-source
@@ -1003,6 +1004,7 @@ scenarios:
     cleanup: Stop the worker; final cleanup archives the board.
     expected: covered
     linked_issue: 495
+    notes: Not automated yet, so a run reports not-yet-automated and does not check the regression for issue 495. Cover it manually with the live-bugbash skill until the row runs under --codex real.
 
   # ---------------------------------------------------------------------------------------------
   # Trello prerequisites and relationship context

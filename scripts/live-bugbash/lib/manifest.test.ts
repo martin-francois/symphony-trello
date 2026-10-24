@@ -79,6 +79,17 @@ test("known-bug rows link an issue and real-Codex rows declare real Codex", () =
   assert.deepEqual(ids(realCodexModes.filter((scenario) => scenario.requires.codex !== "real")), []);
 });
 
+test("a row that links a bug but has no automation says so in its notes", () => {
+  // given
+  const linkedRows = MANIFEST.scenarios.filter((scenario) => scenario.linked_issue !== null);
+
+  // when
+  const silentGaps = linkedRows.filter((scenario) => !(scenario.id in SCENARIOS) && !scenario.notes);
+
+  // then
+  assert.deepEqual(ids(silentGaps), [], "a linked issue on an unautomated row reads as regression coverage");
+});
+
 test("rows without a profile, with an unknown family, or with duplicate ids are rejected", () => {
   // given
   const withoutProfile = manifestWith(VALID_ROW.replace("profiles: [quick]", "profiles: []"));
