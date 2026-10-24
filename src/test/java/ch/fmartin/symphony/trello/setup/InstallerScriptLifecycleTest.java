@@ -63,7 +63,7 @@ final class InstallerScriptLifecycleTest {
                 "SYMPHONY_FAKE_LOG",
                 fakeLog.toString(),
                 "SYMPHONY_FAKE_SLOW_TERM",
-                "true",
+                FAKE_SLOW_TERM_DELAYED,
                 "TRELLO_API_KEY",
                 "runtime-key-100%",
                 "TRELLO_API_TOKEN",
@@ -270,10 +270,8 @@ final class InstallerScriptLifecycleTest {
                 .contains("STOP", "REMOVE  " + binDirectory.resolve("symphony-trello"), "REMOVE  " + userService);
         String fakeLogAfterUninstall = Files.readString(fakeLog);
         String fakeLogDuringUninstall = fakeLogAfterUninstall.substring(fakeLogLengthBeforeUninstall);
-        assertThat(fakeLogDuringUninstall)
-                .contains("jar-stopped", "systemctl --user disable --now symphony-trello.service");
-        assertThat(fakeLogDuringUninstall.indexOf("jar-stopped"))
-                .isLessThan(fakeLogDuringUninstall.indexOf("systemctl --user disable --now symphony-trello.service"));
+        assertUninstallStoppedWorkerBeforeDisablingService(
+                uninstall, fakeLogDuringUninstall, "WORKFLOW.lifecycle-board.md", restartedManagedPid);
         assertThat(userService).doesNotExist();
         assertThat(autostartEnvironment).doesNotExist();
         assertThat(processStopsWithin(restartedManagedPid, 5))
@@ -400,6 +398,73 @@ final class InstallerScriptLifecycleTest {
                         "--state-home " + isolatedConfigDirectory.resolveSibling("state"),
                         "--workspace-root " + workspaceRoot,
                         "--state-home " + stateHome));
+    }
+
+    @Test
+    void posixUninstallerKillsWorkerThatOutlastsTermGraceBeforeDisablingService() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path homeDirectory = temporaryDirectory.resolve("outlasting-home");
+        Path symphonyHome = temporaryDirectory.resolve("outlasting-symphony-home");
+        Path app = symphonyHome.resolve("app").toAbsolutePath().normalize();
+        Path stateHome = symphonyHome.resolve("state");
+        Path userService = homeDirectory.resolve(".config/systemd/user/symphony-trello.service");
+        Path fakeLog = temporaryDirectory.resolve("fake-tools.log");
+        Files.createDirectories(app.resolve("target/quarkus-app"));
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker");
+        Files.createDirectories(stateHome);
+        Files.createDirectories(userService.getParent());
+        Files.writeString(userService, "[Unit]\n");
+        // The worker's TERM handler never finishes, so the uninstaller's grace always runs out while it is
+        // still inside the handler: the interleaving behind #778, forced instead of left to host load.
+        ProcessBuilder workerBuilder = new ProcessBuilder(
+                        fakeBin.resolve("java").toString(),
+                        "-Dsymphony.trello.managed.app_home=" + app,
+                        "-jar",
+                        app.resolve("target/quarkus-app/quarkus-run.jar").toString())
+                .directory(app.toFile())
+                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                .redirectError(ProcessBuilder.Redirect.DISCARD);
+        workerBuilder.environment().put("SYMPHONY_FAKE_LOG", fakeLog.toString());
+        workerBuilder.environment().put("SYMPHONY_FAKE_SLOW_TERM", FAKE_SLOW_TERM_UNTIL_KILLED);
+        Process worker = workerBuilder.start();
+        try {
+            assertThat(fileContainsWithin(fakeLog, "jar-start pid=" + worker.pid() + " ", FAKE_WORKER_READY_SECONDS))
+                    .as(
+                            "the fake worker installs its TERM handler and reports jar-start within %s seconds",
+                            FAKE_WORKER_READY_SECONDS)
+                    .isTrue();
+            Files.writeString(
+                    stateHome.resolve("WORKFLOW.outlasting.md.abcdef123456.pid"), Long.toString(worker.pid()));
+            Map<String, String> environment = Map.of(
+                    "PATH",
+                    fakeBin + System.getProperty("path.separator") + System.getenv("PATH"),
+                    "HOME",
+                    homeDirectory.toString(),
+                    "SYMPHONY_HOME",
+                    symphonyHome.toString(),
+                    "SYMPHONY_FAKE_LOG",
+                    fakeLog.toString());
+
+            // when
+            ProcessResult uninstall = run(environment, "bash", "uninstall.sh", "--yes", "--prefix", app.toString());
+
+            // then
+            assertThat(uninstall.exitCode()).as(uninstall.output()).isZero();
+            assertThat(uninstall.output()).contains("KILL  pid=" + worker.pid() + " did not stop after SIGTERM");
+            String fakeLogAfterUninstall = Files.readString(fakeLog);
+            assertUninstallStoppedWorkerBeforeDisablingService(
+                    uninstall, fakeLogAfterUninstall, "WORKFLOW.outlasting.md", worker.pid());
+            assertThat(fakeLogAfterUninstall)
+                    .as("the worker was killed inside its TERM handler, after the app check and before jar-stopped")
+                    .contains("app-present-before-exit")
+                    .doesNotContain("jar-stopped");
+            assertThat(app).doesNotExist();
+            assertThat(userService).doesNotExist();
+        } finally {
+            worker.destroyForcibly();
+        }
     }
 
     @Test
