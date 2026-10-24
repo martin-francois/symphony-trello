@@ -286,6 +286,9 @@ require_terminal() {
 }
 
 run_interactive() {
+  if [[ "$DRY_RUN" == true ]]; then
+    return 0
+  fi
   require_terminal
   print_status RUN "  $*"
   "$@" </dev/tty
