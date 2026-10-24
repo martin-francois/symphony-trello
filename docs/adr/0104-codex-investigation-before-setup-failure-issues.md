@@ -66,17 +66,21 @@ The flow for an unexpected setup failure in an interactive terminal is:
 4. Show the classification, diagnosis, changed files, validation commands with their result, and
    next step from the structured answer.
 5. For a local configuration problem, stop with the next step, or with "rerun the command" when
-   Codex already fixed it, and do not offer an issue. For a fix with changed files whose validation
-   all passed, ask whether to post an issue that describes the failure and the local fix. In every
-   other case, show the existing issue prompt. When Codex answered, the issue draft is the report
-   plus a `Local Codex Investigation` section, written next to the report.
+   Codex already fixed it, and do not offer an issue. When Codex names no next step, say so and ask
+   the user to fix the cause it described. For a Symphony for Trello bug fix with changed files
+   whose validation all passed, ask whether to post an issue that describes the failure and the
+   local fix. In every other case, including a validated fix of an environment or other non-code
+   cause, show the existing issue prompt. When Codex answered, the issue draft is the report plus a
+   `Local Codex Investigation` section, written next to the report.
 
 Privacy boundary:
 
 * The prompt contains fixed instructions, the version, the command name, how the command was started
-  (installer onboarding, installed command, or direct Java command), the error code, and the
-  sanitized report. It contains no raw paths, Trello names or identifiers, account names, or
-  credentials. The question before the run lists the same items.
+  (installer onboarding, installed command, or direct Java command), the error code, the sanitized
+  report, and the report location. The location starts with the diagnostics token of the state
+  directory, so Codex can find the report with one token lookup. It contains no raw paths, Trello
+  names or identifiers, account names, or credentials. The question before the run lists the same
+  items.
 * Codex runs locally. Like any local Codex session, Codex sees its working directory and writable
   roots, and it can read local files. It may resolve report tokens with
   `symphony-trello diagnostics --show-private-context --lookup <token>`, as

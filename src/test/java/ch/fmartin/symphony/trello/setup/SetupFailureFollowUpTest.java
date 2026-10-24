@@ -7,6 +7,7 @@ import ch.fmartin.symphony.trello.setup.CodexInvestigationFinding.Classification
 import ch.fmartin.symphony.trello.setup.CodexInvestigationFinding.ValidationRun;
 import ch.fmartin.symphony.trello.setup.CodexInvestigationRunner.Outcome;
 import ch.fmartin.symphony.trello.testsupport.RecordingTerminal;
+import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -101,7 +102,7 @@ final class SetupFailureFollowUpTest {
         assertThat(scenario.terminal().stderr())
                 .contains(
                         "Codex receives the Symphony for Trello version, the command name and how it was started,"
-                                + " the error code, and the sanitized troubleshooting report.",
+                                + " the error code, and the sanitized troubleshooting report with its location.",
                         "sees local paths while it works",
                         "only sanitized text goes into a GitHub issue draft");
         assertThat(scenario.codex().requests())
@@ -126,7 +127,7 @@ final class SetupFailureFollowUpTest {
                 "n");
 
         // when
-        scenario.failUnexpectedly();
+        Optional<Path> report = scenario.failUnexpectedly();
 
         // then
         assertThat(scenario.terminal().stderr())
@@ -145,6 +146,8 @@ final class SetupFailureFollowUpTest {
                     .contains(
                             "- command: setup-local",
                             "- error_code: " + UNEXPECTED_CODE,
+                            "- troubleshooting_report: `<path:",
+                            ">" + File.separator + stateHomeRelativePath(report) + "`",
                             "# Symphony for Trello Setup Failure",
                             "symphony-trello diagnostics --show-private-context --lookup '<token>'",
                             "Inspect local files directly when you need more detail.");
@@ -237,6 +240,32 @@ final class SetupFailureFollowUpTest {
     }
 
     @Test
+    void localConfigurationFindingWithoutANextStepStillTellsTheUserWhatToDo() throws IOException {
+        // given
+        Scenario scenario = scenario(
+                ScenarioOptions.signedInCodex()
+                        .withCodexOutcome(completed(new CodexInvestigationFinding(
+                                Classification.LOCAL_CONFIGURATION,
+                                "The workflow sets server.port to a port another program uses.",
+                                false,
+                                "",
+                                List.of(),
+                                List.of(),
+                                " "))),
+                "y",
+                "y");
+
+        // when
+        scenario.failUnexpectedly();
+
+        // then
+        assertThat(scenario.terminal().stderr())
+                .contains("Codex did not name a next step. Fix the cause described above, then rerun the command.")
+                .doesNotContain("Next step:", "Follow the next step above");
+        assertThat(scenario.terminal().stdout()).doesNotContain(REPORT_ISSUE_QUESTION, FIX_ISSUE_QUESTION);
+    }
+
+    @Test
     void fixedLocalConfigurationAsksForARerunInsteadOfAnIssue() throws IOException {
         // given
         Scenario scenario = scenario(
@@ -285,15 +314,16 @@ final class SetupFailureFollowUpTest {
                 ProcessCodexInvestigationRunner.UNEXPECTED_ANSWER);
     }
 
-    @MethodSource("unverifiedFixes")
+    @MethodSource("unverifiedOrNonCodeFixes")
     @ParameterizedTest(name = "{argumentSetName}")
-    void unverifiedFixKeepsTheExistingIssuePromptAndAddsTheFindingToTheDraft(
-            List<String> changedFiles, ValidationRun validation, String draftLine) throws IOException {
+    void unverifiedOrNonCodeFixKeepsTheExistingIssuePromptAndAddsTheFindingToTheDraft(
+            Classification classification, List<String> changedFiles, ValidationRun validation, String draftLine)
+            throws IOException {
         // given
         Scenario scenario = scenario(
                 ScenarioOptions.signedInCodex()
                         .withCodexOutcome(completed(new CodexInvestigationFinding(
-                                Classification.SYMPHONY_BUG,
+                                classification,
                                 "The workflow writer ignores a read-only parent directory.",
                                 true,
                                 "Check the parent directory before writing.",
@@ -314,18 +344,26 @@ final class SetupFailureFollowUpTest {
                 .noneSatisfy(command -> assertThat(command).startsWith("gh", "issue", "create"));
     }
 
-    static Stream<Arguments> unverifiedFixes() {
+    static Stream<Arguments> unverifiedOrNonCodeFixes() {
         return Stream.of(
                 argumentSet(
                         "validation failed",
+                        Classification.SYMPHONY_BUG,
                         List.of("WORKFLOW.md"),
                         new ValidationRun("symphony-trello setup-local check", false),
                         "- **validation:** failed `symphony-trello setup-local check`"),
                 argumentSet(
                         "no changed files reported",
+                        Classification.SYMPHONY_BUG,
                         List.of(),
                         new ValidationRun("symphony-trello setup-local check", true),
-                        "- **changed_files:** none"));
+                        "- **changed_files:** none"),
+                argumentSet(
+                        "validated fix of a cause outside Symphony for Trello code",
+                        Classification.ENVIRONMENT,
+                        List.of("WORKFLOW.md"),
+                        new ValidationRun("symphony-trello setup-local check", true),
+                        "- **classification:** environment"));
     }
 
     @MethodSource("codexNotOffered")
@@ -396,6 +434,12 @@ final class SetupFailureFollowUpTest {
         return reportPath.resolveSibling(
                 reportName.substring(0, reportName.length() - SetupFailureFollowUp.REPORT_SUFFIX.length())
                         + SetupFailureFollowUp.ISSUE_DRAFT_SUFFIX);
+    }
+
+    /// The report lives in a fixed directory directly below the state directory.
+    private static Path stateHomeRelativePath(Optional<Path> report) {
+        Path reportPath = report.orElseThrow();
+        return reportPath.getParent().getFileName().resolve(reportPath.getFileName());
     }
 
     private static Outcome completed(CodexInvestigationFinding finding) {

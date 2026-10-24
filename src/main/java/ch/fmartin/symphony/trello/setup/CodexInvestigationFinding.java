@@ -48,6 +48,12 @@ record CodexInvestigationFinding(
                 && validation.stream().allMatch(ValidationRun::passed);
     }
 
+    /// True only for a verified fix of a Symphony for Trello defect, the one case where an issue
+    /// that describes the local fix helps maintainers.
+    boolean verifiedSymphonyFix() {
+        return classification == Classification.SYMPHONY_BUG && verifiedFix();
+    }
+
     static String jsonSchema(ObjectMapper json) {
         ObjectNode validationRun = strictObject(json);
         ObjectNode validationRunProperties = validationRun.putObject("properties");

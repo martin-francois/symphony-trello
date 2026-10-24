@@ -88,11 +88,18 @@ final class SetupFailureFollowUp {
         return finding.classification() == Classification.LOCAL_CONFIGURATION;
     }
 
+    /// Ends a local configuration finding with something the user can act on, even when Codex left
+    /// `next_step` blank.
     private static String localConfigurationClosing(CodexInvestigationFinding finding) {
-        return "Codex found a local configuration problem, so no GitHub issue is suggested. "
-                + (finding.verifiedFix()
-                        ? "Codex fixed it locally. Rerun the command."
-                        : "Follow the next step above, then rerun the command.");
+        String action;
+        if (finding.verifiedFix()) {
+            action = "Codex fixed it locally. Rerun the command.";
+        } else if (finding.nextStep().isBlank()) {
+            action = "Codex did not name a next step. Fix the cause described above, then rerun the command.";
+        } else {
+            action = "Follow the next step above, then rerun the command.";
+        }
+        return "Codex found a local configuration problem, so no GitHub issue is suggested. " + action;
     }
 
     private Investigation investigateWithCodex(FailedSetup failure, Terminal terminal) throws IOException {
@@ -119,7 +126,7 @@ final class SetupFailureFollowUp {
                         + " and may fix it before you open a GitHub issue.");
         terminal.err()
                 .println("Codex receives the Symphony for Trello version, the command name and how it was started,"
-                        + " the error code, and the sanitized troubleshooting report."
+                        + " the error code, and the sanitized troubleshooting report with its location."
                         + " It runs locally, can read your files, and sees local paths while it works.");
         terminal.err()
                 .println("Apart from temporary files, it can change files only in the Symphony config directory"
@@ -185,6 +192,7 @@ final class SetupFailureFollowUp {
                 - command: %s
                 - started_by: %s
                 - error_code: %s
+                - troubleshooting_report: `%s`
 
                 Tasks:
                 1. Find the cause. Classify it as one of:
@@ -204,7 +212,8 @@ final class SetupFailureFollowUp {
 
                 Inspect local files directly when you need more detail. Your working directory is the \
                 Symphony config directory, or the troubleshooting report directory when the config directory \
-                does not exist yet. An additional writable directory, when present, is the Symphony for \
+                does not exist yet. The troubleshooting_report path starts with the token of the Symphony \
+                state directory. An additional writable directory, when present, is the Symphony for \
                 Trello source checkout of a source install; `git log -1` there shows the installed commit.
 
                 The troubleshooting report below replaces private values with tokens: `<path:...>` for local \
@@ -228,10 +237,24 @@ final class SetupFailureFollowUp {
                         sanitizer.apply(failure.commandName()),
                         startedBy(),
                         sanitizer.apply(failure.errorCode()),
+                        reportLocation(failure),
                         PrivateContextTokens.lookupCommand(TOKEN_PLACEHOLDER),
                         fence + "markdown",
                         report.stripTrailing(),
                         fence);
+    }
+
+    /// Names the report by the state directory token plus its fixed relative path, so Codex can open
+    /// it after one token lookup while the prompt keeps no raw local path.
+    private static String reportLocation(FailedSetup failure) {
+        Path stateHome = failure.paths().stateHome();
+        Path report = failure.reportPath();
+        if (!report.startsWith(stateHome)) {
+            return failure.sanitizer().apply(report.toString());
+        }
+        return failure.sanitizer().apply(stateHome.toString())
+                + stateHome.getFileSystem().getSeparator()
+                + stateHome.relativize(report);
     }
 
     private String startedBy() {
@@ -311,7 +334,7 @@ final class SetupFailureFollowUp {
             return;
         }
         String question =
-                investigation instanceof Answered answered && answered.finding().verifiedFix()
+                investigation instanceof Answered answered && answered.finding().verifiedSymphonyFix()
                         ? "Codex changed files locally and validation passed. Open a GitHub issue that describes the"
                                 + " failure and the local fix? [y/N] "
                         : "GitHub CLI is authenticated. Open a GitHub issue with this report? [y/N] ";

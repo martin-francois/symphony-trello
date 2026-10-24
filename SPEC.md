@@ -1003,13 +1003,15 @@ CLI is on `PATH` and `codex login status` succeeds, the command MAY ask whether 
 investigate the failure locally before offering a GitHub issue. The question MUST default to no and
 MUST say what Codex receives. Codex MUST NOT start without an explicit yes. The prompt Symphony
 sends MUST contain only fixed instructions, the version, the command name, how the command was
-started, the error code, and the sanitized report; it MUST NOT contain raw local paths, Trello names
-or identifiers, account names, or credential values. Codex runs locally and sees its own working
-directory and writable roots, which are the Symphony config directory and, for a source install, the
-source checkout. Symphony MUST NOT commit, push, open pull requests, or post issues on Codex's
-behalf. Every text Codex returns MUST pass through the troubleshooting-report sanitizer before it is
-printed or added to an issue draft. When Codex reports a local configuration problem, the command
-MUST show the next step instead of offering an issue. When Codex reports changed files and every
+started, the error code, the sanitized report, and the report location with the state directory
+replaced by its diagnostics token; it MUST NOT contain raw local paths, Trello names or identifiers,
+account names, or credential values. Codex runs locally and sees its own working directory and
+writable roots, which are the Symphony config directory and, for a source install, the source
+checkout. Symphony MUST NOT commit, push, open pull requests, or post issues on Codex's behalf.
+Every text Codex returns MUST pass through the troubleshooting-report sanitizer before it is printed
+or added to an issue draft. When Codex reports a local configuration problem, the command MUST show
+the next step instead of offering an issue, and MUST still name an action when Codex gives no next
+step. When Codex classifies the cause as a Symphony for Trello bug, reports changed files, and every
 reported validation passed, the command MAY offer an issue that describes the failure and the local
 fix. When Codex is unavailable, is declined, times out, exits non-zero, or returns no usable answer,
 the command MUST fall back to the existing GitHub issue offer. Posting an issue MUST always need a
