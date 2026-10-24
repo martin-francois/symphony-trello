@@ -165,6 +165,9 @@ jobs:
       - name: Diagnostics tool probe tests
         if: ${{ env.ISOLATE_OPENREWRITE != 'true' }}
         run: .\mvnw.cmd -q '-Djunit.parallel.enabled=false' '-Dtest=SetupDiagnosticReporterTest#diagnosticsToolProbeUsesWindowsPathextWithoutHelperShell+diagnosticsRunsNativeWindowsPathextExecutableDirectly+deepDiagnosticsUsesWindowsPathextCodexExecutableForLoginStatus+deepDiagnosticsKeepsWindowsPathextCodexAvailableWhenLoginStatusFails+deepDiagnosticsUsesWindowsPathextGithubExecutableForAuthStatus+deepDiagnosticsKeepsWindowsPathextGithubAvailableWhenAuthStatusFails+diagnosticsMarksFoundToolWithUnavailableVersionAsAvailable+diagnosticsMarksFoundButUnlaunchableToolSeparately' test
+      - name: Windows batch shim launch tests
+        if: ${{ env.ISOLATE_OPENREWRITE != 'true' }}
+        run: .\mvnw.cmd -q '-Djunit.parallel.enabled=false' '-Dtest=WindowsBatchShimLaunchTest,ExecutableResolverTest' test
       - name: PowerShell generated-wrapper lifecycle
         if: ${{ env.ISOLATE_OPENREWRITE != 'true' }}
         run: .\mvnw.cmd -q '-Djunit.parallel.enabled=false' -Dtest=InstallerScriptLifecycleTest#powershellInstallerLifecycleInstallsStartsStopsAndUninstallsWithFakeJavaOnWindows test

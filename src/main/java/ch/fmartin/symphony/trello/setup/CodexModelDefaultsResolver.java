@@ -2,6 +2,8 @@ package ch.fmartin.symphony.trello.setup;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
+import ch.fmartin.symphony.trello.process.ExecutableResolver;
+import ch.fmartin.symphony.trello.process.PlatformEnvironment;
 import ch.fmartin.symphony.trello.process.ProcessEnvironment;
 import ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.ReasoningEffortOption;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.CodexModelDefaults;
@@ -36,7 +38,7 @@ final class CodexModelDefaultsResolver {
 
     private final ObjectMapper json;
     private final List<String> command;
-    private final Map<String, String> environment;
+    private final PlatformEnvironment environment;
     private final Duration readTimeout;
 
     CodexModelDefaultsResolver(ObjectMapper json) {
@@ -53,9 +55,16 @@ final class CodexModelDefaultsResolver {
 
     CodexModelDefaultsResolver(
             ObjectMapper json, List<String> command, Map<String, String> environment, Duration readTimeout) {
+        this(json, command, PlatformEnvironment.of(environment, System.getProperty("os.name")), readTimeout);
+    }
+
+    /// `environment` holds the variables added to the inherited ones for the app-server process, and
+    /// whether that process runs on Windows.
+    CodexModelDefaultsResolver(
+            ObjectMapper json, List<String> command, PlatformEnvironment environment, Duration readTimeout) {
         this.json = json;
         this.command = List.copyOf(command);
-        this.environment = Map.copyOf(environment);
+        this.environment = environment;
         this.readTimeout = readTimeout;
     }
 
@@ -75,9 +84,11 @@ final class CodexModelDefaultsResolver {
     }
 
     private CodexModelSelectionDefaults queryAppServer() throws IOException, InterruptedException {
-        ProcessBuilder processBuilder = new ProcessBuilder(command).redirectError(ProcessBuilder.Redirect.DISCARD);
-        processBuilder.environment().putAll(environment);
+        ProcessBuilder processBuilder = new ProcessBuilder().redirectError(ProcessBuilder.Redirect.DISCARD);
+        processBuilder.environment().putAll(environment.variables());
         ProcessEnvironment.removeDefaultSecrets(processBuilder);
+        var childEnvironment = new PlatformEnvironment(processBuilder.environment(), environment.windows());
+        processBuilder.command(new ExecutableResolver(childEnvironment).launchCommand(command));
         Process process = processBuilder.start();
         var reader = new AppServerResponseReader(process.getInputStream());
         try (var writer = process.outputWriter(StandardCharsets.UTF_8)) {
