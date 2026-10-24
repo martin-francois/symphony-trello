@@ -69,7 +69,7 @@ final class AdaptivePollIntervalTest {
                 .isEqualTo(new RuntimeSnapshot.Polling(
                         CONFIGURED,
                         RateLimitPressure.MAX_WAIT,
-                        Optional.of(AdaptivePollInterval.TRELLO_RATE_LIMITED),
+                        Optional.of(RuntimeSnapshot.SlowdownReason.TRELLO_RATE_LIMITED),
                         Optional.of(START)));
     }
 

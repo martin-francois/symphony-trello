@@ -58,12 +58,28 @@ public record RuntimeSnapshot(
 
     /// The configured `polling.interval_ms` next to the interval the worker currently uses.
     ///
-    /// @param slowdownReason a stable code while the effective interval is longer than the
-    ///     configured one, otherwise empty
+    /// @param slowdownReason why the effective interval is longer than the configured one, otherwise
+    ///     empty
     /// @param lastRateLimitedAt when Trello last answered with `429`, if it did since startup
     public record Polling(
             Duration configuredInterval,
             Duration effectiveInterval,
-            Optional<String> slowdownReason,
+            Optional<SlowdownReason> slowdownReason,
             Optional<Instant> lastRateLimitedAt) {}
+
+    /// Why the worker polls less often than `polling.interval_ms`.
+    public enum SlowdownReason {
+        TRELLO_RATE_LIMITED("trello_rate_limited");
+
+        private final String code;
+
+        SlowdownReason(String code) {
+            this.code = code;
+        }
+
+        /// The stable code shown in `/api/v1/state` and the logs.
+        public String code() {
+            return code;
+        }
+    }
 }

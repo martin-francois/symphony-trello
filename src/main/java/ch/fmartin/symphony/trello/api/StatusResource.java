@@ -25,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
+import org.jspecify.annotations.Nullable;
 
 @Path("/")
 public class StatusResource {
@@ -107,7 +108,7 @@ public class StatusResource {
                                 .collect(Collectors.joining()));
     }
 
-    private static String pollingLine(RuntimeSnapshot.Polling polling) {
+    private static String pollingLine(RuntimeSnapshot.@Nullable Polling polling) {
         if (polling == null) {
             return "";
         }

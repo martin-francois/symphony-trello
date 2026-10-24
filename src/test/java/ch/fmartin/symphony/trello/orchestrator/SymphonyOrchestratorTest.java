@@ -722,7 +722,7 @@ final class SymphonyOrchestratorTest {
                 .isEqualTo(new RuntimeSnapshot.Polling(
                         configured,
                         slowed,
-                        Optional.of(AdaptivePollInterval.TRELLO_RATE_LIMITED),
+                        Optional.of(RuntimeSnapshot.SlowdownReason.TRELLO_RATE_LIMITED),
                         Optional.of(rateLimitedAt)));
         assertThat(nextTickDelay)
                 .as("the tick after a Trello 429 waits longer than the configured %s", configured)
