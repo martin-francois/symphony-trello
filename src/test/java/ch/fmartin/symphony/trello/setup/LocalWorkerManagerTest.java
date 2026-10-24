@@ -20,6 +20,7 @@ import static org.mockito.Mockito.when;
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -3598,7 +3599,7 @@ final class LocalWorkerManagerTest {
         Files.createDirectories(pidFile.getParent());
         Files.writeString(pidFile, "42", StandardCharsets.US_ASCII);
         assertThat(pidFile).exists();
-        var deleteFailure = new IOException("denied " + pidFile);
+        var deleteFailure = new AccessDeniedException(pidFile.toString());
         when(fixture.platform.isAlive(42L)).thenReturn(true);
         when(fixture.platform.isManaged(42L, fixture.paths.appHome())).thenReturn(false);
         String pidToken = PrivateContextTokens.pathToken(fixture.paths.configDir(), pidFile);
@@ -3620,8 +3621,8 @@ final class LocalWorkerManagerTest {
         result.assertSuccess()
                 .stdoutContains(
                         "Skipped unmanaged stale pid WORKFLOW.private.abc123 pid=42",
-                        "Could not remove the stale managed pid file.",
-                        "The unrelated process was not stopped.",
+                        "Could not remove the stale managed pid file. The unrelated process was not stopped."
+                                + " (AccessDeniedException)",
                         "Remove the stale managed pid file manually, then rerun stop.",
                         "pid_file_token=" + pidToken,
                         PrivateContextTokens.lookupCommand(pidToken))

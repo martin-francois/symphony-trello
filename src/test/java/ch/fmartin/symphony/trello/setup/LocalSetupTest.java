@@ -28,6 +28,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -4055,6 +4056,38 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void startFailureNamesThePathFreeCauseOfTheWorkerLaunchFailure() throws Exception {
+        // given
+        Path env = tempDir.resolve(".env");
+        Path pidFile = tempDir.resolve("state").resolve("imported-queue.pid");
+        doThrow(new AccessDeniedException(pidFile.toString()))
+                .when(workerManager)
+                .start(any(), any(), any(), any());
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "board-1",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_start_failed",
+                        "Could not start Symphony for \"Imported Queue\" (AccessDeniedException)")
+                .stderrDoesNotContain(pidFile.toString());
+    }
+
+    @Test
     void reconnectsExistingBoardByConnectedBoardNameBeforeTrelloLookup() throws Exception {
         // given
         Path existingWorkflow = tempDir.resolve("WORKFLOW.connected-name.md");
@@ -5236,6 +5269,44 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void unwrappedIoFailureNamesItsPathFreeCauseAsTheFailureMessage() throws Exception {
+        // given
+        Path config = tempDir.resolve("config");
+        Files.createDirectories(config);
+        Path workflow = config.resolve("WORKFLOW.shared-log-rotation.md");
+        Files.writeString(workflow, "existing");
+        writeOldBoardManifest(config.resolve(ConnectedBoardManifest.FILE_NAME), workflow);
+        Path workerLog = tempDir.resolve("state").resolve("WORKFLOW.shared-log-rotation.log");
+        doThrow(new AccessDeniedException(workerLog.toString()))
+                .when(workerManager)
+                .rotateLogsForReplacedBoards(any(), any(), any());
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "board-1",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                tempDir.resolve(".env").toString(),
+                "--force",
+                "--no-start",
+                "--no-github");
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains("setup_failed code=setup_local_failed message=AccessDeniedException")
+                .stderrDoesNotContain(workerLog.toString());
+    }
+
+    @Test
     void setupSurfacesManagedWorkerStartFailure() throws Exception {
         // given
         doThrow(new TrelloBoardSetupException("setup_worker_start_failed", "Unable to start managed worker."))
@@ -6066,7 +6137,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_stop_failed",
-                        "Could not stop Symphony for \"Plan \\\"B\\\"\\nQueue\": simulated stop failure")
+                        "Could not stop Symphony for \"Plan \\\"B\\\"\\nQueue\" (IOException: simulated stop failure)")
                 .stderrDoesNotContain("Plan \"B\"\nQueue");
         assertThatWorkflow(workflow).hasServerPort(conflictingPort);
         assertThatManifest(manifest).hasBoardWithPort("Plan \"B\"\nQueue", ConfigDefaults.DEFAULT_SERVER_PORT);
