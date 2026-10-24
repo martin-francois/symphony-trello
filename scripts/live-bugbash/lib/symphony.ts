@@ -220,13 +220,19 @@ export async function workerState(port: number): Promise<WorkerState | null> {
   }
 }
 
+type PollCheck<T> = () => Promise<T | null | undefined | false> | T | null | undefined | false;
+
 /** Polls `check` until it returns a value or the deadline passes. Polling is the behavior under test. */
-export async function waitFor<T>(
-  description: string,
-  check: () => Promise<T | null | undefined | false> | T | null | undefined | false,
-  timeoutMs: number,
-  intervalMs = 500,
-): Promise<T> {
+export async function waitFor<T>(description: string, check: PollCheck<T>, timeoutMs: number, intervalMs = 500): Promise<T> {
+  const value = await pollUntil(check, timeoutMs, intervalMs);
+  if (value === null) {
+    throw new TimeoutError(`timed out after ${Math.round(timeoutMs / 1000)}s waiting for ${description}`);
+  }
+  return value;
+}
+
+/** Like `waitFor`, but returns null at the deadline, for callers that report a timeout themselves. */
+export async function pollUntil<T>(check: PollCheck<T>, timeoutMs: number, intervalMs = 500): Promise<T | null> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const value = await check();
@@ -234,7 +240,7 @@ export async function waitFor<T>(
       return value;
     }
     if (Date.now() >= deadline) {
-      throw new TimeoutError(`timed out after ${Math.round(timeoutMs / 1000)}s waiting for ${description}`);
+      return null;
     }
     await sleep(intervalMs);
   }

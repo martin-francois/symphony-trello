@@ -4,7 +4,7 @@ import {runCodexAuthChanged} from "./codex.ts";
 import {isAlive, runOwnedProcesses} from "./processes.ts";
 import type {CleanupSummary} from "./report.ts";
 import type {RunRoot} from "./run-root.ts";
-import {sleep, type CliPaths, type SymphonyCli} from "./symphony.ts";
+import {pollUntil, type CliPaths, type SymphonyCli} from "./symphony.ts";
 import type {TrelloApi} from "./trello.ts";
 
 interface RegisteredWorker {
@@ -117,20 +117,12 @@ export async function cleanupRun(run: RunRoot, cli: SymphonyCli | null, trello: 
 
 /** Workers exit asynchronously after `stop`; give them a bounded grace period before counting. */
 async function settledProcesses(runRoot: string) {
-  const deadline = Date.now() + PROCESS_EXIT_GRACE_MS;
-  let owned = runOwnedProcesses(runRoot);
-  while (owned.length > 0 && Date.now() < deadline) {
-    await sleep(500);
-    owned = runOwnedProcesses(runRoot);
-  }
-  return owned;
+  await pollUntil(() => runOwnedProcesses(runRoot).length === 0, PROCESS_EXIT_GRACE_MS);
+  return runOwnedProcesses(runRoot);
 }
 
 async function waitForExit(pids: readonly number[]): Promise<void> {
-  const deadline = Date.now() + PROCESS_EXIT_GRACE_MS;
-  while (pids.some(isAlive) && Date.now() < deadline) {
-    await sleep(250);
-  }
+  await pollUntil(() => !pids.some(isAlive), PROCESS_EXIT_GRACE_MS, 250);
 }
 
 function signal(pid: number, name: NodeJS.Signals): void {
