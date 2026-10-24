@@ -404,10 +404,8 @@ public class ConfigResolver {
         return Stream.concat(configuredRoots, environmentRoots).distinct().toList();
     }
 
-    /// Resolves a path setting that has no absent state. An unset or blank leading variable fails
-    /// configuration because keeping the reference text would create a literal `$NAME` directory.
-    /// `repository.default_path` resolves such a variable to absent instead; see
-    /// docs/adr/0112-fail-path-settings-on-missing-environment-variables.md.
+    /// Fails on an unset or blank leading variable instead of creating a literal `$NAME` directory;
+    /// see docs/adr/0112-fail-path-settings-on-missing-environment-variables.md.
     private Path pathFailingOnMissingVariable(Path workflowDirectory, String setting, String value) {
         return absolutePath(
                 workflowDirectory,
@@ -476,13 +474,15 @@ public class ConfigResolver {
             expanded = System.getProperty("user.home") + expanded.substring(1);
         }
         if (expanded.startsWith("$") && expanded.indexOf('/') < 0) {
-            expanded = environmentResolver.apply(expanded.substring(1)).orElse(expanded);
+            expanded = EnvironmentReferences.referenceName(expanded)
+                    .flatMap(environmentResolver)
+                    .orElse(expanded);
         } else if (expanded.startsWith("$")) {
             int separator = expanded.indexOf('/');
-            String name = expanded.substring(1, separator);
+            String reference = expanded.substring(0, separator);
             String suffix = expanded.substring(separator);
-            expanded = environmentResolver
-                    .apply(name)
+            expanded = EnvironmentReferences.referenceName(reference)
+                    .flatMap(environmentResolver)
                     .map(envValue -> envValue + suffix)
                     .orElse(expanded);
         }

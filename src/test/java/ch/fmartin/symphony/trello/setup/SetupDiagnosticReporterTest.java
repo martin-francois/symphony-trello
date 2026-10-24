@@ -2037,8 +2037,11 @@ final class SetupDiagnosticReporterTest {
                 .doesNotContain("pid-key", "https://trello.com/b/pid-key/lookup-pid-board");
     }
 
-    @Test
-    void privateContextLookupResolvesFileBackedSecretTokenWithoutReadingSecretValue() throws Exception {
+    @ParameterizedTest
+    @ValueSource(
+            strings = {"secrets/trello-api-key", "$PARENT/secrets/trello-api-key", "${PARENT}/secrets/trello-api-key"})
+    void privateContextLookupResolvesFileBackedSecretTokenWithoutReadingSecretValue(String configuredPath)
+            throws Exception {
         // given
         Path configDir = tempDir.resolve("lookup-secret-config");
         Path workspaceRoot = tempDir.resolve("lookup-secret-workspaces");
@@ -2053,13 +2056,14 @@ final class SetupDiagnosticReporterTest {
                 tracker:
                   kind: trello
                   board_id: lookup-secret-board-id
-                  api_key: file:secrets/trello-api-key
+                  api_key: file:%s
                   api_token: literal-secret-token
                 server:
                   port: 19204
                 ---
                 # Lookup Secret
-                """);
+                """
+                        .formatted(configuredPath));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "lookup-secret-board-id",
@@ -2075,7 +2079,7 @@ final class SetupDiagnosticReporterTest {
                         false))));
         DiagnosticsTokenHasher.load(configDir);
         String lookupToken = pathToken(diagnosticsKey(configDir), secretFile);
-        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+        var reporter = new SetupDiagnosticReporter(Map.of("PARENT", configDir.toString()), new FakeCommandRunner());
 
         // when
         String report = reporter.renderReport(
