@@ -306,6 +306,56 @@ final class SymphonyOrchestratorTest {
     }
 
     @Test
+    void rendersPullRequestHandoffModeFromWorkflowLabelAndDispatchedCardLabels() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: key
+                  api_token: token
+                  board_id: board-1
+                  active_states: [Todo, In Progress]
+                  in_progress_state: In Progress
+                workspace:
+                  root: work
+                polling:
+                  interval_ms: 60000
+                github:
+                  pull_request_mode: create
+                  no_pr_label: Branch Only
+                codex:
+                  command: fake
+                ---
+                {{ pull_request_handoff.mode }}/{{ pull_request_handoff.selected_by }}
+                """);
+        var tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
+        tracker.preparedCard = TestCards.cardWithLabels("card-1", "TRELLO-abc", "In Progress", List.of("branch only"));
+        var request = new AtomicReference<AgentRunner.AgentRunRequest>();
+        AgentRunner runner = mock();
+        doAnswer(invocation -> {
+                    request.set(invocation.getArgument(0));
+                    return AgentRunResult.ok();
+                })
+                .when(runner)
+                .run(any());
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
+
+        // when
+        orchestrator.start();
+        waitUntil(() -> request.get() != null);
+        orchestrator.stop();
+
+        // then
+        assertThat(request.get().prompt())
+                .as("the renamed workflow label on the dispatched card must select branch-only handoff")
+                .isEqualTo("branch_only/card_label");
+    }
+
+    @Test
     void retriesCardFromInProgressWhenAgentRunFailsAfterPickupMove() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");

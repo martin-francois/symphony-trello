@@ -21,6 +21,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.function.Function;
 import java.util.stream.Stream;
+import org.jspecify.annotations.Nullable;
 
 @ApplicationScoped
 public class ConfigResolver {
@@ -28,6 +29,9 @@ public class ConfigResolver {
     private static final Splitter PATH_SEPARATOR = Splitter.on(File.pathSeparator);
     private static final String FILE_SECRET_PREFIX = "file:";
     private static final int MAX_SECRET_BYTES = 64 * 1024;
+    static final String NO_PR_LABEL_TYPE_MESSAGE =
+            EffectiveConfig.GitHubConfig.qualifiedKey(EffectiveConfig.GitHubConfig.NO_PR_LABEL_KEY)
+                    + " must be a Trello label name, or \"\" to disable the label";
 
     private final Function<String, Optional<String>> environmentResolver;
 
@@ -58,6 +62,7 @@ public class ConfigResolver {
         object(root, "polling");
         object(root, "server");
         Map<String, Object> trelloTools = object(root, "trello_tools");
+        EffectiveConfig.GitHubConfig github = gitHubConfig(object(root, EffectiveConfig.GitHubConfig.SECTION_KEY));
         object(tracker, "priority_labels");
         object(agent, "max_concurrent_agents_by_state");
         TypedWorkflowConfig typedWorkflow = WorkflowConfigIngestion.collect(workflow, environmentResolver);
@@ -164,7 +169,8 @@ public class ConfigResolver {
                         bool(trelloTools, "allow_url_attachments", writes),
                         bool(trelloTools, "allow_destructive_operations", false),
                         bool(trelloTools, "assume_write_scope", false)),
-                new EffectiveConfig.ServerConfig(optionalInt(typedWorkflow.serverPort())));
+                new EffectiveConfig.ServerConfig(optionalInt(typedWorkflow.serverPort())),
+                github);
     }
 
     public void validateForDispatch(EffectiveConfig config) {
@@ -210,6 +216,35 @@ public class ConfigResolver {
             return (Map<String, Object>) map;
         }
         throw new ConfigException("config_type_error", key + " must be an object");
+    }
+
+    private static EffectiveConfig.GitHubConfig gitHubConfig(Map<String, Object> github) {
+        Object configuredMode = github.get(EffectiveConfig.GitHubConfig.PULL_REQUEST_MODE_KEY);
+        PullRequestMode mode = configuredMode == null
+                ? EffectiveConfig.GitHubConfig.DEFAULTS.pullRequestMode()
+                : PullRequestMode.fromWorkflowValue(configuredMode.toString())
+                        .orElseThrow(() -> new ConfigException(
+                                "config_value_error",
+                                EffectiveConfig.GitHubConfig.qualifiedKey(
+                                                EffectiveConfig.GitHubConfig.PULL_REQUEST_MODE_KEY)
+                                        + " must be "
+                                        + PullRequestMode.workflowValueChoices()));
+        return new EffectiveConfig.GitHubConfig(mode, noPrLabel(github));
+    }
+
+    /// An omitted key keeps the default label; an explicit empty or null value disables the signal.
+    private static @Nullable String noPrLabel(Map<String, Object> github) {
+        if (!github.containsKey(EffectiveConfig.GitHubConfig.NO_PR_LABEL_KEY)) {
+            return EffectiveConfig.GitHubConfig.DEFAULTS.noPrLabel();
+        }
+        Object configured = github.get(EffectiveConfig.GitHubConfig.NO_PR_LABEL_KEY);
+        if (configured == null) {
+            return null;
+        }
+        if (!(configured instanceof String label)) {
+            throw new ConfigException("config_value_error", NO_PR_LABEL_TYPE_MESSAGE);
+        }
+        return label.isBlank() ? null : label.trim();
     }
 
     private static String string(Map<String, Object> root, String key, String defaultValue) {

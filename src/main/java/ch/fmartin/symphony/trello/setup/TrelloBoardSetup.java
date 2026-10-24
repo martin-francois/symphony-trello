@@ -6,6 +6,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.codex.CodexSkillCatalog;
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
+import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.config.StateNames;
 import ch.fmartin.symphony.trello.config.TrelloListRoleValidator;
@@ -1047,7 +1048,7 @@ public final class TrelloBoardSetup {
                   root: %s
                 repository:
                   default_url: %s
-                  default_path: %s
+                  default_path: %s%s
                 server:
                   port: %d
                 polling:
@@ -1125,6 +1126,7 @@ public final class TrelloBoardSetup {
                         yamlScalar(workspaceRoot.toString()),
                         optionalYamlScalar(repositoryDefaults.defaultUrl()),
                         optionalYamlScalar(repositoryDefaults.defaultPath()),
+                        gitHubYaml(githubEnabled),
                         serverPort,
                         ConfigDefaults.GENERATED_WORKFLOW_POLLING_INTERVAL_MS,
                         trelloToolsYaml(handoffStates),
@@ -1525,7 +1527,9 @@ public final class TrelloBoardSetup {
                 repository, and blocker details that apply to the card.
                 """;
         String publicationStep = githubEnabled
-                ? "Publish or update a pull request when repository changes should be reviewed."
+                ? "Publish or update a pull request when repository changes should be reviewed, or push the branch"
+                        + " without one when the " + PullRequestHandoffPrompt.SECTION_TITLE
+                        + " section selects a branch-only handoff."
                 : "For repository changes, create a local commit or patch according to the card and workflow.";
         return """
                 ## Execution Flow
@@ -1678,7 +1682,8 @@ public final class TrelloBoardSetup {
 
                 This PR requirement applies when the card asks for code, documentation, configuration, tests, or
                 other version-controlled repository changes. It does not apply when the card explicitly asks for a
-                local-only investigation, says not to push, or requires no repository change. In those cases, explain
+                local-only investigation, says not to push, or requires no repository change. The %s
+                section below can also replace it with a branch-only handoff. In the local-only cases, explain
                 the local-only or repository-independent result and only the evidence that applies in %s. Do not
                 require branch or commit evidence when no repository changed.
 
@@ -1686,16 +1691,36 @@ public final class TrelloBoardSetup {
                 the fallback strategies in `%s`. If a PR is still required and cannot be
                 created or updated, %s with the exact blocker instead of moving to %s.
                 """
+                        .formatted(
+                                reviewHandoff,
+                                skillPath("commit"),
+                                skillPath("push-pr"),
+                                prEvidence,
+                                PullRequestHandoffPrompt.SECTION_TITLE,
+                                localEvidence,
+                                skillPath("push-pr"),
+                                blockedText,
+                                reviewHandoff)
+                        .stripTrailing()
+                + "\n\n"
+                + PullRequestHandoffPrompt.modeSection(reviewHandoff, prEvidence, skillPath("push-pr"));
+    }
+
+    private static String gitHubYaml(boolean githubEnabled) {
+        if (!githubEnabled) {
+            return "";
+        }
+        return """
+
+                %s:
+                  %s: %s
+                  %s: %s"""
                 .formatted(
-                        reviewHandoff,
-                        skillPath("commit"),
-                        skillPath("push-pr"),
-                        prEvidence,
-                        localEvidence,
-                        skillPath("push-pr"),
-                        blockedText,
-                        reviewHandoff)
-                .stripTrailing();
+                        EffectiveConfig.GitHubConfig.SECTION_KEY,
+                        EffectiveConfig.GitHubConfig.PULL_REQUEST_MODE_KEY,
+                        EffectiveConfig.GitHubConfig.DEFAULTS.pullRequestMode().workflowValue(),
+                        EffectiveConfig.GitHubConfig.NO_PR_LABEL_KEY,
+                        yamlScalar(ConfigDefaults.DEFAULT_NO_PR_LABEL));
     }
 
     private static String prFeedbackPrompt(
@@ -1834,6 +1859,8 @@ public final class TrelloBoardSetup {
                 do not restart from scratch, %s unless the Trello card or a human explicitly asks for a reset.
 
                 Before returning the card to %s, rerun the card-specific validation and PR feedback sweep, %s
+
+                %s
                 """
                 .formatted(
                         reviewHandoff,
@@ -1842,7 +1869,8 @@ public final class TrelloBoardSetup {
                         reworkPlan,
                         resetRestrictions,
                         reviewHandoff,
-                        reworkEvidence)
+                        reworkEvidence,
+                        PullRequestHandoffPrompt.REWORK_NOTE)
                 .stripTrailing();
     }
 
@@ -1905,6 +1933,8 @@ public final class TrelloBoardSetup {
 
                 After successful merge, update the workpad with merge evidence, add a concise completion comment
                 when useful, and move the card to %s.
+
+                %s
                 """
                 .formatted(
                         quote(mergingState),
@@ -1917,7 +1947,9 @@ public final class TrelloBoardSetup {
                         quote(mergingState),
                         fixupDecision,
                         blockedText,
-                        doneDestination)
+                        doneDestination,
+                        PullRequestHandoffPrompt.mergeRules(
+                                quote(mergingState), reviewHandoff, doneDestination, blockedText, skillPath("land")))
                 .stripTrailing();
     }
 
@@ -2127,17 +2159,15 @@ public final class TrelloBoardSetup {
                 blank(blockedDestination) ? "block in the final response" : "move to " + quote(blockedDestination);
         String pullRequestLine = "";
         if (githubEnabled) {
-            pullRequestLine = workpadToolEnabled
-                    ? """
-                - A pull request exists and is linked in the workpad and handoff comment for repository-changing work
-                  unless the card explicitly requested local-only/no-push work.
+            String linkEvidence = workpadToolEnabled ? "the workpad and handoff comment" : "the final response";
+            pullRequestLine =
+                    """
+                - A pull request exists and is linked in %s for repository-changing work
+                  unless the card explicitly requested local-only/no-push work or the %s
+                  section selects a branch-only handoff, which needs the pushed branch and its handoff details instead.
                 - PR feedback sweep is complete for any existing or newly created PR.
                 """
-                    : """
-                - A pull request exists and is linked in the final response for repository-changing work
-                  unless the card explicitly requested local-only/no-push work.
-                - PR feedback sweep is complete for any existing or newly created PR.
-                """;
+                            .formatted(linkEvidence, PullRequestHandoffPrompt.SECTION_TITLE);
         }
         return """
                 ## Completion Bar Before %s
