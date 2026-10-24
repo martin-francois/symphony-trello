@@ -89,6 +89,7 @@ if [[ "$1" == run ]]; then
   write_report "$coverage/fuzzer_stats/RepositorySourceFuzzer.json" "repository/RepositorySourceResolver.java"
   write_report "$coverage/fuzzer_stats/TrelloCardReferenceParserFuzzer.json" "tracker/TrelloCardReferenceParser.java"
   write_report "$coverage/fuzzer_stats/TrelloChecklistClassifierFuzzer.json" "tracker/TrelloChecklistClassifier.java"
+  write_report "$coverage/fuzzer_stats/TrelloHandoffToolFuzzer.json" "agent/TrelloHandoffToolHandler.java"
   write_report "$coverage/fuzzer_stats/WorkflowLoaderFuzzer.json" "workflow/WorkflowLoader.java"
 fi
 `,

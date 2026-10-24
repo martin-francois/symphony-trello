@@ -10,6 +10,7 @@ const targetSources = new Map([
   ["RepositorySourceFuzzer", "repository/RepositorySourceResolver.java"],
   ["TrelloCardReferenceParserFuzzer", "tracker/TrelloCardReferenceParser.java"],
   ["TrelloChecklistClassifierFuzzer", "tracker/TrelloChecklistClassifier.java"],
+  ["TrelloHandoffToolFuzzer", "agent/TrelloHandoffToolHandler.java"],
   ["WorkflowLoaderFuzzer", "workflow/WorkflowLoader.java"],
 ]);
 
