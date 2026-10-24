@@ -531,9 +531,11 @@ final class ConfigResolverTest {
     }
 
     private static Stream<Arguments> environmentPrefixedPaths() {
-        return Stream.of(PARENT_REFERENCE, BRACED_PARENT_REFERENCE)
-                .flatMap(reference ->
-                        Stream.of(Arguments.of(reference, ""), Arguments.of(reference + "/workspaces", "workspaces")));
+        return Stream.of(
+                Arguments.of(PARENT_REFERENCE, ""),
+                Arguments.of(PARENT_REFERENCE + "/workspaces", "workspaces"),
+                Arguments.of(BRACED_PARENT_REFERENCE, ""),
+                Arguments.of(BRACED_PARENT_REFERENCE + "/workspaces", "workspaces"));
     }
 
     private static ConfigResolver parentResolver(Path parent) {

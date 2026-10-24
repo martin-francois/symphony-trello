@@ -47,6 +47,8 @@ final class SetupDiagnosticReporterTest {
     private static final String SYNTHETIC_BOARD_ID = "000000000000000000000001";
     private static final String ANSI_ESCAPE_IN_LOG = "\u001B";
     private static final String TERMINAL_BELL_IN_LOG = "\u0007";
+    private static final String SECRET_DIRECTORY = "secrets";
+    private static final String SECRET_DIRECTORY_VARIABLE = "SYMPHONY_SECRETS";
 
     @TempDir
     Path tempDir;
@@ -2038,7 +2040,7 @@ final class SetupDiagnosticReporterTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"secrets", "$SYMPHONY_SECRETS", "${SYMPHONY_SECRETS}"})
+    @ValueSource(strings = {SECRET_DIRECTORY, "$" + SECRET_DIRECTORY_VARIABLE, "${" + SECRET_DIRECTORY_VARIABLE + "}"})
     void privateContextLookupResolvesFileBackedSecretTokenWithoutReadingSecretValue(String secretDirectory)
             throws Exception {
         // given
@@ -2046,7 +2048,7 @@ final class SetupDiagnosticReporterTest {
         Path workspaceRoot = tempDir.resolve("lookup-secret-workspaces");
         Path stateHome = tempDir.resolve("lookup-secret-state");
         Path workflow = configDir.resolve("WORKFLOW.lookup-secret.md");
-        Path secretFile = configDir.resolve("secrets").resolve("trello-api-key");
+        Path secretFile = configDir.resolve(SECRET_DIRECTORY).resolve("trello-api-key");
         Files.createDirectories(configDir);
         Files.writeString(
                 workflow,
@@ -2079,7 +2081,7 @@ final class SetupDiagnosticReporterTest {
         DiagnosticsTokenHasher.load(configDir);
         String lookupToken = pathToken(diagnosticsKey(configDir), secretFile);
         var reporter = new SetupDiagnosticReporter(
-                Map.of("SYMPHONY_SECRETS", secretFile.getParent().toString()), new FakeCommandRunner());
+                Map.of(SECRET_DIRECTORY_VARIABLE, secretFile.getParent().toString()), new FakeCommandRunner());
 
         // when
         String report = reporter.renderReport(
