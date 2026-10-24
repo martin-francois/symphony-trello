@@ -4,6 +4,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
 import java.util.Optional;
@@ -26,6 +27,10 @@ import java.util.regex.Pattern;
  * steps are the cases of {@link #runScript}. {@code SYMPHONY_FAKE_CODEX_TOOL_DIR} receives one file
  * per client response to a scripted request. One file per record keeps the concurrent fake
  * processes of one worker from interleaving their output.
+ *
+ * <p>scripts/live-bugbash/lib/codex.ts writes the scripts and reads the records, and
+ * scripts/live-bugbash/lib/codex.test.ts fails when the step names, variable names, or file suffixes
+ * on the two sides drift apart.
  */
 public class FakeCodexAppServer {
     private static final Pattern ID = Pattern.compile("\"id\"\\s*:\\s*(\\d+)");
@@ -33,6 +38,8 @@ public class FakeCodexAppServer {
     private static final Pattern THREAD_ID = Pattern.compile("\"threadId\"\\s*:\\s*\"([^\"]+)\"");
     private static final String DEFAULT_COMMENT =
             "Symphony live E2E fake Codex handoff: summary and verification complete.";
+    private static final String SCRIPT_SUFFIX = ".script";
+    private static final String RECORD_SUFFIX = ".txt";
 
     public static void main(String[] args) throws Exception {
         new FakeCodexAppServer().run();
@@ -138,7 +145,7 @@ public class FakeCodexAppServer {
             return Optional.empty();
         }
         try (var scripts = Files.list(Path.of(directory))) {
-            return scripts.filter(path -> path.getFileName().toString().endsWith(".script"))
+            return scripts.filter(path -> path.getFileName().toString().endsWith(SCRIPT_SUFFIX))
                     .filter(path -> turnStartLine.contains(scenarioId(path)))
                     .max((left, right) -> Integer.compare(
                             scenarioId(left).length(), scenarioId(right).length()));
@@ -147,7 +154,7 @@ public class FakeCodexAppServer {
 
     private static String scenarioId(Path script) {
         String name = script.getFileName().toString();
-        return name.substring(0, name.length() - ".script".length());
+        return name.substring(0, name.length() - SCRIPT_SUFFIX.length());
     }
 
     private void runScript(Path script, String threadId, String turnId) throws Exception {
@@ -220,15 +227,20 @@ public class FakeCodexAppServer {
 
     /**
      * Writes one record into its own file. The name starts with the wall-clock time and a
-     * per-process sequence number, so a sorted listing keeps each process's records in order.
+     * per-process sequence number, so a sorted listing keeps each process's records in order. The
+     * record is written under a temporary name and then renamed, so a reader never sees a partial
+     * record.
      */
     private static void writeRecord(String variable, String record) throws IOException {
         String directory = System.getenv(variable);
         if (directory == null || directory.isBlank()) {
             return;
         }
-        String name = "%013d-%06d-%s.txt".formatted(System.currentTimeMillis(), ++recordSequence, UUID.randomUUID());
-        Files.writeString(Path.of(directory, name), record, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
+        recordSequence += 1;
+        String name = "%013d-%06d-%s".formatted(System.currentTimeMillis(), recordSequence, UUID.randomUUID());
+        Path temporary = Path.of(directory, name + ".tmp");
+        Files.writeString(temporary, record, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
+        Files.move(temporary, Path.of(directory, name + RECORD_SUFFIX), StandardCopyOption.ATOMIC_MOVE);
     }
 
     private static void completeWithUsageLimit(String threadId, String turnId) {
