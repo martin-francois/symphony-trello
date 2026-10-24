@@ -240,6 +240,9 @@ require_terminal() {
 }
 
 run_interactive() {
+  if [[ "$DRY_RUN" == true ]]; then
+    return 0
+  fi
   require_terminal
   printf '  RUN  %s\n' "$*"
   "$@" </dev/tty
