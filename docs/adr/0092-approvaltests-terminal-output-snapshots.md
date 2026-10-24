@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-10-04
-decision-makers: [François Martin, Claude Code]
+decision-makers: [François Martin]
 consulted:
   - "[GitHub issue #602](https://github.com/martin-francois/symphony-trello/issues/602)"
   - "[GitHub issue #776](https://github.com/martin-francois/symphony-trello/issues/776)"
@@ -46,6 +46,9 @@ Which tool should store, compare, report, and update these snapshots?
   previous 12 months, an unarchived repository, no deprecation notice, a compatible open-source
   license, and at least 100 GitHub stars. Respect the seven-day release-age cooldown from
   [Dependency updates](../agents/dependency-updates.md).
+* Have no published vulnerability that affects the library or the versions of its runtime
+  dependencies that the test classpath resolves.
+* Run on every platform the project supports, or have a documented way to run there.
 * Prefer a terminal-aware tool when it gives a material advantage, and keep the transcript
   representation honest: separate streams for normal processes, one merged transcript for a
   pseudo-terminal.
@@ -77,6 +80,16 @@ GitHub API, Maven Central, and PyPI:
 JetBrains JediTerm (864 stars, LGPL-3.0) is a Java terminal emulator, not a snapshot library. It
 would only help with final-screen rendering, which the issue leaves out of scope because the
 installer does not move the cursor or draw a full-screen interface.
+
+Security history, checked on 2026-10-24 in the GitHub advisory database, which lists CVE IDs, and
+in each project's repository security advisories: no advisory names ApprovalTests.Java
+(`com.approvaltests:approvaltests` or `approvaltests-util`), java-snapshot-testing (old group
+`io.github.origin-energy` or new group `io.github.codedabble-dev`), Selfie
+(`com.diffplug.selfie`), tui-test, VHS, or insta. No candidate repository has published a
+security advisory. The only advisory among the ApprovalTests runtime dependencies is
+[CVE-2025-48924](https://github.com/advisories/GHSA-j288-q9x7-2f5v) in `commons-lang3` before
+3.18.0. `approvaltests-util` 31.0.0 declares `commons-lang3` 3.20.0, and the test classpath
+resolves 3.20.0, so the fixed version is in use.
 
 ## Decision Outcome
 
@@ -175,7 +188,11 @@ failure reporter, and the update switch.
 Evidence: 387 stars, Apache-2.0, repository active and not archived, release 31.0.0 on 2026-06-18
 (older than the seven-day cooldown), Java 8 bytecode, compiled against `junit-jupiter-api` 6.1.0.
 Runtime dependencies are `approvaltests-util` and `commons-lang3`, which the test classpath already
-has through REST Assured. OSV and the GitHub advisory database list no vulnerabilities.
+has through REST Assured. OSV and the GitHub advisory database list no vulnerabilities for
+ApprovalTests; the security-history check above covers its dependencies. The library is plain
+Java and runs wherever the test JVM runs. The repository's baselines record POSIX paths and need
+Bash and util-linux `script`, so the snapshot suites run on Linux, and
+`scripts/snapshot-tests-docker.sh` runs them in a Linux container on Windows and macOS.
 
 Spike: 40 snapshot tests in four classes with the repository's Java 25, JUnit 6.1.3, Surefire
 3.6.0, and concurrent class and method execution. Three verification runs passed. A missing
@@ -200,7 +217,7 @@ entries and compares them through a JUnit 5 extension.
 
 Evidence: 129 stars, MIT, not archived, release 4.2.0 on 2026-06-30 under the new group
 `io.github.codedabble-dev`. Open issues report wrong snapshot names with parallel execution and
-nested tests, and duplicated shaded classes.
+nested tests, and duplicated shaded classes. No published vulnerability.
 
 Spike: the same 40 tests. Verification passed under concurrent execution with `CI=true`, and the
 diff output was clear.
@@ -222,7 +239,7 @@ variable.
 
 Evidence: 101 stars, Apache-2.0, not archived, release 3.1.1 on 2026-05-26. It is written in Kotlin
 and depends on `kotlin-stdlib` 2.2.21. A race when writing snapshots under parallel JUnit execution
-was fixed upstream.
+was fixed upstream. No published vulnerability.
 
 Spike: the same 40 tests. With `selfie=readonly`, a missing snapshot failed without writing, and
 verification passed under concurrent execution. The failure message named the first changed line
@@ -244,7 +261,7 @@ asserts screen snapshots with optional styles. Its core is Rust, with Rust, Pyth
 bindings and a command-line tool.
 
 Evidence: 277 stars, MIT, not archived. Release 0.1.0 appeared on 2026-10-03, inside the
-seven-day cooldown; earlier releases are betas.
+seven-day cooldown; earlier releases are betas. No published vulnerability.
 
 * Good, because it is the most terminal-aware option: terminal size, styles, and screen state.
 * Bad, because it has no Java binding and cannot run inside the Maven test JVM or reuse the
@@ -259,7 +276,7 @@ VHS runs scripted terminal sessions from a tape file and writes GIF, video, or t
 serve as golden files.
 
 Evidence: about 21,000 stars, MIT, release v0.12.1 on 2026-09-24. It requires `ttyd` and `ffmpeg`
-on PATH.
+on PATH. No published vulnerability in VHS itself.
 
 * Good, because it is popular and well maintained.
 * Bad, because it needs a Go binary, `ttyd`, and `ffmpeg` in CI and on every contributor machine.
@@ -270,7 +287,8 @@ on PATH.
 
 insta is the standard Rust snapshot library, with review tooling through `cargo insta`.
 
-Evidence: about 2,970 stars, Apache-2.0, release 1.49.0 on 2026-10-03.
+Evidence: about 2,970 stars, Apache-2.0, release 1.49.0 on 2026-10-03. No published
+vulnerability.
 
 * Good, because its review workflow is mature.
 * Bad, because it needs the Rust toolchain and Rust test code, which this Java project does not
