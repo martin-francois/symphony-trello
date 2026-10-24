@@ -45,6 +45,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedSet;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -109,6 +110,8 @@ final class SetupDiagnosticReporter {
     private static final CharMatcher POSIX_PATH_START = SLASHES;
     private static final CharMatcher URL_AUTHORITY_TERMINATOR =
             CharMatcher.whitespace().or(CharMatcher.anyOf("/?#")).precomputed();
+    private static final CharMatcher WHITESPACE = CharMatcher.whitespace().precomputed();
+    private static final BiConsumer<String, String> IGNORE_PATH_TOKENS = (token, path) -> {};
     private static final CharMatcher TOKEN_TERMINATOR =
             CharMatcher.whitespace().or(CharMatcher.anyOf(")>'\"`")).precomputed();
     private static final CharMatcher ASCII_WORD_CHARACTER = CharMatcher.inRange('a', 'z')
@@ -607,6 +610,10 @@ final class SetupDiagnosticReporter {
     private String renderPrivateContext(DiagnosticsRequest request, Optional<DiagnosticsTokenHasher> sharedTokenHasher)
             throws IOException {
         DiagnosticsContext context = diagnosticsContext(request, sharedTokenHasher);
+        // Tool path mappings sanitize the version lines the way the public report does, but private
+        // context never runs auth probes.
+        sensitiveValues = sensitiveValues(context.manifest(), context.paths(), diagnosticsArguments(request, false));
+        deepDiagnostics = false;
 
         var body = new StringBuilder();
         body.append("# Symphony for Trello Private Context\n\n");
@@ -706,6 +713,7 @@ final class SetupDiagnosticReporter {
         addLogMappings(mappings, context.paths().stateHome(), context.selectedWorkflowPaths(), context.selected());
         addProcessStateMappings(
                 mappings, context.paths().stateHome(), context.selectedWorkflowPaths(), context.selected());
+        addToolMappings(mappings);
         return mappings;
     }
 
@@ -872,6 +880,22 @@ final class SetupDiagnosticReporter {
                             pathToken(mapping.workflow().toString()),
                             mapping.workflow()));
         }
+    }
+
+    /// Maps the path tokens in the tool table. Tool output such as a Podman `docker` shim notice can
+    /// name any path, so the mapping reruns the version probes and records what sanitizing them
+    /// tokenizes instead of listing known paths.
+    private void addToolMappings(List<PrivateContextMapping> mappings) {
+        for (String tool : DIAGNOSTIC_TOOL_COMMANDS) {
+            emittedPathTokens(toolProbe(tool).detail())
+                    .forEach(token -> addMapping(mappings, "tool", tool, token.getKey(), token.getValue()));
+        }
+    }
+
+    private List<Map.Entry<String, String>> emittedPathTokens(String text) {
+        List<Map.Entry<String, String>> emitted = new ArrayList<>();
+        sanitize(text, (token, path) -> emitted.add(Map.entry(token, path)));
+        return emitted.stream().distinct().toList();
     }
 
     private static void addMapping(
@@ -1201,7 +1225,7 @@ final class SetupDiagnosticReporter {
         MarkdownTable table = MarkdownTable.leftAligned(List.of("tool", "status", "detail"));
         for (String tool : tools) {
             ToolProbe probe = toolProbe(tool);
-            table.row(tool, probe.status(), sanitize(probe.detail()));
+            table.row(tool, probe.status(), sanitize(probe.detail()) + probe.authStatus());
         }
         table.appendTo(body);
     }
@@ -1221,13 +1245,15 @@ final class SetupDiagnosticReporter {
             }
             return new ToolProbe("missing", "");
         }
-        String detail =
+        // The auth status stays out of the sanitized version line so a path token in that line is the
+        // same with and without --deep, and the private-context lookup can resolve it.
+        String authStatus =
                 switch (command.displayName()) {
-                    case "codex" -> codexStatus(command, version, deepDiagnostics);
-                    case "gh" -> githubStatus(command, version, deepDiagnostics);
-                    default -> version.output();
+                    case "codex" -> authStatus(command, "login");
+                    case "gh" -> authStatus(command, "auth");
+                    default -> "";
                 };
-        return new ToolProbe("available", firstLine(detail));
+        return new ToolProbe("available", firstLine(version.output()), authStatus);
     }
 
     private ToolCommand toolCommand(String tool) {
@@ -1357,20 +1383,13 @@ final class SetupDiagnosticReporter {
         return stripped;
     }
 
-    private String codexStatus(ToolCommand command, CommandResult version, boolean deepDiagnostics) {
+    /// Renders `; <subcommand>=...` from `<tool> <subcommand> status`, such as `codex login status`.
+    private String authStatus(ToolCommand command, String subcommand) {
         if (!deepDiagnostics) {
-            return firstLine(version.output()) + "; login=not-probed";
+            return "; " + subcommand + "=not-probed";
         }
-        CommandResult auth = commandRunner.run(command.command("login", "status"));
-        return firstLine(version.output()) + "; login=" + (auth.success() ? "ok" : "not-ok");
-    }
-
-    private String githubStatus(ToolCommand command, CommandResult version, boolean deepDiagnostics) {
-        if (!deepDiagnostics) {
-            return firstLine(version.output()) + "; auth=not-probed";
-        }
-        CommandResult auth = commandRunner.run(command.command("auth", "status"));
-        return firstLine(version.output()) + "; auth=" + (auth.success() ? "ok" : "not-ok");
+        CommandResult auth = commandRunner.run(command.command(subcommand, "status"));
+        return "; " + subcommand + "=" + (auth.success() ? "ok" : "not-ok");
     }
 
     private ManifestSnapshot manifest(Path manifestPath) {
@@ -2394,12 +2413,18 @@ final class SetupDiagnosticReporter {
     }
 
     private String sanitize(String value) {
+        return sanitize(value, IGNORE_PATH_TOKENS);
+    }
+
+    /// Sanitizes like [#sanitize(String)] and passes each emitted path token with its path to
+    /// `pathTokens`, so the private-context lookup can map tokens from free-form text.
+    private String sanitize(String value, BiConsumer<String, String> pathTokens) {
         if (value == null || value.isBlank()) {
             return "";
         }
-        String sanitized = redactSensitivePaths(value);
+        String sanitized = redactSensitivePaths(value, pathTokens);
         for (String sensitiveValue : sensitiveValues) {
-            sanitized = replaceSensitiveValue(sanitized, sensitiveValue);
+            sanitized = replaceSensitiveValue(sanitized, sensitiveValue, pathTokens);
         }
         sanitized = AUTHORIZATION_HEADER.matcher(sanitized).replaceAll("$1<redacted>");
         sanitized = BEARER_TOKEN.matcher(sanitized).replaceAll("$1<redacted>");
@@ -2415,27 +2440,31 @@ final class SetupDiagnosticReporter {
         sanitized = TRELLO_URL.matcher(sanitized).replaceAll(match -> "<trello-url:" + hash(match.group()) + ">");
         sanitized = TRELLO_CARD_FIELD.matcher(sanitized).replaceAll(match -> match.group(1) + "<redacted>");
         sanitized = TRELLO_OBJECT_ID.matcher(sanitized).replaceAll(match -> "<id:" + hash(match.group()) + ">");
-        sanitized = PATH_ASSIGNMENT.matcher(sanitized).replaceAll(match -> match.group(1) + pathToken(match.group(2)));
+        sanitized = PATH_ASSIGNMENT
+                .matcher(sanitized)
+                .replaceAll(match -> match.group(1) + pathToken(match.group(2), pathTokens));
         sanitized = QUOTED_WINDOWS_PATH
                 .matcher(sanitized)
-                .replaceAll(match -> match.group(1) + pathToken(match.group(2)) + match.group(1));
+                .replaceAll(match -> match.group(1) + pathToken(match.group(2), pathTokens) + match.group(1));
         sanitized = QUOTED_POSIX_PATH
                 .matcher(sanitized)
-                .replaceAll(match -> match.group(1) + pathToken(match.group(2)) + match.group(1));
-        sanitized = WINDOWS_PATH.matcher(sanitized).replaceAll(match -> pathToken(match.group()));
-        return CliInputValidation.safeDiagnosticsText(redactAbsolutePosixPaths(sanitized));
+                .replaceAll(match -> match.group(1) + pathToken(match.group(2), pathTokens) + match.group(1));
+        sanitized = WINDOWS_PATH.matcher(sanitized).replaceAll(match -> pathToken(match.group(), pathTokens));
+        return CliInputValidation.safeDiagnosticsText(redactAbsolutePosixPaths(sanitized, pathTokens));
     }
 
     /// Replaces a sensitive value. An absolute-path value extends over a following path remainder
     /// and always renders as a path token, so one private path renders as one stable token that
     /// matches the path tokens elsewhere in the report instead of a value token or adjacent value
     /// and path tokens.
-    private String replaceSensitiveValue(String text, String sensitiveValue) {
+    private String replaceSensitiveValue(String text, String sensitiveValue, BiConsumer<String, String> pathTokens) {
         if (!looksLikeAbsolutePath(sensitiveValue)) {
             return text.replace(sensitiveValue, "<value:" + hash(sensitiveValue) + ">");
         }
         Pattern sensitivePath = Pattern.compile(Pattern.quote(sensitiveValue) + "(?:[/\\\\][^\\s\"'`|)\\]]*)?");
-        return sensitivePath.matcher(text).replaceAll(match -> Matcher.quoteReplacement(pathToken(match.group())));
+        return sensitivePath
+                .matcher(text)
+                .replaceAll(match -> Matcher.quoteReplacement(pathToken(match.group(), pathTokens)));
     }
 
     private static boolean looksLikeAbsolutePath(String value) {
@@ -2540,7 +2569,7 @@ final class SetupDiagnosticReporter {
         return terminator < 0 ? value.length() : terminator;
     }
 
-    private String redactAbsolutePosixPaths(String value) {
+    private String redactAbsolutePosixPaths(String value, BiConsumer<String, String> pathTokens) {
         var redacted = new StringBuilder(value.length());
         int cursor = 0;
         while (cursor < value.length()) {
@@ -2550,7 +2579,7 @@ final class SetupDiagnosticReporter {
                 break;
             }
             int end = absolutePosixPathEnd(value, start);
-            redacted.append(value, cursor, start).append(pathToken(value.substring(start, end)));
+            redacted.append(value, cursor, start).append(pathToken(value.substring(start, end), pathTokens));
             cursor = end;
         }
         return redacted.toString();
@@ -2827,15 +2856,57 @@ final class SetupDiagnosticReporter {
                 .toList();
     }
 
-    private String redactSensitivePaths(String value) {
+    private String redactSensitivePaths(String value, BiConsumer<String, String> pathTokens) {
         String redacted = value;
         for (String path : sensitivePaths()) {
             if (!path.isBlank()) {
                 Pattern pathWithChildren = Pattern.compile(Pattern.quote(path) + "(?:[/\\\\][^\\r\\n\"'`<>|]*)?");
-                redacted = pathWithChildren.matcher(redacted).replaceAll(match -> pathToken(match.group()));
+                redacted = redactPathMatches(redacted, pathWithChildren, pathTokens);
             }
         }
         return redacted;
+    }
+
+    /// Replaces each match with one path token. A match can run past the end of the path into the
+    /// rest of a log line, because child paths may contain spaces. The token therefore ends at the
+    /// longest prefix that ends before whitespace and exists on disk, which keeps text such as
+    /// ` outcome=loaded` visible and lets the private-context lookup resolve the token. Without such
+    /// a prefix the whole match stays in one token. A shorter existing prefix of a missing path still
+    /// ends the token early, see docs/adr/0111-resolvable-diagnostics-path-tokens.md.
+    private String redactPathMatches(String value, Pattern pathPattern, BiConsumer<String, String> pathTokens) {
+        Matcher matcher = pathPattern.matcher(value);
+        var redacted = new StringBuilder(value.length());
+        int cursor = 0;
+        while (matcher.find(cursor)) {
+            String path = existingPathPrefix(matcher.group());
+            redacted.append(value, cursor, matcher.start()).append(pathToken(path, pathTokens));
+            cursor = matcher.start() + path.length();
+        }
+        return redacted.append(value, cursor, value.length()).toString();
+    }
+
+    private static String existingPathPrefix(String candidate) {
+        if (WHITESPACE.matchesNoneOf(candidate) || existsAsPath(candidate)) {
+            return candidate;
+        }
+        for (int end = candidate.length() - 1; end > 0; end--) {
+            if (WHITESPACE.matches(candidate.charAt(end))
+                    && !WHITESPACE.matches(candidate.charAt(end - 1))
+                    && existsAsPath(candidate.substring(0, end))) {
+                return candidate.substring(0, end);
+            }
+        }
+        return candidate;
+    }
+
+    /// Text that is not a valid path on this platform is not an existing path, so the caller keeps
+    /// the whole match in one token.
+    private static boolean existsAsPath(String path) {
+        try {
+            return Files.exists(Path.of(path), LinkOption.NOFOLLOW_LINKS);
+        } catch (InvalidPathException e) {
+            return false;
+        }
     }
 
     private static void addPath(List<String> paths, String value) {
@@ -2846,6 +2917,12 @@ final class SetupDiagnosticReporter {
 
     private String pathToken(String path) {
         return "<path:" + hash(path) + ">";
+    }
+
+    private String pathToken(String path, BiConsumer<String, String> pathTokens) {
+        String token = pathToken(path);
+        pathTokens.accept(token, path);
+        return token;
     }
 
     private static PrintStream borrowedOut(Terminal terminal) {
@@ -3057,7 +3134,11 @@ final class SetupDiagnosticReporter {
         WINDOWS_BATCH
     }
 
-    private record ToolProbe(String status, String detail) {}
+    private record ToolProbe(String status, String detail, String authStatus) {
+        private ToolProbe(String status, String detail) {
+            this(status, detail, "");
+        }
+    }
 
     private record ManifestSnapshot(ConnectedBoardManifest manifest, ManifestStatus status) {}
 
