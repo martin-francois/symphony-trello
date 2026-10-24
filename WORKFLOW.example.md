@@ -64,6 +64,8 @@ trello_tools:
 
 You are working on {{ card.identifier }}: {{ card.title }}.
 
+Current Trello list: {{ card.state }}
+
 Read the card description and repository instructions, make the smallest maintainable change that
 satisfies the card, run relevant verification, and leave the workspace in a reviewable state.
 
@@ -143,12 +145,12 @@ This is an unattended orchestration run. Do not ask a human to perform routine f
 Work autonomously end to end unless the card is blocked by missing requirements, permissions,
 credentials, tools, or unsafe repository state.
 
-Start by determining the current Trello list and route from that list. After the required initial
-`checking` call classifies the deep comment window, open or create the workpad, then keep it current
-as the single detailed progress record. Spend extra effort up front on planning and validation design
-before implementation. Reproduce bugs or capture a concrete current-state signal before changing
-behavior. When meaningful out-of-scope improvements are discovered, record them as separate follow-up
-work instead of expanding this card.
+Start from the current Trello list shown under Trello Card and route from that list. After the
+required initial `checking` call classifies the deep comment window, open or create the workpad,
+then keep it current as the single detailed progress record. Spend extra effort up front on planning
+and validation design before implementation. Reproduce bugs or capture a concrete current-state
+signal before changing behavior. When meaningful out-of-scope improvements are discovered, record
+them as separate follow-up work instead of expanding this card.
 
 Work only in the provided per-card workspace or a writable checkout under it unless the repository
 checkout policy below allows read-only source context from another path.
@@ -469,14 +471,35 @@ create duplicate progress summary comments when the workpad already contains the
 `Merging`. Do not merge from Human Review, and do not call `gh pr merge` directly from the workflow
 prompt. Open `.codex/skills/symphony-trello-land/SKILL.md` and follow it.
 
-Before merging, identify the PR, run the PR feedback sweep, run current card-specific validation,
-check mergeability, branch state, required reviews, and CI/check status, and follow the repository's
-merge policy. Do not enable auto-merge unless the repository policy explicitly requires it.
+For work with a PR, identify the PR before merging, run the PR feedback sweep, run current
+card-specific validation, check mergeability, branch state, required reviews, and CI/check status, and
+follow the repository's merge policy. Do not enable auto-merge unless the repository policy explicitly
+requires it.
 
-If PR discovery, checks, auth, branch state, merge policy, or outstanding review feedback is unclear,
-update the workpad and move the card to `Blocked` with a concise blocker. After successful merge,
-update the workpad with merge evidence, add a concise completion comment when useful, and move the
-card to `Done`.
+Deterministic merge decisions:
+- If the workpad or a handoff comment shows that the card's work was completed and handed off for
+  review, no PR for that work is linked from the card description, Trello comments, or workpad, no
+  open PR exists for the card's branch, and the work did not need one, there is nothing to merge.
+  This covers question-only, repository-independent, and explicitly local-only or no-push work.
+  Record in the workpad that no merge was needed, and move the card to `Done`. Do not move it back to
+  Human Review and do not block it.
+- If no PR exists for the card and neither the workpad nor a handoff comment shows completed work
+  handed off for review, the card is not ready to close. Update the workpad and move the card to
+  `Blocked` with a concise blocker.
+- If the card moved from Human Review to `Merging` with no new feedback and the PR is clean, merge it.
+- If exact, unambiguous feedback added before the card entered `Merging` was addressed with current
+  validation and clean checks, merge it.
+- If final work in the merge approval list required material fixups, broad interpretation, or
+  unverifiable changes, move back to Human Review with the reason and ask for renewed approval.
+- If the work needs a PR and PR discovery, checks, auth, branch state, merge policy, required reviews,
+  or actionable review feedback is unresolved, update the workpad and move the card to `Blocked` with
+  a concise blocker.
+
+After successful merge, update the workpad with merge evidence, add a concise completion comment
+when useful, and move the card to `Done`.
+
+`Merging` is only for pull requests. When you hand off work with nothing to merge, say in the handoff
+comment that a human can move the card straight to `Done` after review.
 
 ## Completion Bar Before Human Review
 

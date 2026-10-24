@@ -46,6 +46,7 @@ import org.junit.jupiter.api.io.TempDir;
 final class TrelloBoardSetupTest {
     private static final String REPOSITORY_POLICY_HEADING = "## Classify Repository Need Before Source Blocking";
     private static final String REPOSITORY_SOURCE_PRECEDENCE_HEADING = "## Repository Source Precedence";
+    private static final String MERGE_SECTION_HEADING = "## Merge From ";
 
     private FakeTrelloServer trello;
     private TrelloBoardSetup setup;
@@ -449,16 +450,7 @@ final class TrelloBoardSetupTest {
         Path workflow = tempDir.resolve("generated-workflow.md");
 
         // when
-        var result = setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
-                endpoint(),
-                new TrelloBoardSetup.TrelloCredentials("key", "token"),
-                "Symphony Work Queue",
-                null,
-                workflow,
-                Path.of("./workspaces"),
-                1,
-                false,
-                false));
+        var result = setup.createRecommendedBoard(recommendedBoardRequest(workflow));
         int expectedPort = result.serverPort();
 
         // then
@@ -517,7 +509,7 @@ final class TrelloBoardSetupTest {
                 .contains("do not create separate progress comments")
                 .contains("## Operating Posture")
                 .contains("This is an unattended orchestration run")
-                .contains("Start by determining the current Trello list")
+                .contains("Start from the current Trello list shown under Trello Card")
                 .contains("## Execution Flow")
                 .contains("commit, push")
                 .contains("Only move to \"Human Review\"")
@@ -693,6 +685,74 @@ final class TrelloBoardSetupTest {
                         false,
                         false));
         assertThat(config.polling().interval()).isEqualTo(ConfigDefaults.GENERATED_WORKFLOW_POLLING_INTERVAL);
+    }
+
+    @Test
+    void recommendedWorkflowClosesMergingCardsWithNothingToMergeInDone() {
+        // given
+        Path workflow = tempDir.resolve("nothing-to-merge-workflow.md");
+
+        // when
+        setup.createRecommendedBoard(recommendedBoardRequest(workflow));
+        String prompt = new PromptRenderer()
+                .render(
+                        new WorkflowLoader().load(workflow).promptTemplate(),
+                        TestCards.card("card-1", "TRELLO-1", "Merging"),
+                        null);
+
+        // then
+        assertThat(prompt).contains("Current Trello list: Merging");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .containsIgnoringWhitespaces("For work with a PR, identify the PR before merging")
+                .containsIgnoringWhitespaces(
+                        "If the workpad or a handoff comment shows that the card's work was completed and handed off for review, no PR for that work is linked")
+                .containsIgnoringWhitespaces(
+                        "no merge was needed, and move the card to \"Done\". Do not move it back to \"Human Review\"")
+                .containsIgnoringWhitespaces(
+                        "neither the workpad nor a handoff comment shows completed work handed off for review, the card is not ready to close. Update the workpad and move the card to \"Blocked\"")
+                .containsIgnoringWhitespaces("If the work needs a PR and PR discovery, checks, auth")
+                .containsIgnoringWhitespaces("a human can move the card straight to \"Done\" after review");
+    }
+
+    @Test
+    void shippedWorkflowExampleMergeSectionMatchesGeneratedWorkflow() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("merge-section-workflow.md");
+        setup.createRecommendedBoard(recommendedBoardRequest(workflow));
+
+        // when
+        String generatedMerge = mergeSection(Files.readString(workflow));
+        String exampleMerge = mergeSection(Files.readString(Path.of("WORKFLOW.example.md")));
+
+        // then
+        // The generated section ends with an unheaded pickup paragraph that the example does not carry.
+        assertThat(normalizedForComparison(generatedMerge))
+                .as("generated merge section starting with the shipped workflow example merge section")
+                .startsWith(normalizedForComparison(exampleMerge));
+    }
+
+    @Test
+    void shippedSkillsCloseCardsWithNothingToMerge() throws IOException {
+        // given
+        Path landSkill = Path.of(".codex/skills/land/SKILL.md");
+        Path handoffSkill = Path.of(".codex/skills/trello-handoff/SKILL.md");
+
+        // when
+        String land = Files.readString(landSkill);
+        String handoff = Files.readString(handoffSkill);
+
+        // then
+        assertThat(land)
+                .contains("there is nothing to merge")
+                .containsIgnoringWhitespaces("shows that the card's work was completed and handed off for review")
+                .containsIgnoringWhitespaces("Do not send it back to the configured review handoff list")
+                .containsIgnoringWhitespaces("the card is not ready to close")
+                .contains("- The PR cannot be identified for work that needs one.");
+        assertThat(handoff)
+                .containsIgnoringWhitespaces("a human can move the card straight to `Done` after review")
+                .containsIgnoringWhitespaces("reaches `Merging` after that handoff")
+                .containsIgnoringWhitespaces("move it to `Done` instead of back to `Human Review`");
     }
 
     @Test
@@ -927,16 +987,7 @@ final class TrelloBoardSetupTest {
                 workspaceJson("workspace-2", "second", "Second Workspace", "second")));
         Path workflow = tempDir.resolve("generated-workflow.md");
 
-        var request = new TrelloBoardSetup.NewBoardRequest(
-                endpoint(),
-                new TrelloBoardSetup.TrelloCredentials("key", "token"),
-                "Symphony Work Queue",
-                null,
-                workflow,
-                Path.of("./workspaces"),
-                1,
-                false,
-                false);
+        var request = recommendedBoardRequest(workflow);
 
         // when
         ThrowingCallable action = () -> setup.createRecommendedBoard(request);
@@ -1680,6 +1731,8 @@ final class TrelloBoardSetupTest {
                 .contains("renewed \"Review\"")
                 .contains("move back to\n  \"Review\" with the reason")
                 .contains("move the card to \"Released\"")
+                .containsIgnoringWhitespaces(
+                        "no merge was needed, and move the card to \"Released\". Do not move it back to \"Review\"")
                 .doesNotContain("renewed Human Review")
                 .doesNotContain("move back to\n  \"Human Review\"")
                 .doesNotContain("move the card to \"Done\"");
@@ -2928,8 +2981,33 @@ final class TrelloBoardSetupTest {
         return URI.create("http://127.0.0.1:" + trello.endpointUri().getPort() + "/1");
     }
 
+    private TrelloBoardSetup.NewBoardRequest recommendedBoardRequest(Path workflow) {
+        return new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "Symphony Work Queue",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                false);
+    }
+
     private static EffectiveConfig resolve(Path workflow) {
         return new ConfigResolver().resolve(new WorkflowLoader().load(workflow));
+    }
+
+    private static String mergeSection(String workflow) {
+        int start = workflow.indexOf(MERGE_SECTION_HEADING);
+        assertThat(start).as("merge section heading offset").isNotNegative();
+        int end = workflow.indexOf("\n## ", start + MERGE_SECTION_HEADING.length());
+        return end < 0 ? workflow.substring(start) : workflow.substring(start, end);
+    }
+
+    // The example quotes list names Markdown-style while generated prompts use double quotes.
+    private static String normalizedForComparison(String text) {
+        return text.replaceAll("[\"`]", "").replaceAll("\\s+", " ").strip();
     }
 
     private static String repositoryPolicySection(String workflow) {
