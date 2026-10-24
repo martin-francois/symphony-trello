@@ -110,12 +110,12 @@ function compiledFakeCodex(run: RunRoot): string {
   const compiled = join(classes, "FakeCodexAppServer.class");
   if (!existsSync(compiled) || statSync(compiled).mtimeMs < statSync(source).mtimeMs) {
     mkdirSync(classes, {recursive: true});
-    const javac = javaExecutable().replace(/java$/, "javac");
+    const javac = jdkTool("javac");
     const result = spawnSync(javac, ["--release", "25", "-d", classes, source], {
       encoding: "utf8",
     });
     if (result.status !== 0) {
-      throw new Error(`could not compile the fake Codex app-server: ${result.stderr}`);
+      throw new Error(`could not compile the fake Codex app-server with ${javac}: ${result.error?.message ?? result.stderr}`);
     }
   }
   return classes;
@@ -241,8 +241,14 @@ export async function realCodexSentinel(run: RunRoot, scenarioId: string, timeou
 }
 
 export function javaExecutable(): string {
+  return jdkTool("java");
+}
+
+/** A JDK tool from `JAVA_HOME/bin` when it is there, otherwise the bare name for a PATH lookup. */
+function jdkTool(name: string): string {
   const javaHome = process.env["JAVA_HOME"];
-  return javaHome !== undefined && existsSync(join(javaHome, "bin", "java")) ? join(javaHome, "bin", "java") : "java";
+  const candidate = javaHome === undefined ? null : join(javaHome, "bin", name);
+  return candidate !== null && existsSync(candidate) ? candidate : name;
 }
 
 export function shellQuote(value: string): string {
