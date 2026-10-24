@@ -51,12 +51,15 @@ typed IDs", because it keeps one interaction model for all setup prompts, works 
 never blocks a model that the catalog does not list.
 
 `CodexModelDefaultsResolver` keeps using app-server `model/list`. It parses each usable entry once.
-When a model ID repeats, in one page or across pages, the first entry wins for the display name,
-hidden flag, default marker, and reasoning metadata, so the picker label and the reasoning
-recommendation always come from the same entry. Entries without a usable model ID are skipped.
-Control characters in the model ID or reasoning metadata still make setup treat the whole catalog as
-unsupported, as ADR 0025 already does for model metadata. The display name is only a label, so a
-display name with control characters is dropped and the picker shows the model ID instead.
+When a model ID repeats, in one page or across pages, the first usable entry wins for the display
+name, hidden flag, default marker, and reasoning metadata, so the picker label and the reasoning
+recommendation always come from the same entry. Entries without a usable model ID are skipped. An
+entry whose model ID or reasoning metadata contains control characters is skipped the same way, so
+one bad entry, even a hidden or repeated one, does not hide the safe entries or turn off the model
+prompt. When no usable entry is left, setup uses the empty-catalog fallback from ADR 0025. The
+model ID is checked before trimming and also rejects Unicode line and paragraph separators, using
+the typed-ID path's single-line matcher. The display name is only a label, so a display name with
+control characters or either separator is dropped and the picker shows the model ID instead.
 
 `CodexModelPicker` shows the non-hidden entries in catalog order, marks Symphony's catalog
 recommendation, and preselects the current value. The current value is the preserved workflow model
@@ -94,12 +97,13 @@ never show the picker.
 Run `./mvnw -q spotless:check verify`. `CodexModelPickerTest` covers Enter and end of input,
 selection by number, typed IDs, the other-model choice, invalid numbers, blank IDs, an arrow-key
 escape sequence, current-model markers, unlisted and omitted workflow models, and display-name
-shortening within 80 columns. `CodexModelDefaultsResolverTest` covers catalog order, hidden entries,
-malformed entries, duplicates across pages, the first of several default markers, and a dropped
-unsafe display name. `LocalSetupTest` covers the picker at the command boundary against a fake
-app-server: Enter, a number that switches the reasoning recommendation, the other-model choice,
-preselection of an existing workflow model, the free-text fallback for an empty catalog, and no
-picker for `--codex-model` or `--non-interactive`.
+shortening within 80 columns. `CodexModelDefaultsResolverTest` covers Unicode line and paragraph
+separators in raw model IDs and display names, catalog order, hidden entries,
+malformed entries, skipped entries with control characters, duplicates across pages, the first of
+several default markers, and a dropped unsafe display name. `LocalSetupTest` covers the picker at
+the command boundary against a fake app-server: Enter, a number that switches the reasoning
+recommendation, the other-model choice, preselection of an existing workflow model, the free-text
+fallback for an empty catalog, and no picker for `--codex-model` or `--non-interactive`.
 
 ## Pros and Cons of the Options
 

@@ -1,6 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
-import static ch.fmartin.symphony.trello.TextCharacterMatchers.ISO_CONTROL_CHARACTERS;
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNSAFE_SINGLE_LINE_CHARACTERS;
 import static ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.blank;
 import static com.google.common.base.Preconditions.checkArgument;
 
@@ -160,24 +160,35 @@ final class CodexModelDefaultsResolver {
                 defaults, visibleModels, reasoningEffortsByModel, reasoningEffortOptionsByModel);
     }
 
-    /// Parses usable catalog entries in catalog order. A repeated model id keeps its first entry so
-    /// the picker label, default selection, and reasoning metadata all come from the same entry.
+    /// Parses usable catalog entries in catalog order. A repeated model id keeps its first usable entry
+    /// so the picker label, default selection, and reasoning metadata all come from the same entry.
     private static List<CatalogEntry> catalogEntries(ArrayNode models) {
-        Map<String, CatalogEntry> firstEntryPerModelInCatalogOrder = new LinkedHashMap<>();
+        Map<String, CatalogEntry> firstUsableEntryPerModelInCatalogOrder = new LinkedHashMap<>();
         for (JsonNode model : models) {
-            String modelName = validatedCatalogText(model, "model");
-            if (!blank(modelName)) {
-                // Parse every entry, including repeats, so unsafe metadata anywhere rejects the catalog.
-                CatalogEntry entry = catalogEntry(modelName.strip(), model);
-                firstEntryPerModelInCatalogOrder.putIfAbsent(entry.model(), entry);
-            }
+            usableCatalogEntry(model)
+                    .ifPresent(entry -> firstUsableEntryPerModelInCatalogOrder.putIfAbsent(entry.model(), entry));
         }
-        return List.copyOf(firstEntryPerModelInCatalogOrder.values());
+        return List.copyOf(firstUsableEntryPerModelInCatalogOrder.values());
+    }
+
+    /// Returns the entry, or empty when its model id is blank or unsafe for a picker line, or its
+    /// reasoning metadata contains control characters. Skipping one entry keeps the catalog usable.
+    private static Optional<CatalogEntry> usableCatalogEntry(JsonNode model) {
+        String modelName = model.path("model").asText(null);
+        if (blank(modelName) || UNSAFE_SINGLE_LINE_CHARACTERS.matchesAnyOf(modelName)) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(catalogEntry(modelName, model));
+        } catch (IllegalArgumentException unsafeMetadata) {
+            LOG.log(System.Logger.Level.DEBUG, "Skipping a Codex catalog entry with unsafe metadata", unsafeMetadata);
+            return Optional.empty();
+        }
     }
 
     private static CatalogEntry catalogEntry(String modelName, JsonNode model) {
         return new CatalogEntry(
-                modelName,
+                modelName.strip(),
                 displayName(model),
                 model.path("hidden").asBoolean(false),
                 model.path("isDefault").asBoolean(false),
@@ -186,10 +197,10 @@ final class CodexModelDefaultsResolver {
     }
 
     /// Returns the display name only when it is safe to print. The name is cosmetic, so an unsafe one
-    /// is dropped and the picker shows the model id instead of rejecting the whole catalog.
+    /// is dropped and the picker shows the model id instead of skipping the entry.
     private static String displayName(JsonNode model) {
         String displayName = model.path("displayName").asText(null);
-        return displayName == null || ISO_CONTROL_CHARACTERS.matchesAnyOf(displayName) ? null : displayName;
+        return displayName == null || UNSAFE_SINGLE_LINE_CHARACTERS.matchesAnyOf(displayName) ? null : displayName;
     }
 
     /// Applies the new-workflow precedence from ADR 0025: visible Terra, then the first visible
@@ -206,15 +217,15 @@ final class CodexModelDefaultsResolver {
     private static List<ReasoningEffortOption> supportedReasoningEfforts(JsonNode model) {
         return model.path("supportedReasoningEfforts")
                 .valueStream()
-                .filter(option -> !blank(option.path("reasoningEffort").asText(null)))
                 .map(CodexModelDefaultsResolver::reasoningEffortOption)
+                .flatMap(Optional::stream)
                 .toList();
     }
 
-    private static ReasoningEffortOption reasoningEffortOption(JsonNode option) {
-        return new ReasoningEffortOption(
-                option.path("reasoningEffort").asText(null),
-                option.path("description").asText(null));
+    private static Optional<ReasoningEffortOption> reasoningEffortOption(JsonNode option) {
+        String effort = validatedCatalogText(option, "reasoningEffort");
+        String description = validatedCatalogText(option, "description");
+        return blank(effort) ? Optional.empty() : Optional.of(new ReasoningEffortOption(effort, description));
     }
 
     private static String validatedCatalogText(JsonNode value, String fieldName) {

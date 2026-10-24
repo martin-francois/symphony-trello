@@ -747,12 +747,15 @@ when the operator presses Enter.
 
 When `--codex-model` is omitted and supported discovery lists at least one non-hidden entry with a
 usable model id, guided setup MUST offer a numbered model picker. The picker MUST list every such
-entry once, in catalog order, keeping the first entry when a model id repeats across the response or
-its pages. Setup MUST read the display name, default marker, and reasoning metadata of a repeated
-model id from that same first entry, and MUST drop a display name that contains control characters
-instead of rejecting the catalog. It MUST identify the catalog-derived recommendation, MUST preselect the effective current
-model so that Enter keeps it, and MUST identify a preserved workflow model that is not the
-recommendation as current. A preserved workflow model that the picker does not list MUST appear as
+entry once, in catalog order, keeping the first usable entry when a model id repeats across the
+response or its pages. Setup MUST read the display name, default marker, and reasoning metadata of a
+repeated model id from that same first usable entry. An entry whose model id or reasoning metadata
+contains control characters is not usable: setup MUST skip that entry and keep using the rest of the
+catalog. A model id containing a Unicode line or paragraph separator is also unusable, including
+before trimming. A display name that contains control characters or either Unicode separator MUST
+be dropped while its entry stays usable. The picker MUST identify the catalog-derived recommendation,
+MUST preselect the effective current model so that Enter keeps it, and MUST identify a preserved
+workflow model that is not the recommendation as current. A preserved workflow model that the picker does not list MUST appear as
 its own choice, and a workflow that omits the model MUST offer a choice that keeps the omission. The
 picker MUST end with an explicit other-model choice that accepts any non-blank single-line model id,
 and the prompt MUST also accept such a model id typed directly. Choosing the current model MUST
@@ -760,8 +763,8 @@ count as keeping it. Choosing a different model MUST resolve reasoning effort as
 model under the precedence above. The picker MAY shorten Codex display names to keep lines short but
 MUST show model ids in full. When discovery is unsupported or lists no non-hidden usable entry,
 guided setup MUST keep the free-text model prompt instead of showing an empty picker. Non-interactive
-setup and `--codex-model` MUST NOT show the picker. Non-interactive setup follows the same resolution unless explicit
-setup options provide different values. Existing workflow values remain the source of truth for a
+setup and `--codex-model` MUST NOT show the picker. Non-interactive setup follows the same
+resolution unless explicit setup options provide different values. Existing workflow values remain the source of truth for a
 Trello board and take precedence over discovered defaults during workflow regeneration. The selected
 catalog model MAY omit `defaultReasoningEffort`; setup MUST NOT supply a model-specific effort from a
 hard-coded Terra or Sol default. As the explicit supported-empty or unusable catalog exception, an
