@@ -2,9 +2,9 @@ package ch.fmartin.symphony.trello.tracker;
 
 import ch.fmartin.symphony.trello.domain.Card;
 import com.google.common.base.Splitter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 public final class TrelloReferenceFuzzInvariants {
     public static final int MAX_TEXT_LENGTH = 2_048;
@@ -48,8 +48,7 @@ public final class TrelloReferenceFuzzInvariants {
     }
 
     private static void assertNormalizedUrlsParseBackToTheSameReferences(List<ParsedReference> references) {
-        List<String> urls = references.stream().map(ParsedReference::url).toList();
-        if (!parseReferences(String.join(" ", urls)).references().equals(references)) {
+        if (!parseReferences(String.join(" ", urlsOf(references))).references().equals(references)) {
             throw new AssertionError("normalized Trello URLs do not parse back to the same references");
         }
         for (ParsedReference reference : references) {
@@ -106,12 +105,18 @@ public final class TrelloReferenceFuzzInvariants {
         if (result.prerequisiteReferences().isEmpty()) {
             return;
         }
-        String normalized = result.prerequisiteReferences().stream()
-                .map(ParsedReference::url)
-                .collect(Collectors.joining("\n"));
+        String normalized = String.join("\n", urlsOf(result.prerequisiteReferences()));
         if (!analyzeChecklist(checklist(normalized)).equals(result)) {
             throw new AssertionError("normalized prerequisite URLs do not classify back to the same prerequisites");
         }
+    }
+
+    private static List<String> urlsOf(List<ParsedReference> references) {
+        List<String> urls = new ArrayList<>(references.size());
+        for (ParsedReference reference : references) {
+            urls.add(reference.url());
+        }
+        return List.copyOf(urls);
     }
 
     public static Card.Checklist checklist(String text) {

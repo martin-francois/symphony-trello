@@ -8,6 +8,7 @@ import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.google.common.base.Splitter;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.file.Path;
@@ -34,11 +35,13 @@ public final class WorkflowLoaderInvariants {
             Set.of(UNREADABLE_CODE, PARSE_ERROR_CODE, "workflow_front_matter_not_a_map");
     private static final String FRONT_MATTER_DELIMITER = "---";
     private static final String EMPTY_FRONT_MATTER = "---\n{}\n---\n";
-    private static final Pattern LINE_TERMINATOR = Pattern.compile("\\R");
-    private static final Pattern FILE_LINE_TERMINATOR = Pattern.compile("\r\n|\r|\n");
-    // The densest valid YAML found so far is "?," in a flow sequence, which becomes {"": null}: three
-    // nodes for two bytes. The factor leaves headroom for denser forms while still failing on alias
-    // expansion, which grows exponentially.
+    private static final Pattern ANY_UNICODE_LINE_BREAK = Pattern.compile("\\R");
+    // The line ends that separate front matter lines; other Unicode breaks stay inside a line.
+    private static final Pattern WORKFLOW_LINE_END = Pattern.compile("\r\n|\r|\n");
+    private static final Splitter WORKFLOW_LINES = Splitter.on(WORKFLOW_LINE_END);
+    // An explicit empty key, "?," in a flow sequence, becomes {"": null}: three nodes for two bytes. The
+    // factor leaves headroom for denser forms while still failing on alias expansion, which grows
+    // exponentially.
     private static final int MAX_NODES_PER_INPUT_BYTE = 4;
     private static final ObjectMapper CANONICAL_JSON =
             new ObjectMapper().enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS);
@@ -67,8 +70,8 @@ public final class WorkflowLoaderInvariants {
     }
 
     private static void assertFrontMatterRules(String text, LoadResult result) {
-        List<String> lines = text.lines().toList();
-        if (lines.isEmpty() || !FRONT_MATTER_DELIMITER.equals(lines.getFirst().trim())) {
+        List<String> lines = WORKFLOW_LINES.splitToList(text);
+        if (!isFrontMatterDelimiter(lines.getFirst())) {
             WorkflowDefinition definition = result.definition();
             if (definition == null) {
                 throw violation("markdown without front matter is accepted");
@@ -77,23 +80,36 @@ public final class WorkflowLoaderInvariants {
             check(
                     definition
                             .promptTemplate()
-                            .equals(FILE_LINE_TERMINATOR
+                            .equals(WORKFLOW_LINE_END
                                     .matcher(text)
                                     .replaceAll(System.lineSeparator())
                                     .trim()),
                     "markdown without front matter becomes the whole trimmed prompt");
-        } else if (lines.stream().skip(1).noneMatch(line -> FRONT_MATTER_DELIMITER.equals(line.trim()))) {
+        } else if (!hasClosingDelimiter(lines)) {
             check(
                     PARSE_ERROR_CODE.equals(result.failureCode()),
                     "front matter without a closing delimiter is a parse error");
         }
     }
 
+    private static boolean hasClosingDelimiter(List<String> lines) {
+        for (String line : lines.subList(1, lines.size())) {
+            if (isFrontMatterDelimiter(line)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isFrontMatterDelimiter(String line) {
+        return FRONT_MATTER_DELIMITER.equals(line.trim());
+    }
+
     private static void assertExplicitRejection(WorkflowException failure) {
         check(FAILURE_CODES.contains(failure.code()), "failure code is one of the specified workflow errors");
         check(
                 failure.getMessage() != null
-                        && !LINE_TERMINATOR.matcher(failure.getMessage()).find(),
+                        && !ANY_UNICODE_LINE_BREAK.matcher(failure.getMessage()).find(),
                 "failure message is one line");
     }
 
@@ -124,16 +140,21 @@ public final class WorkflowLoaderInvariants {
     }
 
     private static long nodeCount(@Nullable Object value) {
-        return switch (value) {
-            case Map<?, ?> map ->
-                1
-                        + map.entrySet().stream()
-                                .mapToLong(entry -> nodeCount(entry.getKey()) + nodeCount(entry.getValue()))
-                                .sum();
-            case List<?> list ->
-                1 + list.stream().mapToLong(WorkflowLoaderInvariants::nodeCount).sum();
-            case null, default -> 1;
-        };
+        long count = 1;
+        switch (value) {
+            case Map<?, ?> map -> {
+                for (Map.Entry<?, ?> entry : map.entrySet()) {
+                    count += nodeCount(entry.getKey()) + nodeCount(entry.getValue());
+                }
+            }
+            case List<?> list -> {
+                for (Object element : list) {
+                    count += nodeCount(element);
+                }
+            }
+            case null, default -> {}
+        }
+        return count;
     }
 
     private static void check(boolean property, String description) {
