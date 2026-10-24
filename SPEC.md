@@ -4144,6 +4144,27 @@ When this profile is used:
   `symphony-trello status` plus one shell-correct `symphony-trello logs --workflow PATH` command for
   each connected workflow. If setup or managed-worker handling leaves the install unsuccessful, the
   installer MUST NOT print the handoff
+- before any mutation, `install.sh` and `install.ps1` MUST print one plan that names the detected
+  platform, whether the run installs or updates, the source (release version and asset location, or
+  repository and ref with credentials redacted), and the app, config, workspace, state/log, and
+  command paths, each once
+- installer progress MUST be grouped into numbered phases (`[n/N] Title`) whose count the plan fixes
+  before the first phase: prerequisites, install or update, guided setup and managed worker start or
+  restart when onboarding runs, and managed worker restart when `--no-onboard` updates an install
+  with managed workers. Each phase SHOULD print one result line per milestone, and both installers
+  MUST use the same phase titles and status words
+- installers MUST NOT echo routine low-level commands on success. When a routine command fails, the
+  installer MUST name it with credentials redacted. Commands that need approval or terminal input
+  MUST still be printed before they run
+- when an installer exits with an error inside a phase, it MUST name the failed phase and print a
+  recovery step on stderr after the error, MUST keep the error's exit code, and MUST NOT print the
+  final handoff or a completion result
+- installer dry-run MUST show the same phases as a real run with `WOULD` lines, MUST NOT change files,
+  and MUST NOT report that installation, setup, or startup succeeded
+- `--no-onboard` MUST skip the setup phase and end with one installed or updated result plus one
+  next-step command
+- installer progress output MUST NOT rely on color, animation, emoji, or Unicode symbols to convey
+  state, and MUST NOT emit terminal control sequences when output is redirected
 - installer-to-Java completion coordination MUST remain process-local and MUST NOT be written to an
   autostart environment snapshot or inherited by a managed worker. A completion-only Java invocation
   MUST load only the connected board manifest and MUST NOT run prerequisites, prompts, Trello or
@@ -4173,6 +4194,9 @@ When this profile is used:
   interactive prompts through a pseudo-terminal, using test doubles for external tools/services,
   verifying install, update, managed start/status, and uninstall cleanup behavior without real Trello,
   GitHub, or Codex side effects
+- deterministic tests SHOULD check the installer transcript order for both installers: one plan,
+  ordered phases, the handoff once and last, dry-run phases without success results, `--no-onboard`
+  completion, and a named failed phase
 - deterministic CI SHOULD exercise PowerShell installer smoke, option, and lifecycle paths on a
   native Windows PowerShell runner; local Linux machines MAY use the Microsoft .NET SDK container
   image through `scripts/pwsh-docker.sh` when a local PowerShell check is needed
