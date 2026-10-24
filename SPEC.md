@@ -2134,14 +2134,33 @@ Optional client-side tool extension:
   authoritative workpad first and report the duplicate cleanup outcome in the tool result. Deleting
   the duplicate comments needs `trello_tools.allow_destructive_operations`; without that opt-in the
   updated workpad text SHOULD make the required manual cleanup visible on the card.
+- Java implementation extension: every Trello comment that Symphony creates or updates ends with one
+  human-readable attribution footer. The footer is the comment's final Markdown paragraph and is
+  exactly `_Managed by Symphony_`, or `_Managed by Symphony · <detail>_` when a managed-comment family
+  needs one line of extra visible identity. This applies to `trello_add_comment` handoff comments, the
+  Codex workpad, the blocker-recheck status, and the prerequisite status comment. Comment-writing tools
+  MUST remove footers that the agent supplied at the end of its text and append exactly one canonical
+  footer. Text without a body besides the footer MUST be rejected before mutation. The footer MUST
+  NOT contain raw HTML, opaque markers, credentials, private paths, or account names.
+- The attribution footer identifies authorship for board users; it MUST NOT grant ownership. Each
+  update or delete path MUST still prove that a comment belongs to its own managed family, such as
+  the workpad heading, the prerequisite-status heading, or the blocker-recheck link, before changing
+  it. A comment that only carries the plain footer, copies footer text, or has a malformed or
+  misplaced footer MUST stay an ordinary comment for every family it does not otherwise belong to.
+  Ordinary user comments MUST NOT receive the footer automatically.
+- Comments written before the footer existed gain it only when their owning path changes their
+  visible content. An owning path that compares the current text with its desired state MUST ignore
+  a missing or present footer, so an unchanged legacy comment is not rewritten only to add it.
+  Implementations MUST NOT bulk-rewrite historical comments to add the footer.
 - The Java implementation exposes `trello_update_blocker_recheck_status` for a generated-workflow
   stale-blocker recheck. Its `status` is `checking` or `resumed`. The tool reads a deep current-card
   comment window and classifies only the newest ordinary comment after excluding the Codex workpad,
   Symphony-managed prerequisite comments, and exact canonical blocker-recheck comments. A canonical
-  blocker-recheck comment ends with the exact human-readable `Managed by Symphony` Markdown footer.
-  Its link MUST point to the qualifying comment action on the current Trello card. Similar visible
-  text, a malformed link, or a link to another card remains ordinary. The tool MUST NOT scan past a
-  newer ordinary human comment.
+  blocker-recheck comment ends with the exact human-readable `Managed by Symphony` Markdown footer
+  whose detail is a link to the qualifying comment action on the current Trello card. Similar
+  visible text, a malformed link, or a link to another card remains ordinary. A blocker handoff
+  added through `trello_add_comment` carries the plain footer and remains an ordinary comment for
+  this classification. The tool MUST NOT scan past a newer ordinary human comment.
 - That newest ordinary comment is a blocker handoff only when its first non-blank line starts with
   `Blocked:` or `Blocked by ...`, matched without case sensitivity. An ordinary discussion that only
   contains the word `blocked` MUST NOT qualify.
@@ -2431,7 +2450,9 @@ Trello-visible waiting status records the sync problem without creating comment 
 When a skipped Trello card has unresolved, missing, inaccessible, unsupported cross-board, ambiguous,
 or sync-failed prerequisites, Symphony MUST update one managed Trello-visible status/workpad comment
 or equivalent card-visible surface. Board users MUST NOT need host logs to understand why a Trello
-card has not left an active list.
+card has not left an active list. In the Java implementation, that status comment starts
+with `## Symphony Prerequisite Status` and ends with the `Managed by Symphony` attribution footer
+from Section 10.5.
 
 ### 11.5 Error Handling Contract
 
@@ -2495,6 +2516,9 @@ Trello Workflow Conformance:
   the current card, upserting the single `## Codex Workpad` comment, maintaining the managed
   blocker-recheck status when an exact stale blocker handoff qualifies, and moving the current card
   to an allowed board-local list.
+- Java implementation extension: every Trello comment Symphony writes ends with the
+  `Managed by Symphony` attribution footer described in Section 10.5, and the generated workflow and
+  shipped Trello skills tell the agent not to write the footer itself.
 - Java implementation extension: Trello-facing markdown written by `trello_add_comment` and
   `trello_upsert_workpad` escapes a GitHub issue reference such as `#2076` when it would be the
   first visible text of a paragraph or unordered bullet item. This avoids Trello rendering issue
@@ -3682,6 +3706,10 @@ These checks are REQUIRED when the workflow expects the agent to perform Trello 
 - URL attachment writes are allowed only when `trello_tools.allow_url_attachments` permits them, and
   the attached URL is an HTTP(S) URL without credentials, query string, or fragment.
 - Destructive operations are disabled unless explicitly configured.
+- If the attribution footer extension is implemented, every Symphony-written comment family ends
+  with exactly one canonical footer after creates, updates, retries, and echoed input; the footer
+  never makes a comment editable or deletable by another family; and lookalike, malformed,
+  user-authored, legacy, other-card, and wrong-family comments stay unchanged.
 - Startup validates write capability or emits an operator-visible warning when verification is not
   possible without side effects.
 

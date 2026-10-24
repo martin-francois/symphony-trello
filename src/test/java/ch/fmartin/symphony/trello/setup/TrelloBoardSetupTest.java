@@ -2945,6 +2945,12 @@ final class TrelloBoardSetupTest {
     private static void assertGeneratedStaleBlockerRecheckPolicy(Path workflow) {
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
+                .contains("## Comment Attribution")
+                .containsIgnoringWhitespaces(
+                        "Every Trello comment Symphony writes ends with a `Managed by Symphony` footer")
+                .containsIgnoringWhitespaces("Do not type the footer yourself")
+                .containsIgnoringWhitespaces(
+                        "A blocker handoff added through trello_add_comment ends with the plain footer and still counts as an ordinary comment for this check")
                 .contains("## Stale Blocker Recheck")
                 .contains("trello_update_blocker_recheck_status")
                 .containsIgnoringWhitespaces("newest ordinary comment")
