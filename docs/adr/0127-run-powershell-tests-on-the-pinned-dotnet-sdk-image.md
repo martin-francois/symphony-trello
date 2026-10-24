@@ -133,8 +133,9 @@ This decision remains implemented when:
 
 The job runs on a GitHub-hosted Ubuntu runner, where `docker` is Docker. On a Linux host with
 rootless Podman, the installer tests strip `SYMPHONY_TRELLO_CONTAINER_RUNTIME` and `XDG_*` and give
-every run its own `HOME`, so `scripts/check-pwsh-docker` meets the problems tracked in
+every run its own `HOME`, so `scripts/check-pwsh-docker` meets the problem tracked in
 [GitHub issue #777](https://github.com/martin-francois/symphony-trello/issues/777), one image pull per
-test home, and [GitHub issue #823](https://github.com/martin-francois/symphony-trello/issues/823),
-no `--userns=keep-id` behind the podman-docker shim. Both fixes change only how the wrapper calls the
-runtime, so this job runs them as soon as their pull requests touch the wrapper.
+test home. Its fix changes only how the wrapper calls the runtime, so this job runs it as soon as its
+pull request touches the wrapper. Behind the podman-docker shim, the wrapper recognizes Podman from
+`docker --version` and adds `--userns=keep-id`
+([GitHub issue #823](https://github.com/martin-francois/symphony-trello/issues/823), ADR 0054).

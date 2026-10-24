@@ -7,10 +7,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -101,11 +101,11 @@ final class ContainerRuntimeScriptTest {
         Path invocation = tempDir.resolve("invocation.txt");
         installRecordingRuntime("docker", invocation);
         String pinnedImage = "ghcr.io/betterleaks/betterleaks:v9.9.9@sha256:" + "a".repeat(64);
-        Map<String, String> environment = new HashMap<>(runtimeEnvironment(null));
-        environment.put("SYMPHONY_TRELLO_BETTERLEAKS_IMAGE", pinnedImage);
 
         // when
-        ProcessResult result = runWrapper("betterleaks-docker.sh", environment);
+        ProcessResult result = runWrapper(
+                "betterleaks-docker.sh",
+                defaultRuntimeEnvironmentWith("SYMPHONY_TRELLO_BETTERLEAKS_IMAGE", pinnedImage));
 
         // then
         result.assertSuccess();
@@ -120,14 +120,13 @@ final class ContainerRuntimeScriptTest {
         installFailingRuntime("podman");
 
         // when
-        ProcessResult result = runWrapper(
-                "pwsh-docker.sh",
-                defaultRuntimeEnvironmentWith(
-                        "HOME", tempDir.resolve("missing-installer-test-home").toString()));
+        List<String> invocationArguments = runPowerShellWrapperWith(
+                invocation,
+                "HOME",
+                tempDir.resolve("missing-installer-test-home").toString());
 
         // then
-        result.assertSuccess();
-        assertThat(invocation).content(StandardCharsets.UTF_8).contains("run", "--userns=keep-id");
+        assertThat(invocationArguments).contains("run", "--userns=keep-id");
     }
 
     @Test
@@ -139,13 +138,11 @@ final class ContainerRuntimeScriptTest {
         installRecordingRuntime("docker", invocation);
 
         // when
-        ProcessResult result = runWrapper(
-                "pwsh-docker.sh", defaultRuntimeEnvironmentWith("TMPDIR", testTemporaryDirectory.toString()));
+        List<String> invocationArguments =
+                runPowerShellWrapperWith(invocation, "TMPDIR", testTemporaryDirectory.toString());
 
         // then
-        result.assertSuccess();
-        assertThat(Files.readAllLines(invocation))
-                .containsSequence("-v", testTemporaryDirectory + ":" + testTemporaryDirectory);
+        assertThat(invocationArguments).containsSequence("-v", testTemporaryDirectory + ":" + testTemporaryDirectory);
     }
 
     @MethodSource("temporaryDirectoriesAlreadyMounted")
@@ -157,12 +154,10 @@ final class ContainerRuntimeScriptTest {
         installRecordingRuntime("docker", invocation);
 
         // when
-        ProcessResult result =
-                runWrapper("pwsh-docker.sh", defaultRuntimeEnvironmentWith("TMPDIR", temporaryDirectory));
+        List<String> invocationArguments = runPowerShellWrapperWith(invocation, "TMPDIR", temporaryDirectory);
 
         // then
-        result.assertSuccess();
-        assertThat(Files.readAllLines(invocation)).containsOnlyOnce(expectedMount);
+        assertThat(invocationArguments).containsOnlyOnce(expectedMount);
     }
 
     @ParameterizedTest
@@ -173,12 +168,10 @@ final class ContainerRuntimeScriptTest {
         installRecordingRuntime("docker", invocation);
 
         // when
-        ProcessResult result =
-                runWrapper("pwsh-docker.sh", defaultRuntimeEnvironmentWith("TMPDIR", temporaryDirectory));
+        List<String> invocationArguments = runPowerShellWrapperWith(invocation, "TMPDIR", temporaryDirectory);
 
         // then
-        result.assertSuccess();
-        assertThat(invocation).content(StandardCharsets.UTF_8).doesNotContain(temporaryDirectory);
+        assertThat(invocationArguments).noneMatch(argument -> argument.contains(temporaryDirectory));
     }
 
     @MethodSource("containerRuntimeRequirements")
@@ -255,10 +248,17 @@ final class ContainerRuntimeScriptTest {
         return Map.of("PATH", tempDir + ":/usr/bin:/bin", "SYMPHONY_TRELLO_CONTAINER_RUNTIME", runtime);
     }
 
-    private Map<String, String> defaultRuntimeEnvironmentWith(String name, String value) {
+    private Map<String, String> defaultRuntimeEnvironmentWith(String variable, String value) {
         Map<String, String> environment = new HashMap<>(runtimeEnvironment(null));
-        environment.put(name, value);
+        environment.put(variable, value);
         return environment;
+    }
+
+    /// Runs `pwsh-docker.sh` with one extra variable and returns the arguments the recording runtime got.
+    private List<String> runPowerShellWrapperWith(Path invocation, String variable, String value) throws Exception {
+        runWrapper("pwsh-docker.sh", defaultRuntimeEnvironmentWith(variable, value))
+                .assertSuccess();
+        return Files.readAllLines(invocation);
     }
 
     private ProcessResult runWrapper(String script, Map<String, String> environment) throws Exception {
