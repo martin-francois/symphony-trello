@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import static org.junit.jupiter.api.Named.named;
 
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
 import java.io.File;
@@ -18,7 +19,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -29,6 +32,15 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 final class InstallerScriptTest {
     private static final String INSTALL_CONTEXT_PROPERTIES = "install-context.properties";
+    private static final String ANSI_ESCAPE_IN_INSTALLER_OUTPUT = "\u001B";
+    private static final String STYLE_RESET = ANSI_ESCAPE_IN_INSTALLER_OUTPUT + "[0m";
+    private static final String STYLE_ACCENT = ANSI_ESCAPE_IN_INSTALLER_OUTPUT + "[1;38;5;32m";
+    private static final String STYLE_SUCCESS = ANSI_ESCAPE_IN_INSTALLER_OUTPUT + "[1;38;5;64m";
+    private static final String STYLE_ATTENTION = ANSI_ESCAPE_IN_INSTALLER_OUTPUT + "[1;38;5;166m";
+    private static final Pattern TERMINAL_STYLE =
+            Pattern.compile(Pattern.quote(ANSI_ESCAPE_IN_INSTALLER_OUTPUT) + "\\[[0-9;]*m");
+    private static final String OUTPUT_STYLE_BLOCK_START = "# >>> output style >>>";
+    private static final String OUTPUT_STYLE_BLOCK_END = "# <<< output style <<<";
 
     @TempDir
     Path temporaryDirectory;
@@ -224,6 +236,108 @@ final class InstallerScriptTest {
     }
 
     @Test
+    void posixInstallerColorsRedirectedOutputOnlyWhenForced() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin + File.pathSeparator + System.getenv("PATH"),
+                "SYMPHONY_HOME", temporaryDirectory.resolve("color-home").toString(),
+                "SYMPHONY_FAKE_LOG", temporaryDirectory.resolve("color.log").toString());
+
+        // when
+        ColorRuns runs = ColorRuns.of(environment, "bash", "install.sh", "--dry-run", "--no-update-path");
+
+        // then
+        runs.assertColorOnlyWhenForced(
+                STYLE_ACCENT + "Symphony for Trello installer" + STYLE_RESET,
+                "  " + STYLE_SUCCESS + "OK" + STYLE_RESET + "      Java 25+ JDK available",
+                "  " + STYLE_ATTENTION + "NOTE" + STYLE_RESET + "  ",
+                "  " + STYLE_ACCENT + "WOULD" + STYLE_RESET + " install command: ");
+    }
+
+    @MethodSource("colorTerminalScenarios")
+    @ParameterizedTest(name = "{0}")
+    void posixUninstallerColorsTerminalOutputForColorCapableTerminals(Map<String, String> colorEnvironment)
+            throws Exception {
+        // given
+        assumePosixPseudoTerminal();
+
+        // when
+        ProcessResult result = runUninstallerDryRunInPseudoTerminal(colorEnvironment);
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains(
+                        STYLE_ACCENT + "Symphony for Trello uninstall" + STYLE_RESET,
+                        "  " + STYLE_ACCENT + "APP FILES" + STYLE_RESET + "       ");
+    }
+
+    @MethodSource("plainTerminalScenarios")
+    @ParameterizedTest(name = "{0}")
+    void posixUninstallerKeepsTerminalOutputPlainWhenColorIsOff(Map<String, String> colorEnvironment) throws Exception {
+        // given
+        assumePosixPseudoTerminal();
+
+        // when
+        ProcessResult result = runUninstallerDryRunInPseudoTerminal(colorEnvironment);
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains("Symphony for Trello uninstall")
+                .doesNotContain(ANSI_ESCAPE_IN_INSTALLER_OUTPUT);
+    }
+
+    private static Stream<Named<Map<String, String>>> colorTerminalScenarios() {
+        return Stream.of(
+                named("color terminal", Map.of("TERM", "xterm-256color")),
+                named("empty NO_COLOR is unset", Map.of("TERM", "xterm-256color", "NO_COLOR", "")),
+                named("CLICOLOR_FORCE on a dumb terminal", Map.of("TERM", "dumb", "CLICOLOR_FORCE", "1")));
+    }
+
+    private static Stream<Named<Map<String, String>>> plainTerminalScenarios() {
+        return Stream.of(
+                named("dumb terminal", Map.of("TERM", "dumb")),
+                named("no terminal type", Map.of()),
+                named("NO_COLOR", Map.of("TERM", "xterm-256color", "NO_COLOR", "1")),
+                named("CLICOLOR=0", Map.of("TERM", "xterm-256color", "CLICOLOR", "0")),
+                named("CLICOLOR_FORCE=0 is not forcing", Map.of("TERM", "dumb", "CLICOLOR_FORCE", "0")));
+    }
+
+    private static void assumePosixPseudoTerminal() {
+        assumeFalse(isWindows());
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("script"));
+    }
+
+    private ProcessResult runUninstallerDryRunInPseudoTerminal(Map<String, String> colorEnvironment)
+            throws IOException, InterruptedException {
+        Map<String, String> environment = withEnvironment(
+                Map.of(
+                        "SYMPHONY_HOME",
+                        temporaryDirectory.resolve("terminal-color-home").toString()),
+                colorEnvironment);
+        return runWithPseudoTerminal(environment, "", "bash uninstall.sh --dry-run");
+    }
+
+    @CsvSource({"install.sh, uninstall.sh", "install.ps1, uninstall.ps1"})
+    @ParameterizedTest(name = "{0} and {1}")
+    void installerAndUninstallerShareOneOutputStyleBlock(String installer, String uninstaller) throws Exception {
+        // given
+        String installerScript = Files.readString(Path.of(installer));
+        String uninstallerScript = Files.readString(Path.of(uninstaller));
+
+        // when
+        String installerStyle = outputStyleBlock(installerScript);
+        String uninstallerStyle = outputStyleBlock(uninstallerScript);
+
+        // then
+        assertThat(installerStyle).contains("NO_COLOR", "CLICOLOR_FORCE").isEqualTo(uninstallerStyle);
+    }
+
+    @Test
     void posixFixtureSuppressesInheritedRepositoryEnvironmentControls() throws Exception {
         // given
         assumeFalse(isWindows());
@@ -261,6 +375,30 @@ final class InstallerScriptTest {
         if (System.getProperty("os.name", "").equalsIgnoreCase("Linux")) {
             assertThat(result.output()).contains("fixture-os=Linux");
         }
+    }
+
+    @Test
+    void posixFixtureSuppressesInheritedOutputColorControls() throws Exception {
+        // given
+        assumeFalse(isWindows());
+        assumeTrue(commandExists("bash"));
+        var processBuilder = new ProcessBuilder(
+                "bash",
+                "-c",
+                "for name in " + String.join(" ", OUTPUT_COLOR_CONTROLS) + "; do "
+                        + "printf '%s=%s\\n' \"$name\" \"${!name-unset}\"; done");
+        for (String control : OUTPUT_COLOR_CONTROLS) {
+            processBuilder.environment().put(control, "inherited");
+        }
+
+        // when
+        ProcessResult result = run(Map.of("TERM", "explicit"), processBuilder);
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains("NO_COLOR=unset", "CLICOLOR=unset", "CLICOLOR_FORCE=unset", "TERM=explicit")
+                .doesNotContain("inherited");
     }
 
     @Test
@@ -5634,6 +5772,30 @@ final class InstallerScriptTest {
         assertThat(result.output()).contains("Symphony for Trello installer", "Dry run: no files changed.");
     }
 
+    @CsvSource({
+        "install.ps1, --no-onboard, Symphony for Trello installer",
+        "uninstall.ps1, --yes, Symphony for Trello uninstall"
+    })
+    @ParameterizedTest(name = "{0}")
+    void powershellScriptsKeepRedirectedOutputPlainUnlessForcedWhenAvailable(String script, String flag, String heading)
+            throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+
+        // when
+        ColorRuns runs = ColorRuns.of(
+                nonWindowsPowerShellEnvironment(),
+                command(pwsh, "-NoProfile", "-File", "./" + script, "--dry-run", flag)
+                        .toArray(String[]::new));
+
+        // then
+        runs.assertColorOnlyWhenForced(
+                STYLE_ACCENT + heading + STYLE_RESET,
+                STYLE_ACCENT + "Dry run: no files changed." + STYLE_RESET,
+                "  " + STYLE_ACCENT + "WOULD" + STYLE_RESET + " ");
+    }
+
     @Test
     void powershellInstallerDryRunPreviewsSetupBeforeManagedWorkerStartupWhenAvailable() throws Exception {
         // given
@@ -7309,7 +7471,7 @@ final class InstallerScriptTest {
                         "kill",
                         "wait_for_exit",
                         "absolutize_path",
-                        "SKIP  stale pid does not belong to this install: $(worker_label \"$pid_file\")",
+                        "print_status SKIP \"  stale pid does not belong to this install: $(worker_label \"$pid_file\")",
                         "symphony-trello.service",
                         "autostart.env",
                         "launchctl bootout",
@@ -7336,7 +7498,7 @@ final class InstallerScriptTest {
                         "RemoveAllLocalData",
                         "YesLocalData",
                         ".symphony-trello-install",
-                        "SKIP  stale pid does not belong to this install: $(Get-WorkerLabel $pidFile.BaseName)",
+                        "Write-Status \"SKIP\" \"  stale pid does not belong to this install: $(Get-WorkerLabel $pidFile.BaseName)",
                         "Remove-WindowsAutostart",
                         "schtasks.exe /Delete",
                         "Microsoft\\Windows\\Start Menu\\Programs\\Startup",
@@ -7349,7 +7511,7 @@ final class InstallerScriptTest {
                         "Remove-ManagedCodexArtifacts",
                         "Test-ManagedCodexWrapper",
                         "[int]::TryParse",
-                        "SKIP  invalid stale pid",
+                        "Write-Status \"SKIP\" \"  invalid stale pid",
                         "Test-Path -LiteralPath $safePath",
                         "Remove-Item -Recurse -Force -LiteralPath $safePath",
                         "Assert-AppRemovalPreservesCurrentData",
@@ -8560,6 +8722,45 @@ final class InstallerScriptTest {
                 .containsSubsequence(
                         "delete " + app.resolve("nested/deeper"), "delete " + app.resolve("nested"), "delete " + app)
                 .actual();
+    }
+
+    private static String withoutTerminalStyles(String output) {
+        return TERMINAL_STYLE.matcher(output).replaceAll("");
+    }
+
+    /// One command run three ways: with the inherited color settings, with `CLICOLOR_FORCE=1`, and
+    /// with both `CLICOLOR_FORCE=1` and `NO_COLOR=1`. The tests run redirected, so only the forced
+    /// run may contain styles.
+    private record ColorRuns(ProcessResult plain, ProcessResult forced, ProcessResult optedOut) {
+        static ColorRuns of(Map<String, String> environment, String... command)
+                throws IOException, InterruptedException {
+            return new ColorRuns(
+                    run(environment, command),
+                    run(withEnvironment(environment, Map.of("CLICOLOR_FORCE", "1")), command),
+                    run(withEnvironment(environment, Map.of("CLICOLOR_FORCE", "1", "NO_COLOR", "1")), command));
+        }
+
+        void assertColorOnlyWhenForced(String... styledFragments) {
+            plain.assertSuccess();
+            forced.assertSuccess();
+            optedOut.assertSuccess();
+            assertThat(plain.output()).doesNotContain(ANSI_ESCAPE_IN_INSTALLER_OUTPUT);
+            assertThat(optedOut.output())
+                    .as("NO_COLOR wins over CLICOLOR_FORCE")
+                    .isEqualTo(plain.output());
+            assertThat(forced.output()).contains(styledFragments);
+            assertThat(withoutTerminalStyles(forced.output()))
+                    .as("color must only wrap text that plain output already shows")
+                    .isEqualTo(plain.output());
+        }
+    }
+
+    private static String outputStyleBlock(String script) {
+        int start = script.indexOf(OUTPUT_STYLE_BLOCK_START);
+        int end = script.indexOf(OUTPUT_STYLE_BLOCK_END);
+        assertThat(start).as("output style block start marker").isNotNegative();
+        assertThat(end).as("output style block end marker after its start").isGreaterThan(start);
+        return script.substring(start, end).replace("\r\n", "\n");
     }
 
     private static String normalizedWhitespace(String text) {
