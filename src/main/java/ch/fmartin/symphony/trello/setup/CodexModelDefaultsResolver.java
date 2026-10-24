@@ -1,8 +1,11 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.ISO_CONTROL_CHARACTERS;
+import static ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.blank;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import ch.fmartin.symphony.trello.process.ProcessEnvironment;
+import ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.CatalogModel;
 import ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.ReasoningEffortOption;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.CodexModelDefaults;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -19,6 +22,7 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -127,69 +131,88 @@ final class CodexModelDefaultsResolver {
         return params;
     }
 
-    private CodexModelSelectionDefaults fromModelList(JsonNode models) {
-        if (!models.isArray() || models.isEmpty()) {
-            return CodexModelSelectionDefaults.of(CodexModelDefaults.fallback());
-        }
+    private CodexModelSelectionDefaults fromModelList(ArrayNode models) {
+        List<CatalogEntry> entries = catalogEntries(models);
         Map<String, String> reasoningEffortsByModel = new LinkedHashMap<>();
         Map<String, List<ReasoningEffortOption>> reasoningEffortOptionsByModel = new LinkedHashMap<>();
-        JsonNode selected = null;
-        boolean selectedIsSymphonyPreferred = false;
-        boolean selectedIsDefault = false;
-        for (JsonNode model : models) {
-            String modelName = validatedCatalogText(model, "model");
-            if (blank(modelName)) {
-                continue;
+        for (CatalogEntry entry : entries) {
+            if (!blank(entry.defaultReasoningEffort())) {
+                reasoningEffortsByModel.put(entry.model(), entry.defaultReasoningEffort());
             }
-            List<ReasoningEffortOption> reasoningEffortOptions = supportedReasoningEfforts(model);
-            if (!reasoningEffortOptions.isEmpty()) {
-                reasoningEffortOptionsByModel.put(modelName, reasoningEffortOptions);
+            if (!entry.reasoningEffortOptions().isEmpty()) {
+                reasoningEffortOptionsByModel.put(entry.model(), entry.reasoningEffortOptions());
             }
-            boolean modelIsDefault = model.path("isDefault").asBoolean(false);
-            boolean modelIsHidden = model.path("hidden").asBoolean(false);
-            boolean modelIsSymphonyPreferred = SYMPHONY_PREFERRED_CODEX_MODEL.equals(modelName);
-            if (!modelIsHidden
-                    && shouldSelectModel(
-                            selected,
-                            selectedIsSymphonyPreferred,
-                            selectedIsDefault,
-                            modelIsSymphonyPreferred,
-                            modelIsDefault)) {
-                selected = model;
-                selectedIsSymphonyPreferred = modelIsSymphonyPreferred;
-                selectedIsDefault = modelIsDefault;
-            }
-            String reasoningEffort = validatedCatalogText(model, "defaultReasoningEffort");
-            if (blank(reasoningEffort)) {
-                continue;
-            }
-            reasoningEffortsByModel.put(modelName, reasoningEffort);
         }
-        if (selected == null) {
-            return CodexModelSelectionDefaults.withReasoningEffortOptions(
-                    CodexModelDefaults.fallback(), reasoningEffortsByModel, reasoningEffortOptionsByModel);
-        }
-        String modelName = validatedCatalogText(selected, "model");
-        String reasoningEffort = validatedCatalogText(selected, "defaultReasoningEffort");
-        if (blank(modelName)) {
-            return CodexModelSelectionDefaults.withReasoningEffortOptions(
-                    CodexModelDefaults.fallback(), reasoningEffortsByModel, reasoningEffortOptionsByModel);
-        }
-        return CodexModelSelectionDefaults.withReasoningEffortOptions(
-                CodexModelDefaults.partial(modelName, reasoningEffort),
-                reasoningEffortsByModel,
-                reasoningEffortOptionsByModel);
+        List<CatalogEntry> visibleEntries =
+                entries.stream().filter(entry -> !entry.hidden()).toList();
+        Optional<CatalogEntry> recommended = recommendedEntry(visibleEntries);
+        CodexModelDefaults defaults = recommended
+                .map(entry -> CodexModelDefaults.partial(entry.model(), entry.defaultReasoningEffort()))
+                .orElseGet(CodexModelDefaults::fallback);
+        Optional<String> recommendedModel = recommended.map(CatalogEntry::model);
+        List<CatalogModel> visibleModels = visibleEntries.stream()
+                .map(entry -> new CatalogModel(
+                        entry.model(),
+                        entry.displayName(),
+                        recommendedModel.map(entry.model()::equals).orElse(false)))
+                .toList();
+        return CodexModelSelectionDefaults.fromCatalog(
+                defaults, visibleModels, reasoningEffortsByModel, reasoningEffortOptionsByModel);
     }
 
-    private static boolean shouldSelectModel(
-            JsonNode selected,
-            boolean selectedIsSymphonyPreferred,
-            boolean selectedIsDefault,
-            boolean modelIsSymphonyPreferred,
-            boolean modelIsDefault) {
-        return selected == null
-                || (!selectedIsSymphonyPreferred
-                        && (modelIsSymphonyPreferred || (!selectedIsDefault && modelIsDefault)));
+    /// Parses usable catalog entries in catalog order. A repeated model id keeps its first usable entry
+    /// so the picker label, default selection, and reasoning metadata all come from the same entry.
+    private static List<CatalogEntry> catalogEntries(ArrayNode models) {
+        Map<String, CatalogEntry> firstUsableEntryPerModelInCatalogOrder = new LinkedHashMap<>();
+        for (JsonNode model : models) {
+            usableCatalogEntry(model)
+                    .ifPresent(entry -> firstUsableEntryPerModelInCatalogOrder.putIfAbsent(entry.model(), entry));
+        }
+        return List.copyOf(firstUsableEntryPerModelInCatalogOrder.values());
+    }
+
+    /// Returns the entry, or empty when it has no model id or its model id or reasoning metadata
+    /// contains control characters. Skipping only that entry keeps the rest of the catalog usable.
+    private static Optional<CatalogEntry> usableCatalogEntry(JsonNode model) {
+        String modelName = model.path("model").asText(null);
+        if (blank(modelName)) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(catalogEntry(modelName, model));
+        } catch (IllegalArgumentException unsafeMetadata) {
+            LOG.log(System.Logger.Level.DEBUG, "Skipping a Codex catalog entry with unsafe metadata", unsafeMetadata);
+            return Optional.empty();
+        }
+    }
+
+    private static CatalogEntry catalogEntry(String modelName, JsonNode model) {
+        CodexModelSelectionDefaults.checkNoControlCharacters(modelName, "model");
+        return new CatalogEntry(
+                modelName.strip(),
+                displayName(model),
+                model.path("hidden").asBoolean(false),
+                model.path("isDefault").asBoolean(false),
+                validatedCatalogText(model, "defaultReasoningEffort"),
+                supportedReasoningEfforts(model));
+    }
+
+    /// Returns the display name only when it is safe to print. The name is cosmetic, so an unsafe one
+    /// is dropped and the picker shows the model id instead of skipping the entry.
+    private static String displayName(JsonNode model) {
+        String displayName = model.path("displayName").asText(null);
+        return displayName == null || ISO_CONTROL_CHARACTERS.matchesAnyOf(displayName) ? null : displayName;
+    }
+
+    /// Applies the new-workflow precedence from ADR 0025: visible Terra, then the first visible
+    /// Codex default, then the first visible entry. Catalog order decides between several defaults.
+    private static Optional<CatalogEntry> recommendedEntry(List<CatalogEntry> visibleEntries) {
+        return visibleEntries.stream()
+                .filter(entry -> SYMPHONY_PREFERRED_CODEX_MODEL.equals(entry.model()))
+                .findAny()
+                .or(() ->
+                        visibleEntries.stream().filter(CatalogEntry::isDefault).findFirst())
+                .or(() -> visibleEntries.stream().findFirst());
     }
 
     private static List<ReasoningEffortOption> supportedReasoningEfforts(JsonNode model) {
@@ -292,14 +315,18 @@ final class CodexModelDefaultsResolver {
         }
     }
 
-    private static boolean blank(String value) {
-        return value == null || value.isBlank();
-    }
-
     private static String implementationVersion() {
         String version = CodexModelDefaultsResolver.class.getPackage().getImplementationVersion();
         return blank(version) ? DEVELOPMENT_VERSION : version;
     }
+
+    private record CatalogEntry(
+            String model,
+            String displayName,
+            boolean hidden,
+            boolean isDefault,
+            String defaultReasoningEffort,
+            List<ReasoningEffortOption> reasoningEffortOptions) {}
 
     private static final class AppServerResponseReader {
         /// Queued after the last stdout line so a waiting reader can tell end of stream from a timeout.

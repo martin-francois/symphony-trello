@@ -1,8 +1,10 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
+import ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.CatalogModel;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.CodexModelDefaults;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
@@ -17,6 +19,11 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 final class CodexModelDefaultsResolverTest {
+    private static final String ESCAPE = Character.toString(0x1B);
+    private static final String LINE_FEED = "\n";
+    private static final String SAFE_MODEL = "gpt-safe";
+    private static final String SAFE_REASONING_EFFORT = "low";
+
     private final ObjectMapper json = new ObjectMapper();
 
     @TempDir
@@ -109,39 +116,48 @@ final class CodexModelDefaultsResolverTest {
                 .hasValue("First");
     }
 
-    @MethodSource("catalogControlCharacterScenarios")
+    @MethodSource("unsafeCatalogEntryScenarios")
     @ParameterizedTest
-    void rejectsControlCharactersInCatalogModelMetadata(CatalogControlCharacterScenario scenario) throws Exception {
+    void skipsACatalogEntryWithControlCharactersAndKeepsTheRestOfTheCatalog(UnsafeCatalogEntryScenario scenario)
+            throws Exception {
         // given
-        var model = json.createObjectNode();
-        model.put("model", scenario.model());
-        model.put("defaultReasoningEffort", scenario.reasoningEffort());
-        model.put("isDefault", true);
-        var response = json.createObjectNode();
-        response.put("jsonrpc", "2.0");
-        response.put("id", 2);
-        response.putObject("result").putArray("data").add(model);
-        String responseJson = json.writeValueAsString(response);
-        Path appServer = appServerScript(
-                """
-                while IFS= read -r line; do
-                  case "$line" in
-                    *'"method":"initialize"'*)
-                      printf '%%s\\n' '{"jsonrpc":"2.0","id":1,"result":{}}'
-                      ;;
-                    *'"method":"model/list"'*)
-                      printf '%%s\\n' '%s'
-                      ;;
-                  esac
-                done
-                """
-                        .formatted(responseJson));
+        var catalog = json.createArrayNode();
+        catalog.addObject()
+                .put("model", scenario.model())
+                .put("defaultReasoningEffort", scenario.reasoningEffort())
+                .put("hidden", scenario.hidden())
+                .put("isDefault", true)
+                .putArray("supportedReasoningEfforts")
+                .addObject()
+                .put("reasoningEffort", "high")
+                .put("description", scenario.reasoningEffortDescription());
+        catalog.addObject().put("model", SAFE_MODEL).put("defaultReasoningEffort", SAFE_REASONING_EFFORT);
+        Path appServer = CodexModelAppServerFixture.createPaginated(tempDir, json.writeValueAsString(catalog), "[]");
 
         // when
-        CodexModelDefaults defaults = new CodexModelDefaultsResolver(json, List.of(appServer.toString())).resolve();
+        CodexModelSelectionDefaults defaults =
+                new CodexModelDefaultsResolver(json, List.of(appServer.toString())).resolveSelectionDefaults();
 
         // then
-        assertThat(defaults).isEqualTo(CodexModelDefaults.unsupportedFirstClassFields());
+        assertThat(defaults.defaults()).isEqualTo(new CodexModelDefaults(SAFE_MODEL, SAFE_REASONING_EFFORT));
+        assertThat(defaults.visibleModels()).containsExactly(new CatalogModel(SAFE_MODEL, null, true));
+        assertThat(defaults.reasoningEffortChoicesForModel(SAFE_MODEL)).isEmpty();
+    }
+
+    @Test
+    void fallsBackToTheCompatibilityModelWhenEveryCatalogEntryHasControlCharacters() throws Exception {
+        // given
+        var catalog = json.createArrayNode();
+        catalog.addObject().put("model", "gpt" + LINE_FEED + "forged").put("isDefault", true);
+        Path appServer = CodexModelAppServerFixture.createPaginated(tempDir, json.writeValueAsString(catalog), "[]");
+
+        // when
+        CodexModelSelectionDefaults defaults =
+                new CodexModelDefaultsResolver(json, List.of(appServer.toString())).resolveSelectionDefaults();
+
+        // then
+        assertThat(defaults.defaults()).isEqualTo(CodexModelDefaults.fallback());
+        assertThat(defaults.visibleModels()).isEmpty();
     }
 
     @Test
@@ -194,6 +210,76 @@ final class CodexModelDefaultsResolverTest {
 
         // then
         assertThat(defaults).isEqualTo(new CodexModelDefaults("gpt-visible-first", "high"));
+    }
+
+    @Test
+    void listsVisibleCatalogModelsForThePickerFromTheFirstUsableEntryOfEachModel() throws Exception {
+        // given
+        Path appServer = CodexModelAppServerFixture.createPaginated(
+                tempDir,
+                """
+                [{"model":"gpt-6.1-sol","displayName":"GPT-6.1-Sol","isDefault":true,"defaultReasoningEffort":"low"},{"model":"gpt-reserve","displayName":"GPT-Reserve","hidden":true},{"model":" "},{"displayName":"No model id"},"not-an-object",{"model":"gpt-5.5","displayName":" "}]
+                """,
+                """
+                [{"model":"gpt-5.6-terra","displayName":"GPT-5.6-Terra","defaultReasoningEffort":"medium"},{"model":"gpt-6.1-sol","displayName":"Duplicate Sol","defaultReasoningEffort":"ultra","supportedReasoningEfforts":[{"reasoningEffort":"ultra"}]}]
+                """);
+
+        // when
+        CodexModelSelectionDefaults defaults =
+                new CodexModelDefaultsResolver(json, List.of(appServer.toString())).resolveSelectionDefaults();
+
+        // then
+        assertThat(defaults.visibleModels())
+                .containsExactly(
+                        new CatalogModel("gpt-6.1-sol", "GPT-6.1-Sol", false),
+                        new CatalogModel("gpt-5.5", null, false),
+                        new CatalogModel("gpt-5.6-terra", "GPT-5.6-Terra", true));
+        assertThat(defaults.defaults()).isEqualTo(new CodexModelDefaults("gpt-5.6-terra", "medium"));
+        assertThat(defaults.reasoningEffortForModel("gpt-6.1-sol")).hasValue("low");
+        assertThat(defaults.reasoningEffortChoicesForModel("gpt-6.1-sol")).isEmpty();
+    }
+
+    @Test
+    void dropsADisplayNameWithControlCharactersWithoutRejectingTheCatalog() throws Exception {
+        // given
+        Path appServer = CodexModelAppServerFixture.createPaginated(
+                tempDir,
+                """
+                [{"model":"gpt-safe","displayName":"GPT\\u001b[2J Safe","defaultReasoningEffort":"medium"}]
+                """,
+                "[]");
+
+        // when
+        CodexModelSelectionDefaults defaults =
+                new CodexModelDefaultsResolver(json, List.of(appServer.toString())).resolveSelectionDefaults();
+
+        // then
+        assertThat(defaults.defaults()).isEqualTo(new CodexModelDefaults("gpt-safe", "medium"));
+        assertThat(defaults.visibleModels()).containsExactly(new CatalogModel("gpt-safe", null, true));
+    }
+
+    @Test
+    void recommendsTheFirstVisibleCatalogDefaultWhenSeveralEntriesAreMarkedDefault() throws Exception {
+        // given
+        Path appServer = CodexModelAppServerFixture.createPaginated(
+                tempDir,
+                """
+                [{"model":"gpt-first-visible"},{"model":"gpt-first-default","isDefault":true},{"model":"gpt-later-default","isDefault":true}]
+                """,
+                "[]");
+
+        // when
+        CodexModelSelectionDefaults defaults =
+                new CodexModelDefaultsResolver(json, List.of(appServer.toString())).resolveSelectionDefaults();
+
+        // then
+        assertThat(defaults.defaults().model()).isEqualTo("gpt-first-default");
+        assertThat(defaults.visibleModels())
+                .extracting(CatalogModel::model, CatalogModel::recommended)
+                .containsExactly(
+                        tuple("gpt-first-visible", false),
+                        tuple("gpt-first-default", true),
+                        tuple("gpt-later-default", false));
     }
 
     @Test
@@ -441,18 +527,29 @@ final class CodexModelDefaultsResolverTest {
                 .doesNotContain("\"jsonrpc\"");
     }
 
-    private static Stream<CatalogControlCharacterScenario> catalogControlCharacterScenarios() {
+    private static Stream<UnsafeCatalogEntryScenario> unsafeCatalogEntryScenarios() {
+        String otherModel = "gpt-other";
+        String effort = "medium";
+        String description = "Deep";
+        String unsafeEffort = "med" + ESCAPE + "ium";
         return Stream.of(
-                new CatalogControlCharacterScenario("model", "gpt\nforged", "medium"),
-                new CatalogControlCharacterScenario(
-                        "default effort", "gpt-safe", "med" + Character.toString(0x1B) + "ium"));
+                new UnsafeCatalogEntryScenario("model", "gpt" + LINE_FEED + "forged", effort, description, false),
+                new UnsafeCatalogEntryScenario(
+                        "model with a trailing line break", otherModel + LINE_FEED, effort, description, false),
+                new UnsafeCatalogEntryScenario("default effort", otherModel, unsafeEffort, description, false),
+                new UnsafeCatalogEntryScenario(
+                        "reasoning effort description", otherModel, effort, description + ESCAPE + "[2J", false),
+                new UnsafeCatalogEntryScenario("hidden entry", otherModel, unsafeEffort, description, true),
+                new UnsafeCatalogEntryScenario(
+                        "first entry of a repeated model", SAFE_MODEL, unsafeEffort, description, false));
     }
 
     private Path appServerScript(String body) throws Exception {
         return CodexModelAppServerFixture.create(tempDir, body);
     }
 
-    private record CatalogControlCharacterScenario(String name, String model, String reasoningEffort) {
+    private record UnsafeCatalogEntryScenario(
+            String name, String model, String reasoningEffort, String reasoningEffortDescription, boolean hidden) {
         @Override
         public String toString() {
             return name;
