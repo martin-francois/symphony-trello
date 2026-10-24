@@ -7,9 +7,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 
 final class ReleaseWorkflowTest {
+    private static final Pattern POSIX_FIRST_SIGNED_RELEASE_VERSION =
+            Pattern.compile("(?m)^FIRST_SIGNED_RELEASE_VERSION=\"([^\"]+)\"$");
+
     @Test
     void releaseWorkflowBuildsAssetsOnlyForReleasePleaseCreatedTags() throws IOException {
         // given
@@ -50,6 +55,8 @@ final class ReleaseWorkflowTest {
                         "PROVENANCE_BUNDLE: ${{ steps.attest-release-assets.outputs.bundle-path }}",
                         "release provenance bundle was not created",
                         "symphony-trello-$RELEASE_VERSION.intoto.jsonl",
+                        "Verify release signatures",
+                        "run: scripts/verify-release-signatures",
                         "existing_assets=\"$(gh release view --repo \"$GITHUB_REPOSITORY\" \"$RELEASE_TAG\" --json assets --jq '.assets[].name')\"",
                         "grep -Fx -- \"$asset\" <<<\"$existing_assets\"",
                         "release already contains every expected public asset; refusing same-tag asset reuse",
@@ -69,9 +76,46 @@ final class ReleaseWorkflowTest {
         assertAppearsBefore(workflow, "Resolve release asset upload target", "Checkout release source tag");
         assertAppearsBefore(workflow, "Build release assets", "Attest release assets");
         assertAppearsBefore(workflow, "Attest release assets", "Add release provenance asset");
-        assertAppearsBefore(workflow, "Add release provenance asset", "Upload release assets");
+        assertAppearsBefore(workflow, "Add release provenance asset", "Verify release signatures");
+        assertAppearsBefore(workflow, "Verify release signatures", "Upload release assets");
         assertAppearsBefore(workflow, "Upload release assets", "Verify release assets");
         assertAppearsBefore(workflow, "Verify release assets", "Publish release");
+    }
+
+    @Test
+    void installersAndReleaseWorkflowAgreeOnTheReleaseSignerIdentity() throws IOException {
+        // given
+        String signerWorkflow = ".github/workflows/release-please.yml@refs/heads/main";
+
+        // when
+        String workflow = releaseWorkflowSource();
+        String posixInstaller = Files.readString(Path.of("install.sh"));
+        String powerShellInstaller = Files.readString(Path.of("install.ps1"));
+        String signatureCheck = Files.readString(Path.of("scripts/verify-release-signatures"));
+        String readme = Files.readString(Path.of("README.md"));
+        String contributing = Files.readString(Path.of("CONTRIBUTING.md"));
+
+        // then
+        assertThat(workflow)
+                .as("the signer identity names this workflow, which must keep running from pushes to main")
+                .containsPattern("branches:\\R\\s+- main\\R")
+                .contains("attestations: write", "id-token: write");
+        assertThat(Map.of(
+                        "install.sh", posixInstaller,
+                        "install.ps1", powerShellInstaller,
+                        "scripts/verify-release-signatures", signatureCheck))
+                .allSatisfy((file, source) ->
+                        assertThat(source).as(file).contains(signerWorkflow, "--cert-identity", "GH_HOST"));
+        assertThat(Map.of("README.md", readme, "CONTRIBUTING.md", contributing))
+                .as("manual verification docs name the identity the installers pin")
+                .allSatisfy((file, source) -> assertThat(source).as(file).contains(signerWorkflow));
+        Matcher posixFirstSignedVersion = POSIX_FIRST_SIGNED_RELEASE_VERSION.matcher(posixInstaller);
+        assertThat(posixFirstSignedVersion.find())
+                .as("install.sh declares FIRST_SIGNED_RELEASE_VERSION")
+                .isTrue();
+        assertThat(powerShellInstaller)
+                .as("install.ps1 and install.sh must skip signature checks for the same older releases")
+                .contains("$FirstSignedReleaseVersion = \"" + posixFirstSignedVersion.group(1) + "\"");
     }
 
     @Test
@@ -246,6 +290,7 @@ final class ReleaseWorkflowTest {
                 Files.readString(Path.of("scripts/resolve-release-asset-target")),
                 Files.readString(Path.of("scripts/build-release-assets")),
                 Files.readString(Path.of("scripts/add-release-provenance")),
+                Files.readString(Path.of("scripts/verify-release-signatures")),
                 Files.readString(Path.of("scripts/upload-release-assets")),
                 Files.readString(Path.of("scripts/verify-release-assets")));
     }

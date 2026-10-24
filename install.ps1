@@ -42,6 +42,12 @@ $DefaultBinDir = Join-Path $(if ($env:USERPROFILE) { $env:USERPROFILE } else { $
 $DefaultVersion = "1.2.0" # x-release-please-version
 $DefaultRepo = "https://github.com/martin-francois/symphony-trello.git"
 $DefaultRef = "v$DefaultVersion"
+# The signer identity pins the release workflow and branch, so a valid Sigstore bundle from another
+# workflow, branch, or repository still fails. ADR 0103 explains the choice.
+$ReleaseRepository = "martin-francois/symphony-trello"
+$ReleaseSignerIdentity = "https://github.com/$ReleaseRepository/.github/workflows/release-please.yml@refs/heads/main"
+$FirstSignedReleaseVersion = "1.2.0"
+$SecurityReportUrl = "https://github.com/$ReleaseRepository/security/advisories/new"
 $ScheduledTaskName = "Symphony for Trello"
 $WindowsUserProfile = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
 $WindowsProfileRoot = if ($env:APPDATA) { $env:APPDATA } else { Join-Path $WindowsUserProfile "AppData\Roaming" }
@@ -1280,6 +1286,85 @@ function Assert-ReleaseArchiveChecksum([string]$ArchivePath, [string]$ChecksumsP
   }
 }
 
+function Get-ReleaseSignatureBundleName {
+  return "symphony-trello-$Version.intoto.jsonl"
+}
+
+function Test-GitHubCliAttestationSupport {
+  if (-not (Test-Command "gh")) {
+    return $false
+  }
+  try {
+    & gh attestation verify --help *> $null
+    return $LASTEXITCODE -eq 0
+  } catch {
+    return $false
+  }
+}
+
+# Returns verify, unsigned-release, or no-github-cli.
+function Get-ReleaseSignatureCheckMode {
+  if ([version]($Version -replace "[-+].*$", "") -lt [version]$FirstSignedReleaseVersion) {
+    return "unsigned-release"
+  }
+  if (Test-GitHubCliAttestationSupport) {
+    return "verify"
+  }
+  return "no-github-cli"
+}
+
+function Get-ReleaseSignatureSkipReason([string]$Mode) {
+  if ($Mode -eq "unsigned-release") {
+    return "release $Version predates signed release assets"
+  }
+  return "install GitHub CLI (gh) 2.49 or newer to check it"
+}
+
+function Assert-ReleaseArchiveSignature([string]$ArchivePath, [string]$TempDir) {
+  $mode = Get-ReleaseSignatureCheckMode
+  if ($mode -ne "verify") {
+    Write-Host "  NOTE  Release signature not checked: $(Get-ReleaseSignatureSkipReason $mode). SHA3-256 checksum verified."
+    return
+  }
+  $archiveName = Split-Path -Leaf $ArchivePath
+  $bundleName = Get-ReleaseSignatureBundleName
+  $bundle = Join-Path $TempDir $bundleName
+  try {
+    Invoke-DownloadFile "$ReleaseBaseUrl/$bundleName" $bundle
+  } catch {
+    throw "Could not download the release signature bundle: $ReleaseBaseUrl/$bundleName`nSymphony for Trello was not installed or updated. Check your network and rerun the installer."
+  }
+  # Windows PowerShell turns native stderr into a terminating error under "Stop"; keep gh's output.
+  $ErrorActionPreference = "Continue"
+  $previousGitHubHost = $env:GH_HOST
+  $env:GH_HOST = "github.com"
+  try {
+    $output = & gh attestation verify $ArchivePath --bundle $bundle --repo $ReleaseRepository --cert-identity $ReleaseSignerIdentity 2>&1
+    $verified = $LASTEXITCODE -eq 0
+  } finally {
+    $env:GH_HOST = $previousGitHubHost
+  }
+  if (-not $verified) {
+    # Native stderr lines arrive as ErrorRecords; an empty line renders as the exception type name.
+    $ghLines = @(
+      $output |
+        ForEach-Object { if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { "$_" } } |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        ForEach-Object { "  gh: $_" }
+    )
+    $message = @("Release signature verification failed. Symphony for Trello was not installed or updated. Archive:", "  $archiveName") +
+      $ghLines +
+      @(
+        "GitHub CLI could not confirm that the $ReleaseRepository release workflow built this archive.",
+        "If gh could not reach Sigstore, check your network and rerun the installer.",
+        "Otherwise, do not install this archive and report it privately:",
+        "  $SecurityReportUrl"
+      )
+    throw ($message -join "`n")
+  }
+  Write-Host "  OK  Release signature verified with GitHub CLI"
+}
+
 function Install-ReleaseArchive {
   Assert-ExistingAppSafe
   $archiveName = "symphony-trello-$Version.zip"
@@ -1293,6 +1378,7 @@ function Install-ReleaseArchive {
     Invoke-DownloadFile $archiveUrl $archive
     Invoke-DownloadFile $checksumsUrl $checksums
     Assert-ReleaseArchiveChecksum $archive $checksums
+    Assert-ReleaseArchiveSignature $archive $tempDir
     $extractDir = Join-Path $tempDir "extract"
     New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
     Invoke-Step "expand $archiveName" {
@@ -1353,6 +1439,12 @@ if ($DryRun) {
   } else {
     Write-Host "  WOULD download release archive: $ReleaseBaseUrl/symphony-trello-$Version.zip"
     Write-Host "  WOULD verify SHA3-256 checksum with: $ReleaseBaseUrl/checksums.txt"
+    $signatureCheckMode = Get-ReleaseSignatureCheckMode
+    if ($signatureCheckMode -eq "verify") {
+      Write-Host "  WOULD verify release signature with GitHub CLI: $ReleaseBaseUrl/$(Get-ReleaseSignatureBundleName)"
+    } else {
+      Write-Host "  WOULD skip release signature check: $(Get-ReleaseSignatureSkipReason $signatureCheckMode)"
+    }
     Write-Host "  WOULD unpack release archive to: $Prefix"
   }
   Write-Host "  WOULD install CLI executable: $BinDir\symphony-trello.ps1"
