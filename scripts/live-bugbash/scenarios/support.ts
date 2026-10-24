@@ -4,7 +4,7 @@ import {fakeCodex, type FakeCodex, type FakeCodexStep, writeFakeCodexScript, cap
 import {freePort} from "../lib/ports.ts";
 import {commandEvidence, ProductFailure, type ScenarioContext} from "../lib/scenario.ts";
 import {waitFor, workerState, type CliPaths, type CommandOutcome, type SymphonyCli, type WorkerState} from "../lib/symphony.ts";
-import {STANDARD_LISTS, type CreatedBoard} from "../lib/trello.ts";
+import {LIST_NAMES, STANDARD_LISTS, type CreatedBoard} from "../lib/trello.ts";
 import {patchWorkflow, readFrontMatter, type WorkflowEdit} from "../lib/workflow.ts";
 
 /** Generous bounds: polling is the behavior under test, and CI-class hosts can be slow. */
@@ -146,7 +146,7 @@ export function script(service: ServiceBoard, scenarioId: string, steps: readonl
   writeFakeCodexScript(service.codex, scenarioId, steps);
 }
 
-export async function addCard(context: ScenarioContext, service: ServiceBoard, scenarioId: string, desc: string, list = "Ready for Codex", title = "bug bash card"): Promise<string> {
+export async function addCard(context: ScenarioContext, service: ServiceBoard, scenarioId: string, desc: string, list: string = LIST_NAMES.ready, title = "bug bash card"): Promise<string> {
   const card = await context.trello().createCard(service.board, list, `${scenarioId}: ${title}`, desc, scenarioId);
   return card.id;
 }

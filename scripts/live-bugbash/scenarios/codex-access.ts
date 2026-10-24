@@ -4,6 +4,7 @@ import {realCodexSentinel, runScopedCodexHome} from "../lib/codex.ts";
 import {runOwnedProcesses} from "../lib/processes.ts";
 import type {ScenarioContext, ScenarioRegistry} from "../lib/scenario.ts";
 import {sleep, waitFor} from "../lib/symphony.ts";
+import {LIST_NAMES} from "../lib/trello.ts";
 import {
   addCard,
   cardList,
@@ -83,7 +84,7 @@ async function failureCase(context: ScenarioContext): Promise<string> {
   context.evidence("retry-error.txt", run.error);
   context.check.that(expected.error.test(run.error), `the state API shows the card retrying with an error matching ${expected.error.source}`);
   if (id === "malformed-app-server-protocol") {
-    context.check.equal(run.listAfterRetry, "Ready for Codex", "the card returns to Ready for Codex");
+    context.check.equal(run.listAfterRetry, LIST_NAMES.ready, "the card returns to Ready for Codex");
   }
   await sleep(1_000);
   const leftovers = runOwnedProcesses(context.run.root).filter((owned) => commandLine(owned.pid).includes(run.service.codex.scriptDir));
@@ -143,7 +144,7 @@ async function installedRealCodexSmoke(context: ScenarioContext): Promise<string
   context.evidence("start.txt", `${outcome.stdout}\n${outcome.stderr}`);
   context.check.exitCode(outcome, 0, "start exits 0");
   try {
-    await waitForCardIn(context, service, cardId, "Human Review", REAL_CODEX_CARD_TIMEOUT_MS);
+    await waitForCardIn(context, service, cardId, LIST_NAMES.humanReview, REAL_CODEX_CARD_TIMEOUT_MS);
     const comments = await context.trello().comments(cardId);
     context.evidence("comments.txt", comments.join("\n---\n"));
     context.check.that(comments.length > 0, "the card has a Codex workpad or handoff comment");

@@ -3,7 +3,7 @@ import {join} from "node:path";
 import {freePort, occupyPort, reservedPorts} from "../lib/ports.ts";
 import {outputOf, ProductFailure, SkipScenario, type ScenarioContext, type ScenarioRegistry} from "../lib/scenario.ts";
 import {runCommand, sandboxEnvironment, sleep, workerState} from "../lib/symphony.ts";
-import {STANDARD_LISTS} from "../lib/trello.ts";
+import {LIST_NAMES, STANDARD_LISTS} from "../lib/trello.ts";
 import {getIn} from "../lib/workflow.ts";
 import {
   addCard,
@@ -235,19 +235,19 @@ async function missingSelector(context: ScenarioContext, command: "import-board"
 
 async function optionLikeSelector(context: ScenarioContext, command: "import-board" | "setup-local"): Promise<string> {
   if (command === "import-board") {
-    const result = await prepareImport(context, ["--terminal", "Done"], ["--active=--terminal", "--terminal", "Done"]);
+    const result = await prepareImport(context, ["--terminal", LIST_NAMES.done], ["--active=--terminal", "--terminal", LIST_NAMES.done]);
     context.check.exitCode(result.outcome, 0, "import-board exits 0");
     if (result.outcome.status === 0) {
       const tracker = frontMatter(result.workflow)["tracker"] as Record<string, unknown>;
       context.check.that((tracker["active_states"] as string[]).includes("--terminal"), "active_states contains the list named --terminal");
-      context.check.that((tracker["terminal_states"] as string[]).includes("Done"), "terminal_states contains Done");
+      context.check.that((tracker["terminal_states"] as string[]).includes(LIST_NAMES.done), "terminal_states contains Done");
     }
     return "import-board treated the attached value --terminal as a list name";
   }
-  const board = await context.trello().createBoard(context.scenario.id, ["--terminal", "Done"], context.options.trelloWorkspaceId);
+  const board = await context.trello().createBoard(context.scenario.id, ["--terminal", LIST_NAMES.done], context.options.trelloWorkspaceId);
   const paths = (await context.cli()).paths(context.scenario.id);
   const workflow = join(paths.configDir, "option-like.WORKFLOW.md");
-  const outcome = await setupLocal(context, paths, workflow, ["--board", board.id, "--active=--terminal", "--terminal", "Done"]);
+  const outcome = await setupLocal(context, paths, workflow, ["--board", board.id, "--active=--terminal", "--terminal", LIST_NAMES.done]);
   context.check.exitCode(outcome, 0, "setup-local exits 0");
   if (outcome.status === 0) {
     const tracker = frontMatter(workflow)["tracker"] as Record<string, unknown>;
@@ -272,7 +272,7 @@ async function invalidBoardSelector(context: ScenarioContext): Promise<string> {
 }
 
 async function duplicateListSelector(context: ScenarioContext): Promise<string> {
-  const result = await prepareImport(context, STANDARD_LISTS, ["--active", "Ready for Codex", "--active", "Ready for Codex", "--terminal", "Done"]);
+  const result = await prepareImport(context, STANDARD_LISTS, ["--active", LIST_NAMES.ready, "--active", LIST_NAMES.ready, "--terminal", LIST_NAMES.done]);
   context.check.failedExit(result.outcome, "import-board fails for a repeated selector");
   context.check.contains(outputOf(result.outcome), "setup_failed code=setup_duplicate_active_state", "the failure code is setup_duplicate_active_state");
   context.check.that(!existsSync(result.workflow) && !existsSync(result.manifest), "no workflow or manifest is written");
@@ -369,13 +369,13 @@ async function noInProgressDispatch(context: ScenarioContext): Promise<string> {
     throw new ProductFailure("setup-local did not create the named board");
   }
   const service = await adoptService(context, context.scenario.id, workflow, paths, boardId);
-  context.check.that(!("In Progress" in service.board.lists), "the board has no In Progress list");
+  context.check.that(!(LIST_NAMES.inProgress in service.board.lists), "the board has no In Progress list");
   const cardId = await addCard(context, service, context.scenario.id, "Answer with one sentence. No repository is needed.");
   await startWorker(context, service);
   try {
-    await waitForCardIn(context, service, cardId, "Human Review");
+    await waitForCardIn(context, service, cardId, LIST_NAMES.humanReview);
     const visited = context.fakeTrello?.state.moves.filter((move) => move.cardId === cardId).map((move) => move.toList) ?? [];
-    context.check.that(!visited.includes("In Progress"), "the card never entered In Progress");
+    context.check.that(!visited.includes(LIST_NAMES.inProgress), "the card never entered In Progress");
   } finally {
     await stopWorker(context, service);
   }
@@ -383,28 +383,28 @@ async function noInProgressDispatch(context: ScenarioContext): Promise<string> {
 }
 
 async function noHandoffDestination(context: ScenarioContext): Promise<string> {
-  const result = await prepareImport(context, ["Ready for Codex", "Done"], []);
+  const result = await prepareImport(context, [LIST_NAMES.ready, LIST_NAMES.done], []);
   context.check.exitCode(result.outcome, 0, "import-board exits 0");
   if (result.outcome.status === 0) {
     const document = frontMatter(result.workflow);
     context.check.equal(getIn(document, ["tracker", "blocked_state"]), undefined, "the workflow has no blocked_state");
     const moves = getIn(document, ["trello_tools", "allowed_move_list_names"]) as string[];
-    context.check.that(moves.length === 1 && moves[0] === "Done", "moves are allowed only to Done");
+    context.check.that(moves.length === 1 && moves[0] === LIST_NAMES.done, "moves are allowed only to Done");
   }
   return "import-board of a queue-and-Done board wrote a workflow that allows moves only to Done";
 }
 
 async function terminalDoneHandoff(context: ScenarioContext): Promise<string> {
-  const service = await serviceBoard(context, context.scenario.id, {lists: ["Ready for Codex", "Done"], reviewList: "Done"});
+  const service = await serviceBoard(context, context.scenario.id, {lists: [LIST_NAMES.ready, LIST_NAMES.done], reviewList: LIST_NAMES.done});
   const cardId = await addCard(context, service, context.scenario.id, "Answer with one sentence. No repository is needed.");
   await startWorker(context, service);
   try {
-    await waitForCardIn(context, service, cardId, "Done");
+    await waitForCardIn(context, service, cardId, LIST_NAMES.done);
     await sleep(3_000);
     const current = await workerState(service.port);
     const retrying = (current?.retrying ?? []).some((entry) => entry["card_id"] === cardId);
     context.check.that(!retrying, "the worker does not retry the card after the terminal move");
-    context.check.equal(await cardList(context, service, cardId), "Done", "the card stays in Done");
+    context.check.equal(await cardList(context, service, cardId), LIST_NAMES.done, "the card stays in Done");
   } finally {
     await stopWorker(context, service);
   }

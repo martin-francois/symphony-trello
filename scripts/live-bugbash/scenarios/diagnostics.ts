@@ -3,6 +3,7 @@ import {join} from "node:path";
 import {freePort} from "../lib/ports.ts";
 import {outputOf, type ScenarioContext, type ScenarioRegistry} from "../lib/scenario.ts";
 import type {CliPaths} from "../lib/symphony.ts";
+import {LIST_NAMES} from "../lib/trello.ts";
 import {addCard, cli, filesIn, serviceBoard, startWorker, stopWorker, waitForCardIn, type ServiceBoard} from "./support.ts";
 
 const PATH_TOKEN = /<path:[0-9a-f]{12}>/g;
@@ -27,7 +28,7 @@ async function workedBoard(context: ScenarioContext): Promise<ServiceBoard> {
     const card = await addCard(context, service, "diagnostics-board", "Answer with one sentence. No repository is needed.");
     await startWorker(context, service);
     try {
-      await waitForCardIn(context, service, card, "Human Review");
+      await waitForCardIn(context, service, card, LIST_NAMES.humanReview);
     } finally {
       await stopWorker(context, service);
     }
