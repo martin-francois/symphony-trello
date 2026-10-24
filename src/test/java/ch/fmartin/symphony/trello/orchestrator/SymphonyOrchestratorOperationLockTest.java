@@ -11,11 +11,8 @@ import ch.fmartin.symphony.trello.agent.AgentRunResult;
 import ch.fmartin.symphony.trello.agent.AgentRunner;
 import ch.fmartin.symphony.trello.domain.Card;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
@@ -35,30 +32,23 @@ final class SymphonyOrchestratorOperationLockTest {
         var tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
         AgentRunner runner = mock();
         BlockingRun blockingRun = blockRunnerUntilCancelled(runner);
-        var tickPausedBeforeDispatch = new CountDownLatch(1);
-        var resumeTick = new CountDownLatch(1);
-        tracker.stateFetchHook = () -> {
-            tickPausedBeforeDispatch.countDown();
-            awaitRelease(resumeTick, "the tick paused before its dispatch");
-        };
+        var tickBeforeDispatch = new PausePoint("the first tick at its pre-dispatch card refresh");
+        tracker.stateFetchHook = tickBeforeDispatch::pause;
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
         orchestrator.start();
-        assertThat(tickPausedBeforeDispatch.await(5, TimeUnit.SECONDS))
-                .as("the first tick should reach its pre-dispatch card refresh within 5 seconds")
-                .isTrue();
+        tickBeforeDispatch.awaitPaused();
 
         // when
         CompletableFuture<Integer> preparesWhenStopReturned = CompletableFuture.supplyAsync(() -> {
             orchestrator.stop();
             return tracker.prepareForDispatchCalls.get();
         });
-        waitForBoundedQuietPeriod(preparesWhenStopReturned::isDone);
-        resumeTick.countDown();
+        tickBeforeDispatch.resumeWhenContendedOr(preparesWhenStopReturned::isDone);
 
         // then
         assertThat(preparesWhenStopReturned)
                 .as("stop must let the in-flight tick finish its dispatch before tearing down")
-                .succeedsWithin(Duration.ofSeconds(5))
+                .succeedsWithin(WAIT_TIMEOUT)
                 .isEqualTo(1);
         assertThat(blockingRun.cancelled())
                 .as("stop must cancel the worker that the in-flight tick dispatched")
@@ -79,7 +69,7 @@ final class SymphonyOrchestratorOperationLockTest {
                     if (firstRun.getAndSet(false)) {
                         return AgentRunResult.fail("first attempt failed");
                     }
-                    blockUntilInterruptedOrTimedOut(Duration.ofSeconds(30));
+                    blockUntilInterruptedOrTimedOut(BLOCKED_WORKER_TIMEOUT);
                     return AgentRunResult.fail("interrupted");
                 })
                 .when(runner)
@@ -94,26 +84,21 @@ final class SymphonyOrchestratorOperationLockTest {
 
         Thread retrier = Thread.ofPlatform().unstarted(() -> orchestrator.retryNowForTests("card-retry"));
         var retrierFetches = new AtomicInteger();
-        var retryPausedBeforeDispatch = new CountDownLatch(1);
-        var resumeRetry = new CountDownLatch(1);
+        var retryBeforeDispatch = new PausePoint("the retry at its pre-dispatch prompt refresh");
         // The retry's second fetch is the prompt refresh: its claim is already released and its
         // slot budget already computed, which is the widest window a concurrent tick could use.
         tracker.stateFetchHook = () -> {
             if (Thread.currentThread().equals(retrier) && retrierFetches.incrementAndGet() == 2) {
-                retryPausedBeforeDispatch.countDown();
-                awaitRelease(resumeRetry, "the retry paused before its dispatch");
+                retryBeforeDispatch.pause();
             }
         };
         retrier.start();
-        assertThat(retryPausedBeforeDispatch.await(5, TimeUnit.SECONDS))
-                .as("the retry should reach its pre-dispatch prompt refresh within 5 seconds")
-                .isTrue();
+        retryBeforeDispatch.awaitPaused();
         int ticksBeforeRefresh = tickCompletions.get();
 
         // when
         orchestrator.requestRefresh();
-        waitForBoundedQuietPeriod(() -> tickCompletions.get() > ticksBeforeRefresh);
-        resumeRetry.countDown();
+        retryBeforeDispatch.resumeWhenContendedOr(() -> tickCompletions.get() > ticksBeforeRefresh);
         waitUntil(() -> !retrier.isAlive() && tickCompletions.get() > ticksBeforeRefresh);
         RuntimeSnapshot snapshot = orchestrator.snapshot();
         orchestrator.stop();

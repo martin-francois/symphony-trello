@@ -66,6 +66,13 @@ choose the next locking design.
 * Good, because the new owning tests check domain rules (stop cancels what an in-flight tick
   dispatched, a racing retry respects `agent.max_concurrent_agents`, a refresh racing stop never
   schedules after shutdown), so a correct replacement design keeps them green.
+* Good, because the owning tests that pause an operation resume it only once the competing operation
+  is blocked on a lock or monitor that the paused thread holds, or once the outcome that lock
+  prevents has already happened. They never resume after a fixed delay, so every run exercises the
+  contention and a mutant cannot survive because the competing operation was slow to start.
+* Neutral, because that wait ties those tests to designs in which the competing operation blocks on
+  a lock or monitor. [ADR 0105](0105-orchestrator-published-read-view.md) keeps both the operation
+  lock and a tick-schedule monitor, so its design still fits.
 * Bad, because 58 mutants survive. Most of them only matter for data races between status readers
   and writers, which no deterministic unit test can reproduce without one test hook per monitor
   section.

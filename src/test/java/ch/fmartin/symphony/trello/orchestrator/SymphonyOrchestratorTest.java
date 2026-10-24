@@ -892,12 +892,8 @@ final class SymphonyOrchestratorTest {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflow(workflow, "60000");
         SymphonyOrchestrator orchestrator = orchestrator(workflow, new FakeTracker(List.of()), mock());
-        var refreshPausedBeforeScheduling = new CountDownLatch(1);
-        var resumeRefresh = new CountDownLatch(1);
-        orchestrator.refreshScheduleHookForTests = () -> {
-            refreshPausedBeforeScheduling.countDown();
-            awaitRelease(resumeRefresh, "the refresh paused before scheduling its tick");
-        };
+        var refreshBeforeScheduling = new PausePoint("the refresh between its started check and its schedule");
+        orchestrator.refreshScheduleHookForTests = refreshBeforeScheduling::pause;
         var tickCompletions = new AtomicInteger();
         orchestrator.tickCompletionHookForTests = tickCompletions::incrementAndGet;
         orchestrator.start();
@@ -905,23 +901,20 @@ final class SymphonyOrchestratorTest {
         waitUntil(() -> tickCompletions.get() == 1);
         CompletableFuture<Throwable> refreshFailure =
                 CompletableFuture.supplyAsync(() -> catchThrowable(orchestrator::requestRefresh));
-        assertThat(refreshPausedBeforeScheduling.await(5, TimeUnit.SECONDS))
-                .as("the refresh should pass the started check within 5 seconds")
-                .isTrue();
+        refreshBeforeScheduling.awaitPaused();
 
         // when
         CompletableFuture<Void> stopped = CompletableFuture.runAsync(orchestrator::stop);
-        waitForBoundedQuietPeriod(stopped::isDone);
-        resumeRefresh.countDown();
+        refreshBeforeScheduling.resumeWhenContendedOr(stopped::isDone);
 
         // then
         assertThat(refreshFailure)
                 .as("a refresh that passed the started check must schedule before stop shuts the scheduler down")
-                .succeedsWithin(Duration.ofSeconds(5))
+                .succeedsWithin(WAIT_TIMEOUT)
                 .isNull();
         assertThat(stopped)
-                .as("stop should finish within 5 seconds once the racing refresh has scheduled")
-                .succeedsWithin(Duration.ofSeconds(5));
+                .as("stop should finish once the racing refresh has scheduled")
+                .succeedsWithin(WAIT_TIMEOUT);
     }
 
     @Test
@@ -947,7 +940,7 @@ final class SymphonyOrchestratorTest {
         assertThat(changeAttempted.await(5, TimeUnit.SECONDS))
                 .as("the concurrent workflow-path change should be attempted within 5 seconds")
                 .isTrue();
-        waitForBoundedQuietPeriod(rejection::isDone);
+        waitUntilContendedOr(starter, rejection::isDone);
         tracker.releaseTerminalFetch.countDown();
         assertThat(starter.join(Duration.ofSeconds(5)))
                 .as("the orchestrator startup thread terminates after the terminal fetch is released")

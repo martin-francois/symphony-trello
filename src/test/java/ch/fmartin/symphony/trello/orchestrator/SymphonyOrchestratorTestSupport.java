@@ -29,6 +29,9 @@ import ch.fmartin.symphony.trello.workspace.HookRunner;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadInfo;
+import java.lang.management.ThreadMXBean;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -39,9 +42,11 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -58,7 +63,11 @@ import java.util.random.RandomGenerator;
 final class SymphonyOrchestratorTestSupport {
     static final Instant COMMENT_TIME = Instant.parse("2026-01-01T00:00:00Z");
     static final Duration POLL_INTERVAL = Duration.ofMillis(25);
-    private static final Duration CONDITION_TIMEOUT = Duration.ofSeconds(5);
+    /// Bound for every wait on a condition, pause or release; correct code finishes far sooner.
+    static final Duration WAIT_TIMEOUT = Duration.ofSeconds(5);
+    /// How long a fake agent run blocks before it gives up waiting for cancellation.
+    static final Duration BLOCKED_WORKER_TIMEOUT = Duration.ofSeconds(30);
+    private static final ThreadMXBean THREADS = ManagementFactory.getThreadMXBean();
     static final RandomGenerator NO_JITTER = new FixedRandom(bound -> 0);
     static final RandomGenerator MAX_JITTER = new FixedRandom(bound -> bound - 1);
     private static final int PERCENT = 100;
@@ -107,8 +116,8 @@ final class SymphonyOrchestratorTestSupport {
         when(runner.run(any())).thenAnswer(invocation -> {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             requests.publish(request);
-            assertThat(releaseWorkers.await(5, TimeUnit.SECONDS))
-                    .as("the concurrent-command workers should be released within 5 seconds")
+            assertThat(releaseWorkers.await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                    .as("the concurrent-command workers should be released within %d seconds", WAIT_TIMEOUT.toSeconds())
                     .isTrue();
             return AgentRunResult.ok();
         });
@@ -137,8 +146,8 @@ final class SymphonyOrchestratorTestSupport {
             CompletableFuture<AgentRunner.AgentRunRequest> request =
                     requests.computeIfAbsent(command, ignored -> new CompletableFuture<>());
             assertThat(request)
-                    .as("the %s request should be published within 5 seconds", command)
-                    .succeedsWithin(Duration.ofSeconds(5));
+                    .as("the %s request should be published within %d seconds", command, WAIT_TIMEOUT.toSeconds())
+                    .succeedsWithin(WAIT_TIMEOUT);
             return request.join();
         }
     }
@@ -166,8 +175,8 @@ final class SymphonyOrchestratorTestSupport {
             AgentRunner.AgentRunRequest request)
             throws InterruptedException {
         workerBStarted.countDown();
-        assertThat(releaseWorkerB.await(5, TimeUnit.SECONDS))
-                .as("the board B worker should be released within 5 seconds")
+        assertThat(releaseWorkerB.await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                .as("the board B worker should be released within %d seconds", WAIT_TIMEOUT.toSeconds())
                 .isTrue();
         tracker.setCardState(
                 endpoint,
@@ -182,7 +191,7 @@ final class SymphonyOrchestratorTestSupport {
         doAnswer(invocation -> {
                     started.countDown();
                     try {
-                        blockUntilInterruptedOrTimedOut(Duration.ofSeconds(30));
+                        blockUntilInterruptedOrTimedOut(BLOCKED_WORKER_TIMEOUT);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                     }
@@ -655,27 +664,70 @@ final class SymphonyOrchestratorTestSupport {
     }
 
     static void waitUntil(BooleanSupplier condition) throws InterruptedException {
-        BoundedWait.until(CONDITION_TIMEOUT, condition, "the orchestrator condition");
+        BoundedWait.until(WAIT_TIMEOUT, condition, "the orchestrator condition");
     }
 
-    /// Gives an event that correct code keeps waiting one second to happen anyway. A missing lock
-    /// lets it happen inside this window, and the caller's later assertions detect the result.
-    static void waitForBoundedQuietPeriod(BooleanSupplier forbiddenEvent) throws InterruptedException {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
-        while (System.nanoTime() < deadline && !forbiddenEvent.getAsBoolean()) {
-            pollDelayForBoundedConditionWait();
-        }
+    /// Waits until another thread is blocked on a lock or monitor that `holder` owns, or until the
+    /// event that lock prevents has already happened. Correct code reaches the first state and a
+    /// missing lock the second, so the competing operation has reached the lock before the caller
+    /// releases `holder`, and the caller's later assertions tell the two outcomes apart.
+    static void waitUntilContendedOr(Thread holder, BooleanSupplier forbiddenEvent) throws InterruptedException {
+        waitUntil(() -> forbiddenEvent.getAsBoolean() || anotherThreadWaitsForALockHeldBy(holder));
+    }
+
+    private static boolean anotherThreadWaitsForALockHeldBy(Thread holder) {
+        long holderId = holder.threadId();
+        return Arrays.stream(THREADS.getThreadInfo(THREADS.getAllThreadIds()))
+                .filter(Objects::nonNull)
+                .mapToLong(ThreadInfo::getLockOwnerId)
+                .anyMatch(ownerId -> ownerId == holderId);
     }
 
     /// Holds a paused operation inside a test hook until the test resumes it.
     static void awaitRelease(CountDownLatch release, String pausedOperation) {
         try {
-            assertThat(release.await(5, TimeUnit.SECONDS))
-                    .as("%s should be resumed within 5 seconds", pausedOperation)
+            assertThat(release.await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                    .as("%s should be resumed within %d seconds", pausedOperation, WAIT_TIMEOUT.toSeconds())
                     .isTrue();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new AssertionError(pausedOperation + " was interrupted", e);
+        }
+    }
+
+    /// Pauses an operation inside a test hook until the test resumes it, and remembers the paused
+    /// thread so the test can resume it only once a competing operation is blocked behind it.
+    static final class PausePoint {
+        private final String pausedOperation;
+        private final CountDownLatch paused = new CountDownLatch(1);
+        private final CountDownLatch resume = new CountDownLatch(1);
+        private final AtomicReference<Thread> pausedThread = new AtomicReference<>();
+
+        PausePoint(String pausedOperation) {
+            this.pausedOperation = pausedOperation;
+        }
+
+        /// Runs on the operation's thread. Once the test resumed, later calls return at once.
+        void pause() {
+            pausedThread.compareAndSet(null, Thread.currentThread());
+            paused.countDown();
+            awaitRelease(resume, pausedOperation);
+        }
+
+        void awaitPaused() throws InterruptedException {
+            assertThat(paused.await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                    .as("%s should pause within %d seconds", pausedOperation, WAIT_TIMEOUT.toSeconds())
+                    .isTrue();
+        }
+
+        /// Resumes the paused operation once another thread waits for a lock it holds, or once the
+        /// event that lock prevents has already happened, as `waitUntilContendedOr` describes.
+        void resumeWhenContendedOr(BooleanSupplier forbiddenEvent) throws InterruptedException {
+            try {
+                waitUntilContendedOr(pausedThread.get(), forbiddenEvent);
+            } finally {
+                resume.countDown();
+            }
         }
     }
 
