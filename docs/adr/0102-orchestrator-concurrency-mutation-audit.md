@@ -61,8 +61,8 @@ choose the next locking design.
 ### Consequences
 
 * Good, because the record shows exactly which synchronization elements the tests own: 13 of 71
-  mutants fail a deterministic owning test. Before this change, 9 did, and one of those (L05) failed
-  only through a timing side effect.
+  mutants fail a deterministic owning test. Before this change, 8 did. L05 also failed in some runs,
+  but only through a timing side effect, so it did not count as killed.
 * Good, because the new owning tests check domain rules (stop cancels what an in-flight tick
   dispatched, a racing retry respects `agent.max_concurrent_agents`, a refresh racing stop never
   schedules after shutdown), so a correct replacement design keeps them green.
@@ -168,10 +168,11 @@ read-modify-write, `O` statement order.
 | O03 | Clear `tickRunning`, consume the refresh and schedule in separate sections | `refreshAtTickCompletionBoundaryIsNotOverwrittenByIntervalSchedule` |
 | O05 | Mark stopping at the very end of `stop()` | `refreshAtSchedulerShutdownBoundaryIsANoOp` |
 
-Before this change, L02, L09, S03 and O01 survived, and L05 was killed only by timing-dependent
-side effects in `usageDeadlineRechecksOnceExtendsOnRepeatAndClearsOnSuccess` and
-`lateSameCommandOldTargetUsagePausesCurrentTargetWithoutTransplantingRetry`, which did not fail
-in every run.
+Before this change, L02, L09, S03 and O01 survived. L05 also survived by the every-run rule: it
+failed only through timing-dependent side effects in
+`usageDeadlineRechecksOnceExtendsOnRepeatAndClearsOnSuccess` and
+`lateSameCommandOldTargetUsagePausesCurrentTargetWithoutTransplantingRetry`, which did not fail in
+every run. That leaves the 8 deterministic kills before this change.
 
 ### Survivors that are redundant today
 

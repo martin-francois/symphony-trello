@@ -91,10 +91,10 @@ The design:
 
 ### Confirmation
 
-[GitHub issue #815](https://github.com/martin-francois/symphony-trello/issues/815) is done when the orchestrator tests pass unchanged, the ADR 0102 owning tests still
-fail against their mutants, `SymphonyOrchestrator` contains no `synchronized (this)` block or
-`synchronized` method outside the tick-schedule object, and a rerun of the ADR 0102 mutant list is
-recorded in this ADR.
+[GitHub issue #815](https://github.com/martin-francois/symphony-trello/issues/815) is done when the
+orchestrator tests pass unchanged, the ADR 0102 owning tests still fail against their mutants,
+`SymphonyOrchestrator` contains no `synchronized (this)` block or `synchronized` method outside the
+tick-schedule object, and a rerun of the ADR 0102 mutant list is recorded in this ADR.
 
 ## Pros and Cons of the Options
 
