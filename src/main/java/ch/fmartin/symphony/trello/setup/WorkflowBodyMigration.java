@@ -3,10 +3,10 @@ package ch.fmartin.symphony.trello.setup;
 import ch.fmartin.symphony.trello.CliExitCodes;
 import ch.fmartin.symphony.trello.setup.WorkflowBodyClassification.Action;
 import ch.fmartin.symphony.trello.setup.WorkflowBodyClassifier.WorkflowBodyAssessment;
+import ch.fmartin.symphony.trello.setup.WorkflowMigrationReporter.PreviewOutcome;
 import ch.fmartin.symphony.trello.workflow.WorkflowException;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import java.io.IOException;
-import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -23,11 +23,8 @@ import org.jspecify.annotations.Nullable;
 /// every write decision live here instead of in shell or PowerShell.
 @NullMarked
 final class WorkflowBodyMigration {
-    static final String GUIDE_ANCHOR = "migrate-generated-workflows";
     static final String TARGET_BODY_FILE_INFIX = ".symphony-";
     static final String TARGET_BODY_FILE_SUFFIX = "-body.txt";
-
-    private static final String REPOSITORY_URL = "https://github.com/martin-francois/symphony-trello";
 
     private final String runningVersionText;
     private final WorkflowBodyWriter writer;
@@ -43,57 +40,51 @@ final class WorkflowBodyMigration {
     }
 
     int run(WorkflowMigrationRequest request, Terminal terminal) throws IOException {
-        PrintStream out = terminal.out(); // NOPMD - Terminal owns the stream.
         if (request.markMigrated()
                 && request.board().isEmpty()
                 && request.workflow().isEmpty()) {
             throw new TrelloBoardSetupException(
                     "setup_invalid_arguments", "--mark-migrated needs --board NAME or --workflow PATH.");
         }
+        var report = new WorkflowMigrationReporter(
+                runningVersionText, command, shellArgument, terminal.out()); // NOPMD - Terminal owns the stream.
         Optional<SymphonyVersion> running = SymphonyVersion.parse(runningVersionText);
         Optional<SymphonyVersion> from = request.fromVersion().flatMap(SymphonyVersion::parse);
-        out.println();
-        out.println("Generated workflow check");
-        Optional<SymphonyVersion> newerMajor = from.filter(source -> newerMajor(source, running));
-        if (newerMajor.isPresent()) {
-            printMajorDowngradeRejection(newerMajor.orElseThrow(), out);
+        report.checkStarted();
+        if (rejectsMajorDowngrade(from, running, report)) {
             return CliExitCodes.SETUP_FAILURE;
         }
         List<MigrationTarget> targets = targets(request);
         if (targets.isEmpty()) {
-            out.println("  OK  No connected workflows to check.");
+            report.noConnectedWorkflows();
             return 0;
         }
         GeneratedWorkflowStore store = GeneratedWorkflowStore.inConfigDir(request.configDir());
-        List<GeneratedWorkflowRecord> records = records(store, out);
+        List<GeneratedWorkflowRecord> records = records(store, report);
         List<WorkflowMigrationItem> items = targets.stream()
                 .map(target -> assess(target, records, from, running))
                 .toList();
-        out.println("Symphony " + runningVersionText + " compared " + items.size()
-                + (items.size() == 1 ? " workflow" : " workflows") + " with the workflow body it generates.");
-        items.forEach(item -> out.println(item.reportLine(runningVersionText)));
+        report.comparison(items);
 
-        recordCurrentBodies(request, store, items, out);
-        guideManualMigrations(request, items, out);
-        int failedWrites = replaceGeneratedBodies(request, store, items, terminal);
-        markManualMigrations(request, store, items, out);
+        var context = new RunContext(request, store, items, terminal, report);
+        recordCurrentBodies(context);
+        guideManualMigrations(context);
+        int failedWrites = replaceGeneratedBodies(context);
+        markManualMigrations(context);
         if (failedWrites > 0) {
             // A failed workflow write is unexpected, so it goes through the CLI failure path that
             // writes a sanitized troubleshooting report. The lines above already name each backup.
             throw new TrelloBoardSetupException(
-                    "setup_workflow_migration_failed",
-                    "Could not migrate " + failedWrites + " confirmed workflow body"
-                            + (failedWrites == 1 ? "" : "s")
-                            + ". The output above says where each backup is and whether the original is in place.");
+                    "setup_workflow_migration_failed", WorkflowMigrationReporter.failedWritesMessage(failedWrites));
         }
         return items.stream().anyMatch(item -> item.action() == Action.REJECT) ? CliExitCodes.SETUP_FAILURE : 0;
     }
 
-    private void printMajorDowngradeRejection(SymphonyVersion from, PrintStream out) {
-        out.println("  REJECTED  Symphony " + from + " was replaced by Symphony " + runningVersionText
-                + ". Downgrading to an older major version is not supported, so no workflow was checked or"
-                + " changed.");
-        out.println("            Reinstall a Symphony " + from.major() + ".x release to keep using these workflows.");
+    private static boolean rejectsMajorDowngrade(
+            Optional<SymphonyVersion> from, Optional<SymphonyVersion> running, WorkflowMigrationReporter report) {
+        Optional<SymphonyVersion> newerMajor = from.filter(source -> newerMajor(source, running));
+        newerMajor.ifPresent(report::majorDowngradeRejected);
+        return newerMajor.isPresent();
     }
 
     private static List<MigrationTarget> targets(WorkflowMigrationRequest request) throws IOException {
@@ -113,15 +104,14 @@ final class WorkflowBodyMigration {
                 .orElseGet(() -> new MigrationTarget(PathNames.fileName(workflow), workflow, Optional.empty()));
     }
 
-    private static List<GeneratedWorkflowRecord> records(GeneratedWorkflowStore store, PrintStream out) {
+    private static List<GeneratedWorkflowRecord> records(
+            GeneratedWorkflowStore store, WorkflowMigrationReporter report) {
         try {
             return store.records();
         } catch (IOException | RuntimeException e) {
             // Without readable provenance every workflow falls back to the manual path, which never
             // writes a workflow, so the check can still report safely.
-            out.println("  WARN  Could not read the recorded generated bodies. Every workflow is treated as"
-                    + " having no record until you repair or remove this file:");
-            out.println("        " + store.storePath());
+            report.storeUnreadable(store.storePath());
             return List.of();
         }
     }
@@ -205,220 +195,128 @@ final class WorkflowBodyMigration {
                 refreshRecord);
     }
 
-    private void recordCurrentBodies(
-            WorkflowMigrationRequest request,
-            GeneratedWorkflowStore store,
-            List<WorkflowMigrationItem> items,
-            PrintStream out) {
-        if (request.dryRun()) {
+    private void recordCurrentBodies(RunContext context) {
+        if (context.request().dryRun()) {
             return;
         }
-        items.stream().filter(WorkflowMigrationItem::refreshRecord).forEach(item -> recordTargetBody(store, item, out));
+        context.items().stream()
+                .filter(WorkflowMigrationItem::refreshRecord)
+                .forEach(item -> recordTargetBody(context, item));
     }
 
-    private void guideManualMigrations(
-            WorkflowMigrationRequest request, List<WorkflowMigrationItem> items, PrintStream out) {
-        List<WorkflowMigrationItem> manual = items.stream()
+    private void guideManualMigrations(RunContext context) {
+        List<WorkflowMigrationItem> manual = context.items().stream()
                 .filter(item -> item.action() == Action.MANUAL || item.action() == Action.REJECT)
                 .toList();
         if (manual.isEmpty()) {
             return;
         }
-        out.println();
-        out.println("Manual workflow migration needed");
+        WorkflowMigrationReporter report = context.report();
+        report.manualMigrationsStarted();
         for (WorkflowMigrationItem item : manual) {
-            out.println("  " + item.heading());
+            report.manualMigrationHeading(item);
             if (item.action() == Action.REJECT) {
-                out.println("    Symphony " + runningVersionText + " does not migrate workflows from another major"
-                        + " version. Reinstall a release with the same major version as "
-                        + item.sourceVersionLabel() + " to keep using this workflow.");
+                report.majorDowngradeNotMigrated(item);
             } else {
                 item.targetBody()
                         .ifPresentOrElse(
-                                targetBody -> guideManualMigration(request, item, targetBody, out),
-                                () -> out.println(
-                                        "    Fix the workflow file, then run " + migrateCommand() + " again."));
+                                targetBody -> guideManualMigration(context.request(), item, targetBody, report),
+                                report::fixWorkflowFile);
             }
         }
     }
 
     private void guideManualMigration(
-            WorkflowMigrationRequest request, WorkflowMigrationItem item, String targetBody, PrintStream out) {
+            WorkflowMigrationRequest request,
+            WorkflowMigrationItem item,
+            String targetBody,
+            WorkflowMigrationReporter report) {
         Path preview = targetBodyPath(item.workflowPath());
+        PreviewOutcome outcome;
         if (request.dryRun()) {
-            out.println("    WOULD write the Symphony " + runningVersionText + " generated body to:");
-            out.println("      " + preview);
+            outcome = PreviewOutcome.WOULD_WRITE;
         } else if (request.nonInteractive()) {
             // Unattended updates only report, so they do not leave a preview file on every run.
-            out.println("    Run " + migrateCommand() + " in a terminal to write the Symphony " + runningVersionText
-                    + " generated body next to this workflow.");
-        } else if (writeTargetBody(preview, targetBody)) {
-            out.println("    Symphony " + runningVersionText + " generated body:");
-            out.println("      " + preview);
+            outcome = PreviewOutcome.NOT_WRITTEN_UNATTENDED;
         } else {
-            out.println("    Could not write the generated body preview next to the workflow.");
+            outcome = writeTargetBody(preview, targetBody) ? PreviewOutcome.WRITTEN : PreviewOutcome.WRITE_FAILED;
         }
-        if (item.classification() == WorkflowBodyClassification.UNKNOWN_SOURCE) {
-            out.println("    Symphony rendered this body from the workflow's current list settings.");
-        }
-        out.println("    1. Keep the workflow metadata unchanged: everything up to and including the closing ---"
-                + " line.");
-        out.println("    2. Compare the text after that line with the generated body, copy the generated text you"
-                + " want, and keep your own additions.");
-        out.println("    3. Then record the migration with this command:");
-        out.println("      " + migrateCommand() + " --workflow "
-                + shellArgument.apply(item.workflowPath().toString()) + " --mark-migrated");
-        guideLink().ifPresent(link -> out.println("    Guide: " + link));
-        if (item.downgrade()) {
-            out.println("    " + downgradeWarning(item));
-        }
+        report.manualMigrationSteps(item, preview, outcome);
     }
 
     /// Returns the number of confirmed replacements that failed.
-    private int replaceGeneratedBodies(
-            WorkflowMigrationRequest request,
-            GeneratedWorkflowStore store,
-            List<WorkflowMigrationItem> items,
-            Terminal terminal)
-            throws IOException {
-        List<WorkflowMigrationItem> replaceable =
-                items.stream().filter(item -> item.replacement().isPresent()).toList();
+    private int replaceGeneratedBodies(RunContext context) throws IOException {
+        List<WorkflowMigrationItem> replaceable = context.items().stream()
+                .filter(item -> item.replacement().isPresent())
+                .toList();
         if (replaceable.isEmpty()) {
             return 0;
         }
-        PrintStream out = terminal.out(); // NOPMD - Terminal owns the stream.
-        out.println();
-        out.println("Workflow body migrations");
-        replaceable.forEach(item -> explainReplacement(item, out));
-        if (request.dryRun()) {
-            replaceable.forEach(item -> {
-                out.println("  WOULD back up and replace the generated body in:");
-                out.println("    " + item.workflowPath());
-            });
+        WorkflowMigrationReporter report = context.report();
+        report.replacementsStarted();
+        replaceable.forEach(
+                item -> report.replacementExplained(item, item.replacement().orElseThrow()));
+        if (context.request().dryRun()) {
+            replaceable.forEach(report::wouldReplace);
             return 0;
         }
-        if (request.nonInteractive()) {
-            out.println("  No workflow was changed. Run " + migrateCommand()
-                    + " in a terminal to review and apply these migrations.");
-            replaceable.stream()
-                    .filter(WorkflowMigrationItem::downgrade)
-                    .forEach(item -> out.println("  " + downgradeWarning(item)));
+        if (context.request().nonInteractive()) {
+            report.replacementsLeftUnattended(replaceable);
             return 0;
         }
+        Terminal terminal = context.terminal();
         ConfirmationMode mode =
                 replaceable.size() == 1 ? ConfirmationMode.EACH : ConfirmationMode.ask(terminal, replaceable.size());
         int failedWrites = 0;
         for (WorkflowMigrationItem item : replaceable) {
             if (mode.confirms(terminal, item)) {
-                failedWrites += replace(store, item, out) ? 0 : 1;
+                failedWrites += replace(context, item) ? 0 : 1;
             } else {
-                printDeclined(item, out);
+                report.declined(item);
             }
         }
         return failedWrites;
     }
 
-    private void explainReplacement(WorkflowMigrationItem item, PrintStream out) {
-        WorkflowBodyReplacement replacement = item.replacement().orElseThrow();
-        out.println("  " + item.heading());
-        if (item.downgrade()) {
-            out.println("    This workflow was created for a newer Symphony version (" + item.sourceVersionLabel()
-                    + ") than Symphony " + runningVersionText + ". Migrating replaces its generated body with the"
-                    + " body that Symphony " + runningVersionText + " generates.");
-        } else {
-            out.println("    The generated workflow changed since " + item.sourceVersionLabel()
-                    + ". Migrating gives this workflow the Symphony " + runningVersionText
-                    + " workflow fixes and features.");
-        }
-        out.println("    Only the text after the closing --- line changes. The workflow metadata stays as it is.");
-        if (replacement.preservesUserAdditions()) {
-            out.println(
-                    "    Your text " + additionPlacement(replacement) + " the generated body stays exactly as it is.");
-            out.println("    Warning: your kept text can conflict with the new generated body and cause unexpected"
-                    + " behavior. Review it after the migration.");
-        }
-    }
-
-    private static String additionPlacement(WorkflowBodyReplacement replacement) {
-        if (!replacement.preservedPrefix().isEmpty()
-                && !replacement.preservedSuffix().isEmpty()) {
-            return "before and after";
-        }
-        return replacement.preservedPrefix().isEmpty() ? "after" : "before";
-    }
-
-    private boolean replace(GeneratedWorkflowStore store, WorkflowMigrationItem item, PrintStream out) {
-        Path workflow = item.workflowPath();
+    private boolean replace(RunContext context, WorkflowMigrationItem item) {
         WorkflowBodyWriter.WriteResult result =
-                writer.write(workflow, item.replacement().orElseThrow());
+                writer.write(item.workflowPath(), item.replacement().orElseThrow());
         if (!result.written()) {
-            out.println("  FAILED  Could not migrate this workflow (" + result.failure() + "):");
-            out.println("          " + workflow);
-            result.backup()
-                    .ifPresent(backup -> out.println(
-                            result.restored()
-                                    ? "          Symphony restored the original workflow from the backup: " + backup
-                                    : "          The backup of the original workflow is: " + backup));
+            context.report().migrationFailed(item, result);
             return false;
         }
-        Path backup = result.backup().orElseThrow();
-        out.println("  OK  Migrated " + workflow);
-        out.println("      Backup: " + backup);
-        out.println("      To undo, copy the backup over the workflow. If Symphony " + runningVersionText
-                + " causes problems, also reinstall " + item.sourceVersionLabel()
-                + " with the installer's --version option.");
-        recordTargetBody(store, item, out);
+        context.report().migrated(item, result.backup().orElseThrow());
+        recordTargetBody(context, item);
         return true;
     }
 
-    private void printDeclined(WorkflowMigrationItem item, PrintStream out) {
-        out.println("  SKIPPED  This workflow keeps its current body: " + item.workflowPath());
-        if (item.downgrade()) {
-            out.println("           " + downgradeWarning(item));
-        } else {
-            out.println("           It does not get the Symphony " + runningVersionText
-                    + " workflow fixes and features. Run " + migrateCommand() + " to migrate it later.");
-        }
-    }
-
-    private String downgradeWarning(WorkflowMigrationItem item) {
-        return "Warning: this workflow was created for " + item.sourceVersionLabel()
-                + ", which is newer than Symphony " + runningVersionText + ". It may mention features that Symphony "
-                + runningVersionText + " does not support and can behave unexpectedly.";
-    }
-
-    private void markManualMigrations(
-            WorkflowMigrationRequest request,
-            GeneratedWorkflowStore store,
-            List<WorkflowMigrationItem> items,
-            PrintStream out) {
-        if (!request.markMigrated()) {
+    private void markManualMigrations(RunContext context) {
+        if (!context.request().markMigrated()) {
             return;
         }
-        out.println();
-        for (WorkflowMigrationItem item : items) {
+        WorkflowMigrationReporter report = context.report();
+        report.manualRecordsStarted();
+        for (WorkflowMigrationItem item : context.items()) {
             Path workflow = item.workflowPath();
             if (item.action() != Action.MANUAL || item.inputs().isEmpty()) {
-                out.println("  OK  " + workflow + " needs no manual migration record.");
-            } else if (request.dryRun()) {
-                out.println("  WOULD record " + workflow + " as migrated to the Symphony " + runningVersionText
-                        + " generated body.");
-            } else if (recordTargetBody(store, item, out)) {
-                out.println("  OK  Recorded " + workflow + " as migrated to the Symphony " + runningVersionText
-                        + " generated body. Later updates compare against that body.");
+                report.noManualRecordNeeded(workflow);
+            } else if (context.request().dryRun()) {
+                report.wouldRecordMigrated(workflow);
+            } else if (recordTargetBody(context, item)) {
+                report.recordedMigrated(workflow);
             }
         }
     }
 
-    private boolean recordTargetBody(GeneratedWorkflowStore store, WorkflowMigrationItem item, PrintStream out) {
+    private boolean recordTargetBody(RunContext context, WorkflowMigrationItem item) {
         Path workflow = item.workflowPath();
         try {
-            store.put(GeneratedWorkflowRecord.current(
-                    workflow, runningVersionText, item.inputs().orElseThrow()));
+            context.store()
+                    .put(GeneratedWorkflowRecord.current(
+                            workflow, runningVersionText, item.inputs().orElseThrow()));
             return true;
         } catch (IOException | RuntimeException e) {
-            out.println("  WARN  Could not record the generated body of " + workflow
-                    + " in the provenance store. The next check may ask about this workflow again.");
+            context.report().recordFailed(workflow);
             return false;
         }
     }
@@ -446,19 +344,17 @@ final class WorkflowBodyMigration {
                 + TARGET_BODY_FILE_SUFFIX);
     }
 
-    private Optional<String> guideLink() {
-        return SymphonyVersion.parse(runningVersionText)
-                .filter(SymphonyVersion::release)
-                .map(version -> REPOSITORY_URL + "/blob/v" + version + "/README.md#" + GUIDE_ANCHOR);
-    }
-
-    private String migrateCommand() {
-        return command + " migrate-workflows";
-    }
-
     private static boolean newerMajor(SymphonyVersion source, Optional<SymphonyVersion> running) {
         return running.map(current -> source.major() > current.major()).orElse(false);
     }
+
+    /// The state one `migrate-workflows` run shares between its steps.
+    private record RunContext(
+            WorkflowMigrationRequest request,
+            GeneratedWorkflowStore store,
+            List<WorkflowMigrationItem> items,
+            Terminal terminal,
+            WorkflowMigrationReporter report) {}
 
     record MigrationTarget(String label, Path workflowPath, Optional<Boolean> githubEnabled) {
         MigrationTarget {
