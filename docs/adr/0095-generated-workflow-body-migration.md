@@ -133,7 +133,8 @@ This decision remains implemented when:
   limits, unknown store fields, and major-downgrade rejection;
 * `TrelloBoardSetupMainTest` and `LocalSetupGithubConfigurationTest` prove that generated workflows
   are recorded and that a freshly generated workflow is reported as unchanged;
-* the POSIX and PowerShell installer tests show the `migrate-workflows` call on update; and
+* the POSIX and PowerShell installer tests show the `migrate-workflows` call on update, refuse an
+  older major release before the app is replaced, and let a same-major downgrade through; and
 * `SPEC.md` Section 19.4.1 describes the same contract.
 
 ## Pros and Cons of the Options

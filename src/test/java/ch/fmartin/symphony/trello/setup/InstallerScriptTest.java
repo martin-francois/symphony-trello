@@ -7937,29 +7937,10 @@ final class InstallerScriptTest {
     void posixReleaseInstallRejectsAMajorVersionDowngradeBeforeReplacingTheApp() throws Exception {
         // given
         assumeTrue(commandExists("bash"));
-        Path installScript = Path.of("install.sh").toAbsolutePath();
-        Path fakeBin = createFakeToolchain(temporaryDirectory);
-        Path symphonyHome = temporaryDirectory.resolve("major-downgrade-home");
-        Path appHome = symphonyHome.resolve("app");
-        Path binDirectory = temporaryDirectory.resolve("major-downgrade-bin");
-        Path fakeLog = temporaryDirectory.resolve("major-downgrade-fake-tools.log");
-        Files.createDirectories(appHome);
-        Files.writeString(appHome.resolve(".symphony-trello-install"), "installer-managed archive\n");
-        Files.createDirectories(binDirectory);
-        writeExecutable(
-                binDirectory.resolve("symphony-trello"),
-                """
-                #!/usr/bin/env bash
-                echo "symphony-trello 99.0.0"
-                """);
-        Map<String, String> environment = Map.of(
-                "PATH", fakeBin + System.getProperty("path.separator") + System.getenv("PATH"),
-                "SYMPHONY_HOME", symphonyHome.toString(),
-                "SYMPHONY_FAKE_LOG", fakeLog.toString());
+        ReleaseArchiveUpdate update = releaseArchiveUpdate("major-downgrade", "99.0.0");
 
         // when
-        ProcessResult result = run(
-                environment, "bash", installScript.toString(), "--no-onboard", "--bin-dir", binDirectory.toString());
+        ProcessResult result = update.runPosix();
 
         // then
         assertThat(result.exitCode()).as(result.output()).isEqualTo(SETUP_FAILURE);
@@ -7969,8 +7950,142 @@ final class InstallerScriptTest {
                                 + installerDefaultRef().substring(1) + " belongs to an older major version.",
                         "Downgrading to an older major version is not supported. Install a 99.x release instead.")
                 .doesNotContain("Checking generated workflows...");
-        assertThat(appHome).isDirectoryContaining("glob:**/.symphony-trello-install");
-        assertThat(appHome.resolve("target")).doesNotExist();
+        update.assertAppUntouched();
+    }
+
+    @Test
+    void posixReleaseInstallLetsASameMajorDowngradeReachTheReleaseDownload() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("curl"));
+        String release = installerDefaultRef().substring(1);
+        String newerSameMajor = release.substring(0, release.indexOf('.')) + ".99.0";
+        ReleaseArchiveUpdate update = releaseArchiveUpdate("same-major-downgrade", newerSameMajor);
+
+        // when
+        ProcessResult result = update.runPosix();
+
+        // then
+        assertThat(result.exitCode())
+                .as("the release directory is empty, so the download must fail after the version check passed")
+                .isNotZero();
+        assertThat(result.output())
+                .contains("Installing Symphony...", update.releaseBaseUrl() + "/symphony-trello-" + release + ".tar.gz")
+                .doesNotContain("belongs to an older major version");
+        update.assertAppUntouched();
+    }
+
+    @Test
+    void powershellReleaseInstallRejectsAMajorVersionDowngradeBeforeReplacingTheAppWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        ReleaseArchiveUpdate update = releaseArchiveUpdate("ps-major-downgrade", "99.0.0");
+
+        // when
+        ProcessResult result = update.runPowerShell(pwsh);
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isOne();
+        assertThat(normalizedWhitespace(result.output()))
+                .contains(
+                        "Symphony 99.0.0 is installed, and release "
+                                + installerDefaultRef().substring(1) + " belongs to an older major version.",
+                        "Downgrading to an older major version is not supported. Install a 99.x release instead.")
+                .doesNotContain("Checking generated workflows...");
+        update.assertAppUntouched();
+    }
+
+    @Test
+    void powershellReleaseInstallLetsASameMajorDowngradeReachTheReleaseDownloadWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        String release = installerDefaultRef().substring(1);
+        String newerSameMajor = release.substring(0, release.indexOf('.')) + ".99.0";
+        ReleaseArchiveUpdate update = releaseArchiveUpdate("ps-same-major-downgrade", newerSameMajor);
+
+        // when
+        ProcessResult result = update.runPowerShell(pwsh);
+
+        // then
+        assertThat(result.exitCode())
+                .as("the release directory is empty, so the download must fail after the version check passed")
+                .isNotZero();
+        assertThat(result.output())
+                .contains("Installing Symphony...", update.releaseBaseUrl() + "/symphony-trello-" + release + ".zip")
+                .doesNotContain("belongs to an older major version");
+        update.assertAppUntouched();
+    }
+
+    /// An existing installer-managed release-archive app whose installed command reports
+    /// `installedVersion`, updated without onboarding from a local release directory that holds no
+    /// archive, so no run can download anything.
+    private ReleaseArchiveUpdate releaseArchiveUpdate(String name, String installedVersion) throws IOException {
+        Path fakeBin = createPowerShellFakeToolchain(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve(name + "-home");
+        Path appHome = symphonyHome.resolve("app");
+        Path binDirectory = temporaryDirectory.resolve(name + "-bin");
+        Files.createDirectories(appHome);
+        Files.writeString(appHome.resolve(".symphony-trello-install"), "installer-managed archive\n");
+        Files.createDirectories(binDirectory);
+        // install.sh asks the installed command for its version; install.ps1 asks Java directly.
+        writeExecutable(
+                binDirectory.resolve("symphony-trello"),
+                """
+                #!/usr/bin/env bash
+                echo "symphony-trello %s"
+                """
+                        .formatted(installedVersion));
+        Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
+        environment.put("PATH", fakeBin + File.pathSeparator + System.getenv("PATH"));
+        environment.put("SYMPHONY_HOME", symphonyHome.toString());
+        environment.put("SYMPHONY_FAKE_JAVA", fakeBin.resolve("fake-java.ps1").toString());
+        environment.put(
+                "SYMPHONY_FAKE_LOG",
+                temporaryDirectory.resolve(name + "-fake-tools.log").toString());
+        environment.put("SYMPHONY_FAKE_VERSION", installedVersion);
+        environment.put(
+                "SYMPHONY_TRELLO_RELEASE_BASE_URL",
+                temporaryDirectory.resolve(name + "-empty-release").toUri().toString());
+        return new ReleaseArchiveUpdate(appHome, binDirectory, environment);
+    }
+
+    private record ReleaseArchiveUpdate(Path appHome, Path binDirectory, Map<String, String> environment) {
+        String releaseBaseUrl() {
+            return environment.get("SYMPHONY_TRELLO_RELEASE_BASE_URL");
+        }
+
+        ProcessResult runPosix() throws Exception {
+            return run(
+                    environment,
+                    "bash",
+                    Path.of("install.sh").toAbsolutePath().toString(),
+                    "--no-onboard",
+                    "--bin-dir",
+                    binDirectory.toString());
+        }
+
+        ProcessResult runPowerShell(List<String> pwsh) throws Exception {
+            return run(
+                    environment,
+                    command(
+                                    pwsh,
+                                    "-NoProfile",
+                                    "-File",
+                                    "./install.ps1",
+                                    "--no-onboard",
+                                    "--prefix",
+                                    appHome.toString(),
+                                    "--bin-dir",
+                                    binDirectory.toString())
+                            .toArray(String[]::new));
+        }
+
+        void assertAppUntouched() {
+            assertThat(appHome).isDirectoryContaining("glob:**/.symphony-trello-install");
+            assertThat(appHome.resolve("target")).doesNotExist();
+        }
     }
 
     @Test

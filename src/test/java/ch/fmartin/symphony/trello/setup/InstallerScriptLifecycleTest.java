@@ -252,6 +252,11 @@ final class InstallerScriptLifecycleTest {
                 .isZero();
         assertThat(update.exitCode()).isZero();
         assertThat(secondUpdate.exitCode()).isZero();
+        assertThat(install.output()).doesNotContain("Checking generated workflows...");
+        assertThat(update.output())
+                .contains(
+                        "Checking generated workflows...",
+                        "RUN  " + installedCommand + " migrate-workflows --from-version test --non-interactive");
         assertThat(markerContentAfterUpdate).isEqualTo("updated\n");
         assertThat(statusWhileRunning.output())
                 .contains("running WORKFLOW.lifecycle-board.md pid=")

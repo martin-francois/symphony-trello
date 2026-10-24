@@ -732,7 +732,7 @@ final class InstallerScriptFixture {
                         exit 0
                         ;;
                       *)
-                        echo "symphony-trello test"
+                        echo "symphony-trello ${SYMPHONY_FAKE_VERSION:-test}"
                         exit 0
                         ;;
                     esac
@@ -954,7 +954,7 @@ final class InstallerScriptFixture {
                       Write-Output "symphony-trello test"
                       exit 0
                     }
-                    Write-Output "symphony-trello test"
+                    Write-Output "symphony-trello $(if ($env:SYMPHONY_FAKE_VERSION) { $env:SYMPHONY_FAKE_VERSION } else { 'test' })"
                     exit 0
                   }
 	                  if (($args -join " ") -like "*TrelloBoardSetupMain start*" -or
