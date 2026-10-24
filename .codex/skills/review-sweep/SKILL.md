@@ -175,6 +175,11 @@ match the work actually completed, update the PR metadata before handoff.
   a pending CodeRabbit status context. Treat CodeRabbit as asynchronous review
   feedback: act on posted comments or requested changes, and mention if it is
   still pending after actual CI is green.
+- A failed CodeRabbit pre-merge check is fixed in the PR body, then rerun with
+  `@coderabbitai run pre-merge checks`. An agent leaves `I confirm I understand
+  what the code does` for the human to tick, so an AI assistance check that
+  fails only on that box is expected at handoff. Report it and do not tick the
+  box. Pull-request review enforces who ticked it.
 - If CI cannot run because of external quota or infrastructure limits, run
   equivalent local CI checks. Hand off only when those checks pass or only have
   failures clearly unrelated to the card.
