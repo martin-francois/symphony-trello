@@ -29,7 +29,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -911,18 +910,11 @@ final class CodexAppServerClientTest {
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
         Instant laterPrimaryReset = now.plusSeconds(120);
         Instant earlierSecondaryReset = now.plusSeconds(60);
-        Path firstSessionMarker = tempDir.resolve("sequential-rate-limit-first-session");
+        String firstSession = "sequential-rate-limit-first";
         List<JsonNode> publishedRateLimits = new ArrayList<>();
         Path appServer = writeUsageFixtureScript(
                 "sequential-shared-rate-limit-app-server.sh",
-                """
-                if mkdir '__FIRST_SESSION_MARKER__' 2>/dev/null; then
-                  session=first
-                else
-                  session=second
-                fi
-                """
-                        .replace("__FIRST_SESSION_MARKER__", firstSessionMarker.toString()),
+                sessionRoleByWorkspace(firstSession, "first", "second"),
                 """
                 if [ "$session" = first ]; then
                   echo '{"method":"account/rateLimits/updated","params":{"rateLimits":{"primary":{"usedPercent":100,"resetsAt":__PRIMARY_RESET__},"credits":{"balance":"7","hasCredits":true,"unlimited":false},"planType":"team","limitId":"limit-a","limitName":"Initial limit","individualLimit":{"limit":"100","remainingPercent":25,"resetsAt":__PRIMARY_RESET__,"used":"75"},"rateLimitReachedType":"rate_limit_reached","futureMetadata":{"opaque":"preserve-me"}}}}'
@@ -944,7 +936,7 @@ final class CodexAppServerClientTest {
         };
 
         // when
-        AgentRunResult first = runTurn(client, config, "sequential-rate-limit-first", listener);
+        AgentRunResult first = runTurn(client, config, firstSession, listener);
         AgentRunResult second = runTurn(client, config, "sequential-rate-limit-second", listener);
 
         // then
@@ -1020,7 +1012,7 @@ final class CodexAppServerClientTest {
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
         Instant laterPrimaryReset = now.plusSeconds(120);
         Instant earlierSecondaryReset = now.plusSeconds(60);
-        Path primaryRole = tempDir.resolve("concurrent-primary-role");
+        String firstSession = "concurrent-rate-limit-first";
         Path primaryReady = tempDir.resolve("concurrent-primary-ready");
         Path secondaryReady = tempDir.resolve("concurrent-secondary-ready");
         Path primaryObserved = tempDir.resolve("concurrent-primary-observed");
@@ -1028,14 +1020,7 @@ final class CodexAppServerClientTest {
         List<JsonNode> publishedRateLimits = new CopyOnWriteArrayList<>();
         Path appServer = writeUsageFixtureScript(
                 "concurrent-shared-rate-limit-app-server.sh",
-                """
-                if mkdir '__PRIMARY_ROLE__' 2>/dev/null; then
-                  session=primary
-                else
-                  session=secondary
-                fi
-                """
-                        .replace("__PRIMARY_ROLE__", primaryRole.toString()),
+                sessionRoleByWorkspace(firstSession, "primary", "secondary"),
                 """
                 if [ "$session" = primary ]; then
                   touch '__PRIMARY_READY__'
@@ -1082,7 +1067,7 @@ final class CodexAppServerClientTest {
                 markObserved(secondaryObserved);
             }
         };
-        Path firstWorkspace = workspace("concurrent-rate-limit-first");
+        Path firstWorkspace = workspace(firstSession);
         Path secondWorkspace = workspace("concurrent-rate-limit-second");
 
         // when
@@ -1090,10 +1075,10 @@ final class CodexAppServerClientTest {
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             var first = executor.submit(() -> client.runTurn(
                     config,
-                    TestCards.card("card-1", "TRELLO-concurrent-rate-limit-first", "Ready for Codex"),
+                    TestCards.card("card-1", "TRELLO-" + firstSession, "Ready for Codex"),
                     firstWorkspace,
                     "Run the concurrent fixture.",
-                    "worker-concurrent-rate-limit-first",
+                    "worker-" + firstSession,
                     listener));
             var second = executor.submit(() -> client.runTurn(
                     config,
@@ -1126,18 +1111,12 @@ final class CodexAppServerClientTest {
         // given
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
         Instant reset = now.plusSeconds(120);
-        Path rateLimitRole = tempDir.resolve("inflight-rate-limit-role");
+        String rateLimitSession = "inflight-rate-limit-update";
+        String usageSession = "inflight-usage-limit";
         Path acceptanceEntered = tempDir.resolve("inflight-rate-limit-acceptance-entered");
         Path appServer = writeUsageFixtureScript(
                 "inflight-accepted-rate-limit-app-server.sh",
-                """
-                if mkdir '__RATE_LIMIT_ROLE__' 2>/dev/null; then
-                  session=rate-limit
-                else
-                  session=usage
-                fi
-                """
-                        .replace("__RATE_LIMIT_ROLE__", rateLimitRole.toString()),
+                sessionRoleByWorkspace(rateLimitSession, "rate-limit", "usage"),
                 """
                 if [ "$session" = rate-limit ]; then
                   echo '{"method":"account/rateLimits/updated","params":{"rateLimits":{"primary":{"usedPercent":100,"resetsAt":__RESET__}}}}'
@@ -1160,12 +1139,10 @@ final class CodexAppServerClientTest {
                 json, new TrelloHandoffToolHandler(json, new TrelloClient(json)), Clock.fixed(now, ZoneOffset.UTC));
         var releaseAcceptance = new CountDownLatch(1);
         var usageFailurePublished = new CountDownLatch(1);
-        var usageWorker = new AtomicReference<String>();
         AgentEventListener listener = new AgentEventListener() {
             @Override
             public void onEvent(AgentEvent event) {
                 if (isTypedUsageFailure(event)) {
-                    usageWorker.set(event.workerIdentity());
                     usageFailurePublished.countDown();
                 }
             }
@@ -1189,35 +1166,33 @@ final class CodexAppServerClientTest {
         };
 
         // when
-        List<AgentRunResult> results;
+        AgentRunResult rateLimitRun;
+        AgentRunResult usageRun;
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            Future<AgentRunResult> first =
-                    executor.submit(() -> runTurn(client, config, "inflight-rate-limit-first", listener));
-            Future<AgentRunResult> second =
-                    executor.submit(() -> runTurn(client, config, "inflight-rate-limit-second", listener));
+            Future<AgentRunResult> rateLimitFuture =
+                    executor.submit(() -> runTurn(client, config, rateLimitSession, listener));
+            Future<AgentRunResult> usageFuture = executor.submit(() -> runTurn(client, config, usageSession, listener));
             try {
                 assertThat(usageFailurePublished.await(5, TimeUnit.SECONDS))
                         .as("the usage-limit event is published within 5 seconds")
                         .isTrue();
-                Future<AgentRunResult> usageResult = usageWorker.get().endsWith("first") ? first : second;
-                assertThatThrownBy(() -> usageResult.get(500, TimeUnit.MILLISECONDS))
+                assertThatThrownBy(() -> usageFuture.get(500, TimeUnit.MILLISECONDS))
                         .as("the usage-limit run remains incomplete while event acceptance is in flight")
                         .isInstanceOf(TimeoutException.class);
             } finally {
                 releaseAcceptance.countDown();
             }
-            results = List.of(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS));
+            rateLimitRun = rateLimitFuture.get(10, TimeUnit.SECONDS);
+            usageRun = usageFuture.get(10, TimeUnit.SECONDS);
         }
 
         // then
-        AgentRunResult usageLimit = results.stream()
-                .filter(result -> result.failureCategory() == AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT)
-                .findFirst()
-                .orElseThrow();
+        assertThat(rateLimitRun).isEqualTo(AgentRunResult.ok());
+        assertThat(usageRun.failureCategory()).isEqualTo(AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT);
         if (accepted) {
-            assertThat(usageLimit.retryNotBefore()).hasValue(reset);
+            assertThat(usageRun.retryNotBefore()).hasValue(reset);
         } else {
-            assertThat(usageLimit.retryNotBefore()).isEmpty();
+            assertThat(usageRun.retryNotBefore()).isEmpty();
         }
     }
 
@@ -1393,6 +1368,26 @@ final class CodexAppServerClientTest {
         return event.event().equals("turn/completed")
                 && event.payload() != null
                 && event.payload().at("/turn/error/codexErrorInfo").asText().equals("usageLimitExceeded");
+    }
+
+    /// Shell setup that sets `session` from the fixture process's working directory: `role` for the workspace of
+    /// `workspaceIdentifier`, `otherRole` for any other. The test picks each session's workspace, so concurrent
+    /// sessions cannot both claim one role. A `mkdir` lock cannot promise that, because some `mkdir` builds report
+    /// success when `mkdir(2)` fails but another process has created the directory by then.
+    private String sessionRoleByWorkspace(String workspaceIdentifier, String role, String otherRole)
+            throws IOException {
+        return """
+                if [ "${PWD##*/}" = '__ROLE_WORKSPACE__' ]; then
+                  session=__MATCHING_ROLE__
+                else
+                  session=__OTHER_ROLE__
+                fi
+                """
+                .replace(
+                        "__ROLE_WORKSPACE__",
+                        workspace(workspaceIdentifier).getFileName().toString())
+                .replace("__MATCHING_ROLE__", role)
+                .replace("__OTHER_ROLE__", otherRole);
     }
 
     private Path writeRateLimitNotificationScript(String fileName, String notifications) throws Exception {
