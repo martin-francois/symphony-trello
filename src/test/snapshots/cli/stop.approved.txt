@@ -1,0 +1,4 @@
+exitCode: 0
+--- stdout ---
+Stopped Symphony for Trello for "Snapshot Queue"
+--- stderr ---

@@ -156,6 +156,17 @@
       "datasourceTemplate": "custom.oss-fuzz-clusterfuzzlite-run-fuzzers",
       "versioningTemplate": "docker",
       "description": "The oss-fuzz-clusterfuzzlite-run-fuzzers feed offers the newest v1 build pushed at least seven days ago as release v1, so Renovate replaces only the digest and keeps the v1 tag. See ADR 0126."
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^scripts/snapshot-tests-docker\\.sh$/"
+      ],
+      "matchStrings": [
+        "docker\\.io/library/(?<depName>maven):(?<currentValue>\\d+\\.\\d+\\.\\d+-eclipse-temurin-\\d+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
     }
   ],
   "customDatasources": {

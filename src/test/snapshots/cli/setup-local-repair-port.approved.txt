@@ -1,0 +1,12 @@
+exitCode: 0
+--- stdout ---
+Symphony for Trello setup
+
+Checking prerequisites...
+  OK      Git
+  OK      Java 25+ JDK
+  OK      Codex CLI
+  OK      Codex CLI authenticated
+  OPTIONAL GitHub CLI authenticated
+  OK      No port repair needed. "Snapshot Queue" is already configured for an available port: http://127.0.0.1:<WORKER_PORT>
+--- stderr ---

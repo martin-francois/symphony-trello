@@ -114,7 +114,7 @@ final class LocalWorkerManagerTestFixture {
         stubManagedPort(board);
         when(healthChecker.waitForSameWorkflow(eq(board), eq(board.serverPort()), any()))
                 .thenReturn(stopped(board));
-        when(platform.stop(pid, Duration.ofSeconds(15), Duration.ofSeconds(5))).thenReturn(true);
+        stubGracefulStop(pid);
     }
 
     void stubStartedWorkerHealth(ConnectedBoard board, long pid, BoardHealth health) throws Exception {
@@ -122,7 +122,7 @@ final class LocalWorkerManagerTestFixture {
         stubManagedPort(board);
         when(healthChecker.waitForSameWorkflow(eq(board), eq(board.serverPort()), any()))
                 .thenReturn(health);
-        when(platform.stop(pid, Duration.ofSeconds(15), Duration.ofSeconds(5))).thenReturn(true);
+        stubGracefulStop(pid);
     }
 
     void stubStartedWorkerProcessValidation(ConnectedBoard board, long pid, boolean alive, boolean managed)
@@ -141,6 +141,15 @@ final class LocalWorkerManagerTestFixture {
         writeManagedPid(board, pid);
         when(platform.isAlive(pid)).thenReturn(true);
         when(platform.isManaged(pid, paths.appHome(), board.workflowPath())).thenReturn(true);
+    }
+
+    private void stubGracefulStop(long pid) throws Exception {
+        when(platform.stop(pid, Duration.ofSeconds(15), Duration.ofSeconds(5))).thenReturn(true);
+    }
+
+    void stubStoppableManagedPid(ConnectedBoard board, long pid) throws Exception {
+        stubManagedPid(board, pid);
+        stubGracefulStop(pid);
     }
 
     void stubManagedPidWithHealth(ConnectedBoard board, long pid, BoardHealth health) throws Exception {

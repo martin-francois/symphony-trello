@@ -1,0 +1,4 @@
+exitCode: 0
+--- stdout ---
+running "Snapshot Queue" pid=4242 http://127.0.0.1:18080
+--- stderr ---

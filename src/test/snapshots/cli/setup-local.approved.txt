@@ -1,0 +1,60 @@
+exitCode: 0
+--- stdout ---
+Symphony for Trello setup
+
+Checking prerequisites...
+  OK      Git
+  OK      Java 25+ JDK
+  OK      Codex CLI
+  OK      Codex CLI authenticated
+  OPTIONAL GitHub CLI authenticated
+
+Validating Trello...
+  OK  Connected to Trello as "Alex Example"
+  OK  Trello Workspace: "Engineering"
+
+GitHub integration
+  OK  GitHub integration skipped
+  symphony-trello setup-local configure-github
+  curl -fsSL https://symphony-trello.fmartin.ch/install.sh | bash
+
+Saving Trello credentials...
+  OK  Credentials saved: <TEMP>/config/.env
+  OK  Trello API key: sent***************************************
+  OK  Trello token: sent*****************************************
+
+Trello board
+  OK  Board connected: "Snapshot Queue"
+  OK  Board lists: "Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Done"
+  OK  Workflow written: <TEMP>/config/WORKFLOW.md
+  OK  Repository clone URL not set; this workflow remains repository-general.
+      To add or change it later, edit repository.default_url in:
+        <TEMP>/config/WORKFLOW.md
+  OK  Local server port selected for "Snapshot Queue": 18080
+
+Workspace access
+This controls which files/folders sandboxed card runs may use.
+Codex execution sandboxing is configured separately.
+Cards run in per-card workspaces under:
+  <TEMP>/workspaces
+  OK  Additional read/write paths allowed: 0
+
+Codex execution
+  OK  Codex sandbox: workspace-limited
+
+Starting Symphony...
+  OK  Symphony is connected to "Snapshot Queue"
+
+Board:
+  https://trello.com/b/abc123/board
+
+You're good to go - your Trello board is now a queue for Codex work.
+Connected board: "Snapshot Queue"
+Workflow: <TEMP>/config/WORKFLOW.md
+
+Create a Trello card with a clear task and move it to this workflow's configured queue list.
+
+Useful commands:
+  symphony-trello status
+  symphony-trello logs --workflow '<TEMP>/config/WORKFLOW.md'
+--- stderr ---

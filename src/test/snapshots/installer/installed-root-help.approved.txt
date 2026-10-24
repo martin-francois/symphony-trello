@@ -1,0 +1,18 @@
+exitCode: 0
+--- stdout ---
+Usage: symphony-trello [-hV] [COMMAND]
+Set up and run Symphony for Trello.
+  -h, --help      Show this help message and exit.
+  -V, --version   Print version information and exit.
+Commands:
+  new-board        Create the recommended Trello board and workflow.
+  import-board     Create a workflow for an existing Trello board.
+  list-workspaces  List Trello Workspaces visible to the token.
+  start            Start managed local Symphony workers.
+  stop             Stop managed local Symphony workers.
+  status           Show the current runtime state of selected Symphony
+                     workflows.
+  logs             Show managed local Symphony worker logs.
+  diagnostics      Print sanitized diagnostics for issue reports.
+  setup-local      Set up local Trello-driven Codex automation.
+--- stderr ---
