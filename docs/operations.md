@@ -243,7 +243,8 @@ After a poll that got a Trello `429` response, the worker doubles its effective 
 30 seconds. After 60 seconds without a `429`, it halves the interval again, step by step, until it
 is back at `polling.interval_ms`. If Trello sent `Retry-After`, the next poll also waits until that
 time has passed, for at most 30 seconds. Every wait gets up to 10 percent random jitter on top, so
-workers that share a token do not poll at the same moment. A manual refresh still polls at once.
+workers that share a token do not poll at the same moment. At the 30-second limit, a wait can
+therefore reach 33 seconds. A manual refresh still polls at once.
 
 The status page shows the slowdown, for example `Polling: configured 5s, currently 20s because
 Trello asked Symphony to slow down.` The `polling` object in `/api/v1/state` has the same values,
