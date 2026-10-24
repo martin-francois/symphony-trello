@@ -144,9 +144,10 @@ portal, `FULL` lets JReleaser publish automatically.
 ### Confirmation
 
 * `MavenCentralPublicationTest` checks the job order and gate, the environment and permissions, that
-  only the deploy step gets secrets, that the release job still builds and attests its own assets,
-  that JReleaser skips tags and GitHub Releases and configures no release files or checksums, and
-  that the POM metadata, sources jar, and Javadoc jar are present.
+  only the deploy step gets secrets, that the release job never runs the Maven Central steps, that
+  JReleaser skips tags and GitHub Releases and configures nothing besides signing, release, and
+  deploy, and that the POM metadata, sources jar, Javadoc jar, and pinned deploy plugin are present.
+  It reads `pom.xml` as XML, so formatting changes do not affect it.
 * `scripts/maven-central-publication.test.ts` checks the Maven commands of both scripts, that the
   deploy script refuses any stage other than `UPLOAD` or `FULL`, and that Renovate does not
   automerge the deploy plugin or JReleaser.
@@ -245,6 +246,6 @@ A new workflow file starts when GitHub reports the published release.
 ## More Information
 
 * Owner setup and the switch between `UPLOAD` and `FULL` live in `CONTRIBUTING.md` under
-  "Maintainer Release Setup".
+  "Maven Central Publication".
 * Maven Central requires PGP signatures. They do not replace the Sigstore attestation for GitHub
   Release assets, which stays the installers' trust anchor.
