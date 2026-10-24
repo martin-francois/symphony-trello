@@ -3,11 +3,6 @@ import {existsSync, readFileSync, writeFileSync} from "node:fs";
 import {createServer, type IncomingMessage, type Server, type ServerResponse} from "node:http";
 import type {AddressInfo} from "node:net";
 
-/**
- * Stateful local stand-in for the Trello REST API subset that Symphony and the harness use. It lets
- * every Trello scenario run end to end without credentials. It is not a Trello emulator: anything it
- * does not model returns 404 and is recorded in `unsupportedRoutes` so a scenario can report the gap.
- */
 export interface FakeBoard {
   id: string;
   name: string;
@@ -126,6 +121,11 @@ interface Reply {
   body: unknown;
 }
 
+/**
+ * Stateful local stand-in for the Trello REST API subset that Symphony and the harness use. It lets
+ * every Trello scenario run end to end without credentials. It is not a Trello emulator: anything it
+ * does not model returns 404 and is recorded in `unsupportedRoutes` so a scenario can report the gap.
+ */
 export class FakeTrelloApi {
   readonly state: FakeTrelloState;
   private server: Server | null = null;
@@ -143,7 +143,8 @@ export class FakeTrelloApi {
 
   async start(port = 0): Promise<string> {
     const server = createServer((request, response) => {
-      void this.handle(request, response);
+      // A failure outside the reply path, such as a failed state write, must not end the harness.
+      this.handle(request, response).catch(() => response.destroy());
     });
     await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
     this.server = server;
@@ -168,24 +169,15 @@ export class FakeTrelloApi {
   }
 
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
-    const body = await readBody(request);
-    const url = new URL(request.url ?? "/", "http://127.0.0.1");
-    const query: Query = Object.fromEntries(url.searchParams.entries());
-    Object.assign(query, parseBody(body, request.headers["content-type"]));
-    const segments = url.pathname.split("/").filter((segment) => segment !== "").map(decodeURIComponent);
-    if (segments[0] === "1") {
-      segments.shift();
-    }
     const method = request.method ?? "GET";
+    let segments: string[] = [];
     let reply: Reply;
-    if (!this.authorized(request, query)) {
-      reply = {status: 401, body: "invalid key"};
-    } else {
-      try {
-        reply = this.route(method, segments, query);
-      } catch (error) {
-        reply = {status: 400, body: {message: error instanceof Error ? error.message : String(error)}};
-      }
+    try {
+      const parsed = await parseRequest(request);
+      segments = parsed.segments;
+      reply = this.authorized(request, parsed.query) ? this.route(method, segments, parsed.query) : {status: 401, body: "invalid key"};
+    } catch (error) {
+      reply = {status: 400, body: {message: error instanceof Error ? error.message : String(error)}};
     }
     this.state.requestCount += 1;
     if (reply.status === 404) {
@@ -706,6 +698,18 @@ function now(): string {
   return new Date().toISOString();
 }
 
+async function parseRequest(request: IncomingMessage): Promise<{segments: string[]; query: Query}> {
+  const body = await readBody(request);
+  const url = new URL(request.url ?? "/", "http://127.0.0.1");
+  const query: Query = Object.fromEntries(url.searchParams.entries());
+  Object.assign(query, parseBody(body, request.headers["content-type"]));
+  const segments = url.pathname.split("/").filter((segment) => segment !== "").map(decodeURIComponent);
+  if (segments[0] === "1") {
+    segments.shift();
+  }
+  return {segments, query};
+}
+
 async function readBody(request: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of request) {
@@ -719,7 +723,10 @@ function parseBody(body: string, contentType: string | undefined): Query {
     return {};
   }
   if (contentType?.includes("application/json")) {
-    const parsed = JSON.parse(body) as Record<string, unknown>;
+    const parsed: unknown = JSON.parse(body);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      throw new Error("a JSON request body must be an object");
+    }
     return Object.fromEntries(Object.entries(parsed).map(([key, value]) => [key, String(value)]));
   }
   return Object.fromEntries(new URLSearchParams(body).entries());
