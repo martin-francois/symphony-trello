@@ -45,6 +45,10 @@ final class CliValueNormalizer {
     }
 
     static String nullIfBlank(String value) {
-        return value == null || value.isBlank() ? null : value;
+        return blank(value) ? null : value;
+    }
+
+    static boolean blank(String value) {
+        return value == null || value.isBlank();
     }
 }

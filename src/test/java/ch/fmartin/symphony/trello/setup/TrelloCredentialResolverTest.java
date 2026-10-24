@@ -214,8 +214,9 @@ final class TrelloCredentialResolverTest {
     private Path credentialFile(Map<String, String> values) throws Exception {
         Path credentialFile = tempDir.resolve(".env");
         var content = new StringBuilder();
-        values.forEach(
-                (name, value) -> content.append(name).append('=').append(value).append('\n'));
+        for (Map.Entry<String, String> entry : values.entrySet()) {
+            content.append(entry.getKey()).append('=').append(entry.getValue()).append('\n');
+        }
         Files.writeString(credentialFile, content);
         return credentialFile;
     }

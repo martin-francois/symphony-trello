@@ -457,16 +457,24 @@ final class SetupDiagnosticReporter {
             String apiTokenName,
             TrelloCredentialSource apiTokenSource,
             Path dotenvPath) {
-        if (apiKeySource == TrelloCredentialSource.SHELL_ENVIRONMENT
-                && apiTokenSource == TrelloCredentialSource.SHELL_ENVIRONMENT) {
-            return "Check " + apiKeyName + " and " + apiTokenName
-                    + " from the shell environment. Shell variables take precedence over the .env file passed with --env.";
-        }
-        if (apiKeySource == TrelloCredentialSource.DOTENV_FILE
-                && apiTokenSource == TrelloCredentialSource.DOTENV_FILE) {
-            return "Check " + apiKeyName + " and " + apiTokenName + " in this .env credential file:\n  "
-                    + displayPath(dotenvPath);
-        }
+        return switch (TrelloCredentialSource.Pair.of(apiKeySource, apiTokenSource)) {
+            case SHELL_ENVIRONMENT ->
+                "Check " + apiKeyName + " and " + apiTokenName
+                        + " from the shell environment. Shell variables take precedence over the .env file passed with --env.";
+            case DOTENV_FILE ->
+                "Check " + apiKeyName + " and " + apiTokenName + " in this .env credential file:\n  "
+                        + displayPath(dotenvPath);
+            case MIXED ->
+                mixedTrelloAuthFailureHint(apiKeyName, apiKeySource, apiTokenName, apiTokenSource, dotenvPath);
+        };
+    }
+
+    private static String mixedTrelloAuthFailureHint(
+            String apiKeyName,
+            TrelloCredentialSource apiKeySource,
+            String apiTokenName,
+            TrelloCredentialSource apiTokenSource,
+            Path dotenvPath) {
         String hint = "Check these Trello credential sources:\n"
                 + credentialSourceLine(apiKeyName, "tracker.api_key", apiKeySource, dotenvPath) + "\n"
                 + credentialSourceLine(apiTokenName, "tracker.api_token", apiTokenSource, dotenvPath);

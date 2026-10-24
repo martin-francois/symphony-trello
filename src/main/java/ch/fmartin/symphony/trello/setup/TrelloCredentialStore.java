@@ -240,16 +240,12 @@ final class TrelloCredentialStore {
     }
 
     static String redact(String value) {
-        if (blank(value)) {
+        if (CliValueNormalizer.blank(value)) {
             return "";
         }
         if (value.length() <= 4) {
             return "****";
         }
         return value.substring(0, Math.min(4, value.length())) + "*".repeat(Math.max(4, value.length() - 4));
-    }
-
-    private static boolean blank(String value) {
-        return value == null || value.isBlank();
     }
 }

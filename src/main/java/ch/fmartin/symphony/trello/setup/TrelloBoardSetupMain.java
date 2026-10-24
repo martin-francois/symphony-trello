@@ -1154,6 +1154,9 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                     .resolveTrelloCredentials(Optional.ofNullable(key), Optional.ofNullable(token));
         }
 
+        /// A blank `--key` or `--token` counts as absent here even though the resolver lets it win.
+        /// It fails as a missing credential before anything is saved, so it gives no reason to use
+        /// the runtime credential file.
         boolean hasDirectCredentials() {
             return CliValueNormalizer.trimmedOrNull(key) != null || CliValueNormalizer.trimmedOrNull(token) != null;
         }

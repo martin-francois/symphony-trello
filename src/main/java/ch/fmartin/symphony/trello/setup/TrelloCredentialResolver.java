@@ -36,7 +36,8 @@ final class TrelloCredentialResolver {
 
     /// Resolves one variable without the credential-file check, for callers such as worker start
     /// that must report missing credentials before a reference-looking file value. A present
-    /// direct value wins even when blank, so `--key ""` never falls back to another source.
+    /// direct value wins even when blank, so `--key ""` never falls back to another source. Setup
+    /// then prompts for the value, and the CLI commands reject it as missing.
     CredentialValue resolve(String name, Optional<String> directValue) {
         return directValue
                 .map(value -> CredentialValue.directInput(name, value))
@@ -53,10 +54,12 @@ final class TrelloCredentialResolver {
     }
 
     private static Optional<String> nonBlank(@Nullable String value) {
-        return Optional.ofNullable(value).filter(text -> !text.isBlank());
+        return Optional.ofNullable(CliValueNormalizer.nullIfBlank(value));
     }
 
-    /// One resolved Trello credential. `name` is the environment variable it was looked up as. The
+    /// One resolved Trello credential. `name` is the environment variable that error messages and
+    /// remediation hints name: the variable it was looked up as, or for
+    /// [TrelloCredentialSource#WORKFLOW_CONFIG] the default variable, which was never read. The
     /// value is `null` for [TrelloCredentialSource#MISSING] and
     /// [TrelloCredentialSource#WORKFLOW_CONFIG].
     record CredentialValue(String name, @Nullable String value, TrelloCredentialSource source) {
@@ -79,7 +82,7 @@ final class TrelloCredentialResolver {
         }
 
         boolean blank() {
-            return value == null || value.isBlank();
+            return CliValueNormalizer.blank(value);
         }
 
         /// Credential file values are used literally and never expanded. A value that looks like an
@@ -133,15 +136,11 @@ final class TrelloCredentialResolver {
         }
 
         String sourceDescription(Path envPath) {
-            if (apiKeyValue.source() == TrelloCredentialSource.SHELL_ENVIRONMENT
-                    && apiTokenValue.source() == TrelloCredentialSource.SHELL_ENVIRONMENT) {
-                return "environment variables";
-            }
-            if (apiKeyValue.source() == TrelloCredentialSource.DOTENV_FILE
-                    && apiTokenValue.source() == TrelloCredentialSource.DOTENV_FILE) {
-                return envPath.toString();
-            }
-            return "environment variables and " + envPath;
+            return switch (TrelloCredentialSource.Pair.of(apiKeyValue.source(), apiTokenValue.source())) {
+                case SHELL_ENVIRONMENT -> "environment variables";
+                case DOTENV_FILE -> envPath.toString();
+                case MIXED -> "environment variables and " + envPath;
+            };
         }
     }
 }
