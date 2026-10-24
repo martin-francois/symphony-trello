@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -145,19 +146,36 @@ final class InstallerScriptTest {
                 .isEmpty();
     }
 
-    @Test
-    void fixtureTerminatesReplacementDescendantsSpawnedDuringTimeoutCleanup() throws Exception {
+    @CsvSource(
+            delimiter = '|',
+            textBlock =
+                    """
+                    root replaces its terminated child       | exec bash "$@"
+                    descendant replaces its terminated child | bash "$@" & wait
+                    """)
+    @ParameterizedTest(name = "{0}")
+    void fixtureStopsTimedOutProcessTreeBeforeItCanReplaceTerminatedDescendants(String scenario, String launcher)
+            throws Exception {
         // given
         assumeFalse(isWindows());
         assumeTrue(commandExists("bash"));
+        Path replacingScript = temporaryDirectory.resolve("replace-terminated-child.sh");
+        Files.writeString(
+                replacingScript,
+                """
+                trap 'sleep 60 & printf "%s" "$!" > "$2"' CHLD
+                sleep 60 &
+                printf '%s' "$!" > "$1"
+                wait
+                """);
         Path originalPid = temporaryDirectory.resolve("original.pid");
         Path replacementPid = temporaryDirectory.resolve("replacement.pid");
         var processBuilder = new ProcessBuilder(
                 "bash",
                 "-c",
-                "trap 'trap - CHLD; sleep 60 & printf '%s' \"$!\" > \"$2\"' CHLD; "
-                        + "sleep 60 & child=$!; printf '%s' \"$child\" > \"$1\"; wait \"$child\"; wait",
+                launcher,
                 "fixture-timeout",
+                replacingScript.toString(),
                 originalPid.toString(),
                 replacementPid.toString());
 
@@ -168,15 +186,47 @@ final class InstallerScriptTest {
 
         // then
         assertThat(originalPid).exists();
-        assertThat(replacementPid).exists();
         assertThat(ProcessHandle.of(Long.parseLong(Files.readString(originalPid)))
                         .filter(ProcessHandle::isAlive))
                 .as("original timed-out descendant process")
                 .isEmpty();
-        assertThat(ProcessHandle.of(Long.parseLong(Files.readString(replacementPid)))
-                        .filter(ProcessHandle::isAlive))
-                .as("replacement timed-out descendant process")
-                .isEmpty();
+        assertThat(replacementPid)
+                .as("the CHLD trap must not run, because the fixture stops the tree before it terminates any"
+                        + " process in it")
+                .doesNotExist();
+    }
+
+    @Test
+    void fixtureStopsEveryProcessInTheTreeBeforeTerminatingAny() throws Exception {
+        // given
+        assumeFalse(isWindows());
+        assumeTrue(commandExists("bash"));
+        Path grandchildPid = temporaryDirectory.resolve("grandchild.pid");
+        Process root = new ProcessBuilder(
+                        "bash",
+                        "-c",
+                        "bash -c 'sleep 60 & printf %s \"$!\" > \"$1\"; wait' child \"$1\" & wait",
+                        "root",
+                        grandchildPid.toString())
+                .start();
+        try {
+            waitForFile(grandchildPid);
+            List<ProcessHandle> tree = new ArrayList<>(root.descendants().toList());
+            tree.add(root.toHandle());
+
+            // when
+            stopProcessTree(root);
+
+            // then
+            assertThat(tree).as("root, child and grandchild").hasSize(3);
+            for (ProcessHandle process : tree) {
+                assertThat(processState(process.pid()))
+                        .as("ps state of pid %s right after the fixture stopped the tree", process.pid())
+                        .startsWith("T");
+            }
+        } finally {
+            terminateProcessTreeImmediately(root);
+        }
     }
 
     @ParameterizedTest(name = "{0} syntax")
@@ -8946,5 +8996,19 @@ final class InstallerScriptTest {
         private String expectedMessage() {
             return expectedMessages.getFirst();
         }
+    }
+
+    private static void waitForFile(Path file) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (!Files.exists(file) && System.nanoTime() < deadline) {
+            Thread.sleep(10);
+        }
+        assertThat(file).exists();
+    }
+
+    private static String processState(long pid) throws IOException, InterruptedException {
+        return run(Map.of(), "ps", "-o", "stat=", "-p", Long.toString(pid))
+                .output()
+                .strip();
     }
 }

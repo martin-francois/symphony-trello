@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.google.common.base.Splitter;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -13,10 +14,13 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -25,6 +29,10 @@ import java.util.stream.Stream;
 final class InstallerScriptFixture {
     private static final int PROCESS_DESCENDANT_DISCOVERY_MILLIS = 1_000;
     private static final int PROCESS_TERMINATION_SECONDS = 5;
+    private static final int PROCESS_STOP_SECONDS = 5;
+    private static final int PROCESS_STOP_POLL_MILLIS = 10;
+    private static final Splitter PS_LINES =
+            Splitter.onPattern("\\R").trimResults().omitEmptyStrings();
     private static final int TEMP_FILE_DELETION_SECONDS = 5;
     private static final String REPOSITORY_ENVIRONMENT_PREFIX = "SYMPHONY_";
     private static final Pattern POSIX_INSTALLER_DEFAULT_VERSION =
@@ -235,17 +243,13 @@ final class InstallerScriptFixture {
                 .toString();
     }
 
-    private static void terminateProcessTree(Process process) throws InterruptedException {
+    private static void terminateProcessTree(Process process) throws IOException, InterruptedException {
         Map<Long, ProcessHandle> observedDescendants = new LinkedHashMap<>();
-        long discoveryDeadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(PROCESS_DESCENDANT_DISCOVERY_MILLIS);
-        List<ProcessHandle> currentDescendants;
-        do {
-            currentDescendants = terminateCurrentDescendants(process, observedDescendants);
-            if (currentDescendants.isEmpty()) {
-                break;
-            }
-            pollDelayForBoundedProcessWait();
-        } while (process.isAlive() && System.nanoTime() < discoveryDeadline);
+        if (isWindows()) {
+            terminateDescendantsUntilNoneAppear(process, observedDescendants);
+        } else {
+            stopProcessTree(process);
+        }
         terminateCurrentDescendants(process, observedDescendants);
         process.destroyForcibly();
         for (ProcessHandle descendant : observedDescendants.values()) {
@@ -261,6 +265,94 @@ final class InstallerScriptFixture {
                 .isFalse();
     }
 
+    /// Sends SIGSTOP to the root and to every descendant before any of them is terminated, on Linux and
+    /// macOS. A running process can start a child between a descendant scan and its own termination,
+    /// for example from a `CHLD` trap that replaces a terminated child, and once that process dies the
+    /// kernel moves the new child out of the tree where no later scan finds it. A stopped process starts
+    /// no child and runs no trap. The fixture waits until `ps` reports each signalled process as stopped
+    /// before it scans again, because a process can still finish a fork after `kill` returns. The scan
+    /// after the last stop therefore sees every process the tree contains. See ADR 0129.
+    static void stopProcessTree(Process process) throws IOException, InterruptedException {
+        Set<Long> stoppedPids = new HashSet<>();
+        List<ProcessHandle> unstopped = List.of(process.toHandle());
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(PROCESS_STOP_SECONDS);
+        while (!unstopped.isEmpty() && System.nanoTime() < deadline) {
+            runProcessHelper(command(List.of("kill", "-s", "STOP"), pidArguments(unstopped)));
+            awaitStopped(unstopped, deadline);
+            for (ProcessHandle stopped : unstopped) {
+                stoppedPids.add(stopped.pid());
+            }
+            unstopped = new ArrayList<>();
+            for (ProcessHandle descendant : process.descendants().toList()) {
+                if (!stoppedPids.contains(descendant.pid())) {
+                    unstopped.add(descendant);
+                }
+            }
+        }
+    }
+
+    private static void awaitStopped(List<ProcessHandle> processes, long deadline)
+            throws IOException, InterruptedException {
+        String pids = String.join(",", pidArguments(processes));
+        while (!allListedProcessesStopped(runProcessHelper(List.of("ps", "-o", "stat=", "-p", pids)))
+                && System.nanoTime() < deadline) {
+            Thread.sleep(PROCESS_STOP_POLL_MILLIS);
+        }
+    }
+
+    /// `ps` prints no line for a process that exited and was reaped. `T` is a stopped process, `Z` one
+    /// that exited while its stopped parent cannot reap it; neither can start a child.
+    private static boolean allListedProcessesStopped(String psStates) {
+        for (String state : PS_LINES.split(psStates)) {
+            if (!state.startsWith("T") && !state.startsWith("Z")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static String[] pidArguments(List<ProcessHandle> processes) {
+        String[] pids = new String[processes.size()];
+        for (int index = 0; index < pids.length; index++) {
+            pids[index] = Long.toString(processes.get(index).pid());
+        }
+        return pids;
+    }
+
+    /// Runs `kill` or `ps` and returns its standard output. Both exit non-zero when a listed process
+    /// already exited, and still handle the others, so the exit code is ignored.
+    private static String runProcessHelper(List<String> command) throws IOException, InterruptedException {
+        Path output = Files.createTempFile("symphony-trello-process-helper-", ".log");
+        try {
+            Process helper = new ProcessBuilder(command)
+                    .redirectOutput(output.toFile())
+                    .redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .start();
+            if (!helper.waitFor(Duration.ofSeconds(PROCESS_STOP_SECONDS))) {
+                helper.destroyForcibly();
+            }
+            return Files.readString(output);
+        } finally {
+            Files.deleteIfExists(output);
+        }
+    }
+
+    /// Windows offers no stop signal, so this best-effort loop terminates descendants until a scan finds
+    /// none or the discovery window closes. A process that starts a child after the last scan can still
+    /// leave that child running.
+    private static void terminateDescendantsUntilNoneAppear(
+            Process process, Map<Long, ProcessHandle> observedDescendants) throws InterruptedException {
+        long discoveryDeadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(PROCESS_DESCENDANT_DISCOVERY_MILLIS);
+        List<ProcessHandle> currentDescendants;
+        do {
+            currentDescendants = terminateCurrentDescendants(process, observedDescendants);
+            if (currentDescendants.isEmpty()) {
+                break;
+            }
+            pollDelayForBoundedProcessWait();
+        } while (process.isAlive() && System.nanoTime() < discoveryDeadline);
+    }
+
     private static List<ProcessHandle> terminateCurrentDescendants(
             Process process, Map<Long, ProcessHandle> observedDescendants) {
         List<ProcessHandle> currentDescendants = process.descendants().toList();
@@ -271,7 +363,7 @@ final class InstallerScriptFixture {
         return currentDescendants;
     }
 
-    private static void terminateProcessTreeImmediately(Process process) {
+    static void terminateProcessTreeImmediately(Process process) {
         List<ProcessHandle> descendants = process.descendants().toList();
         descendants.reversed().forEach(ProcessHandle::destroyForcibly);
         process.destroyForcibly();
