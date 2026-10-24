@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.fmartin.symphony.trello.testsupport.CapturedStreams;
 import com.google.common.base.Splitter;
 import java.io.File;
 import java.io.IOException;
@@ -499,12 +500,17 @@ final class InstallerScriptFixture {
     }
 
     static String installerDefaultRef() throws IOException {
+        return "v" + installerDefaultVersion();
+    }
+
+    /// The release version `install.sh` installs by default; Release Please bumps it every release.
+    static String installerDefaultVersion() throws IOException {
         String installScript = Files.readString(Path.of("install.sh"));
         return POSIX_INSTALLER_DEFAULT_VERSION
                 .matcher(installScript)
                 .results()
                 .findAny()
-                .map(match -> "v" + match.group(1))
+                .map(match -> match.group(1))
                 .orElseThrow(() -> new IllegalStateException("install.sh is missing the Release Please default ref"));
     }
 
@@ -1170,7 +1176,7 @@ final class InstallerScriptFixture {
     }
 
     /// A child process whose standard output and standard error were captured separately.
-    record ProcessResult(int exitCode, String stdout, String stderr) {
+    record ProcessResult(int exitCode, String stdout, String stderr) implements CapturedStreams {
         /// Standard output followed by standard error, for fragment assertions that do not depend
         /// on stream placement. Use [#stdout()] and [#stderr()] when the stream matters.
         String output() {

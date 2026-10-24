@@ -127,12 +127,11 @@ public final class TranscriptNormalizer {
 
         public TranscriptNormalizer build() {
             // Longer values first, so a nested path is replaced before the root that contains it.
-            List<Replacement> ordered = placeholdersByValue.entrySet().stream()
-                    .map(entry -> new Replacement(entry.getKey(), entry.getValue()))
-                    .sorted(Comparator.comparingInt((Replacement replacement) ->
-                                    replacement.value().length())
-                            .reversed())
-                    .toList();
+            List<Replacement> ordered = new ArrayList<>(placeholdersByValue.size());
+            placeholdersByValue.forEach((value, placeholder) -> ordered.add(new Replacement(value, placeholder)));
+            ordered.sort(Comparator.comparingInt(
+                            (Replacement replacement) -> replacement.value().length())
+                    .reversed());
             return new TranscriptNormalizer(ordered, leakMarkers);
         }
     }

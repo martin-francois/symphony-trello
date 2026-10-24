@@ -33,8 +33,6 @@ import org.junit.jupiter.api.condition.OS;
                 "The baselines record POSIX paths and quoting; run scripts/snapshot-tests-docker.sh on Windows")
 final class TrelloBoardSetupMainSnapshotTest extends LocalSetupFixtureSupport {
     private static final TerminalSnapshots SNAPSHOTS = TerminalSnapshots.repository();
-    private static final String BOARD_URL = "https://trello.com/b/abc123/snapshot-queue";
-    private static final String BOARD_NAME = "Snapshot Queue";
     private static final int FIXED_SERVER_PORT = 18_080;
     private static final long FIXED_WORKER_PID = 4_242;
 
@@ -86,7 +84,7 @@ final class TrelloBoardSetupMainSnapshotTest extends LocalSetupFixtureSupport {
         connectBoard(workerPort);
 
         // when
-        CliRunResult result = runCli("setup-local", "repair-port", "--board", BOARD_NAME);
+        CliRunResult result = runCli("setup-local", "repair-port", "--board", SnapshotBoard.NAME);
 
         // then
         SNAPSHOTS.verify("cli/setup-local-repair-port", result, normalizerWithWorkerPort(workerPort));
@@ -110,7 +108,7 @@ final class TrelloBoardSetupMainSnapshotTest extends LocalSetupFixtureSupport {
                 "--token",
                 TRELLO_API_TOKEN,
                 "--board",
-                BOARD_URL,
+                SnapshotBoard.URL,
                 "configure-github");
 
         // then
@@ -121,11 +119,11 @@ final class TrelloBoardSetupMainSnapshotTest extends LocalSetupFixtureSupport {
     @Test
     void newBoard() throws Exception {
         // given
-        Path workflow = tempDir.resolve("new-board").resolve("WORKFLOW.snapshot-queue.md");
-        Files.createDirectories(workflow.getParent());
+        Path workflow = workflowPath("new-board");
 
         // when
-        CliRunResult result = runCli(
+        CliRunResult result = runCli(withWorkflowOutput(
+                workflow,
                 "new-board",
                 "--endpoint",
                 endpoint(),
@@ -134,19 +132,9 @@ final class TrelloBoardSetupMainSnapshotTest extends LocalSetupFixtureSupport {
                 "--token",
                 TRELLO_API_TOKEN,
                 "--name",
-                BOARD_NAME,
+                SnapshotBoard.NAME,
                 "--repository-url",
-                HTTPS,
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                workflow.resolveSibling(ConnectedBoardManifest.FILE_NAME).toString(),
-                "--env",
-                workflow.resolveSibling(".env").toString(),
-                "--workspace-root",
-                tempDir.resolve("workspaces").toString(),
-                "--server-port",
-                String.valueOf(FIXED_SERVER_PORT));
+                HTTPS));
 
         // then
         SNAPSHOTS.verify("cli/new-board", result, normalizer());
@@ -157,11 +145,11 @@ final class TrelloBoardSetupMainSnapshotTest extends LocalSetupFixtureSupport {
     @Test
     void importBoard() throws Exception {
         // given
-        Path workflow = tempDir.resolve("import-board").resolve("WORKFLOW.snapshot-queue.md");
-        Files.createDirectories(workflow.getParent());
+        Path workflow = workflowPath("import-board");
 
         // when
-        CliRunResult result = runCli(
+        CliRunResult result = runCli(withWorkflowOutput(
+                workflow,
                 "import-board",
                 "--endpoint",
                 endpoint(),
@@ -170,7 +158,7 @@ final class TrelloBoardSetupMainSnapshotTest extends LocalSetupFixtureSupport {
                 "--token",
                 TRELLO_API_TOKEN,
                 "--board",
-                BOARD_URL,
+                SnapshotBoard.URL,
                 "--active",
                 "Ready for Codex",
                 "--in-progress",
@@ -178,17 +166,7 @@ final class TrelloBoardSetupMainSnapshotTest extends LocalSetupFixtureSupport {
                 "--terminal",
                 "Done",
                 "--repository-url",
-                HTTPS,
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                workflow.resolveSibling(ConnectedBoardManifest.FILE_NAME).toString(),
-                "--env",
-                workflow.resolveSibling(".env").toString(),
-                "--workspace-root",
-                tempDir.resolve("workspaces").toString(),
-                "--server-port",
-                String.valueOf(FIXED_SERVER_PORT));
+                HTTPS));
 
         // then
         SNAPSHOTS.verify("cli/import-board", result, normalizer());
@@ -271,8 +249,9 @@ final class TrelloBoardSetupMainSnapshotTest extends LocalSetupFixtureSupport {
                 worker.managedFiles().stdoutLog(),
                 """
                 2026-01-01 00:00:00 INFO Symphony for Trello started
-                2026-01-01 00:00:01 INFO Polling board "Snapshot Queue"
-                """);
+                2026-01-01 00:00:01 INFO Polling board "%s"
+                """
+                        .formatted(SnapshotBoard.NAME));
 
         // when
         CliRunResult result = runWorkerCommand(worker, "logs");
@@ -300,7 +279,7 @@ final class TrelloBoardSetupMainSnapshotTest extends LocalSetupFixtureSupport {
 
     private WorkerScenario connectedWorker() throws Exception {
         var fixture = new LocalWorkerManagerTestFixture(tempDir.resolve("worker"));
-        ConnectedBoard board = fixture.connectedBoard("board-1", BOARD_NAME, "snapshot-queue");
+        ConnectedBoard board = fixture.connectedBoard("board-1", SnapshotBoard.NAME, SnapshotBoard.SLUG);
         fixture.save(board);
         return new WorkerScenario(fixture, board);
     }
@@ -340,7 +319,7 @@ final class TrelloBoardSetupMainSnapshotTest extends LocalSetupFixtureSupport {
             "--token",
             TRELLO_API_TOKEN,
             "--board-name",
-            BOARD_NAME,
+            SnapshotBoard.NAME,
             "--workflow",
             fixture.workflowPath().toString(),
             "--env",
@@ -351,6 +330,31 @@ final class TrelloBoardSetupMainSnapshotTest extends LocalSetupFixtureSupport {
             String.valueOf(serverPort),
             "--no-github"
         };
+    }
+
+    /// Returns where a board command in `directory` writes its workflow, with the directory created.
+    private Path workflowPath(String directory) throws Exception {
+        Path workflow = tempDir.resolve(directory).resolve(SnapshotBoard.WORKFLOW_FILE_NAME);
+        Files.createDirectories(workflow.getParent());
+        return workflow;
+    }
+
+    /// Appends the arguments that place the board's workflow, manifest, env file, and workspaces
+    /// next to `workflow` and pin the HTTP status port, shared by `new-board` and `import-board`.
+    private String[] withWorkflowOutput(Path workflow, String... commandArguments) {
+        List<String> arguments = new ArrayList<>(List.of(commandArguments));
+        arguments.addAll(List.of(
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                workflow.resolveSibling(ConnectedBoardManifest.FILE_NAME).toString(),
+                "--env",
+                workflow.resolveSibling(".env").toString(),
+                "--workspace-root",
+                tempDir.resolve("workspaces").toString(),
+                "--server-port",
+                String.valueOf(FIXED_SERVER_PORT)));
+        return arguments.toArray(String[]::new);
     }
 
     private void connectBoard(int workerPort) {

@@ -71,7 +71,7 @@ public final class TerminalSnapshots {
         verifyRendered(scenario, TerminalTranscript.ofStreams(exitCode, stdout, stderr), normalizer);
     }
 
-    public void verify(String scenario, CliRunResult result, TranscriptNormalizer normalizer) {
+    public void verify(String scenario, CapturedStreams result, TranscriptNormalizer normalizer) {
         verifyStreams(scenario, result.exitCode(), result.stdout(), result.stderr(), normalizer);
     }
 

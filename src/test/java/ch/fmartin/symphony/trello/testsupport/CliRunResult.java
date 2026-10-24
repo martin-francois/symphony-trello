@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.List;
 import java.util.Objects;
 
-public record CliRunResult(int exitCode, String stdout, String stderr) {
+public record CliRunResult(int exitCode, String stdout, String stderr) implements CapturedStreams {
     public CliRunResult assertSuccess() {
         assertThat(exitCode).as("stdout:%n%s%nstderr:%n%s", stdout, stderr).isZero();
         assertThat(stderr).isEmpty();
