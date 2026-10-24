@@ -77,10 +77,10 @@ parallel safety. Live end-to-end and deployed-verification rules live in
   If a test truly must coordinate access to a shared resource, keep the lock narrow and explain why
   the resource cannot be isolated; do not make broad test classes or whole finding families serial
   only to hide parallel-safety problems.
-- In tests, prefer waiting for an observable condition with a bounded helper such as `waitUntil` or
-  Awaitility instead of using a fixed `Thread.sleep`. A sleep may remain only as the poll interval
-  inside a bounded wait or retry helper, or when sleeping is the behavior under test. For
-  intentionally blocking fakes, prefer an interruptible blocking primitive such as
+- In tests, prefer waiting for an observable condition with a bounded helper such as
+  `testsupport.BoundedWait.until` instead of using a fixed `Thread.sleep`. A sleep may remain only
+  as the poll interval inside a bounded wait or retry helper, or when sleeping is the behavior under
+  test. For intentionally blocking fakes, prefer an interruptible blocking primitive such as
   `CountDownLatch.await(...)` with a timeout, and make the helper name or test setup explain why a
   condition wait would not express the test better.
 - Every added or changed concurrency mechanism—including `synchronized`, locks, atomics, concurrent
