@@ -3587,8 +3587,20 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
   launch config; old-target retries retire instead of becoming attempts for same-ID new-target cards
 - Stall detection kills stalled sessions and schedules retry
 - Slot exhaustion requeues retries with explicit error reason
+- Orchestrator operations are serialized: a retry dispatch that races a poll tick cannot exceed
+  `agent.max_concurrent_agents`, a worker exit waits for an in-flight operation before its tracker
+  I/O, and stop waits for an in-flight tick and cancels the workers that tick dispatched
+- If a refresh trigger is implemented, a refresh that races tick completion runs as the next tick
+  instead of waiting for the polling interval, and a refresh that races stop is a no-op that never
+  schedules work after shutdown
 - If a snapshot API is implemented, it returns running rows, retry rows, token totals, and rate
   limits
+- If a snapshot API is implemented, snapshot and card-detail reads do not wait for an in-flight
+  orchestrator operation and show the state as of one point of that operation. These changes are
+  visible before the tracker, workspace, or worker call that follows them in the same operation:
+  the selected board at startup, the stopped state at stop, the new routing after a reload, a
+  dispatched card, a refreshed or terminated running card, a worker exit, a scheduled or fired
+  retry, and an installed, rearmed, or cleared dispatch pause
 - If a snapshot API is implemented, timeout/unavailable cases are surfaced
 
 ### 17.5 Coding-Agent App-Server Client
