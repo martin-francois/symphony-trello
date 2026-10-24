@@ -68,6 +68,12 @@ public final class SymphonyCommentFooter {
         return parse(text).map(footer -> withoutTrailingFooters(footer.body())).orElse(text);
     }
 
+    /// Tells whether `text` holds nothing but whitespace and canonical footers, which no tool may
+    /// post because the comment would say nothing besides who wrote it.
+    public static boolean isFooterOnly(String text) {
+        return withoutTrailingFooters(text.strip()).isBlank();
+    }
+
     /// Compares two comment texts as their owning path sees them: footers at the end do not count,
     /// so a legacy comment without a footer equals the same content with one.
     public static boolean sameBody(String left, @Nullable String right) {
