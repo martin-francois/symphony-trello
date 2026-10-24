@@ -161,7 +161,10 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Select one fuzz target and its budget
         id: target
-        run: scripts/select-clusterfuzzlite-target "${{ matrix.target }}" "${{ inputs.fuzz_seconds }}"
+        env:
+          CFL_TARGET: ${{ matrix.target }}
+          CFL_FULL_SHARE_SECONDS: ${{ inputs.fuzz_seconds }}
+        run: scripts/select-clusterfuzzlite-target "$CFL_TARGET" "$CFL_FULL_SHARE_SECONDS"
       - name: Run batch fuzzing
         id: fuzz
         continue-on-error: true
