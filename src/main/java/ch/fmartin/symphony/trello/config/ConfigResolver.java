@@ -30,7 +30,8 @@ public class ConfigResolver {
     private static final String FILE_SECRET_PREFIX = "file:";
     private static final int MAX_SECRET_BYTES = 64 * 1024;
     static final String NO_PR_LABEL_TYPE_MESSAGE =
-            "github.no_pr_label must be a Trello label name, or \"\" to disable the label";
+            EffectiveConfig.GitHubConfig.qualifiedKey(EffectiveConfig.GitHubConfig.NO_PR_LABEL_KEY)
+                    + " must be a Trello label name, or \"\" to disable the label";
 
     private final Function<String, Optional<String>> environmentResolver;
 
@@ -61,7 +62,7 @@ public class ConfigResolver {
         object(root, "polling");
         object(root, "server");
         Map<String, Object> trelloTools = object(root, "trello_tools");
-        EffectiveConfig.GitHubConfig github = gitHubConfig(object(root, "github"));
+        EffectiveConfig.GitHubConfig github = gitHubConfig(object(root, EffectiveConfig.GitHubConfig.SECTION_KEY));
         object(tracker, "priority_labels");
         object(agent, "max_concurrent_agents_by_state");
         TypedWorkflowConfig typedWorkflow = WorkflowConfigIngestion.collect(workflow, environmentResolver);
@@ -218,22 +219,25 @@ public class ConfigResolver {
     }
 
     private static EffectiveConfig.GitHubConfig gitHubConfig(Map<String, Object> github) {
-        Object configuredMode = github.get("pull_request_mode");
+        Object configuredMode = github.get(EffectiveConfig.GitHubConfig.PULL_REQUEST_MODE_KEY);
         PullRequestMode mode = configuredMode == null
                 ? EffectiveConfig.GitHubConfig.DEFAULTS.pullRequestMode()
                 : PullRequestMode.fromWorkflowValue(configuredMode.toString())
                         .orElseThrow(() -> new ConfigException(
                                 "config_value_error",
-                                "github.pull_request_mode must be " + PullRequestMode.workflowValueChoices()));
+                                EffectiveConfig.GitHubConfig.qualifiedKey(
+                                                EffectiveConfig.GitHubConfig.PULL_REQUEST_MODE_KEY)
+                                        + " must be "
+                                        + PullRequestMode.workflowValueChoices()));
         return new EffectiveConfig.GitHubConfig(mode, noPrLabel(github));
     }
 
     /// An omitted key keeps the default label; an explicit empty or null value disables the signal.
     private static @Nullable String noPrLabel(Map<String, Object> github) {
-        if (!github.containsKey("no_pr_label")) {
+        if (!github.containsKey(EffectiveConfig.GitHubConfig.NO_PR_LABEL_KEY)) {
             return EffectiveConfig.GitHubConfig.DEFAULTS.noPrLabel();
         }
-        Object configured = github.get("no_pr_label");
+        Object configured = github.get(EffectiveConfig.GitHubConfig.NO_PR_LABEL_KEY);
         if (configured == null) {
             return null;
         }
