@@ -131,10 +131,10 @@ After the period, three batches failed in `Build fuzzers` on 2026-09-10, 2026-09
 | Prompt rendering in `PromptRenderer` | Operator template plus card data | 0 of 4 | Deferred |
 | Status API in `StatusResource` | Local HTTP requests | 0 of 28 | Deferred |
 
-The ranking weighs three things: the uncovered branches the input can reach, what a defect there
-would cost, and how much harness the target needs. The handoff tools have the most branches and the
-highest defect value, but they come last because they need a recording fake, a new seam in
-`TrelloClient`, and a write-scope property before fuzzing finds anything.
+The order follows the target-selection rule in
+[ADR 0078](../adr/0078-github-actions-continuous-fuzzing.md#decision-outcome). The handoff tools have
+the most branches and the highest defect value, but they come last because they need a recording
+fake, a new seam in `TrelloClient`, and a write-scope property before fuzzing finds anything.
 
 1. Configuration resolution decides the Codex sandbox policy and secret references. It can extend
    `WorkflowLoaderFuzzer`, whose loader is saturated but whose corpus already holds valid front
