@@ -111,7 +111,8 @@ final class SetupLocalCommandFactory {
     }
 
     static void printExecutionFailure(PrintStream err, Exception exception, String errorCode) {
-        err.println("setup_failed code=%s message=%s".formatted(errorCode, exception.getMessage()));
+        err.println("setup_failed code=%s message=%s"
+                .formatted(errorCode, SetupFailureCauses.commandBoundaryMessage(exception)));
         SetupDiagnosticReporter.userActionHint(exception).ifPresent(hint -> err.println("Next step: " + hint));
     }
 
