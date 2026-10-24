@@ -56,15 +56,15 @@ for (const stage of [undefined, "", "PUBLISH", "upload"]) {
   });
 }
 
-test("Renovate leaves JReleaser updates for a maintainer's dry run", () => {
-  const renovate = JSON.parse(readFileSync(resolve("renovate.json"), "utf8")) as {
-    packageRules: Array<{ matchPackageNames?: string[]; automerge?: boolean }>;
-  };
+for (const packageName of ["org.apache.maven.plugins:maven-deploy-plugin", "org.jreleaser:jreleaser-maven-plugin"]) {
+  test(`Renovate leaves ${packageName} updates for a maintainer's dry run`, () => {
+    const renovate = JSON.parse(readFileSync(resolve("renovate.json"), "utf8")) as {
+      packageRules: Array<{ matchPackageNames?: string[]; automerge?: boolean }>;
+    };
 
-  const jreleaserRules = renovate.packageRules.filter((rule) =>
-    rule.matchPackageNames?.includes("org.jreleaser:jreleaser-maven-plugin"),
-  );
+    const matchingRules = renovate.packageRules.filter((rule) => rule.matchPackageNames?.includes(packageName));
 
-  assert.equal(jreleaserRules.length, 1);
-  assert.equal(jreleaserRules[0]?.automerge, false);
-});
+    assert.equal(matchingRules.length, 1);
+    assert.equal(matchingRules[0]?.automerge, false);
+  });
+}

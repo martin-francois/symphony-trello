@@ -313,11 +313,12 @@
       ]
     },
     {
-      "description": "JReleaser runs only in the release workflow's Maven Central job, which pull request CI does not run. A maintainer runs the JReleaser dry run before merging an update.",
+      "description": "The deploy plugin and JReleaser run only in the release workflow's Maven Central job, which pull request CI does not run. A maintainer runs the JReleaser dry run before merging an update.",
       "matchDatasources": [
         "maven"
       ],
       "matchPackageNames": [
+        "org.apache.maven.plugins:maven-deploy-plugin",
         "org.jreleaser:jreleaser-maven-plugin"
       ],
       "groupName": null,
@@ -326,7 +327,7 @@
         "jreleaser"
       ],
       "prBodyNotes": [
-        "Before merge, run the JReleaser dry run from CONTRIBUTING.md, section \"Maven Central Publication\", and check that it signs the staged files and writes the bundle."
+        "Before merge, run the JReleaser dry run from CONTRIBUTING.md, section \"Maven Central Publication\", and check that it stages the jars and POM, signs them, and writes the bundle."
       ]
     },
     {

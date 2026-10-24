@@ -48,6 +48,7 @@
     <pebble.version>4.1.2</pebble.version>
     <maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
     <maven-dependency-plugin.version>3.11.0</maven-dependency-plugin.version>
+    <maven-deploy-plugin.version>3.2.0</maven-deploy-plugin.version>
     <maven-failsafe-plugin.version>${surefire.version}</maven-failsafe-plugin.version>
     <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
     <maven.plugins.group-id>org.apache.maven.plugins</maven.plugins.group-id>
@@ -603,6 +604,11 @@
       </properties>
       <build>
         <plugins>
+          <plugin>
+            <groupId>${maven.plugins.group-id}</groupId>
+            <artifactId>maven-deploy-plugin</artifactId>
+            <version>${maven-deploy-plugin.version}</version>
+          </plugin>
           <plugin>
             <groupId>org.jreleaser</groupId>
             <artifactId>jreleaser-maven-plugin</artifactId>
