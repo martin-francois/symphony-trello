@@ -10,6 +10,7 @@ import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.trelloList
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.workspaceJson;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.workspacesJson;
 import static ch.fmartin.symphony.trello.testsupport.TestFileContents.INVALID_UTF_8_READ_FAILURE;
+import static ch.fmartin.symphony.trello.testsupport.WorkflowAssertions.GITHUB_ISSUE_ASSIGNMENT_HEADING;
 import static ch.fmartin.symphony.trello.testsupport.WorkflowAssertions.assertThatWorkflow;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -48,7 +49,6 @@ import org.junit.jupiter.api.io.TempDir;
 
 final class TrelloBoardSetupTest {
     private static final String REPOSITORY_POLICY_HEADING = "## Classify Repository Need Before Source Blocking";
-    private static final String GITHUB_ISSUE_ASSIGNMENT_HEADING = "## GitHub Issue Assignment";
     private static final String REPOSITORY_SOURCE_PRECEDENCE_HEADING = "## Repository Source Precedence";
 
     private FakeTrelloServer trello;
@@ -3095,10 +3095,10 @@ final class TrelloBoardSetupTest {
 
     private static int sectionEnd(String workflow, String heading, int headingOffset) {
         int end = workflow.indexOf("\n## ", headingOffset + heading.length());
-        assertThat(end)
+        return assertThat(end)
                 .as("next workflow section heading offset after %s", heading)
-                .isGreaterThan(headingOffset);
-        return end;
+                .isGreaterThan(headingOffset)
+                .actual();
     }
 
     private static void assertGeneratedStaleBlockerRecheckPolicy(Path workflow) {

@@ -8,6 +8,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public final class WorkflowAssertions {
+    public static final String GITHUB_ISSUE_ASSIGNMENT_HEADING = "## GitHub Issue Assignment";
+
     private final String content;
 
     private WorkflowAssertions(Path workflow) {
@@ -29,7 +31,7 @@ public final class WorkflowAssertions {
 
     public WorkflowAssertions hasNoGithubFlow() {
         assertThat(content)
-                .doesNotContain("## Pull Request Publication", "## GitHub Issue Assignment", "linked PR comments");
+                .doesNotContain("## Pull Request Publication", GITHUB_ISSUE_ASSIGNMENT_HEADING, "linked PR comments");
         return this;
     }
 
