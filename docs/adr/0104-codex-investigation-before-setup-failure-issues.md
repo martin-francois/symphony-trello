@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-10-04
-decision-makers: [François Martin, Claude]
+decision-makers: [François Martin]
 consulted:
   - "[GitHub issue #114](https://github.com/martin-francois/symphony-trello/issues/114)"
   - "[ADR 0029](0029-setup-failure-diagnostics-policy.md)"
@@ -58,25 +58,33 @@ The flow for an unexpected setup failure in an interactive terminal is:
 
 1. Write the sanitized troubleshooting report as before.
 2. If Codex CLI is on `PATH` and `codex login status` succeeds, explain what Codex receives and ask
-   `Ask Codex to investigate this failure? [y/N]`. The default answer is no.
+   `Ask Codex to investigate this failure? [y/N]`. The default answer is no. This offer does not
+   require GitHub CLI authentication; the later issue offer checks `gh auth status` separately.
 3. On yes, run `codex exec --sandbox workspace-write --skip-git-repo-check --ephemeral
    --output-schema ... --output-last-message ... --cd <config dir> -` with the prompt on standard
    input. When the app home is a Git checkout from a source install, add it with `--add-dir` so
-   Codex can fix code. A release archive install gets no code write access.
+   Codex can fix code. A release archive install gets no code write access. Create a missing config
+   directory only after consent. If creation fails, keep the issue offer and do not start Codex in
+   the troubleshooting-report directory, which is outside the approved writable roots.
 4. Show the classification, diagnosis, changed files, validation commands with their result, and
    next step from the structured answer.
-5. For a local configuration problem, stop with the next step, or with "rerun the command" when
-   Codex already fixed it, and do not offer an issue. For a fix with changed files whose validation
-   all passed, ask whether to post an issue that describes the failure and the local fix. In every
-   other case, show the existing issue prompt. When Codex answered, the issue draft is the report
-   plus a `Local Codex Investigation` section, written next to the report.
+5. For a local configuration problem, show the next step, or "rerun the command" when Codex already
+   fixed it. When Codex names no next step, say so and ask the user to fix the cause it described.
+   Then, when GitHub CLI is authenticated, ask `Post a GitHub issue anyway? [y/N]` with default no.
+   For a Symphony for Trello bug fix with changed files
+   whose validation all passed, ask whether to post an issue that describes the failure and the
+   local fix. In every other case, including a validated fix of an environment or other non-code
+   cause, show the existing issue prompt. When Codex answered, the issue draft is the report plus a
+   `Local Codex Investigation` section, written next to the report.
 
 Privacy boundary:
 
 * The prompt contains fixed instructions, the version, the command name, how the command was started
-  (installer onboarding, installed command, or direct Java command), the error code, and the
-  sanitized report. It contains no raw paths, Trello names or identifiers, account names, or
-  credentials. The question before the run lists the same items.
+  (installer onboarding, installed command, or direct Java command), the error code, the sanitized
+  report, and the report location. The location starts with the diagnostics token of the state
+  directory, so Codex can find the report with one token lookup. It contains no raw paths, Trello
+  names or identifiers, account names, or credentials. The question before the run lists the same
+  items.
 * Codex runs locally. Like any local Codex session, Codex sees its working directory and writable
   roots, and it can read local files. It may resolve report tokens with
   `symphony-trello diagnostics --show-private-context --lookup <token>`, as
@@ -96,7 +104,8 @@ start a second Codex run.
 * Good, because users can get a diagnosis or a working local fix before anyone opens an issue.
 * Good, because a public issue that follows a local fix carries the diagnosis, a short fix summary,
   the changed files, and the validation result.
-* Good, because a local configuration problem ends with a next step instead of an issue.
+* Good, because a local configuration problem gets a next step and the user still chooses whether
+  to report it. Declining the default-no issue offer ends the flow without posting.
 * Good, because the sanitizer that already protects the report also protects Codex answers.
 * Bad, because Codex sees local paths through its working directory and writable roots, and it can
   read local files, including files with credentials. The prompt tells Codex not to print or change
@@ -114,12 +123,14 @@ Run the focused tests:
 ```
 
 `SetupFailureFollowUpTest` drives the real report and sanitizer with a fake Codex runner and a fake
-`gh`. It checks the prompt order, the default-no answer, each fallback, the local configuration
-stop, the verified-fix issue draft, the non-interactive and loop guards, and that no secret, board
+`gh`. It checks the prompt order, the default-no answer, each fallback, the default-no local configuration
+issue offer, the verified-fix issue draft, the non-interactive and loop guards, and that no secret, board
 name, Trello URL, or temporary path reaches the Codex prompt or the issue draft.
 `ProcessCodexInvestigationRunnerTest` runs the process runner against a fake `codex` script and
 checks the command line, the standard-input prompt, the schema, the marker variable, the timeout
-stop, and every failure result.
+stop, and every failure result. A child-JVM test waits until the investigation reaches
+`Process.waitFor` after registering its shutdown hook, then exits that JVM and checks that both
+Codex and its child stopped.
 `WindowsBatchShimLaunchTest` runs the investigation through a real npm-style batch shim in the
 native Windows CI lane and checks the arguments and exit status. Executable discovery uses the
 shared resolver; each runner wraps batch commands only when it starts the process.

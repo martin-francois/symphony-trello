@@ -10,6 +10,7 @@ import ch.fmartin.symphony.trello.setup.CodexInvestigationFinding.Classification
 import ch.fmartin.symphony.trello.setup.CodexInvestigationFinding.ValidationRun;
 import ch.fmartin.symphony.trello.setup.CodexInvestigationRunner.Outcome;
 import ch.fmartin.symphony.trello.testsupport.RecordingTerminal;
+import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -32,6 +33,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /// Covers the interactive follow-up after an unexpected setup failure: the opt-in Codex
 /// investigation and the GitHub issue prompt, driven through the real troubleshooting report and
@@ -49,7 +51,9 @@ final class SetupFailureFollowUpTest {
     private static final String FIX_ISSUE_QUESTION =
             "Codex changed files locally and validation passed. Open a GitHub issue that describes the failure and"
                     + " the local fix?";
+    private static final String LOCAL_ISSUE_QUESTION = "Post a GitHub issue anyway? [y/N] ";
     private static final String POSTED_ISSUE_URL = "https://github.com/martin-francois/symphony-trello/issues/1";
+    private static final String SUPPLEMENTARY_CHARACTER = "\uD83D\uDE00";
     private static final Instant NOW = Instant.parse("2026-05-02T03:04:05Z");
 
     @TempDir
@@ -128,12 +132,60 @@ final class SetupFailureFollowUpTest {
         assertThat(scenario.terminal().stderr())
                 .contains(
                         "Codex receives the Symphony for Trello version, the command name and how it was started,"
-                                + " the error code, and the sanitized troubleshooting report.",
+                                + " the error code, and the sanitized troubleshooting report with its location.",
                         "sees local paths while it works",
                         "only sanitized text goes into a GitHub issue draft");
         assertThat(scenario.codex().requests())
                 .as("declining must not start Codex")
                 .isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void missingConfigDirectoryIsCreatedOnlyAfterInvestigationConsent(boolean consent) throws IOException {
+        // given
+        Path configDir = tempDir.resolve("missing-config");
+        Path report = Files.writeString(tempDir.resolve("report.md"), "sanitized report");
+        var commands = new FakeCommandRunner().returns(0, "", "login", "status");
+        var codex = new RecordingCodex(new Outcome.Failed("no answer"));
+        var followUp = new SetupFailureFollowUp(
+                commands, codex, () -> true, Map.of(), SetupFailureFollowUp.CODEX_INVESTIGATION_TIMEOUT);
+        var failure = new SetupFailureFollowUp.FailedSetup(
+                report,
+                UNEXPECTED_CODE,
+                "setup-local",
+                new LocalWorkerPaths(tempDir.resolve("app"), configDir, tempDir.resolve("workspaces"), tempDir),
+                new SetupFailureFollowUp.CodexCli.OnPath(arguments -> arguments),
+                text -> "sanitized");
+
+        // when
+        followUp.offer(failure, new RecordingTerminal(consent ? "y" : "n", "n"));
+
+        // then
+        assertThat(Files.isDirectory(configDir))
+                .as("only consent creates the missing writable root")
+                .isEqualTo(consent);
+        assertThat(codex.requests())
+                .extracting(CodexInvestigationRunner.Request::workingRoot)
+                .containsExactlyElementsOf(consent ? List.of(configDir) : List.of());
+    }
+
+    @Test
+    void uncreatableConfigDirectoryKeepsIssuePromptWithoutBroadeningWriteAccess() throws IOException {
+        // given
+        Scenario scenario = scenario(ScenarioOptions.signedInCodex().with(Condition.CONFIG_CREATION_BLOCKED), "y", "n");
+
+        // when
+        scenario.failUnexpectedly();
+
+        // then
+        assertThat(scenario.codex().requests())
+                .as("no other directory becomes a writable fallback")
+                .isEmpty();
+        assertThat(scenario.terminal().stdout()).containsSubsequence(CODEX_QUESTION, REPORT_ISSUE_QUESTION);
+        assertThat(scenario.terminal().stderr())
+                .contains("cannot prepare Codex configuration directory: create or repair it before retrying")
+                .doesNotContain(scenario.configDir().toString());
     }
 
     @Test
@@ -153,7 +205,7 @@ final class SetupFailureFollowUpTest {
                 "n");
 
         // when
-        scenario.failUnexpectedly();
+        Optional<Path> report = scenario.failUnexpectedly();
 
         // then
         assertThat(scenario.terminal().stderr())
@@ -172,6 +224,8 @@ final class SetupFailureFollowUpTest {
                     .contains(
                             "- command: setup-local",
                             "- error_code: " + UNEXPECTED_CODE,
+                            "- troubleshooting_report: `<path:",
+                            ">" + File.separator + stateHomeRelativePath(report) + "`",
                             "# Symphony for Trello Setup Failure",
                             "symphony-trello diagnostics --show-private-context --lookup '<token>'",
                             "Inspect local files directly when you need more detail.");
@@ -237,7 +291,7 @@ final class SetupFailureFollowUpTest {
     }
 
     @Test
-    void localConfigurationFindingGivesTheNextStepInsteadOfAnIssuePrompt() throws IOException {
+    void localConfigurationFindingGivesTheNextStepAndOffersAnIssueWithDefaultNo() throws IOException {
         // given
         Scenario scenario = scenario(
                 ScenarioOptions.signedInCodex()
@@ -250,7 +304,7 @@ final class SetupFailureFollowUpTest {
                                 List.of(),
                                 "Run setup-local repair-port for this board."))),
                 "y",
-                "y");
+                "");
 
         // when
         scenario.failUnexpectedly();
@@ -259,12 +313,46 @@ final class SetupFailureFollowUpTest {
         assertThat(scenario.terminal().stderr())
                 .contains(
                         "Next step: Run setup-local repair-port for this board.",
-                        "Codex found a local configuration problem, so no GitHub issue is suggested.");
-        assertThat(scenario.terminal().stdout()).doesNotContain(REPORT_ISSUE_QUESTION, FIX_ISSUE_QUESTION);
+                        "Codex found a local configuration problem.");
+        assertThat(scenario.terminal().stdout())
+                .contains(LOCAL_ISSUE_QUESTION)
+                .doesNotContain(REPORT_ISSUE_QUESTION, FIX_ISSUE_QUESTION);
+        assertThat(scenario.commands().commands())
+                .noneSatisfy(command -> assertThat(command).startsWith("gh", "issue", "create"));
     }
 
     @Test
-    void fixedLocalConfigurationAsksForARerunInsteadOfAnIssue() throws IOException {
+    void localConfigurationFindingWithoutANextStepStillTellsTheUserWhatToDo() throws IOException {
+        // given
+        Scenario scenario = scenario(
+                ScenarioOptions.signedInCodex()
+                        .withCodexOutcome(completed(new CodexInvestigationFinding(
+                                Classification.LOCAL_CONFIGURATION,
+                                "The workflow sets server.port to a port another program uses.",
+                                false,
+                                "",
+                                List.of(),
+                                List.of(),
+                                " "))),
+                "y",
+                "");
+
+        // when
+        scenario.failUnexpectedly();
+
+        // then
+        assertThat(scenario.terminal().stderr())
+                .contains("Codex did not name a next step. Fix the cause described above, then rerun the command.")
+                .doesNotContain("Next step:", "Follow the next step above");
+        assertThat(scenario.terminal().stdout())
+                .contains(LOCAL_ISSUE_QUESTION)
+                .doesNotContain(REPORT_ISSUE_QUESTION, FIX_ISSUE_QUESTION);
+        assertThat(scenario.commands().commands())
+                .noneSatisfy(command -> assertThat(command).startsWith("gh", "issue", "create"));
+    }
+
+    @Test
+    void fixedLocalConfigurationAsksForARerunAndOffersAnIssueWithDefaultNo() throws IOException {
         // given
         Scenario scenario = scenario(
                 ScenarioOptions.signedInCodex()
@@ -277,17 +365,97 @@ final class SetupFailureFollowUpTest {
                                 List.of(new ValidationRun("symphony-trello setup-local check", true)),
                                 "Rerun setup-local."))),
                 "y",
-                "y");
+                "");
 
         // when
         scenario.failUnexpectedly();
 
         // then
         assertThat(scenario.terminal().stderr())
+                .contains("Changed files: WORKFLOW.md", "Codex fixed it locally. Rerun the command.");
+        assertThat(scenario.terminal().stdout())
+                .contains(LOCAL_ISSUE_QUESTION)
+                .doesNotContain(REPORT_ISSUE_QUESTION, FIX_ISSUE_QUESTION);
+        assertThat(scenario.commands().commands())
+                .noneSatisfy(command -> assertThat(command).startsWith("gh", "issue", "create"));
+    }
+
+    @Test
+    void acceptedLocalConfigurationIssueIncludesTheFindingAfterDraftConfirmation() throws IOException {
+        // given
+        Scenario scenario = scenario(
+                ScenarioOptions.signedInCodex()
+                        .withCodexOutcome(completed(new CodexInvestigationFinding(
+                                Classification.LOCAL_CONFIGURATION,
+                                "The configured workspace parent is read-only.",
+                                false,
+                                "",
+                                List.of(),
+                                List.of(),
+                                "Choose a writable workspace parent."))),
+                "y",
+                "y",
+                "y");
+
+        // when
+        Optional<Path> report = scenario.failUnexpectedly();
+
+        // then
+        assertThat(scenario.terminal().stdout())
+                .contains(LOCAL_ISSUE_QUESTION, "Post this GitHub issue now? [y/N]", POSTED_ISSUE_URL)
+                .doesNotContain(REPORT_ISSUE_QUESTION, FIX_ISSUE_QUESTION);
+        assertThat(issueDraft(report))
+                .content(StandardCharsets.UTF_8)
                 .contains(
-                        "Changed files: WORKFLOW.md",
-                        "no GitHub issue is suggested. Codex fixed it locally. Rerun the command.");
-        assertThat(scenario.terminal().stdout()).doesNotContain(REPORT_ISSUE_QUESTION, FIX_ISSUE_QUESTION);
+                        "## Local Codex Investigation",
+                        "- **classification:** local_configuration",
+                        "- **diagnosis:** The configured workspace parent is read-only.",
+                        "- **next_step:** Choose a writable workspace parent.");
+    }
+
+    @Test
+    void codexInvestigationIsOfferedWhenGithubCliIsSignedOut() throws IOException {
+        // given
+        Scenario scenario = scenario(ScenarioOptions.signedInCodex().with(Condition.GITHUB_SIGNED_OUT), "y");
+
+        // when
+        scenario.failUnexpectedly();
+
+        // then
+        assertThat(scenario.codex().requests()).hasSize(1);
+        assertThat(scenario.terminal().stdout())
+                .contains(CODEX_QUESTION)
+                .doesNotContain(LOCAL_ISSUE_QUESTION, REPORT_ISSUE_QUESTION, FIX_ISSUE_QUESTION);
+        assertThat(scenario.commands().commands())
+                .noneSatisfy(command -> assertThat(command).startsWith("gh", "issue", "create"));
+    }
+
+    @Test
+    void truncatingADiagnosisKeepsSupplementaryCharactersWholeInThePostedDraft() throws IOException {
+        // given
+        String prefix = "a".repeat(SetupFailureFollowUp.ANSWER_TEXT_LIMIT - 1);
+        String diagnosis = prefix + SUPPLEMENTARY_CHARACTER + "more detail";
+        Scenario scenario = scenario(
+                ScenarioOptions.signedInCodex()
+                        .withCodexOutcome(completed(new CodexInvestigationFinding(
+                                Classification.ENVIRONMENT,
+                                diagnosis,
+                                false,
+                                "",
+                                List.of(),
+                                List.of(),
+                                "Check Java."))),
+                "y",
+                "y",
+                "y");
+
+        // when
+        Optional<Path> report = scenario.failUnexpectedly();
+
+        // then
+        assertThat(scenario.terminal().stderr()).doesNotContain("Setup failure follow-up failed");
+        assertThat(scenario.terminal().stdout()).contains(POSTED_ISSUE_URL);
+        assertThat(issueDraft(report)).content(StandardCharsets.UTF_8).contains(prefix + " ...");
     }
 
     @MethodSource("failedInvestigationReasons")
@@ -312,15 +480,16 @@ final class SetupFailureFollowUpTest {
                 ProcessCodexInvestigationRunner.UNEXPECTED_ANSWER);
     }
 
-    @MethodSource("unverifiedFixes")
+    @MethodSource("unverifiedOrNonCodeFixes")
     @ParameterizedTest(name = "{argumentSetName}")
-    void unverifiedFixKeepsTheExistingIssuePromptAndAddsTheFindingToTheDraft(
-            List<String> changedFiles, ValidationRun validation, String draftLine) throws IOException {
+    void unverifiedOrNonCodeFixKeepsTheExistingIssuePromptAndAddsTheFindingToTheDraft(
+            Classification classification, List<String> changedFiles, ValidationRun validation, String draftLine)
+            throws IOException {
         // given
         Scenario scenario = scenario(
                 ScenarioOptions.signedInCodex()
                         .withCodexOutcome(completed(new CodexInvestigationFinding(
-                                Classification.SYMPHONY_BUG,
+                                classification,
                                 "The workflow writer ignores a read-only parent directory.",
                                 true,
                                 "Check the parent directory before writing.",
@@ -341,18 +510,26 @@ final class SetupFailureFollowUpTest {
                 .noneSatisfy(command -> assertThat(command).startsWith("gh", "issue", "create"));
     }
 
-    static Stream<Arguments> unverifiedFixes() {
+    static Stream<Arguments> unverifiedOrNonCodeFixes() {
         return Stream.of(
                 argumentSet(
                         "validation failed",
+                        Classification.SYMPHONY_BUG,
                         List.of("WORKFLOW.md"),
                         new ValidationRun("symphony-trello setup-local check", false),
                         "- **validation:** failed `symphony-trello setup-local check`"),
                 argumentSet(
                         "no changed files reported",
+                        Classification.SYMPHONY_BUG,
                         List.of(),
                         new ValidationRun("symphony-trello setup-local check", true),
-                        "- **changed_files:** none"));
+                        "- **changed_files:** none"),
+                argumentSet(
+                        "validated fix of a cause outside Symphony for Trello code",
+                        Classification.ENVIRONMENT,
+                        List.of("WORKFLOW.md"),
+                        new ValidationRun("symphony-trello setup-local check", true),
+                        "- **classification:** environment"));
     }
 
     @MethodSource("codexNotOffered")
@@ -425,13 +602,25 @@ final class SetupFailureFollowUpTest {
                         + SetupFailureFollowUp.ISSUE_DRAFT_SUFFIX);
     }
 
+    /// The report lives in a fixed directory directly below the state directory.
+    private static Path stateHomeRelativePath(Optional<Path> report) {
+        Path reportPath = report.orElseThrow();
+        return reportPath.getParent().getFileName().resolve(reportPath.getFileName());
+    }
+
     private static Outcome completed(CodexInvestigationFinding finding) {
         return new Outcome.Completed(finding);
     }
 
     private Scenario scenario(ScenarioOptions options, String... answers) throws IOException {
         Path root = Files.createTempDirectory(tempDir, "follow-up-");
-        Path configDir = Files.createDirectories(root.resolve("config"));
+        Path configDir = root.resolve("config");
+        if (options.has(Condition.CONFIG_CREATION_BLOCKED)) {
+            configDir = Files.writeString(root.resolve("blocked"), "not a directory")
+                    .resolve("config");
+        } else {
+            Files.createDirectories(configDir);
+        }
         Path appHome = Files.createDirectories(root.resolve("app"));
         if (options.has(Condition.SOURCE_CHECKOUT)) {
             Files.createDirectories(appHome.resolve(".git"));
@@ -447,6 +636,9 @@ final class SetupFailureFollowUpTest {
         Map<String, String> environment = new HashMap<>();
         environment.put("PATH", tools.toString());
         environment.put("SYMPHONY_TRELLO_APP_HOME", appHome.toString());
+        if (options.has(Condition.CONFIG_CREATION_BLOCKED)) {
+            environment.put("SYMPHONY_TRELLO_STATE_HOME", root.resolve("state").toString());
+        }
         if (options.has(Condition.STARTED_BY_CODEX_INVESTIGATION)) {
             environment.put(CodexInvestigationRunner.INVESTIGATION_MARKER_ENV, "1");
         }
@@ -457,7 +649,7 @@ final class SetupFailureFollowUpTest {
                         codexExecutable.toString(),
                         "login",
                         "status")
-                .returns(0, "github.com\n", "gh", "auth", "status")
+                .returns(options.has(Condition.GITHUB_SIGNED_OUT) ? 1 : 0, "github.com\n", "gh", "auth", "status")
                 .returnsForPrefix(0, POSTED_ISSUE_URL + "\n", "gh", "issue", "create");
         var codex = new RecordingCodex(options.codexOutcome());
         var followUp = new SetupFailureFollowUp(
@@ -534,8 +726,10 @@ final class SetupFailureFollowUpTest {
     /// Ways a scenario departs from the default: Codex on PATH and signed in, a console attached,
     /// an interactive command, a release install, and a command the user started directly.
     enum Condition {
+        CONFIG_CREATION_BLOCKED,
         NO_CODEX_ON_PATH,
         CODEX_SIGNED_OUT,
+        GITHUB_SIGNED_OUT,
         NO_CONSOLE,
         NON_INTERACTIVE,
         SOURCE_CHECKOUT,

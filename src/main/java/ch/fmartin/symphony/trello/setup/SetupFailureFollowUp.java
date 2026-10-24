@@ -10,6 +10,7 @@ import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -30,7 +31,7 @@ final class SetupFailureFollowUp {
     static final String ISSUE_REPOSITORY = "martin-francois/symphony-trello";
     static final String ISSUE_TITLE = "Local setup failed";
     private static final String TOKEN_PLACEHOLDER = "<token>";
-    private static final int ANSWER_TEXT_LIMIT = 2_000;
+    static final int ANSWER_TEXT_LIMIT = 2_000;
     private static final int ANSWER_LIST_LIMIT = 50;
     static final String ISSUE_DRAFT_SUFFIX = "-github-issue.md";
     static final String REPORT_SUFFIX = ".md";
@@ -71,12 +72,11 @@ final class SetupFailureFollowUp {
             return;
         }
         try {
-            switch (investigateWithCodex(failure, terminal)) {
-                case Answered answered
-                when isLocalConfiguration(answered.finding()) ->
-                    terminal.err().println(localConfigurationClosing(answered.finding()));
-                case Investigation investigation -> offerGithubIssue(failure, investigation, terminal);
+            Investigation investigation = investigateWithCodex(failure, terminal);
+            if (investigation instanceof Answered answered && isLocalConfiguration(answered.finding())) {
+                terminal.err().println(localConfigurationClosing(answered.finding()));
             }
+            offerGithubIssue(failure, investigation, terminal);
         } catch (IOException e) {
             terminal.err()
                     .println(failure.sanitizer()
@@ -88,11 +88,18 @@ final class SetupFailureFollowUp {
         return finding.classification() == Classification.LOCAL_CONFIGURATION;
     }
 
+    /// Gives the user an action after a local configuration finding, even when Codex left
+    /// `next_step` blank.
     private static String localConfigurationClosing(CodexInvestigationFinding finding) {
-        return "Codex found a local configuration problem, so no GitHub issue is suggested. "
-                + (finding.verifiedFix()
-                        ? "Codex fixed it locally. Rerun the command."
-                        : "Follow the next step above, then rerun the command.");
+        String action;
+        if (finding.verifiedFix()) {
+            action = "Codex fixed it locally. Rerun the command.";
+        } else if (finding.nextStep().isBlank()) {
+            action = "Codex did not name a next step. Fix the cause described above, then rerun the command.";
+        } else {
+            action = "Follow the next step above, then rerun the command.";
+        }
+        return "Codex found a local configuration problem. " + action;
     }
 
     private Investigation investigateWithCodex(FailedSetup failure, Terminal terminal) throws IOException {
@@ -102,15 +109,14 @@ final class SetupFailureFollowUp {
         return switch (failure.codex()) {
             case CodexCli.OnPath onPath
             when codexAuthenticated(onPath.command()) -> offerInvestigation(onPath.command(), failure, terminal);
-            case CodexCli.OnPath ignored -> NO_ANSWER;
-            case CodexCli.NotOnPath ignored -> NO_ANSWER;
+            case CodexCli _ -> NO_ANSWER;
         };
     }
 
     private Investigation offerInvestigation(CodexCommand codex, FailedSetup failure, Terminal terminal)
             throws IOException {
         List<Path> additionalWritableRoots = sourceCheckout(failure.paths())
-                .filter(root -> !root.equals(workingRoot(failure)))
+                .filter(root -> !root.equals(failure.paths().configDir()))
                 .map(List::of)
                 .orElseGet(List::of);
         terminal.err().println();
@@ -119,7 +125,7 @@ final class SetupFailureFollowUp {
                         + " and may fix it before you open a GitHub issue.");
         terminal.err()
                 .println("Codex receives the Symphony for Trello version, the command name and how it was started,"
-                        + " the error code, and the sanitized troubleshooting report."
+                        + " the error code, and the sanitized troubleshooting report with its location."
                         + " It runs locally, can read your files, and sees local paths while it works.");
         terminal.err()
                 .println("Apart from temporary files, it can change files only in the Symphony config directory"
@@ -130,11 +136,22 @@ final class SetupFailureFollowUp {
         if (!confirmed(answer)) {
             return NO_ANSWER;
         }
+        Path configDir = failure.paths().configDir();
+        try {
+            Files.createDirectories(configDir);
+        } catch (IOException e) {
+            terminal.err()
+                    .println(failure.sanitizer()
+                            .apply(SetupFailureCauses.withCause(
+                                    "cannot prepare Codex configuration directory: create or repair it before retrying",
+                                    e)));
+            return NO_ANSWER;
+        }
         terminal.err()
                 .println("Codex is investigating. This can take up to "
                         + CodexInvestigationRunner.describe(codexTimeout) + ". Press Ctrl+C to stop.");
         Outcome outcome = codexRunner.investigate(new CodexInvestigationRunner.Request(
-                codex, prompt(failure), workingRoot(failure), additionalWritableRoots, codexTimeout));
+                codex, prompt(failure), configDir, additionalWritableRoots, codexTimeout));
         return switch (outcome) {
             case Outcome.Completed completed -> {
                 CodexInvestigationFinding finding = sanitized(completed.finding(), failure.sanitizer());
@@ -152,18 +169,6 @@ final class SetupFailureFollowUp {
 
     private boolean codexAuthenticated(CodexCommand codex) {
         return commands.run(codex.command("login", "status")).success();
-    }
-
-    /// Codex starts in the config directory, where workflows, the connected-board manifest, and
-    /// the `.env` file live. If that directory does not exist yet, it starts in the directory that
-    /// holds the troubleshooting report.
-    private static Path workingRoot(FailedSetup failure) {
-        Path configDir = failure.paths().configDir();
-        if (Files.isDirectory(configDir)) {
-            return configDir;
-        }
-        Path reportDirectory = failure.reportPath().toAbsolutePath().getParent();
-        return reportDirectory == null ? configDir : reportDirectory;
     }
 
     /// Only a Git checkout from a source install can take a code fix; a release archive cannot.
@@ -185,26 +190,22 @@ final class SetupFailureFollowUp {
                 - command: %s
                 - started_by: %s
                 - error_code: %s
+                - troubleshooting_report: `%s`
 
                 Tasks:
                 1. Find the cause. Classify it as one of:
-                   - symphony_bug: a defect in Symphony for Trello code, its installer, or a generated workflow.
-                   - local_configuration: a problem the user can fix in their own workflow, connected-board \
-                manifest, or .env file.
-                   - environment: the operating system, Java, Git, network, or file permissions on this machine.
-                   - external_tool_or_service: Codex CLI, GitHub CLI, Trello, or another external dependency.
-                   - unknown: the evidence is not enough to decide.
+                %s
                 2. Change files only when you can make a safe fix that stays scoped to this failure. Never \
                 change or print credential values, .env secrets, Codex auth or session files, or GitHub \
                 credentials. Do not commit, push, open pull requests, or post issues.
-                3. After any change, run the closest local validation, such as `symphony-trello setup-local \
+                3. After any change, run the closest local validation, such as `%s setup-local \
                 check`, the failed command with --dry-run when it supports it, or the focused Maven test in \
                 a source checkout. Report every validation command and whether it passed.
                 4. When the user has to act, give one direct next step.
 
                 Inspect local files directly when you need more detail. Your working directory is the \
-                Symphony config directory, or the troubleshooting report directory when the config directory \
-                does not exist yet. An additional writable directory, when present, is the Symphony for \
+                Symphony config directory. The troubleshooting_report path starts with the token of the Symphony \
+                state directory. An additional writable directory, when present, is the Symphony for \
                 Trello source checkout of a source install; `git log -1` there shows the installed commit.
 
                 The troubleshooting report below replaces private values with tokens: `<path:...>` for local \
@@ -228,10 +229,32 @@ final class SetupFailureFollowUp {
                         sanitizer.apply(failure.commandName()),
                         startedBy(),
                         sanitizer.apply(failure.errorCode()),
+                        reportLocation(failure),
+                        classificationDescriptions(),
+                        LocalSetup.DEFAULT_COMMAND,
                         PrivateContextTokens.lookupCommand(TOKEN_PLACEHOLDER),
                         fence + "markdown",
                         report.stripTrailing(),
                         fence);
+    }
+
+    private static String classificationDescriptions() {
+        return Arrays.stream(Classification.values())
+                .map(classification -> "   - " + classification.jsonValue() + ": " + classification.description())
+                .collect(Collectors.joining("\n"));
+    }
+
+    /// Names the report by the state directory token plus its fixed relative path, so Codex can open
+    /// it after one token lookup while the prompt keeps no raw local path.
+    private static String reportLocation(FailedSetup failure) {
+        Path stateHome = failure.paths().stateHome();
+        Path report = failure.reportPath();
+        if (!report.startsWith(stateHome)) {
+            return failure.sanitizer().apply(report.toString());
+        }
+        return failure.sanitizer().apply(stateHome.toString())
+                + stateHome.getFileSystem().getSeparator()
+                + stateHome.relativize(report);
     }
 
     private String startedBy() {
@@ -311,10 +334,15 @@ final class SetupFailureFollowUp {
             return;
         }
         String question =
-                investigation instanceof Answered answered && answered.finding().verifiedFix()
-                        ? "Codex changed files locally and validation passed. Open a GitHub issue that describes the"
-                                + " failure and the local fix? [y/N] "
-                        : "GitHub CLI is authenticated. Open a GitHub issue with this report? [y/N] ";
+                switch (investigation) {
+                    case Answered answered
+                    when isLocalConfiguration(answered.finding()) -> "Post a GitHub issue anyway? [y/N] ";
+                    case Answered answered
+                    when answered.finding().verifiedSymphonyFix() ->
+                        "Codex changed files locally and validation passed. Open a GitHub issue that describes the"
+                                + " failure and the local fix? [y/N] ";
+                    case Investigation _ -> "GitHub CLI is authenticated. Open a GitHub issue with this report? [y/N] ";
+                };
         if (!confirmed(terminal.readLine(question))) {
             return;
         }
@@ -389,7 +417,15 @@ final class SetupFailureFollowUp {
 
     private static String sanitizedText(String value, UnaryOperator<String> sanitizer) {
         String sanitized = sanitizer.apply(value).strip();
-        return sanitized.length() <= ANSWER_TEXT_LIMIT ? sanitized : sanitized.substring(0, ANSWER_TEXT_LIMIT) + " ...";
+        if (sanitized.length() <= ANSWER_TEXT_LIMIT) {
+            return sanitized;
+        }
+        int end = ANSWER_TEXT_LIMIT;
+        // Keep the UTF-16 limit without splitting a supplementary character before UTF-8 output.
+        if (Character.isHighSurrogate(sanitized.charAt(end - 1)) && Character.isLowSurrogate(sanitized.charAt(end))) {
+            end--;
+        }
+        return sanitized.substring(0, end) + " ...";
     }
 
     private static boolean confirmed(String answer) {

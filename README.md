@@ -730,15 +730,19 @@ report and, in an interactive terminal with GitHub CLI signed in, offers to post
 issue. Failures you can fix yourself, such as missing credentials, print a next step instead. If
 Codex CLI is installed and signed in, the command first asks whether Codex should investigate the
 failure on your machine. The answer defaults to no. Codex gets the Symphony for Trello version, the
-command name and how it was started, the error code, and the sanitized report. It runs locally, so
-it can read your files and sees local paths through its working directory and writable directories.
-Apart from temporary files, it can change files only in the Symphony config directory and, for a
-source install, the source checkout. It does not commit, push, or post anything. Afterwards the
-command shows the cause Codex found, the files it changed, and the validation it ran. A local
-configuration problem ends with a next step. After a validated fix, you can post an issue that
-describes the failure and the fix. Only sanitized text goes into that issue draft, and you see the
-full draft before you confirm. If Codex is missing, signed out, times out after 15 minutes, or
-fails, the command offers the usual issue instead. `--non-interactive` runs never start Codex.
+command name and how it was started, the error code, and the sanitized report with its location. It
+runs locally, so it can read your files and sees local paths through its working directory and
+writable directories. Apart from temporary files, it can change files only in the Symphony config
+directory and, for a source install, the source checkout. After you agree, Symphony creates the
+config directory if it is missing. If that fails, it offers the issue prompt without starting Codex
+or granting another writable directory. Codex does not commit, push, or post anything. Afterwards the command shows the cause Codex found, the files it changed, and the
+validation it ran. A local configuration problem gets a next step, followed by an optional issue
+prompt that defaults to no. The issue draft includes the finding if you choose to post. Codex
+investigation does not need GitHub CLI authentication; posting an issue does. After a validated fix
+of a Symphony for Trello bug, you can post an issue that describes the failure and the fix. Only
+sanitized text goes into that issue draft, and you see the full draft before you confirm. If Codex
+is missing, signed out, times out after 15 minutes, or fails, the command offers the usual issue
+instead. `--non-interactive` runs never start Codex.
 
 ## Installer Reference
 
