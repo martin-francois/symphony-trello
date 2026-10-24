@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -213,9 +214,9 @@ final class TrelloCredentialResolverTest {
 
     private Path credentialFile(Map<String, String> values) throws Exception {
         Path credentialFile = tempDir.resolve(".env");
-        var content = new StringBuilder();
-        values.forEach(
-                (name, value) -> content.append(name).append('=').append(value).append('\n'));
+        String content = values.entrySet().stream()
+                .map(entry -> entry.getKey() + "=" + entry.getValue() + "\n")
+                .collect(Collectors.joining());
         Files.writeString(credentialFile, content);
         return credentialFile;
     }

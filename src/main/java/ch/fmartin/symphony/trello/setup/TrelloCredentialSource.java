@@ -11,5 +11,26 @@ enum TrelloCredentialSource {
     /// Worker start only: the workflow sets a literal or `file:` value instead of an environment
     /// reference, so neither the shell environment nor the credential file is read.
     WORKFLOW_CONFIG,
-    MISSING
+    MISSING;
+
+    /// Where a key and token pair came from, for messages that name one place when both values
+    /// share it and list both places otherwise.
+    enum Pair {
+        SHELL_ENVIRONMENT,
+        DOTENV_FILE,
+        /// Every other pair, including two direct, two workflow, or two missing values.
+        MIXED;
+
+        static Pair of(TrelloCredentialSource apiKeySource, TrelloCredentialSource apiTokenSource) {
+            if (apiKeySource == TrelloCredentialSource.SHELL_ENVIRONMENT
+                    && apiTokenSource == TrelloCredentialSource.SHELL_ENVIRONMENT) {
+                return SHELL_ENVIRONMENT;
+            }
+            if (apiKeySource == TrelloCredentialSource.DOTENV_FILE
+                    && apiTokenSource == TrelloCredentialSource.DOTENV_FILE) {
+                return DOTENV_FILE;
+            }
+            return MIXED;
+        }
+    }
 }

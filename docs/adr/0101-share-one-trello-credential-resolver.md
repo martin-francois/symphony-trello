@@ -71,6 +71,9 @@ missing values, and then calls `CredentialValue#requireLiteralCredentialFileValu
 order stays the same. `persist()` is derived from the source instead of being stored next to it.
 The single enum `TrelloCredentialSource` has `DIRECT_INPUT`, `SHELL_ENVIRONMENT`, `DOTENV_FILE`,
 `WORKFLOW_CONFIG`, and `MISSING`.
+`TrelloCredentialSource.Pair` maps a key and token source pair to "both from the shell", "both
+from the credential file", or "mixed", so `CredentialSelection#sourceDescription` and the
+`trello_auth_failed` hint in `SetupDiagnosticReporter` share one rule.
 
 A differential spike compared the code on `main` with the new resolver and with SmallRye Config
 3.17.2:
