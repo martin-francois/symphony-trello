@@ -4,6 +4,7 @@ import static ch.fmartin.symphony.trello.orchestrator.SymphonyOrchestratorTestSu
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.boardJson;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.respond;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.InstanceOfAssertFactories.DURATION;
 import static org.mockito.Mockito.mock;
 
 import ch.fmartin.symphony.trello.config.ConfigResolver;
@@ -17,6 +18,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -91,7 +93,7 @@ final class TrelloRateLimitPollingIntegrationTest {
         orchestrator.start();
         waitUntil(() -> orchestrator.snapshot().polling().slowdownReason().isPresent());
         RuntimeSnapshot.Polling polling = orchestrator.snapshot().polling();
-        Duration nextTickDelay = orchestrator.scheduledTickDelayForTests();
+        Optional<Duration> nextTickDelay = orchestrator.scheduledTickDelayForTests();
         orchestrator.stop();
 
         // then
@@ -101,6 +103,7 @@ final class TrelloRateLimitPollingIntegrationTest {
         assertThat(polling.lastRateLimitedAt()).isPresent();
         assertThat(nextTickDelay)
                 .as("with no retries left, the next tick itself waits out Trello's Retry-After of %s", RETRY_AFTER)
+                .get(DURATION)
                 .isGreaterThan(RETRY_AFTER.minus(TEST_SLACK));
     }
 }

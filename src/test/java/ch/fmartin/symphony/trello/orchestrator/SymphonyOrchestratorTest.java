@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.orchestrator;
 import static ch.fmartin.symphony.trello.orchestrator.SymphonyOrchestratorTestSupport.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.assertj.core.api.InstanceOfAssertFactories.DURATION;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -707,14 +708,16 @@ final class SymphonyOrchestratorTest {
         var tracker = new FakeTracker(List.of());
         Instant rateLimitedAt = Instant.parse("2026-10-04T10:00:00Z");
         tracker.rateLimitPressure.set(new RateLimitPressure(1, Optional.of(rateLimitedAt), Optional.empty()));
-        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, mock());
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, mock(), NO_JITTER);
         Duration slowed = configured.multipliedBy(AdaptivePollInterval.SLOWDOWN_FACTOR);
+        // The scheduled delay counts down between scheduling and reading it.
+        Duration elapsedSinceScheduling = Duration.ofSeconds(2);
 
         // when
         orchestrator.start();
         waitUntil(() -> orchestrator.snapshot().polling().effectiveInterval().equals(slowed));
         RuntimeSnapshot snapshot = orchestrator.snapshot();
-        Duration nextTickDelay = orchestrator.scheduledTickDelayForTests();
+        Optional<Duration> nextTickDelay = orchestrator.scheduledTickDelayForTests();
         orchestrator.stop();
 
         // then
@@ -725,8 +728,9 @@ final class SymphonyOrchestratorTest {
                         Optional.of(RuntimeSnapshot.SlowdownReason.TRELLO_RATE_LIMITED),
                         Optional.of(rateLimitedAt)));
         assertThat(nextTickDelay)
-                .as("the tick after a Trello 429 waits longer than the configured %s", configured)
-                .isGreaterThan(configured);
+                .as("with jitter fixed at zero, the tick after a Trello 429 waits the slowed %s", slowed)
+                .get(DURATION)
+                .isBetween(slowed.minus(elapsedSinceScheduling), slowed);
     }
 
     @Test

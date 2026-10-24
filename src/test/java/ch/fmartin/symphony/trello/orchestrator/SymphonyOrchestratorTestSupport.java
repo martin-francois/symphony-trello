@@ -20,6 +20,7 @@ import ch.fmartin.symphony.trello.domain.BlockerRef;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import ch.fmartin.symphony.trello.testsupport.BoundedWait;
+import ch.fmartin.symphony.trello.time.ApplicationClock;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.RateLimitPressure;
 import ch.fmartin.symphony.trello.tracker.TrackerClient;
@@ -50,12 +51,17 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
+import java.util.function.LongUnaryOperator;
 import java.util.function.Predicate;
+import java.util.random.RandomGenerator;
 
 final class SymphonyOrchestratorTestSupport {
     static final Instant COMMENT_TIME = Instant.parse("2026-01-01T00:00:00Z");
     static final Duration POLL_INTERVAL = Duration.ofMillis(25);
     private static final Duration CONDITION_TIMEOUT = Duration.ofSeconds(5);
+    static final RandomGenerator NO_JITTER = new FixedRandom(bound -> 0);
+    static final RandomGenerator MAX_JITTER = new FixedRandom(bound -> bound - 1);
+    private static final int PERCENT = 100;
 
     static UsageProbeScenario usageProbeScenario(Path workflow, MutableClock clock, Card first, Card second) {
         var tracker = new FakeTracker(List.of(first, second));
@@ -588,6 +594,30 @@ final class SymphonyOrchestratorTestSupport {
     }
 
     static SymphonyOrchestrator orchestrator(
+            Path workflow, TrackerClient tracker, AgentRunner runner, RandomGenerator pollJitter) {
+        var orchestrator = new SymphonyOrchestrator(
+                new WorkflowLoader(),
+                new ConfigResolver(),
+                tracker,
+                runner,
+                new PromptRenderer(),
+                new WorkspaceManager(new HookRunner()),
+                ApplicationClock.systemUtc(),
+                Optional.empty(),
+                pollJitter);
+        orchestrator.workflowPath = workflow;
+        return orchestrator;
+    }
+
+    /// The delay [#MAX_JITTER] turns `delay` into: the largest jitter share on top, minus the one
+    /// millisecond the exclusive bound leaves out.
+    static Duration withLargestJitter(Duration delay) {
+        return delay.plus(delay.multipliedBy(AdaptivePollInterval.MAX_JITTER_PERCENT)
+                        .dividedBy(PERCENT))
+                .minusMillis(1);
+    }
+
+    static SymphonyOrchestrator orchestrator(
             Path workflow,
             TrackerClient tracker,
             AgentRunner runner,
@@ -971,6 +1001,19 @@ final class SymphonyOrchestratorTestSupport {
         @Override
         public Instant instant() {
             return now.get();
+        }
+    }
+
+    /// Returns a chosen draw for every bound, so a test can pin the smallest or largest jitter.
+    record FixedRandom(LongUnaryOperator drawForBound) implements RandomGenerator {
+        @Override
+        public long nextLong() {
+            throw new UnsupportedOperationException("the poll interval only draws bounded values");
+        }
+
+        @Override
+        public long nextLong(long bound) {
+            return drawForBound.applyAsLong(bound);
         }
     }
 

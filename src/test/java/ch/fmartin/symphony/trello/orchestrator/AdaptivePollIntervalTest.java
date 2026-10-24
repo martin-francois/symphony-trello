@@ -1,5 +1,8 @@
 package ch.fmartin.symphony.trello.orchestrator;
 
+import static ch.fmartin.symphony.trello.orchestrator.SymphonyOrchestratorTestSupport.MAX_JITTER;
+import static ch.fmartin.symphony.trello.orchestrator.SymphonyOrchestratorTestSupport.NO_JITTER;
+import static ch.fmartin.symphony.trello.orchestrator.SymphonyOrchestratorTestSupport.withLargestJitter;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.orchestrator.SymphonyOrchestratorTestSupport.MutableClock;
@@ -9,7 +12,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.LongUnaryOperator;
 import java.util.random.RandomGenerator;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -20,9 +22,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 final class AdaptivePollIntervalTest {
     private static final Instant START = Instant.parse("2026-10-04T10:00:00Z");
     private static final Duration CONFIGURED = Duration.ofSeconds(5);
-    private static final int PERCENT = 100;
-    private static final RandomGenerator NO_JITTER = new FixedRandom(bound -> 0);
-    private static final RandomGenerator MAX_JITTER = new FixedRandom(bound -> bound - 1);
     private static final int RATE_LIMITED_TICKS_TO_REACH_CAP = 3;
     private static final int QUIET_PERIODS_TO_RECOVER = 3;
 
@@ -189,26 +188,7 @@ final class AdaptivePollIntervalTest {
         assertThat(interval.status(reloaded).slowdownReason()).isEmpty();
     }
 
-    private static Duration withLargestJitter(Duration delay) {
-        return delay.plus(delay.multipliedBy(AdaptivePollInterval.MAX_JITTER_PERCENT)
-                        .dividedBy(PERCENT))
-                .minusMillis(1);
-    }
-
     private static RateLimitPressure rateLimited(Optional<Instant> retryNotBefore) {
         return new RateLimitPressure(1, Optional.of(START), retryNotBefore);
-    }
-
-    /// Returns a chosen draw for every bound, so a test can pin the smallest or largest jitter.
-    private record FixedRandom(LongUnaryOperator drawForBound) implements RandomGenerator {
-        @Override
-        public long nextLong() {
-            throw new UnsupportedOperationException("the poll interval only draws bounded values");
-        }
-
-        @Override
-        public long nextLong(long bound) {
-            return drawForBound.applyAsLong(bound);
-        }
     }
 }
