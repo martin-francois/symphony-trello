@@ -179,9 +179,7 @@ public final class TrelloHandoffToolFuzzInvariants {
             "trello_workpad_managed_section_ambiguous",
             "trello_workpad_comment_window_incomplete",
             "trello_checklist_ambiguous",
-            "trello_check_item_ambiguous",
-            // GitHub PR #784 reports arguments that break the advertised schema with this code.
-            "invalid_tool_arguments");
+            "trello_check_item_ambiguous");
     // Codes that can follow writes: a Trello request failed part way through, or a workpad cleanup had
     // to restore the authoritative comment.
     private static final Set<String> FAILURE_AFTER_WRITE_CODES = Set.of(
@@ -195,8 +193,8 @@ public final class TrelloHandoffToolFuzzInvariants {
             "trello_card_not_found",
             "trello_unknown_payload",
             "trello_unsupported_operation");
-    // The handler's catch-all for a runtime exception. Argument validation uses it today, before any
-    // write, so it is expected only for arguments outside the advertised schema.
+    // The handler's catch-all for a runtime exception. It may answer arguments outside the advertised
+    // schema, but never follows a write or schema-valid arguments.
     private static final String UNEXPECTED_FAILURE_CODE = "trello_tool_failed";
 
     private TrelloHandoffToolFuzzInvariants() {}
@@ -330,31 +328,22 @@ public final class TrelloHandoffToolFuzzInvariants {
     }
 
     private static void assertMoveAllowed(Execution execution, Write write) {
-        TrelloClient.BoardList target = null;
-        for (TrelloClient.BoardList list : execution.lists()) {
-            if (list.id().equals(write.value())) {
-                target = list;
-            }
-        }
-        if (target == null) {
-            throw violation(execution, write, "the card moved to a list that is not on the board");
-        }
+        TrelloClient.BoardList target = execution.lists().stream()
+                .filter(list -> list.id().equals(write.value()))
+                .findFirst()
+                .orElseThrow(() -> violation(execution, write, "the card moved to a list that is not on the board"));
         if (target.closed()) {
             throw violation(execution, write, "the card moved to an archived list");
         }
         Permissions permissions = execution.permissions();
         String normalizedName = StateNames.normalize(target.name());
         boolean allowedById = permissions.allowedListIds().contains(target.id());
-        boolean allowedByName = false;
-        for (String allowedName : permissions.allowedListNames()) {
-            allowedByName |= StateNames.normalize(allowedName).equals(normalizedName);
-        }
-        int openListsWithName = 0;
-        for (TrelloClient.BoardList list : execution.lists()) {
-            if (!list.closed() && StateNames.normalize(list.name()).equals(normalizedName)) {
-                openListsWithName++;
-            }
-        }
+        boolean allowedByName = permissions.allowedListNames().stream()
+                .anyMatch(allowedName -> StateNames.normalize(allowedName).equals(normalizedName));
+        long openListsWithName = execution.lists().stream()
+                .filter(list ->
+                        !list.closed() && StateNames.normalize(list.name()).equals(normalizedName))
+                .count();
         if (!allowedById && !(allowedByName && openListsWithName == 1)) {
             throw violation(
                     execution,

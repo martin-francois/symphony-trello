@@ -38,6 +38,7 @@ public final class InMemoryTrelloBoard {
     private static final int OK = 200;
     private static final int NOT_FOUND = 404;
     private static final String EMPTY_OBJECT = "{}";
+    private static final String TRELLO_DEFAULT_ACTIONS_LIMIT = "50";
 
     private final ObjectMapper json = new ObjectMapper();
     private final String boardId;
@@ -315,7 +316,7 @@ public final class InMemoryTrelloBoard {
                 .put("url", CARD_URL_PREFIX + card.shortLink());
         body.putArray("labels");
         if ("commentCard".equals(query.get("actions"))) {
-            int limit = Integer.parseInt(query.getOrDefault("actions_limit", "50"));
+            int limit = actionsLimit(query);
             boolean withIds = query.getOrDefault("action_fields", "").contains("id");
             ArrayNode actions = body.putArray("actions");
             for (CommentState comment :
@@ -331,6 +332,16 @@ public final class InMemoryTrelloBoard {
             body.set("checklists", checklistsJson(card));
         }
         return body;
+    }
+
+    // An AssertionError escapes the handler's catch-all, so a malformed client request fails the fuzz run.
+    private static int actionsLimit(Map<String, String> query) {
+        String limit = query.getOrDefault("actions_limit", TRELLO_DEFAULT_ACTIONS_LIMIT);
+        try {
+            return Integer.parseInt(limit);
+        } catch (NumberFormatException e) {
+            throw new AssertionError("TrelloClient sent a non-numeric actions_limit: " + limit, e);
+        }
     }
 
     private static ArrayNode checklistsJson(CardState card) {
