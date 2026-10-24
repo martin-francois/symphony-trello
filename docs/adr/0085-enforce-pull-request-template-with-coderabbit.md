@@ -121,6 +121,9 @@ check cannot tell a pull request without AI help from one whose author skipped t
   a later review completes.
 * Bad, because the instructions quote template text, so a template edit must update them. A script
   test catches a quoted excerpt the template no longer contains.
+* Bad, because each custom check takes one instruction text, so both repeat the rules for reading
+  the body. YAML cannot splice a shared part into a block scalar, so a script test keeps the copies
+  identical instead.
 
 ### Confirmation
 
@@ -132,7 +135,8 @@ corepack pnpm run verify:scripts
 ```
 
 `scripts/coderabbit-config.test.ts` fails when a custom check quotes text that is not in the
-template, when an error-mode check exists without `request_changes_workflow: true`, and when the
+template, when the custom checks stop sharing the same preamble for reading the body, when the
+description check leaves error mode or `request_changes_workflow: true` goes away, and when the
 author regains the ability to ignore failed checks or approve their own pull request.
 `ReleaseWorkflowTest` checks that both status settings stay off and that `github-actions[bot]` and
 `renovate[bot]` stay in `ignore_usernames`. Validate `.coderabbit.yaml` against the CodeRabbit

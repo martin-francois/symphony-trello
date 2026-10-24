@@ -2,22 +2,17 @@
 
 # ADR 0085 records why the pull request template is enforced this way.
 reviews:
-  # A check in error mode blocks nothing on its own. This workflow makes CodeRabbit request changes
-  # while a check fails, and the ruleset's pull request rule blocks a merge until it approves.
+  # Error-mode checks block a merge only through this changes-requested review.
   request_changes_workflow: true
-  # `@coderabbitai approve` and `@coderabbitai resolve` approve even with failing checks, so the
-  # author must not be able to run them on their own pull request.
+  # Otherwise the author can `@coderabbitai approve` their own pull request despite failing checks.
   allow_author_approval: false
-  # Not the gate: commit_status only mirrors review progress when review_progress is off, and
-  # review_status only adds skip notices. Both stay off so a skipped Release Please pull request
-  # gets no CodeRabbit status and no comment.
+  # Not the gate; both stay off so Release Please pull requests get no CodeRabbit status or comment.
   commit_status: false
   review_status: false
   auto_review:
     ignore_title_keywords:
       - "[skip ci]"
-    # Bots do not fill in the template, so the checks below would request changes on every bot pull
-    # request and hold Renovate's automerge until someone overrode them.
+    # Bots do not fill in the template, so the checks would hold Renovate's automerge.
     ignore_usernames:
       - "github-actions[bot]"
       - "renovate[bot]"
@@ -50,8 +45,7 @@ reviews:
           Pass otherwise. Both boxes unticked means no AI assistance was used.
 
           Do not judge whether the disclosure is true.
-      # scripts/check-pr-compatibility-metadata.ts, run by the Commitlint workflow, holds the full
-      # rules. This check asks for a subset of them, so it never fails a body that script accepts.
+      # Subset of scripts/check-pr-compatibility-metadata.ts, never stricter than that script.
       - name: "Compatibility decision complete"
         mode: "error"
         instructions: |

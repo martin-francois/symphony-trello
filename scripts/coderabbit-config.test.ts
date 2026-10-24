@@ -19,7 +19,6 @@ interface CodeRabbitConfig {
       readonly custom_checks: readonly CustomCheck[];
       readonly description?: PreMergeCheck;
       readonly override_requested_reviewers_only?: boolean;
-      readonly [check: string]: PreMergeCheck | readonly CustomCheck[] | boolean | undefined;
     };
     readonly request_changes_workflow?: boolean;
   };
@@ -33,6 +32,8 @@ const TEMPLATE = readFileSync(
   "utf8",
 );
 const CUSTOM_CHECKS = CONFIG.reviews.pre_merge_checks.custom_checks;
+// Every custom check opens with the same rules for reading the body, up to and including this line.
+const SHARED_PREAMBLE_END = "Fail when the body is empty.";
 
 test("custom pre-merge checks quote only text the pull request template contains", () => {
   // given
@@ -56,19 +57,45 @@ test("custom pre-merge checks quote only text the pull request template contains
   assert.deepEqual(missingExcerpts, []);
 });
 
-test("the description check blocks in error mode through the request changes workflow", () => {
+test("custom pre-merge checks share one preamble for reading the body", () => {
   // given
-  const checks = Object.values(CONFIG.reviews.pre_merge_checks).flatMap((value) =>
-    typeof value === "object" ? [value].flat() : [],
-  ) as readonly PreMergeCheck[];
+  const preambleEnds = CUSTOM_CHECKS.map((check) => check.instructions.indexOf(SHARED_PREAMBLE_END));
 
   // when
-  const blocking = checks.some((check) => check.mode === "error");
+  const checksWithoutPreamble = CUSTOM_CHECKS.filter((_, index) => preambleEnds[index] === -1).map(
+    (check) => check.name,
+  );
+  const preambles = CUSTOM_CHECKS.map((check, index) =>
+    check.instructions.slice(0, (preambleEnds[index] ?? 0) + SHARED_PREAMBLE_END.length),
+  );
 
   // then
-  assert.ok(blocking, "expected at least one pre-merge check in error mode");
-  assert.equal(CONFIG.reviews.pre_merge_checks.description?.mode, "error");
-  assert.equal(CONFIG.reviews.request_changes_workflow, true);
+  assert.deepEqual(
+    checksWithoutPreamble,
+    [],
+    `every custom check must end its shared preamble with "${SHARED_PREAMBLE_END}"`,
+  );
+  assert.equal(
+    new Set(preambles).size,
+    1,
+    "edit the shared preamble in every custom check, so all checks read the body the same way",
+  );
+});
+
+test("the description check blocks in error mode through the request changes workflow", () => {
+  // given
+  const {reviews} = CONFIG;
+
+  // when
+  const descriptionMode = reviews.pre_merge_checks.description?.mode;
+
+  // then
+  assert.equal(descriptionMode, "error", "the built-in description check must stay in error mode");
+  assert.equal(
+    reviews.request_changes_workflow,
+    true,
+    "error mode blocks a merge only through the request changes workflow",
+  );
 });
 
 test("the pull request author cannot clear a failed pre-merge check without fixing the body", () => {
@@ -76,9 +103,18 @@ test("the pull request author cannot clear a failed pre-merge check without fixi
   const {reviews} = CONFIG;
 
   // when
-  const authorCanOverride = reviews.pre_merge_checks.override_requested_reviewers_only !== true;
-  const authorCanApprove = reviews.allow_author_approval !== false;
+  const {override_requested_reviewers_only: overrideByReviewersOnly} = reviews.pre_merge_checks;
+  const {allow_author_approval: allowAuthorApproval} = reviews;
 
   // then
-  assert.deepEqual({authorCanApprove, authorCanOverride}, {authorCanApprove: false, authorCanOverride: false});
+  assert.equal(
+    overrideByReviewersOnly,
+    true,
+    "only requested reviewers may ignore failed pre-merge checks, otherwise the author can skip them",
+  );
+  assert.equal(
+    allowAuthorApproval,
+    false,
+    "the author must not run @coderabbitai approve, which approves even with failing checks",
+  );
 });
