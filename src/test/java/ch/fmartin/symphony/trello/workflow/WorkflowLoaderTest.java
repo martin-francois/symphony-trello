@@ -98,7 +98,7 @@ final class WorkflowLoaderTest {
         Files.writeString(workflow, workflowWithExtraFrontMatter(frontMatter, "Body"));
 
         // when
-        WorkflowException failure = catchThrowableOfType(() -> loader.load(workflow), WorkflowException.class);
+        WorkflowException failure = catchThrowableOfType(WorkflowException.class, () -> loader.load(workflow));
 
         // then
         assertThat(failure.code()).isEqualTo("workflow_parse_error");

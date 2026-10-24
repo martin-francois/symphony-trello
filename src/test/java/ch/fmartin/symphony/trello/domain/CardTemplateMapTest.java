@@ -69,7 +69,7 @@ final class CardTemplateMapTest {
 
         // then
         assertThat(template.get("blocked_by"))
-                .asList()
+                .asInstanceOf(InstanceOfAssertFactories.LIST)
                 .singleElement()
                 .asInstanceOf(InstanceOfAssertFactories.MAP)
                 .containsEntry("id", "blocker-1")
@@ -77,32 +77,32 @@ final class CardTemplateMapTest {
                 .containsEntry("state", "Done")
                 .containsEntry("url", "https://trello.com/c/SYNTH102");
         assertThat(template.get("checklists"))
-                .asList()
+                .asInstanceOf(InstanceOfAssertFactories.LIST)
                 .singleElement()
                 .asInstanceOf(InstanceOfAssertFactories.MAP)
                 .containsEntry("id", "checklist-1")
                 .containsEntry("name", "Must finish first");
         assertThat(template.get("attachments"))
-                .asList()
+                .asInstanceOf(InstanceOfAssertFactories.LIST)
                 .singleElement()
                 .asInstanceOf(InstanceOfAssertFactories.MAP)
                 .containsEntry("id", "attachment-1")
                 .containsEntry("url", "https://trello.com/c/SYNTH103");
         assertThat(template.get("trello_references"))
-                .asList()
+                .asInstanceOf(InstanceOfAssertFactories.LIST)
                 .singleElement()
                 .asInstanceOf(InstanceOfAssertFactories.MAP)
                 .containsEntry("source", "description")
                 .containsEntry("lookup_id", "SYNTH102")
                 .containsEntry("terminal", true);
         assertThat(template.get("prerequisite_problems"))
-                .asList()
+                .asInstanceOf(InstanceOfAssertFactories.LIST)
                 .singleElement()
                 .asInstanceOf(InstanceOfAssertFactories.MAP)
                 .containsEntry("code", "trello_prerequisite_checklist_ambiguous")
                 .containsEntry("checklist", "Related");
         assertThat(template.get("comments"))
-                .asList()
+                .asInstanceOf(InstanceOfAssertFactories.LIST)
                 .singleElement()
                 .asInstanceOf(InstanceOfAssertFactories.MAP)
                 .containsEntry("id", "comment-1")

@@ -72,8 +72,8 @@ final class TrelloClientChaosTest {
 
         // when
         TrelloException failure = catchThrowableOfType(
-                () -> client.fetchCandidateCards(config(Map.of("blocker_enforced_states", List.of("Todo")))),
-                TrelloException.class);
+                TrelloException.class,
+                () -> client.fetchCandidateCards(config(Map.of("blocker_enforced_states", List.of("Todo")))));
 
         // then
         assertThat(failure).as(scenario).isNotNull();
@@ -100,8 +100,8 @@ final class TrelloClientChaosTest {
 
         // when
         TrelloException failure = catchThrowableOfType(
-                () -> client.addUrlAttachment(config(Map.of()), "write-card", "https://example.invalid/pr/1", "PR"),
-                TrelloException.class);
+                TrelloException.class,
+                () -> client.addUrlAttachment(config(Map.of()), "write-card", "https://example.invalid/pr/1", "PR"));
 
         // then
         assertThat(failure).as(scenario).isNotNull();
@@ -138,7 +138,7 @@ final class TrelloClientChaosTest {
         // when
         List<?> cards = client.fetchCandidateCards(config);
         TrelloException writeFailure =
-                catchThrowableOfType(() -> client.addComment(config, "write-card", "hello"), TrelloException.class);
+                catchThrowableOfType(TrelloException.class, () -> client.addComment(config, "write-card", "hello"));
 
         // then
         assertThat(cards).isEmpty();

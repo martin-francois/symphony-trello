@@ -1099,7 +1099,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             if (currentValue instanceof List<?>) {
                 argSpec.<List<String>>getValue().add(value);
             } else {
-                argSpec.setValue(value, commandSpec.commandLine());
+                argSpec.setValue(value);
             }
             return true;
         }
