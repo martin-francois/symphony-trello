@@ -3596,9 +3596,11 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - If a snapshot API is implemented, it returns running rows, retry rows, token totals, and rate
   limits
 - If a snapshot API is implemented, snapshot and card-detail reads do not wait for an in-flight
-  orchestrator operation and show the state as of one point of that operation; a change an
-  operation makes to running rows, retry rows, the dispatch pause, or the effective config is
-  visible before that operation's next tracker, workspace, or worker call
+  orchestrator operation and show the state as of one point of that operation. These changes are
+  visible before the tracker, workspace, or worker call that follows them in the same operation:
+  the selected board at startup, the stopped state at stop, the new routing after a reload, a
+  dispatched card, a refreshed or terminated running card, a worker exit, a scheduled or fired
+  retry, and an installed, rearmed, or cleared dispatch pause
 - If a snapshot API is implemented, timeout/unavailable cases are surfaced
 
 ### 17.5 Coding-Agent App-Server Client
