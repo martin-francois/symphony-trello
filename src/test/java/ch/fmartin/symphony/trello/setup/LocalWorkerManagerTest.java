@@ -18,6 +18,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
+import ch.fmartin.symphony.trello.testsupport.BoundedWait;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AccessDeniedException;
@@ -32,9 +33,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.LockSupport;
 import java.util.function.BiFunction;
-import java.util.function.BooleanSupplier;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -47,6 +46,7 @@ import org.mockito.MockedConstruction;
 
 final class LocalWorkerManagerTest {
     private static final long MISSING_WORKFLOW_STATE_PID = 42L;
+    private static final Duration SECOND_CALLER_WAIT_TIMEOUT = Duration.ofSeconds(5);
 
     @TempDir
     Path tempDir;
@@ -570,8 +570,10 @@ final class LocalWorkerManagerTest {
                     .isTrue();
             second = startThread(() -> fixture.start(fixture.startRequest("Queue")), secondResult, secondError);
             secondThread.set(second);
-            awaitCondition(
-                    () -> startCalls.get() > 1 || secondError.get() != null || threadIsWaiting(secondThread.get()));
+            BoundedWait.until(
+                    SECOND_CALLER_WAIT_TIMEOUT,
+                    () -> startCalls.get() > 1 || secondError.get() != null || threadIsWaiting(secondThread.get()),
+                    "the second start reaching the worker lock");
 
             // when
             assertThat(startCalls).hasValue(1);
@@ -621,7 +623,10 @@ final class LocalWorkerManagerTest {
             Thread start = startThread(() -> fixture.start(fixture.startRequest("Queue")), startResult, startError);
 
             // when
-            awaitCondition(() -> startCalls.get() > 0 || threadIsWaitingForFileLock(start));
+            BoundedWait.until(
+                    SECOND_CALLER_WAIT_TIMEOUT,
+                    () -> startCalls.get() > 0 || threadIsWaitingForFileLock(start),
+                    "the start reaching the worker file lock");
 
             // then
             assertThat(startCalls).hasValue(0);
@@ -2459,7 +2464,10 @@ final class LocalWorkerManagerTest {
                     .isTrue();
             second = startThread(() -> fixture.stop(fixture.stopRequest("Queue")), secondResult, secondError);
             secondThread.set(second);
-            awaitCondition(() -> stopCalls.get() > 1 || threadIsWaiting(secondThread.get()));
+            BoundedWait.until(
+                    SECOND_CALLER_WAIT_TIMEOUT,
+                    () -> stopCalls.get() > 1 || threadIsWaiting(secondThread.get()),
+                    "the second stop reaching the worker lock");
 
             // when
             assertThat(stopCalls).hasValue(1);
@@ -4222,17 +4230,6 @@ final class LocalWorkerManagerTest {
         return Stream.of(thread.getStackTrace())
                 .anyMatch(frame -> frame.getClassName().startsWith("sun.nio.ch.")
                         && frame.getMethodName().startsWith("lock"));
-    }
-
-    private static void awaitCondition(BooleanSupplier condition) {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
-        while (System.nanoTime() < deadline) {
-            if (condition.getAsBoolean()) {
-                return;
-            }
-            LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(10));
-        }
-        throw new AssertionError("condition was not met before timeout");
     }
 
     private static StalePidScenario stalePidScenario(LocalWorkerManagerTestFixture fixture) throws Exception {
