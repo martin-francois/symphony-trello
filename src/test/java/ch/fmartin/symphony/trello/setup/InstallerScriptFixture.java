@@ -93,6 +93,10 @@ final class InstallerScriptFixture {
             }
         }
         processEnvironment.putAll(environment);
+        if (!environment.containsKey("TMPDIR") && !isWindows()) {
+            // The JVM ignores TMPDIR on Linux, and scripts/pwsh-docker.sh mounts TMPDIR into the container.
+            processEnvironment.put("TMPDIR", System.getProperty("java.io.tmpdir"));
+        }
         if (!environment.containsKey("SYMPHONY_TRELLO_TEST_OS") && isLinux()) {
             processEnvironment.put("SYMPHONY_TRELLO_TEST_OS", "Linux");
         }

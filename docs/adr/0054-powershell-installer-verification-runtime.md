@@ -78,6 +78,22 @@ By default, `scripts/pwsh-docker.sh` sets
 exercised from Linux. Maintainers can set `SYMPHONY_TRELLO_PWSH_ALLOW_NON_WINDOWS_TEST_RUNTIME=0`
 to prove the guard rejects non-Windows PowerShell.
 
+The installer tests remove inherited `SYMPHONY_*` variables, so they always call the wrapper with
+the default `docker` runtime. Where `docker` is the podman-docker shim, the wrapper recognizes
+Podman from `docker --version` and adds `--userns=keep-id`, as it does for
+`SYMPHONY_TRELLO_CONTAINER_RUNTIME=podman`. Without it, rootless Podman maps the host user to a
+subordinate UID that cannot read the tests' `0700` temp directories
+([GitHub issue #823](https://github.com/martin-francois/symphony-trello/issues/823)). Passing the runtime
+variable through the test fixture was rejected because the fixture strips every `SYMPHONY_*`
+control to keep host settings out of installer tests. Adding `--userns=keep-id` for every runtime
+was rejected because Docker does not support it.
+
+The wrapper also mounts `TMPDIR` when it lies outside `/tmp` and the repository, and the installer
+test fixture sets `TMPDIR` to the JVM's `java.io.tmpdir`. Contributors can then move the test temp
+dir off a small `/tmp` with one JVM setting. Mounting only `TMPDIR` and asking contributors to keep
+it equal to `java.io.tmpdir` was rejected, because the JVM ignores `TMPDIR` on Linux and a mismatch
+hides the test files from the container.
+
 ### Consequences
 
 * Good, because hosted PowerShell behavior is validated on the user platform it targets.
@@ -106,7 +122,9 @@ SYMPHONY_TRELLO_TEST_PWSH=./scripts/pwsh-docker.sh ./mvnw -q '-Djunit.parallel.e
 ```
 
 That command should report all PowerShell-pattern tests executed with zero skips when Docker is
-available.
+available. The same holds for rootless Podman behind the podman-docker shim, with the test temp dir
+on `/tmp` or elsewhere. `ContainerRuntimeScriptTest` pins the wrapper's shim detection and `TMPDIR`
+mount with recording fake runtimes.
 
 Hosted CI should show:
 

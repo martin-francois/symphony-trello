@@ -229,8 +229,11 @@ GitHub Secret Scanning responsibility split.
 
 PowerShell installer tests use native `pwsh` automatically on Windows. CI runs the PowerShell
 installer checks on a native Windows runner. On Linux, set `SYMPHONY_TRELLO_TEST_PWSH` when you
-need to exercise the PowerShell path; the local wrapper runs `pwsh` through Microsoft's .NET SDK
-container:
+need to exercise the PowerShell path. The local wrapper runs `pwsh` through Microsoft's .NET SDK
+container and mounts the repository, `/tmp`, the current directory, and `TMPDIR`. The installer
+tests set `TMPDIR` to the JVM's `java.io.tmpdir`, so their files stay visible in the container when
+you move the test temp dir off `/tmp`. When `docker` is the podman-docker shim, the wrapper detects
+it and maps your user into the container as it does for Podman. For example:
 
 ```bash
 ./scripts/pwsh-docker.sh -NoProfile -File ./install.ps1 --dry-run --no-onboard
