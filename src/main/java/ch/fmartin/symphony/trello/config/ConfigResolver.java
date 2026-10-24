@@ -260,8 +260,9 @@ public class ConfigResolver {
     private EffectiveConfig.RepositoryConfig repositoryConfig(
             Path workflowDirectory, Map<String, Object> repository, TypedWorkflowConfig typedWorkflow) {
         var codexReview = new EffectiveConfig.CodexReviewConfig(
-                strictRepositoryFlag(
-                        repository, "codex_review_before_handoff", ConfigDefaults.DEFAULT_CODEX_REVIEW_BEFORE_HANDOFF),
+                flag(
+                        typedWorkflow.repositoryCodexReviewBeforeHandoff(),
+                        ConfigDefaults.DEFAULT_CODEX_REVIEW_BEFORE_HANDOFF),
                 integer(
                         typedWorkflow.repositoryCodexReviewMaxCycles(),
                         ConfigDefaults.DEFAULT_CODEX_REVIEW_MAX_CYCLES));
@@ -368,6 +369,13 @@ public class ConfigResolver {
         return setting.value().orElse(defaultValue);
     }
 
+    private static boolean flag(WorkflowBooleanSetting setting, boolean defaultValue) {
+        setting.finding().ifPresent(finding -> {
+            throw new ConfigException("config_value_error", finding.message());
+        });
+        return setting.value().orElse(defaultValue);
+    }
+
     private static OptionalInt optionalInt(WorkflowIntegerSetting setting) {
         setting.finding().filter(WorkflowConfigFinding::strict).ifPresent(finding -> {
             throw new ConfigException("config_value_error", finding.message());
@@ -378,23 +386,6 @@ public class ConfigResolver {
     private static boolean bool(Map<String, Object> root, String key, boolean defaultValue) {
         Object value = root.get(key);
         return value == null ? defaultValue : Boolean.parseBoolean(value.toString());
-    }
-
-    /// Unlike the lenient trello_tools flags, a typo in an opt-in workflow switch must not silently
-    /// read as `false`, so only YAML booleans and their plain `true`/`false` spellings are accepted.
-    private static boolean strictRepositoryFlag(Map<String, Object> repository, String key, boolean defaultValue) {
-        Object value = repository.get(key);
-        if (value == null) {
-            return defaultValue;
-        }
-        if (value instanceof Boolean flag) {
-            return flag;
-        }
-        String text = value.toString().trim();
-        if ("true".equalsIgnoreCase(text) || "false".equalsIgnoreCase(text)) {
-            return Boolean.parseBoolean(text);
-        }
-        throw new ConfigException("config_value_error", "repository." + key + " must be true or false");
     }
 
     @SuppressWarnings("unchecked")

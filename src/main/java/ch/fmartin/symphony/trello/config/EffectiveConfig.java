@@ -91,6 +91,7 @@ public record EffectiveConfig(
     @NullMarked
     public record RepositoryConfig(
             @Nullable String defaultUrl, @Nullable Path defaultPath, CodexReviewConfig codexReview) {
+        /// For callers that only resolve repository sources, where the review loop plays no part.
         public RepositoryConfig(@Nullable String defaultUrl, @Nullable Path defaultPath) {
             this(defaultUrl, defaultPath, CodexReviewConfig.disabled());
         }
@@ -108,6 +109,13 @@ public record EffectiveConfig(
 
     /// Optional review loop that the agent runs before it hands off repository changes.
     public record CodexReviewConfig(boolean enabled, int maxCycles) {
+        /// Front-matter keys under `repository`; config parsing, setup, and prompt text all use these.
+        public static final String ENABLED_KEY = "codex_review_before_handoff";
+
+        public static final String MAX_CYCLES_KEY = "codex_review_max_cycles";
+        public static final String ENABLED_PATH = "repository." + ENABLED_KEY;
+        public static final String MAX_CYCLES_PATH = "repository." + MAX_CYCLES_KEY;
+
         public static CodexReviewConfig disabled() {
             return new CodexReviewConfig(
                     ConfigDefaults.DEFAULT_CODEX_REVIEW_BEFORE_HANDOFF, ConfigDefaults.DEFAULT_CODEX_REVIEW_MAX_CYCLES);

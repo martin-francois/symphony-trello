@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 final class ConfigResolverTest {
@@ -401,6 +402,22 @@ final class ConfigResolverTest {
 
         // then
         assertThat(config.repository().codexReview()).isEqualTo(new EffectiveConfig.CodexReviewConfig(true, 5));
+    }
+
+    @CsvSource({"'\"TRUE\"', true", "'\"False\"', false"})
+    @ParameterizedTest
+    void acceptsQuotedCodexReviewFlagIgnoringCase(String flag, boolean expected) throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.codex-review-quoted-" + expected + ".md",
+                "repository:\n  codex_review_before_handoff: " + flag);
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.repository().codexReview().enabled()).isEqualTo(expected);
     }
 
     @MethodSource("invalidCodexReviewSettings")

@@ -142,7 +142,7 @@ public class SymphonyMain {
         return switch (finding.kind()) {
             case OUT_OF_INT_RANGE -> "Workflow server.port is out of integer range: " + finding.input();
             case FRACTIONAL, NOT_A_NUMBER -> "Workflow server.port must be a whole number: " + finding.input();
-            case NON_POSITIVE, NEGATIVE, IGNORED_MAP_VALUE -> "Workflow " + finding.message();
+            case NON_POSITIVE, NEGATIVE, NOT_A_BOOLEAN, IGNORED_MAP_VALUE -> "Workflow " + finding.message();
         };
     }
 

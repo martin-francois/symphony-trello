@@ -97,8 +97,15 @@ public final class WorkflowConfigIngestion {
         WorkflowIntegerSetting codexTurnTimeoutMs = integerSetting(codex, "turn_timeout_ms", "turn_timeout_ms");
         WorkflowIntegerSetting codexReadTimeoutMs = integerSetting(codex, "read_timeout_ms", "read_timeout_ms");
         WorkflowIntegerSetting codexStallTimeoutMs = integerSetting(codex, "stall_timeout_ms", "stall_timeout_ms");
-        WorkflowIntegerSetting repositoryCodexReviewMaxCycles =
-                positiveIntegerSetting(repository, "codex_review_max_cycles", "repository.codex_review_max_cycles");
+        WorkflowBooleanSetting repositoryCodexReviewBeforeHandoff = strictBooleanSetting(
+                repository,
+                EffectiveConfig.CodexReviewConfig.ENABLED_KEY,
+                EffectiveConfig.CodexReviewConfig.ENABLED_PATH);
+        repositoryCodexReviewBeforeHandoff.finding().ifPresent(findings::add);
+        WorkflowIntegerSetting repositoryCodexReviewMaxCycles = positiveIntegerSetting(
+                repository,
+                EffectiveConfig.CodexReviewConfig.MAX_CYCLES_KEY,
+                EffectiveConfig.CodexReviewConfig.MAX_CYCLES_PATH);
 
         add(
                 findings,
@@ -127,6 +134,7 @@ public final class WorkflowConfigIngestion {
                 codexReadTimeoutMs,
                 codexStallTimeoutMs,
                 serverPort,
+                repositoryCodexReviewBeforeHandoff,
                 repositoryCodexReviewMaxCycles,
                 priorityLabels,
                 maxConcurrentAgentsByState,
@@ -211,6 +219,30 @@ public final class WorkflowConfigIngestion {
                                 String.valueOf(value),
                                 path + " must be positive"))))
                 .orElse(parsed);
+    }
+
+    /// Unlike the lenient trello_tools flags, a typo in an opt-in switch must not silently read as
+    /// `false`. Only YAML booleans and quoted `true`/`false` strings are accepted, ignoring case like
+    /// the YAML parser does for unquoted `True` and `TRUE`.
+    private static WorkflowBooleanSetting strictBooleanSetting(Map<String, Object> root, String key, String path) {
+        Object value = root.get(key);
+        return switch (value) {
+            case null -> WorkflowBooleanSetting.omitted();
+            case Boolean flag -> WorkflowBooleanSetting.valid(flag);
+            case String text
+            when isBooleanWord(text.trim()) -> WorkflowBooleanSetting.valid(Boolean.parseBoolean(text.trim()));
+            default ->
+                WorkflowBooleanSetting.invalid(WorkflowConfigFinding.strict(
+                        path,
+                        WorkflowConfigFinding.Kind.NOT_A_BOOLEAN,
+                        String.valueOf(value).trim(),
+                        path + " must be true or false"));
+        };
+    }
+
+    private static boolean isBooleanWord(String text) {
+        return Boolean.TRUE.toString().equalsIgnoreCase(text)
+                || Boolean.FALSE.toString().equalsIgnoreCase(text);
     }
 
     private static WorkflowIntegerSetting parseInteger(String path, Object value) {

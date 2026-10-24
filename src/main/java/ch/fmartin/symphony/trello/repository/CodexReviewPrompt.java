@@ -6,7 +6,7 @@ import org.jspecify.annotations.NullMarked;
 /// Renders the runtime section that turns on the optional pre-handoff Codex review loop.
 ///
 /// Symphony appends this section after the persisted workflow prompt, the same way it appends the
-/// repository source context, so editing `repository.codex_review_before_handoff` takes effect on
+/// repository source context, so editing the workflow opt-in flag takes effect on
 /// the next dispatch for generated, older, and hand-written workflows alike. See ADR 0121.
 @NullMarked
 public final class CodexReviewPrompt {
@@ -29,8 +29,8 @@ public final class CodexReviewPrompt {
         return """
                 %s
 
-                This workflow sets `repository.codex_review_before_handoff: true` with
-                `repository.codex_review_max_cycles: %d`. This final runtime section is authoritative for the review
+                This workflow sets `%s: true` with
+                `%s: %d`. This final runtime section is authoritative for the review
                 loop. It supersedes earlier workflow or skill text that orders validation, push, pull request, or
                 handoff steps differently.
 
@@ -88,6 +88,8 @@ public final class CodexReviewPrompt {
                 """
                 .formatted(
                         HEADING,
+                        EffectiveConfig.CodexReviewConfig.ENABLED_PATH,
+                        EffectiveConfig.CodexReviewConfig.MAX_CYCLES_PATH,
                         codexReview.maxCycles(),
                         REVIEW_COMMAND_TIMEOUT,
                         REVIEW_COMMAND_TIMEOUT,
