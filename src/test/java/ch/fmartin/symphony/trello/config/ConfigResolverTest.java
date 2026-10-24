@@ -430,6 +430,94 @@ final class ConfigResolverTest {
     }
 
     @Test
+    void followUpCardsAreDisabledWithDocumentedDefaultsWhenOmitted() throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow("WORKFLOW.follow-up-defaults.md", "");
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.trelloTools().followUpCards())
+                .isEqualTo(new EffectiveConfig.FollowUpCardsConfig(
+                        false, "Inbox", null, "follow-up", Map.of(), false, 3, 10));
+    }
+
+    @Test
+    void resolvesConfiguredFollowUpCards() throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.follow-up-configured.md",
+                """
+                trello_tools:
+                  follow_up_cards:
+                    enabled: true
+                    list_name: Icebox
+                    list_id: list-icebox
+                    label: ""
+                    relationship_labels:
+                      current_waits_for_follow_up: Must finish first
+                      related: "  "
+                    move_current_card_to_blocked: true
+                    max_cards_per_source_card: 2
+                    max_cards_per_hour: 4
+                """);
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.trelloTools().followUpCards())
+                .isEqualTo(new EffectiveConfig.FollowUpCardsConfig(
+                        true,
+                        "Icebox",
+                        "list-icebox",
+                        "",
+                        Map.of(FollowUpRelationship.CURRENT_WAITS_FOR_FOLLOW_UP, "Must finish first"),
+                        true,
+                        2,
+                        4));
+    }
+
+    @MethodSource("invalidFollowUpCardSettings")
+    @ParameterizedTest
+    void rejectsInvalidFollowUpCardSettings(String name, String setting, String expectedMessage) throws Exception {
+        // given
+        Path workflow =
+                writeDefaultWorkflow("WORKFLOW." + name + ".md", "trello_tools:\n  follow_up_cards:\n    " + setting);
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        ConfigException error = catchThrowableOfType(
+                ConfigException.class, () -> resolver.resolve(new WorkflowLoader().load(workflow)));
+
+        // then
+        assertThat(error.code()).isEqualTo("config_value_error");
+        assertThat(error).hasMessage(expectedMessage);
+    }
+
+    private static Stream<Arguments> invalidFollowUpCardSettings() {
+        return Stream.of(
+                Arguments.of(
+                        "zero-per-source",
+                        "max_cards_per_source_card: 0",
+                        "trello_tools.follow_up_cards.max_cards_per_source_card must be a positive whole number"),
+                Arguments.of(
+                        "fractional-per-hour",
+                        "max_cards_per_hour: 1.5",
+                        "trello_tools.follow_up_cards.max_cards_per_hour must be a positive whole number"),
+                Arguments.of(
+                        "blank-list", "list_name: \" \"", "trello_tools.follow_up_cards.list_name must not be blank"),
+                Arguments.of(
+                        "unknown-relationship-label",
+                        "relationship_labels:\n      blocks: Blocks",
+                        "trello_tools.follow_up_cards.relationship_labels keys must be one of related,"
+                                + " follow_up_waits_for_current, current_waits_for_follow_up"));
+    }
+
+    @Test
     void emptyPriorityLabelValuesFallBackToDefaultsInsteadOfCrashing() throws Exception {
         // given
         Path workflow = writeDefaultWorkflow(

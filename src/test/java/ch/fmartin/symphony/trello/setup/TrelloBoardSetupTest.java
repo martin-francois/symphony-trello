@@ -518,6 +518,10 @@ final class TrelloBoardSetupTest {
                 .contains("## Operating Posture")
                 .contains("This is an unattended orchestration run")
                 .contains("Start by determining the current Trello list")
+                .contains("## Out-Of-Scope Follow-Up Work")
+                .containsIgnoringWhitespaces(
+                        "When the `trello_create_follow_up_card` tool is available, call it once per distinct out-of-scope item")
+                .containsIgnoringWhitespaces("list the follow-up work under a `Follow-ups` heading")
                 .contains("## Execution Flow")
                 .contains("commit, push")
                 .contains("Only move to \"Human Review\"")
@@ -691,7 +695,8 @@ final class TrelloBoardSetupTest {
                         false,
                         false,
                         false,
-                        false));
+                        false,
+                        EffectiveConfig.FollowUpCardsConfig.disabled()));
         assertThat(config.polling().interval()).isEqualTo(ConfigDefaults.GENERATED_WORKFLOW_POLLING_INTERVAL);
     }
 
@@ -1121,7 +1126,16 @@ final class TrelloBoardSetupTest {
         EffectiveConfig config = resolve(workflow);
         assertThat(config.trelloTools())
                 .isEqualTo(new EffectiveConfig.TrelloToolsConfig(
-                        false, false, List.of(), List.of(), false, false, false, false, false));
+                        false,
+                        false,
+                        List.of(),
+                        List.of(),
+                        false,
+                        false,
+                        false,
+                        false,
+                        false,
+                        EffectiveConfig.FollowUpCardsConfig.disabled()));
     }
 
     @Test
@@ -1618,7 +1632,8 @@ final class TrelloBoardSetupTest {
                         false,
                         false,
                         false,
-                        false));
+                        false,
+                        EffectiveConfig.FollowUpCardsConfig.disabled()));
         assertThat(config.agent().maxConcurrentAgents()).isEqualTo(2);
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
@@ -1870,7 +1885,16 @@ final class TrelloBoardSetupTest {
         EffectiveConfig config = resolve(workflow);
         assertThat(config.trelloTools())
                 .isEqualTo(new EffectiveConfig.TrelloToolsConfig(
-                        true, true, List.of(), List.of("done"), true, false, false, false, false));
+                        true,
+                        true,
+                        List.of(),
+                        List.of("done"),
+                        true,
+                        false,
+                        false,
+                        false,
+                        false,
+                        EffectiveConfig.FollowUpCardsConfig.disabled()));
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("allowed_move_list_names:")
