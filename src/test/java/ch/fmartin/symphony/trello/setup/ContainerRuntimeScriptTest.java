@@ -10,7 +10,6 @@ import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -95,8 +94,8 @@ final class ContainerRuntimeScriptTest {
         Path invocation = tempDir.resolve("invocation.txt");
         installRecordingRuntime("docker", invocation);
         String pinnedImage = "ghcr.io/betterleaks/betterleaks:v9.9.9@sha256:" + "a".repeat(64);
-        Map<String, String> environment = new HashMap<>(runtimeEnvironment(null));
-        environment.put("SYMPHONY_TRELLO_BETTERLEAKS_IMAGE", pinnedImage);
+        Map<String, String> environment =
+                withEnvironment(runtimeEnvironment(null), Map.of("SYMPHONY_TRELLO_BETTERLEAKS_IMAGE", pinnedImage));
 
         // when
         ProcessResult result = runWrapper("betterleaks-docker.sh", environment);
