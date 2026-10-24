@@ -81,12 +81,13 @@ configuration caps JUnit's fixed executor pool at the configured parallelism. Th
 blocking tests from creating compensating workers beyond the runner's measured capacity.
 
 Runner allocation is separate from runner sizing. The `test` job remains on
-`blacksmith-2vcpu-ubuntu-2404`, and `windows-powershell` remains on
-`blacksmith-2vcpu-windows-2025`, because they dominate pull-request completion time and benefit from
-Blacksmith's faster execution and caching. Every other repository job uses a standard
-GitHub-hosted runner. Linux supporting jobs use `ubuntu-24.04`, matching the operating-system
-version of the Blacksmith runner they replace. Release Please also uses GitHub-hosted Ubuntu because
-it does not gate pull-request completion.
+`blacksmith-2vcpu-ubuntu-2604`, and `windows-powershell` remains on `blacksmith-2vcpu-windows-2025`,
+because they dominate pull-request completion time and benefit from Blacksmith's faster execution
+and caching. Every other repository job uses a standard GitHub-hosted runner. Linux supporting jobs
+pin the same Ubuntu version as the Blacksmith runner they replace. A script test fails when the two
+differ, so a runner update moves both. The measurements below ran on Ubuntu 24.04 runners of the
+same size; both moved to Ubuntu 26.04 in October 2026. Release Please also uses GitHub-hosted Ubuntu
+because it does not gate pull-request completion.
 
 The previous stable hosted test shape completed in 146 seconds on 2 vCPU in both benchmark runs, for
 146 normalized seconds. Successful 2-vCPU JUnit-parallel cells measured 97-103 normalized seconds,
@@ -163,7 +164,7 @@ The Surefire and Failsafe system properties MUST set
 `junit.jupiter.execution.parallel.config.fixed.parallelism`. A fixed parallelism value without the
 matching maximum pool size does not bound JUnit's compensating worker threads.
 
-The hosted Linux test job should run on `blacksmith-2vcpu-ubuntu-2404` and pass:
+The hosted Linux test job should run on `blacksmith-2vcpu-ubuntu-2604` and pass:
 
 ```bash
 ./mvnw -Djunit.parallel.enabled=true -Djunit.parallel.config.fixed.parallelism=2 verify
@@ -174,7 +175,7 @@ the old serial shape during test isolation debugging.
 
 The only Blacksmith runner labels in `.github/workflows` MUST be:
 
-* `ci.yml:test:blacksmith-2vcpu-ubuntu-2404`; and
+* `ci.yml:test:blacksmith-2vcpu-ubuntu-2604`; and
 * `ci.yml:windows-powershell:blacksmith-2vcpu-windows-2025`.
 
 Repository script tests enforce this allocation across every workflow. All Linux jobs outside those

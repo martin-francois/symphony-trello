@@ -64,6 +64,15 @@ Patch tags like `8.0.425`, distribution tags like `8.0-bookworm-slim` and archit
 out, because the pin follows a `major.minor` tag and docker versioning compares only tags of the
 same shape.
 
+Before a major ships, Microsoft already points its `major.minor` tag at the previews and release
+candidates. In October 2026 `11.0` had the digest of `11.0.100-rc.2`, and Renovate opened PR #966 to
+move the PowerShell test image from the 10.0 release to that release candidate. The transform
+therefore marks a `major.minor` release `isStable: false` when its digest also belongs to a version
+tag such as `11.0.100-preview.7` or `11.0.100-rc.2`. Renovate ignores unstable releases by default,
+so it offers the major once Microsoft points the tag at the first stable build and that push is seven
+days old. Marking the release unstable, rather than dropping it, keeps digest updates working for a
+pin that already follows a preview on purpose.
+
 For a digest update Renovate ages the update against the timestamp of the tag it follows, so the
 `8.0` digest becomes eligible seven days after Microsoft last pushed `8.0`. If Microsoft pushes
 again inside those seven days, the clock restarts with the new digest, as it does for a Docker Hub
