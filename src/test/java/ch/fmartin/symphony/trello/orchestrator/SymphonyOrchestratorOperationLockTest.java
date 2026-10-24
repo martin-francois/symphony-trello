@@ -39,10 +39,12 @@ final class SymphonyOrchestratorOperationLockTest {
         tickBeforeDispatch.awaitPaused();
 
         // when
-        CompletableFuture<Integer> preparesWhenStopReturned = CompletableFuture.supplyAsync(() -> {
-            orchestrator.stop();
-            return tracker.prepareForDispatchCalls.get();
-        });
+        CompletableFuture<Integer> preparesWhenStopReturned = CompletableFuture.supplyAsync(
+                () -> {
+                    orchestrator.stop();
+                    return tracker.prepareForDispatchCalls.get();
+                },
+                OWN_PLATFORM_THREAD);
         tickBeforeDispatch.resumeWhenContendedOr(preparesWhenStopReturned::isDone);
 
         // then
