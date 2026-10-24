@@ -3365,11 +3365,11 @@ final class SetupDiagnosticReporterTest {
     @Test
     void writesSanitizedReportWithInstallerToolWorkflowAndLogContext() throws Exception {
         // given
-        HttpServer server = fakeLocalServer();
-        int port = server.getAddress().getPort();
+        FakeLocalServer server = FakeLocalServer.start();
+        int port = server.port();
         String privateSourceCommit = "abcdef0123456789abcdef0123456789abcdef01";
         Path report;
-        try {
+        try (server) {
             Path appHome = tempDir.resolve("app");
             Path configDir = tempDir.resolve("config");
             Path workspaceRoot = tempDir.resolve("workspaces");
@@ -3505,8 +3505,6 @@ final class SetupDiagnosticReporterTest {
                                     "--active",
                                     "Secret Queue"))
                     .orElseThrow();
-        } finally {
-            server.stop(0);
         }
 
         // then
@@ -3734,10 +3732,10 @@ final class SetupDiagnosticReporterTest {
     @Test
     void healthProbesIncludeCustomMarkdownWorkflowWhenManifestIsMissing() throws Exception {
         // given
-        HttpServer server = fakeLocalServer();
-        int port = server.getAddress().getPort();
+        FakeLocalServer server = FakeLocalServer.start();
+        int port = server.port();
         Optional<Path> report;
-        try {
+        try (server) {
             Path configDir = tempDir.resolve("custom-workflow-config");
             Path workspaceRoot = tempDir.resolve("workspaces");
             Path workflow = tempDir.resolve("custom-board.md");
@@ -3763,8 +3761,6 @@ final class SetupDiagnosticReporterTest {
                     new TrelloBoardSetupException("setup_custom_workflow_failed", "setup failed"),
                     request(configDir, workspaceRoot, Path.of("missing-manifest.json"), workflow, env),
                     terminal);
-        } finally {
-            server.stop(0);
         }
 
         // then
@@ -4136,32 +4132,45 @@ final class SetupDiagnosticReporterTest {
         }
     }
 
-    /// Binds an OS-assigned loopback port and keeps it until the caller stops the server, so no other
-    /// process can take the port between the fixture writing it and the reporter probing it.
-    private static HttpServer fakeLocalServer() throws IOException {
-        HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-        server.createContext(
-                "/api/v1/local-status",
-                exchange -> writeJson(
-                        exchange,
-                        """
-                {"boardId":"private-board-id","configuredBoardId":"older-private-short-link","workflowPath":"/home/alice/private-project/WORKFLOW.md"}
-                """));
-        server.createContext(
-                "/api/v1/state",
-                exchange -> writeJson(
-                        exchange,
-                        """
-                {
-                  "generated_at":"2026-05-11T00:00:00Z",
-                  "counts":{"running":1,"retrying":1},
-                  "running":[{"card_id":"private-card-id","card_identifier":"TRELLO-private","last_message":"private runtime message"}],
-                  "retrying":[{"card_id":"private-card-id-2","card_identifier":"TRELLO-private-2","error":"private retry message"}],
-                  "routing":{"active_lists":["Ready for Codex"],"terminal_lists":["Done"],"handoff_lists":[]}
-                }
-                """));
-        server.start();
-        return server;
+    /// Fake local status server for the health probes. It binds an OS-assigned loopback port and keeps
+    /// it until closed, so no other process can take the port between the fixture writing it and the
+    /// reporter probing it.
+    private record FakeLocalServer(HttpServer httpServer) implements AutoCloseable {
+
+        static FakeLocalServer start() throws IOException {
+            HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+            server.createContext(
+                    "/api/v1/local-status",
+                    exchange -> writeJson(
+                            exchange,
+                            """
+                    {"boardId":"private-board-id","configuredBoardId":"older-private-short-link","workflowPath":"/home/alice/private-project/WORKFLOW.md"}
+                    """));
+            server.createContext(
+                    "/api/v1/state",
+                    exchange -> writeJson(
+                            exchange,
+                            """
+                    {
+                      "generated_at":"2026-05-11T00:00:00Z",
+                      "counts":{"running":1,"retrying":1},
+                      "running":[{"card_id":"private-card-id","card_identifier":"TRELLO-private","last_message":"private runtime message"}],
+                      "retrying":[{"card_id":"private-card-id-2","card_identifier":"TRELLO-private-2","error":"private retry message"}],
+                      "routing":{"active_lists":["Ready for Codex"],"terminal_lists":["Done"],"handoff_lists":[]}
+                    }
+                    """));
+            server.start();
+            return new FakeLocalServer(server);
+        }
+
+        int port() {
+            return httpServer.getAddress().getPort();
+        }
+
+        @Override
+        public void close() {
+            httpServer.stop(0);
+        }
     }
 
     private static void writeJson(HttpExchange exchange, String json) throws IOException {
