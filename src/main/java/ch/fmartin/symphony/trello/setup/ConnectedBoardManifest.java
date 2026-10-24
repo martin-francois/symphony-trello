@@ -68,6 +68,36 @@ record ConnectedBoardManifest(List<ConnectedBoard> boards) {
         return actual != null && expected != null && actual.equalsIgnoreCase(expected);
     }
 
+    /// The one connected board that a `--board` selector names; no match or several matches are
+    /// expected selector errors.
+    ConnectedBoard selectBoard(String selector) {
+        List<ConnectedBoard> matches = findAllByBoard(selector);
+        if (matches.isEmpty()) {
+            throw new TrelloBoardSetupException(
+                    "setup_worker_board_not_found", "No connected Trello board matches \"" + selector + "\".");
+        }
+        if (matches.size() > 1) {
+            throw new TrelloBoardSetupException(
+                    "setup_worker_board_ambiguous",
+                    "Multiple connected boards match --board. Re-run with a board id, short link, or --workflow.");
+        }
+        return matches.getFirst();
+    }
+
+    /// The connected board that a `--workflow` selector names, or empty for a workflow outside the
+    /// manifest. Several rows for one workflow are a manifest error the user must repair.
+    Optional<ConnectedBoard> selectWorkflow(Path workflowPath) {
+        List<ConnectedBoard> matches = findAllByWorkflow(workflowPath);
+        if (matches.size() > 1) {
+            throw new TrelloBoardSetupException(
+                    "setup_worker_workflow_ambiguous",
+                    "Multiple connected-board rows reference --workflow. Repair "
+                            + FILE_NAME
+                            + ", then rerun the command.");
+        }
+        return matches.stream().findAny();
+    }
+
     Optional<ConnectedBoard> findByWorkflow(Path workflowPath) {
         return findAllByWorkflow(workflowPath).stream().findFirst();
     }

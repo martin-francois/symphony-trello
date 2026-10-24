@@ -252,6 +252,11 @@ final class InstallerScriptLifecycleTest {
                 .isZero();
         assertThat(update.exitCode()).isZero();
         assertThat(secondUpdate.exitCode()).isZero();
+        assertThat(install.output()).doesNotContain("Checking generated workflows...");
+        assertThat(update.output())
+                .contains(
+                        "Checking generated workflows...",
+                        "RUN  " + installedCommand + " migrate-workflows --from-version test --non-interactive");
         assertThat(markerContentAfterUpdate).isEqualTo("updated\n");
         assertThat(statusWhileRunning.output())
                 .contains("running WORKFLOW.lifecycle-board.md pid=")
@@ -523,6 +528,23 @@ final class InstallerScriptLifecycleTest {
                 "stop",
                 "--workflow",
                 workflow.toString());
+        ProcessResult update = run(
+                environment,
+                "pwsh",
+                "-NoProfile",
+                "-File",
+                installScript.toString(),
+                "--no-onboard",
+                "--symphony-home",
+                symphonyHome.toString(),
+                "--prefix",
+                installPrefix.toString(),
+                "--bin-dir",
+                binDirectory.toString(),
+                "--repo",
+                sourceRepository.toUri().toString(),
+                "--ref",
+                "main");
         ProcessResult uninstall = run(
                 environment,
                 "pwsh",
@@ -554,7 +576,12 @@ final class InstallerScriptLifecycleTest {
         assertThat(status.output()).contains("running WORKFLOW $value & (demo).md");
         assertThat(logs.output()).contains("fake wrapper log");
         assertThat(stop.output()).contains("Stopped WORKFLOW $value & (demo).md");
+        assertThat(update.exitCode()).as(update.output()).isZero();
+        assertThat(install.output()).doesNotContain("Checking generated workflows...");
+        assertThat(update.output()).contains("Checking generated workflows...");
         String fakeLogContent = Files.readString(fakeLog);
+        assertThat(eventArguments(setupCliEvent(fakeLogContent, "migrate-workflows", "--non-interactive")))
+                .contains("migrate-workflows --from-version test --non-interactive");
         Map<String, Object> powerShellSetup = setupCliEvent(fakeLogContent, "new-board", "Wrapper Dispatch Board");
         assertThat(String.valueOf(powerShellSetup.get("cwd"))).contains("windows caller");
         assertThat(String.valueOf(powerShellSetup.get("dotenv"))).contains("home $value & (demo)\\config\\.env");

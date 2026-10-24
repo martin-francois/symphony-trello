@@ -175,6 +175,76 @@ final class TrelloBoardSetupMainTest {
                 .isEqualTo("Open lists: \"Ready for Codex\", \"Sneaky\\nList\\t\\\"Q\\\"\", \"Released\"");
     }
 
+    @Test
+    void importBoardRecordsTheGeneratedBodySoTheMigrationCheckFindsNoChange() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.recorded.md");
+        Path store = tempDir.resolve(GeneratedWorkflowStore.FILE_NAME);
+        CliRunResult imported = runCli(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--in-progress",
+                "Doing",
+                "--blocked",
+                "Blocked",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                tempDir.resolve(ConnectedBoardManifest.FILE_NAME).toString(),
+                "--env",
+                tempDir.resolve(".env.recorded").toString());
+        String workflowAfterImport = Files.readString(workflow);
+
+        // when
+        CliRunResult recorded = runCli("migrate-workflows", "--config-dir", tempDir.toString(), "--non-interactive");
+        Files.delete(store);
+        CliRunResult unversioned = runCli("migrate-workflows", "--config-dir", tempDir.toString(), "--non-interactive");
+
+        // then
+        imported.assertSuccess();
+        recorded.assertSuccess()
+                .stdoutContains("OK        \"Existing Board\"", "the generated workflow body did not change");
+        unversioned.assertSuccess().stdoutContains("CURRENT   \"Existing Board\"");
+        assertThat(workflow).hasContent(workflowAfterImport);
+        assertThat(store).exists();
+    }
+
+    @Test
+    void migrateWorkflowsRejectsAmbiguousOrIncompleteSelectorsWithoutChecking() {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+
+        // when
+        CliRunResult bothSelectors = runCli(
+                "migrate-workflows",
+                "--config-dir",
+                tempDir.toString(),
+                "--board",
+                "Board",
+                "--workflow",
+                workflow.toString());
+        CliRunResult markWithoutSelector =
+                runCli("migrate-workflows", "--config-dir", tempDir.toString(), "--mark-migrated");
+
+        // then
+        bothSelectors.assertFailure(SETUP_FAILURE).stderrContains("mutually exclusive");
+        markWithoutSelector
+                .assertFailure(SETUP_FAILURE)
+                .stderrContains("--mark-migrated needs --board NAME or --workflow PATH.");
+        assertThat(workflow).doesNotExist();
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"input?utm=test", "input#fragment", "input/?utm=test"})
     void importBoardStripsAccidentalQueryOrFragmentFromBareBoardSelectors(String selector) {

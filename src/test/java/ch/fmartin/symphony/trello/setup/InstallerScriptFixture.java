@@ -704,9 +704,17 @@ final class InstallerScriptFixture {
                     echo "setup_failed code=setup_invalid_arguments message=Unmatched argument: 'definitely-not-a-command'" >&2
                     exit 2
                   fi
+                  if [[ -n "${SYMPHONY_FAKE_WITHOUT_WORKFLOW_MIGRATION:-}" && "${raw_cli_args[0]:-}" == "migrate-workflows" ]]; then
+                    echo "setup_failed code=setup_invalid_arguments message=Unmatched argument: 'migrate-workflows'" >&2
+                    exit 2
+                  fi
                   if [[ "$*" == *"--help"* || "$*" == *" -h"* ]]; then
                     echo "Usage: symphony-trello"
                     exit 0
+                  fi
+                  if [[ -n "${SYMPHONY_FAKE_WORKFLOW_MIGRATION_FAILURE:-}" && "${raw_cli_args[0]:-}" == "migrate-workflows" ]]; then
+                    echo "  REJECTED  simulated workflow migration rejection"
+                    exit 2
                   fi
                   if [[ "$*" == *"--version"* ]]; then
                     case "${SYMPHONY_FAKE_VERSION_MODE:-ok}" in
@@ -724,7 +732,7 @@ final class InstallerScriptFixture {
                         exit 0
                         ;;
                       *)
-                        echo "symphony-trello test"
+                        echo "symphony-trello ${SYMPHONY_FAKE_VERSION:-test}"
                         exit 0
                         ;;
                     esac
@@ -946,7 +954,7 @@ final class InstallerScriptFixture {
                       Write-Output "symphony-trello test"
                       exit 0
                     }
-                    Write-Output "symphony-trello test"
+                    Write-Output "symphony-trello $(if ($env:SYMPHONY_FAKE_VERSION) { $env:SYMPHONY_FAKE_VERSION } else { 'test' })"
                     exit 0
                   }
 	                  if (($args -join " ") -like "*TrelloBoardSetupMain start*" -or
@@ -1012,7 +1020,8 @@ final class InstallerScriptFixture {
                 new String[] {"stop", "--help"},
                 new String[] {"status", "--help"},
                 new String[] {"logs", "--help"},
-                new String[] {"diagnostics", "--help"});
+                new String[] {"diagnostics", "--help"},
+                new String[] {"migrate-workflows", "--help"});
     }
 
     static String[] commandWithPrefix(String executable, String[] arguments) {

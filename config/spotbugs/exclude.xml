@@ -45,6 +45,13 @@
     <Method name="writeAtomically"/>
   </Match>
 
+  <!-- Workflow body migration and its provenance store create temporary files only next to a connected or explicitly selected workflow, or next to the store in the config directory, through one same-directory helper. -->
+  <Match>
+    <Bug pattern="PATH_TRAVERSAL_IN"/>
+    <Class name="ch.fmartin.symphony.trello.setup.AtomicFiles"/>
+    <Method name="siblingTemporaryFile"/>
+  </Match>
+
   <!-- Repository-source records use constructor-enforced discriminated-state invariants. SpotBugs 4.10.3.0 does not infer those invariants or that repeated record accessors return the same immutable field. -->
   <Match>
     <Bug pattern="NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE"/>
