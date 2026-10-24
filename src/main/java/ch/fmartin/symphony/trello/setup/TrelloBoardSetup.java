@@ -1948,7 +1948,8 @@ public final class TrelloBoardSetup {
                         fixupDecision,
                         blockedText,
                         doneDestination,
-                        PullRequestHandoffPrompt.mergeRules(doneDestination, blockedText, skillPath("land")))
+                        PullRequestHandoffPrompt.mergeRules(
+                                quote(mergingState), reviewHandoff, doneDestination, blockedText, skillPath("land")))
                 .stripTrailing();
     }
 

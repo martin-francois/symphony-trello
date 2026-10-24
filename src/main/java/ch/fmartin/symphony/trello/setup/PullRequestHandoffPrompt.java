@@ -32,7 +32,8 @@ final class PullRequestHandoffPrompt {
     }
 
     /// The merge rules for a card branch that has no pull request, appended to the generated merge section.
-    static String mergeRules(String doneDestination, String blockedText, String landSkill) {
+    static String mergeRules(
+            String mergingState, String reviewHandoff, String doneDestination, String blockedText, String landSkill) {
         return """
                 Branch-only exception: when the %s section selects `branch_only` and no open
                 pull request exists for the card branch, skip the PR steps above and merge the branch itself.
@@ -41,8 +42,22 @@ final class PullRequestHandoffPrompt {
                 branch, skip the merge. Push the target branch normally and never force-push it. Do not apply pull
                 request review-thread handling. After the merge, or when no merge was needed, say in the completion
                 comment which branch was merged into which target, or why no merge was needed, and move the card to
-                %s. If the merge or push is rejected, %s."""
-                .formatted(SECTION_TITLE, landSkill, doneDestination, blockedText);
+                %s. If the merge or push is rejected, %s.
+
+                When the effective mode is `create`, no pull request exists for the card branch, and an earlier
+                branch-only handoff pushed that branch, for example because a human removed the label and moved the
+                card straight to %s, do not merge the branch directly. Create the pull request first as described
+                in %s, but keep the card in %s instead of moving it to %s. Then follow the PR
+                merge steps above for the new pull request."""
+                .formatted(
+                        SECTION_TITLE,
+                        landSkill,
+                        doneDestination,
+                        blockedText,
+                        mergingState,
+                        CREATE_LATER_TITLE,
+                        mergingState,
+                        reviewHandoff);
     }
 
     private static String resolvedMode() {
