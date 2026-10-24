@@ -22,7 +22,8 @@ headers, left, right, and center alignment markers, and rows with one space on e
 cell, such as `| git | available |`. It checks that every row has one cell per header. Headers are
 fixed literals in `SetupDiagnosticReporter`, and the helper writes them as given. In cell values it
 escapes only table syntax: a pipe becomes `\|`, CR and LF become spaces, and `null` becomes an empty
-cell. Redaction happens before a value reaches the helper.
+cell. Report values are redacted before they reach the helper. The private-context tables that
+`diagnostics --show-private-context` prints pass raw values on purpose.
 
 [GitHub issue #94](https://github.com/martin-francois/symphony-trello/issues/94) asked whether
 commonmark-java and its GFM tables extension should render these tables instead. Should the
