@@ -1188,11 +1188,12 @@ test("Renovate looks up MCR images through the catalog's push times", () => {
       datasource?.defaultRegistryUrlTemplate ?? "",
       /^https:\/\/mcr\.microsoft\.com\/api\/v1\/catalog\/[^?]+\/tags\?reg=mar$/u,
     );
+    const transform = datasource?.transformTemplates?.join("\n") ?? "";
     // lastModifiedDate is the registry's time of the push that set the tag's current digest.
-    assert.match(
-      datasource?.transformTemplates?.join("\n") ?? "",
-      /"releaseTimestamp": \$tag\.lastModifiedDate/u,
-    );
+    assert.match(transform, /"releaseTimestamp": \$tag\.lastModifiedDate/u);
+    // MCR points the major.minor tag of an unreleased major at its previews, so a release whose
+    // digest is also a preview or rc version must not count as stable (ADR 0125).
+    assert.match(transform, /"isStable": \$not\(\$tag\.digest in \$prereleaseDigests\)/u);
   }
 });
 

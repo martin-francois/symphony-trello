@@ -168,11 +168,11 @@
       ]
     },
     "mcr-dotnet-sdk": {
-      "description": "Microsoft Artifact Registry's tag catalog for mcr.microsoft.com/dotnet/sdk. Every major.minor tag, such as 8.0, becomes a release with the catalog's lastModifiedDate, the time MCR last pushed that tag, as its release timestamp and the tag's current manifest-list digest. Patch, distribution and architecture tags are left out because the pin follows a major.minor tag.",
+      "description": "Microsoft Artifact Registry's tag catalog for mcr.microsoft.com/dotnet/sdk. Every major.minor tag, such as 8.0, becomes a release with the catalog's lastModifiedDate, the time MCR last pushed that tag, as its release timestamp and the tag's current manifest-list digest. Patch, distribution and architecture tags are left out because the pin follows a major.minor tag. Before a major ships, MCR already points its major.minor tag, such as 11.0, at the preview or release candidate, so a major.minor tag whose digest is also a preview or rc version tag, such as 11.0.100-rc.2, is marked unstable and Renovate does not offer it as an update.",
       "defaultRegistryUrlTemplate": "https://mcr.microsoft.com/api/v1/catalog/dotnet/sdk/tags?reg=mar",
       "format": "json",
       "transformTemplates": [
-        "($tags := $filter($, function($tag) { $match($tag.name, /^[0-9]+\\.[0-9]+$/) }); {\"releases\": [$map($tags, function($tag) { {\"version\": $tag.name, \"releaseTimestamp\": $tag.lastModifiedDate, \"digest\": $tag.digest} })], \"sourceUrl\": \"https://github.com/dotnet/sdk\"})"
+        "($prereleaseDigests := $filter($, function($tag) { $match($tag.name, /^[0-9]+\\.[0-9]+\\.[0-9]+-(preview|rc)\\.[0-9]+$/) }).digest; $tags := $filter($, function($tag) { $match($tag.name, /^[0-9]+\\.[0-9]+$/) }); {\"releases\": [$map($tags, function($tag) { {\"version\": $tag.name, \"releaseTimestamp\": $tag.lastModifiedDate, \"digest\": $tag.digest, \"isStable\": $not($tag.digest in $prereleaseDigests)} })], \"sourceUrl\": \"https://github.com/dotnet/sdk\"})"
       ]
     },
     "oss-fuzz-base-builder-jvm": {
