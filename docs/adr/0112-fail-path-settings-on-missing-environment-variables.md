@@ -15,9 +15,9 @@ informed: [Future maintainers, Contributors]
 
 ## Context and Problem Statement
 
-Path settings may start with an environment reference, such as `$SYMPHONY_PARENT` or
-`$SYMPHONY_PARENT/workspaces`. When that variable was unset, most path settings kept the reference
-as literal text and resolved it relative to `WORKFLOW.md`:
+Path settings may start with an environment reference, such as `$SYMPHONY_PARENT`,
+`$SYMPHONY_PARENT/workspaces`, or `${SYMPHONY_PARENT}/workspaces`. When that variable was unset,
+most path settings kept the reference as literal text and resolved it relative to `WORKFLOW.md`:
 
 - `workspace.root: $SYMPHONY_PARENT/workspaces` became a directory named
   `$SYMPHONY_PARENT/workspaces` next to `WORKFLOW.md`, and Symphony created workspaces there
@@ -42,8 +42,9 @@ variable is missing. What should each path setting do with an unset or blank var
   directory than the one the user wrote.
 - The error must name the setting and the variable, so the user knows what to set.
 - Keep settings whose absent state is meaningful and documented working the same way.
-- Compose with [GitHub PR #821](https://github.com/martin-francois/symphony-trello/pull/821), which
-  moves path reference parsing into `EnvironmentReferences.pathReference`, without a second parser.
+- Use the reference grammar in `EnvironmentReferences.referenceName` instead of a second parser, so
+  the change works with or without [GitHub PR #821](https://github.com/martin-francois/symphony-trello/pull/821),
+  which moves path reference parsing into `EnvironmentReferences`.
 
 ## Considered Options
 
@@ -76,11 +77,13 @@ workflow without a repository default is a supported setup, so absent is a real 
 `SetupDiagnosticReporter` also calls `expandPath` to map `file:` secret paths to lookup tokens. It
 keeps the lenient lookup, because diagnostics must report a broken workflow, not fail on it.
 
-The strict lookup is a function argument, not a second parser. After
-[GitHub PR #821](https://github.com/martin-francois/symphony-trello/pull/821),
-`expandPath` calls the lookup only for a valid `$NAME` or `${NAME}` first segment, so the strict
-lookup covers the braced form without further changes. Until then, a value such as
-`${NAME}/suffix` fails with the variable name `{NAME}` instead of becoming a literal directory.
+The strict lookup is a function argument, not a second parser. `expandPath` hands it the text
+after `$` up to the first `/`, and the lookup passes that text back through
+`EnvironmentReferences.referenceName`. So `$NAME` and `${NAME}` both name the variable `NAME`, and
+text that is not a reference, such as a bare `$` or `$not-a-name/dir`, stays a literal path, the
+same as in `repository.default_path`. After
+[GitHub PR #821](https://github.com/martin-francois/symphony-trello/pull/821), `expandPath` hands
+the lookup only a valid name, which `referenceName` returns unchanged.
 
 ### Consequences
 
@@ -88,6 +91,8 @@ lookup covers the braced form without further changes. Until then, a value such 
   variable in the error, instead of running in the wrong directory.
 - Good, because a blank variable can no longer turn `$NAME/workspaces` into `/workspaces`.
 - Good, because a `file:` secret error now names the missing variable instead of a literal path.
+- Good, because `${NAME}` behaves like `$NAME` in these settings: a set variable expands and a
+  missing one fails.
 - Bad, because the same missing variable still means two things: a configuration error in most path
   settings and absent in `repository.default_path`. The SPEC states both.
 - Neutral, because the change only affects values that already resolved to a wrong directory or
@@ -98,7 +103,10 @@ lookup covers the braced form without further changes. Until then, a value such 
 
 - `ConfigResolverTest.missingEnvironmentReferenceInPathSettingFailsConfigurationInsteadOfBecomingLiteralDirectory`
   covers every strict setting with an unset and a blank variable, through `WorkflowLoader` and
-  `ConfigResolver`.
+  `ConfigResolver`, plus the braced form for `workspace.root` and a `file:` secret.
+- `ConfigResolverTest.workspaceRootExpandsSetLeadingEnvironmentReference` and
+  `workspaceRootKeepsDollarTextThatIsNotAnEnvironmentReferenceLiteral` check that the strict lookup
+  still expands a set `$NAME` or `${NAME}` and leaves non-reference `$` text literal.
 - `ConfigResolverTest.missingEnvironmentReferenceInRepositoryDefaultPathPrefixResolvesToAbsent`,
   `missingOptionalRepositoryDefaultPathEnvironmentReferenceResolvesToAbsent`, and
   `blankOptionalRepositoryDefaultPathEnvironmentReferenceResolvesToAbsent` keep

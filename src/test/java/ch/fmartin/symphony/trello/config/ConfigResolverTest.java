@@ -21,11 +21,13 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 final class ConfigResolverTest {
     private static final String NUL_IN_REPOSITORY_PATH = "\u0000";
     private static final String PARENT_VARIABLE = "SYMPHONY_PARENT";
     private static final String PARENT_REFERENCE = "$" + PARENT_VARIABLE;
+    private static final String BRACED_PARENT_REFERENCE = "${" + PARENT_VARIABLE + "}";
 
     @TempDir
     Path tempDir;
@@ -427,6 +429,11 @@ final class ConfigResolverTest {
                         literalTracker + "workspace:\n  root: " + PARENT_REFERENCE + "/workspaces",
                         Map.of()),
                 new PathSettingReference(
+                        "workspace.root",
+                        "braced prefix",
+                        literalTracker + "workspace:\n  root: " + BRACED_PARENT_REFERENCE + "/workspaces",
+                        Map.of()),
+                new PathSettingReference(
                         "codex.additional_writable_roots",
                         "prefix",
                         literalTracker + "codex:\n  additional_writable_roots:\n    - " + PARENT_REFERENCE + "/shared",
@@ -440,6 +447,11 @@ final class ConfigResolverTest {
                         "tracker.api_key secret file",
                         "prefix",
                         tracker.formatted("file:" + PARENT_REFERENCE + "/api-key", "literal-token"),
+                        Map.of()),
+                new PathSettingReference(
+                        "tracker.api_key secret file",
+                        "braced prefix",
+                        tracker.formatted("file:" + BRACED_PARENT_REFERENCE + "/api-key", "literal-token"),
                         Map.of()),
                 new PathSettingReference(
                         "tracker.api_token secret file",
@@ -469,8 +481,8 @@ final class ConfigResolverTest {
         }
     }
 
-    /// A path setting whose value starts with [#PARENT_REFERENCE], plus any other environment
-    /// the case needs. Each case runs once per [MissingParentVariable].
+    /// A path setting whose value starts with a reference to [#PARENT_VARIABLE], plus any other
+    /// environment the case needs. Each case runs once per [MissingParentVariable].
     private record PathSettingReference(
             String setting, String referenceShape, String frontMatter, Map<String, String> environment) {
         Arguments withMissing(MissingParentVariable missing) {
@@ -787,6 +799,49 @@ final class ConfigResolverTest {
         // then
         assertThat(config.repository().defaultPath()).as(missing.description).isNull();
         assertThat(config.repository().selectedDefaultSource()).isEqualTo(EffectiveConfig.DefaultSource.NONE);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {PARENT_REFERENCE, BRACED_PARENT_REFERENCE})
+    void workspaceRootExpandsSetLeadingEnvironmentReference(String reference) throws Exception {
+        // given
+        Path parent = tempDir.resolve("parent");
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.workspace-root-env-prefix.md",
+                """
+                workspace:
+                  root: %s/workspaces
+                """
+                        .formatted(reference));
+        var resolver = new ConfigResolver(
+                name -> PARENT_VARIABLE.equals(name) ? Optional.of(parent.toString()) : Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.workspace().root())
+                .isEqualTo(parent.resolve("workspaces").toAbsolutePath().normalize());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"$", "$not-a-name/workspaces"})
+    void workspaceRootKeepsDollarTextThatIsNotAnEnvironmentReferenceLiteral(String configured) throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.workspace-root-literal-dollar.md",
+                """
+                workspace:
+                  root: "%s"
+                """.formatted(configured));
+        var resolver = new ConfigResolver(name -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.workspace().root())
+                .isEqualTo(tempDir.resolve(configured).toAbsolutePath().normalize());
     }
 
     @Test
