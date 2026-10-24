@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 
 /// Runs one fuzzed Trello handoff tool call against an [InMemoryTrelloBoard] and checks that the call
@@ -38,6 +40,12 @@ import org.jspecify.annotations.Nullable;
 /// Free text comes from the start of the input and every choice from the end.
 public final class TrelloHandoffToolFuzzInvariants {
     static final String CURRENT_CARD_ID = "card-current";
+    static final String MIDDLE_DOT = "\u00B7";
+    private static final String RECHECK_FOOTER_PREFIX = "_Managed by Symphony " + MIDDLE_DOT
+            + " [View the comment explaining why this card was previously blocked](";
+    private static final String RECHECK_FOOTER_SUFFIX = ")_";
+    private static final Pattern FOOTER_LINE =
+            Pattern.compile("_Managed by Symphony(?: " + MIDDLE_DOT + " ([^\\r\\n]+))?_");
     private static final String OTHER_CARD_ID = "card-other";
     private static final String MISSING_CARD_ID = "card-missing";
     private static final String BOARD_ID = "board-1";
@@ -376,6 +384,19 @@ public final class TrelloHandoffToolFuzzInvariants {
             return;
         }
         String code = payload.path("error").asText("");
+        boolean commentFooterRefusal = "invalid_comment_text".equals(code);
+        boolean workpadFooterRefusal = "invalid_workpad_text".equals(code);
+        if (commentFooterRefusal || workpadFooterRefusal) {
+            String expectedTool = commentFooterRefusal ? "trello_add_comment" : "trello_upsert_workpad";
+            if (!expectedTool.equals(execution.tool())
+                    || !footerOnlyText(execution.arguments().path("text"))
+                    || !execution.writes().isEmpty()) {
+                throw new AssertionError("cannot accept footer-only refusal " + quoted(code)
+                        + ": expected the matching tool, only canonical footer paragraphs and no writes: "
+                        + describe(execution));
+            }
+            return;
+        }
         if (REFUSAL_CODES.contains(code)) {
             if (!execution.writes().isEmpty()) {
                 throw new AssertionError("refused call " + code + " still wrote to Trello: " + describe(execution));
@@ -397,6 +418,36 @@ public final class TrelloHandoffToolFuzzInvariants {
             throw new AssertionError(
                     "tool call failed with an unknown failure code " + quoted(code) + ": " + describe(execution));
         }
+    }
+
+    // Independent paragraph model: the production formatter removes trailing footers backwards.
+    private static boolean footerOnlyText(JsonNode text) {
+        if (!text.isTextual()) {
+            return false;
+        }
+        boolean paragraphBoundary = true;
+        boolean foundFooter = false;
+        for (String line : text.textValue().strip().split("\n", -1)) {
+            if (line.isBlank()) {
+                paragraphBoundary = true;
+                continue;
+            }
+            Matcher footer = FOOTER_LINE.matcher(line.stripTrailing());
+            if (!paragraphBoundary || !footer.matches()) {
+                return false;
+            }
+            String detail = footer.group(1);
+            if (detail != null
+                    && (detail.isBlank()
+                            || !detail.equals(detail.strip())
+                            || detail.startsWith("_")
+                            || detail.endsWith("_"))) {
+                return false;
+            }
+            foundFooter = true;
+            paragraphBoundary = false;
+        }
+        return foundFooter;
     }
 
     private static JsonNode payload(Execution execution) {
@@ -445,15 +496,12 @@ public final class TrelloHandoffToolFuzzInvariants {
         if (TrelloHandoffToolHandler.UPSERT_WORKPAD.equals(execution.tool())) {
             return text.startsWith(TrelloHandoffToolHandler.WORKPAD_MARKER);
         }
-        return text.endsWith(TrelloHandoffToolHandler.BLOCKER_RECHECK_FOOTER_SUFFIX)
+        return text.endsWith(RECHECK_FOOTER_SUFFIX)
                 && text.contains("\n\n" + recheckFooterLink(execution.currentShortLink()));
     }
 
     private static String recheckFooterLink(String shortLink) {
-        return TrelloHandoffToolHandler.BLOCKER_RECHECK_FOOTER_PREFIX
-                + InMemoryTrelloBoard.CARD_URL_PREFIX
-                + shortLink
-                + COMMENT_LINK_FRAGMENT;
+        return RECHECK_FOOTER_PREFIX + InMemoryTrelloBoard.CARD_URL_PREFIX + shortLink + COMMENT_LINK_FRAGMENT;
     }
 
     /// The URL rule from SPEC.md Section 17.8, checked independently of the handler.
@@ -568,8 +616,7 @@ public final class TrelloHandoffToolFuzzInvariants {
     }
 
     private static String managedRecheckText(String visibleStatus, String shortLink, String blockerActionId) {
-        return visibleStatus + "\n\n" + recheckFooterLink(shortLink) + blockerActionId
-                + TrelloHandoffToolHandler.BLOCKER_RECHECK_FOOTER_SUFFIX;
+        return visibleStatus + "\n\n" + recheckFooterLink(shortLink) + blockerActionId + RECHECK_FOOTER_SUFFIX;
     }
 
     private static String workpad(String body) {

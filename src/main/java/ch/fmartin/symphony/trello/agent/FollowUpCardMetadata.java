@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.agent;
 
 import ch.fmartin.symphony.trello.config.FollowUpRelationship;
+import ch.fmartin.symphony.trello.tracker.SymphonyCommentFooter;
 import com.google.common.base.CharMatcher;
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -15,7 +16,7 @@ import org.jspecify.annotations.Nullable;
 /// A description that does not end with this exact line carries no relationship meaning, so a
 /// pasted card link, an attachment, or an edited footer stays a plain reference.
 record FollowUpCardMetadata(String sourceShortLink, FollowUpRelationship relationship) {
-    static final String FOOTER_PREFIX = TrelloHandoffToolHandler.MANAGED_BY_SYMPHONY;
+    static final String FOOTER_PREFIX = "_" + SymphonyCommentFooter.ATTRIBUTION;
     // Trello short links are 8 characters today; 24 also admits a full card id used as a link.
     static final int MIN_SHORT_LINK_LENGTH = 8;
     static final int MAX_SHORT_LINK_LENGTH = 24;
@@ -23,15 +24,16 @@ record FollowUpCardMetadata(String sourceShortLink, FollowUpRelationship relatio
             .or(CharMatcher.inRange('a', 'z'))
             .or(CharMatcher.inRange('0', '9'))
             .precomputed();
-    private static final String SEPARATOR = TrelloHandoffToolHandler.FOOTER_SEPARATOR;
+    static final String SEPARATOR = SymphonyCommentFooter.DETAIL_SEPARATOR;
+    private static final String CARD_URL_PREFIX = "https://trello.com/c/";
     private static final String SOURCE_LINK_PREFIX = "Follow-up of [the source card](";
     // The short link group is loose on purpose: validShortLink owns the allowed characters and length.
-    private static final Pattern FOOTER = Pattern.compile(Pattern.quote(
-                    FOOTER_PREFIX + SEPARATOR + SOURCE_LINK_PREFIX + TrelloHandoffToolHandler.TRELLO_CARD_URL_PREFIX)
-            + "([^)\\s]+)" + Pattern.quote(")" + SEPARATOR) + "([^_\\n]+)_");
+    private static final Pattern FOOTER =
+            Pattern.compile(Pattern.quote(FOOTER_PREFIX + SEPARATOR + SOURCE_LINK_PREFIX + CARD_URL_PREFIX)
+                    + "([^)\\s]+)" + Pattern.quote(")" + SEPARATOR) + "([^_\\n]+)_");
 
     static String cardUrl(String shortLink) {
-        return TrelloHandoffToolHandler.TRELLO_CARD_URL_PREFIX + shortLink;
+        return CARD_URL_PREFIX + shortLink;
     }
 
     static boolean validShortLink(@Nullable String shortLink) {

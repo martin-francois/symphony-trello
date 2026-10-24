@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.agent;
 
 import ch.fmartin.symphony.trello.config.FollowUpRelationship;
+import ch.fmartin.symphony.trello.tracker.SymphonyCommentFooter;
 import java.util.regex.Pattern;
 
 /// Symphony records completed follow-up writes here, independently of the model's next response.
@@ -46,9 +47,8 @@ final class FollowUpsWorkpadSection {
     }
 
     private static String footer(String url, FollowUpRelationship relationship) {
-        return TrelloHandoffToolHandler.MANAGED_BY_SYMPHONY
-                + TrelloHandoffToolHandler.FOOTER_SEPARATOR + "Follow-up " + link(url)
-                + TrelloHandoffToolHandler.FOOTER_SEPARATOR + relationship.sourceCardNote() + "_";
+        return SymphonyCommentFooter.append(
+                "", "Follow-up " + link(url) + FollowUpCardMetadata.SEPARATOR + relationship.sourceCardNote());
     }
 
     private static String escapedTitle(String title) {

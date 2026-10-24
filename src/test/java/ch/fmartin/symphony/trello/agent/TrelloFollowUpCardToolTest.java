@@ -110,6 +110,30 @@ final class TrelloFollowUpCardToolTest {
     }
 
     @Test
+    void addingFollowUpToAttributedWorkpadKeepsOneTrailingFooter() {
+        // given
+        EffectiveConfig config = config(Map.of(), Map.of());
+        board.cardByName(SOURCE_TITLE)
+                .orElseThrow()
+                .comment("## Codex Workpad\n\nImplementation plan.\n\n_Managed by Symphony_");
+
+        // when
+        ObjectNode result = call(config, arguments(FOLLOW_UP_TITLE, "related"));
+        ObjectNode retried = call(config, arguments(FOLLOW_UP_TITLE, "related"));
+
+        // then
+        successPayload(result);
+        successPayload(retried);
+        assertThat(board.cardByName(SOURCE_TITLE).orElseThrow().comments())
+                .singleElement()
+                .asString()
+                .contains("Implementation plan.")
+                .containsOnlyOnce(FOLLOW_UP_TITLE)
+                .containsOnlyOnce("_Managed by Symphony_")
+                .endsWith(FollowUpsWorkpadSection.END_MARKER + "\n\n_Managed by Symphony_");
+    }
+
+    @Test
     void repairAddsAMissingLabelThenCompletesLinksAndTheWorkpad() {
         // given
         EffectiveConfig config = config(Map.of(), Map.of());
