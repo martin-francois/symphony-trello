@@ -19,6 +19,7 @@ import com.networknt.schema.Schema;
 import com.networknt.schema.SchemaRegistry;
 import com.networknt.schema.SchemaRegistryConfig;
 import com.networknt.schema.SpecificationVersion;
+import com.networknt.schema.path.NodePath;
 import com.networknt.schema.path.PathType;
 import com.networknt.schema.regex.JDKRegularExpressionFactory;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -61,17 +62,21 @@ public class TrelloHandoffToolHandler {
     private static final int MAX_ACTION_ID_LENGTH = 128;
     private static final Splitter LOGICAL_LINE_BREAK = Splitter.onPattern("\\r\\n|[\\n\\r\\x{0085}\\x{2028}\\x{2029}]");
     private static final int WORKPAD_LOCK_STRIPES = 64;
-    // Fail-fast reports the first violation, which is all one tool result needs. English messages
-    // and JSON paths keep results independent of the host locale. The tool schemas hold no $ref or
-    // $schema, so nothing is loaded remotely, and the JDK regex engine needs no optional engine.
+    // Shared by library messages and the whitespace rule so both locate an argument the same way.
+    private static final PathType ARGUMENT_PATH_TYPE = PathType.JSON_PATH;
+    // The tool schemas hold no $ref or $schema, so the registry never loads anything remotely.
     private static final SchemaRegistry ARGUMENT_SCHEMAS = SchemaRegistry.withDefaultDialect(
             SpecificationVersion.DRAFT_2020_12,
             registry -> registry.schemaRegistryConfig(SchemaRegistryConfig.builder()
+                    // One tool result reports one violation, so validation can stop at the first.
                     .failFast(true)
+                    // English messages keep tool results independent of the host locale.
                     .locale(Locale.ENGLISH)
-                    .pathType(PathType.JSON_PATH)
+                    .pathType(ARGUMENT_PATH_TYPE)
+                    // The JDK engine needs neither the optional Joni nor the GraalJS dependency.
                     .regularExpressionFactory(JDKRegularExpressionFactory.getInstance())
                     .build()));
+    private static final String TOOL_NAME = "name";
     private static final String INPUT_SCHEMA = "inputSchema";
     private static final String REQUIRED_ARGUMENTS = "required";
     private static final Map<String, ToolDefinition> TOOLS = toolDefinitions();
@@ -125,6 +130,7 @@ public class TrelloHandoffToolHandler {
         List<ToolDefinition> definitions = List.of(
                 toolDefinition(
                         ADD_COMMENT,
+                        TrelloHandoffToolHandler::addComment,
                         "Add a handoff comment to the current Trello card. The current card is fixed by Symphony; do not include a card id.",
                         objectSchema(
                                 Map.of(
@@ -134,6 +140,7 @@ public class TrelloHandoffToolHandler {
                                 List.of("text"))),
                 toolDefinition(
                         UPSERT_WORKPAD,
+                        TrelloHandoffToolHandler::upsertWorkpad,
                         "Create or update the single Codex workpad comment on the current Trello card. The text is Markdown and must summarize current plan, acceptance criteria, progress, validation, blockers, and handoff notes.",
                         objectSchema(
                                 Map.of(
@@ -143,6 +150,7 @@ public class TrelloHandoffToolHandler {
                                 List.of("text"))),
                 toolDefinition(
                         UPDATE_BLOCKER_RECHECK_STATUS,
+                        TrelloHandoffToolHandler::updateBlockerRecheckStatus,
                         "Maintain one managed status while rechecking the newest exact Blocked: or Blocked by handoff. Set checking before the recheck, then set resumed only after that blocker no longer applies.",
                         objectSchema(
                                 Map.of(
@@ -153,6 +161,7 @@ public class TrelloHandoffToolHandler {
                                 List.of("status"))),
                 toolDefinition(
                         UPSERT_CHECKLIST_ITEM,
+                        TrelloHandoffToolHandler::upsertChecklistItem,
                         "Create or update one checklist item on the current Trello card. The current card is fixed by Symphony; do not include a card id.",
                         objectSchema(
                                 Map.of(
@@ -165,6 +174,7 @@ public class TrelloHandoffToolHandler {
                                 List.of("checklist_name", "item_name", "complete"))),
                 toolDefinition(
                         ADD_URL_ATTACHMENT,
+                        TrelloHandoffToolHandler::addUrlAttachment,
                         "Attach one http or https URL without credentials, query string, or fragment to the current Trello card. The current card is fixed by Symphony; do not include a card id.",
                         objectSchema(
                                 Map.of(
@@ -176,6 +186,7 @@ public class TrelloHandoffToolHandler {
                                 List.of("url"))),
                 toolDefinition(
                         MOVE_CURRENT_CARD,
+                        TrelloHandoffToolHandler::moveCurrentCard,
                         "Move the current Trello card to one configured board-local handoff list. Use list_name unless the workflow explicitly gives a Trello list_id.",
                         objectSchema(
                                 Map.of(
@@ -209,15 +220,7 @@ public class TrelloHandoffToolHandler {
         }
 
         try {
-            return switch (tool) {
-                case ADD_COMMENT -> addComment(config, card, arguments);
-                case UPSERT_WORKPAD -> upsertWorkpad(config, card, arguments);
-                case UPDATE_BLOCKER_RECHECK_STATUS -> updateBlockerRecheckStatus(config, card, arguments);
-                case MOVE_CURRENT_CARD -> moveCurrentCard(config, card, arguments);
-                case UPSERT_CHECKLIST_ITEM -> upsertChecklistItem(config, card, arguments);
-                case ADD_URL_ATTACHMENT -> addUrlAttachment(config, card, arguments);
-                default -> throw new IllegalStateException("unreachable");
-            };
+            return definition.call().invoke(this, config, card, arguments);
         } catch (TrelloException e) {
             return failure(e.code(), e.getMessage());
         } catch (RuntimeException e) {
@@ -1130,14 +1133,15 @@ public class TrelloHandoffToolHandler {
                 || !config.trelloTools().allowedMoveListNames().isEmpty();
     }
 
-    private static ToolDefinition toolDefinition(String name, String description, ObjectNode inputSchema) {
+    private static ToolDefinition toolDefinition(
+            String name, ToolCall call, String description, ObjectNode inputSchema) {
         ObjectNode spec = JsonNodeFactory.instance
                 .objectNode()
                 .put("namespace", "symphony")
-                .put("name", name)
+                .put(TOOL_NAME, name)
                 .put("description", description);
         spec.set(INPUT_SCHEMA, inputSchema);
-        return new ToolDefinition(name, spec, inputSchema, ARGUMENT_SCHEMAS.getSchema(inputSchema));
+        return new ToolDefinition(spec, ARGUMENT_SCHEMAS.getSchema(inputSchema), call);
     }
 
     private static ObjectNode objectSchema(Map<String, ObjectNode> properties, List<String> required) {
@@ -1241,7 +1245,16 @@ public class TrelloHandoffToolHandler {
 
     private record BoardListMatch(TrelloClient.BoardList list, String error) {}
 
-    private record ToolDefinition(String name, ObjectNode spec, ObjectNode inputSchema, Schema argumentSchema) {
+    @FunctionalInterface
+    private interface ToolCall {
+        ObjectNode invoke(TrelloHandoffToolHandler handler, EffectiveConfig config, Card card, JsonNode arguments);
+    }
+
+    private record ToolDefinition(ObjectNode spec, Schema argumentSchema, ToolCall call) {
+        String name() {
+            return spec.path(TOOL_NAME).textValue();
+        }
+
         /// Returns the first violation, or null. Library messages name the argument location, an
         /// undeclared property's name, and the broken rule, never the supplied value. A required
         /// string that is only whitespace is no usable Trello text either; the schema cannot say so
@@ -1252,10 +1265,11 @@ public class TrelloHandoffToolHandler {
             if (!errors.isEmpty()) {
                 return errors.getFirst().toString();
             }
-            for (JsonNode required : inputSchema.path(REQUIRED_ARGUMENTS)) {
+            for (JsonNode required : spec.path(INPUT_SCHEMA).path(REQUIRED_ARGUMENTS)) {
                 JsonNode value = arguments.path(required.textValue());
                 if (value.isTextual() && blank(value.textValue())) {
-                    return "$." + required.textValue() + ": must not be only whitespace";
+                    return new NodePath(ARGUMENT_PATH_TYPE).append(required.textValue())
+                            + ": must not be only whitespace";
                 }
             }
             return null;
