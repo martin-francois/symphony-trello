@@ -55,31 +55,40 @@ For paths in tool output:
 ## Decision Outcome
 
 Chosen options: "Longest existing prefix before whitespace" and "Lookup reruns tool version probes",
-because together they make the reported tokens resolve without
-leaving any part of a private path visible.
+because together they make the reported tokens resolve while a missing path with a space stays in
+one token, as long as no shorter prefix of it exists on disk.
 
 The workflow, log, and PID file paths that worker log lines name normally exist while diagnostics
 runs, so their tokens now end at the real path and the lookup finds them. A path that no longer
 exists stays one token with the text after it, as before.
 
-The lookup runs the same `--version` commands as the public report and records the path tokens that
-sanitizing the first output line emits, under the `tool` category. The codex and gh auth status
-(`; login=...`, `; auth=...`) is now appended after the sanitized version line, so a path token in
-that line is the same with and without `--deep`. The lookup never runs the auth probes.
+The private-context report, and so every lookup, runs the same `--version` commands as the public
+report and records the path tokens that sanitizing the first output line emits, under the `tool`
+category. The codex and gh auth status (`; login=...`, `; auth=...`) is now appended after the
+sanitized version line, so a path token in that line is the same with and without `--deep`. The
+lookup never runs the auth probes.
 
 ### Consequences
 
 * Good, because `workflow=<path:...> outcome=loaded` keeps its trailing text and resolves to the
   workflow path.
 * Good, because a path with a space, such as a directory named `private client`, still renders as one
-  token when it does not exist on disk.
+  token when neither it nor a shorter prefix of it that ends before a space exists on disk.
 * Good, because any path that a tool prints in its version line, such as the Podman notice or a
   `Picked up JAVA_TOOL_OPTIONS:` line from `java -version`, resolves without a hand-kept list.
+* Bad, because a missing path with a space still shows its tail when a shorter prefix of it exists.
+  For `<config>/private client/repo outcome=loaded`, where the `<config>/private` directory exists
+  and `<config>/private client/repo` does not, the report shows
+  `<path:...> client/repo outcome=loaded`.
 * Bad, because the token for a path followed by text now depends on whether the path exists when
   diagnostics runs. A file deleted between two reports changes its token in the second report.
+  The lookup sanitizes the tool version lines again, so a file created or deleted between the public
+  report and the lookup changes where a tool token ends, and the lookup returns `not_found` for the
+  token from the report.
 * Bad, because a path followed by text still swallows that text when the path is gone. The lookup then
   resolves nothing for it, which matches the behavior before this change.
-* Bad, because a focused lookup now runs the local tool version commands, which adds a short delay.
+* Bad, because the private-context report and every focused lookup now run the local tool version
+  commands, which adds a short delay.
 * Bad, because the tool token for the Podman notice still covers ` to quiet msg.`, since that path
   is outside the known roots and does not exist. The lookup shows that whole text as the value.
 
@@ -105,7 +114,9 @@ Match the known root and its child path as before, including spaces, then end th
 longest prefix before whitespace that exists on disk. Keep the whole match when no prefix exists.
 
 * Good, because real paths with spaces stay whole and text after a real path stays visible.
-* Good, because it never leaves a partial path visible.
+* Good, because a missing path with a space stays in one token when no shorter prefix of it exists.
+* Bad, because a missing path with a space shows its tail when a shorter prefix that ends before a
+  space exists, such as `<config>/private` for `<config>/private client/repo`.
 * Bad, because it reads the file system while sanitizing text.
 
 ### First whitespace
