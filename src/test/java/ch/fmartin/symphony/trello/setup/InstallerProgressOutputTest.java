@@ -161,19 +161,20 @@ final class InstallerProgressOutputTest {
                         "[1/2] Checking prerequisites",
                         "OK  Java 25+ JDK",
                         "[2/2] Installing Symphony",
-                        "OK  Release " + RELEASE_VERSION + " verified and unpacked",
+                        "OK  Release verified and unpacked",
                         "OK  Command installed",
                         "Symphony for Trello installed.",
                         "Next step: connect a Trello board with: ",
                         "symphony-trello' setup-local")
                 .containsOnlyOnce(symphonyHome.resolve("app").toString())
+                .containsOnlyOnce(RELEASE_VERSION)
                 .doesNotContain(RUN_LINE, ESCAPE, "\r", "[3/", "Running setup", "start --all", HANDOFF);
         assertThat(update.output())
                 .containsSubsequence(
                         "Update plan",
                         "[1/2] Checking prerequisites",
                         "[2/2] Updating Symphony",
-                        "OK  Release " + RELEASE_VERSION + " verified and unpacked",
+                        "OK  Release verified and unpacked",
                         "Symphony for Trello updated.",
                         "Next step: start the connected boards with: ",
                         "symphony-trello' start --all")
