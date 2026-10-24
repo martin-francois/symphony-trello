@@ -4263,6 +4263,9 @@ When this profile is used:
   review fix
 - the loop MUST stop after a cycle with no justified in-scope finding, or after
   `repository.codex_review_max_cycles` cycles
+- when the final local validation fails and the repair changes code, or a sync after a rejected push
+  changes the candidate, the agent SHOULD review that change in one more cycle when the limit allows
+  before it validates and pushes again
 - the workpad and visible handoff comment, or the final response when Trello comments are
   unavailable, MUST record that the loop ran, the cycle count, the review method, fixed and rejected
   findings, and whether the loop ended clean or at the cycle limit, with open justified findings as
@@ -4270,8 +4273,10 @@ When this profile is used:
 - generated workflows MUST write both fields with their defaults under `repository`, MUST explain
   that the runtime section turns the loop on, and setup regeneration MUST preserve existing values
   the same way it preserves `repository.default_url` and `repository.default_path`
-- the shipped `push-pr` and `trello-handoff` skills MUST defer to the runtime section when it is
-  present: the review loop runs before local checks and push, and the handoff records its outcome
+- the shipped `commit`, `push-pr`, and `trello-handoff` skills MUST defer to the runtime section
+  when it is present: the candidate is committed before the review loop, the loop runs before local
+  checks and push, a push retry after a sync that changed the candidate reviews that change again,
+  and the handoff records the loop outcome
 
 This profile keeps repository actions agent-owned. Java does not run `codex review`, inspect review
 findings, or block a push. See ADR 0121 for the alternatives that were considered.

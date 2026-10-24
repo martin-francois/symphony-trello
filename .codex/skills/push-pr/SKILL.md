@@ -138,9 +138,11 @@ description: >
    fi
    ```
 
-5. If push is rejected because the branch is stale, use `repo-sync`, rerun
-   checks, then push again. Use `--force-with-lease` only after a deliberate
-   history rewrite.
+5. If push is rejected because the branch is stale, use `repo-sync`. If the
+   sync changed the candidate, for example through conflict resolution, and
+   the prompt has a `Codex Review Before Handoff` section, review that change
+   as the section describes. Then rerun checks and push again. Use
+   `--force-with-lease` only after a deliberate history rewrite.
 6. If push fails because of auth, permissions, or branch protection, surface the
    exact failure. Do not rewrite remotes or switch protocols as a workaround.
 7. Create or update the PR:

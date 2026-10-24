@@ -77,7 +77,8 @@ public final class CodexReviewPrompt {
 
                 Between cycles, run only the focused checks a fix needs, not the full local validation. If the final
                 local validation fails and the repair changes code, review that repair in one more cycle when the
-                limit allows, then validate again.
+                limit allows, then validate again. Do the same when a sync after a rejected push changes the candidate,
+                for example through conflict resolution, before you validate and push again.
 
                 Record the outcome in the Trello workpad and the visible handoff comment, or in the final response
                 when Trello comments are unavailable: that the review loop ran, how many cycles ran, whether the

@@ -83,8 +83,9 @@ used.
 
 Generated workflows write both fields with their defaults and include a short "Review Loop
 Setting" section that names the runtime section. Setup regeneration preserves the two values the
-same way it preserves `repository.default_url` and `repository.default_path`. The `push-pr` and
-`trello-handoff` skills defer to the runtime section when it is present.
+same way it preserves `repository.default_url` and `repository.default_path`. The `commit`,
+`push-pr`, and `trello-handoff` skills defer to the runtime section when it is present, including
+a push retry whose sync changed the candidate.
 
 Setup gets no new command-line option. Editing one front-matter value is the documented way to turn
 the loop on. A setup option would add another prompt or flag to `setup-local`, `new-board`, and
@@ -115,7 +116,8 @@ the loop on. A setup option would add another prompt or flag to `setup-local`, `
 * `TrelloBoardSetupTest` checks that GitHub and non-GitHub generated workflows write the disabled
   defaults and the "Review Loop Setting" section, and `LocalSetupTest` checks that
   `setup-local configure-github` keeps edited values.
-* `CodexSkillStructureTest` checks that `push-pr` and `trello-handoff` defer to the runtime section.
+* `CodexSkillStructureTest` checks that `commit`, `push-pr`, and `trello-handoff` defer to the
+  runtime section.
 * `SPEC.md` Section 19.6 holds the contract.
 
 ## Pros and Cons of the Options

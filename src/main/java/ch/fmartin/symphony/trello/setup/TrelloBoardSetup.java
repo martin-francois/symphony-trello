@@ -1619,7 +1619,7 @@ public final class TrelloBoardSetup {
     private static String codexReviewSettingPrompt(String reviewState, boolean githubEnabled) {
         String reviewHandoff = blank(reviewState) ? "human review" : quote(reviewState);
         String publication =
-                githubEnabled ? "any push, the pull request or no-PR handoff," : "the local commit or patch handoff";
+                githubEnabled ? "any push, the pull request or no-PR handoff," : "the local handoff record";
         return """
                 ## Review Loop Setting
 

@@ -139,6 +139,8 @@ final class CodexSkillStructureTest {
                 .body();
         String handoff = readSkillMetadata(SKILLS_ROOT.resolve("trello-handoff").resolve("SKILL.md"))
                 .body();
+        String commit = readSkillMetadata(SKILLS_ROOT.resolve("commit").resolve("SKILL.md"))
+                .body();
 
         // then
         assertThat(pushPr)
@@ -147,7 +149,12 @@ final class CodexSkillStructureTest {
                         "finish that review loop first", "Then run the required local checks", "4. Push normally:")
                 .containsIgnoringWhitespaces("including CI-equivalent local checks when CI cannot run")
                 .containsIgnoringWhitespaces(
-                        "has a " + runtimeSection + " and its review loop has not run for the current candidate");
+                        "has a " + runtimeSection + " and its review loop has not run for the current candidate")
+                .containsSubsequence("use `repo-sync`", "review that change", "Then rerun checks and push again.")
+                .containsIgnoringWhitespaces("sync changed the candidate, for example through conflict resolution");
+        assertThat(commit)
+                .containsIgnoringWhitespaces("runtime " + runtimeSection
+                        + ", that section decides when the review loop, local checks, and push happen");
         assertThat(handoff)
                 .containsIgnoringWhitespaces(
                         "has a " + runtimeSection + ", also record the review loop outcome it asks for");

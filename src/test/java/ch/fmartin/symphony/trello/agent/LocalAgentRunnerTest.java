@@ -147,6 +147,11 @@ final class LocalAgentRunnerTest {
                         "4. Only then push the branch, create or update the pull request or write the no-PR handoff"
                                 + " artifact such as `PR.md`, and move the card to the review handoff list.")
                 .contains("Record the outcome in the Trello workpad and the visible handoff comment");
+        assertThat(section)
+                .containsSubsequence(
+                        "If the final local validation fails and the repair changes code, review that repair",
+                        "Do the same when a sync after a rejected push changes the candidate",
+                        "before you validate and push again.");
     }
 
     @Test

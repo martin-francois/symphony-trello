@@ -864,7 +864,7 @@ final class TrelloBoardSetupTest {
         // given
         Path workflow = tempDir.resolve("review-loop-" + github + ".md");
         String expectedPublication =
-                github.enabled() ? "any push, the pull request or no-PR handoff," : "the local commit or patch handoff";
+                github.enabled() ? "any push, the pull request or no-PR handoff," : "the local handoff record";
 
         // when
         setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
