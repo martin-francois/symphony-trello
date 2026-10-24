@@ -1237,10 +1237,6 @@ final class SetupDiagnosticReporter {
         };
     }
 
-    private Optional<String> environmentValue(String name) {
-        return platformEnvironment.value(name);
-    }
-
     private String codexStatus(String executable, CommandResult version, boolean deepDiagnostics) {
         if (!deepDiagnostics) {
             return firstLine(version.output()) + "; login=not-probed";
@@ -1690,7 +1686,7 @@ final class SetupDiagnosticReporter {
         }
         try {
             Path configuredPath = Path.of(
-                    ConfigResolver.expandPath(configuredValue.substring(prefix.length()), this::environmentValue));
+                    ConfigResolver.expandPath(configuredValue.substring(prefix.length()), platformEnvironment::value));
             Path workflowDirectory = workflowDirectory(workflow);
             Path secretFile = configuredPath.isAbsolute() ? configuredPath : workflowDirectory.resolve(configuredPath);
             return Optional.of(secretFile.toAbsolutePath().normalize());
