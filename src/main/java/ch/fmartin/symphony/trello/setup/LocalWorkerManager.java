@@ -28,6 +28,10 @@ import java.util.function.Function;
 final class LocalWorkerManager {
     private static final int STARTUP_LOG_BYTE_LIMIT = 128 * 1024;
     private static final Striped<Lock> PROCESS_LOCKS = Striped.lazyWeakLock(1024);
+    /// How long stop waits for a worker to exit after TERM before it sends KILL.
+    static final Duration WORKER_STOP_GRACE = Duration.ofSeconds(15);
+    /// How long stop waits for a worker to exit after KILL before it reports the stop as failed.
+    static final Duration WORKER_KILL_WAIT = Duration.ofSeconds(5);
 
     private final Map<String, String> environment;
     private final WorkflowConfigEditor workflowConfig;
@@ -1015,7 +1019,7 @@ final class LocalWorkerManager {
 
     private void stopPid(ManagedProcessStore store, ManagedProcessStore.ManagedProcessFiles files, long pid)
             throws IOException {
-        if (!platform.stop(pid, Duration.ofSeconds(15), Duration.ofSeconds(5))) {
+        if (!platform.stop(pid, WORKER_STOP_GRACE, WORKER_KILL_WAIT)) {
             throw new TrelloBoardSetupException("setup_stop_failed", "Managed process did not stop: pid=" + pid);
         }
         store.deletePid(files.pidFile());
