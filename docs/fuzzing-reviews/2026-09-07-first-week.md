@@ -12,10 +12,13 @@ repository.
 
 The baseline period is the first seven days of that chain. It covers the 30 batch runs that started
 between 2026-08-31 15:19 UTC, when the first cycle 0 started, and 2026-09-07 15:19 UTC. All 30
-succeeded, and all seven cycle-3 runs finished their prune and coverage jobs. Each of the four targets
-fuzzed for 145,380 seconds, about 40 hours. Cycles 0 to 2 give each target 82.5 minutes and cycle 3
-gives it 75 minutes. The tables also show data up to 2026-10-03 to check whether the conclusions
-still hold.
+succeeded, and all seven cycle-3 runs finished their prune and coverage jobs. Cycles 0 to 2 give
+each target 4,950 seconds (82.5 minutes) and cycle 3 gives it 4,500 seconds (75 minutes). The 23
+batches in cycles 0 to 2 and the 7 in cycle 3 add up to a budget of 145,350 seconds per target.
+libFuzzer's `Done ... runs in` lines report one second more than the budget for every run, so each
+of the four targets fuzzed for 145,380 measured seconds, about 40 hours. The throughput averages
+below use the measured time. The tables also show data up to 2026-10-03 to check whether the
+conclusions still hold.
 
 ## Targets
 
@@ -80,13 +83,30 @@ Across all production code the fuzzers covered 430 of 14,232 lines and 328 of 6,
 
 Every target reached its entry point in the first report. Between the first report built from the
 chain's corpus, on 2026-09-01, and the end of the period, the only gain was one
-`RepositorySourceResolver` branch. Of the 32 branches it still misses, 8 cannot run with the current
-harness. The harness writes `Repository: ` plus the input into every card description and always
-passes an empty repository configuration, so a card without a declaration and the fallback to the
-workflow default URL or path never occur. Another 7 missed branches check the port after an IPv6
-host in brackets, and 9 validate the user and host of `user@host:path` remotes. At least 4 of those
-9 can never run: `scpRemote` returns early when the host part has no `@`, so its later
-`at >= 0` and `user != null` checks are always true.
+`RepositorySourceResolver` branch. It still misses 32 branches:
+
+- 9 cannot run with the current harness. The harness writes `Repository: ` plus the input into every
+  card description, never passes a null card text, and always passes an empty repository
+  configuration. A card without a declaration, a card without a description, and the fallback to
+  the workflow default URL or path never occur.
+- 7 check the port after an IPv6 host in brackets.
+- 16 cannot run with any input, because an earlier check or the way the source value is built
+  already decides them.
+
+The 16 dead branches, grouped by the check that decides them:
+
+| Branches | Code | Why no input reaches them |
+| ---: | --- | --- |
+| 4 | `at >= 0` and `user != null` in `scpRemote` | `scpRemote` returns early when the host part has no `@`. |
+| 3 | Unsafe-character and blank-path checks in `scpRemote` | The whole value already passed the unsafe-character check, and the path is not empty and has no whitespace. |
+| 1 | URI scheme check in `scpRemote` | `remote` calls `scpRemote` only for values without a URI scheme. |
+| 1 | Colon at the end of the value in `scpRemote` | `parse` already trims a trailing `:` as token punctuation. |
+| 1 | Raw-text check in `unsafeUriComponent` | The whole value already passed the same check. |
+| 1 | Unsafe user info in `ssh://` URLs | The check before it already covers the whole authority, user info included. |
+| 1 | Unsafe characters in `localPath` | `parse` already rejects them. |
+| 1 | Scheme other than `file` in `fileUriPath` | `parse` calls it only for values that start with `file://`. |
+| 1 | `LOCAL_PATH` in `allowsLocalPath` | `parse` returns earlier for that mode. |
+| 2 | Identity and path comparison in `equivalent` | The source value is built from the same parts as the identity and path, so equal values always mean equal identity and path. |
 
 ## Findings
 
@@ -143,8 +163,8 @@ identifier, and card-reference parsing is already reached by `RepositorySourceFu
 
 - [#691](https://github.com/martin-francois/symphony-trello/issues/691): generate structured input
   for `RepositorySourceFuzzer`, so card fields vary, a workflow default repository is set, and
-  remotes use bracketed IPv6 hosts and `user@host:path` forms. This can reach about 20 of the 24
-  missed branches listed above. The rest cannot run with any input.
+  remotes use bracketed IPv6 hosts and `user@host:path` forms. This can reach the 9 harness and 7
+  IPv6 branches listed above. The other 16 cannot run with any input.
 - [#692](https://github.com/martin-francois/symphony-trello/issues/692): give `WorkflowLoaderFuzzer`
   properties beyond its exception type, and measure whether parsing from memory instead of a
   temporary file raises its throughput.
