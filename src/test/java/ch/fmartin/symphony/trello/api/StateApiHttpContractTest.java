@@ -189,7 +189,7 @@ final class StateApiHttpContractTest {
                 new RuntimeSnapshot.Polling(
                         Duration.ofSeconds(5),
                         Duration.ofSeconds(20),
-                        Optional.of("trello_rate_limited"),
+                        Optional.of(RuntimeSnapshot.SlowdownReason.TRELLO_RATE_LIMITED),
                         Optional.of(Instant.parse("2026-02-24T20:15:29Z"))));
     }
 

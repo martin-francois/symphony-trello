@@ -143,7 +143,7 @@ final class StatusResourceTest {
                         new RuntimeSnapshot.Polling(
                                 Duration.ofSeconds(5),
                                 Duration.ofMillis(7500),
-                                Optional.of("trello_rate_limited"),
+                                Optional.of(RuntimeSnapshot.SlowdownReason.TRELLO_RATE_LIMITED),
                                 Optional.of(Instant.parse("2026-05-05T00:00:04Z"))),
                         "Polling: configured <code>5s</code>, currently <code>7.5s</code> because Trello asked Symphony to slow down."));
     }

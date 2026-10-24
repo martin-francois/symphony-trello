@@ -25,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
+import org.jspecify.annotations.Nullable;
 
 @Path("/")
 public class StatusResource {
@@ -107,15 +108,17 @@ public class StatusResource {
                                 .collect(Collectors.joining()));
     }
 
-    private static String pollingLine(RuntimeSnapshot.Polling polling) {
+    private static String pollingLine(RuntimeSnapshot.@Nullable Polling polling) {
         if (polling == null) {
             return "";
         }
         String configured = seconds(polling.configuredInterval());
         return polling.slowdownReason()
-                .map(ignoredReason ->
+                .map(reason -> switch (reason) {
+                    case TRELLO_RATE_LIMITED ->
                         "<p role=\"status\">Polling: configured <code>%s</code>, currently <code>%s</code> because Trello asked Symphony to slow down.</p>"
-                                .formatted(configured, seconds(polling.effectiveInterval())))
+                                .formatted(configured, seconds(polling.effectiveInterval()));
+                })
                 .orElseGet(() -> "<p>Polling: every <code>%s</code> (<code>polling.interval_ms</code>).</p>"
                         .formatted(configured));
     }

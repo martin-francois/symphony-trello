@@ -110,7 +110,9 @@ record StateSnapshotResponse(
                     : new Polling(
                             polling.configuredInterval().toMillis(),
                             polling.effectiveInterval().toMillis(),
-                            polling.slowdownReason().orElse(null),
+                            polling.slowdownReason()
+                                    .map(RuntimeSnapshot.SlowdownReason::code)
+                                    .orElse(null),
                             polling.lastRateLimitedAt().orElse(null));
         }
     }

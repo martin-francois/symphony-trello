@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.orchestrator;
 
+import ch.fmartin.symphony.trello.orchestrator.RuntimeSnapshot.SlowdownReason;
 import ch.fmartin.symphony.trello.tracker.RateLimitPressure;
 import com.google.common.collect.Comparators;
 import java.time.Clock;
@@ -15,7 +16,6 @@ import org.jboss.logging.Logger;
 ///
 /// Not thread-safe: the orchestrator calls it only while holding its instance monitor.
 final class AdaptivePollInterval {
-    static final String TRELLO_RATE_LIMITED = "trello_rate_limited";
     /// How long the worker must see no `429` before each recovery step.
     static final Duration QUIET_PERIOD = Duration.ofSeconds(60);
     /// Each tick with a `429` multiplies the effective interval by this; each quiet period divides it.
@@ -70,7 +70,7 @@ final class AdaptivePollInterval {
         return new RuntimeSnapshot.Polling(
                 configured,
                 effectiveInterval(configured),
-                isSlowedDown(configured) ? Optional.of(TRELLO_RATE_LIMITED) : Optional.empty(),
+                isSlowedDown(configured) ? Optional.of(SlowdownReason.TRELLO_RATE_LIMITED) : Optional.empty(),
                 lastRateLimitedAt);
     }
 
@@ -94,7 +94,7 @@ final class AdaptivePollInterval {
         if (change > 0) {
             LOG.warnf(
                     "polling outcome=slowed_down reason=%s configured_interval_ms=%d effective_interval_ms=%d",
-                    TRELLO_RATE_LIMITED, configured.toMillis(), effective.toMillis());
+                    SlowdownReason.TRELLO_RATE_LIMITED.code(), configured.toMillis(), effective.toMillis());
         } else if (change < 0) {
             LOG.infof(
                     "polling outcome=recovering configured_interval_ms=%d effective_interval_ms=%d",
