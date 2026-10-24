@@ -3142,7 +3142,12 @@ final class TrelloBoardSetupTest {
                 .contains("keep that file uncommitted")
                 .contains("skip the PR steps above and merge the branch itself")
                 .contains("If the branch commits are already on the target\nbranch, skip the merge.")
-                .contains("Do not apply pull\nrequest review-thread handling.");
+                .contains("Do not apply pull\nrequest review-thread handling.")
+                .as("a create-mode card that went through a branch-only handoff gets its pull request before merging")
+                .contains(
+                        """
+                        card straight to "Merging", do not merge the branch directly. Create the pull request first as described
+                        in Creating The Pull Request Later, but keep the card in "Merging" instead of moving it to "Human Review".""");
         assertThat(resolve(workflow).github())
                 .isEqualTo(new EffectiveConfig.GitHubConfig(PullRequestMode.CREATE, "No PR"));
     }

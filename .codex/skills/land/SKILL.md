@@ -79,6 +79,11 @@ Handoff Mode section selects `branch_only` and no open PR exists for the card
 branch. A PR that a human opened from the proposed description takes the
 normal PR steps above.
 
+When the workflow selects `create` for a card branch that went through a
+branch-only handoff and still has no PR, do not use this section. Create the
+PR first with `push-pr` ("Creating A PR From A Proposed Description"), keep the
+card in the merge approval list, and then take the normal PR steps above.
+
 1. Pick the target branch: the branch the Trello card names, otherwise the
    repository default branch.
 2. Fetch the target branch. Skip the merge when the card's commits are

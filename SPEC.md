@@ -4970,6 +4970,12 @@ The completion comment names the merged branch and target, or why no merge was n
 resolution does not apply without a pull request. A rejected merge or push moves the card to the
 blocked destination.
 
+When a later run in the merge approval list uses `create` for a card branch that went through a
+branch-only handoff and still has no pull request, for example because a human removed the label
+and moved the card straight to the merge approval list, Codex does not merge the branch directly. It
+creates the pull request from the proposed description file first, keeps the card in the merge
+approval list, and then follows the pull request merge flow.
+
 ## Appendix A. SSH Worker Extension (OPTIONAL)
 
 This appendix describes a common extension profile in which Symphony keeps one central orchestrator

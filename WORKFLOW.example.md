@@ -664,6 +664,12 @@ completion comment which branch was merged into which target, or why no merge wa
 the card to `Done`. If the merge or push is rejected, move the card to `Blocked` with a concise
 blocker.
 
+When the effective mode is `create`, no pull request exists for the card branch, and an earlier
+branch-only handoff pushed that branch, for example because a human removed the label and moved the
+card straight to `Merging`, do not merge the branch directly. Create the pull request first as
+described in Creating The Pull Request Later, but keep the card in `Merging` instead of moving it to
+Human Review. Then follow the PR merge steps above for the new pull request.
+
 ## Completion Bar Before Human Review
 
 Do not move the card to Human Review until all applicable items are true:

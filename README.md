@@ -1884,6 +1884,9 @@ card to `Done`. If the commits are already on the target branch, Codex skips the
 card to `Done`. The completion comment says which branch was merged or why no merge was needed.
 Branch protection that requires PRs makes this merge fail, and the card moves to `Blocked`.
 
+If you remove the `No PR` label from a card that has no PR yet and move it straight to `Merging`,
+Codex opens the PR from `PR.md` first and then merges it through the normal PR flow.
+
 ## Operations
 
 Useful endpoints:

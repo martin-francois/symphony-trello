@@ -71,6 +71,12 @@ description to an untracked `PR.md` (or `PR-2.md`, `PR-3.md`, and so on), never 
 branch, and hand off with the checkout path, branch, branch link, and file path. The `push-pr` and
 `land` skills describe the branch-only push and the branch merge from `Merging`.
 
+A card in `Merging` that runs as `create` but still has no pull request after a branch-only
+handoff, for example because a human removed the label and moved the card straight to `Merging`,
+gets its pull request from the proposed description first and then takes the pull request merge
+flow. On a `create` board, merging keeps going through a pull request, so branch protection and CI
+still apply.
+
 Setup does not ask about the mode. The maintainer chose to activate the default `No PR` label in
 newly generated GitHub workflows without an extra opt-in, and classified the change as compatible:
 workflows that are not regenerated or migrated keep their current behavior because their bodies do

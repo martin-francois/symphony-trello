@@ -757,7 +757,10 @@ request anyway, committing its proposed description file, or reaching `Done` wit
 10. On the branch-only board, add a comment that asks for a pull request and move the card back to
     `Ready for Codex`. Verify that no pull request is created and the handoff explains how to get
     one.
-11. Delete the temporary branches, close any temporary pull requests, and archive the boards.
+11. On the `create` board, remove the `No PR` label from another branch-only card without a pull
+    request and move it straight to `Merging`. Verify that Codex creates the pull request from
+    `PR.md`, keeps the card in `Merging`, and merges through the pull request flow.
+12. Delete the temporary branches, close any temporary pull requests, and archive the boards.
 
 ### Regression Scenario: In-Progress Pickup Visibility
 
