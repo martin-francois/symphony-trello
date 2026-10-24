@@ -121,6 +121,8 @@ delayed re-probes.
 
 ## More Information
 
-The delayed re-probe added on the lifecycle side while investigating
+The `PORT_USED` re-probe added on the lifecycle side while investigating
 [GitHub issue #213](https://github.com/martin-francois/symphony-trello/issues/213) remains as a
-cheap guard for transient GC or CPU pauses during health probes.
+guard for GC or CPU pauses during health probes.
+[ADR 0053](0053-sleep-based-waits-kept-as-polling-boundaries.md) records its measured cost and
+benefit.

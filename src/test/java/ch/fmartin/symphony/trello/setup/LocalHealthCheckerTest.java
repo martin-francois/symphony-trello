@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.setup;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
+import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetAddress;
@@ -13,12 +14,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 final class LocalHealthCheckerTest {
+    /// Far above the 500 ms probe timeout, so only a checker that never re-probes reaches it.
+    private static final Duration REPROBE_WAIT_BOUND = Duration.ofSeconds(10);
+
     private HttpServer server;
 
     @TempDir
@@ -73,25 +80,56 @@ final class LocalHealthCheckerTest {
     }
 
     @Test
-    void workflowHealthRetriesTransientLocalStatusFailureBeforeReportingPortUsed() throws Exception {
+    void workflowHealthReprobesOnceWhenABusyWorkerMissesTheLocalStatusTimeout() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md").toAbsolutePath().normalize();
+        var requests = new AtomicInteger();
+        var reprobeArrived = new CountDownLatch(1);
+        try (var handlers = Executors.newVirtualThreadPerTaskExecutor()) {
+            server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+            // The default executor is the single dispatcher thread, which the stalled first
+            // request would block, so the re-probe could never be answered.
+            server.setExecutor(handlers);
+            server.createContext("/api/v1/local-status", exchange -> {
+                if (requests.incrementAndGet() == 1) {
+                    // Like a worker frozen by a GC or CPU pause: the connection is accepted, but
+                    // no answer comes until the checker has given up on this request.
+                    awaitReprobe(reprobeArrived);
+                    exchange.close();
+                    return;
+                }
+                reprobeArrived.countDown();
+                respondWithJson(
+                        exchange,
+                        """
+                        {"workflowPath":"%s","boardId":"full-board-id","configuredBoardId":"abc123"}
+                        """
+                                .formatted(workflow));
+            });
+            server.start();
+            var checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
+
+            // when
+            BoardHealth health = checker.workflowHealth(
+                    workflow, "abc123", "abc123", server.getAddress().getPort());
+
+            // then
+            assertThat(health.kind())
+                    .as("a worker that answers the re-probe must not be reported as a foreign process")
+                    .isEqualTo(BoardHealthKind.SAME_WORKFLOW);
+            assertThat(requests).hasValue(2);
+        }
+    }
+
+    @Test
+    void workflowHealthReportsPortUsedForAForeignHttpServerAfterOneReprobe() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md").toAbsolutePath().normalize();
         var requests = new AtomicInteger();
         server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-        server.createContext("/api/v1/local-status", exchange -> {
-            if (requests.incrementAndGet() == 1) {
-                exchange.sendResponseHeaders(500, -1);
-                exchange.close();
-                return;
-            }
-            byte[] body =
-                    """
-                    {"workflowPath":"%s","boardId":"full-board-id","configuredBoardId":"abc123"}
-                    """
-                            .formatted(workflow)
-                            .getBytes(StandardCharsets.UTF_8);
-            exchange.sendResponseHeaders(200, body.length);
-            exchange.getResponseBody().write(body);
+        server.createContext("/", exchange -> {
+            requests.incrementAndGet();
+            exchange.sendResponseHeaders(404, -1);
             exchange.close();
         });
         server.start();
@@ -102,8 +140,8 @@ final class LocalHealthCheckerTest {
                 workflow, "abc123", "abc123", server.getAddress().getPort());
 
         // then
-        assertThat(health.kind()).isEqualTo(BoardHealthKind.SAME_WORKFLOW);
-        assertThat(requests.get()).isEqualTo(2);
+        assertThat(health.kind()).isEqualTo(BoardHealthKind.PORT_USED);
+        assertThat(requests).hasValue(2);
     }
 
     @Test
@@ -214,10 +252,7 @@ final class LocalHealthCheckerTest {
                 exchange.close();
                 return;
             }
-            byte[] body = healthyJson.getBytes(StandardCharsets.UTF_8);
-            exchange.sendResponseHeaders(200, body.length);
-            exchange.getResponseBody().write(body);
-            exchange.close();
+            respondWithJson(exchange, healthyJson);
         });
         server.start();
         int port = server.getAddress().getPort();
@@ -253,12 +288,26 @@ final class LocalHealthCheckerTest {
 
     private void startLocalStatusServer(String responseJson) throws IOException {
         server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-        server.createContext("/api/v1/local-status", exchange -> {
-            byte[] body = responseJson.getBytes(StandardCharsets.UTF_8);
-            exchange.sendResponseHeaders(200, body.length);
-            exchange.getResponseBody().write(body);
-            exchange.close();
-        });
+        server.createContext("/api/v1/local-status", exchange -> respondWithJson(exchange, responseJson));
         server.start();
+    }
+
+    private static void respondWithJson(HttpExchange exchange, String json) throws IOException {
+        byte[] body = json.getBytes(StandardCharsets.UTF_8);
+        exchange.sendResponseHeaders(200, body.length);
+        exchange.getResponseBody().write(body);
+        exchange.close();
+    }
+
+    /// Blocks the stalled first request until the re-probe arrives, so the checker can only see it
+    /// time out. The bound keeps a broken checker from hanging the test.
+    private static void awaitReprobe(CountDownLatch reprobeArrived) {
+        try {
+            if (!reprobeArrived.await(REPROBE_WAIT_BOUND.toMillis(), TimeUnit.MILLISECONDS)) {
+                throw new IllegalStateException("the checker never sent a re-probe");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }

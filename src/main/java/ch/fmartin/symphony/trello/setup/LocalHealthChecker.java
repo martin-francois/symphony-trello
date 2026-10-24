@@ -27,7 +27,6 @@ final class LocalHealthChecker {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final TypeReference<Map<String, Object>> JSON_MAP_TYPE = new TypeReference<>() {};
     private static final Duration LOCAL_STATUS_TIMEOUT = Duration.ofMillis(500);
-    private static final Duration PORT_USED_RETRY_DELAY = Duration.ofMillis(150);
     private static final Duration SAME_WORKFLOW_POLL_DELAY = Duration.ofMillis(200);
     // Covers cold JVM startup on slow shared-CPU hosts; a healthy container worker was observed
     // binding after 9.4 seconds, just past the previous fixed 10-second window.
@@ -89,11 +88,12 @@ final class LocalHealthChecker {
         if (health.kind() != BoardHealthKind.PORT_USED) {
             return health;
         }
-        // A briefly busy worker can miss the short local-status timeout; one delayed re-probe keeps
-        // healthy managed workers from transiently showing up as PORT_USED. A longer timeout would
-        // slow every probe of a genuinely foreign port instead. This covers occasional GC or CPU
-        // pauses without weakening the normal port-conflict signal.
-        if (!sleptWithoutInterrupt(PORT_USED_RETRY_DELAY)) {
+        // A worker frozen by a GC or CPU pause still accepts the connection but misses the
+        // local-status timeout. One immediate re-probe gives it a second timeout window before
+        // start treats it as unhealthy and restarts it. A delay before the re-probe would add
+        // nothing for a frozen worker and would slow every probe of a foreign port that fails fast.
+        // See docs/adr/0053-sleep-based-waits-kept-as-polling-boundaries.md.
+        if (Thread.currentThread().isInterrupted()) {
             return health;
         }
         return probeWorkflowHealth(expectedWorkflowPath, expectedBoardId, expectedBoardKey, port);
