@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 final class InstalledCliDefaultsTest {
     private final Path configDir = Path.of("/opt/symphony/config");
@@ -14,18 +16,19 @@ final class InstalledCliDefaultsTest {
     private final Path stateHome = Path.of("/opt/symphony/state");
     private final Path appHome = Path.of("/opt/symphony/app");
 
-    @Test
-    void addsInstalledDefaultsForLifecycleCommands() {
+    @ParameterizedTest
+    @ValueSource(strings = {"status", "codex"})
+    void addsInstalledDefaultsForLifecycleCommands(String command) {
         // given
         InstalledCliDefaults.InstalledPaths paths = installedPaths();
 
         // when
-        List<String> args = InstalledCliDefaults.apply(List.of("status"), paths);
+        List<String> args = InstalledCliDefaults.apply(List.of(command), paths);
 
         // then
         assertThat(args)
                 .containsExactly(
-                        "status",
+                        command,
                         "--config-dir",
                         configDir.toString(),
                         "--workspace-root",
