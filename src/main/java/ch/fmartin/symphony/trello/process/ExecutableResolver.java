@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /// Finds a tool on `PATH` the way the platform shell does and builds the command that starts it.
@@ -26,11 +27,19 @@ public final class ExecutableResolver {
     private static final List<String> DEFAULT_WINDOWS_PATH_EXTENSIONS = List.of(".COM", ".EXE", ".BAT", ".CMD");
     private static final List<String> WINDOWS_BATCH_EXTENSIONS = List.of(".cmd", ".bat");
 
-    /// `cmd.exe` expands `%` and, with delayed expansion, `!` inside double quotes, and a quote or
-    /// line break ends the quoted argument. On a Windows CI runner it also split quoted arguments at
-    /// `&`, `|`, `<`, `>` and `^`. An argument with any of these cannot reach a batch shim unchanged;
-    /// ADR 0114 lists the characters that were shown to pass.
-    private static final CharMatcher CMD_UNSAFE_CHARACTERS = CharMatcher.anyOf("\"%!&|<>^\r\n");
+    /// `cmd.exe` expands `%` and, with delayed expansion, `!` inside double quotes, a quote ends the
+    /// quoted argument, and it splits a quoted argument at `&`, `|`, `<`, `>` and `^`. ADR 0114
+    /// records the evidence and the characters shown to pass.
+    private static final String CMD_CHANGED_CHARACTERS = "\"%!&|<>^";
+
+    /// A carriage return or line feed also ends the quoted argument.
+    private static final String LINE_BREAK_CHARACTERS = "\r\n";
+
+    private static final CharMatcher CMD_UNSAFE_CHARACTERS =
+            CharMatcher.anyOf(CMD_CHANGED_CHARACTERS + LINE_BREAK_CHARACTERS).precomputed();
+    private static final String CMD_UNSAFE_ARGUMENT_MESSAGE = "cannot pass an argument containing any of "
+            + CMD_CHANGED_CHARACTERS.chars().mapToObj(Character::toString).collect(Collectors.joining(" "))
+            + " or a line break to a Windows batch file through cmd.exe";
 
     private static final CharMatcher BACKSLASH = CharMatcher.is('\\');
 
@@ -151,8 +160,7 @@ public final class ExecutableResolver {
 
     private static String quoteForCmd(String value) throws IOException {
         if (CMD_UNSAFE_CHARACTERS.matchesAnyOf(value)) {
-            throw new IOException("cannot pass an argument containing any of \" % ! & | < > ^ or a line break "
-                    + "to a Windows batch file through cmd.exe");
+            throw new IOException(CMD_UNSAFE_ARGUMENT_MESSAGE);
         }
         // The program reads `\"` as a literal quote, so trailing backslashes are doubled to keep
         // them in front of the closing quote.
