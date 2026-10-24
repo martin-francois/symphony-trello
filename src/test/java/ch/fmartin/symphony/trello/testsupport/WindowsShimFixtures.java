@@ -8,7 +8,9 @@ public final class WindowsShimFixtures {
     /// An `os.name` value that makes platform checks treat the host as Windows.
     public static final String WINDOWS_OS_NAME = "Windows 11";
 
-    /// The default Windows `PATHEXT` order, which finds npm's `.CMD` shim when no `.EXE` exists.
+    /// The start of the default Windows `PATHEXT`, which finds npm's `.CMD` shim when no `.EXE`
+    /// exists. Tests set it explicitly instead of relying on the resolver's fallback for an unset
+    /// `PATHEXT`, so they exercise the `PATHEXT` parsing a real Windows host goes through.
     public static final String NPM_PATHEXT = ".COM;.EXE;.BAT;.CMD";
 
     /// Arguments that must reach a batch shim unchanged: Codex-style developer instructions with
