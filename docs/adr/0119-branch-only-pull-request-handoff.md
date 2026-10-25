@@ -78,11 +78,18 @@ flow. On a `create` board, merging keeps going through a pull request, so branch
 still apply.
 
 Setup does not ask about the mode. The maintainer chose to activate the default `No PR` label in
-newly generated GitHub workflows without an extra opt-in, and classified the change as compatible:
-workflows that are not regenerated or migrated keep their current behavior because their bodies do
-not reference `pull_request_handoff`. A board that already uses a `No PR` label for another purpose
+newly generated GitHub workflows without an extra opt-in. This is a breaking change, as recorded in
+[GitHub issue #31](https://github.com/martin-francois/symphony-trello/issues/31).
+Workflows that are not regenerated or migrated and have no top-level `github` key keep their
+handoff behavior because their bodies do not reference `pull_request_handoff`. An invalid `github`
+value still fails configuration after upgrade, even without regeneration or migration.
+A board that already uses a `No PR` label for another purpose
 gets branch-only handoff for those cards once its workflow is regenerated or migrated. Renaming the
 Trello label, or setting `github.no_pr_label` to another name or `""`, keeps the old meaning.
+
+The top-level `github` key now requires an object with valid fields. A hand-written workflow that
+used this key for a different value fails configuration. Remove or rename that unrelated key, or
+replace it with the documented `github` settings before upgrading.
 
 ### Consequences
 
