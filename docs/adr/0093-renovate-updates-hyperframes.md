@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-10-04
-decision-makers: [François Martin, Claude]
+decision-makers: [François Martin]
 consulted:
   - "[GitHub issue #616](https://github.com/martin-francois/symphony-trello/issues/616)"
   - "[ADR 0074](0074-hyperframes-readme-demo-video.md)"
@@ -78,6 +78,8 @@ A regex manager in `renovate.json` reads that one line as the npm package `hyper
 rule sets `automerge: false`, clears inherited groups, adds the `hyperframes` label, and writes the
 render and review steps into the pull-request body. The rule comes before the major-update rule, so
 majors still receive the `major update` label and manual merge. No rule changes `minimumReleaseAge`.
+
+A 0.x minor update receives no `major update` label and still never merges automatically.
 
 Renovate's update then changes only the version line. The freshness check fails on that pull request
 until a maintainer checks out the branch, runs `node scripts/render-readme-demo.ts`, reviews the
