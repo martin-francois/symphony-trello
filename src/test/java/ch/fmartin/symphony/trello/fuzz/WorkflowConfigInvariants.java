@@ -25,6 +25,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -155,11 +156,21 @@ public final class WorkflowConfigInvariants {
 
     // Setup diagnostics read the port through the typed view; the service binds the resolved one.
     private static void assertServerPortViewsAgree(TypedWorkflowConfig typed, EffectiveConfig config) {
-        Optional<Integer> resolvedPort = config.server().port().stream().boxed().findFirst();
+        OptionalInt resolvedPort = config.server().port();
         WorkflowServerPortClassification classification = typed.serverPortClassification();
-        check(classification.port().equals(resolvedPort), "diagnostics classify the port the service resolved");
         check(
-                classification.probeOrSkipPort().equals(resolvedPort),
+                classification
+                        .port()
+                        .map(OptionalInt::of)
+                        .orElseGet(OptionalInt::empty)
+                        .equals(resolvedPort),
+                "diagnostics classify the port the service resolved");
+        check(
+                classification
+                        .probeOrSkipPort()
+                        .map(OptionalInt::of)
+                        .orElseGet(OptionalInt::empty)
+                        .equals(resolvedPort),
                 "diagnostics probe or skip exactly the resolved port");
         WorkflowIntegerSetting localPort = typed.localServerPortSetting();
         check(
