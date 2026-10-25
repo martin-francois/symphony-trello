@@ -763,6 +763,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             Path dotenv = credentialDotenv(envPath, configDir);
             CliInputValidation.rejectBlankText("--workspace-id", workspaceId);
             CliInputValidation.rejectControlCharactersInText("--workspace-id", workspaceId);
+            CliInputValidation.rejectWorkspaceIdReference("--workspace-id", workspaceId);
             TrelloCredentials credentials = credentialsFrom(auth, dotenv);
             var options = new GuidedTutorial.Options(
                     github || (!noGithub && connectedBoardUsesGithub()),
@@ -780,6 +781,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         private boolean connectedBoardUsesGithub() throws IOException {
             Path manifest = configDir
                     .map(dir -> dir.toAbsolutePath().normalize().resolve(ConnectedBoardManifest.FILE_NAME))
+                    .or(TrelloBoardSetupMain::configuredConfigDirManifestPath)
                     .orElseGet(() -> LocalWorkerPaths.defaultManifestPath(System.getenv()));
             return GuidedTutorial.connectedBoardUsesGithub(manifest);
         }

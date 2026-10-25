@@ -21,6 +21,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /// Runs `symphony-trello tutorial` as a real process, so standard input, process exit, and the
 /// Ctrl+C shutdown hook behave like they do for a user.
@@ -109,8 +111,9 @@ final class TutorialCommandProcessTest {
                 .isTrue();
     }
 
-    @Test
-    void connectedGithubBoardSelectsTheGithubWalkthrough() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void connectedGithubBoardSelectsTheGithubWalkthrough(boolean configuredProperty) throws Exception {
         // given
         Path configDir = Files.createDirectories(tempDir.resolve("config"));
         Files.writeString(
@@ -125,7 +128,9 @@ final class TutorialCommandProcessTest {
                                 json(configDir.resolve("WORKFLOW.md")),
                                 json(configDir.resolve(".env")),
                                 json(tempDir.resolve("workspaces"))));
-        Process process = startTutorial("--config-dir", configDir.toString());
+        Process process = configuredProperty
+                ? startTutorialWithProperty(configDir.toString())
+                : startTutorial("--config-dir", configDir.toString());
         CompletableFuture<String> stderr = readAll(process.getErrorStream());
         readAll(process.getInputStream());
 
@@ -142,7 +147,32 @@ final class TutorialCommandProcessTest {
                 .containsExactlyElementsOf(TrelloBoardSetup.RECOMMENDED_LISTS);
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"https://trello.com/w/synthetic", "/tmp/workspace", "./workspace"})
+    void rejectsWorkspaceReferencesBeforeCreatingTheBoard(String workspace) throws Exception {
+        // given
+        Process process = startTutorial("--workspace-id", workspace);
+        CompletableFuture<String> stderr = readAll(process.getErrorStream());
+        readAll(process.getInputStream());
+
+        // when
+        process.getOutputStream().close();
+        boolean exited = process.waitFor(PROCESS_TIMEOUT);
+
+        // then
+        assertThat(exited)
+                .as("invalid workspace references end the tutorial process")
+                .isTrue();
+        assertThat(process.exitValue()).isNotZero();
+        assertThat(stderr.get()).contains("--workspace-id");
+        assertThat(trello.boardNames()).isEmpty();
+    }
+
     private Process startTutorial(String... options) throws IOException {
+        return startTutorialWithProperty("", options);
+    }
+
+    private Process startTutorialWithProperty(String configDirectory, String... options) throws IOException {
         List<String> command = new ArrayList<>(List.of(
                 Path.of(System.getProperty("java.home"), "bin", isWindows() ? "java.exe" : "java")
                         .toString(),
@@ -156,6 +186,9 @@ final class TutorialCommandProcessTest {
                 "key",
                 "--token",
                 "token"));
+        if (!configDirectory.isEmpty()) {
+            command.add(1, "-Dsymphony.trello.config.dir=" + configDirectory);
+        }
         command.addAll(List.of(options));
         ProcessBuilder builder = new ProcessBuilder(command).directory(tempDir.toFile());
         INHERITED_SETUP_ENVIRONMENT.forEach(builder.environment()::remove);

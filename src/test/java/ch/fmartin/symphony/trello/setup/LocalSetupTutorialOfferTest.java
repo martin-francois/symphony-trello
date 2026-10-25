@@ -67,6 +67,36 @@ final class LocalSetupTutorialOfferTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void existingBoardKeepOffersTheTutorialAfterTheHandoff() {
+        // given
+        runSetupWithInput(setup, "", setupArguments(true)).assertSuccess();
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                setup,
+                "\ny\nq\n",
+                "--endpoint",
+                statefulTrello.endpoint().toString(),
+                "--key",
+                "key",
+                "--token",
+                "token");
+
+        // then
+        result.assertSuccess()
+                .stdoutContainsSubsequence(
+                        "Keeping connected Trello boards.",
+                        "Useful commands:",
+                        GuidedTutorial.OFFER_PROMPT,
+                        "Guided tutorial",
+                        "OK  Archived the temporary tutorial board");
+        assertThat(statefulTrello.boardNames()).containsExactly(BOARD_NAME, GuidedTutorial.BOARD_NAME);
+        assertThat(statefulTrello.archived(statefulTrello.boardIdNamed(BOARD_NAME)))
+                .as("the tutorial keeps the existing board open")
+                .isFalse();
+    }
+
+    @Test
     void declinedOfferNamesTheTutorialCommandAndCreatesNoTutorialBoard() {
         // given
         String answers = DEFAULT_SETUP_ANSWERS + "\n";

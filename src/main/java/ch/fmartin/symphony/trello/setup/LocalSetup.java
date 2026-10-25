@@ -181,7 +181,14 @@ public final class LocalSetup {
                             configureFollowUpCards(options, board.workflowPath(), board.boardName(), terminal);
                         }
                         startExistingBoards(options, manifest, out);
-                        printFinalHandoffUnlessDeferred(out, manifest, options.command(), TutorialMention.COMMAND);
+                        TutorialMention tutorialMention = options.nonInteractive()
+                                ? TutorialMention.COMMAND
+                                : TutorialMention.OFFER_AFTER_HANDOFF;
+                        boolean handoffPrinted =
+                                printFinalHandoffUnlessDeferred(out, manifest, options.command(), tutorialMention);
+                        if (handoffPrinted && tutorialMention == TutorialMention.OFFER_AFTER_HANDOFF) {
+                            offerExistingBoardTutorial(options, manifest, terminal);
+                        }
                         return 0;
                     }
                     if (action == ExistingSetupAction.UPDATE_CODEX_ACCESS) {
@@ -265,7 +272,7 @@ public final class LocalSetup {
                     options.nonInteractive() ? TutorialMention.COMMAND : TutorialMention.OFFER_AFTER_HANDOFF;
             boolean handoffPrinted = printFinalHandoffUnlessDeferred(out, manifest, options.command(), tutorialMention);
             if (handoffPrinted && tutorialMention == TutorialMention.OFFER_AFTER_HANDOFF) {
-                offerTutorial(options, credentials, githubIntegration, terminal);
+                offerTutorial(options, () -> credentials, githubIntegration.enabled(), terminal);
             }
             return 0;
         } catch (TrelloBoardSetupException | IllegalArgumentException | IOException e) {
@@ -293,10 +300,26 @@ public final class LocalSetup {
         return true;
     }
 
+    private void offerExistingBoardTutorial(Options options, ConnectedBoardManifest manifest, Terminal terminal)
+            throws IOException {
+        boolean githubEnabled = manifest.boards().stream().anyMatch(ConnectedBoard::githubEnabled);
+        offerTutorial(
+                options,
+                () -> credentials(options, manifest.boards().getFirst().envPath(), terminal)
+                        .credentials(),
+                githubEnabled,
+                terminal);
+    }
+
+    @FunctionalInterface
+    private interface TutorialCredentials {
+        TrelloCredentials load() throws IOException;
+    }
+
     /// Offers the guided tutorial after a successful interactive setup. The tutorial is optional,
     /// so its failure never turns the finished setup into a failed one.
     private static void offerTutorial(
-            Options options, TrelloCredentials credentials, GitHubIntegration githubIntegration, Terminal terminal)
+            Options options, TutorialCredentials credentials, boolean githubEnabled, Terminal terminal)
             throws IOException {
         String command = ShellCommandRenderer.executable(
                 options.command(), SetupSystemProperties.get(ShellCommandRenderer.SHELL_PROPERTY));
@@ -307,9 +330,9 @@ public final class LocalSetup {
                 terminal.info("  " + GuidedTutorial.commandLine(command));
                 return;
             }
-            GuidedTutorial.forCli(options.endpoint(), credentials, terminal)
+            GuidedTutorial.forCli(options.endpoint(), credentials.load(), terminal)
                     .run(new GuidedTutorial.Options(
-                            githubIntegration.enabled(),
+                            githubEnabled,
                             GuidedTutorial.BoardCleanup.ARCHIVE_BY_DEFAULT,
                             options.workspaceId(),
                             command));
