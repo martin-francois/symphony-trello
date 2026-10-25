@@ -18,7 +18,9 @@ async function withFake(body: (trello: TrelloApi, fake: FakeTrelloApi, run: RunR
   const fake = new FakeTrelloApi({stateFile: join(repo, "fake.json")});
   const endpoint = await fake.start();
   try {
-    await body(new TrelloApi(run, endpoint, FAKE_TRELLO_CREDENTIALS), fake, run);
+    const trello = new TrelloApi(run, endpoint, FAKE_TRELLO_CREDENTIALS);
+    await trello.captureInitialBoards();
+    await body(trello, fake, run);
   } finally {
     await fake.stop();
   }

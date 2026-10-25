@@ -26,6 +26,7 @@ export interface CleanupSummary {
   boardsArchived: number;
   boardsStillOpen: number;
   boardArchiveFailures: number;
+  boardDiscoveryFailed: boolean;
   workersRegistered: number;
   workersStopped: number;
   runOwnedProcessesRemaining: number;
@@ -88,11 +89,11 @@ export function appendProgress(run: RunRoot, line: string): void {
 export function writeLedger(run: RunRoot, results: readonly ScenarioResult[]): void {
   const rows = results.map(
     (result) =>
-      `| ${result.id} | ${result.status} | ${tableCell(run.publicText(result.summary))} | ${tableCell(result.modeTags.join(" "))} |`,
+      `| ${result.id} | ${result.status} | ${tableCell(run.publicText(result.summary))} | ${tableCell(result.modeTags.join(" "))} | ${tableCell(result.targetCommit?.slice(0, 12) ?? "unverified existing installation")} |`,
   );
   run.writePublic(
     PUBLIC_FILES.ledger,
-    ["# Coverage ledger", "", "| scenario id | status | public-safe evidence summary | mode tags |", "| --- | --- | --- | --- |", ...rows, ""].join(
+    ["# Coverage ledger", "", "| scenario id | status | public-safe evidence summary | mode tags | tested revision |", "| --- | --- | --- | --- | --- |", ...rows, ""].join(
       "\n",
     ),
   );
@@ -107,6 +108,7 @@ export function writeCleanupSummary(run: RunRoot, summary: CleanupSummary): void
 - Archived by cleanup during this run: ${summary.boardsArchived}
 - Still open after cleanup: ${summary.boardsStillOpen}
 - Archive failures: ${summary.boardArchiveFailures}
+- Board discovery completed: ${!summary.boardDiscoveryFailed}
 - Run-owned workers registered: ${summary.workersRegistered}
 - Workers stopped by cleanup during this run: ${summary.workersStopped}
 - Run-owned processes remaining: ${summary.runOwnedProcessesRemaining}
@@ -136,7 +138,7 @@ export function mergeCleanup(previous: CleanupSummary | null, latest: CleanupSum
 }
 
 export function cleanupIsClean(summary: CleanupSummary): boolean {
-  return summary.boardsStillOpen === 0 && summary.boardArchiveFailures === 0 && summary.runOwnedProcessesRemaining === 0;
+  return !summary.boardDiscoveryFailed && summary.boardsStillOpen === 0 && summary.boardArchiveFailures === 0 && summary.runOwnedProcessesRemaining === 0;
 }
 
 export function writeFinalReport(

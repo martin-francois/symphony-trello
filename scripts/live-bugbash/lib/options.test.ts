@@ -77,3 +77,10 @@ test("durations accept ms, s, m, and h and default to seconds", () => {
   assert.deepEqual(parsed, [250, 90_000, 600_000, 7_200_000, 30_000]);
   assert.throws(() => parseDuration("ten minutes", "--x"), UsageError);
 });
+
+test("durations reject zero and timer-overflow values instead of scheduling an immediate timeout", () => {
+  for (const value of ["0ms", "2147483648ms", `${"9".repeat(310)}h`]) {
+    assert.throws(() => parseDuration(value, "--time-budget"), UsageError);
+  }
+  assert.equal(parseDuration("2147483647ms", "--time-budget"), 2_147_483_647);
+});

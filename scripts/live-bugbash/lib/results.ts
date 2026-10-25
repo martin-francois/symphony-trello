@@ -31,6 +31,7 @@ export const EXECUTED: ReadonlySet<ResultStatus> = new Set([
 export const FAILING: ReadonlySet<ResultStatus> = new Set(["failed", "harness-invalid", "interrupted"]);
 
 export interface ScenarioResult {
+  targetCommit: string | null;
   id: string;
   family: string;
   mode: string;
@@ -80,9 +81,10 @@ export function resumedStatus(previous: ResultStatus | undefined, current: Resul
   return previous === "harness-invalid" && PASS_LIKE.has(current) ? "corrected" : current;
 }
 
-export function emptyResult(scenario: Scenario, status: ResultStatus, summary: string, modeTags: string[]): ScenarioResult {
+export function emptyResult(scenario: Scenario, status: ResultStatus, summary: string, modeTags: string[], targetCommit: string | null): ScenarioResult {
   const now = new Date().toISOString();
   return {
+    targetCommit,
     id: scenario.id,
     family: scenario.family,
     mode: scenario.mode,

@@ -3,7 +3,7 @@ import {runOwnedProcesses} from "../lib/processes.ts";
 import {appendProgress} from "../lib/report.ts";
 import {SkipScenario, type ScenarioContext, type ScenarioRegistry} from "../lib/scenario.ts";
 import {sleep} from "../lib/symphony.ts";
-import {cli, endpointArgs} from "./support.ts";
+import {cli} from "./support.ts";
 
 const SENTINEL_TIMEOUT_MS = 180_000;
 
@@ -29,7 +29,23 @@ async function passiveSoak(context: ScenarioContext): Promise<string> {
   }
   const soakEnd = until?.getTime() ?? Date.now() + (durationMs ?? 0);
   const end = context.deadline === null ? soakEnd : Math.min(soakEnd, context.deadline);
-  const sentinel = context.options.codex === "real" && codexAvailable();
+  if (end <= Date.now()) {
+    throw new SkipScenario("cannot run passive soak: renew --soak-duration or --soak-until before resuming");
+  }
+  const deadline = new AbortController();
+  const signal = AbortSignal.any([deadline.signal, context.signal]);
+  let timer: ReturnType<typeof setTimeout>;
+  const scheduleDeadline = () => {
+    timer = setTimeout(() => {
+      if (Date.now() >= end) deadline.abort();
+      else scheduleDeadline();
+    }, Math.min(end - Date.now(), 2_147_483_647));
+  };
+  scheduleDeadline();
+  const requireTime = () => {
+    if (Date.now() >= end) deadline.abort();
+    signal.throwIfAborted();
+  };
   const totals: SoakTotals = {
     cycles: 0,
     trelloFailures: 0,
@@ -37,50 +53,61 @@ async function passiveSoak(context: ScenarioContext): Promise<string> {
     openRunOwnedBoardCycles: 0,
     runOwnedProcessCycles: 0,
     codexSentinelFailures: 0,
-    codexSentinel: sentinel ? "run" : "not-run",
+    codexSentinel: "not-run",
   };
-  const trello = context.trello();
-  do {
-    totals.cycles += 1;
-    const cycle = {trelloAuth: "ok", openBoards: 0, boardQueryFailures: 0, processes: 0, codexSentinel: sentinel ? "ok" : "not-run"};
-    const auth = await cli(context, `cycle-${totals.cycles}-list-workspaces`, ["list-workspaces", ...(await endpointArgs(context))]);
-    if (auth.status !== 0) {
-      totals.trelloFailures += 1;
-      cycle.trelloAuth = "failed";
-    }
-    for (const board of trello.registeredBoards()) {
-      try {
-        if (!(await trello.boardClosed(board.id))) {
-          cycle.openBoards += 1;
+  try {
+    const symphony = await context.cli(signal);
+    requireTime();
+    const sentinel = context.options.codex === "real" && codexAvailable(Math.min(20_000, end - Date.now()));
+    requireTime();
+    totals.codexSentinel = sentinel ? "run" : "not-run";
+    const trello = context.trello();
+    do {
+      requireTime();
+      const cycleNumber = totals.cycles + 1;
+      const cycle = {trelloAuth: "ok", openBoards: 0, boardQueryFailures: 0, processes: 0, codexSentinel: sentinel ? "ok" : "not-run"};
+      const auth = await cli(context, `cycle-${cycleNumber}-list-workspaces`, ["list-workspaces", "--endpoint", symphony.endpoint], {signal});
+      requireTime();
+      if (auth.status !== 0) cycle.trelloAuth = "failed";
+      for (const board of trello.registeredBoards()) {
+        requireTime();
+        try {
+          if (!(await trello.boardClosed(board.id, signal))) cycle.openBoards += 1;
+        } catch {
+          requireTime();
+          cycle.boardQueryFailures += 1;
         }
-      } catch {
-        cycle.boardQueryFailures += 1;
+        requireTime();
       }
-    }
-    totals.boardQueryFailures += cycle.boardQueryFailures;
-    if (cycle.openBoards > 0) {
-      totals.openRunOwnedBoardCycles += 1;
-    }
-    cycle.processes = runOwnedProcesses(context.run.root).length;
-    if (cycle.processes > 0) {
-      totals.runOwnedProcessCycles += 1;
-    }
-    if (sentinel) {
-      const result = await realCodexSentinel(context.run, `${context.scenario.id}-cycle-${totals.cycles}`, SENTINEL_TIMEOUT_MS);
-      if (!result.ok) {
-        totals.codexSentinelFailures += 1;
-        cycle.codexSentinel = "failed";
+      cycle.processes = runOwnedProcesses(context.run.root).length;
+      requireTime();
+      if (sentinel) {
+        const result = await realCodexSentinel(context.run, `${context.scenario.id}-cycle-${cycleNumber}`, Math.min(SENTINEL_TIMEOUT_MS, end - Date.now()), {signal, github: context.options.github});
+        requireTime();
+        if (!result.ok) cycle.codexSentinel = "failed";
       }
-    }
-    appendProgress(
-      context.run,
-      `soak cycle ${totals.cycles}: trello auth ${cycle.trelloAuth}, open run-owned boards ${cycle.openBoards}, board query failures ${cycle.boardQueryFailures}, run-owned processes ${cycle.processes}, codex sentinel ${cycle.codexSentinel}`,
-    );
-    const wait = Math.min(context.options.soak.intervalMs, end - Date.now());
-    if (wait > 0) {
-      await sleep(wait);
-    }
-  } while (Date.now() < end);
+      totals.cycles += 1;
+      if (cycle.trelloAuth === "failed") totals.trelloFailures += 1;
+      totals.boardQueryFailures += cycle.boardQueryFailures;
+      if (cycle.openBoards > 0) totals.openRunOwnedBoardCycles += 1;
+      if (cycle.processes > 0) totals.runOwnedProcessCycles += 1;
+      if (cycle.codexSentinel === "failed") totals.codexSentinelFailures += 1;
+      appendProgress(
+        context.run,
+        `soak cycle ${totals.cycles}: trello auth ${cycle.trelloAuth}, open run-owned boards ${cycle.openBoards}, board query failures ${cycle.boardQueryFailures}, run-owned processes ${cycle.processes}, codex sentinel ${cycle.codexSentinel}`,
+      );
+      const wait = Math.min(context.options.soak.intervalMs, end - Date.now());
+      if (wait > 0) await sleep(wait, signal);
+    } while (Date.now() < end);
+  } catch (error) {
+    if (context.signal.aborted || !deadline.signal.aborted) throw error;
+    context.caveat("the soak deadline cancelled an unfinished probe; only completed cycles count");
+  } finally {
+    clearTimeout(timer!);
+  }
+  if (totals.cycles === 0) {
+    throw new SkipScenario("cannot complete a soak cycle before its deadline: use an installed CLI or renew the soak duration");
+  }
   context.evidence("soak-summary.json", JSON.stringify(totals, null, 2));
   context.check.equal(totals.trelloFailures, 0, "no cycle had a Trello auth failure");
   context.check.equal(totals.boardQueryFailures, 0, "no board query failed");

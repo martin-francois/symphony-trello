@@ -50,7 +50,7 @@ async function startAll(context: ScenarioContext, current: Pair): Promise<void> 
   const outcome = await lifecycle(context, "start-all", ["start", "--all"], current.paths);
   context.check.exitCode(outcome, 0, "start --all exits 0");
   for (const service of [current.first, current.second]) {
-    await waitFor(`the ${service.fixture} state endpoint`, () => workerState(service.port), 60_000);
+    await waitFor(`the ${service.fixture} state endpoint`, () => workerState(service.port, context.signal), 60_000, 500, context.signal);
   }
 }
 
@@ -104,7 +104,7 @@ async function startAllTwoWorkflows(context: ScenarioContext): Promise<string> {
     ];
     for (const card of cards) {
       await waitForCardIn(context, card.service, card.id, LIST_NAMES.humanReview);
-      const local = await fetch(`http://127.0.0.1:${card.service.port}/api/v1/local-status`).then((response) => response.json() as Promise<Record<string, unknown>>);
+      const local = await fetch(`http://127.0.0.1:${card.service.port}/api/v1/local-status`, {signal: context.signal}).then((response) => response.json() as Promise<Record<string, unknown>>);
       context.check.that(
         local["configuredBoardId"] === card.service.board.id || local["configuredBoardId"] === card.service.board.shortLink || local["boardId"] === card.service.board.id,
         `the ${card.service.fixture} worker reports its own board`,
@@ -195,7 +195,7 @@ async function stalePid(context: ScenarioContext): Promise<string> {
     throw new ProductFailure("the started worker has no run-owned pid file");
   }
   process.kill(pid, "SIGKILL");
-  await waitFor("the killed worker to exit", () => !isAlive(pid), 10_000);
+  await waitFor("the killed worker to exit", () => !isAlive(pid), 10_000, 500, context.signal);
   const status = await lifecycle(context, "status-after-kill", ["status", "--workflow", service.workflow], service.paths);
   context.check.that(status.stdout.trim().startsWith("stopped"), "status reports the killed worker stopped");
   try {
@@ -251,7 +251,7 @@ async function invalidReload(context: ScenarioContext): Promise<string> {
   await startWorker(context, service);
   try {
     writeFileSync(service.workflow, original.replace(/^---\n/, "---\ntracker: [unclosed\n"));
-    await sleep(4_000);
+    await sleep(4_000, context.signal);
     context.check.that((await workerState(service.port)) !== null, "the worker keeps answering /api/v1/state after the bad edit");
     const cardId = await addCard(context, service, context.scenario.id, QUESTION);
     await waitForCardIn(context, service, cardId, LIST_NAMES.humanReview);
@@ -292,14 +292,14 @@ async function externalMove(context: ScenarioContext, destination: string): Prom
   await startWorker(context, service);
   try {
     const cardId = await addCard(context, service, context.scenario.id, QUESTION);
-    await waitFor("the card to run", async () => stateEntries(await state(service), "running").some((entry) => entry["card_id"] === cardId), 60_000);
+    await waitFor("the card to run", async () => stateEntries(await state(service), "running").some((entry) => entry["card_id"] === cardId), 60_000, 500, context.signal);
     await context.trello().moveCard(service.board, cardId, destination);
     await waitFor(
       "the worker to drop the moved card",
       async () => !stateEntries(await state(service), "running").some((entry) => entry["card_id"] === cardId),
-      30_000,
+      30_000, 500, context.signal,
     );
-    await sleep(3_000);
+    await sleep(3_000, context.signal);
     const current = await state(service);
     context.check.that(!stateEntries(current, "retrying").some((entry) => entry["card_id"] === cardId), "the moved card is not retried");
     const fakes = runOwnedProcesses(context.run.root).filter((owned) => owned.reason === "command line" && commandLine(owned.pid).includes(service.codex.scriptDir));

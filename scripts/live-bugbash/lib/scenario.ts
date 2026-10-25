@@ -60,18 +60,20 @@ export interface HarnessServices {
   run: RunRoot;
   options: RunOptions;
   targetCommit: string;
+  /** Cancels scenario work before final cleanup starts. Cleanup uses independent clients. */
+  signal: AbortSignal;
   /** Epoch milliseconds when the run's --time-budget ends, or null without a budget. */
   deadline: number | null;
   /** The CLI under test; installs from source on first use unless --symphony-command was given. */
-  cli(): Promise<SymphonyCli>;
+  cli(signal?: AbortSignal): Promise<SymphonyCli>;
   /** The source install behind `cli()`, or null when --symphony-command selected an existing install. */
-  sourceInstall(): Promise<SourceInstall> | null;
+  sourceInstall(signal?: AbortSignal): Promise<SourceInstall> | null;
   trello(): TrelloApi;
   fakeTrello: FakeTrelloApi | null;
   /** Runs a shared fixture once per run and caches its result for every scenario that needs it. */
   fixture<T>(id: string, setup: () => Promise<T>): Promise<T>;
   /** Runs the idempotent cleanup routine and returns that pass's own counts. */
-  cleanup(): Promise<CleanupSummary>;
+  cleanup(final?: boolean): Promise<CleanupSummary>;
   /** Writes the public report files that the private-context scan covers. */
   flushReports(): void;
 }

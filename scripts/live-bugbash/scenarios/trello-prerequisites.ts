@@ -33,7 +33,7 @@ async function observeNeverDispatched(service: ServiceBoard, cardId: string): Pr
     if ([...stateEntries(current, "running"), ...stateEntries(current, "retrying")].some((entry) => entry["card_id"] === cardId)) {
       return false;
     }
-    await sleep(500);
+    await sleep(500, service.signal);
   }
   return true;
 }
@@ -50,7 +50,7 @@ async function mixedChecklist(context: ScenarioContext, secondItem: (dependencyU
   await context.trello().addChecklist(service.board, target, "Prerequisites", [dependency.url, secondItem(dependency.url)]);
   await startWorker(context, service);
   try {
-    await waitFor("the managed prerequisite status comment", async () => (await statusComments(context, target)).length > 0, 60_000);
+    await waitFor("the managed prerequisite status comment", async () => (await statusComments(context, target)).length > 0, 60_000, 500, context.signal);
     const neverDispatched = await observeNeverDispatched(service, target);
     context.check.that(neverDispatched, "the state API never lists the target as running or retrying");
     context.check.equal(await cardList(context, service, target), LIST_NAMES.ready, "the target card stays in Ready for Codex");
@@ -76,7 +76,7 @@ async function exactPrerequisite(context: ScenarioContext): Promise<string> {
   await context.trello().addChecklist(service.board, target, "Prerequisites", [prerequisite.url]);
   await startWorker(context, service);
   try {
-    await waitFor("the waiting status comment", async () => (await statusComments(context, target)).some((text) => text.includes("waiting for prerequisites")), 60_000);
+    await waitFor("the waiting status comment", async () => (await statusComments(context, target)).some((text) => text.includes("waiting for prerequisites")), 60_000, 500, context.signal);
     context.check.that(await observeNeverDispatched(service, target), "the target waits while the prerequisite is open");
     context.check.equal(promptsMentioning(service.codex, `${id}: target`).length, 0, "fake Codex does not see the target while it waits");
     await context.trello().moveCard(service.board, prerequisite.id, LIST_NAMES.done);
@@ -111,7 +111,7 @@ async function maxAgentsParallel(context: ScenarioContext): Promise<string> {
       if (lists.every((list) => list === LIST_NAMES.humanReview)) {
         break;
       }
-      await sleep(300);
+      await sleep(300, context.signal);
     }
     context.check.that(peak >= 2, `at least two cards run at the same time (peak ${peak})`);
     for (const card of cards) {
@@ -133,7 +133,7 @@ async function requiredLabel(context: ScenarioContext): Promise<string> {
   await startWorker(context, service);
   try {
     await waitForCardIn(context, service, labelled, LIST_NAMES.humanReview);
-    await sleep(3_000);
+    await sleep(3_000, context.signal);
     context.check.equal(await cardList(context, service, unlabelled), LIST_NAMES.ready, "the unlabelled card stays in Ready for Codex");
     context.check.equal(promptsMentioning(service.codex, `${id}: unlabelled`).length, 0, "fake Codex never sees the unlabelled card");
   } finally {

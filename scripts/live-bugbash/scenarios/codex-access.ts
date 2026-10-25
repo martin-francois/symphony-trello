@@ -1,6 +1,6 @@
 import {spawn} from "node:child_process";
 import {readFileSync} from "node:fs";
-import {realCodexSentinel, runScopedCodexHome} from "../lib/codex.ts";
+import {realCodexEnvironment, realCodexSentinel, runScopedCodexHome} from "../lib/codex.ts";
 import {runOwnedProcesses} from "../lib/processes.ts";
 import type {ScenarioContext, ScenarioRegistry} from "../lib/scenario.ts";
 import {sleep, waitFor} from "../lib/symphony.ts";
@@ -63,7 +63,7 @@ async function failureFixture(context: ScenarioContext): Promise<Map<string, Fai
         const entry = await waitFor(
           `${id} to enter the retry queue`,
           async () => stateEntries(await state(service), "retrying").find((candidate) => candidate["card_id"] === cardId),
-          60_000,
+          60_000, 500, context.signal,
         );
         runs.set(id, {service, cardId, error: String(entry["error"] ?? ""), listAfterRetry: await cardList(context, service, cardId)});
       }
@@ -86,7 +86,7 @@ async function failureCase(context: ScenarioContext): Promise<string> {
   if (id === "malformed-app-server-protocol") {
     context.check.equal(run.listAfterRetry, LIST_NAMES.ready, "the card returns to Ready for Codex");
   }
-  await sleep(1_000);
+  await sleep(1_000, context.signal);
   const leftovers = runOwnedProcesses(context.run.root).filter((owned) => commandLine(owned.pid).includes(run.service.codex.scriptDir));
   context.check.equal(leftovers.length, 0, "no fake app-server process remains after the worker stops");
   return `the card entered the retry queue with "${run.error.split(":")[0] ?? ""}" and no app-server process remained`;
@@ -101,36 +101,53 @@ function commandLine(pid: number): string {
 }
 
 async function directSentinel(context: ScenarioContext): Promise<string> {
-  const result = await realCodexSentinel(context.run, context.scenario.id, SENTINEL_TIMEOUT_MS);
+  const result = await realCodexSentinel(context.run, context.scenario.id, SENTINEL_TIMEOUT_MS, {github: context.options.github, signal: context.signal});
   context.check.that(result.ok, result.detail);
   return result.detail;
 }
 
 async function protocolProbe(context: ScenarioContext): Promise<string> {
-  const codexHome = runScopedCodexHome(context.run);
+  context.signal.throwIfAborted();
   const child = spawn("codex", ["app-server"], {
     cwd: context.run.dir("workspaces", context.scenario.id),
-    env: {...process.env, CODEX_HOME: codexHome},
+    env: realCodexEnvironment(context.run, context.options.github),
     stdio: ["pipe", "pipe", "pipe"],
+    detached: true,
   });
   let stdout = "";
   let stderr = "";
   child.stdout.setEncoding("utf8").on("data", (chunk: string) => (stdout += chunk));
   child.stderr.setEncoding("utf8").on("data", (chunk: string) => (stderr += chunk));
-  const exited = new Promise<number | null>((resolve) => child.on("close", resolve));
+  const exited = new Promise<number | null>((resolve) => {
+    child.on("close", resolve);
+    child.on("error", (error) => {stderr += error.message; resolve(null);});
+  });
+  child.stdin.on("error", (error) => {stderr += error.message;});
+  const terminate = (signal: NodeJS.Signals) => {
+    if (child.pid === undefined) return;
+    try { process.kill(-child.pid, signal); } catch { /* The owned group already exited. */ }
+  };
+  const abort = () => terminate("SIGTERM");
+  context.signal.addEventListener("abort", abort, {once: true});
   child.stdin.write(`${JSON.stringify({id: 1, method: "initialize", params: {clientInfo: {name: "symphony-bugbash", version: "0"}}})}\n`);
   try {
-    const line = await waitFor("the initialize response", () => stdout.split("\n").find((candidate) => candidate.includes("\"id\":1")), 30_000, 100);
+    const line = await waitFor("the initialize response", () => stdout.split("\n").find((candidate) => candidate.includes("\"id\":1")), 30_000, 100, context.signal);
     const response = JSON.parse(line) as {id?: number; result?: {userAgent?: string}};
     context.check.equal(response.id, 1, "the response carries the request id");
     context.check.that(typeof response.result?.userAgent === "string", "the response has a userAgent");
   } finally {
     child.stdin.end();
-    const timeout = sleep(10_000).then(() => "timeout" as const);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<"timeout">((resolve) => {timer = setTimeout(() => resolve("timeout"), 10_000);});
     const result = await Promise.race([exited, timeout]);
+    clearTimeout(timer);
+    context.signal.removeEventListener("abort", abort);
     context.check.that(result !== "timeout", "codex app-server exits after stdin closes");
     if (result === "timeout") {
-      child.kill("SIGKILL");
+      terminate("SIGKILL");
+      child.stdout.destroy();
+      child.stderr.destroy();
+      await exited;
     }
     context.evidence("app-server.log", `${stdout}\n--- stderr ---\n${stderr}`);
   }
@@ -154,7 +171,7 @@ async function installedRealCodexSmoke(context: ScenarioContext): Promise<string
         const current = await state(service);
         return stateEntries(current, "running").length === 0 && stateEntries(current, "retrying").length === 0;
       },
-      60_000,
+      60_000, 500, context.signal,
     );
   } finally {
     await stopWorker(context, service);

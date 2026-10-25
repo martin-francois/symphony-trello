@@ -7,7 +7,8 @@ installs Symphony from the current commit, runs the selected rows against run-sc
 cleans up, and writes reports under `target/live-bugbash/<run-id>/`.
 
 The harness is fake by default. Without opt-in flags it uses a local fake Trello API and the
-deterministic fake Codex app-server in `scripts/FakeCodexAppServer.java`. Real Trello, real Codex,
+deterministic fake Codex app-server in `scripts/FakeCodexAppServer.java`. Setup discovers a run-owned
+fake `codex` CLI and uses an isolated Codex home, so fake runs require no Codex installation or login. Real Trello, real Codex,
 and real GitHub need explicit flags. CI does not run the harness; the script-tests job only runs
 its unit tests.
 
@@ -87,17 +88,22 @@ With `--trello real`, every board the harness creates is named `<run-id>-<scenar
 written to `created-trello-boards.jsonl` before any list or card is added. Boards that the product
 creates (`setup-local`, `new-board`) carry the same prefix and are registered right after the
 command. Cleanup archives only registered boards. Before archiving, it also registers any visible
-board whose name starts with `<run-id>-` and whose id shows it was created after the run started,
-so a scenario that stopped before registering its board does not leak it. Against the fake Trello API the harness also
+board whose name starts with `<run-id>-`, whose id is within the run clock allowance, and which
+was absent from the initial visible-board snapshot. Resume retains that snapshot. This recovers
+a board from a stopped scenario without claiming a pre-existing board with the same prefix. Against the fake Trello API the harness also
 checks after every row that no unregistered board exists; a row that leaks one is reported as
 `harness-invalid`, so a rehearsal with fakes catches the leak before a real run.
 
 Real-Codex rows use a run-scoped `CODEX_HOME` that holds only a copy of `auth.json`, so Codex writes
-no sessions or history into the operator's Codex home. Cleanup deletes the copy. If Codex refreshed
+no sessions or history into the operator's Codex home. Intermediate cleanup retains the refreshed
+copy for later rows and the soak; final cleanup deletes it. If Codex refreshed
 its login inside the copy, the cleanup summary says so; the harness never writes to the operator's
 Codex home, so run `codex login` again if the normal login stops working. Each real-Codex row
 is bounded: the sentinel and protocol probe stop after three minutes or less, and the Trello smoke
 card waits at most five minutes.
+
+Default CLI calls also remove GitHub tokens and use a run-owned GitHub config directory. The
+operator's GitHub authentication is restored only with `--github real-sandbox`.
 
 A row that ran against the fake Trello API carries the `trello:fake` mode tag. When a live profile
 such as `trello-live` runs against fakes, the final report says that the run has no live coverage.
@@ -136,18 +142,20 @@ Every command runs with `HOME`, `XDG_*`, and `SYMPHONY_HOME` pointing into
 | `covered-with-caveat` | passed with a caveat recorded in the row |
 | `known-bug` | reproduced a known bug that the row links; not a clean pass |
 | `harness-invalid` | the harness could not produce a trustworthy result |
-| `interrupted` | stopped by `--time-budget`, the ten-minute row limit, or a signal |
+| `interrupted` | stopped by `--time-budget`, the ten-minute ordinary-row limit, or a signal |
 | `corrected` | passed on `--resume` after an earlier `harness-invalid` result |
 | `failed` | unexpected product failure; a new finding to triage |
 | `skipped` | a requirement or opt-in was missing |
 | `not-yet-automated` | listed in the manifest without automation yet |
 
-A row that hits the ten-minute limit keeps running in the background, so the run starts no further
-row and reports the rest as `interrupted`. Run `--cleanup-only` once that row has stopped.
+A signal, the time budget or an ordinary row timeout cancels active scenario operations. The runner
+waits for the scenario to settle before final cleanup, starts no further row, and reports remaining
+rows as `interrupted`. Cleanup uses separate clients and remains available after cancellation.
 
 The run exits 0 when no row is `failed`, `harness-invalid`, or `interrupted`, cleanup left nothing
-open or running, and the private-context scan found nothing. It exits 130 after an interruption and
-1 otherwise.
+open or running, board discovery completed, and both private-context scans succeeded without
+findings. Scanner errors or unavailable scanners fail the run. It exits 130 after an interruption
+and 1 otherwise.
 
 A `failed` row is a candidate bug, not a confirmed one. Reproduce it twice, for example with
 `run.sh --scenario <id>`, then draft an issue under `issues/` with the live-bugbash skill.
@@ -169,26 +177,46 @@ workers, terminates any process that still belongs to the run, archives every re
 deletes registered sensitive copies such as env files and the Codex auth copy. A process belongs to
 the run when it is a Java or Codex program whose command line contains the run root, or a
 `codex app-server` or `codex exec` process whose working directory is inside the run root. Shells,
-editors, and an interactive Codex session opened inside a run directory are left alone. Running cleanup again is safe:
+editors, and an interactive Codex session opened inside a run directory are left alone. Failed board
+discovery leaves cleanup incomplete even with an empty registry. Retained ownership evidence lets
+a later cleanup pass recover unregistered resources. Running cleanup again is safe:
 
 ```bash
 scripts/live-bugbash/run.sh --cleanup-only <run-id>
 ```
 
 `--resume <run-id>` reruns the rows of an earlier run that did not pass or reproduce a known bug and
-keeps the others.
+keeps the others only when their recorded tested revision matches the current target. Changing
+revision reruns the selected rows, including earlier passes and known-bug results. Each ledger row
+records its revision; previous results are preserved under private evidence before rewriting the
+reports. Results without a recorded revision also rerun. Resume and cleanup restore the saved
+selection and integration targets, including the Trello workspace. Conflicting target or selection
+flags are rejected before contacting a
+service. Credentials are read again from the current environment, never stored in the configuration.
+An existing `--symphony-command` installation has no verified source revision. Its rows always rerun
+on resume, since the application behind the same command path can change without a checkout change.
+A wrapper checksum would not identify the application classes it launches. Reports mark that
+revision as unverified and retain the earlier results under private evidence.
+A resumed invocation accepts new `--time-budget`, `--soak-duration`, `--soak-until`, and
+`--soak-interval` values. An older run without saved configuration requires manual inspection of its
+resource registries before cleanup. A resumed soak whose saved absolute deadline has passed is
+skipped until a new duration or deadline is supplied.
 
 The passive soak checks Trello auth through the installed CLI, queries every registered board,
 scans for run-owned processes, and, with `--codex real`, appends one line to a run-owned file with
 real Codex. It runs until `--soak-duration` or `--soak-until`, with `--soak-interval` between cycles,
-and reports per-cycle results in `progress.md`:
+and reports per-cycle results in `progress.md`. The ordinary ten-minute row limit does not apply
+to a soak; the whole-run time budget still does. The deadline cancels pending source installation,
+CLI commands, Trello queries, and Codex sentinels. No probe starts after it expires. Only completed
+cycles count; if none completes, the row is skipped with an instruction to extend the duration or
+use an installed CLI:
 
 ```bash
 scripts/live-bugbash/run.sh --profile soak --soak-duration 10m --trello real --codex real
 ```
 
 `--time-budget 10m` hard-stops a whole run; rows that have not finished by then are reported as
-`interrupted`.
+`interrupted`. Duration arguments must be positive and no greater than `2147483647ms`.
 
 ## Manifest rows
 

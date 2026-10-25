@@ -3,10 +3,10 @@ import {existsSync, readFileSync, rmSync} from "node:fs";
 import {dirname, join, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {cleanupRun} from "./lib/cleanup.ts";
-import {codexAvailable} from "./lib/codex.ts";
+import {codexAvailable, runScopedCodexHome} from "./lib/codex.ts";
 import {FAKE_TRELLO_CREDENTIALS, FakeTrelloApi} from "./lib/fake-trello-api.ts";
 import {loadManifest, type Scenario} from "./lib/manifest.ts";
-import {parseOptions, USAGE, UsageError, type RunOptions} from "./lib/options.ts";
+import {USAGE, UsageError, type RunOptions} from "./lib/options.ts";
 import {planRun, selectScenarios, type Capabilities, type PlanEntry} from "./lib/plan.ts";
 import {
   appendProgress,
@@ -22,21 +22,21 @@ import {
 } from "./lib/report.ts";
 import {emptyResult, PASS_LIKE, resumedStatus, verdict, type ScenarioResult} from "./lib/results.ts";
 import {publicFilesBeforeFinalReport, scanPublicFiles} from "./lib/private-context.ts";
+import {resolveRunOptions, saveRunOptions} from "./lib/run-options.ts";
 import {PUBLIC_FILES, RunRoot} from "./lib/run-root.ts";
 import {Checks, ProductFailure, SkipScenario, type HarnessServices, type ScenarioContext, type SourceInstall} from "./lib/scenario.ts";
-import {installFromSource, SymphonyCli, TimeoutError, type TrelloTarget} from "./lib/symphony.ts";
+import {scenarioTimeoutMs} from "./lib/scenario-timeout.ts";
+import {githubEnvironment, installFromSource, SymphonyCli, TimeoutError, type TrelloTarget} from "./lib/symphony.ts";
 import {REAL_TRELLO_ENDPOINT, TrelloApi, type TrelloCredentials} from "./lib/trello.ts";
 import {SCENARIOS} from "./scenarios/index.ts";
 
 export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const MANIFEST_PATH = join(REPO_ROOT, "scripts", "live-bugbash", "manifest.yml");
-/** Upper bound for one scenario; the longest automated row (a real-Codex card) waits five minutes. */
-const SCENARIO_TIMEOUT_MS = 10 * 60_000;
 
 async function main(argv: readonly string[]): Promise<number> {
   let options: RunOptions;
   try {
-    options = parseOptions(argv);
+    options = resolveRunOptions(REPO_ROOT, argv);
   } catch (error) {
     if (error instanceof UsageError) {
       process.stderr.write(`live-bugbash: ${error.message}\n\n${USAGE}`);
@@ -149,6 +149,15 @@ async function trelloSetup(run: RunRoot, options: RunOptions): Promise<TrelloSet
   return {target: {endpoint: REAL_TRELLO_ENDPOINT, credentials}, fake: null};
 }
 
+function selectedIntegrationEnvironment(run: RunRoot, options: RunOptions): NodeJS.ProcessEnv {
+  const environment: NodeJS.ProcessEnv = {};
+  if (options.codex === "real") {
+    environment["PATH"] = process.env["PATH"];
+    environment["CODEX_HOME"] = runScopedCodexHome(run);
+  }
+  return {...environment, ...githubEnvironment(options.github)};
+}
+
 async function execute(plan: readonly PlanEntry[], options: RunOptions): Promise<number> {
   const run = new RunRoot(REPO_ROOT, options.runId);
   if (options.resume && !run.exists) {
@@ -164,20 +173,20 @@ async function execute(plan: readonly PlanEntry[], options: RunOptions): Promise
     return 2;
   }
   run.create();
+  saveRunOptions(run, options);
   const commit = targetCommit();
-  const previous = options.resume ? previousResults(run) : new Map<string, ScenarioResult>();
+  const testedCommit = options.symphonyCommand === null ? commit : null;
+  const previous = options.resume ? previousResults(run, testedCommit) : new Map<string, ScenarioResult>();
   const trello = await trelloSetup(run, options);
-  const trelloApi = new TrelloApi(run, trello.target.endpoint, trello.target.credentials);
-  if (options.trello === "real") {
-    try {
-      run.privateEvidence("run", "preexisting-trello-boards.json", JSON.stringify(await trelloApi.visibleBoards(), null, 2));
-    } catch (error) {
-      process.stderr.write(`live-bugbash: the real Trello API rejected the credentials or was unreachable: ${error instanceof Error ? error.message : String(error)}\n`);
-      if (!options.resume) {
-        rmSync(run.root, {recursive: true, force: true});
-      }
-      return 2;
-    }
+  const cancellation = new AbortController();
+  const trelloApi = new TrelloApi(run, trello.target.endpoint, trello.target.credentials, cancellation.signal);
+  try {
+    await trelloApi.captureInitialBoards();
+  } catch (error) {
+    process.stderr.write(`live-bugbash: cannot initialize Trello run: ${error instanceof Error ? error.message : String(error)}\n`);
+    if (!options.resume) rmSync(run.root, {recursive: true, force: true});
+    await trello.fake?.stop();
+    return 2;
   }
 
   let sourceInstall: Promise<SourceInstall> | null = null;
@@ -186,10 +195,10 @@ async function execute(plan: readonly PlanEntry[], options: RunOptions): Promise
   const results: ScenarioResult[] = [];
   const header: RunHeader = {
     runId: options.runId,
-    targetCommit: commit.slice(0, 12),
+    targetCommit: testedCommit?.slice(0, 12) ?? "unverified existing installation",
     startedAt: new Date().toISOString(),
     options,
-    cliSource: options.symphonyCommand === null ? `source install of ${commit.slice(0, 12)}` : "--symphony-command",
+    cliSource: options.symphonyCommand === null ? `source install of ${commit.slice(0, 12)}` : "existing installation; revision unverified; rows rerun on resume",
   };
   let lastCleanup: CleanupSummary | null = null;
   const deadline = options.timeBudgetMs === null ? null : Date.now() + options.timeBudgetMs;
@@ -198,28 +207,32 @@ async function execute(plan: readonly PlanEntry[], options: RunOptions): Promise
     run,
     options,
     targetCommit: commit,
+    signal: cancellation.signal,
     deadline,
     fakeTrello: trello.fake,
-    sourceInstall() {
+    sourceInstall(signal?: AbortSignal) {
+      cancellation.signal.throwIfAborted();
       if (options.symphonyCommand !== null) {
         return null;
       }
-      sourceInstall ??= installFromSource(run, commit);
+      const combined = signal === undefined ? cancellation.signal : AbortSignal.any([cancellation.signal, signal]);
+      sourceInstall ??= installFromSource(run, commit, combined);
       return sourceInstall;
     },
-    cli() {
+    cli(signal?: AbortSignal) {
+      cancellation.signal.throwIfAborted();
       cliPromise ??= (async () => {
         if (options.symphonyCommand !== null) {
-          return new SymphonyCli(run, resolve(options.symphonyCommand), trello.target);
+          return new SymphonyCli(run, resolve(options.symphonyCommand), trello.target, selectedIntegrationEnvironment(run, options), cancellation.signal);
         }
-        const installed = await services.sourceInstall();
+        const installed = await services.sourceInstall(signal);
         if (installed === null) {
           throw new Error("no source install and no --symphony-command");
         }
         if (installed.outcome.status !== 0) {
           throw new Error("the source install failed, so no symphony-trello command is available");
         }
-        return new SymphonyCli(run, installed.command, trello.target);
+        return new SymphonyCli(run, installed.command, trello.target, selectedIntegrationEnvironment(run, options), cancellation.signal);
       })();
       return cliPromise;
     },
@@ -230,9 +243,11 @@ async function execute(plan: readonly PlanEntry[], options: RunOptions): Promise
       }
       return fixtures.get(id) as Promise<T>;
     },
-    async cleanup() {
+    async cleanup(final = false) {
       const cli = cliPromise === null ? null : await cliPromise.catch(() => null);
-      const pass = await cleanupRun(run, cli, trelloApi);
+      const cleanupCli = cli === null ? null : new SymphonyCli(run, cli.command, trello.target, selectedIntegrationEnvironment(run, options));
+      const cleanupTrello = new TrelloApi(run, trello.target.endpoint, trello.target.credentials);
+      const pass = await cleanupRun(run, cleanupCli, cleanupTrello, {preserveCodexAuth: !final});
       lastCleanup = mergeCleanup(lastCleanup, pass);
       writeCleanupSummary(run, lastCleanup);
       return pass;
@@ -258,6 +273,7 @@ async function execute(plan: readonly PlanEntry[], options: RunOptions): Promise
     }
     interrupted = true;
     stopReason = "interrupted by a signal";
+    cancellation.abort();
     abortCurrent?.();
   };
   process.on("SIGINT", onSignal);
@@ -277,28 +293,31 @@ async function execute(plan: readonly PlanEntry[], options: RunOptions): Promise
       }
       let result: ScenarioResult;
       if (interrupted) {
-        result = emptyResult(entry.scenario, "interrupted", `not started: ${stopReason}`, modeTags(entry.scenario, options));
+        result = emptyResult(entry.scenario, "interrupted", `not started: ${stopReason}`, modeTags(entry.scenario, options), testedCommit);
       } else if (entry.decision === "skip") {
-        result = emptyResult(entry.scenario, "skipped", entry.reason, modeTags(entry.scenario, options));
+        result = emptyResult(entry.scenario, "skipped", entry.reason, modeTags(entry.scenario, options), testedCommit);
       } else if (entry.decision === "not-yet-automated") {
-        result = emptyResult(entry.scenario, "not-yet-automated", "not automated yet; cover it manually with the live-bugbash skill", modeTags(entry.scenario, options));
+        result = emptyResult(entry.scenario, "not-yet-automated", "not automated yet; cover it manually with the live-bugbash skill", modeTags(entry.scenario, options), testedCommit);
       } else {
         appendProgress(run, `start ${entry.scenario.id}`);
-        const limitMs = Math.min(SCENARIO_TIMEOUT_MS, deadline === null ? SCENARIO_TIMEOUT_MS : Math.max(0, deadline - Date.now()));
+        const limitMs = scenarioTimeoutMs(entry.scenario, deadline);
+        let timer: ReturnType<typeof setTimeout> | undefined;
         const stopped = new Promise<string>((resolve) => {
-          const timer = setTimeout(() => resolve(`did not finish within ${Math.round(limitMs / 1000)}s`), limitMs);
+          if (limitMs !== null) timer = setTimeout(() => resolve(`did not finish within ${Math.round(limitMs / 1000)}s`), limitMs);
           abortCurrent = () => {
             clearTimeout(timer);
             resolve("interrupted by a signal");
           };
         });
-        const outcome = await Promise.race([runScenario(services, entry.scenario, selectedIds), stopped]);
+        const activeScenario = runScenario(services, entry.scenario, selectedIds);
+        const outcome = await Promise.race([activeScenario, stopped]);
+        clearTimeout(timer);
         abortCurrent = null;
         if (typeof outcome === "string") {
-          // The abandoned scenario keeps running in the background and may still touch shared
-          // fixtures, so no further scenario starts. Cleanup stops its processes, and the process
-          // exits after the reports are written.
-          result = emptyResult(entry.scenario, "interrupted", `stopped while running: ${outcome}`, modeTags(entry.scenario, options));
+          cancellation.abort();
+          // Joined cancellation prevents late probes from recreating resources after cleanup.
+          await activeScenario;
+          result = emptyResult(entry.scenario, "interrupted", `stopped while running: ${outcome}`, modeTags(entry.scenario, options), testedCommit);
           if (!interrupted) {
             interrupted = true;
             stopReason =
@@ -323,7 +342,8 @@ async function execute(plan: readonly PlanEntry[], options: RunOptions): Promise
   } finally {
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);
-    await services.cleanup();
+    if (interrupted) cancellation.abort();
+    await services.cleanup(true);
     appendProgress(run, "final cleanup finished");
     services.flushReports();
     await trello.fake?.stop();
@@ -332,7 +352,7 @@ async function execute(plan: readonly PlanEntry[], options: RunOptions): Promise
   const scan = await scanPublicFiles(run, publicFilesBeforeFinalReport(run));
   writeFinalReport(run, header, results, stopReason, lastCleanup, scan);
   const finalScan = await scanPublicFiles(run, [PUBLIC_FILES.finalReport]);
-  const exitCode = Math.max(exitCodeFor(results, lastCleanup), scan.status === "findings" || finalScan.status === "findings" ? 1 : 0);
+  const exitCode = Math.max(exitCodeFor(results, lastCleanup), scan.status !== "clean" || finalScan.status !== "clean" ? 1 : 0);
   process.stdout.write(
     `${run.publicText(readFileSync(run.path(PUBLIC_FILES.finalReport), "utf8").split("\n## Findings")[0] ?? "")}\n` +
       `Final report private-context scan: ${finalScan.status}\nReports: target/live-bugbash/${options.runId}/\n`,
@@ -363,6 +383,7 @@ async function runScenario(
     if (runner === undefined) {
       throw new Error(`no automation registered for ${scenario.id}`);
     }
+    services.signal.throwIfAborted();
     summary = await runner(context);
     const outcome = verdict(scenario.expected, scenario.linked_issue, check.failures, caveats.length === 0 ? null : caveats.join("; "));
     status = outcome.status;
@@ -389,6 +410,7 @@ async function runScenario(
   }
   return {
     id: scenario.id,
+    targetCommit: services.options.symphonyCommand === null ? services.targetCommit : null,
     family: scenario.family,
     mode: scenario.mode,
     status,
@@ -444,13 +466,15 @@ export function modeTags(scenario: Scenario, options: RunOptions): string[] {
   return tags;
 }
 
-function previousResults(run: RunRoot): Map<string, ScenarioResult> {
+function previousResults(run: RunRoot, commit: string | null): Map<string, ScenarioResult> {
   const path = run.path("state", "results.json");
   if (!existsSync(path)) {
     return new Map();
   }
   const results = JSON.parse(readFileSync(path, "utf8")) as ScenarioResult[];
-  return new Map(results.map((result) => [result.id, result]));
+  // Preserve the prior evidence before this invocation rewrites reports and reruns changed targets.
+  run.privateEvidence("run", `results-before-resume-${Date.now()}.json`, JSON.stringify(results, null, 2));
+  return new Map(results.filter((result) => commit !== null && result.targetCommit === commit).map((result) => [result.id, result]));
 }
 
 async function cleanupOnly(options: RunOptions): Promise<number> {
@@ -463,7 +487,7 @@ async function cleanupOnly(options: RunOptions): Promise<number> {
   const trelloApi = new TrelloApi(run, trello.target.endpoint, trello.target.credentials);
   const installed = run.path("install", "bin", "symphony-trello");
   const command = options.symphonyCommand ?? (existsSync(installed) ? installed : null);
-  const cli = command === null ? null : new SymphonyCli(run, resolve(command), trello.target);
+  const cli = command === null ? null : new SymphonyCli(run, resolve(command), trello.target, selectedIntegrationEnvironment(run, options));
   try {
     const summary = await cleanupRun(run, cli, trelloApi);
     writeCleanupSummary(run, summary);

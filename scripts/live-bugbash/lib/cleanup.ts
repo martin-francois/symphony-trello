@@ -20,7 +20,9 @@ const PROCESS_EXIT_GRACE_MS = 10_000;
  * every registered Trello board, and deletes registered sensitive copies. Each step acts only on
  * registered or run-root-owned targets, and the whole routine is safe to run again.
  */
-export async function cleanupRun(run: RunRoot, cli: SymphonyCli | null, trello: TrelloApi | null): Promise<CleanupSummary> {
+export async function cleanupRun(
+  run: RunRoot, cli: SymphonyCli | null, trello: TrelloApi | null, options: {preserveCodexAuth?: boolean} = {},
+): Promise<CleanupSummary> {
   const notes: string[] = [];
   const workers = uniqueWorkers(run.entries<RegisteredWorker>("workers"));
   let workersStopped = 0;
@@ -52,6 +54,7 @@ export async function cleanupRun(run: RunRoot, cli: SymphonyCli | null, trello: 
   }
   const remaining = runOwnedProcesses(run.root);
 
+  let boardDiscoveryFailed = false;
   if (trello !== null) {
     try {
       const swept = await trello.sweepRunBoards("cleanup");
@@ -59,6 +62,7 @@ export async function cleanupRun(run: RunRoot, cli: SymphonyCli | null, trello: 
         notes.push(`${swept} run-named board(s) were missing from the registry and were registered by cleanup.`);
       }
     } catch {
+      boardDiscoveryFailed = true;
       notes.push("Cleanup could not list visible boards to look for unregistered run boards.");
     }
   }
@@ -90,7 +94,10 @@ export async function cleanupRun(run: RunRoot, cli: SymphonyCli | null, trello: 
     notes.push("Codex rewrote its login inside the run copy, for example after a token refresh. If the normal Codex login stops working, run codex login again.");
   }
   let sensitivePathsDeleted = 0;
+  const codexHome = run.path("state", "codex-home");
   for (const path of new Set(run.lines("sensitivePaths"))) {
+    // A later soak still needs refreshed authentication; final cleanup removes this copy.
+    if (options.preserveCodexAuth === true && (path === codexHome || path.startsWith(codexHome + sep))) continue;
     if (!path.startsWith(run.root + sep)) {
       notes.push("A registered sensitive path outside the run root was left untouched.");
       continue;
@@ -106,6 +113,7 @@ export async function cleanupRun(run: RunRoot, cli: SymphonyCli | null, trello: 
     boardsArchived,
     boardsStillOpen,
     boardArchiveFailures,
+    boardDiscoveryFailed,
     workersRegistered: workers.length,
     workersStopped,
     runOwnedProcessesRemaining: remaining.length,

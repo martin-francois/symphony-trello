@@ -6,6 +6,7 @@ import {percent, resumedStatus, tally, verdict, type ResultStatus, type Scenario
 function result(status: ResultStatus, harnessOnly = false): ScenarioResult {
   return {
     id: status,
+    targetCommit: "synthetic",
     family: "setup",
     mode: "deterministic-cli",
     status,
@@ -24,6 +25,7 @@ const CLEAN: CleanupSummary = {
   boardsArchived: 2,
   boardsStillOpen: 0,
   boardArchiveFailures: 0,
+  boardDiscoveryFailed: false,
   workersRegistered: 1,
   workersStopped: 1,
   runOwnedProcessesRemaining: 0,

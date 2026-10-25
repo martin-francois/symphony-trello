@@ -232,9 +232,13 @@ export function safeRunId(value: string): string {
 export function parseDuration(value: string, flag: string): number {
   const match = DURATION.exec(value);
   if (match === null || match[1] === undefined) {
-    throw new UsageError(`${flag} must be a duration such as 90s, 10m, or 2h`);
+    throw new UsageError(`cannot parse duration "${value}": use a value such as 90s, 10m, or 2h for ${flag}`);
   }
-  return Number(match[1]) * (DURATION_UNITS_MS[match[2] ?? "s"] ?? 1_000);
+  const milliseconds = Number(match[1]) * (DURATION_UNITS_MS[match[2] ?? "s"] ?? 1_000);
+  if (!Number.isSafeInteger(milliseconds) || milliseconds < 1 || milliseconds > 2_147_483_647) {
+    throw new UsageError(`cannot parse duration "${value}": expected 1 through 2147483647 milliseconds for ${flag}`);
+  }
+  return milliseconds;
 }
 
 function parseTimestamp(value: string, flag: string): Date {

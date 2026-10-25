@@ -3,7 +3,7 @@ import {chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSyn
 import {homedir} from "node:os";
 import {join} from "node:path";
 import type {RunRoot} from "./run-root.ts";
-import {runCommand} from "./symphony.ts";
+import {githubEnvironment, runCommand, sandboxEnvironment} from "./symphony.ts";
 import {LIST_NAMES} from "./trello.ts";
 
 /** Behaviors understood by scripts/FakeCodexAppServer.java, one per script line. */
@@ -167,8 +167,8 @@ export function toolResponses(codex: FakeCodex, scenarioId: string): ToolRespons
     });
 }
 
-export function codexAvailable(): boolean {
-  return spawnSync("codex", ["--version"], {encoding: "utf8", timeout: 20_000}).status === 0;
+export function codexAvailable(timeoutMs = 20_000): boolean {
+  return spawnSync("codex", ["--version"], {encoding: "utf8", timeout: timeoutMs, killSignal: "SIGKILL"}).status === 0;
 }
 
 /**
@@ -179,7 +179,8 @@ export function codexAvailable(): boolean {
 export function runScopedCodexHome(run: RunRoot): string {
   const source = operatorCodexAuth();
   const home = run.dir("state", "codex-home");
-  if (existsSync(source)) {
+  // Codex refreshes this private copy; later scenarios must keep the refreshed credentials.
+  if (existsSync(source) && !existsSync(join(home, "auth.json"))) {
     copyFileSync(source, join(home, "auth.json"));
     chmodSync(join(home, "auth.json"), 0o600);
   }
@@ -201,6 +202,11 @@ export function runCodexAuthChanged(run: RunRoot): boolean {
   return existsSync(copy) && existsSync(source) && readFileSync(copy, "utf8") !== readFileSync(source, "utf8");
 }
 
+/** Direct probes keep the same run-owned HOME and explicit GitHub opt-in as installed workers. */
+export function realCodexEnvironment(run: RunRoot, github: "fake" | "real-sandbox"): NodeJS.ProcessEnv {
+  return {...sandboxEnvironment(run), ...githubEnvironment(github), PATH: process.env["PATH"], CODEX_HOME: runScopedCodexHome(run)};
+}
+
 export interface SentinelResult {
   ok: boolean;
   detail: string;
@@ -211,7 +217,8 @@ export interface SentinelResult {
  * Bounded by `timeoutMs`; uses the workspace-write sandbox with the marker directory as the
  * workspace, so no host path outside the run is writable.
  */
-export async function realCodexSentinel(run: RunRoot, scenarioId: string, timeoutMs: number): Promise<SentinelResult> {
+export async function realCodexSentinel(run: RunRoot, scenarioId: string, timeoutMs: number, options: {signal?: AbortSignal; github?: "fake" | "real-sandbox"} = {}): Promise<SentinelResult> {
+  options.signal?.throwIfAborted();
   const directory = run.dir("workspaces", "codex-sentinel", scenarioId);
   mkdirSync(directory, {recursive: true});
   const marker = join(directory, "sentinel.txt");
@@ -228,7 +235,7 @@ export async function realCodexSentinel(run: RunRoot, scenarioId: string, timeou
       directory,
       `Append exactly one line with the text "${line}" to the file sentinel.txt in the current directory. Do not touch anything else and do not run any other command.`,
     ],
-    {timeoutMs, env: {...process.env, CODEX_HOME: runScopedCodexHome(run)}, cwd: directory},
+    {timeoutMs, signal: options.signal, env: realCodexEnvironment(run, options.github ?? "fake"), cwd: directory},
   );
   run.privateEvidence(scenarioId, "codex-sentinel.log", `${result.stdout}\n--- stderr ---\n${result.stderr}`);
   const changed = readFileSync(marker, "utf8").includes(line);

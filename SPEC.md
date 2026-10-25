@@ -4237,6 +4237,14 @@ network access, or external service permissions are unavailable.
   manifest against real Trello, Codex, and GitHub sandbox resources when explicitly opted in, and
   against local fakes otherwise. It reports skipped rows as skipped, keeps known-bug rows separate
   from passes, and archives every run-owned Trello board it registered.
+- Java implementation extension: A harness interruption MUST cancel active scenario operations
+  and wait for them to settle before final cleanup. Cleanup MUST remain available after scenario
+  cancellation. Failed board discovery or an unsuccessful private-context
+  scan MUST prevent a successful run result. Results MUST distinguish verified source revisions
+  from unverified existing installations. Resume MUST rerun a row when that revision differs from
+  the current target or is unavailable. Direct Codex
+  probes MUST use run-scoped HOME and configuration paths. GitHub authentication MUST remain absent
+  unless the GitHub sandbox integration was explicitly enabled.
 
 ## 18. Implementation Checklist (Definition of Done)
 

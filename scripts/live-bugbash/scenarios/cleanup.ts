@@ -27,6 +27,7 @@ async function interimBoardCleanup(context: ScenarioContext): Promise<string> {
 
 async function finalBoardCleanup(context: ScenarioContext): Promise<string> {
   const pass = await context.cleanup();
+  context.check.equal(pass.boardDiscoveryFailed, false, "run-owned board discovery completed");
   context.check.equal(pass.boardsStillOpen, 0, "every registered board is closed");
   context.check.equal(pass.boardArchiveFailures, 0, "no archive request failed");
   context.check.equal(pass.runOwnedProcessesRemaining, 0, "no run-owned process remains");
@@ -37,6 +38,7 @@ async function finalCleanupVerification(context: ScenarioContext): Promise<strin
   const pass = await context.cleanup();
   context.check.equal(pass.boardsArchived, 0, "the second pass archives no board");
   context.check.equal(pass.workersStopped, 0, "the second pass stops no worker");
+  context.check.equal(pass.boardDiscoveryFailed, false, "run-owned board discovery completed");
   context.check.equal(pass.boardsStillOpen, 0, "every registered board is still closed");
   context.check.equal(runOwnedProcesses(context.run.root).length, 0, "no run-owned process remains");
   return `a second cleanup pass changed nothing for ${pass.boardsRegistered} registered board(s) and ${pass.workersRegistered} worker(s)`;
@@ -45,7 +47,7 @@ async function finalCleanupVerification(context: ScenarioContext): Promise<strin
 async function privateContextScan(context: ScenarioContext): Promise<string> {
   context.flushReports();
   const files = publicFilesBeforeFinalReport(context.run);
-  const scan = await scanPublicFiles(context.run, files);
+  const scan = await scanPublicFiles(context.run, files, context.signal);
   if (scan.status === "unavailable" || scan.status === "not-run") {
     throw new SkipScenario(scan.detail);
   }

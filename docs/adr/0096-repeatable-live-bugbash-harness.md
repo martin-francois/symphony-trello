@@ -65,6 +65,10 @@ The parts:
   variables add prompt capture and per-card scripts for tool calls, user-input and approval
   requests, telemetry, malformed JSON, cancelled turns, and stalls. Without them it behaves as
   before, so `LiveTrelloE2eIT` and `docs/live-e2e.md` are unchanged.
+* Setup discovery in fake mode uses a run-owned `codex` launcher for version, authentication status,
+  and model discovery. It precedes the operator CLI on PATH and uses an empty run-owned Codex home.
+  Worker turns still use the Java fake app-server. Real mode explicitly selects the operator CLI
+  with the private authentication copy.
 * Real Trello, Codex, and GitHub need `--trello real`, `--codex real`, and `--github
   real-sandbox`. A row whose requirement is missing is `skipped`, never passed.
 * The issue's six statuses stay, and three are added: `failed` for an unexpected product failure,
@@ -74,6 +78,61 @@ The parts:
 * Selection is one function, `selectScenarios`, over a criteria object. Theme support from the
   [themed live bug-bash runs issue](https://github.com/martin-francois/symphony-trello/issues/499) adds a
   criterion there and an optional manifest field instead of filtering elsewhere.
+
+A run stores its normalized, non-secret selection and integration settings before creating external
+resources. Resume and cleanup load those settings before planning or choosing an API target. An
+explicit conflicting target or selection is rejected instead of silently replacing the earlier
+run's configuration. Time budgets and soak deadlines can be renewed for a resumed invocation. This
+keeps the run id sufficient for recovery; requiring the operator to repeat every original flag
+would make cleanup depend on remembered arguments. A resumed source installation uses an immutable
+run-owned bare repository per commit, so selecting a rebased revision does not rewrite an earlier
+source ref.
+
+Cancellation reaches installation, scenario commands, Trello requests, polling and direct Codex
+probes. The runner waits for the active scenario to settle before final cleanup. Abandoning its
+promise lets later probes recreate authentication copies or start processes after cleanup, so that
+approach is rejected. Cleanup uses independent clients so an interrupted scenario cannot cancel its
+recovery operations. A passive soak controls its requested duration without the ordinary ten-minute
+scenario timer. The whole-run
+budget still interrupts an unfinished soak. Removing the competing scenario timer prevents a
+completed ten-minute soak from racing an interruption at the same deadline.
+
+Board discovery excludes every id in the initial visible-board snapshot. That snapshot is written
+before resources are created and retained across resume. A matching name and recent creation time
+alone do not prove ownership, since a short run id can also prefix an existing board. Resume uses
+the board id in the newly generated workflow rather than the first registry entry with its name.
+Run-owned workflow replacement is explicit when rerunning `new-board`.
+
+Installed CLI calls and direct Codex probes use run-owned HOME/XDG directories. They remove GitHub
+authentication variables and use an empty run-owned GitHub config directory. Only
+`--github real-sandbox` restores the operator's GitHub authentication. Intermediate
+cleanup retains the private Codex authentication copy so a later soak uses refreshed credentials;
+final cleanup deletes it and still reports a refresh without modifying the operator's original.
+
+The soak deadline also bounds lazy source installation, CLI calls, Trello requests, and Codex
+sentinels. A shared cancellation signal stops an in-flight probe, and no new probe starts after the
+deadline. Only fully completed cycles count. If the first cycle never completes, the row is skipped
+with an instruction to extend the duration or use an installed CLI. This keeps a short health window
+from silently expanding into an installation or network timeout.
+
+Each result records its tested revision. Resume reuses successful or known-bug results only when
+that revision matches the current target. Earlier results are saved under private evidence before
+the ledger is rewritten. Rerunning changed targets costs time, but avoids presenting old assertions
+under a new revision header. Mixed-revision reuse is rejected because a run would no longer have one
+verified target. A result without recorded provenance must run again.
+
+For `--symphony-command`, the harness cannot infer an immutable application revision from the command
+path or wrapper contents. The installed classes can change independently. Reports mark those
+results as unverified, store no target commit, and rerun every selected row on resume. This retains
+resume and historical evidence without claiming that a matching checkout identifies the installed
+application. Scanner scenarios inherit cancellation; final report scans remain independent so the
+interrupted run still receives a privacy check.
+
+Cleanup records failed board discovery as an incomplete outcome, even when its registry is empty.
+The saved initial-board snapshot and registries remain available for another cleanup attempt. A
+successful retry clears the discovery failure. Scanner errors and unavailable scanners also require
+a nonzero run exit. Treating either operation as a warning would claim evidence the run did not
+collect.
 
 ### Consequences
 
@@ -103,6 +162,9 @@ The parts:
 
 ### TypeScript harness on Node with a YAML manifest
 
+A Node program loads scenario metadata from YAML and executes registered TypeScript scenarios.
+It keeps selection, reports and resource ownership in shared modules.
+
 * Good, because the repository already type-checks and tests TypeScript scripts in CI.
 * Good, because YAML parsing, JSON handling, HTTP, and child processes need no extra dependency.
 * Good, because the fake Trello API and the runner share state, so scenarios can assert on moves and
@@ -111,17 +173,23 @@ The parts:
 
 ### Bash scripts with shell helper libraries
 
+A Bash entry point invokes scenario scripts that share shell functions for APIs and reporting.
+
 * Good, because the issue sketched this layout and the original run used shell commands.
 * Bad, because parsing a YAML manifest in Bash needs an extra tool such as `yq`.
 * Bad, because report generation, redaction, and JSON assertions in Bash are hard to test and review.
 
 ### Single-file Java programs
 
+Separate Java source programs execute scenarios directly through the JDK source launcher.
+
 * Good, because Java is already required.
 * Bad, because single-file programs cannot use the YAML library without a classpath, and the
   harness would need many cooperating files.
 
 ### JUnit integration tests
+
+JUnit tests drive the live scenarios from Maven alongside the existing live E2E suite.
 
 * Good, because they would sit next to `LiveTrelloE2eIT` and reuse test fixtures.
 * Bad, because the issue asks for the installed-CLI boundary, profiles, a public ledger, and a soak

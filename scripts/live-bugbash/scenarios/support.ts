@@ -18,10 +18,11 @@ export async function cli(
   context: ScenarioContext,
   name: string,
   args: readonly string[],
-  options: {paths?: CliPaths; env?: Record<string, string>; timeoutMs?: number; cwd?: string} = {},
+  options: {paths?: CliPaths; env?: Record<string, string>; timeoutMs?: number; cwd?: string; signal?: AbortSignal} = {},
 ): Promise<CommandOutcome> {
-  const symphony = await context.cli();
-  const outcome = await symphony.exec(args, options);
+  const signal = options.signal === undefined ? context.signal : AbortSignal.any([context.signal, options.signal]);
+  const symphony = await context.cli(signal);
+  const outcome = await symphony.exec(args, {...options, signal});
   context.evidence(`${name}.txt`, commandEvidence(args, outcome));
   return outcome;
 }
@@ -48,6 +49,7 @@ export interface ServiceBoard {
   codex: FakeCodex;
   port: number;
   cli: SymphonyCli;
+  signal: AbortSignal;
 }
 
 export interface ServiceBoardOptions {
@@ -116,12 +118,13 @@ export async function serviceBoard(context: ScenarioContext, fixture: string, op
     ...(options.edits ?? []),
   ];
   patchWorkflow(workflow, edits);
-  return {fixture, board, paths, workflow, codex, port, cli: symphony};
+  return {fixture, board, paths, workflow, codex, port, cli: symphony, signal: context.signal};
 }
 
 /** Wraps a workflow that setup-local wrote so the service helpers can drive it with fake Codex. */
 export async function adoptService(context: ScenarioContext, fixture: string, workflow: string, paths: CliPaths, boardId: string): Promise<ServiceBoard> {
   const symphony = await context.cli();
+  const lists = await context.trello().request<Array<{id: string; name: string}>>("GET", `boards/${boardId}/lists`, {filter: "open"});
   const codex = fakeCodex(context.run, fixture);
   patchWorkflow(workflow, [
     [["tracker", "endpoint"], symphony.endpoint],
@@ -129,7 +132,6 @@ export async function adoptService(context: ScenarioContext, fixture: string, wo
     [["codex", "read_timeout_ms"], 15_000],
     [["codex", "command"], codex.command],
   ]);
-  const lists = await context.trello().request<Array<{id: string; name: string}>>("GET", `boards/${boardId}/lists`, {filter: "open"});
   const name = context.trello().registeredBoards().find((board) => board.id === boardId)?.name ?? fixture;
   return {
     fixture,
@@ -139,6 +141,7 @@ export async function adoptService(context: ScenarioContext, fixture: string, wo
     codex,
     port: Number((readFrontMatter(workflow)["server"] as {port?: unknown} | undefined)?.port),
     cli: symphony,
+    signal: context.signal,
   };
 }
 
@@ -157,7 +160,7 @@ export async function startWorker(context: ScenarioContext, service: ServiceBoar
   if (outcome.status !== 0) {
     throw new ProductFailure(`start failed for fixture ${service.fixture} (exit ${String(outcome.status)})`);
   }
-  await waitFor(`the ${service.fixture} worker state endpoint`, () => workerState(service.port), WORKER_START_TIMEOUT_MS);
+  await waitFor(`the ${service.fixture} worker state endpoint`, () => workerState(service.port, context.signal), WORKER_START_TIMEOUT_MS, 500, context.signal);
 }
 
 export async function stopWorker(context: ScenarioContext, service: ServiceBoard): Promise<CommandOutcome> {
@@ -172,19 +175,19 @@ export async function cardList(context: ScenarioContext, service: ServiceBoard, 
 }
 
 export async function waitForCardIn(context: ScenarioContext, service: ServiceBoard, cardId: string, list: string, timeoutMs = CARD_TIMEOUT_MS): Promise<void> {
-  await waitFor(`the card to reach ${list}`, async () => (await cardList(context, service, cardId)) === list, timeoutMs);
+  await waitFor(`the card to reach ${list}`, async () => (await cardList(context, service, cardId)) === list, timeoutMs, 500, context.signal);
 }
 
 export async function waitForPrompt(service: ServiceBoard, marker: string, timeoutMs = CARD_TIMEOUT_MS): Promise<string> {
   return waitFor(
     `fake Codex to receive the prompt for ${marker}`,
     () => capturedPrompts(service.codex).find((prompt) => prompt.includes(marker)),
-    timeoutMs,
+    timeoutMs, 500, service.signal,
   );
 }
 
 export async function state(service: ServiceBoard): Promise<WorkerState> {
-  const current = await workerState(service.port);
+  const current = await workerState(service.port, service.signal);
   if (current === null) {
     throw new ProductFailure(`the ${service.fixture} worker stopped answering /api/v1/state`);
   }

@@ -12,7 +12,7 @@ export function publicFilesBeforeFinalReport(run: RunRoot): string[] {
 }
 
 /** Scans public files with scripts/check-private-context (BetterLeaks plus the repository's private-context rules). */
-export async function scanPublicFiles(run: RunRoot, files: readonly string[]): Promise<PrivateContextScan> {
+export async function scanPublicFiles(run: RunRoot, files: readonly string[], signal?: AbortSignal): Promise<PrivateContextScan> {
   const present = files.filter((file) => existsSync(run.path(file)));
   if (present.length === 0) {
     return {status: "not-run", detail: "no public files to scan"};
@@ -20,7 +20,7 @@ export async function scanPublicFiles(run: RunRoot, files: readonly string[]): P
   const outcome = await runCommand(
     join(run.repoRoot, "scripts", "check-private-context"),
     present.flatMap((file) => ["--file", run.path(file)]),
-    {cwd: run.repoRoot, timeoutMs: 300_000},
+    {cwd: run.repoRoot, timeoutMs: 300_000, signal},
   );
   run.privateEvidence("run", `private-context-scan-${Date.now()}.log`, `${outcome.stdout}\n${outcome.stderr}`);
   if (outcome.status === 0) {

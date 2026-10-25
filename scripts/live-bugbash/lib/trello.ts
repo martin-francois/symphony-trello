@@ -1,3 +1,4 @@
+import {existsSync, readFileSync, writeFileSync} from "node:fs";
 import type {RunRoot} from "./run-root.ts";
 
 export const REAL_TRELLO_ENDPOINT = "https://api.trello.com/1";
@@ -61,14 +62,16 @@ export class TrelloApi {
   readonly endpoint: string;
   private readonly credentials: TrelloCredentials;
   private readonly run: RunRoot;
+  private readonly signal: AbortSignal | undefined;
 
-  constructor(run: RunRoot, endpoint: string, credentials: TrelloCredentials) {
+  constructor(run: RunRoot, endpoint: string, credentials: TrelloCredentials, signal?: AbortSignal) {
+    this.signal = signal;
     this.run = run;
     this.endpoint = endpoint.replace(/\/+$/, "");
     this.credentials = credentials;
   }
 
-  async request<T>(method: string, path: string, params: Record<string, string> = {}): Promise<T> {
+  async request<T>(method: string, path: string, params: Record<string, string> = {}, options: {signal?: AbortSignal} = {}): Promise<T> {
     const url = new URL(`${this.endpoint}/${path.replace(/^\/+/, "")}`);
     const init: RequestInit = {
       method,
@@ -76,7 +79,7 @@ export class TrelloApi {
         Accept: "application/json",
         Authorization: `OAuth oauth_consumer_key="${this.credentials.key}", oauth_token="${this.credentials.token}"`,
       },
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.any([AbortSignal.timeout(30_000), ...[this.signal, options.signal].filter((signal) => signal !== undefined)]),
     };
     if (method === "GET") {
       for (const [key, value] of Object.entries(params)) {
@@ -180,8 +183,8 @@ export class TrelloApi {
     return checklists.flatMap((checklist) => checklist.checkItems);
   }
 
-  async boardClosed(boardId: string): Promise<boolean> {
-    const board = await this.request<{closed: boolean}>("GET", `boards/${encodeURIComponent(boardId)}`, {fields: "closed"});
+  async boardClosed(boardId: string, signal?: AbortSignal): Promise<boolean> {
+    const board = await this.request<{closed: boolean}>("GET", `boards/${encodeURIComponent(boardId)}`, {fields: "closed"}, {signal});
     return board.closed;
   }
 
@@ -191,20 +194,48 @@ export class TrelloApi {
     await this.request("PUT", `boards/${encodeURIComponent(boardId)}/closed`, {value: "true"});
   }
 
+  /** Captures ownership exclusions once; resuming must not classify leaked run boards as pre-existing. */
+  async captureInitialBoards(): Promise<void> {
+    const path = this.initialBoardsPath();
+    if (existsSync(path)) {
+      this.preexistingBoardIds();
+      return;
+    }
+    this.run.dir("private-evidence", "run");
+    writeFileSync(path, JSON.stringify(await this.visibleBoards()), {mode: 0o600});
+  }
+
+  private initialBoardsPath(): string {
+    return this.run.path("private-evidence", "run", "preexisting-trello-boards.json");
+  }
+
+  private preexistingBoardIds(): Set<string> {
+    const path = this.initialBoardsPath();
+    if (!existsSync(path)) {
+      throw new Error("cannot discover unregistered run boards: capture initial Trello boards before creating resources");
+    }
+    const boards: unknown = JSON.parse(readFileSync(path, "utf8"));
+    if (!Array.isArray(boards) || !boards.every((board: unknown) => typeof board === "object" && board !== null && "id" in board && typeof board.id === "string")) {
+      throw new Error("cannot restore initial Trello boards: expected a saved array of board ids");
+    }
+    return new Set(boards.map((board: {id: string}) => board.id));
+  }
+
   /**
    * Registers boards that something else created for this run, such as `setup-local` or a scenario
    * that stopped before registering. A board qualifies only when its name starts with the run id
-   * and its id says it was created after the run started, so a short custom run id cannot claim an
-   * older board that happens to share the prefix.
+   * and its id falls within the run clock allowance. The initial snapshot excludes pre-existing
+   * boards even when a short custom run id shares their prefix.
    */
   async sweepRunBoards(scenarioId: string): Promise<number> {
     const known = new Set(this.registeredBoards().map((board) => board.id));
+    const preexisting = this.preexistingBoardIds();
     const prefix = `${this.run.runId}-`;
     const earliest = Math.floor(this.run.startedAt.getTime() / 1000) - CLOCK_SKEW_SECONDS;
     let added = 0;
     for (const board of await this.visibleBoards()) {
       const created = boardCreatedAt(board.id);
-      if (board.name.startsWith(prefix) && !known.has(board.id) && created !== null && created >= earliest) {
+      if (board.name.startsWith(prefix) && !known.has(board.id) && !preexisting.has(board.id) && created !== null && created >= earliest) {
         this.run.register("trelloBoards", {id: board.id, name: board.name, scenario: scenarioId, url: ""});
         added += 1;
       }

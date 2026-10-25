@@ -52,6 +52,11 @@ async function installedWrapperTrelloAuth(context: ScenarioContext): Promise<str
   return "list-workspaces authenticated with run-scoped credentials and printed no credential";
 }
 
+function workspaceArgs(context: ScenarioContext): string[] {
+  const workspace = context.options.trelloWorkspaceId;
+  return workspace === null ? [] : ["--workspace-id", workspace];
+}
+
 async function newBoard(context: ScenarioContext): Promise<string> {
   const paths = (await context.cli()).paths(context.scenario.id);
   const workflow = join(paths.configDir, "new-board.WORKFLOW.md");
@@ -61,6 +66,7 @@ async function newBoard(context: ScenarioContext): Promise<string> {
     "--name",
     name,
     "--no-github",
+    "--force",
     "--workflow",
     workflow,
     "--workspace-root",
@@ -68,14 +74,15 @@ async function newBoard(context: ScenarioContext): Promise<string> {
     "--server-port",
     String(await freePort()),
     ...(await endpointArgs(context)),
+    ...workspaceArgs(context),
   ]);
   const registered = await registerProductBoards(context);
   context.check.exitCode(outcome, 0, "new-board exits 0");
   context.check.equal(registered, 1, "exactly one new run-owned board was created and registered");
   context.check.that(existsSync(workflow), "the workflow is written under the run root");
-  if (registered === 1) {
-    const board = context.trello().registeredBoards().find((entry) => entry.name === name);
-    const lists = board === undefined ? [] : await context.trello().request<Array<{name: string}>>("GET", `boards/${board.id}/lists`, {filter: "open"});
+  if (registered === 1 && existsSync(workflow)) {
+    const boardId = await registeredWorkflowBoardId(context, workflow);
+    const lists = await context.trello().request<Array<{name: string}>>("GET", `boards/${boardId}/lists`, {filter: "open"});
     context.check.that(
       STANDARD_LISTS.every((list) => lists.some((entry) => entry.name === list)),
       "the new board has the recommended Trello-only lists",
@@ -85,6 +92,19 @@ async function newBoard(context: ScenarioContext): Promise<string> {
     context.check.that(typeof getIn(frontMatter(workflow), ["tracker", "board_id"]) === "string", "the workflow names the new board");
   }
   return "new-board created a registered board with the recommended lists and wrote the workflow under the run root";
+}
+
+// Setup writes a short link, while the ownership registry stores the full Trello id.
+async function registeredWorkflowBoardId(context: ScenarioContext, workflow: string): Promise<string> {
+  const reference = getIn(frontMatter(workflow), ["tracker", "board_id"]);
+  if (typeof reference !== "string") {
+    throw new ProductFailure("cannot inspect the setup workflow: expected tracker.board_id in the generated file");
+  }
+  const board = await context.trello().request<{id: string}>("GET", `boards/${encodeURIComponent(reference)}`, {fields: "id"});
+  if (!context.trello().registeredBoards().some((entry) => entry.id === board.id)) {
+    throw new ProductFailure("cannot inspect the setup workflow: its board is not registered to this run");
+  }
+  return board.id;
 }
 
 async function importBoardCustom(context: ScenarioContext): Promise<string> {
@@ -189,6 +209,7 @@ async function setupLocal(
       String(await freePort(paths.manifest)),
       ...extra,
       ...(await endpointArgs(context)),
+      ...workspaceArgs(context),
     ],
     {paths},
   );
@@ -364,10 +385,7 @@ async function noInProgressDispatch(context: ScenarioContext): Promise<string> {
     throw new ProductFailure(`setup-local --no-in-progress failed (exit ${String(setup.status)})`);
   }
   context.check.equal(getIn(frontMatter(workflow), ["tracker", "in_progress_state"]), undefined, "the workflow has no tracker.in_progress_state");
-  const boardId = context.trello().registeredBoards().find((board) => board.name === runBoardName(context))?.id;
-  if (boardId === undefined) {
-    throw new ProductFailure("setup-local did not create the named board");
-  }
+  const boardId = await registeredWorkflowBoardId(context, workflow);
   const service = await adoptService(context, context.scenario.id, workflow, paths, boardId);
   context.check.that(!(LIST_NAMES.inProgress in service.board.lists), "the board has no In Progress list");
   const cardId = await addCard(context, service, context.scenario.id, "Answer with one sentence. No repository is needed.");
@@ -400,7 +418,7 @@ async function terminalDoneHandoff(context: ScenarioContext): Promise<string> {
   await startWorker(context, service);
   try {
     await waitForCardIn(context, service, cardId, LIST_NAMES.done);
-    await sleep(3_000);
+    await sleep(3_000, context.signal);
     const current = await workerState(service.port);
     const retrying = (current?.retrying ?? []).some((entry) => entry["card_id"] === cardId);
     context.check.that(!retrying, "the worker does not retry the card after the terminal move");
@@ -442,7 +460,7 @@ async function installDryRun(context: ScenarioContext): Promise<string> {
   const outcome = await runCommand(
     "bash",
     [join(context.run.repoRoot, "install.sh"), "--dry-run", "--no-onboard", "--no-update-path", "--prefix", prefix, "--bin-dir", binDir],
-    {cwd: context.run.root, env: sandboxEnvironment(context.run)},
+    {cwd: context.run.root, env: sandboxEnvironment(context.run), signal: context.signal},
   );
   context.evidence("install-dry-run.txt", `exit=${String(outcome.status)}\n${outcome.stdout}\n${outcome.stderr}`);
   context.check.exitCode(outcome, 0, "install.sh --dry-run exits 0");
@@ -461,6 +479,7 @@ async function uninstallDryRun(context: ScenarioContext): Promise<string> {
   const outcome = await runCommand("bash", [join(context.run.repoRoot, "uninstall.sh"), "--dry-run", "--prefix", prefix, "--bin-dir", binDir], {
     cwd: context.run.root,
     env: sandboxEnvironment(context.run),
+    signal: context.signal,
   });
   context.evidence("uninstall-dry-run.txt", `exit=${String(outcome.status)}\n${outcome.stdout}\n${outcome.stderr}`);
   context.check.exitCode(outcome, 0, "uninstall.sh --dry-run exits 0");

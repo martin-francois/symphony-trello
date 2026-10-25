@@ -49,10 +49,6 @@ async function reachesReview(context: ScenarioContext, run: CaseRun): Promise<vo
   context.check.equal(list, LIST_NAMES.humanReview, "the card reaches Human Review");
 }
 
-function comments(context: ScenarioContext, cardId: string): string[] {
-  return context.fakeTrello?.commentsOf(cardId).map((comment) => comment.data.text) ?? [];
-}
-
 const CASES: Readonly<Record<string, ToolCase>> = {
   "trello-tool-comment-write-denied": {
     fixture: FIXTURES.restricted,
@@ -153,7 +149,7 @@ const CASES: Readonly<Record<string, ToolCase>> = {
     assert: async (context, run) => {
       context.check.contains(responseFor(run, "trello_add_comment"), "trello_writes_disabled", "the comment call returns trello_writes_disabled");
       context.check.contains(responseFor(run, "trello_move_current_card"), "trello_writes_disabled", "the move call returns trello_writes_disabled");
-      context.check.that(!comments(context, run.cardId).some((text) => text.includes("read-only check")), "the card has no comment from Codex");
+      context.check.that(!(await context.trello().comments(run.cardId)).some((text) => text.includes("read-only check")), "the card has no comment from Codex");
       context.check.that((await cardList(context, run.service, run.cardId)) !== LIST_NAMES.humanReview, "the card never reaches Human Review");
     },
   },
@@ -172,10 +168,10 @@ async function toolFixture(context: ScenarioContext, fixture: ToolFixture): Prom
     const runs = new Map<string, CaseRun>();
     try {
       for (const [id, entry] of cases) {
-        await waitFor(`${entry.responses} scripted responses for ${id}`, () => toolResponses(service.codex, id).length >= entry.responses, 90_000);
+        await waitFor(`${entry.responses} scripted responses for ${id}`, () => toolResponses(service.codex, id).length >= entry.responses, 90_000, 500, context.signal);
       }
       // Let the final moves and Trello writes from the completed turns land before asserting.
-      await sleep(2_000);
+      await sleep(2_000, context.signal);
       for (const [id] of cases) {
         runs.set(id, {service, cardId: cards.get(id) as string, responses: toolResponses(service.codex, id)});
       }

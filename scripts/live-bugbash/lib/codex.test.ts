@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
-import {readFileSync} from "node:fs";
+import {mkdtempSync, readFileSync, rmSync, statSync, writeFileSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
 import test from "node:test";
-import {FAKE_CODEX_CONTRACT, fakeCodexStepKinds} from "./codex.ts";
+import {FAKE_CODEX_CONTRACT, fakeCodexStepKinds, runCodexAuthChanged, runScopedCodexHome} from "./codex.ts";
+
+import {RunRoot} from "./run-root.ts";
 
 const FAKE_SOURCE = readFileSync(new URL("../../FakeCodexAppServer.java", import.meta.url), "utf8");
 
@@ -32,4 +36,40 @@ test("the fake Codex variable names and file suffixes the harness uses appear in
 
   // then
   assert.deepEqual(missing, []);
+});
+
+
+test("reusing a run Codex home preserves refreshed authentication and the operator's original", () => {
+  // given
+  const directory = mkdtempSync(join(tmpdir(), "bugbash-codex-auth-"));
+  const previousHome = process.env["CODEX_HOME"];
+  process.env["CODEX_HOME"] = directory;
+  const original = '{"synthetic":"original"}';
+  const refreshed = '{"synthetic":"refreshed"}';
+  writeFileSync(join(directory, "auth.json"), original);
+  const run = new RunRoot(directory, "auth-refresh");
+  run.create();
+  try {
+    const home = runScopedCodexHome(run);
+    const copy = join(home, "auth.json");
+    assert.equal(readFileSync(copy, "utf8"), original);
+    assert.equal(statSync(copy).mode & 0o777, 0o600);
+    writeFileSync(copy, refreshed);
+
+    // when
+    const reused = runScopedCodexHome(run);
+
+    // then
+    assert.equal(reused, home);
+    assert.equal(readFileSync(copy, "utf8"), refreshed);
+    assert.equal(readFileSync(join(directory, "auth.json"), "utf8"), original);
+    assert.equal(runCodexAuthChanged(run), true);
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env["CODEX_HOME"];
+    } else {
+      process.env["CODEX_HOME"] = previousHome;
+    }
+    rmSync(directory, {recursive: true, force: true});
+  }
 });
