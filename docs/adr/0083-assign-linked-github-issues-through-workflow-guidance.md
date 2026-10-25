@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-10-04
-decision-makers: [François Martin, Claude]
+decision-makers: [François Martin]
 consulted:
   - "[GitHub issue #542](https://github.com/martin-francois/symphony-trello/issues/542)"
   - "[GitHub CLI `gh issue edit` manual](https://cli.github.com/manual/gh_issue_edit)"
