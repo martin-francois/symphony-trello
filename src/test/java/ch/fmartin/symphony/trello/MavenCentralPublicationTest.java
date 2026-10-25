@@ -11,7 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.Map;
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -63,7 +63,7 @@ final class MavenCentralPublicationTest {
                 .doesNotContain(STAGE_STEP, DEPLOY_STEP);
         assertThat(publicationJob.get("needs").asText()).isEqualTo(RELEASE_JOB);
         assertThat(publicationJob.get("if").asText())
-                .isEqualTo("${{ needs.release-please.outputs.upload_assets == 'true'"
+                .isEqualTo("${{ needs." + RELEASE_JOB + ".outputs.upload_assets == 'true'"
                         + " && vars.MAVEN_CENTRAL_STAGE != '' }}");
         assertThat(publicationJob.get("environment").asText()).isEqualTo(PUBLICATION_ENVIRONMENT);
         assertThat(strings(publicationJob.get("permissions"))).containsOnly(entry("contents", "read"));
@@ -74,7 +74,7 @@ final class MavenCentralPublicationTest {
                 .first()
                 .extracting(step -> strings(step.get("with")), as(map(String.class, String.class)))
                 .containsOnly(
-                        entry("ref", "${{ needs.release-please.outputs.checkout_ref }}"),
+                        entry("ref", "${{ needs." + RELEASE_JOB + ".outputs.checkout_ref }}"),
                         entry("persist-credentials", "false"));
     }
 
@@ -188,13 +188,13 @@ final class MavenCentralPublicationTest {
 
     /// Maps each child element name to its text; callers pass elements whose child names are unique.
     private static Map<String, String> childTexts(Element parent) {
-        Map<String, String> texts = new LinkedHashMap<>();
+        Map<String, String> texts = new HashMap<>();
         NodeList children = parent.getChildNodes();
         for (int index = 0; index < children.getLength(); index++) {
             if (children.item(index) instanceof Element child) {
                 texts.put(child.getTagName(), child.getTextContent().strip());
             }
         }
-        return texts;
+        return Map.copyOf(texts);
     }
 }
