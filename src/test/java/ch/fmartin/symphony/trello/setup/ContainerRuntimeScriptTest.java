@@ -11,7 +11,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -97,7 +96,7 @@ final class ContainerRuntimeScriptTest {
     void snapshotWrapperPreservesWhetherCiIsSet(String ci) throws Exception {
         // given
         Path invocation = installRecordingRuntime("docker");
-        var environment = new LinkedHashMap<>(runtimeEnvironment(null));
+        var environment = new HashMap<>(runtimeEnvironment(null));
         environment.put("XDG_CACHE_HOME", tempDir.resolve("cache").toString());
         if (ci != null) {
             environment.put("CI", ci);

@@ -164,12 +164,17 @@ parallel safety. Live end-to-end and deployed-verification rules live in
   ([ADR 0092](../adr/0092-approvaltests-terminal-output-snapshots.md)). When a change alters that
   output, rerun them with the update command in `CONTRIBUTING.md`, read the baseline diff, and
   commit it with the change. Never update baselines to make an unexplained difference disappear.
+  `TerminalSnapshots.updateRequested` rejects updates when `CI` is present and is not `false`,
+  as covered by `TerminalSnapshotsTest`. Pull-request review of the baseline diff enforces the
+  requirement to explain each change.
 - Keep failure, validation, and edge-case output in the lower-layer tests that own it (ADR 0055).
   Add an end-to-end snapshot only when packaging, environment, process, or terminal behavior cannot
-  be shown in-process.
+  be shown in-process. Pull-request review checks this test ownership boundary.
 - Make a scenario deterministic in its fixture before registering a normalization. Register only
   exact values with `TranscriptNormalizer`, and pass credentials as `CredentialSentinels` values,
-  never as normalized values.
+  never as normalized values. `TranscriptNormalizer.register` rejects sentinel registration, and
+  `TerminalSnapshots` rejects leaked sentinels before comparison. `TerminalSnapshotsTest` covers
+  both guards; pull-request review checks fixture determinism.
 
 ## What to test and what not to test
 
