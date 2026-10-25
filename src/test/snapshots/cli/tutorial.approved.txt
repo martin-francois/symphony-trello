@@ -1,0 +1,82 @@
+exitCode: 0
+--- stdout ---
+
+Guided tutorial
+This walkthrough creates a temporary Trello board, asks you to move one sample card through the
+workflow, and shows how Symphony reacts. It does not change your connected boards, your
+repositories, or your workflow files. The tutorial plays Symphony's part itself, so no Codex
+work runs and no pull request is created.
+
+Creating the temporary tutorial board...
+  OK  Board created: "Symphony for Trello tutorial (temporary)"
+  OK  Lists: "Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Done"
+  OK  Sample card in "Inbox": "Tutorial: add a hello message to the README"
+
+Open the tutorial board in your browser:
+  https://trello.com/b/SYNTH001/synthetic-board
+
+What each Trello list means:
+  "Inbox"            Ideas and rough tasks. Symphony leaves them alone.
+  "Ready for Codex"  Cards that are ready for Codex. Symphony picks up work from here.
+  "In Progress"      Symphony moves a card here while Codex works on it.
+  "Blocked"          Codex moves a card here when it cannot continue without your help.
+  "Human Review"     Codex moves finished work here so a person can review it.
+  "Done"             Finished work. Symphony leaves these cards alone.
+
+Step 1 of 3: queue the card
+In Trello, move the card "Tutorial: add a hello message to the README"
+from "Inbox" to "Ready for Codex".
+The tutorial checks the board every 5 seconds for up to 3 minutes.
+Press Enter to check now, s to let the tutorial do it, or q to stop:   OK  The tutorial moved the card to "Ready for Codex" for you
+
+Symphony picks up the card
+Symphony dispatches cards from "Ready for Codex". When it starts one, it moves the card to
+"In Progress" and adds one "## Codex Workpad" Trello comment. The tutorial does the same now.
+  OK  Moved the card to "In Progress"
+  OK  Added the Codex Workpad comment
+Open the card and read the workpad comment. Symphony records progress and handoff notes
+there, and it updates this one comment instead of adding new ones.
+Press Enter to continue, or q to stop: 
+Codex hands the card over for review
+When Codex finishes, it updates the workpad with a summary and moves the card to "Human Review".
+  OK  Updated the workpad with handoff notes
+  OK  Moved the card to "Human Review"
+Review the result: read the workpad notes on the card.
+Press Enter to continue, or q to stop: 
+Step 2 of 3: ask for a change
+Pretend the result needs one more change. Add a Trello comment to the card, for example:
+  Please also add a short goodbye message
+Then move the card back to "Ready for Codex" so Symphony can address it.
+The tutorial checks the board every 5 seconds for up to 3 minutes.
+Press Enter to check now, s to let the tutorial do it, or q to stop:   OK  The tutorial added the comment "Please also add a short goodbye message" and moved the card to "Ready for Codex" for you
+
+Symphony treats this as rework
+Symphony picks the card up again. The card already has a workpad, so Codex treats this as
+rework: it rereads the card, your new Trello comments, and the workpad before it changes anything.
+  OK  Moved the card to "In Progress"
+  OK  Updated the workpad with your comment as rework input
+  OK  Moved the card to "Human Review"
+Press Enter to continue, or q to stop: 
+By default, Symphony handles one card per board at a time; later you can raise `agent.max_concurrent_agents` in `WORKFLOW.md` when you are comfortable running more in parallel.
+The README workflow contract has the details:
+  https://github.com/martin-francois/symphony-trello#workflow-contract
+
+Step 3 of 3: accept the result
+The result looks good now. Move the card to "Done".
+The tutorial checks the board every 5 seconds for up to 3 minutes.
+Press Enter to check now, s to let the tutorial do it, or q to stop:   OK  The tutorial moved the card to "Done" for you
+"Done" is a terminal list. Symphony leaves cards there alone.
+
+What GitHub pull request integration adds
+Without GitHub integration, Symphony still runs the Trello and Codex loop for card-based work.
+Setup adds GitHub-specific lists such as "Merging" only when GitHub integration is configured.
+With it, Symphony can create and update pull requests, link them on Trello cards, and process
+feedback from pull requests and Trello comments. "Merging" then means "do final checks and merge
+this PR if safe" before Symphony moves the finished card to "Done".
+To add GitHub integration later, run:
+  symphony-trello setup-local configure-github
+
+You finished the tutorial. Use the same flow on your connected board.
+
+Archive the temporary tutorial board now? [Y/n]   OK  Archived the temporary tutorial board
+--- stderr ---

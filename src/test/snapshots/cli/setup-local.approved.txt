@@ -54,6 +54,9 @@ Workflow: <TEMP>/config/WORKFLOW.md
 
 Create a Trello card with a clear task and move it to this workflow's configured queue list.
 
+To practice the card flow on a temporary Trello board first, run:
+  symphony-trello tutorial
+
 Useful commands:
   symphony-trello status
   symphony-trello logs --workflow '<TEMP>/config/WORKFLOW.md'

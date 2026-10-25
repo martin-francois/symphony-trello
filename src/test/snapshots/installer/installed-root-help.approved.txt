@@ -16,5 +16,7 @@ Commands:
   diagnostics        Print sanitized diagnostics for issue reports.
   migrate-workflows  Check generated workflow bodies after a Symphony update or
                        supported downgrade.
+  tutorial           Practice the Symphony card flow on a temporary Trello
+                       board.
   setup-local        Set up local Trello-driven Codex automation.
 --- stderr ---

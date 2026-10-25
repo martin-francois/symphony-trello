@@ -6,11 +6,15 @@ import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.HTTPS;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.testsupport.CliRunResult;
+import ch.fmartin.symphony.trello.testsupport.StatefulFakeTrello;
 import ch.fmartin.symphony.trello.testsupport.TerminalSnapshots;
 import ch.fmartin.symphony.trello.testsupport.TranscriptNormalizer;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.io.PrintWriter;
+import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -20,6 +24,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledOnOs;
 import org.junit.jupiter.api.condition.OS;
+import picocli.CommandLine;
 
 /// Command-boundary happy-path snapshots for every public `symphony-trello` command.
 ///
@@ -46,6 +51,47 @@ final class TrelloBoardSetupMainSnapshotTest extends LocalSetupFixtureSupport {
 
         // then
         SNAPSHOTS.verify("cli/root-help", result, normalizer());
+    }
+
+    @Test
+    void tutorial() throws Exception {
+        // given
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+        try (var trello = new StatefulFakeTrello().start();
+                var input = new BufferedReader(new StringReader("s\n\n\ns\n\ns\n\n"))) {
+            var out = new PrintStream(stdout, true, StandardCharsets.UTF_8);
+            var err = new PrintStream(stderr, true, StandardCharsets.UTF_8);
+            var boardSetup = new TrelloBoardSetup(new ObjectMapper()).withPortProbe(port -> false);
+            var main = new TrelloBoardSetupMain(
+                    new TrelloBoardSetupService(boardSetup, workerManager, Map.of()), workerManager, input, out, err);
+            var command = new CommandLine(main)
+                    .setOut(new PrintWriter(out, true, StandardCharsets.UTF_8))
+                    .setErr(new PrintWriter(err, true, StandardCharsets.UTF_8));
+
+            // when
+            int exitCode = SetupSystemProperties.withLookup(
+                    Map.<String, String>of()::get,
+                    () -> command.execute(
+                            "tutorial",
+                            "--endpoint",
+                            trello.endpoint().toString(),
+                            "--key",
+                            TRELLO_API_KEY,
+                            "--token",
+                            TRELLO_API_TOKEN,
+                            "--config-dir",
+                            tempDir.resolve("tutorial-config").toString(),
+                            "--no-github"));
+            var result = new CliRunResult(
+                    exitCode, stdout.toString(StandardCharsets.UTF_8), stderr.toString(StandardCharsets.UTF_8));
+
+            // then
+            SNAPSHOTS.verify("cli/tutorial", result, normalizer());
+            assertThat(trello.archived(trello.boardIdNamed(GuidedTutorial.BOARD_NAME)))
+                    .as("the completed tutorial archives its temporary board")
+                    .isTrue();
+        }
     }
 
     @Test
