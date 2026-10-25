@@ -182,10 +182,15 @@ Each coverage upload is a commit on its `gh-pages` branch. Per-class coverage co
 review period:
 
 ```bash
+run_logs=$(mktemp -d "${TMPDIR:-/var/tmp}/fuzz-review.XXXXXX")
 gh api --paginate "repos/martin-francois/symphony-trello/actions/workflows/continuous-fuzzing.yml/runs?created=2026-08-31..2026-09-07&per_page=100" \
-  --jq '.workflow_runs[] | select(.display_title | startswith("Continuous batch cycle")) | .id'
-gh api "repos/martin-francois/symphony-trello/actions/runs/<run-id>/logs" > run.zip
-unzip -p run.zip '*_batch*.txt' | grep -E 'stat::|DONE|finished with no crashes'
+  --jq '.workflow_runs[] | select(.display_title | startswith("Continuous batch cycle")) | .id' \
+  > "$run_logs/run-ids.txt"
+while IFS= read -r run_id; do
+  gh api "repos/martin-francois/symphony-trello/actions/runs/$run_id/logs" > "$run_logs/$run_id.zip"
+  unzip -p "$run_logs/$run_id.zip" '*_batch*.txt' \
+    | grep -E 'stat::|DONE|finished with no crashes' > "$run_logs/$run_id-stats.txt"
+done < "$run_logs/run-ids.txt"
 ```
 
 GitHub keeps workflow logs for 90 days, so the next review must collect them within that window.
