@@ -119,6 +119,21 @@ test("the pull request author cannot clear a failed pre-merge check without fixi
   );
 });
 
+test("assistance disclosure requires exactly one explicit choice", () => {
+  // given
+  const check = CUSTOM_CHECKS.find(({name}) => name === "AI assistance disclosed");
+
+  // when
+  const instructions = check?.instructions.replaceAll(/\s+/gu, " ") ?? "";
+
+  // then
+  assert.equal(check?.mode, "error");
+  assert.ok(instructions.includes("neither disclosure choice is ticked or both choices are ticked"));
+  assert.ok(instructions.includes("exactly one must be ticked"));
+  assert.ok(instructions.includes('"AI-assisted PR" is ticked and the confirmation is not'));
+  assert.ok(instructions.includes("No AI assistance beyond short completion, search, formatting, or typo fixes"));
+});
+
 test("redaction acknowledgement is required in error mode", () => {
   // given
   const check = CUSTOM_CHECKS.find(({name}) => name === "Redaction checked");

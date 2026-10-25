@@ -115,6 +115,7 @@ Built with Codex, Claude, or other AI tools? Awesome — just mark it.
 AI PRs are first-class citizens here. We just want transparency so reviewers know what to look for.
 -->
 
+- [ ] No AI assistance beyond short completion, search, formatting, or typo fixes
 - [ ] AI-assisted PR
 - [ ] I confirm I understand what the code does
 

@@ -41,7 +41,9 @@ CodeRabbit output. How should the template become a merge requirement?
   accepts.
 * Release Please pull requests skip the template checks.
 * Renovate pull requests keep their automerge.
-* The pull request template itself does not change in this decision.
+* [Template enforcement](https://github.com/martin-francois/symphony-trello/issues/655)
+  preserves the original template; [explicit disclosure](https://github.com/martin-francois/symphony-trello/issues/782)
+  adds the no-assistance choice.
 
 ## Considered Options
 
@@ -55,8 +57,8 @@ CodeRabbit output. How should the template become a merge requirement?
 Chosen option: CodeRabbit pre-merge checks through the request changes workflow.
 
 `.coderabbit.yaml` sets the built-in description check to `error`. It adds three custom checks in
-`error` mode. "AI assistance disclosed" fails when the AI Assistance heading or either checkbox is
-missing, and when `AI-assisted PR` is ticked without `I confirm I understand what the code does`.
+`error` mode. "AI assistance disclosed" fails when the AI Assistance heading or any of the three checkboxes is
+missing, when neither or both disclosure choices are ticked, and when `AI-assisted PR` is ticked without `I confirm I understand what the code does`.
 "Compatibility decision complete" fails when the Compatibility Decision section is missing, when
 not exactly one option is ticked, and when Breaking is ticked without non-placeholder `Breaks:`,
 `Migration:`, and `Alternative:` values. "Redaction checked" requires the redaction checkbox in the Review Checklist to be ticked.
@@ -97,8 +99,10 @@ With the body emptied, the same check read its own instructions in the diff and 
 checks therefore judge only the body as GitHub stores it, fail an empty body, and read the full body
 from the GitHub REST API when the description they get is cut short.
 
-The template has no box for "no AI assistance", so an unticked AI Assistance section passes. The
-check cannot tell a pull request without AI help from one whose author skipped the disclosure.
+The template requires an explicit disclosure choice. The no-assistance choice includes the short
+completion, search, formatting, and typo-fix exemptions in `AI_CONTRIBUTION_POLICY.md`. An untouched
+section fails instead of treating missing disclosure as no assistance. The generated OpenRewrite
+pull request body selects the no-assistance choice because that workflow runs deterministic recipes.
 
 ### Consequences
 

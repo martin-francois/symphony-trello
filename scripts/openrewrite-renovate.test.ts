@@ -95,6 +95,7 @@ test("renders a complete generated pull request body", () => {
   assert.match(body, /- `src\/main\/java\/example\/Example\.java`/);
   assert.match(body, /- \[x\] Compatible:/);
   assert.match(body, /- \[x\] Combine this pull request/);
+  assert.match(body, /- \[x\] No AI assistance beyond short completion, search, formatting, or typo fixes/);
   assert.match(body, /- \[ \] AI-assisted PR/);
 });
 

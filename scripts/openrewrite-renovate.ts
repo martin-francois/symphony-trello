@@ -295,6 +295,7 @@ ${fileList(input.generatedFiles)}
 
 ## AI Assistance (if used)
 
+- [x] No AI assistance beyond short completion, search, formatting, or typo fixes
 - [ ] AI-assisted PR
 - [ ] I confirm I understand what the code does
 `;

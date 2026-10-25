@@ -34,15 +34,19 @@ reviews:
 
           Fail when the body is empty.
 
-          Find the heading "## AI Assistance (if used)". Below it are two checkboxes,
-          "AI-assisted PR" and "I confirm I understand what the code does".
+          Find the heading "## AI Assistance (if used)". Below it are three checkboxes,
+          "No AI assistance beyond short completion, search, formatting, or typo fixes",
+          "AI-assisted PR", and "I confirm I understand what the code does".
 
-          Fail when the heading or either checkbox line is missing.
+          Fail when the heading or any of the three checkbox lines is missing.
+
+          Fail when neither disclosure choice is ticked or both choices are ticked. Name both
+          disclosure choices and say that exactly one must be ticked.
 
           Fail when "AI-assisted PR" is ticked and the confirmation is not. Say that a person has to
           tick the confirmation before merging.
 
-          Pass otherwise. Both boxes unticked means no AI assistance was used.
+          Pass otherwise. The confirmation is required only for the AI-assisted choice.
 
           Do not judge whether the disclosure is true.
       # Subset of scripts/check-pr-compatibility-metadata.ts, never stricter than that script.
