@@ -30,6 +30,7 @@ import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
 import ch.fmartin.symphony.trello.testsupport.SetupCommandBuilder;
 import ch.fmartin.symphony.trello.testsupport.TestEnv;
 import ch.fmartin.symphony.trello.testsupport.TestWorkflows;
+import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import java.io.ByteArrayOutputStream;
@@ -173,6 +174,49 @@ final class TrelloBoardSetupMainTest {
         assertThat(openListsLine)
                 .as("one logical message must stay on one physical line with unambiguous quoting")
                 .isEqualTo("Open lists: \"Ready for Codex\", \"Sneaky\\nList\\t\\\"Q\\\"\", \"Released\"");
+    }
+
+    @Test
+    void importBoardRecordsTheGeneratedBodyAndInputs() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.recorded.md");
+        CliRunResult imported = runCli(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--in-progress",
+                "Doing",
+                "--blocked",
+                "Blocked",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                tempDir.resolve(ConnectedBoardManifest.FILE_NAME).toString(),
+                "--env",
+                tempDir.resolve(".env.recorded").toString());
+
+        // when
+        GeneratedWorkflowRecord recorded = GeneratedWorkflowStore.find(
+                        GeneratedWorkflowStore.inConfigDir(tempDir).records(), workflow)
+                .orElseThrow();
+
+        // then
+        imported.assertSuccess();
+        assertThat(recorded.symphonyVersion()).isEqualTo(SymphonyVersion.currentText());
+        assertThat(recorded.inputs().activeStates()).contains("Queue for Codex");
+        assertThat(recorded.body().trim())
+                .isEqualTo(new WorkflowLoader().load(workflow).promptTemplate());
+        assertThat(workflow).content().endsWith(recorded.body());
     }
 
     @ParameterizedTest

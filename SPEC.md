@@ -3692,6 +3692,9 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - CLI exits with success when application starts and shuts down normally
 - CLI exits nonzero when startup fails or the host process exits abnormally
 
+- Generated workflow provenance tests cover setup recording, regeneration, unknown JSON fields,
+  and warning-only failure without undoing completed setup.
+
 ### 17.8 Trello Workflow Conformance
 
 These checks are REQUIRED when the workflow expects the agent to perform Trello handoff transitions.
@@ -4236,6 +4239,28 @@ When this profile is used:
 - deterministic CI SHOULD run the PowerShell installer smoke and option paths through
   `scripts/pwsh-docker.sh` when a pull request changes that wrapper, so an update of the container
   image it pins is exercised before merge
+
+#### 19.4.1 Generated Workflow Provenance
+
+Generated workflow bodies change between Symphony versions. Recorded provenance is a permanent
+compatibility contract; [ADR 0095](docs/adr/0095-generated-workflow-body-migration.md) records its
+representation and the planned migration flow.
+
+- Whenever setup writes a generated workflow (`setup-local` board creation or import,
+  `setup-local configure-github`, `new-board`, and `import-board`), it MUST record the exact
+  generated body, the Symphony version that generated it, and the generation inputs in
+  `generated-workflows.json` beside the connected-board manifest. A failure to record MUST be
+  reported as a warning and MUST NOT undo the finished setup.
+- The JSON store has `formatVersion: 1` and a `workflows` list. Each record has `workflowPath`,
+  `symphonyVersion`, `inputs`, and `body`. It keeps one record per absolute workflow path, replacing
+  that record when setup regenerates the workflow. Other records, including unknown fields in
+  their stored inputs, MUST remain unchanged. Unknown top-level fields MUST also be preserved.
+- Readers MUST ignore unknown store, record, and input fields, so supported versions can read
+  records written by a newer version. A newer version MUST give missing input fields defaults that
+  render the older body. Removing or renaming a stored field is a breaking change; a future
+  incompatible format MUST use a new format version and define its migration contract.
+- The store is local user data beside the connected-board manifest. Setup MUST NOT place version
+  markers in the workflow metadata or generated prompt body.
 
 ### 19.5 Java Repository Quality Profile
 

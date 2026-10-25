@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.testsupport.SetupRunResult;
 import ch.fmartin.symphony.trello.testsupport.TestEnv;
+import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -40,6 +41,55 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
         assertThatWorkflow(firstWorkflow).hasGithubFlow().hasMerging();
         assertThat(commands.stoppedWorkflows).containsExactly(firstWorkflow.toString());
         assertThat(commands.startedWorkflows).containsExactly(firstWorkflow.toString());
+    }
+
+    @Test
+    void setupRecordsEachGeneratedBodyForLaterWorkflowMigrationChecks() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.recorded-upgrade.md");
+        Path env = tempDir.resolve(".env");
+        SetupRunResult connected = connectLocalBoardWithoutGithub(workflow, env, "Recorded Upgrade");
+        GeneratedWorkflowRecord nonGithubRecord = recordedBody(workflow);
+        String nonGithubBody = bodyOf(workflow);
+        prepareNextSetupRunWithGithubAuth();
+
+        // when
+        SetupRunResult upgraded = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/abc123/recorded-upgrade",
+                "configure-github");
+
+        // then
+        connected.assertSuccess();
+        upgraded.assertSuccess();
+        assertThat(nonGithubRecord.body().trim()).isEqualTo(nonGithubBody);
+        assertThat(nonGithubRecord.inputs().githubEnabled())
+                .as("the first record describes the non-GitHub workflow")
+                .isFalse();
+        assertThat(recordedBody(workflow))
+                .satisfies(record -> assertThat(record.body().trim()).isEqualTo(bodyOf(workflow)))
+                .satisfies(record -> assertThat(record.inputs().githubEnabled())
+                        .as("configure-github records the regenerated GitHub workflow body")
+                        .isTrue());
+    }
+
+    private GeneratedWorkflowRecord recordedBody(Path workflow) throws Exception {
+        return GeneratedWorkflowStore.find(
+                        GeneratedWorkflowStore.besideManifest(fixture.manifestPath())
+                                .records(),
+                        workflow)
+                .orElseThrow();
+    }
+
+    private static String bodyOf(Path workflow) throws Exception {
+        return new WorkflowLoader().load(workflow).promptTemplate();
     }
 
     @Test
