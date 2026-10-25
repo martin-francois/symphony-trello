@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-10-04
-decision-makers: [François Martin, Claude Code]
+decision-makers: [François Martin]
 consulted:
   - "[Repeatable live bug-bash harness issue](https://github.com/martin-francois/symphony-trello/issues/492)"
   - "[Themed live bug-bash runs issue](https://github.com/martin-francois/symphony-trello/issues/499)"
