@@ -195,7 +195,8 @@ cannot meet its acceptance criteria until the follow-up is done. Symphony choose
 links both cards, and writes its managed `Follow-ups` workpad section. Do not copy or supply that
 section in a workpad update. Creating a card does not start work on it. When `current_card_must_wait` is `true`, stop implementation; if
 `current_card_moved_to` is empty, finish with the blocked handoff. If the tool is unavailable or
-fails, list the follow-up work under a `Follow-ups` heading in the workpad or final response instead.
+fails, list the follow-up work under a `Proposed follow-ups` heading in the workpad, or under a
+`Follow-ups` heading in the final response instead.
 
 ## Trello List Routing
 

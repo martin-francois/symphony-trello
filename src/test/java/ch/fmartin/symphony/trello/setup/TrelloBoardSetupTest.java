@@ -527,7 +527,8 @@ final class TrelloBoardSetupTest {
                 .containsIgnoringWhitespaces(
                         "exact reproduction commands, required tool versions and environment conditions")
                 .containsIgnoringWhitespaces("call it once per distinct out-of-scope item")
-                .containsIgnoringWhitespaces("list the follow-up work under a `Follow-ups` heading")
+                .containsIgnoringWhitespaces(
+                        "list the follow-up work under a `Proposed follow-ups` heading in the workpad")
                 .contains("## Execution Flow")
                 .contains("commit, push")
                 .contains("Only move to \"Human Review\"")
