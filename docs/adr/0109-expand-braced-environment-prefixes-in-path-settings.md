@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-10-04
-decision-makers: [François Martin, Claude]
+decision-makers: [François Martin]
 consulted:
   - "[GitHub issue #799](https://github.com/martin-francois/symphony-trello/issues/799)"
   - "[GitHub issue #384](https://github.com/martin-francois/symphony-trello/issues/384)"
@@ -56,10 +56,11 @@ gives path settings the same grammar as the credential settings.
 `EnvironmentReferences.pathValue` splits a value at the first `/` and classifies the first segment
 with `referenceName`, returning either a literal path or a reference. `ConfigResolver.expandPath`
 and the `repository.default_path` resolution both use it, and so does setup diagnostics through
-`expandPath`. What each caller does with an unset variable does not change:
-`repository.default_path` treats it as absent, as
-[ADR 0058](0058-generated-workflow-repository-source-precedence.md) decided, and the other path
-settings keep the text.
+`expandPath`. A missing or blank variable leaves `repository.default_path` absent, as
+[ADR 0058](0058-generated-workflow-repository-source-precedence.md) decided. Required path settings
+fail with `missing_path_environment_variable`, as
+[ADR 0112](0112-fail-path-settings-on-missing-environment-variables.md) requires. The shared parser
+preserves both rules.
 
 The name check now applies to every path setting. Before, `workspace.root: $MY-DIR/x` looked up a
 variable named `MY-DIR`. Now `MY-DIR` is not a valid name, so the value stays literal. The `.env`
@@ -77,9 +78,8 @@ applied the check.
 - Bad, because a variable whose name fails the check, such as `MY-DIR`, no longer expands in
   `workspace.root`, `codex.additional_writable_roots`, or `file:` secret paths. No documented or
   generated workflow used such a name.
-- Neutral, because an unset variable in `workspace.root` still leaves the value literal. That is the
-  existing behavior of the bare form and is tracked in
-  [GitHub issue #820](https://github.com/martin-francois/symphony-trello/issues/820).
+- Neutral, because missing-variable handling stays specific to the setting. Required paths fail,
+  while optional repository paths remain absent.
 
 ### Confirmation
 
