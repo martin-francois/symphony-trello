@@ -8,18 +8,21 @@ import ch.fmartin.symphony.trello.process.ExecutableResolver;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.StringJoiner;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 final class InteractiveCommandCancellationTest {
     private static final Duration WAIT_LIMIT = Duration.ofSeconds(5);
+    private static final Duration POLL_INTERVAL = Duration.ofMillis(10);
+    private static final int OWNED_PROCESS_COUNT = 2;
     private static final String SHIM_NAME = "interactive-waiter";
 
     @Test
@@ -43,7 +46,10 @@ final class InteractiveCommandCancellationTest {
                         .toString(),
                 InteractiveWaitingTool.class.getName(),
                 ready.toString());
-        String command = tool.stream().map(value -> quote(value, windows)).collect(Collectors.joining(" "));
+        var command = new StringJoiner(" ");
+        for (String argument : tool) {
+            command.add(quote(argument, windows));
+        }
         // A background child plus wait keeps Bash as the wrapper, matching cmd.exe's process ownership.
         Files.writeString(wrapper, windows ? "@echo off\r\n" + command + "\r\n" : command + " &\nwait\n");
         var runner = new ProcessCommandRunner(
@@ -96,24 +102,34 @@ final class InteractiveCommandCancellationTest {
         while (System.nanoTime() < deadline) {
             if (Files.isRegularFile(ready)) {
                 List<String> pids = Files.readAllLines(ready);
-                if (pids.size() == 2) {
-                    return pids.stream()
-                            .map(Long::parseLong)
-                            .map(pid -> ProcessHandle.of(pid).orElseThrow())
-                            .toList();
+                if (pids.size() == OWNED_PROCESS_COUNT) {
+                    var processes = new ArrayList<ProcessHandle>();
+                    for (String pid : pids) {
+                        processes.add(ProcessHandle.of(Long.parseLong(pid)).orElseThrow());
+                    }
+                    return List.copyOf(processes);
                 }
             }
-            Thread.sleep(10);
+            Thread.sleep(POLL_INTERVAL);
         }
         throw new AssertionError("the interactive tool did not publish its process IDs within " + WAIT_LIMIT);
     }
 
     private static boolean awaitStopped(List<ProcessHandle> processes) throws InterruptedException {
         long deadline = System.nanoTime() + WAIT_LIMIT.toNanos();
-        while (processes.stream().anyMatch(ProcessHandle::isAlive) && System.nanoTime() < deadline) {
-            Thread.sleep(10);
+        while (anyAlive(processes) && System.nanoTime() < deadline) {
+            Thread.sleep(POLL_INTERVAL);
         }
-        return processes.stream().noneMatch(ProcessHandle::isAlive);
+        return !anyAlive(processes);
+    }
+
+    private static boolean anyAlive(List<ProcessHandle> processes) {
+        for (ProcessHandle process : processes) {
+            if (process.isAlive()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String quote(String value, boolean windows) {

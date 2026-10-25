@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.process.ExecutableResolver;
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -76,11 +77,18 @@ final class WindowsBatchShimLaunchTest {
 
     /// Writes `fake-codex.cmd` with the same structure as npm's shim: start a program with a fixed
     /// script argument and forward `%*`.
-    private Path npmStyleShim(Path recordFile) throws IOException {
+    private Path npmStyleShim(Path recordFile) throws IOException, URISyntaxException {
         Path shimDirectory = Files.createDirectories(tempDir.resolve("npm-prefix"));
+        // The recorder needs only test classes; dependency paths needlessly consume cmd.exe's line limit.
+        String recorderClasspath = Path.of(ArgumentRecorder.class
+                        .getProtectionDomain()
+                        .getCodeSource()
+                        .getLocation()
+                        .toURI())
+                .toString();
         Files.writeString(
                 shimDirectory.resolve(SHIM_NAME + ".cmd"),
-                "@ECHO off\r\n\"" + javaExecutable() + "\" -cp \"" + System.getProperty("java.class.path") + "\" "
+                "@ECHO off\r\n\"" + javaExecutable() + "\" -cp \"" + recorderClasspath + "\" "
                         + ArgumentRecorder.class.getName() + " \"" + recordFile + "\" %*\r\n");
         return shimDirectory;
     }
