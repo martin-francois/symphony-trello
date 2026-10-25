@@ -80,14 +80,19 @@ lives in [Testing](testing.md).
   worked by active Codex workers.
 - For PR handoff behavior, do not treat every non-green CI state as blocked. If CI fails because of
   the card's changes or current branch, the card should stay active while Codex reruns the failing
-  check or closest local equivalent and fixes reproducible failures. If the related CI failure passes
-  locally and looks flaky after a reasonable refresh or rerun, handoff to human review is acceptable
-  with a Trello caveat. If CI is pending or stale, the card should stay active while Codex waits,
+  check or closest local equivalent and fixes regressions. A passing rerun alone does not clear an
+  intermittent regression. Handoff with a flaky-check caveat requires target-branch evidence that
+  the failure is pre-existing and not worsened. Otherwise keep it within the current card until
+  fixed or record an explicit verification blocker. If CI is pending or stale, Codex waits,
   refreshes, or reruns checks. If CI is unavailable because of external quota/infrastructure limits,
   Codex must run equivalent local CI checks before handoff. If CI fails for a clearly unrelated
-  reason, Codex should not spend time reproducing that unrelated failure locally; handoff is
-  acceptable when card-specific validation and related checks are clean and the Trello comment
-  records why the failure is unrelated.
+  reason, first establish that it exists on the actual target branch and record the revision and
+  evidence. Apply the follow-up policy in SPEC section 11.7 to actionable pre-existing findings.
+  Handoff is acceptable when card-specific validation and related checks are clean and the Trello
+  comment records the evidence. Problems introduced or worsened by the change stay in the current
+  card until the regression is fixed. `CodexSkillStructureTest` and `TrelloBoardSetupTest` check
+  the shipped policy. Handoff review must check the workpad and follow-up cards for target-revision
+  evidence, regression repairs, and reproduction and verification steps that work on another machine.
 - For live E2E, run the deterministic fake-Codex phase before real Codex. Then run strict real-Codex
   checks against real Trello with fresh cards and wait for both Trello handoff completion and
   `/api/v1/state` returning to zero running/retrying before claiming real-Codex coverage.

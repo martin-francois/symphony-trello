@@ -118,12 +118,14 @@ final class CodexSkillStructureTest {
                 .contains("scope")
                 .contains("inline replies for inline review comments")
                 .contains("PR title, body, branch, labels, or linked card references")
-                .contains("If a failing check is related to the card's changes")
+                .contains("If a failing check is introduced or worsened by the card's changes")
                 .contains("If a related CI check fails")
                 .contains("If checks are pending or stale")
                 .contains("external quota or infrastructure limits")
-                .contains("do not spend")
-                .contains("time reproducing that unrelated failure locally")
+                .contains("Before classifying a CI failure as pre-existing")
+                .contains("actual")
+                .contains("target branch")
+                .contains("without the original session or machine")
                 .contains("flaky-check caveat")
                 .contains("Repeat the sweep until no actionable comments remain");
     }
@@ -139,6 +141,10 @@ final class CodexSkillStructureTest {
         // then
         assertThat(body)
                 .contains("## Rework")
+                .containsIgnoringWhitespaces(
+                        "Problems introduced or worsened by this change MUST be addressed within the current card")
+                .containsIgnoringWhitespaces("actual target branch of the change")
+                .containsIgnoringWhitespaces("without the original session or machine")
                 .contains("moves a card from `Human Review` back to an active list")
                 .contains("Read the existing `## Codex Workpad` comment")
                 .contains("Run `review-sweep` when a PR or branch exists")

@@ -69,6 +69,23 @@ relationships need `allow_checklists`, the optional blocked move uses the move a
 blocked comment needs `allow_comments`. The tool never deletes anything, so
 `allow_destructive_operations` does not apply.
 
+Guided setup asks for an explicit choice during board creation, import, and reconfiguration. A new
+workflow defaults to No; an existing workflow keeps its choice on Enter. Yes enables the feature
+and all permissions needed for every relationship. No disables only follow-up creation. This avoids
+silently revoking permissions used by another feature. Non-interactive setup preserves existing
+settings and never opts a new workflow in. GitHub upgrades preserve custom move allowlists too;
+creating the human approval list does not grant an agent permission to move cards there.
+Destination, limits, and move lists remain separate
+configuration choices.
+
+The agent classifies findings against the actual target branch before filing them. Regressions
+remain part of the current card, including the additional damage from worsening an existing
+problem. A follow-up records the remaining pre-existing work with enough evidence and commands for
+another agent to reproduce it without this session or machine. Missing baseline proof stays a
+workpad verification gap. The workflow and handoff skills carry this policy; the tool schema explains
+the required description. The server cannot verify a Git comparison from prose, so it validates the
+argument structure without claiming to attest that evidence.
+
 Codex supplies only a title, a description, acceptance criteria, and one of three relationships:
 `related`, `follow_up_waits_for_current`, or `current_waits_for_follow_up`. Java chooses the rest:
 
@@ -215,3 +232,11 @@ The prerequisite checklist convention is described in `SPEC.md` Section 11.4. Ri
 formats are tracked in
 [GitHub issue #454](https://github.com/martin-francois/symphony-trello/issues/454); this tool uses
 only the convention that is implemented today.
+
+## Argument validation integration
+
+The follow-up tool uses the shared definition registry from ADR 0088. Its advertised schema also
+validates runtime arguments. Feature, URL attachment, and comment permissions are checked before
+the schema, so a disabled tool keeps its policy error even for malformed input. Schema violations
+return `invalid_tool_arguments`; domain checks such as forged metadata still return
+`invalid_follow_up_card`. The refusal tests assert that neither path sends a Trello request.

@@ -1571,12 +1571,21 @@ This Java implementation advertises the narrower handoff tools above.
 
 Codex sometimes finds useful work that the current card did not ask for. Instead of growing the
 current card, Codex can file that work as its own Trello card so you can prioritize it later. This
-is off by default because it lets Codex create cards on your board. Turn it on in `WORKFLOW.md`:
+is off by default because it lets Codex create cards on your board. Guided setup asks whether to
+allow it when creating, importing, or reconfiguring a board. Enter selects No for a new workflow
+and preserves the current choice for an existing one. The explanation names the configured
+destination, Inbox by default. Creating a card does not start work on it.
+
+Yes enables the feature and its required Trello permissions. No disables only follow-up creation;
+other features keep their permissions. Non-interactive setup preserves an existing choice and
+leaves new configurations disabled. Limits, destination settings, and allowed move lists stay as
+configured. You can also enable it in `WORKFLOW.md`:
 
 ```yaml
 trello_tools:
   enabled: true
   allow_writes: true
+  allow_comments: true
   allow_url_attachments: true
   allow_checklists: true
   follow_up_cards:
@@ -1616,6 +1625,17 @@ not run a card while a card listed there is unfinished. With
 `follow_up_cards.move_current_card_to_blocked: true`, a `current_waits_for_follow_up` card also gets
 a `Blocked by` comment and moves to the list in `tracker.blocked_state`, which must be in the move
 allowlist.
+
+Findings include actionable bugs, errors, warnings, flaky tests, and environment-specific failures
+found while implementing, reviewing, checking CI, testing, or running commands. Codex first checks
+the actual target branch and records its exact revision. Problems introduced or worsened by the
+current change must be fixed within the current card; a follow-up does not replace that work.
+
+Each follow-up includes the baseline evidence, affected code paths, reproduction steps and fixtures,
+required environment and versions, expected and observed behavior, completion criteria, and
+verification commands. It must stand on its own with the codebase. Another agent must not need the
+original session, machine, temporary files, or private logs. Findings without baseline evidence stay
+in the workpad as verification gaps until checked.
 
 Limits keep a confused run from flooding the board. Calling the tool again with the same title for
 the same source card returns the existing card and repairs any missing link instead of creating a

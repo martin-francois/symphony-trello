@@ -162,13 +162,14 @@ match the work actually completed, update the PR metadata before handoff.
 
 ## Checks
 
-- If a failing check is related to the card's changes, the current branch, or
-  can be reproduced by equivalent local validation, keep the card active, fix
-  the failure, push again, and repeat the sweep.
+- If a failing check is introduced or worsened by the card's changes, keep the
+  card active, fix the regression, push again, and repeat the sweep. Creating
+  a follow-up does not satisfy this obligation.
 - If a related CI check fails, rerun that check or the closest local equivalent.
-  If it fails locally, fix it before handoff. If it passes locally and the
-  failure looks flaky after a reasonable refresh or rerun, hand off with the
-  local evidence and flaky-check caveat.
+  A passing rerun alone does not clear an intermittent regression. Hand off
+  with local evidence and a flaky-check caveat only when target-branch evidence
+  establishes that the failure is pre-existing and not worsened. Otherwise
+  keep it within this card until fixed or record an explicit verification blocker.
 - If checks are pending or stale, wait, refresh, or rerun them while the card
   remains active unless a true external blocker appears.
 - Wait for GitHub Actions and other required CI checks, but do not block only on
@@ -183,15 +184,23 @@ match the work actually completed, update the PR metadata before handoff.
 - If CI cannot run because of external quota or infrastructure limits, run
   equivalent local CI checks. Hand off only when those checks pass or only have
   failures clearly unrelated to the card.
-- If CI fails for a reason clearly unrelated to the current card, do not spend
-  time reproducing that unrelated failure locally. Record why it is unrelated
-  and hand off when the card-specific validation and related checks are clean.
+- Before classifying a CI failure as pre-existing, establish it on the actual
+  target branch and record its exact revision and evidence. Apply the
+  `trello-handoff` skill's follow-up policy to actionable bugs, warnings, errors,
+  flaky tests, and environment-specific failures found during this review. A
+  follow-up must be self-contained without the original session or machine.
+  Hand off when card-specific validation and related checks are clean.
 - Record the check state, local commands used when local validation was
   required, and any unavailable, flaky, or unrelated check caveat in the workpad
   and handoff comment.
 - After feedback-driven changes, rerun local validation and refresh PR checks.
-- Repeat the sweep until no actionable comments remain and local-reproducible
-  check failures are fixed, or the card reaches a true blocker.
+- Repeat the sweep until no actionable comments remain and check failures
+  introduced or worsened by the current change are fixed, or the card reaches
+  a true blocker.
+
+`CodexSkillStructureTest` checks that these instructions are shipped. The sweep must record the
+target-branch evidence and review each follow-up against `trello-handoff` before handoff; automated
+structure checks do not establish whether a particular finding is pre-existing.
 
 ## Trello Handoff
 

@@ -1206,21 +1206,22 @@ file content changed, the reply MUST say so explicitly and provide rationale or 
 Before `Human Review`, the generated workflow tells Codex to classify PR check state rather than
 blocking on any non-green check:
 
-- If a failing check is related to the card's changes, the current branch, or can be reproduced by
-  equivalent local validation, Codex keeps the card active, fixes the failure, pushes again, and
-  repeats the review sweep.
-- If a related CI check fails, Codex reruns that check or the closest local equivalent. If it fails
-  locally, Codex fixes it before handoff. If it passes locally and the failure looks flaky after a
-  reasonable refresh or rerun, Codex can move the card to `Human Review` with local evidence and a
-  flaky-check caveat.
+- If a failing check is introduced or worsened by the card's changes, Codex keeps the card active,
+  fixes the regression, pushes again, and repeats the review sweep. A follow-up does not replace
+  that repair.
+- If a related CI check fails, Codex reruns that check or the closest local equivalent. A passing
+  rerun alone does not clear an intermittent regression. Handoff with local evidence and a
+  flaky-check caveat requires target-branch evidence that the failure is pre-existing and not
+  worsened. Otherwise the problem stays within the current card until fixed or becomes an explicit
+  verification blocker.
 - If checks are pending or stale, Codex waits, refreshes, or reruns them while the card remains
   active unless a true external blocker appears.
 - If CI cannot run because of external quota or infrastructure limits, Codex runs equivalent local CI
   checks and can move the card to `Human Review` only when those checks pass or only have failures
   clearly unrelated to the card.
-- If CI fails for a reason clearly unrelated to the current card, Codex does not need to reproduce
-  that unrelated failure locally. Codex records why it is unrelated and can move the card to
-  `Human Review` when card-specific validation and related checks are clean.
+- Before classifying a CI failure as pre-existing, Codex establishes it on the actual target branch
+  and records the revision and evidence. Actionable findings follow Section 11.7. Codex can move
+  the card to `Human Review` when card-specific validation and related checks are clean.
 - The workpad and visible Trello handoff comment MUST record the check state, local commands used
   when local validation was required, and any unavailable, flaky, or unrelated check caveat.
 
@@ -2612,6 +2613,40 @@ Trello card's acceptance criteria as a separate actionable Trello card, without 
 current card's scope. It works on Trello Free Workspaces with normal cards, lists, labels, URL
 attachments, checklists, comments, and descriptions. It MUST NOT depend on Trello Custom Fields,
 Advanced Checklists, mirror cards, or another paid Trello feature.
+
+Onboarding and findings policy:
+
+- Interactive guided setup, including board creation and import, MUST explain that Codex can create
+  linked cards for out-of-scope findings in the configured destination and that creation does not
+  start work. It MUST ask whether to allow this, defaulting to No for a new configuration.
+- Reconfiguration MUST show the existing choice and preserve it on Enter, with `[Y/n]` for enabled
+  and `[y/N]` for disabled. Non-interactive setup MUST NOT prompt or implicitly enable the feature;
+  it MUST preserve existing settings and default new configurations to disabled.
+- Yes MUST enable `follow_up_cards.enabled`, Trello tools, writes, comments, URL attachments, and
+  checklists. No MUST disable only follow-up creation. The choice MUST preserve unrelated workflow
+  settings, move allowlists, follow-up limits, and destination configuration. The explanation MUST
+  name a configured destination that differs from Inbox.
+- Agent instructions MUST cover actionable pre-existing bugs, errors, warnings, flaky tests, and
+  environment-specific failures discovered during implementation, review, CI inspection, tests, or
+  command runs. Problems introduced or worsened by the current change MUST be addressed within
+  the current card. A follow-up MUST NOT replace that repair. A remaining pre-existing problem is
+  tracked separately after the regression is fixed.
+- Before creating a follow-up for a discovered problem, the agent MUST establish that it exists on
+  the actual target branch and record the repository, branch, exact commit, and baseline evidence.
+  Missing baseline evidence remains a verification gap in the workpad, not a confirmed finding.
+- The card MUST be actionable using only its description and the codebase, independently of the
+  original session and machine. It MUST include affected paths, trigger, expected and observed
+  behavior, reproduction commands, required versions and environment conditions, reproducible
+  fixtures, sanitized evidence, scope rationale, completion criteria, and verification commands.
+  External links MAY supplement the evidence but MUST NOT replace it. Reproduction limits and
+  suspicions MUST be explicit. Improvements without a failing reproduction describe the baseline
+  behavior and desired measurable outcome.
+
+`LocalSetupFollowUpCardsTest` and `WorkflowFollowUpCardsSettingsTest` verify the setup choices and
+setting preservation. `CodexSkillStructureTest` and `TrelloBoardSetupTest` verify the shipped
+follow-up policy. Handoff review verifies the case-specific baseline evidence, regression repair,
+and self-contained reproduction and completion criteria in each card; text assertions alone do
+not establish those facts.
 
 Tool contract:
 

@@ -3,7 +3,8 @@ name: trello-handoff
 description: >
   Move the current Trello card through the configured Symphony-for-Trello
   lifecycle. Use when picking up work, handing off for human review, marking a
-  blocker, or completing a merge.
+  blocker, completing a merge, or recording a pre-existing finding discovered
+  during implementation, review, CI inspection, tests, or command runs.
 ---
 
 # Trello Handoff
@@ -29,15 +30,48 @@ The move tool uses Trello's term `list_name` for a board list name.
 
 ## Out-Of-Scope Follow-Ups
 
-When `trello_create_follow_up_card` is advertised, file useful work that is
-outside the current card's acceptance criteria with it instead of expanding the
-card. Give a one-line title, a description that says what was found and why it
-is out of scope, and acceptance criteria. Use `relationship` `related` unless
-one card really has to finish first. Symphony records the result in its managed
-`Follow-ups` workpad section. Do not copy or supply that section in a workpad update.
-If the result says `current_card_must_wait` is `true`, stop
-implementation and hand off as blocked unless `current_card_moved_to` shows the
-tool already moved the card.
+Classify actionable findings from implementation, review, CI inspection, tests, and command runs.
+This includes pre-existing bugs, errors, warnings, flaky tests, and environment-specific failures.
+Problems introduced or worsened by this change MUST be addressed within the current card. Creating
+a follow-up does not satisfy that obligation. If this change worsens a pre-existing problem, fix
+the regression here and track the remaining pre-existing problem separately.
+
+Before creating a follow-up for a discovered problem, establish that it already exists on the actual
+target branch of the change, such as the PR's base branch, not an assumed default branch. Record the
+repository, branch, exact commit, and baseline evidence. Use an isolated checkout or existing CI
+results for that revision. Compare relevant tool versions and environment conditions. If baseline
+evidence is unavailable, keep the finding and verification gap in the workpad; do not present it as
+a confirmed pre-existing problem or create its follow-up yet.
+
+Search existing cards and issues before creating another. When the `trello_create_follow_up_card`
+tool is available, call it once per distinct out-of-scope item with a one-line title, a self-contained
+description, and acceptance criteria. Another agent MUST be able to address the card using only its
+description and the codebase, without the original session or machine. Include:
+
+- the affected repository, target branch and commit, and repository-relative code paths;
+- the trigger, expected and observed behavior, baseline evidence, and why it is outside this card;
+- exact reproduction commands, required tool versions and environment conditions, and small fixtures
+  or commands to recreate them;
+- relevant sanitized diagnostics, clear completion criteria, and verification commands.
+
+Include the evidence in the card itself. Links provide extra context; private paths, temporary logs,
+and references to this conversation are not substitutes. State reproduction limits and distinguish
+observations from suspicions. For an improvement without a failing reproduction, describe the
+current behavior on the target revision and the measurable outcome instead of inventing a failure.
+
+Set `relationship` to `related` when no order is required, `follow_up_waits_for_current` when the
+follow-up can start only after this card is done, or `current_waits_for_follow_up` only when this card
+cannot meet its acceptance criteria until the follow-up is done. Symphony chooses the destination,
+links both cards, and writes its managed `Follow-ups` workpad section. Do not copy or supply that
+section in a workpad update. Creating a card does not start work on it.
+When `current_card_must_wait` is `true`, stop implementation; if
+`current_card_moved_to` is empty, finish with the blocked handoff. If the tool is unavailable or
+fails, list the follow-up work under a `Follow-ups` heading in the workpad or final response instead.
+
+`CodexSkillStructureTest` checks that this policy is shipped. Before handoff, review the workpad
+and each created card for target-revision evidence, regression repairs, and enough inline context
+to reproduce and verify the finding on another machine. The structure test does not prove those
+case-specific facts; record that review evidence in the workpad.
 
 ## Pickup
 
@@ -193,17 +227,20 @@ infrastructure limits. Run equivalent local CI checks and move to `Human Review`
 when those checks pass or only have failures clearly unrelated to the card.
 
 Do not move to `Blocked` only because CI fails for a reason clearly unrelated to
-the current card. Do not spend time reproducing that unrelated failure locally.
+the current card. First establish it on the actual target branch and record the
+revision and evidence under the follow-up policy above.
 Move to `Human Review` when the card-specific validation and related checks are
 clean, with the PR link and a concise caveat explaining why the CI failure is
 unrelated.
 
-If CI fails because of the card's changes or current branch, keep the card
-active. Rerun the failing check or closest local equivalent first. If it fails
-locally, fix it before handoff. If it passes locally and the failure looks flaky
-after a reasonable refresh or rerun, move to `Human Review` with the local
-evidence and flaky-check caveat. Use `Blocked` only when the failure cannot be
-fixed in-session and the exact blocker is clear.
+If CI fails because of the card's changes, keep the card active. Rerun the
+failing check or closest local equivalent first. A passing rerun alone does
+not clear an intermittent regression. Move to `Human Review` with local
+evidence and a flaky-check caveat only when target-branch evidence establishes
+that the failure is pre-existing and not worsened. Otherwise keep it within
+this card until fixed or record an explicit verification blocker. Use
+`Blocked` only when the failure cannot be fixed in-session and the exact
+blocker is clear.
 
 If no `Blocked` list exists but the workflow configured a review list as
 the blocked destination, move there so the card leaves the active queue. In the

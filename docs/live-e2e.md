@@ -665,7 +665,7 @@ skills, or live deployment auth. Use a disposable repository or a private test r
 can be left open temporarily.
 
 The problem this protects against is moving cards to `Blocked` only because CI did not provide a
-useful signal, or trying to reproduce clearly unrelated CI failures locally. Symphony should keep
+useful signal, or treating an unverified CI failure as pre-existing. Symphony should keep
 the card in `In Progress` while related failures are being fixed, but it should still hand off when
 CI is unavailable or clearly unrelated and the appropriate local or card-specific evidence is clean.
 
@@ -673,17 +673,20 @@ CI is unavailable or clearly unrelated and the appropriate local or card-specifi
 2. Let the deployed workflow move the card from `Ready for Codex` to `In Progress`.
 3. For a related CI failure, make the PR fail a check that is tied to the card's change. Verify
    Codex reruns that check or the closest local equivalent. If it fails locally, the card must remain
-   in `In Progress` while Codex fixes and pushes again. If it passes locally and the CI result looks
-   flaky after a reasonable refresh or rerun, Codex may move the card to `Human Review` with a clear
-   flaky-check caveat.
+   in `In Progress` while Codex fixes and pushes again. Verify that a passing rerun alone does not
+   clear a newly introduced intermittent failure. A flaky-check caveat permits handoff only after
+   target-branch evidence proves the failure is pre-existing and not worsened. Otherwise the card
+   remains active until fixed, or records an explicit verification blocker.
 4. For unavailable CI, use a repository workflow that skips CI for PRs unless a command is posted, or
    otherwise produces no usable CI result. Verify Codex runs equivalent local CI checks before
    handoff. The card may move to `Human Review` only when those local checks pass or only have
    failures clearly unrelated to the card.
-5. For clearly unrelated CI failure, make an independent check fail for a reason unrelated to the
-   card, such as a fixture-only job or a known external service failure. Verify Codex does not spend
-   time reproducing that unrelated failure locally. It should explain why the failure is unrelated
-   and move to `Human Review` when card-specific validation and related checks are clean.
+5. For a pre-existing CI failure, make an independent check fail on both the target branch and the
+   PR branch. Verify Codex records the actual target branch, exact revision, and baseline evidence.
+   With follow-up creation enabled, verify it creates a linked card containing reproduction and
+   verification steps that work without the original session or machine. When baseline evidence
+   is unavailable, verify it records the verification gap instead of claiming a confirmed finding.
+   The current card moves to `Human Review` when card-specific validation and related checks are clean.
 6. In every case, verify the Trello workpad and handoff comment record the PR URL, the check state,
    local commands used when local validation was required, and any unavailable, flaky, or unrelated
    check caveat.

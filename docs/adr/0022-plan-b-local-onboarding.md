@@ -61,6 +61,11 @@ Within Plan B, the chosen completion option is "Defer the Java-owned handoff, th
 completion-only mode after installer work." It preserves Java ownership of product text while
 leaving service-manager setup in the platform installers.
 
+Guided setup also offers the opt-in follow-up-card choice during board creation, import, and
+reconfiguration. It preserves the existing answer on Enter and leaves new workflows disabled by
+default. The permission and preservation rules are recorded in
+[ADR 0123](0123-trello-follow-up-card-tool.md).
+
 The Java `setup-local` command owns local product setup and checks. It verifies core tools, validates
 Trello credentials, writes ignored local credentials only when the user typed or passed credentials
 directly, decides GitHub integration before board creation, creates or connects a Trello board with

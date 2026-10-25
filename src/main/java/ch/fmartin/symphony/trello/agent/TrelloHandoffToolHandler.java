@@ -216,7 +216,7 @@ public class TrelloHandoffToolHandler {
                                 ToolPermission.URL_ATTACHMENTS,
                                 ToolPermission.COMMENTS),
                         TrelloHandoffToolHandler::createFollowUpCard,
-                        "Create one separate Trello card for useful work that is outside the current card's acceptance criteria, link it to the current card both ways, and record their relationship. Symphony chooses the board, list, and labels; do not include a card id or list id.",
+                        "Create one linked Trello card for actionable pre-existing work outside this card. Fix problems introduced or worsened by the current change here. Establish discovered problems on the actual target branch before filing them. Creating a card does not start work. Symphony chooses the board, list, and labels; do not include a card id or list id.",
                         objectSchema(
                                 Map.of(
                                         "title",
@@ -225,7 +225,7 @@ public class TrelloHandoffToolHandler {
                                                 TrelloFollowUpCardTool.MAX_TITLE_CODE_POINTS),
                                         "description",
                                         boundedStringSchema(
-                                                "Markdown context a maintainer needs later: what was found, where, and why it is out of scope for the current card.",
+                                                "Self-contained Markdown for an agent with only this card and the codebase: repository, actual target branch and commit, code paths, baseline evidence, trigger, expected and observed behavior, reproduction commands and fixtures, environment and tool versions, verification steps, and scope rationale. Include sanitized evidence rather than relying on the original session, machine, or temporary files. State reproduction limits.",
                                                 TrelloFollowUpCardTool.MAX_DESCRIPTION_CODE_POINTS),
                                         "acceptance_criteria",
                                         stringArraySchema(

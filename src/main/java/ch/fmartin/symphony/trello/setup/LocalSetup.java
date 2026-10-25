@@ -176,6 +176,9 @@ public final class LocalSetup {
                     if (action == ExistingSetupAction.KEEP) {
                         out.println();
                         out.println("Keeping connected Trello boards.");
+                        for (ConnectedBoard board : manifest.boards()) {
+                            configureFollowUpCards(options, board.workflowPath(), board.boardName(), terminal);
+                        }
                         startExistingBoards(options, manifest, out);
                         printFinalHandoffUnlessDeferred(out, manifest, options.command());
                         return 0;
@@ -232,6 +235,7 @@ public final class LocalSetup {
             GitHubIntegration githubIntegration = result.githubIntegration();
             options = configureCodexAccess(options, terminal);
             applyCodexAccess(options, result.workflowPath());
+            configureFollowUpCards(options, result.workflowPath(), result.boardName(), terminal);
             ConnectedBoard connectedBoard = ConnectedBoard.from(result, options, githubIntegration);
             List<ConnectedBoard> replacedBoards = manifest.boardsReplacedBy(connectedBoard);
             stopReplacedBoards(options, replacedBoards);
@@ -676,6 +680,29 @@ public final class LocalSetup {
         return WorkspaceAccessFlow.isBroadAccessPath(path);
     }
 
+    private void configureFollowUpCards(Options options, Path workflowPath, String boardName, Terminal terminal)
+            throws IOException {
+        if (options.nonInteractive()) {
+            return;
+        }
+        WorkflowConfigEditor.FollowUpCardsSettings settings = workflowConfig.followUpCards(workflowPath);
+        PrintStream out = borrowedOut(terminal); // NOPMD - Terminal owns the stream.
+        out.println();
+        out.println("Follow-up cards for " + DisplayNames.quotedName(boardName));
+        out.println();
+        out.println("While working on a task, Codex may find bugs or improvements outside that task's scope."
+                + " It can save these as separate, linked Trello cards in " + settings.destination()
+                + " for you to review and prioritize. Creating a card does not start work on it.");
+        out.println();
+        String answer = terminal.readLine(
+                "Allow Codex to create cards for these findings? " + (settings.enabled() ? "[Y/n] " : "[y/N] "));
+        if (answer != null && !answer.isBlank()) {
+            workflowConfig.updateFollowUpCards(
+                    workflowPath,
+                    answer.strip().equalsIgnoreCase("y") || answer.strip().equalsIgnoreCase("yes"));
+        }
+    }
+
     private Options configureCodexAccess(Options options, Terminal terminal) throws IOException {
         List<Path> allowedPaths = workspaceAccessFlow.resolve(options, terminal);
         boolean dangerFullAccess = codexSandboxFlow.resolve(options, terminal);
@@ -922,6 +949,7 @@ public final class LocalSetup {
         applyCodexAccess(
                 options.withCodexAccess(updated.additionalWritableRoots(), updated.dangerFullAccess()),
                 board.workflowPath());
+        configureFollowUpCards(options, board.workflowPath(), board.boardName(), terminal);
         connectedBoards(options).save(manifest.withBoard(updated));
 
         out.println();
@@ -1175,6 +1203,7 @@ public final class LocalSetup {
         applyCodexAccess(
                 options.withCodexAccess(access.additionalWritableRoots(), access.dangerFullAccess()),
                 board.workflowPath());
+        configureFollowUpCards(options, board.workflowPath(), board.boardName(), terminal);
         var upgraded = new ConnectedBoard(
                 board.boardId(),
                 board.boardKey(),

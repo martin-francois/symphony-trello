@@ -753,7 +753,11 @@ public final class TrelloBoardSetup {
                 Files.createDirectories(parent);
             }
             if (force) {
-                Files.writeString(absolute, workflow, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                String replacement = Files.isRegularFile(absolute)
+                        ? WorkflowConfigEditor.preserveTrelloTools(absolute, workflow)
+                        : workflow;
+                Files.writeString(
+                        absolute, replacement, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
             } else {
                 Files.writeString(absolute, workflow, StandardOpenOption.CREATE_NEW);
             }
@@ -1521,17 +1525,42 @@ public final class TrelloBoardSetup {
 
                 ## Out-Of-Scope Follow-Up Work
 
-                Do not expand this card to cover useful work outside its acceptance criteria. When the
-                `trello_create_follow_up_card` tool is available, call it once per distinct out-of-scope item with a
-                one-line title, a description that says what you found and why it is out of scope, and acceptance
-                criteria that make the work actionable later. Set `relationship` to `related` when no order is
-                required, `follow_up_waits_for_current` when the follow-up can start only after this card is done, or
-                `current_waits_for_follow_up` only when this card cannot meet its acceptance criteria until the
-                follow-up is done. Symphony picks the board list and labels, links both cards, and records the
-                relationship. Symphony records the result in its managed `Follow-ups` workpad section. When the result reports
-                `current_card_must_wait` as `true`, stop implementation; if `current_card_moved_to` is empty, finish
-                with the blocked handoff. If the tool is not available or returns a failure, do not expand scope;
-                list the follow-up work under a `Follow-ups` heading in the workpad or final response instead.
+                Classify actionable findings from implementation, review, CI inspection, tests, and command runs.
+                This includes pre-existing bugs, errors, warnings, flaky tests, and environment-specific failures.
+                Problems introduced or worsened by this change MUST be addressed within the current card. Creating
+                a follow-up does not satisfy that obligation. If this change worsens a pre-existing problem, fix
+                the regression here and track the remaining pre-existing problem separately.
+
+                Before creating a follow-up for a discovered problem, establish that it already exists on the actual
+                target branch of the change, such as the PR's base branch, not an assumed default branch. Record the
+                repository, branch, exact commit, and baseline evidence. Use an isolated checkout or existing CI
+                results for that revision. Compare relevant tool versions and environment conditions. If baseline
+                evidence is unavailable, keep the finding and verification gap in the workpad; do not present it as
+                a confirmed pre-existing problem or create its follow-up yet.
+
+                Search existing cards and issues before creating another. When the `trello_create_follow_up_card`
+                tool is available, call it once per distinct out-of-scope item with a one-line title, a self-contained
+                description, and acceptance criteria. Another agent MUST be able to address the card using only its
+                description and the codebase, without the original session or machine. Include:
+
+                - the affected repository, target branch and commit, and repository-relative code paths;
+                - the trigger, expected and observed behavior, baseline evidence, and why it is outside this card;
+                - exact reproduction commands, required tool versions and environment conditions, and small fixtures
+                  or commands to recreate them;
+                - relevant sanitized diagnostics, clear completion criteria, and verification commands.
+
+                Include the evidence in the card itself. Links provide extra context; private paths, temporary logs,
+                and references to this conversation are not substitutes. State reproduction limits and distinguish
+                observations from suspicions. For an improvement without a failing reproduction, describe the
+                current behavior on the target revision and the measurable outcome instead of inventing a failure.
+
+                Set `relationship` to `related` when no order is required, `follow_up_waits_for_current` when the
+                follow-up can start only after this card is done, or `current_waits_for_follow_up` only when this card
+                cannot meet its acceptance criteria until the follow-up is done. Symphony chooses the destination,
+                links both cards, and writes its managed `Follow-ups` workpad section. Do not copy or supply that
+                section in a workpad update. Creating a card does not start work on it. When `current_card_must_wait` is `true`, stop implementation; if
+                `current_card_moved_to` is empty, finish with the blocked handoff. If the tool is unavailable or
+                fails, list the follow-up work under a `Follow-ups` heading in the workpad or final response instead.
                 """
                 .formatted(workpadText)
                 .stripTrailing();
@@ -1774,19 +1803,19 @@ public final class TrelloBoardSetup {
                 the rationale or validation evidence instead of inventing a snippet.
 
                 Classify PR checks before deciding handoff:
-                - If a failing check is related to the card's changes, the current branch, or can be reproduced by
-                  equivalent local validation, keep the card active, fix the failure, push again, and repeat the
-                  sweep.
-                - If a related CI check fails, rerun that check or the closest local equivalent. If it fails locally,
-                  fix it before handoff. If it passes locally and the failure looks flaky after a reasonable refresh
-                  or rerun, hand off with the local evidence and flaky-check caveat.
+                - If a failing check is introduced or worsened by the card's changes, keep the card active, fix
+                  the regression, push again, and repeat the sweep. A follow-up does not replace this repair.
+                - If a related CI check fails, rerun that check or the closest local equivalent. A passing rerun
+                  alone does not clear an intermittent regression. Hand off with local evidence and a flaky-check
+                  caveat only when target-branch evidence establishes that the failure is pre-existing and not
+                  worsened. Otherwise keep it within this card until fixed or record an explicit verification blocker.
                 - If checks are pending or stale, wait, refresh, or rerun them while the card remains active unless
                   the workflow reaches a true external blocker.
                 - If CI cannot run because of external quota or infrastructure limits, run equivalent local CI checks.
                   Hand off only when those checks pass or only have failures clearly unrelated to the card.
-                - If CI fails for a reason clearly unrelated to the current card, do not spend time reproducing that
-                  unrelated failure locally. Record why it is unrelated and hand off when the card-specific validation
-                  and related checks are clean.
+                - Before classifying a CI failure as pre-existing, establish it on the actual target branch and
+                  record its revision and evidence. Follow the Out-Of-Scope Follow-Up Work policy for actionable
+                  findings. Hand off when card-specific validation and related checks are clean.
                 - Record the check state, local commands used when local validation was required, and any unavailable,
                   flaky, or unrelated check caveat in %s.
 

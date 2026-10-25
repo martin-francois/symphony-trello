@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.config.ConfigException;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
@@ -13,6 +14,7 @@ import ch.fmartin.symphony.trello.config.WorkflowServerPortClassification;
 import ch.fmartin.symphony.trello.workflow.CodexSandboxPolicy;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workflow.WorkflowException;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -623,6 +625,67 @@ final class WorkflowConfigEditor {
             return WorkflowValidation.warn("unreadable or invalid workflow configuration");
         }
     }
+
+    FollowUpCardsSettings followUpCards(Path workflowPath) throws IOException {
+        Map<String, Object> tools = section(parseYaml(read(workflowPath)).get("trello_tools"));
+        Map<String, Object> followUps = section(tools.get("follow_up_cards"));
+        String destination = optionalString(followUps.get("list_id"))
+                .map(id -> "the configured Trello list ID " + DisplayNames.quotedName(id))
+                .orElseGet(() -> optionalString(followUps.get("list_name"))
+                        .map(DisplayNames::quotedName)
+                        .orElse(ConfigDefaults.DEFAULT_FOLLOW_UP_LIST_NAME));
+        return new FollowUpCardsSettings(Boolean.parseBoolean(String.valueOf(followUps.get("enabled"))), destination);
+    }
+
+    void updateFollowUpCards(Path workflowPath, boolean enabled) throws IOException {
+        ReadWorkflow original = readWorkflow(workflowPath);
+        SequencedMap<String, Object> yaml = parseYaml(original.frontMatter());
+        Map<String, Object> tools = section(yaml.get("trello_tools"));
+        Map<String, Object> followUps = section(tools.get("follow_up_cards"));
+        followUps.put("enabled", enabled);
+        tools.put("follow_up_cards", followUps);
+        if (enabled) {
+            for (String permission :
+                    List.of("enabled", "allow_writes", "allow_comments", "allow_url_attachments", "allow_checklists")) {
+                tools.put(permission, true);
+            }
+        }
+        yaml.put("trello_tools", tools);
+        write(workflowPath, original.content(), yaml, original.frontMatter().body());
+    }
+
+    static String preserveTrelloTools(Path workflowPath, String generated) throws IOException {
+        String content = Files.readString(workflowPath);
+        SequencedMap<String, Object> previous;
+        try {
+            previous = parseYaml(FrontMatter.parse(content));
+        } catch (JsonProcessingException | TrelloBoardSetupException ignored) {
+            // Explicit regeneration can replace malformed workflows; no settings can be recovered safely.
+            return generated;
+        }
+        if (!previous.containsKey("trello_tools")) {
+            return generated;
+        }
+        FrontMatter replacement = FrontMatter.parse(generated);
+        SequencedMap<String, Object> yaml = parseYaml(replacement);
+        Map<String, Object> tools = section(previous.get("trello_tools"));
+        yaml.put("trello_tools", tools);
+        return "---\n" + YAML.writeValueAsString(yaml) + "---\n" + replacement.body();
+    }
+
+    private static Map<String, Object> section(Object value) {
+        // Keep existing YAML key order when changing the opt-in setting.
+        Map<String, Object> copy = new LinkedHashMap<>();
+        if (value instanceof Map<?, ?> existing) {
+            existing.forEach((key, setting) -> copy.put(String.valueOf(key), setting));
+        } else if (value != null) {
+            throw new TrelloBoardSetupException(
+                    "setup_workflow_invalid", "cannot update workflow settings: expected a YAML map");
+        }
+        return copy;
+    }
+
+    record FollowUpCardsSettings(boolean enabled, String destination) {}
 
     void updateServerPort(Path workflowPath, int port) throws IOException {
         ReadWorkflow readWorkflow = readWorkflow(workflowPath);
