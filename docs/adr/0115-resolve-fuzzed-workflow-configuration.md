@@ -154,7 +154,7 @@ implementation.
 
 ## More Information
 
-[GitHub PR #787](https://github.com/martin-francois/symphony-trello/pull/787) moves the workflow
-target to in-memory parsing and adds `StandaloneFuzzerIsolationTest`. After both changes merge,
-`WorkflowLoaderFuzzer` calls `WorkflowConfigInvariants` after `WorkflowLoaderInvariants`, and the
-isolation test replays the seeds added here.
+The workflow target parses in memory and calls `WorkflowConfigInvariants` after
+`WorkflowLoaderInvariants`. `StandaloneFuzzerIsolationTest` replays the configuration seeds through
+the standalone entry point. The JUnit fuzz class keeps `FuzzIsolationExtension` and `@Isolated`, as
+required by [ADR 0091](0091-fuzz-harness-properties-and-isolation.md).

@@ -502,7 +502,9 @@ public class ConfigResolver {
 
     private Path optionalRepositoryPath(Path workflowDirectory, Map<String, Object> repository) {
         String resolved = optionalEnvironmentPathValue(optionalString(repository, "default_path"));
-        return resolved == null ? null : absolutePath(workflowDirectory, "repository.default_path", expandPath(resolved));
+        return resolved == null
+                ? null
+                : absolutePath(workflowDirectory, "repository.default_path", expandPath(resolved));
     }
 
     private String optionalEnvironmentPathValue(String configured) {
