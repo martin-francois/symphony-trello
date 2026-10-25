@@ -2616,7 +2616,7 @@ Advanced Checklists, mirror cards, or another paid Trello feature.
 Tool contract:
 
 - The tool name is `trello_create_follow_up_card`. It is advertised only when `trello_tools.enabled`,
-  `trello_tools.allow_writes`, `trello_tools.allow_url_attachments`, and
+  `trello_tools.allow_writes`, `trello_tools.allow_url_attachments`, `trello_tools.allow_comments`, and
   `trello_tools.follow_up_cards.enabled` are all true.
 - Arguments are `title` (one line, at most 200 characters), `description` (Markdown, at most 4000
   characters), `acceptance_criteria` (1 to 10 one-line strings, each at most 300 characters), and
@@ -2626,7 +2626,7 @@ Tool contract:
   starts with `_Managed by Symphony`, MUST fail with a structured error before any Trello request.
 - The source card is the current worker session's card. All reads and writes MUST stay on the
   configured board.
-- The tool requires `trello_tools.allow_url_attachments`. The two prerequisite relationships also
+- The tool requires `trello_tools.allow_url_attachments` and `trello_tools.allow_comments`. The two prerequisite relationships also
   require `trello_tools.allow_checklists`. A disabled permission MUST fail before any Trello request.
 - The destination is the open list selected by `follow_up_cards.list_id` or, when unset,
   `follow_up_cards.list_name`. A missing list, a name that matches more than one open list, or a
@@ -2658,6 +2658,13 @@ Relationship convention:
   attachment, a pasted card URL, a manually linked card, a label, or footer text that differs in
   any character is a plain reference. Implementations MUST NOT assume that Trello card links are
   bidirectional.
+- The source card's Symphony-managed `Follow-ups` workpad section records every created follow-up
+  with its title and the reciprocal footer
+  `_Managed by Symphony · Follow-up [the follow-up card](https://trello.com/c/<shortLink>) · <source-side relationship text>_`.
+  The source-side text is `Related work, no required order.`,
+  `The follow-up card must wait for this card to finish first.`, or
+  `This card must wait for the follow-up card to finish first.` respectively. Both cards therefore
+  retain an explicit relationship record. Attachments alone still carry no relationship meaning.
 - The two ordered relationships are true prerequisites and MUST use the Trello prerequisite
   checklist convention from Section 11.4 with a checklist named `Must finish first`:
   `follow_up_waits_for_current` adds the source card URL as an exact item on the follow-up card, and
@@ -2683,6 +2690,10 @@ Bounds and idempotency:
   name equals `title` after `normalize_state_name` from Section 4.2 is the existing follow-up. The
   tool MUST NOT create a second card for it. It returns that card and adds any missing label, link,
   or prerequisite item, with the blocked handoff above when it adds the source card's item.
+- Duplicate detection also accepts a matching normalized title plus a source-card attachment in
+  either direction. When the exact relationship footer is missing or changed, the tool MUST return
+  the existing card with relationship `unknown` and `current_card_must_wait=false`. It MUST NOT
+  reconstruct a footer, add a prerequisite, move either card, or infer a relationship from the link.
 - An existing follow-up with a different relationship MUST fail with a structured conflict error
   without changing either card.
 - A new card MUST fail with a structured error when the source card already has
@@ -2698,10 +2709,17 @@ Result and workflow use:
 
 - A successful result reports `status` (`follow_up_card_created` or `follow_up_card_exists`), the
   follow-up card ID and URL, the destination list name, the relationship,
-  `current_card_must_wait`, `current_card_moved_to`, and a one-line `workpad_note`.
+  `current_card_must_wait` and `current_card_moved_to`. A typed relationship also reports the
+  follow-up title. A duplicate found only through its title and attachment reports `unknown` and a
+  note asking for manual review of its relationship.
+- Symphony MUST update the managed `Follow-ups` workpad section before reporting a typed follow-up
+  as successful. A retry repairs a failed workpad write without creating another card. Later agent
+  workpad updates and Codex usage updates MUST preserve the section. The workpad tool MUST reject
+  agent-supplied managed markers. Malformed sections, duplicate workpads, and an existing source
+  entry whose relationship footer was edited require manual repair;
+  follow-up creation MUST NOT delete comments to repair them.
 - Generated workflows SHOULD tell the agent to file out-of-scope work with this tool when it is
-  available, to copy `workpad_note` into the workpad, and to stop and hand off as blocked when the
-  current card must wait. When the tool is unavailable or fails, the agent SHOULD list the follow-up
+  available and to stop and hand off as blocked when the current card must wait. When the tool is unavailable or fails, the agent SHOULD list the follow-up
   work in the workpad or final response instead of expanding the card's scope.
 
 ## 12. Prompt Construction and Context Assembly

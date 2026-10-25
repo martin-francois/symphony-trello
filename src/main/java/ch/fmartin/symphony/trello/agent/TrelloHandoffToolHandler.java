@@ -210,30 +210,33 @@ public class TrelloHandoffToolHandler {
                                         stringSchema("Optional attachment display name.")),
                                 List.of("url"))),
                 toolDefinition(
-                    CREATE_FOLLOW_UP_CARD,
-                    List.of(ToolPermission.FOLLOW_UP_CARDS, ToolPermission.URL_ATTACHMENTS),
-                    TrelloHandoffToolHandler::createFollowUpCard,
-                    "Create one separate Trello card for useful work that is outside the current card's acceptance criteria, link it to the current card both ways, and record their relationship. Symphony chooses the board, list, and labels; do not include a card id or list id.",
-                    objectSchema(
-                            Map.of(
-                                    "title",
-                                    boundedStringSchema(
-                                            "One-line title for the follow-up card.",
-                                            TrelloFollowUpCardTool.MAX_TITLE_CODE_POINTS),
-                                    "description",
-                                    boundedStringSchema(
-                                            "Markdown context a maintainer needs later: what was found, where, and why it is out of scope for the current card.",
-                                            TrelloFollowUpCardTool.MAX_DESCRIPTION_CODE_POINTS),
-                                    "acceptance_criteria",
-                                    stringArraySchema(
-                                            "One-line acceptance criteria that make the follow-up card actionable.",
-                                            TrelloFollowUpCardTool.MAX_ACCEPTANCE_CRITERION_CODE_POINTS,
-                                            TrelloFollowUpCardTool.MAX_ACCEPTANCE_CRITERIA),
-                                    "relationship",
-                                    enumStringSchema(
-                                            "related when no order is required, follow_up_waits_for_current when the follow-up can start only after the current card is done, or current_waits_for_follow_up when the current card cannot finish until the follow-up is done. Defaults to related.",
-                                            FollowUpRelationship.toolValues())),
-                            List.of("title", "description", "acceptance_criteria"))),
+                        CREATE_FOLLOW_UP_CARD,
+                        List.of(
+                                ToolPermission.FOLLOW_UP_CARDS,
+                                ToolPermission.URL_ATTACHMENTS,
+                                ToolPermission.COMMENTS),
+                        TrelloHandoffToolHandler::createFollowUpCard,
+                        "Create one separate Trello card for useful work that is outside the current card's acceptance criteria, link it to the current card both ways, and record their relationship. Symphony chooses the board, list, and labels; do not include a card id or list id.",
+                        objectSchema(
+                                Map.of(
+                                        "title",
+                                        boundedStringSchema(
+                                                "One-line title for the follow-up card.",
+                                                TrelloFollowUpCardTool.MAX_TITLE_CODE_POINTS),
+                                        "description",
+                                        boundedStringSchema(
+                                                "Markdown context a maintainer needs later: what was found, where, and why it is out of scope for the current card.",
+                                                TrelloFollowUpCardTool.MAX_DESCRIPTION_CODE_POINTS),
+                                        "acceptance_criteria",
+                                        stringArraySchema(
+                                                "One-line acceptance criteria that make the follow-up card actionable.",
+                                                TrelloFollowUpCardTool.MAX_ACCEPTANCE_CRITERION_CODE_POINTS,
+                                                TrelloFollowUpCardTool.MAX_ACCEPTANCE_CRITERIA),
+                                        "relationship",
+                                        enumStringSchema(
+                                                "related when no order is required, follow_up_waits_for_current when the follow-up can start only after the current card is done, or current_waits_for_follow_up when the current card cannot finish until the follow-up is done. Defaults to related.",
+                                                FollowUpRelationship.toolValues())),
+                                List.of("title", "description", "acceptance_criteria"))),
                 toolDefinition(
                         MOVE_CURRENT_CARD,
                         List.of(ToolPermission.WRITES),
@@ -698,9 +701,53 @@ public class TrelloHandoffToolHandler {
                 listName -> Optional.ofNullable(
                         resolveAllowedTarget(config, null, listName).list()));
         return switch (outcome) {
-            case TrelloFollowUpCardTool.Outcome.Success success -> success(success.payload());
+            case TrelloFollowUpCardTool.Outcome.Success success ->
+                recordFollowUpWorkpad(config, card, success.payload());
             case TrelloFollowUpCardTool.Outcome.Failure failure -> failure(failure.code(), failure.message());
         };
+    }
+
+    private ObjectNode recordFollowUpWorkpad(EffectiveConfig config, Card card, Map<String, String> payload) {
+        return FollowUpRelationship.fromValue(payload.get("relationship"))
+                .map(relationship -> recordFollowUpWorkpad(config, card, payload, relationship))
+                .orElseGet(() -> success(payload));
+    }
+
+    private ObjectNode recordFollowUpWorkpad(
+            EffectiveConfig config, Card card, Map<String, String> payload, FollowUpRelationship relationship) {
+        synchronized (workpadLock(card.id())) {
+            CardLookupResult lookup = trello.fetchCardStateForWorkpad(config, card.id());
+            if (!(lookup instanceof CardLookupResult.Found found)) {
+                return failure(
+                        "trello_workpad_refresh_failed",
+                        "Cannot record the follow-up because the current card could not be refreshed. Retry the tool to repair the workpad.");
+            }
+            List<Card.Comment> workpads = workpadComments(found.card());
+            ObjectNode invalid = invalidFollowUpWorkpads(workpads);
+            if (invalid != null) {
+                return invalid;
+            }
+            if (workpads.size() > 1) {
+                return failure(
+                        "trello_workpad_duplicates",
+                        "Cannot record the follow-up while duplicate workpads exist. Consolidate the workpads and retry; the existing follow-up card will be reused.");
+            }
+            String text = workpads.isEmpty()
+                    ? WORKPAD_MARKER
+                    : primaryWorkpad(workpads).text();
+            if (FollowUpsWorkpadSection.hasConflictingEntry(text, payload.get("follow_up_card_url"), relationship)) {
+                return failure(
+                        "trello_workpad_follow_up_conflict",
+                        "cannot record follow-up: the source workpad relationship was edited. Repair the managed entry to match the follow-up card footer, then retry.");
+            }
+            String updated = FollowUpsWorkpadSection.add(
+                    text, payload.get("follow_up_card_url"), payload.get("follow_up_card_title"), relationship);
+            if (updated.equals(text)) {
+                return success(payload);
+            }
+            ObjectNode result = upsertAgentWorkpadComment(config, card.id(), found.card(), updated, true);
+            return result.path("success").asBoolean() ? success(payload) : result;
+        }
     }
 
     private ObjectNode addUrlAttachment(EffectiveConfig config, Card card, JsonNode arguments) {
@@ -725,6 +772,11 @@ public class TrelloHandoffToolHandler {
 
     private ObjectNode upsertWorkpad(EffectiveConfig config, Card card, JsonNode arguments) {
         String proposedText = arguments.path("text").textValue();
+        if (FollowUpsWorkpadSection.SECTION.containsManagedSectionMarker(proposedText)) {
+            return failure(
+                    "trello_workpad_managed_section_forbidden",
+                    "The Follow-ups section is owned by Symphony and cannot be supplied by the workpad tool.");
+        }
         if (CodexUsageWorkpadSection.hasMalformedManagedSectionMarkers(proposedText)) {
             return failure(
                     "trello_workpad_managed_section_malformed",
@@ -773,7 +825,16 @@ public class TrelloHandoffToolHandler {
     }
 
     private ObjectNode upsertAgentWorkpadComment(EffectiveConfig config, String cardId, Card currentCard, String text) {
+        return upsertAgentWorkpadComment(config, cardId, currentCard, text, false);
+    }
+
+    private ObjectNode upsertAgentWorkpadComment(
+            EffectiveConfig config, String cardId, Card currentCard, String text, boolean writesFollowUps) {
         List<Card.Comment> workpads = workpadComments(currentCard);
+        ObjectNode invalidFollowUps = invalidFollowUpWorkpads(workpads);
+        if (invalidFollowUps != null) {
+            return invalidFollowUps;
+        }
         if (workpads.isEmpty()) {
             return createWorkpad(config, cardId, currentCard, text);
         }
@@ -794,6 +855,10 @@ public class TrelloHandoffToolHandler {
                     "Cannot safely update the authoritative workpad while an older duplicate owns the Codex usage section and destructive duplicate cleanup is disabled.");
         }
         String ownedText = managed.section() == null ? text : CodexUsageWorkpadSection.upsert(text, managed.section());
+        String followUps = FollowUpsWorkpadSection.SECTION.managedSection(primary.text());
+        if (!writesFollowUps && followUps != null) {
+            ownedText = FollowUpsWorkpadSection.SECTION.upsert(ownedText, followUps);
+        }
         return updateExistingWorkpad(
                 config, cardId, workpads, primary, stripManualCleanupNotes(ownedText), nonPrimaryOwner);
     }
@@ -801,6 +866,10 @@ public class TrelloHandoffToolHandler {
     private ObjectNode upsertCodexUsageWorkpadComment(
             EffectiveConfig config, String cardId, Card currentCard, String section) {
         List<Card.Comment> workpads = workpadComments(currentCard);
+        ObjectNode invalidFollowUps = invalidFollowUpWorkpads(workpads);
+        if (invalidFollowUps != null) {
+            return invalidFollowUps;
+        }
         if (workpads.isEmpty()) {
             if (commentWindowMayBeIncomplete(currentCard)) {
                 LOG.warnf("card_id=%s codex_usage_workpad=comment_window_incomplete", cardId);
@@ -912,6 +981,36 @@ public class TrelloHandoffToolHandler {
                 .filter(workpad -> !blank(workpad.id()))
                 .findFirst()
                 .orElseGet(workpads::getFirst);
+    }
+
+    /// Keep a managed follow-up list on the authoritative comment until a person repairs duplicates.
+    private ObjectNode invalidFollowUpWorkpads(List<Card.Comment> workpads) {
+        if (workpads.isEmpty()) {
+            return null;
+        }
+        Card.Comment primary = primaryWorkpad(workpads);
+        for (Card.Comment workpad : workpads) {
+            if (FollowUpsWorkpadSection.SECTION.hasMalformedManagedSectionMarkers(workpad.text())) {
+                return failure(
+                        "trello_workpad_managed_section_malformed",
+                        "Cannot update workpad because the Follow-ups section markers are malformed.");
+            }
+            String followUps = FollowUpsWorkpadSection.SECTION.managedSection(workpad.text());
+            String usage = CodexUsageWorkpadSection.managedSection(workpad.text());
+            if ((followUps != null && CodexUsageWorkpadSection.containsManagedSectionMarker(followUps))
+                    || (usage != null && FollowUpsWorkpadSection.SECTION.containsManagedSectionMarker(usage))) {
+                return failure(
+                        "trello_workpad_managed_section_malformed",
+                        "Cannot update workpad because its managed sections overlap. Separate the sections before retrying.");
+            }
+            if (!workpad.equals(primary)
+                    && FollowUpsWorkpadSection.SECTION.containsManagedSectionMarker(workpad.text())) {
+                return failure(
+                        "trello_workpad_managed_section_non_primary",
+                        "An older workpad owns a Follow-ups section. Move that section to the authoritative workpad and remove the duplicate markers before retrying.");
+            }
+        }
+        return null;
     }
 
     private static ManagedWorkpadState managedWorkpadState(List<Card.Comment> workpads) {
@@ -1218,7 +1317,12 @@ public class TrelloHandoffToolHandler {
     }
 
     private static ObjectNode stringArraySchema(String description, int maxItemLength, int maxItems) {
-        ObjectNode schema = JsonNodeFactory.instance.objectNode().put("type", "array").put("minItems", 1).put("maxItems", maxItems).put("description", description);
+        ObjectNode schema = JsonNodeFactory.instance
+                .objectNode()
+                .put("type", "array")
+                .put("minItems", 1)
+                .put("maxItems", maxItems)
+                .put("description", description);
         schema.set("items", boundedStringSchema("One acceptance criterion.", maxItemLength));
         return schema;
     }
@@ -1314,7 +1418,9 @@ public class TrelloHandoffToolHandler {
     }
 
     private enum ToolPermission {
-        FOLLOW_UP_CARDS("trello_follow_up_cards_disabled", "Follow-up cards are disabled by trello_tools.follow_up_cards.enabled."),
+        FOLLOW_UP_CARDS(
+                "trello_follow_up_cards_disabled",
+                "Follow-up cards are disabled by trello_tools.follow_up_cards.enabled."),
         WRITES("trello_writes_disabled", "Trello writes are disabled by trello_tools.allow_writes."),
         COMMENTS("trello_comments_disabled", "Trello comments are disabled by trello_tools.allow_comments."),
         CHECKLISTS("trello_checklists_disabled", "Trello checklists are disabled by trello_tools.allow_checklists."),
@@ -1341,7 +1447,8 @@ public class TrelloHandoffToolHandler {
         }
     }
 
-    private record ToolDefinition(ObjectNode spec, Schema argumentSchema, List<ToolPermission> permissions, ToolCall call) {
+    private record ToolDefinition(
+            ObjectNode spec, Schema argumentSchema, List<ToolPermission> permissions, ToolCall call) {
         String name() {
             return spec.path(TOOL_NAME).textValue();
         }

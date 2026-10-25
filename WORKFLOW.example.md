@@ -167,7 +167,7 @@ criteria that make the work actionable later. Set `relationship` to `related` wh
 required, `follow_up_waits_for_current` when the follow-up can start only after this card is done, or
 `current_waits_for_follow_up` only when this card cannot meet its acceptance criteria until the
 follow-up is done. Symphony picks the board list and labels, links both cards, and records the
-relationship. Copy the returned `workpad_note` into the workpad. When the result reports
+relationship. Symphony records the result in its managed `Follow-ups` workpad section. When the result reports
 `current_card_must_wait` as `true`, stop implementation; if `current_card_moved_to` is empty, finish
 with the blocked handoff. If the tool is not available or returns a failure, do not expand scope;
 list the follow-up work under a `Follow-ups` heading in the workpad or final response instead.

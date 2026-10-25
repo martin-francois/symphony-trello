@@ -68,7 +68,8 @@ final class TrelloFollowUpCardTool {
     /// Links are part of every follow-up, so the tool is offered only when it can attach them.
     static boolean advertised(EffectiveConfig config) {
         return config.trelloTools().followUpCards().enabled()
-                && config.trelloTools().allowUrlAttachments();
+                && config.trelloTools().allowUrlAttachments()
+                && config.trelloTools().allowComments();
     }
 
     Outcome handle(
@@ -86,6 +87,11 @@ final class TrelloFollowUpCardTool {
             return Outcome.failure(
                     "trello_url_attachments_disabled",
                     "Follow-up cards link both cards with URL attachments, which trello_tools.allow_url_attachments disables.");
+        }
+        if (!config.trelloTools().allowComments()) {
+            return Outcome.failure(
+                    "trello_comments_disabled",
+                    "Follow-up cards need trello_tools.allow_comments to record the managed workpad section.");
         }
         Request request;
         try {
@@ -114,25 +120,23 @@ final class TrelloFollowUpCardTool {
             return destination
                     .failure()
                     .or(blockedTarget::failure)
-                    .or(() -> prerequisiteConflict(
-                            config,
-                            card.id(),
-                            CURRENT_CARD_ROLE,
-                            request.relationship().sourceCardWaits()))
                     .orElseGet(() -> createOrRepair(new Plan(
                             config, policy, card, request, destination.value(), blockedTarget.value(), openLists)));
         }
     }
 
     private Outcome createOrRepair(Plan plan) {
+        List<TrelloClient.BoardCard> boardCards = trello.fetchOpenBoardCards(plan.config());
         List<ExistingFollowUp> existing =
-                existingFollowUps(plan.config(), plan.card().shortLink());
+                existingFollowUps(boardCards, plan.card().shortLink());
         String normalizedTitle = StateNames.normalize(plan.request().title());
         return existing.stream()
                 .filter(followUp -> StateNames.normalize(followUp.card().name()).equals(normalizedTitle))
                 .findAny()
                 .map(followUp -> repair(plan, followUp))
-                .orElseGet(() -> create(plan, existing));
+                .orElseGet(() -> linkedCardWithTitle(plan, boardCards, normalizedTitle)
+                        .map(candidate -> plainReferenceResult(plan, candidate))
+                        .orElseGet(() -> sourcePrerequisiteConflict(plan).orElseGet(() -> create(plan, existing))));
     }
 
     private Outcome repair(Plan plan, ExistingFollowUp followUp) {
@@ -145,7 +149,9 @@ final class TrelloFollowUpCardTool {
         }
         boolean followUpReceivesItem =
                 recorded.prerequisiteSide() == FollowUpRelationship.PrerequisiteSide.FOLLOW_UP_CARD;
-        return prerequisiteConflict(plan.config(), followUp.card().id(), FOLLOW_UP_CARD_ROLE, followUpReceivesItem)
+        return sourcePrerequisiteConflict(plan)
+                .or(() -> prerequisiteConflict(
+                        plan.config(), followUp.card().id(), FOLLOW_UP_CARD_ROLE, followUpReceivesItem))
                 .orElseGet(() -> relabelAndLink(plan, followUp));
     }
 
@@ -232,10 +238,7 @@ final class TrelloFollowUpCardTool {
         payload.put(
                 "current_card_moved_to",
                 movedTo.map(TrelloClient.BoardList::name).orElse(""));
-        payload.put(
-                "workpad_note",
-                "Follow-up card created: " + followUpUrl + " (" + plan.request().title() + "). "
-                        + relationship.sourceCardNote());
+        payload.put("follow_up_card_title", plan.request().title());
         return Outcome.success(payload);
     }
 
@@ -265,6 +268,14 @@ final class TrelloFollowUpCardTool {
         }
     }
 
+    private Optional<Outcome> sourcePrerequisiteConflict(Plan plan) {
+        return prerequisiteConflict(
+                plan.config(),
+                plan.card().id(),
+                CURRENT_CARD_ROLE,
+                plan.request().relationship().sourceCardWaits());
+    }
+
     private Optional<Outcome> prerequisiteConflict(
             EffectiveConfig config, String cardId, String cardRole, boolean receivesItem) {
         if (!receivesItem) {
@@ -274,14 +285,62 @@ final class TrelloFollowUpCardTool {
                 .map(message -> Outcome.failure("trello_follow_up_prerequisite_checklist_conflict", message));
     }
 
-    private List<ExistingFollowUp> existingFollowUps(EffectiveConfig config, String sourceShortLink) {
-        List<ExistingFollowUp> followUps = new ArrayList<>();
-        for (TrelloClient.BoardCard boardCard : trello.fetchOpenBoardCards(config)) {
-            FollowUpCardMetadata.parse(boardCard.description())
-                    .filter(metadata -> metadata.sourceShortLink().equals(sourceShortLink))
-                    .ifPresent(metadata -> followUps.add(new ExistingFollowUp(boardCard, metadata)));
-        }
-        return List.copyOf(followUps);
+    private static List<ExistingFollowUp> existingFollowUps(
+            List<TrelloClient.BoardCard> boardCards, String sourceShortLink) {
+        return boardCards.stream()
+                .flatMap(boardCard -> FollowUpCardMetadata.parse(boardCard.description())
+                        .filter(metadata -> metadata.sourceShortLink().equals(sourceShortLink))
+                        .map(metadata -> new ExistingFollowUp(boardCard, metadata))
+                        .stream())
+                .toList();
+    }
+
+    private Optional<TrelloClient.BoardCard> linkedCardWithTitle(
+            Plan plan, List<TrelloClient.BoardCard> boardCards, String normalizedTitle) {
+        List<String> sourceLinks =
+                trello.fetchAttachmentUrls(plan.config(), plan.card().id());
+        return boardCards.stream()
+                .filter(candidate -> !candidate.id().equals(plan.card().id()))
+                .filter(candidate -> StateNames.normalize(candidate.name()).equals(normalizedTitle))
+                .filter(candidate -> hasCardLink(sourceLinks, candidate.shortLink())
+                        || hasCardLink(
+                                trello.fetchAttachmentUrls(plan.config(), candidate.id()),
+                                plan.card().shortLink()))
+                .findAny();
+    }
+
+    private static boolean hasCardLink(List<String> urls, String shortLink) {
+        String target = FollowUpCardMetadata.cardUrl(shortLink);
+        return urls.stream().anyMatch(url -> url.equals(target) || url.startsWith(target + "/"));
+    }
+
+    /// An attachment prevents duplicate creation but gives no permission to reconstruct a relationship.
+    private static Outcome plainReferenceResult(Plan plan, TrelloClient.BoardCard card) {
+        String listName = plan.openLists().stream()
+                .filter(list -> list.id().equals(card.listId()))
+                .map(TrelloClient.BoardList::name)
+                .findAny()
+                .orElse("");
+        return Outcome.success(
+                Map.of(
+                        "status",
+                        STATUS_EXISTS,
+                        "card_id",
+                        plan.card().id(),
+                        "list_name",
+                        listName,
+                        "follow_up_card_id",
+                        card.id(),
+                        "follow_up_card_url",
+                        FollowUpCardMetadata.cardUrl(card.shortLink()),
+                        "relationship",
+                        "unknown",
+                        "current_card_must_wait",
+                        "false",
+                        "current_card_moved_to",
+                        "",
+                        "note",
+                        "A linked card with this title already exists. Its relationship footer is missing or changed; review it manually."));
     }
 
     private List<String> labelIds(EffectiveConfig config, List<String> labelNames) {

@@ -5,9 +5,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
+import ch.fmartin.symphony.trello.config.FollowUpRelationship;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.testsupport.FakeTrelloBoard;
 import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
+import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -33,6 +35,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -42,6 +45,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 /// Drives `trello_create_follow_up_card` through the handoff tool handler against a stateful fake
 /// Trello board, so each test checks the board state the tool leaves behind.
 final class TrelloFollowUpCardToolTest {
+    private static final char BELL = '\u0007';
     private static final String BOARD_ID = "board-1";
     private static final String SOURCE_ID = "card-source";
     private static final String SOURCE_SHORT_LINK = "SYNTH201";
@@ -79,6 +83,271 @@ final class TrelloFollowUpCardToolTest {
     @AfterEach
     void stopBoard() {
         server.stop();
+    }
+
+    @MethodSource("relationships")
+    @ParameterizedTest
+    void recordsEveryRelationshipOnBothCardsAndInTheManagedWorkpad(FollowUpRelationship relationship) {
+        // given
+        EffectiveConfig config = config(Map.of(), Map.of());
+
+        // when
+        ObjectNode result = call(config, arguments(FOLLOW_UP_TITLE, relationship.value()));
+
+        // then
+        successPayload(result);
+        FakeTrelloBoard.FakeCard followUp = board.cardByName(FOLLOW_UP_TITLE).orElseThrow();
+        FakeTrelloBoard.FakeCard source = board.cardByName(SOURCE_TITLE).orElseThrow();
+        assertThat(followUp.description()).contains(relationship.visibleDescription());
+        assertThat(source.comments()).anySatisfy(text -> assertThat(text)
+                .contains(
+                        "## Codex Workpad",
+                        "**Follow-ups**",
+                        followUp.url(),
+                        FOLLOW_UP_TITLE,
+                        "_Managed by Symphony",
+                        relationship.sourceCardNote()));
+    }
+
+    @Test
+    void repairAddsAMissingLabelThenCompletesLinksAndTheWorkpad() {
+        // given
+        EffectiveConfig config = config(Map.of(), Map.of());
+        FakeTrelloBoard.FakeCard existing = board.card("existing-card", "SYNTH301", FOLLOW_UP_TITLE, INBOX_ID)
+                .description("Body\n\n" + MANAGED_FOOTER_PREFIX + "Related work, no required order_");
+
+        // when
+        ObjectNode result = call(config, arguments(FOLLOW_UP_TITLE, "related"));
+
+        // then
+        assertThat(successPayload(result)).containsEntry("status", TrelloFollowUpCardTool.STATUS_EXISTS);
+        assertThat(existing.labelIds()).hasSize(1);
+        assertThat(existing.attachments()).singleElement().satisfies(link -> assertThat(link.url())
+                .isEqualTo(SOURCE_URL));
+        assertThat(board.cardByName(SOURCE_TITLE).orElseThrow().comments())
+                .singleElement()
+                .asString()
+                .contains(FOLLOW_UP_TITLE);
+        assertThat(board.createdCards()).isEmpty();
+    }
+
+    @Test
+    void editedFooterWithMatchingTitleAndSourceAttachmentDoesNotCreateOrInferARelationship() {
+        // given
+        EffectiveConfig config = config(Map.of(), Map.of());
+        board.card("existing-card", "SYNTH301", FOLLOW_UP_TITLE, INBOX_ID)
+                .description("A person edited the footer.")
+                .attachment("Source", SOURCE_URL);
+        board.cardByName(SOURCE_TITLE)
+                .orElseThrow()
+                .checklist(TrelloFollowUpCardTool.PREREQUISITE_CHECKLIST_NAME, "Ask design first");
+
+        // when
+        ObjectNode result = call(config, arguments(FOLLOW_UP_TITLE, "current_waits_for_follow_up"));
+
+        // then
+        assertThat(successPayload(result))
+                .containsEntry("status", TrelloFollowUpCardTool.STATUS_EXISTS)
+                .containsEntry("relationship", "unknown")
+                .containsEntry("current_card_must_wait", "false");
+        assertThat(board.createdCards()).isEmpty();
+        assertThat(board.cardByName(SOURCE_TITLE).orElseThrow().checklists())
+                .singleElement()
+                .satisfies(checklist -> assertThat(checklist.items())
+                        .extracting(FakeTrelloBoard.ChecklistItem::name)
+                        .containsExactly("Ask design first"));
+        assertThat(board.cardByName(FOLLOW_UP_TITLE).orElseThrow().description())
+                .isEqualTo("A person edited the footer.");
+    }
+
+    @MethodSource("sourceFooterEdits")
+    @ParameterizedTest(name = "{0}")
+    void alteredSourceRelationshipNeedsManualRepairBeforeReportingSuccess(
+            String scenario, String original, String replacement) {
+        // given
+        EffectiveConfig config = config(Map.of(), Map.of());
+        call(config, arguments(FOLLOW_UP_TITLE, "related"));
+        var client = new TrelloClient(json);
+        Card current = ((CardLookupResult.Found) client.fetchCardStateForWorkpad(config, SOURCE_ID)).card();
+        Card.Comment workpad = current.comments().getFirst();
+        String edited = workpad.text().replace(original, replacement);
+        client.updateComment(config, workpad.id(), edited);
+
+        // when
+        ObjectNode result = call(config, arguments(FOLLOW_UP_TITLE, "related"));
+
+        // then
+        assertFailure(result, "trello_workpad_follow_up_conflict");
+        assertThat(board.createdCards()).hasSize(1);
+        assertThat(board.cardByName(SOURCE_TITLE).orElseThrow().comments()).containsExactly(edited);
+    }
+
+    private static List<Arguments> sourceFooterEdits() {
+        return List.of(
+                Arguments.of("removed relationship", FollowUpRelationship.RELATED.sourceCardNote(), ""),
+                Arguments.of(
+                        "changed relationship",
+                        FollowUpRelationship.RELATED.sourceCardNote(),
+                        FollowUpRelationship.CURRENT_WAITS_FOR_FOLLOW_UP.sourceCardNote()),
+                Arguments.of("changed link label", "[the follow-up card]", "[follow-up]"),
+                Arguments.of("removed link label", "[the follow-up card](", ""));
+    }
+
+    @Test
+    void cardUrlInAnEditedTitleDoesNotMakeTheUnchangedFooterConflict() {
+        // given
+        EffectiveConfig config = config(Map.of(), Map.of());
+        String url = successPayload(call(config, arguments(FOLLOW_UP_TITLE, "related")))
+                .get("follow_up_card_url");
+        var client = new TrelloClient(json);
+        Card current = ((CardLookupResult.Found) client.fetchCardStateForWorkpad(config, SOURCE_ID)).card();
+        Card.Comment workpad = current.comments().getFirst();
+        String edited = workpad.text().replace("- Created: " + FOLLOW_UP_TITLE, "- Created: " + url);
+        client.updateComment(config, workpad.id(), edited);
+
+        // when
+        ObjectNode result = call(config, arguments(FOLLOW_UP_TITLE, "related"));
+
+        // then
+        assertThat(successPayload(result)).containsEntry("status", TrelloFollowUpCardTool.STATUS_EXISTS);
+        assertThat(board.createdCards()).hasSize(1);
+        assertThat(board.cardByName(SOURCE_TITLE).orElseThrow().comments()).containsExactly(edited);
+    }
+
+    @Test
+    void longerCardIdDoesNotConflictWithADifferentFollowUp() {
+        // given
+        String url = FollowUpCardMetadata.cardUrl("SYNTH999");
+        String workpad = FollowUpsWorkpadSection.add(
+                "## Codex Workpad", url + "1234567890123456", "Other card", FollowUpRelationship.RELATED);
+
+        // when
+        boolean conflict = FollowUpsWorkpadSection.hasConflictingEntry(
+                workpad, url, FollowUpRelationship.CURRENT_WAITS_FOR_FOLLOW_UP);
+
+        // then
+        assertThat(conflict)
+                .as("a longer card ID identifies a different follow-up")
+                .isFalse();
+    }
+
+    @Test
+    void workpadAndUsageUpdatesPreserveFollowUpsWithoutRepeatingTheEntry() {
+        // given
+        EffectiveConfig config = config(Map.of(), Map.of());
+        call(config, arguments(FOLLOW_UP_TITLE, "related"));
+        String usage = CodexUsageWorkpadSection.rechecking("Usage reset");
+        assertThat(handler.updateCodexUsageSection(config, SOURCE_ID, usage))
+                .as("usage updates preserve the source follow-up section")
+                .isTrue();
+        ObjectNode params = json.createObjectNode();
+        params.put("tool", "trello_upsert_workpad");
+        params.putObject("arguments").put("text", "Updated implementation notes.");
+
+        // when
+        ObjectNode updated = handler.handle(config, sourceCard(), params);
+        ObjectNode retried = call(config, arguments(FOLLOW_UP_TITLE, "related"));
+
+        // then
+        successPayload(updated);
+        successPayload(retried);
+        assertThat(board.createdCards()).hasSize(1);
+        assertThat(board.cardByName(SOURCE_TITLE).orElseThrow().comments())
+                .singleElement()
+                .asString()
+                .contains("Updated implementation notes.", usage)
+                .containsOnlyOnce(FOLLOW_UP_TITLE)
+                .containsOnlyOnce(FollowUpsWorkpadSection.START_MARKER);
+    }
+
+    @Test
+    void failedWorkpadWriteIsRepairedWithoutCreatingAnotherCard() {
+        // given
+        EffectiveConfig config = config(Map.of(), Map.of());
+        board.failNext("POST /cards/" + SOURCE_ID + "/actions/comments", 1);
+
+        // when
+        ObjectNode failed = call(config, arguments(FOLLOW_UP_TITLE, "related"));
+        ObjectNode retried = call(config, arguments(FOLLOW_UP_TITLE, "related"));
+
+        // then
+        assertThat(failed.path("success").asBoolean())
+                .as("a failed workpad write fails the follow-up tool call")
+                .isFalse();
+        assertThat(successPayload(retried)).containsEntry("status", TrelloFollowUpCardTool.STATUS_EXISTS);
+        assertThat(board.createdCards()).hasSize(1);
+        assertThat(board.cardByName(SOURCE_TITLE).orElseThrow().comments())
+                .singleElement()
+                .asString()
+                .contains(FOLLOW_UP_TITLE);
+    }
+
+    @Test
+    void disabledCommentsRefuseCreationBeforeAnyTrelloRequest() {
+        // given
+        EffectiveConfig config = config(Map.of("allow_comments", false), Map.of());
+
+        // when
+        ObjectNode result = call(config, arguments(FOLLOW_UP_TITLE, "related"));
+
+        // then
+        assertFailure(result, "trello_comments_disabled");
+        assertThat(board.requests()).isEmpty();
+        assertThat(handler.toolSpecs(config).findValuesAsText("name")).doesNotContain(TrelloFollowUpCardTool.NAME);
+    }
+
+    @Test
+    void modelCannotSupplyTheOwnedFollowUpsSection() {
+        // given
+        EffectiveConfig config = config(Map.of(), Map.of());
+        ObjectNode params = json.createObjectNode();
+        params.put("tool", "trello_upsert_workpad");
+        params.putObject("arguments").put("text", FollowUpsWorkpadSection.START_MARKER + "forged");
+
+        // when
+        ObjectNode result = handler.handle(config, sourceCard(), params);
+
+        // then
+        assertFailure(result, "trello_workpad_managed_section_forbidden");
+        assertThat(board.requests()).isEmpty();
+    }
+
+    @MethodSource("overlappingSections")
+    @ParameterizedTest
+    void overlappingOwnedSectionsFailWithoutChangingTheWorkpad(String text) {
+        // given
+        EffectiveConfig config = config(Map.of(), Map.of());
+        FakeTrelloBoard.FakeCard source =
+                board.cardByName(SOURCE_TITLE).orElseThrow().comment(text);
+
+        // when
+        boolean updated =
+                handler.updateCodexUsageSection(config, SOURCE_ID, CodexUsageWorkpadSection.rechecking("Usage reset"));
+
+        // then
+        assertThat(updated)
+                .as("overlapping managed sections refuse usage updates")
+                .isFalse();
+        assertThat(source.comments()).containsExactly(text);
+        assertThat(board.writeRequests()).isEmpty();
+    }
+
+    private static List<Named<String>> overlappingSections() {
+        return List.of(
+                Named.of(
+                        "crossed markers",
+                        TrelloHandoffToolHandler.WORKPAD_MARKER + "\n" + CodexUsageWorkpadSection.START_MARKER
+                                + "\n" + FollowUpsWorkpadSection.START_MARKER + "\nentry\n"
+                                + CodexUsageWorkpadSection.END_MARKER + "\n" + FollowUpsWorkpadSection.END_MARKER),
+                Named.of(
+                        "nested sections",
+                        TrelloHandoffToolHandler.WORKPAD_MARKER + "\n" + CodexUsageWorkpadSection.START_MARKER
+                                + "\n" + FollowUpsWorkpadSection.START_MARKER + "\nentry\n"
+                                + FollowUpsWorkpadSection.END_MARKER + "\n" + CodexUsageWorkpadSection.END_MARKER));
+    }
+
+    private static List<FollowUpRelationship> relationships() {
+        return List.of(FollowUpRelationship.values());
     }
 
     @Test
@@ -153,14 +422,14 @@ final class TrelloFollowUpCardToolTest {
         Map<String, String> payload = successPayload(result);
         FakeTrelloBoard.FakeCard followUp = board.cardByName(FOLLOW_UP_TITLE).orElseThrow();
         assertThat(payload)
-                .containsEntry("status", "follow_up_card_created")
+                .containsEntry("status", TrelloFollowUpCardTool.STATUS_CREATED)
                 .containsEntry("follow_up_card_id", followUp.id())
                 .containsEntry("follow_up_card_url", followUp.url())
                 .containsEntry("list_name", ConfigDefaults.DEFAULT_FOLLOW_UP_LIST_NAME)
                 .containsEntry("relationship", "related")
                 .containsEntry("current_card_must_wait", "false")
                 .containsEntry("current_card_moved_to", "");
-        assertThat(payload.get("workpad_note")).contains(followUp.url()).contains(FOLLOW_UP_TITLE);
+        assertThat(payload.get("follow_up_card_title")).isEqualTo(FOLLOW_UP_TITLE);
         assertThat(followUp.listId()).isEqualTo(INBOX_ID);
         assertThat(followUp.description())
                 .startsWith("Polling reads the board labels on every tick.")
@@ -228,7 +497,7 @@ final class TrelloFollowUpCardToolTest {
                         .extracting(FakeTrelloBoard.ChecklistItem::name)
                         .containsExactly(followUp.url()));
         assertThat(source.listId()).isEqualTo(IN_PROGRESS_ID);
-        assertThat(source.comments()).isEmpty();
+        assertThat(source.comments()).singleElement().asString().startsWith(TrelloHandoffToolHandler.WORKPAD_MARKER);
         assertThat(followUp.checklists()).isEmpty();
     }
 
@@ -246,6 +515,7 @@ final class TrelloFollowUpCardToolTest {
         assertThat(successPayload(result)).containsEntry("current_card_moved_to", "Blocked");
         assertThat(source.listId()).isEqualTo(BLOCKED_ID);
         assertThat(source.comments())
+                .filteredOn(text -> text.startsWith("Blocked by "))
                 .singleElement()
                 .asString()
                 .startsWith("Blocked by [the follow-up card](" + followUp.url() + "): it must finish first.");
@@ -325,7 +595,7 @@ final class TrelloFollowUpCardToolTest {
         ObjectNode result = call(config, arguments("  cache BOARD labels between polls ", "related"));
 
         // then
-        assertThat(successPayload(result)).containsEntry("status", "follow_up_card_exists");
+        assertThat(successPayload(result)).containsEntry("status", TrelloFollowUpCardTool.STATUS_EXISTS);
         assertThat(board.createdCards()).hasSize(1);
         assertThat(board.writeRequests()).hasSize(writesAfterFirstCall);
     }
@@ -344,7 +614,7 @@ final class TrelloFollowUpCardToolTest {
         assertThat(failed.path("success").asBoolean(true))
                 .as("the injected attachment failure must surface as a tool failure")
                 .isFalse();
-        assertThat(successPayload(retried)).containsEntry("status", "follow_up_card_exists");
+        assertThat(successPayload(retried)).containsEntry("status", TrelloFollowUpCardTool.STATUS_EXISTS);
         FakeTrelloBoard.FakeCard followUp = board.createdCards().getFirst();
         assertThat(board.createdCards()).hasSize(1);
         assertThat(board.cardByName(SOURCE_TITLE).orElseThrow().attachments())
@@ -398,7 +668,7 @@ final class TrelloFollowUpCardToolTest {
     }
 
     @Test
-    void manuallyLinkedCardWithTheSameTitleIsAPlainReferenceAndDoesNotSuppressCreation() {
+    void manuallyLinkedCardWithTheSameTitlePreventsCreationWithoutRelationshipMeaning() {
         // given
         board.card("card-manual", "SYNTH202", FOLLOW_UP_TITLE, INBOX_ID)
                 .description("See " + SOURCE_URL)
@@ -409,8 +679,10 @@ final class TrelloFollowUpCardToolTest {
         ObjectNode result = call(config, arguments(FOLLOW_UP_TITLE, "related"));
 
         // then
-        assertThat(successPayload(result)).containsEntry("status", "follow_up_card_created");
-        assertThat(board.createdCards()).hasSize(1);
+        assertThat(successPayload(result))
+                .containsEntry("status", TrelloFollowUpCardTool.STATUS_EXISTS)
+                .containsEntry("relationship", "unknown");
+        assertThat(board.createdCards()).isEmpty();
     }
 
     @Test
@@ -432,7 +704,9 @@ final class TrelloFollowUpCardToolTest {
                 .containsEntry("status", TrelloFollowUpCardTool.STATUS_EXISTS)
                 .containsEntry("current_card_moved_to", "Blocked");
         assertThat(source.listId()).isEqualTo(BLOCKED_ID);
-        assertThat(source.comments()).singleElement().asString().startsWith("Blocked by ");
+        assertThat(source.comments())
+                .filteredOn(text -> text.startsWith("Blocked by "))
+                .hasSize(1);
     }
 
     @Test
@@ -449,7 +723,7 @@ final class TrelloFollowUpCardToolTest {
         // then
         assertThat(successPayload(retried)).containsEntry("current_card_moved_to", "");
         assertThat(source.listId()).isEqualTo(IN_PROGRESS_ID);
-        assertThat(source.comments()).hasSize(1);
+        assertThat(source.comments()).hasSize(2);
     }
 
     @Test
@@ -562,7 +836,7 @@ final class TrelloFollowUpCardToolTest {
 
     @MethodSource("invalidArguments")
     @ParameterizedTest(name = "{0}")
-    void invalidArgumentsFailBeforeAnyTrelloRequest(String scenario, ObjectNode arguments) {
+    void invalidArgumentsFailBeforeAnyTrelloRequest(String scenario, ObjectNode arguments, String errorCode) {
         // given
         EffectiveConfig config = config(Map.of(), Map.of());
 
@@ -570,8 +844,36 @@ final class TrelloFollowUpCardToolTest {
         ObjectNode result = call(config, arguments);
 
         // then
-        assertFailure(result, "invalid_follow_up_card");
+        assertFailure(result, errorCode);
         assertThat(board.requests()).isEmpty();
+    }
+
+    @MethodSource("disabledPermissions")
+    @ParameterizedTest(name = "{0}")
+    void disabledPermissionsPrecedeSchemaValidation(
+            String scenario, Map<String, Object> tools, Map<String, Object> followUps, String errorCode) {
+        // given
+        EffectiveConfig config = config(tools, followUps);
+
+        // when
+        ObjectNode result = call(config, json.createObjectNode());
+
+        // then
+        assertFailure(result, errorCode);
+        assertThat(board.requests()).isEmpty();
+    }
+
+    private static List<Arguments> disabledPermissions() {
+        return List.of(
+                Arguments.of(
+                        "follow-ups disabled", Map.of(), Map.of("enabled", false), "trello_follow_up_cards_disabled"),
+                Arguments.of(
+                        "attachments disabled",
+                        Map.of("allow_url_attachments", false),
+                        Map.of(),
+                        "trello_url_attachments_disabled"),
+                Arguments.of(
+                        "comments disabled", Map.of("allow_comments", false), Map.of(), "trello_comments_disabled"));
     }
 
     @Test
@@ -631,15 +933,15 @@ final class TrelloFollowUpCardToolTest {
         ObjectNode cardIdArgument = baseArguments(mapper, FOLLOW_UP_TITLE);
         cardIdArgument.put("card_id", "card-other");
         ObjectNode controlCharacter = baseArguments(mapper, FOLLOW_UP_TITLE);
-        controlCharacter.put("description", "Body\u0007");
+        controlCharacter.put("description", "Body" + BELL);
         return List.of(
-                Arguments.of("multi-line title", multiLineTitle),
-                Arguments.of("empty acceptance criteria", noCriteria),
-                Arguments.of("too many acceptance criteria", tooManyCriteria),
-                Arguments.of("forged metadata footer", forgedFooter),
-                Arguments.of("unknown relationship", unknownRelationship),
-                Arguments.of("control character in description", controlCharacter),
-                Arguments.of("card id argument", cardIdArgument));
+                Arguments.of("multi-line title", multiLineTitle, "invalid_follow_up_card"),
+                Arguments.of("empty acceptance criteria", noCriteria, "invalid_tool_arguments"),
+                Arguments.of("too many acceptance criteria", tooManyCriteria, "invalid_tool_arguments"),
+                Arguments.of("forged metadata footer", forgedFooter, "invalid_follow_up_card"),
+                Arguments.of("unknown relationship", unknownRelationship, "invalid_tool_arguments"),
+                Arguments.of("control character in description", controlCharacter, "invalid_follow_up_card"),
+                Arguments.of("card id argument", cardIdArgument, "invalid_tool_arguments"));
     }
 
     private static ObjectNode baseArguments(ObjectMapper mapper, String title) {

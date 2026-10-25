@@ -60,6 +60,7 @@ public class TrelloClient implements TrackerClient {
     public static final String PREREQUISITE_STATUS_COMMENT_MARKER = "## Symphony Prerequisite Status";
     public static final int RECENT_COMMENT_ACTION_LIMIT = 20;
     public static final int WORKPAD_COMMENT_ACTION_LIMIT = 1000;
+    private static final int BOARD_LABEL_LIMIT = 1000;
 
     private final ObjectMapper json;
     private final Transport transport;
@@ -965,7 +966,7 @@ public class TrelloClient implements TrackerClient {
         return getList(
                         config,
                         "boards/" + encodeSegment(config.tracker().resolvedBoardId()) + "/labels",
-                        Map.of("fields", "id,name", "limit", "1000"))
+                        Map.of("fields", "id,name", "limit", Integer.toString(BOARD_LABEL_LIMIT)))
                 .stream()
                 .map(payload -> new BoardLabel(
                         requiredString(payload, "id", "trello_unknown_payload"),
@@ -984,7 +985,7 @@ public class TrelloClient implements TrackerClient {
     }
 
     public void addLabelToCard(EffectiveConfig config, String cardId, String labelId) {
-        postMap(config, "cards/" + encodeSegment(cardId) + "/idLabels", Map.of("value", labelId));
+        requestBody("POST", config, "cards/" + encodeSegment(cardId) + "/idLabels", Map.of("value", labelId), false);
     }
 
     public CreatedCard createCard(

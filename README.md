@@ -1584,7 +1584,8 @@ trello_tools:
 ```
 
 Symphony then offers Codex the `trello_create_follow_up_card` tool. The tool needs
-`allow_url_attachments`, and the two "must finish first" relationships also need `allow_checklists`. Codex gives a title, a
+`allow_url_attachments` and `allow_comments`. The two "must finish first" relationships also need
+`allow_checklists`. Codex gives a title, a
 description, acceptance criteria, and how the new card relates to the current one. Symphony does the
 rest:
 
@@ -1595,6 +1596,9 @@ rest:
   another name, or to `""` to add no label. `relationship_labels` can add one more label per
   relationship, for example `current_waits_for_follow_up: Must finish first`.
 - It attaches each card to the other, so both cards show a visible link.
+- It writes a managed `Follow-ups` section in the current card's workpad, with the new card's title
+  and a reciprocal `Managed by Symphony` relationship footer. Later workpad and usage updates
+  preserve that section.
 - It ends the new card's description with a `Managed by Symphony` line that names the source card
   and the relationship. Symphony reads relationships only from that exact line. A card link you
   paste or attach yourself stays a plain link.
@@ -1615,7 +1619,10 @@ allowlist.
 
 Limits keep a confused run from flooding the board. Calling the tool again with the same title for
 the same source card returns the existing card and repairs any missing link instead of creating a
-second card. A source card can have at most 3 unfinished follow-up cards
+second card. A matching title and an attachment in either direction also prevent duplicate
+creation after a footer was edited. Symphony then returns `unknown` and asks for manual review;
+it does not infer a relationship or add prerequisites from the attachment. A source card can have
+at most 3 unfinished follow-up cards
 (`max_cards_per_source_card`), and Symphony creates at most 10 follow-up cards per hour
 (`max_cards_per_hour`). The hourly count lives in memory and starts again after a restart. Symphony
 never deletes cards, labels, links, or checklists while doing this. Everything works on a Trello Free

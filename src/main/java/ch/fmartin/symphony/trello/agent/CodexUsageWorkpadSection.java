@@ -7,6 +7,8 @@ public final class CodexUsageWorkpadSection {
     static final String START_MARKER = "<!-- symphony-trello:codex-usage:start -->";
     static final String END_MARKER = "<!-- symphony-trello:codex-usage:end -->";
 
+    private static final ManagedWorkpadSection SECTION = new ManagedWorkpadSection(START_MARKER, END_MARKER);
+
     private CodexUsageWorkpadSection() {}
 
     public static String paused(String message, Instant nextAttempt) {
@@ -37,76 +39,23 @@ public final class CodexUsageWorkpadSection {
     }
 
     static boolean containsManagedSectionMarker(String workpad) {
-        return workpad != null && (workpad.contains(START_MARKER) || workpad.contains(END_MARKER));
+        return SECTION.containsManagedSectionMarker(workpad);
     }
 
     static String upsert(String workpad, String section) {
-        if (hasMalformedManagedSectionMarkers(workpad)) {
-            return workpad;
-        }
-        String withoutManagedSection = remove(workpad).stripTrailing();
-        return withoutManagedSection + "\n\n" + section;
+        return SECTION.upsert(workpad, section);
     }
 
     static String remove(String workpad) {
-        if (hasMalformedManagedSectionMarkers(workpad)) {
-            return workpad;
-        }
-        String result = workpad;
-        int start = result.indexOf(START_MARKER);
-        while (start >= 0) {
-            int end = result.indexOf(END_MARKER, start + START_MARKER.length());
-            int after = end + END_MARKER.length();
-            result = (result.substring(0, start).stripTrailing() + "\n\n"
-                            + result.substring(after).stripLeading())
-                    .stripTrailing();
-            start = result.indexOf(START_MARKER);
-        }
-        return result;
+        return SECTION.remove(workpad);
     }
 
     static String managedSection(String workpad) {
-        if (workpad == null || hasMalformedManagedSectionMarkers(workpad)) {
-            return null;
-        }
-        int start = workpad.indexOf(START_MARKER);
-        if (start < 0) {
-            return null;
-        }
-        int end = workpad.indexOf(END_MARKER, start + START_MARKER.length());
-        return workpad.substring(start, end + END_MARKER.length());
+        return SECTION.managedSection(workpad);
     }
 
     static boolean hasMalformedManagedSectionMarkers(String workpad) {
-        if (workpad == null) {
-            return false;
-        }
-        int cursor = 0;
-        int sections = 0;
-        while (cursor < workpad.length()) {
-            int start = workpad.indexOf(START_MARKER, cursor);
-            int unmatchedEnd = workpad.indexOf(END_MARKER, cursor);
-            if (start < 0) {
-                return unmatchedEnd >= 0;
-            }
-            if (unmatchedEnd >= 0 && unmatchedEnd < start) {
-                return true;
-            }
-            int end = workpad.indexOf(END_MARKER, start + START_MARKER.length());
-            if (end < 0) {
-                return true;
-            }
-            int nestedStart = workpad.indexOf(START_MARKER, start + START_MARKER.length());
-            if (nestedStart >= 0 && nestedStart < end) {
-                return true;
-            }
-            sections++;
-            if (sections > 1) {
-                return true;
-            }
-            cursor = end + END_MARKER.length();
-        }
-        return false;
+        return SECTION.hasMalformedManagedSectionMarkers(workpad);
     }
 
     private static String sanitizeMessage(String message) {

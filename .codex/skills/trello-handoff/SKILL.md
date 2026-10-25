@@ -33,8 +33,9 @@ When `trello_create_follow_up_card` is advertised, file useful work that is
 outside the current card's acceptance criteria with it instead of expanding the
 card. Give a one-line title, a description that says what was found and why it
 is out of scope, and acceptance criteria. Use `relationship` `related` unless
-one card really has to finish first. Copy the returned `workpad_note` into the
-workpad. If the result says `current_card_must_wait` is `true`, stop
+one card really has to finish first. Symphony records the result in its managed
+`Follow-ups` workpad section. Do not copy or supply that section in a workpad update.
+If the result says `current_card_must_wait` is `true`, stop
 implementation and hand off as blocked unless `current_card_moved_to` shows the
 tool already moved the card.
 

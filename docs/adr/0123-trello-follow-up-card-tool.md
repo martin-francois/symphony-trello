@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-10-04
-decision-makers: [François Martin, Claude Code]
+decision-makers: [François Martin]
 consulted:
   - "[GitHub issue #25](https://github.com/martin-francois/symphony-trello/issues/25)"
   - "[GitHub issue #73](https://github.com/martin-francois/symphony-trello/issues/73)"
@@ -36,7 +36,7 @@ what keeps a confused run from flooding the board?
 * Keep the write opt-in, on the configured board, and bounded in count and rate.
 * Never let Codex choose a card ID, list ID, board, or label.
 * Work on a Trello Free Workspace without Custom Fields, mirror cards, or Advanced Checklists.
-* Record relationship meaning in one explicit place and treat every other link as a plain link.
+* Record relationship meaning explicitly on both cards and treat attachments as plain links.
 * Reuse the prerequisite checklist convention for true prerequisites instead of inventing a second
   blocker format.
 * Let a person decide when follow-up work starts.
@@ -62,7 +62,8 @@ relationship recorded in a Symphony metadata footer and prerequisites recorded w
 checklist convention.
 
 The tool is advertised only when `trello_tools.enabled`, `trello_tools.allow_writes`,
-`trello_tools.allow_url_attachments`, and the new `trello_tools.follow_up_cards.enabled` are true. The config lives under `trello_tools` because the
+`trello_tools.allow_url_attachments`, `trello_tools.allow_comments`, and
+`trello_tools.follow_up_cards.enabled` are true. The config lives under `trello_tools` because the
 tool is part of the same permission model: it also needs `allow_url_attachments`, prerequisite
 relationships need `allow_checklists`, the optional blocked move uses the move allowlist, and the
 blocked comment needs `allow_comments`. The tool never deletes anything, so
@@ -78,6 +79,14 @@ Codex supplies only a title, a description, acceptance criteria, and one of thre
   missing label is created on the board with the color `sky`, because Trello needs a color when it
   creates a label. Labels are only visual; Java never reads meaning from them.
 * Both cards get a URL attachment to the other card.
+* Symphony writes a managed `Follow-ups` workpad section on the source card, including the title,
+  follow-up link, and reciprocal Symphony footer with the relationship worded from the source side.
+  The three source-side sentences are defined in SPEC section 11.7. Agent workpad updates and usage
+  notices preserve this section. The workpad tool rejects agent-supplied managed markers. A failed
+  workpad write fails the tool call, and a retry repairs it without making another card.
+  Malformed markers, duplicate workpads, and edited source-side relationship footers require manual
+  repair; the follow-up tool never deletes
+  a comment to resolve them.
 * The last paragraph of the follow-up description is
   `_Managed by Symphony · Follow-up of [the source card](https://trello.com/c/<shortLink>) · <relationship text>_`.
   This exact line is the accepted relationship convention. Any other link stays a plain reference.
@@ -94,7 +103,10 @@ Codex supplies only a title, a description, acceptance criteria, and one of thre
 
 Bounds: the tool finds earlier follow-ups by reading open cards on the board and parsing their
 footers. A matching title for the same source card returns the existing card and adds any missing
-link, label, or prerequisite item. A source card can have at most
+link, label, prerequisite item, or workpad entry. A matching title plus an attachment to the source
+in either direction also prevents duplicate creation. If its exact relationship footer is missing
+or changed, the tool returns `unknown` and leaves both cards unchanged. It does not reconstruct a
+relationship from the attachment. A source card can have at most
 `max_cards_per_source_card` unfinished follow-ups (default 3), and the process creates at most
 `max_cards_per_hour` (default 10). One process lock serializes the duplicate check and the create.
 
@@ -108,9 +120,9 @@ link, label, or prerequisite item. A source card can have at most
 * Good, because the duplicate, per-card, and hourly bounds come from board state and a small
   in-memory window, so a retry does not create a second card.
 * Good, because a failed write part way is repaired by calling the tool again; nothing is deleted.
-* Bad, because a person can break the footer by editing the description. The card then becomes a
-  plain card for Symphony: it no longer counts toward the per-card limit and a retry may create a
-  new follow-up.
+* Bad, because editing a footer removes its machine-readable relationship. A matching title and
+  attachment still prevent a duplicate, but Symphony requires a person to review the relationship.
+  Only exact footers count toward the per-source limit.
 * Bad, because duplicate detection reads open cards only. If a person archives a follow-up, the same
   source card can create it again. [GitHub issue #857](https://github.com/martin-francois/symphony-trello/issues/857)
   tracks closing this gap.
@@ -122,7 +134,8 @@ link, label, or prerequisite item. A source card can have at most
 
 * `TrelloFollowUpCardToolTest` drives the tool through `TrelloHandoffToolHandler` against the
   stateful `FakeTrelloBoard` and checks the resulting board: list, labels, both attachments, the
-  footer, prerequisite checklists, the blocked move, duplicate and retry handling, the per-card
+  reciprocal footer and managed workpad, preservation during agent and usage updates, prerequisite
+  checklists, the blocked move, duplicate and retry handling after edited footers, the per-card
   and hourly limits, two concurrent calls for the same title, and that disabled settings, bad
   destinations, and bad arguments make no write.
 * `ConfigResolverTest` checks the `trello_tools.follow_up_cards` defaults and rejected values.

@@ -47,7 +47,7 @@ public final class FakeTrelloBoard implements HttpHandler {
     }
 
     public synchronized FakeCard card(String id, String shortLink, String name, String listId) {
-        var card = new FakeCard(id, shortLink, name, listId);
+        var card = new FakeCard(id, shortLink, name, listId, boardId);
         cards.add(card);
         return card;
     }
@@ -128,11 +128,31 @@ public final class FakeTrelloBoard implements HttpHandler {
             case "labels" -> "POST".equals(method) && segments.size() == 1 ? createLabel(query) : null;
             case "cards" -> cardRoute(method, segments, query);
             case "checklists" -> checklistRoute(method, segments, query);
+            case "actions" -> actionRoute(method, segments, query);
             default -> null;
         };
     }
 
+    private Object actionRoute(String method, List<String> segments, Map<String, String> query) {
+        if (!"PUT".equals(method) || segments.size() != 3 || !"text".equals(segments.get(2))) {
+            return null;
+        }
+        for (FakeCard card : cards) {
+            for (int index = 0; index < card.comments.size(); index++) {
+                Comment comment = card.comments.get(index);
+                if (comment.id().equals(segments.get(1))) {
+                    card.comments.set(index, new Comment(comment.id(), query.get("value")));
+                    return Map.of("id", comment.id());
+                }
+            }
+        }
+        return null;
+    }
+
     private Object boardRoute(String method, List<String> segments) {
+        if ("GET".equals(method) && segments.size() == 2 && boardId.equals(segments.get(1))) {
+            return Map.of("id", boardId, "name", "Synthetic board", "closed", false);
+        }
         if (!"GET".equals(method) || segments.size() < 3 || !boardId.equals(segments.get(1))) {
             return null;
         }
@@ -226,7 +246,7 @@ public final class FakeTrelloBoard implements HttpHandler {
             }
             case "POST actions/comments" -> {
                 String actionId = "action-" + nextId();
-                card.comments.add(query.get("text"));
+                card.comments.addFirst(new Comment(actionId, query.get("text")));
                 yield Map.of("id", actionId);
             }
             default -> null;
@@ -239,7 +259,7 @@ public final class FakeTrelloBoard implements HttpHandler {
             return null;
         }
         int number = nextId();
-        var card = new FakeCard("card-" + number, "Fu%06d".formatted(number), query.get("name"), listId);
+        var card = new FakeCard("card-" + number, "Fu%06d".formatted(number), query.get("name"), listId, boardId);
         card.description = query.getOrDefault("desc", "");
         card.createdThroughApi = true;
         String labelIds = query.get("idLabels");
@@ -306,12 +326,14 @@ public final class FakeTrelloBoard implements HttpHandler {
         private final List<String> labelIds = new CopyOnWriteArrayList<>();
         private final List<Attachment> attachments = new CopyOnWriteArrayList<>();
         private final List<Checklist> checklists = new CopyOnWriteArrayList<>();
-        private final List<String> comments = new CopyOnWriteArrayList<>();
+        private final List<Comment> comments = new CopyOnWriteArrayList<>();
+        private final String boardId;
         private volatile String listId;
         private volatile String description = "";
         private volatile boolean createdThroughApi;
 
-        private FakeCard(String id, String shortLink, String name, String listId) {
+        private FakeCard(String id, String shortLink, String name, String listId, String boardId) {
+            this.boardId = boardId;
             this.id = id;
             this.shortLink = shortLink;
             this.name = name;
@@ -379,8 +401,17 @@ public final class FakeTrelloBoard implements HttpHandler {
             return List.copyOf(checklists);
         }
 
+        public FakeCard comment(String text) {
+            comments.addFirst(new Comment("comment-" + id + "-" + comments.size(), text));
+            return this;
+        }
+
         public List<String> comments() {
-            return List.copyOf(comments);
+            List<String> texts = new ArrayList<>();
+            for (Comment comment : comments) {
+                texts.add(comment.text());
+            }
+            return List.copyOf(texts);
         }
 
         private Map<String, Object> json() {
@@ -389,6 +420,20 @@ public final class FakeTrelloBoard implements HttpHandler {
             json.put("shortLink", shortLink);
             json.put("name", name);
             json.put("desc", description);
+            json.put("idBoard", boardId);
+            List<Object> actions = new ArrayList<>();
+            for (Comment comment : comments) {
+                actions.add(Map.of(
+                        "id",
+                        comment.id(),
+                        "type",
+                        "commentCard",
+                        "date",
+                        "2026-01-01T00:00:00Z",
+                        "data",
+                        Map.of("text", comment.text())));
+            }
+            json.put("actions", actions);
             json.put("idList", listId);
             json.put("idLabels", List.copyOf(labelIds));
             json.put("closed", false);
@@ -396,6 +441,8 @@ public final class FakeTrelloBoard implements HttpHandler {
             return json;
         }
     }
+
+    private record Comment(String id, String text) {}
 
     public record BoardList(String id, String name, boolean closed) {
         private Map<String, Object> json() {

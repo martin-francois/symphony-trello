@@ -7,8 +7,8 @@ import java.util.Optional;
 /// How a Symphony-created follow-up card relates to the card that was running when Codex found it.
 ///
 /// The two ordered relationships are true prerequisites and use the Trello prerequisite checklist
-/// convention. `RELATED` has no required order, so only the follow-up card's Symphony metadata
-/// footer records it.
+/// convention. `RELATED` has no required order. Symphony records every relationship in the new
+/// card's description footer and the source card's managed workpad section.
 public enum FollowUpRelationship {
     RELATED("related", "Related work, no required order", "Related work, no required order.", PrerequisiteSide.NONE),
     FOLLOW_UP_WAITS_FOR_CURRENT(
