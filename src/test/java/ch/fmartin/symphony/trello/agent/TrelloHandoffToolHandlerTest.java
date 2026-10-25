@@ -14,6 +14,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ch.fmartin.symphony.trello.TestCards;
@@ -359,6 +360,37 @@ final class TrelloHandoffToolHandlerTest {
         assertThat(createdChecklistName.get()).isNull();
     }
 
+    @MethodSource("disabledToolsWithInvalidArguments")
+    @ParameterizedTest(name = "{1}: {2}")
+    void disabledToolRefusalPrecedesInvalidArguments(boolean allowWrites, String tool, String expectedCode) {
+        // given
+        TrelloClient client = mock();
+        var handler = new TrelloHandoffToolHandler(json, client);
+        EffectiveConfig disabled = config(allowWrites, List.of("Review"), List.of(), false, false, false, false);
+        ObjectNode params = json.createObjectNode().put("tool", tool);
+        params.putNull("arguments");
+
+        // when
+        ObjectNode result = handler.handle(disabled, TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"), params);
+
+        // then
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains(expectedCode)
+                .doesNotContain("invalid_tool_arguments");
+        verifyNoInteractions(client);
+    }
+
+    private static List<Arguments> disabledToolsWithInvalidArguments() {
+        return List.of(
+                Arguments.of(true, "trello_add_comment", "trello_comments_disabled"),
+                Arguments.of(true, "trello_upsert_workpad", "trello_comments_disabled"),
+                Arguments.of(true, "trello_update_blocker_recheck_status", "trello_comments_disabled"),
+                Arguments.of(true, "trello_upsert_checklist_item", "trello_checklists_disabled"),
+                Arguments.of(true, "trello_add_url_attachment", "trello_url_attachments_disabled"),
+                Arguments.of(false, "trello_move_current_card", "trello_writes_disabled"));
+    }
+
     @MethodSource("argumentsOutsideTheAdvertisedSchema")
     @ParameterizedTest
     void rejectsArgumentsOutsideTheAdvertisedSchemaBeforeTrelloIo(String tool, String arguments, String expectedMessage)
@@ -472,8 +504,12 @@ final class TrelloHandoffToolHandlerTest {
         List<JsonNode> expected = new ArrayList<>();
         List<Future<List<JsonNode>>> workers = new ArrayList<>();
 
+        List<JsonNode> actual = new ArrayList<>();
+        // close() has no timeout; finally cancels workers and bounds the wait for termination.
+        ExecutorService executor = Executors.newFixedThreadPool(threads); // NOPMD - bounded shutdown in finally.
+
         // when
-        try (ExecutorService executor = Executors.newFixedThreadPool(threads)) {
+        try {
             for (int thread = 0; thread < threads; thread++) {
                 List<JsonNode> params = new ArrayList<>();
                 for (int round = 0; round < roundsPerThread; round++) {
@@ -493,13 +529,17 @@ final class TrelloHandoffToolHandlerTest {
                     return results;
                 }));
             }
+            for (Future<List<JsonNode>> worker : workers) {
+                actual.addAll(worker.get(CONCURRENT_VALIDATION_TIMEOUT.toSeconds(), TimeUnit.SECONDS));
+            }
+        } finally {
+            executor.shutdownNow();
+            assertThat(executor.awaitTermination(CONCURRENT_VALIDATION_TIMEOUT.toSeconds(), TimeUnit.SECONDS))
+                    .as("validation workers terminate after cancellation")
+                    .isTrue();
         }
 
         // then
-        List<JsonNode> actual = new ArrayList<>();
-        for (Future<List<JsonNode>> worker : workers) {
-            actual.addAll(worker.get(CONCURRENT_VALIDATION_TIMEOUT.toSeconds(), TimeUnit.SECONDS));
-        }
         assertThat(actual).containsExactlyElementsOf(expected);
         assertThat(commentText.get()).isNull();
         assertThat(checklistRequests).isEmpty();

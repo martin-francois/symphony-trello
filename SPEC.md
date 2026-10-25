@@ -2182,8 +2182,8 @@ Optional client-side tool extension:
   failure instead of stalling the session.
 - Java implementation extension: each typed tool validates the call's `arguments` against the same
   JSON Schema object it advertises as `inputSchema`. Validation runs after the unsupported-tool,
-  `trello_tools.enabled`, `trello_tools.allow_writes`, and current-card checks and before any
-  per-tool allow flag, other per-tool policy check, or tracker request. Arguments that are not a
+  `trello_tools.enabled`, `trello_tools.allow_writes`, current-card checks, and per-tool allow
+  flags. It runs before other per-tool policy checks or tracker requests. Arguments that are not a
   JSON object, omit a required property, use a wrong JSON type or `null`, use an empty string, use a
   value outside an `enum`, or contain a property the schema does not declare MUST fail with error
   code `invalid_tool_arguments`. A required string that contains only whitespace fails with the
@@ -3707,8 +3707,9 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - If the standardized `trello_rest` tool is implemented but disabled for the session, it is withheld
   or direct invocation fails with a structured disabled-tool error
 - Java implementation extension: every typed Trello tool rejects arguments outside its advertised
-  `inputSchema`, including undeclared properties, with `invalid_tool_arguments` before any per-tool
-  policy check or tracker request, and the failure does not contain the supplied value
+  `inputSchema`, including undeclared properties, with `invalid_tool_arguments` after allow flags
+  and before other per-tool policy checks or tracker requests. Disabled tools retain their existing
+  refusal errors, and validation failures do not contain the supplied value
 
 ### 17.6 Observability
 

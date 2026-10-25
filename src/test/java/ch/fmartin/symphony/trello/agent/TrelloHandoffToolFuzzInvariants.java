@@ -162,7 +162,7 @@ public final class TrelloHandoffToolFuzzInvariants {
             "invalid_checklist_item",
             "invalid_url_attachment",
             "invalid_url_attachment_name",
-            "invalid_blocker_recheck_status",
+            "invalid_tool_arguments",
             "trello_blocker_recheck_card_missing",
             "trello_blocker_recheck_refresh_failed",
             "trello_blocker_recheck_missing_source_id",

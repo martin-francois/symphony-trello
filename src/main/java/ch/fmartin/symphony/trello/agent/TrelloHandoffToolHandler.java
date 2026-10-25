@@ -130,6 +130,7 @@ public class TrelloHandoffToolHandler {
         List<ToolDefinition> definitions = List.of(
                 toolDefinition(
                         ADD_COMMENT,
+                        ToolPermission.COMMENTS,
                         TrelloHandoffToolHandler::addComment,
                         "Add a handoff comment to the current Trello card. The current card is fixed by Symphony; do not include a card id.",
                         objectSchema(
@@ -140,6 +141,7 @@ public class TrelloHandoffToolHandler {
                                 List.of("text"))),
                 toolDefinition(
                         UPSERT_WORKPAD,
+                        ToolPermission.COMMENTS,
                         TrelloHandoffToolHandler::upsertWorkpad,
                         "Create or update the single Codex workpad comment on the current Trello card. The text is Markdown and must summarize current plan, acceptance criteria, progress, validation, blockers, and handoff notes.",
                         objectSchema(
@@ -150,6 +152,7 @@ public class TrelloHandoffToolHandler {
                                 List.of("text"))),
                 toolDefinition(
                         UPDATE_BLOCKER_RECHECK_STATUS,
+                        ToolPermission.COMMENTS,
                         TrelloHandoffToolHandler::updateBlockerRecheckStatus,
                         "Maintain one managed status while rechecking the newest exact Blocked: or Blocked by handoff. Set checking before the recheck, then set resumed only after that blocker no longer applies.",
                         objectSchema(
@@ -161,6 +164,7 @@ public class TrelloHandoffToolHandler {
                                 List.of("status"))),
                 toolDefinition(
                         UPSERT_CHECKLIST_ITEM,
+                        ToolPermission.CHECKLISTS,
                         TrelloHandoffToolHandler::upsertChecklistItem,
                         "Create or update one checklist item on the current Trello card. The current card is fixed by Symphony; do not include a card id.",
                         objectSchema(
@@ -174,6 +178,7 @@ public class TrelloHandoffToolHandler {
                                 List.of("checklist_name", "item_name", "complete"))),
                 toolDefinition(
                         ADD_URL_ATTACHMENT,
+                        ToolPermission.URL_ATTACHMENTS,
                         TrelloHandoffToolHandler::addUrlAttachment,
                         "Attach one http or https URL without credentials, query string, or fragment to the current Trello card. The current card is fixed by Symphony; do not include a card id.",
                         objectSchema(
@@ -186,6 +191,7 @@ public class TrelloHandoffToolHandler {
                                 List.of("url"))),
                 toolDefinition(
                         MOVE_CURRENT_CARD,
+                        ToolPermission.WRITES,
                         TrelloHandoffToolHandler::moveCurrentCard,
                         "Move the current Trello card to one configured board-local handoff list. Use list_name unless the workflow explicitly gives a Trello list_id.",
                         objectSchema(
@@ -213,6 +219,10 @@ public class TrelloHandoffToolHandler {
         if (blank(card.id())) {
             return failure("missing_card_context", "The active worker session has no Trello card id.");
         }
+        ToolPermission permission = definition.permission();
+        if (!permission.enabled(config.trelloTools())) {
+            return failure(permission.code, permission.message);
+        }
         JsonNode arguments = params.path("arguments");
         String violation = definition.argumentViolation(arguments);
         if (violation != null) {
@@ -229,9 +239,6 @@ public class TrelloHandoffToolHandler {
     }
 
     private ObjectNode addComment(EffectiveConfig config, Card card, JsonNode arguments) {
-        if (!config.trelloTools().allowComments()) {
-            return failure("trello_comments_disabled", "Trello comments are disabled by trello_tools.allow_comments.");
-        }
         String text =
                 TrelloMarkdown.escapeLeadingHashtags(arguments.path("text").textValue());
         trello.addComment(config, card.id(), text);
@@ -239,10 +246,6 @@ public class TrelloHandoffToolHandler {
     }
 
     private ObjectNode upsertChecklistItem(EffectiveConfig config, Card card, JsonNode arguments) {
-        if (!config.trelloTools().allowChecklists()) {
-            return failure(
-                    "trello_checklists_disabled", "Trello checklists are disabled by trello_tools.allow_checklists.");
-        }
         String checklistName = arguments.path("checklist_name").textValue().strip();
         String itemName = arguments.path("item_name").textValue().strip();
         if (unsafeToolLine(checklistName) || unsafeToolLine(itemName)) {
@@ -269,9 +272,6 @@ public class TrelloHandoffToolHandler {
     }
 
     private ObjectNode updateBlockerRecheckStatus(EffectiveConfig config, Card card, JsonNode arguments) {
-        if (!config.trelloTools().allowComments()) {
-            return failure("trello_comments_disabled", "Trello comments are disabled by trello_tools.allow_comments.");
-        }
         String requestedStatus = arguments.path("status").textValue();
 
         CardLookupResult lookup = trello.fetchCardStateForWorkpad(config, card.id());
@@ -645,11 +645,6 @@ public class TrelloHandoffToolHandler {
     }
 
     private ObjectNode addUrlAttachment(EffectiveConfig config, Card card, JsonNode arguments) {
-        if (!config.trelloTools().allowUrlAttachments()) {
-            return failure(
-                    "trello_url_attachments_disabled",
-                    "Trello URL attachments are disabled by trello_tools.allow_url_attachments.");
-        }
         String url = arguments.path("url").textValue().strip();
         if (!validAttachmentUrl(url)) {
             return failure(
@@ -670,9 +665,6 @@ public class TrelloHandoffToolHandler {
     }
 
     private ObjectNode upsertWorkpad(EffectiveConfig config, Card card, JsonNode arguments) {
-        if (!config.trelloTools().allowComments()) {
-            return failure("trello_comments_disabled", "Trello comments are disabled by trello_tools.allow_comments.");
-        }
         String proposedText = arguments.path("text").textValue();
         if (CodexUsageWorkpadSection.hasMalformedManagedSectionMarkers(proposedText)) {
             return failure(
@@ -1134,14 +1126,14 @@ public class TrelloHandoffToolHandler {
     }
 
     private static ToolDefinition toolDefinition(
-            String name, ToolCall call, String description, ObjectNode inputSchema) {
+            String name, ToolPermission permission, ToolCall call, String description, ObjectNode inputSchema) {
         ObjectNode spec = JsonNodeFactory.instance
                 .objectNode()
                 .put("namespace", "symphony")
                 .put(TOOL_NAME, name)
                 .put("description", description);
         spec.set(INPUT_SCHEMA, inputSchema);
-        return new ToolDefinition(spec, ARGUMENT_SCHEMAS.getSchema(inputSchema), call);
+        return new ToolDefinition(spec, ARGUMENT_SCHEMAS.getSchema(inputSchema), permission, call);
     }
 
     private static ObjectNode objectSchema(Map<String, ObjectNode> properties, List<String> required) {
@@ -1250,7 +1242,33 @@ public class TrelloHandoffToolHandler {
         ObjectNode invoke(TrelloHandoffToolHandler handler, EffectiveConfig config, Card card, JsonNode arguments);
     }
 
-    private record ToolDefinition(ObjectNode spec, Schema argumentSchema, ToolCall call) {
+    private enum ToolPermission {
+        WRITES("trello_writes_disabled", "Trello writes are disabled by trello_tools.allow_writes."),
+        COMMENTS("trello_comments_disabled", "Trello comments are disabled by trello_tools.allow_comments."),
+        CHECKLISTS("trello_checklists_disabled", "Trello checklists are disabled by trello_tools.allow_checklists."),
+        URL_ATTACHMENTS(
+                "trello_url_attachments_disabled",
+                "Trello URL attachments are disabled by trello_tools.allow_url_attachments.");
+
+        private final String code;
+        private final String message;
+
+        ToolPermission(String code, String message) {
+            this.code = code;
+            this.message = message;
+        }
+
+        boolean enabled(EffectiveConfig.TrelloToolsConfig tools) {
+            return switch (this) {
+                case WRITES -> tools.allowWrites();
+                case COMMENTS -> tools.allowComments();
+                case CHECKLISTS -> tools.allowChecklists();
+                case URL_ATTACHMENTS -> tools.allowUrlAttachments();
+            };
+        }
+    }
+
+    private record ToolDefinition(ObjectNode spec, Schema argumentSchema, ToolPermission permission, ToolCall call) {
         String name() {
             return spec.path(TOOL_NAME).textValue();
         }

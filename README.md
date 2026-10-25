@@ -1548,8 +1548,7 @@ If the API token is read-only or Trello rejects writes, Codex still runs, but ha
 and the failures are visible in the Codex session events.
 
 Each tool checks its arguments against the JSON Schema it advertises to Codex before it contacts
-Trello. A call that leaves out a required argument, sends the wrong type or `null`, sends an empty or
-whitespace-only string, uses a value the schema does not list, or adds an argument the schema does
+Trello. A call that leaves out a required argument, sends the wrong type or `null`, sends an empty string or a whitespace-only required string, uses a value the schema does not list, or adds an argument the schema does
 not declare fails with `invalid_tool_arguments`. The message names the argument and the broken rule
 but not the value Codex sent.
 
