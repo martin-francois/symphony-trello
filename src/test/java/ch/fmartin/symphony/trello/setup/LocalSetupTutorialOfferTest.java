@@ -4,7 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.testsupport.SetupRunResult;
 import ch.fmartin.symphony.trello.testsupport.StatefulFakeTrello;
+import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
+import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -97,6 +102,40 @@ final class LocalSetupTutorialOfferTest extends LocalSetupFixtureSupport {
         assertThat(statefulTrello.archived(statefulTrello.boardIdNamed(GuidedTutorial.BOARD_NAME)))
                 .as("a failed tutorial still archives its board")
                 .isTrue();
+    }
+
+    @Test
+    void unreadableTutorialOfferLeavesCompletedSetupSuccessful() throws IOException {
+        // given
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+        var input = new BufferedReader(new StringReader(DEFAULT_SETUP_ANSWERS)) {
+            @Override
+            public String readLine() throws IOException {
+                String line = super.readLine();
+                if (line == null) {
+                    throw new IOException("fixture input failed");
+                }
+                return line;
+            }
+        };
+
+        // when
+        int exitCode;
+        try (input) {
+            exitCode = setup.run(
+                    fixture.argsWithFixtureServerPort(setupArguments(false)),
+                    input,
+                    new PrintStream(stdout, true, StandardCharsets.UTF_8),
+                    new PrintStream(stderr, true, StandardCharsets.UTF_8));
+        }
+
+        // then
+        assertThat(exitCode).as("stderr:%n%s", stderr).isZero();
+        assertThat(stderr.toString(StandardCharsets.UTF_8))
+                .contains("Setup is complete. Start the tutorial again with:")
+                .doesNotContain("Troubleshooting report written");
+        assertThat(statefulTrello.boardNames()).containsExactly(BOARD_NAME);
     }
 
     @Test

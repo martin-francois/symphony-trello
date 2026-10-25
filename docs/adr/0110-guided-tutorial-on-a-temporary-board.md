@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-10-04
-decision-makers: [François Martin, Claude]
+decision-makers: [François Martin]
 consulted:
   - "[GitHub issue #44](https://github.com/martin-francois/symphony-trello/issues/44)"
   - "[SPEC.md](../../SPEC.md)"
@@ -64,10 +64,18 @@ At the end the tutorial asks `Archive the temporary tutorial board now? [Y/n]`. 
 of deleting because archiving can be undone in Trello and matches the wording users see. After a
 failure, and from a JVM shutdown hook after Ctrl+C, it archives without asking. The tutorial
 thread and the hook claim the board through one atomic settlement before they call Trello, so the
-board is archived at most once and a "keep" answer is never overridden. A Ctrl+C that arrives while
+board is archived at most once and a "keep" answer is never overridden. A shutdown hook that finds
+an archive request already in progress waits for its completion for at most one request timeout.
+A Ctrl+C that arrives while
 the board request waits for Trello's answer waits for that answer, for at most one request timeout,
-and then archives the board Trello returned. Without an answer it names the board to archive by
-hand. `--no-cleanup` keeps the board on every path.
+and prints that it is waiting for Trello so the returned board can be archived. Without an answer
+it names the board to archive by hand. `--no-cleanup` keeps the board on every path.
+
+The rework step captures existing comments before printing its instructions, so an immediate user
+comment counts as new. A failure reading the optional tutorial offer preserves the successful setup.
+
+On the GitHub path, the concurrency note follows the Merging step. On the Trello-only path, it
+stays before the final Done step.
 
 Interactive `setup-local` asks
 `Want to try a guided walkthrough on a temporary Trello board? [y/N]` after its final handoff. The

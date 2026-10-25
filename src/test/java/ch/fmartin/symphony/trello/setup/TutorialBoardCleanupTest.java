@@ -38,11 +38,17 @@ final class TutorialBoardCleanupTest {
         await(archiveStarted);
 
         // when
-        boolean shutdownHookArchived = cleanup.archive();
+        var shutdownHookArchived = new CompletableFuture<Boolean>();
+        Thread shutdownHook = Thread.ofPlatform().start(() -> shutdownHookArchived.complete(cleanup.archive()));
+        awaitBlockedOrFinished(shutdownHook);
+        boolean hookReturnedBeforeArchive = shutdownHookArchived.isDone();
         finishArchive.countDown();
 
         // then
-        assertThat(shutdownHookArchived)
+        assertThat(hookReturnedBeforeArchive)
+                .as("the shutdown hook waits for the archive request before the JVM exits")
+                .isFalse();
+        assertThat(shutdownHookArchived.get(LATCH_WAIT.toMillis(), TimeUnit.MILLISECONDS))
                 .as("the hook sees that the tutorial thread already claimed the board")
                 .isFalse();
         assertThat(tutorialThread.get(LATCH_WAIT.toMillis(), TimeUnit.MILLISECONDS))

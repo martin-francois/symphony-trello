@@ -90,13 +90,16 @@ public final class StatefulFakeTrello implements AutoCloseable {
     }
 
     public synchronized String boardIdNamed(String name) {
-        return boards.values().stream()
-                .filter(board -> board.name.equals(name))
-                .map(board -> board.id)
-                .reduce((first, second) -> {
-                    throw new IllegalStateException("More than one board is named " + name);
-                })
-                .orElseThrow(() -> new IllegalStateException("No board is named " + name));
+        List<String> ids = new ArrayList<>();
+        for (Board board : boards.values()) {
+            if (board.name.equals(name)) {
+                ids.add(board.id);
+            }
+        }
+        if (ids.size() != 1) {
+            throw new IllegalStateException("Expected one board named " + name + " but found " + ids.size());
+        }
+        return ids.getFirst();
     }
 
     public synchronized boolean archived(String boardId) {
@@ -118,10 +121,12 @@ public final class StatefulFakeTrello implements AutoCloseable {
     }
 
     public synchronized String onlyCardId(String boardId) {
-        List<String> ids = cards.values().stream()
-                .filter(card -> card.boardId.equals(boardId))
-                .map(card -> card.id)
-                .toList();
+        List<String> ids = new ArrayList<>();
+        for (Card card : cards.values()) {
+            if (card.boardId.equals(boardId)) {
+                ids.add(card.id);
+            }
+        }
         if (ids.size() != 1) {
             throw new IllegalStateException("Expected one card on " + boardId + " but found " + ids);
         }
@@ -149,11 +154,13 @@ public final class StatefulFakeTrello implements AutoCloseable {
 
     public synchronized void moveCard(String cardId, String listName) {
         Card card = card(cardId);
-        card.listId = lists.values().stream()
-                .filter(list -> list.boardId.equals(card.boardId) && list.name.equals(listName))
-                .map(list -> list.id)
-                .findAny()
-                .orElseThrow(() -> new IllegalStateException("No list named " + listName));
+        for (TrelloList list : lists.values()) {
+            if (list.boardId.equals(card.boardId) && list.name.equals(listName)) {
+                card.listId = list.id;
+                return;
+            }
+        }
+        throw new IllegalStateException("No list named " + listName);
     }
 
     public synchronized void addComment(String cardId, String text) {
@@ -213,7 +220,13 @@ public final class StatefulFakeTrello implements AutoCloseable {
         String resource = path.getFirst();
         return switch (method + " " + resource + "/" + (path.size() - 1)) {
             case "GET members/1" -> ok(Map.of("id", MEMBER_ID, "username", "alex", "fullName", "Alex Example"));
-            case "GET members/2" -> ok(workspaces.stream().map(Workspace::json).toList());
+            case "GET members/2" -> {
+                List<Map<String, Object>> values = new ArrayList<>();
+                for (Workspace workspace : workspaces) {
+                    values.add(workspace.json());
+                }
+                yield ok(values);
+            }
             case "POST boards/0", "POST boards/1" ->
                 ok(createBoard(query.get("name"), query.get("idOrganization")).json());
             case "GET boards/1", "PUT boards/1" -> boardRoute(method, path.get(1), query);
@@ -249,10 +262,13 @@ public final class StatefulFakeTrello implements AutoCloseable {
     }
 
     private Reply boardLists(String boardId) {
-        return ok(lists.values().stream()
-                .filter(list -> list.boardId.equals(boardId))
-                .map(TrelloList::json)
-                .toList());
+        List<Map<String, Object>> values = new ArrayList<>();
+        for (TrelloList list : lists.values()) {
+            if (list.boardId.equals(boardId)) {
+                values.add(list.json());
+            }
+        }
+        return ok(values);
     }
 
     private TrelloList createList(String boardId, String name) {

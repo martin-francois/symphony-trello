@@ -300,13 +300,13 @@ public final class LocalSetup {
             throws IOException {
         String command = ShellCommandRenderer.executable(
                 options.command(), SetupSystemProperties.get(ShellCommandRenderer.SHELL_PROPERTY));
-        terminal.info("");
-        if (!PromptSupport.yes(terminal, GuidedTutorial.OFFER_PROMPT)) {
-            terminal.info("You can start it later with:");
-            terminal.info("  " + GuidedTutorial.commandLine(command));
-            return;
-        }
         try {
+            terminal.info("");
+            if (!PromptSupport.yes(terminal, GuidedTutorial.OFFER_PROMPT)) {
+                terminal.info("You can start it later with:");
+                terminal.info("  " + GuidedTutorial.commandLine(command));
+                return;
+            }
             GuidedTutorial.forCli(options.endpoint(), credentials, terminal)
                     .run(new GuidedTutorial.Options(
                             githubIntegration.enabled(),

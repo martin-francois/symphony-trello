@@ -229,6 +229,7 @@ final class GuidedTutorial {
             return Outcome.STOPPED;
         }
 
+        var rework = new ReworkExpectation(session, card(session));
         printStepHeading(Step.REWORK, "ask for a change");
         terminal.info("Pretend the result needs one more change. Add a Trello comment to the card, for example:");
         terminal.info("  " + SAMPLE_CHANGE_REQUEST);
@@ -238,7 +239,6 @@ final class GuidedTutorial {
             terminal.info("In a real run you can also write review comments on the pull request in GitHub.");
             terminal.info("Symphony reads both.");
         }
-        var rework = new ReworkExpectation(session, card(session));
         if (await(session, input, rework) == StepResult.QUIT) {
             return Outcome.STOPPED;
         }
@@ -246,21 +246,29 @@ final class GuidedTutorial {
             return Outcome.STOPPED;
         }
 
-        terminal.info("");
-        terminal.info(CONCURRENCY_NOTE);
-        terminal.info("The README workflow contract has the details:");
-        terminal.info("  " + ProjectDocs.WORKFLOW_CONTRACT_URL);
+        if (!session.options.github()) {
+            printConcurrencyNote();
+        }
 
         boolean finished = session.options.github() ? mergingStep(session, input) : doneStep(session, input);
         if (!finished) {
             return Outcome.STOPPED;
         }
-        if (!session.options.github()) {
+        if (session.options.github()) {
+            printConcurrencyNote();
+        } else {
             printWhatGitHubAdds(session.options);
         }
         terminal.info("");
         terminal.info("You finished the tutorial. Use the same flow on your connected board.");
         return Outcome.COMPLETED;
+    }
+
+    private void printConcurrencyNote() {
+        terminal.info("");
+        terminal.info(CONCURRENCY_NOTE);
+        terminal.info("The README workflow contract has the details:");
+        terminal.info("  " + ProjectDocs.WORKFLOW_CONTRACT_URL);
     }
 
     private boolean simulatePickup(Session session, TutorialInput input) throws IOException {
@@ -458,6 +466,12 @@ final class GuidedTutorial {
         }
         terminal.info("");
         terminal.info(reason);
+        if (session.cleanup.creationPending()) {
+            terminal.info(
+                    session.options.cleanup() == BoardCleanup.ARCHIVE_BY_DEFAULT
+                            ? "Waiting for Trello to finish creating the board so it can be archived."
+                            : "Waiting for Trello to finish creating the board so its link can be shown.");
+        }
         session.cleanup
                 .createdBoard()
                 .ifPresentOrElse(

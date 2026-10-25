@@ -19,6 +19,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -116,6 +117,34 @@ final class GuidedTutorialTest {
     }
 
     @Test
+    void acceptsACommentAddedAsSoonAsTheReworkInstructionsAppear() throws IOException {
+        // given
+        var terminal = new ScriptedTerminal(
+                user(() -> move(TrelloBoardSetup.RECOMMENDED_ACTIVE_STATE), ""),
+                answer(""),
+                answer(""),
+                answer(""),
+                answer(""),
+                user(() -> move(TrelloBoardSetup.RECOMMENDED_DONE_STATE), ""),
+                answer(""));
+        terminal.onInfo = line -> {
+            if (line.equals("Step 2 of 3: ask for a change")) {
+                requestChange();
+            }
+        };
+
+        // when
+        Outcome outcome = run(terminal, ANSWER_DRIVEN, trelloOnly());
+
+        // then
+        assertThat(outcome).isEqualTo(Outcome.COMPLETED);
+        assertThat(terminal.stdout())
+                .contains("with your new Trello comment")
+                .doesNotContain("but it has no new Trello comment");
+        assertThat(workpad()).contains(USER_CHANGE_REQUEST);
+    }
+
+    @Test
     void githubWalkthroughShowsThePullRequestLineAndFinishesThroughMerging() throws IOException {
         // given
         var handoffWorkpad = new AtomicReference<String>();
@@ -139,11 +168,11 @@ final class GuidedTutorialTest {
                         "review and comment on either the pull request in GitHub or the Trello card",
                         "write review comments on the pull request in GitHub",
                         "With GitHub integration, it normally updates the existing pull request.",
-                        GuidedTutorial.CONCURRENCY_NOTE,
                         "Step 3 of 3: approve the pull request with \"Merging\"",
                         GuidedTutorial.MERGING_EXAMPLE,
                         "OK  The card is in \"Merging\"",
                         "OK  Moved the card to \"Done\"",
+                        GuidedTutorial.CONCURRENCY_NOTE,
                         "OK  Archived the temporary tutorial board")
                 .doesNotContain("What GitHub pull request integration adds");
         assertThat(handoffWorkpad.get()).contains("Pull request: demo only, no pull request was created.");
@@ -555,6 +584,7 @@ final class GuidedTutorialTest {
     /// Answers each prompt with the next scripted reply, like a person who acts in Trello and then
     /// types an answer. It answers end of input once the script runs out.
     private static final class ScriptedTerminal implements Terminal {
+        private Consumer<String> onInfo = line -> {};
         private static final Duration OUTPUT_WAIT = Duration.ofSeconds(10);
 
         private final Deque<Reply> replies = new ConcurrentLinkedDeque<>();
@@ -582,6 +612,7 @@ final class GuidedTutorialTest {
         @Override
         public void info(String line) {
             out.println(line);
+            onInfo.accept(line);
         }
 
         @Override
