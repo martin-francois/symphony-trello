@@ -63,8 +63,32 @@ final class SymphonyVersionTest {
         assertThat(padded).isLessThan(SymphonyVersion.parse("1.5.0-rc.2").orElseThrow());
     }
 
+    @CsvSource({"2.0.0+build.1, 2.0.0", "1.5.0-rc.10+build.2, 1.5.0-rc.10"})
     @ParameterizedTest
-    @ValueSource(strings = {"unknown", "test", "1.2", "v1.2.3", "1.2.3 extra", "99999999999.0.0"})
+    void buildMetadataDoesNotHideTheMajorOrChangeVersionPrecedence(String text, String withoutBuild) {
+        // given
+        SymphonyVersion expected = SymphonyVersion.parse(withoutBuild).orElseThrow();
+
+        // when
+        var parsed = SymphonyVersion.parse(text);
+
+        // then
+        assertThat(parsed).hasValue(expected);
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "unknown",
+                "test",
+                "1.2",
+                "v1.2.3",
+                "1.2.3 extra",
+                "99999999999.0.0",
+                "1.2.3+",
+                "1.2.3+build..1",
+                "1.2.3+build+1"
+            })
     void rejectsTextThatIsNotASymphonyVersion(String text) {
         // given
         String versionText = text;

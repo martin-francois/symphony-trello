@@ -36,6 +36,17 @@ record SymphonyVersion(int major, int minor, int patch, String qualifier) implem
 
     static Optional<SymphonyVersion> parse(String text) {
         String version = text.strip();
+        int buildSeparator = version.indexOf('+');
+        if (buildSeparator >= 0) {
+            String buildMetadata = version.substring(buildSeparator + 1);
+            if (buildMetadata.isEmpty()
+                    || !QUALIFIER_CHARACTER.matchesAllOf(buildMetadata)
+                    || DOT_SPLITTER.splitToStream(buildMetadata).anyMatch(String::isEmpty)) {
+                return Optional.empty();
+            }
+            // Build identifiers have no precedence and must not hide a release's major version.
+            version = version.substring(0, buildSeparator);
+        }
         int qualifierSeparator = version.indexOf('-');
         String qualifier = qualifierSeparator < 0 ? "" : version.substring(qualifierSeparator + 1);
         List<String> numbers =
