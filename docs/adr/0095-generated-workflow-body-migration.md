@@ -88,8 +88,15 @@ messages. It is a top-level command like `start` and `status`, with `--board` or
 after an update, with `--from-version` set to the previous version and `--non-interactive` when
 there is no terminal or `--no-onboard` was passed. A nonzero exit stops the installer before it
 restarts workers: a rejected major downgrade must not run, and a failed write needs the operator to
-read the backup message first. For release-archive installs, both installers also refuse an older
-major release before they replace the app.
+read the backup message first. A newer-major record stops the whole selected batch before any
+write, even when its workflow is unreadable. `--mark-migrated` only records an acknowledgement;
+it never enters the replacement flow. The command checks console availability itself so redirected
+execution stays unattended even without the flag. Recovery commands retain the selected config
+directory. The writer reports separate outcomes for an untouched original, a successful restore,
+and a failed restore, so a backup path alone never implies successful rollback.
+
+For release-archive installs, both installers also refuse an older major release before they replace
+the app.
 
 Line endings. Classification compares bodies after turning CRLF into LF, so the line-ending style
 alone never counts as a customization. A migration writes the target body in the style of the

@@ -177,9 +177,10 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
-    void importBoardRecordsTheGeneratedBodyAndInputs() throws Exception {
+    void importBoardRecordsBodyAndInputsThatMigrationRecognizesAsCurrent() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.recorded.md");
+        Path store = tempDir.resolve(GeneratedWorkflowStore.FILE_NAME);
         CliRunResult imported = runCli(
                 "import-board",
                 "--endpoint",
@@ -204,19 +205,75 @@ final class TrelloBoardSetupMainTest {
                 tempDir.resolve(ConnectedBoardManifest.FILE_NAME).toString(),
                 "--env",
                 tempDir.resolve(".env.recorded").toString());
-
-        // when
-        GeneratedWorkflowRecord recorded = GeneratedWorkflowStore.find(
+        String workflowAfterImport = Files.readString(workflow);
+        GeneratedWorkflowRecord provenance = GeneratedWorkflowStore.find(
                         GeneratedWorkflowStore.inConfigDir(tempDir).records(), workflow)
                 .orElseThrow();
 
+        // when
+        CliRunResult recorded = runCli("migrate-workflows", "--config-dir", tempDir.toString(), "--non-interactive");
+        Files.delete(store);
+        CliRunResult unversioned = runCli("migrate-workflows", "--config-dir", tempDir.toString(), "--non-interactive");
+
         // then
         imported.assertSuccess();
-        assertThat(recorded.symphonyVersion()).isEqualTo(SymphonyVersion.currentText());
-        assertThat(recorded.inputs().activeStates()).contains("Queue for Codex");
-        assertThat(recorded.body().trim())
+        assertThat(provenance.symphonyVersion()).isEqualTo(SymphonyVersion.currentText());
+        assertThat(provenance.inputs().activeStates()).contains("Queue for Codex");
+        assertThat(provenance.body().trim())
                 .isEqualTo(new WorkflowLoader().load(workflow).promptTemplate());
-        assertThat(workflow).content().endsWith(recorded.body());
+        assertThat(workflow).content().endsWith(provenance.body());
+        recorded.assertSuccess()
+                .stdoutContains("OK        \"Existing Board\"", "the generated workflow body did not change");
+        unversioned.assertSuccess().stdoutContains("CURRENT   \"Existing Board\"");
+        assertThat(workflow).hasContent(workflowAfterImport);
+        assertThat(store).exists();
+    }
+
+    @Test
+    void redirectedMigrationWithoutAFlagDoesNotWriteManualPreviews() throws Exception {
+        // given
+        var fixture = new WorkflowMigrationFixture(tempDir);
+        var workflow = fixture.generatedBy(
+                "0.0.1",
+                "Redirected Board",
+                WorkflowMigrationFixture.NON_GITHUB_INPUTS,
+                body -> "Hand-written workflow.\n");
+        Path preview = workflow.path()
+                .resolveSibling(
+                        workflow.path().getFileName() + ".symphony-" + SymphonyVersion.currentText() + "-body.txt");
+
+        // when
+        CliRunResult result = runCliWithoutTrelloCredentials("migrate-workflows", "--config-dir", tempDir.toString());
+
+        // then
+        result.assertSuccess().stdoutContains("MANUAL");
+        assertThat(workflow.path()).hasContent(workflow.content());
+        assertThat(preview).doesNotExist();
+    }
+
+    @Test
+    void migrateWorkflowsRejectsAmbiguousOrIncompleteSelectorsWithoutChecking() {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+
+        // when
+        CliRunResult bothSelectors = runCli(
+                "migrate-workflows",
+                "--config-dir",
+                tempDir.toString(),
+                "--board",
+                "Board",
+                "--workflow",
+                workflow.toString());
+        CliRunResult markWithoutSelector =
+                runCli("migrate-workflows", "--config-dir", tempDir.toString(), "--mark-migrated");
+
+        // then
+        bothSelectors.assertFailure(SETUP_FAILURE).stderrContains("mutually exclusive");
+        markWithoutSelector
+                .assertFailure(SETUP_FAILURE)
+                .stderrContains("--mark-migrated needs --board NAME or --workflow PATH.");
+        assertThat(workflow).doesNotExist();
     }
 
     @ParameterizedTest

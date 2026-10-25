@@ -2206,6 +2206,10 @@ public final class TrelloBoardSetup {
         return blank(blockedState) ? reviewState : blockedState;
     }
 
+    static boolean isSystemTerminalState(String state) {
+        return SYSTEM_TERMINAL_STATES.stream().anyMatch(systemState -> systemState.equalsIgnoreCase(state));
+    }
+
     private static List<String> withSystemTerminalStates(List<String> terminalStates) {
         List<String> combined = new ArrayList<>(terminalStates);
         for (String state : SYSTEM_TERMINAL_STATES) {
@@ -2309,7 +2313,7 @@ public final class TrelloBoardSetup {
                 .orElse(null);
     }
 
-    private static String landingDoneState(List<String> terminalStates) {
+    static String landingDoneState(List<String> terminalStates) {
         return terminalStates.stream()
                 .filter(state -> state.equalsIgnoreCase("Done"))
                 .findAny()

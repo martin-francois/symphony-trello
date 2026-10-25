@@ -1,0 +1,14 @@
+exitCode: 0
+--- stdout ---
+
+Generated workflow check
+Symphony 0.1.0-SNAPSHOT compared 1 workflow with the workflow body it generates.
+  MIGRATE   "Snapshot Queue" (<TEMP>/migration/WORKFLOW.snapshot-queue.md): unchanged generated body from Symphony 0.0.1
+
+Workflow body migrations
+  "Snapshot Queue" (<TEMP>/migration/WORKFLOW.snapshot-queue.md)
+    The generated workflow changed since Symphony 0.0.1. Migrating gives this workflow the Symphony 0.1.0-SNAPSHOT workflow fixes and features.
+    Only the text after the closing --- line changes. The workflow metadata stays as it is.
+  WOULD back up and replace the generated body in:
+    <TEMP>/migration/WORKFLOW.snapshot-queue.md
+--- stderr ---

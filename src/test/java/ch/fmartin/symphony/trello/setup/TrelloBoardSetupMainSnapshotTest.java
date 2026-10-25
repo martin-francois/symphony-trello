@@ -175,6 +175,26 @@ final class TrelloBoardSetupMainSnapshotTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void migrateWorkflows() throws Exception {
+        // given
+        var migration = new WorkflowMigrationFixture(Files.createDirectory(tempDir.resolve("migration")));
+        var inputs = WorkflowMigrationFixture.NON_GITHUB_INPUTS;
+        String previousBody = WorkflowMigrationFixture.otherVersionBody(inputs);
+        Path workflow = migration.connectedWorkflow(
+                SnapshotBoard.NAME, inputs, WorkflowMigrationFixture.workflowFile(inputs, previousBody));
+        migration.record(workflow, "0.0.1", inputs, previousBody);
+        String previousWorkflow = Files.readString(workflow);
+
+        // when
+        CliRunResult result = runCli(
+                "migrate-workflows", "--config-dir", migration.configDir().toString(), "--dry-run");
+
+        // then
+        SNAPSHOTS.verify("cli/migrate-workflows", result, normalizer());
+        assertThat(workflow).hasContent(previousWorkflow);
+    }
+
+    @Test
     void listWorkspaces() {
         // given
         Path env = tempDir.resolve(".env.list-workspaces");

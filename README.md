@@ -809,6 +809,7 @@ symphony-trello logs --board "My Board Name"
 symphony-trello diagnostics --board "My Board Name" --output diagnostics.txt
 symphony-trello diagnostics --workflow WORKFLOW.md --output diagnostics.txt
 symphony-trello diagnostics --show-private-context
+symphony-trello migrate-workflows --dry-run
 symphony-trello stop --board "My Board Name"
 ```
 
@@ -840,6 +841,67 @@ bash uninstall.sh --yes --yes-local-data --remove-all-local-data
 
 `--yes` only skips the prompt for installer-managed app files. Add `--yes-local-data` only when you
 also want unattended deletion of local `.env` files, workflows, workspaces, state, and logs.
+
+### Migrate generated workflows
+
+New Symphony for Trello versions can change the generated workflow prompt, the text after the
+closing `---` line of a workflow file. Run `symphony-trello migrate-workflows` after an update
+to check your connected workflows and bring their prompt up to date. It never changes the YAML metadata
+at the top of the file, and it never recreates your Trello board.
+
+Setup remembers which version generated each workflow prompt in `generated-workflows.json`, next
+to the connected-board manifest in the config directory. The check compares each workflow with
+that recorded text and shows one result per workflow before it changes anything:
+
+| Result | Meaning | What happens |
+| --- | --- | --- |
+| `OK` | The new version generates the same prompt. | Nothing. |
+| `CURRENT` | The workflow already contains the new prompt. | Nothing. |
+| `MIGRATE` | The workflow has the old prompt unchanged, maybe with your own text before or after it. | Symphony asks before replacing the old prompt. Your own text stays exactly as it is. |
+| `MANUAL` | The old prompt was edited inside, appears twice, is unknown, or the file cannot be read safely. | Symphony writes the new prompt to a preview file and explains how to merge it. |
+| `REJECTED` | The workflow comes from a newer major version. | Nothing; reinstall that major version. |
+
+Symphony asks once for all `MIGRATE` workflows (`all`, `each`, or `none`) or once for a single
+workflow. If you kept your own text before or after the prompt, it warns you first: that text can
+conflict with the new prompt, so read it again after the update.
+
+Before it replaces a prompt, Symphony copies the workflow to
+`WORKFLOW.<name>.md.backup-<UTC time>` in the same folder and keeps the file permissions. It checks
+the new file before and after the replacement and restores the backup if a check fails. To undo a
+migration, copy the backup over the workflow. If the new version causes problems, also reinstall the
+previous version with `--version`. The new prompt uses the line endings (LF or CRLF) of the text
+after the closing `---` line. If that text mixes both, the new prompt is written with LF.
+
+For a `MANUAL` result, Symphony writes the new prompt to `WORKFLOW.<name>.md.symphony-<version>-body.txt`.
+Keep everything up to and including the closing `---` line, compare the text after it with the
+preview, and copy over the parts you want. Then record that you migrated it, so later updates
+compare against the new prompt:
+
+```bash
+symphony-trello migrate-workflows --workflow /path/to/WORKFLOW.my-board.md --mark-migrated
+```
+
+Workflows created before this check existed have no recorded prompt. Symphony recognizes them only
+when they already contain the current prompt; otherwise they show `MANUAL`.
+
+You can run the check yourself at any time:
+
+```bash
+symphony-trello migrate-workflows --dry-run
+symphony-trello migrate-workflows
+symphony-trello migrate-workflows --board "My Board Name"
+```
+
+`migrate-workflows --dry-run` shows classifications and planned changes without writing files.
+Without a terminal, or with `--non-interactive`, the command only reports, leaves every workflow
+unchanged, and writes no preview files. It still records `CURRENT`
+workflows in `generated-workflows.json`, so later checks compare against the prompt they already
+have.
+
+Downgrading to an older release of the same major version runs the same check in reverse. Symphony
+says that the workflow was made for a newer version. If you keep the newer prompt, it warns that the
+prompt may mention features the older version does not support, which can cause unexpected
+behavior. The command rejects a workflow or `--from-version` from a newer major version without changing any workflow.
 
 ## Advanced Setup
 
