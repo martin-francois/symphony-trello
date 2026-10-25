@@ -90,10 +90,12 @@ chain's corpus, on 2026-09-01, and the end of the period, the only gain was one
   configuration. A card without a declaration, a card without a description, and the fallback to
   the workflow default URL or path never occur.
 - 7 check the port after an IPv6 host in brackets.
-- 16 cannot run with any input, because an earlier check or the way the source value is built
+- 15 cannot run with any input, because an earlier check or the way the source value is built
   already decides them.
+- 1 compares local paths whose byte encodings differ even though their displayed source values
+  match. The corpus did not exercise this case.
 
-The 16 dead branches, grouped by the check that decides them:
+The 15 dead branches, grouped by the check that decides them:
 
 | Branches | Code | Why no input reaches them |
 | ---: | --- | --- |
@@ -106,7 +108,15 @@ The 16 dead branches, grouped by the check that decides them:
 | 1 | Unsafe characters in `localPath` | `parse` already rejects them. |
 | 1 | Scheme other than `file` in `fileUriPath` | `parse` calls it only for values that start with `file://`. |
 | 1 | `LOCAL_PATH` in `allowsLocalPath` | `parse` returns earlier for that mode. |
-| 2 | Identity and path comparison in `equivalent` | The source value is built from the same parts as the identity and path, so equal values always mean equal identity and path. |
+| 1 | Identity comparison in `equivalent` | The source value is built from the same identity parts, so equal values imply equal identities. |
+
+The branch classification was corrected on 2026-10-25 during
+[#1039](https://github.com/martin-francois/symphony-trello/issues/1039). On Linux, the file URIs
+`file:///tmp/repo%FF` and `file:///tmp/repo%FE` produce different path bytes but the same
+`Path.toString()` value. The path comparison in `equivalent` detects that conflict and must remain.
+The relevant `fileUriPath` and `equivalent` code was already present in the review's original base revision
+`5b78cb8934fb10e9c42065206b7ac309862ebede`; this correction changes the explanation, not the
+recorded coverage counts. The regression test and remaining dead-check removal are tracked in #1039.
 
 ## Findings
 
@@ -164,7 +174,8 @@ identifier, and card-reference parsing is already reached by `RepositorySourceFu
 - [#691](https://github.com/martin-francois/symphony-trello/issues/691): generate structured input
   for `RepositorySourceFuzzer`, so card fields vary, a workflow default repository is set, and
   remotes use bracketed IPv6 hosts and `user@host:path` forms. This can reach the 9 harness and 7
-  IPv6 branches listed above. The other 16 cannot run with any input.
+  IPv6 branches listed above. A Linux file-URI pair with distinct invalid UTF-8 path bytes covers
+  the remaining reachable comparison. The other 15 cannot run with any input.
 - [#692](https://github.com/martin-francois/symphony-trello/issues/692): give `WorkflowLoaderFuzzer`
   properties beyond its exception type, and measure whether parsing from memory instead of a
   temporary file raises its throughput.
