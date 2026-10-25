@@ -119,6 +119,8 @@ documentation checks enforce the changed artifacts.
 
 - Before adding an ADR, inspect `docs/adr/` and use the next unused numeric prefix for the target
   branch. Do not create duplicate ADR numbers.
+- An open pull request keeps the ADR number it reserved; pull-request review checks that no other
+  open pull request or accepted ADR uses that number.
 - Follow MADR status semantics. New decisions normally use `status: accepted`. When a later ADR
   supersedes an earlier accepted decision, update the earlier ADR status to
   `superseded by [ADR 0000](0000-short-name.md)` and add a short note near the top explaining what
