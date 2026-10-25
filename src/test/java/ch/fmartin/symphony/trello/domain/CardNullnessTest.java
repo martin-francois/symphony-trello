@@ -10,7 +10,6 @@ import java.lang.reflect.RecordComponent;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -68,11 +67,12 @@ final class CardNullnessTest {
             throws ReflectiveOperationException {
         // given
         RecordComponent[] components = record.getRecordComponents();
-        Class<?>[] componentTypes =
-                Arrays.stream(components).map(RecordComponent::getType).toArray(Class<?>[]::new);
-        Object[] defaultValues = Arrays.stream(componentTypes)
-                .map(CardNullnessTest::defaultValue)
-                .toArray();
+        Class<?>[] componentTypes = new Class<?>[components.length];
+        Object[] defaultValues = new Object[components.length];
+        for (int index = 0; index < components.length; index++) {
+            componentTypes[index] = components[index].getType();
+            defaultValues[index] = defaultValue(componentTypes[index]);
+        }
 
         // when
         Record created = record.getDeclaredConstructor(componentTypes).newInstance(defaultValues);
