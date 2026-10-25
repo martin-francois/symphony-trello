@@ -10,6 +10,8 @@ import static org.junit.jupiter.api.Named.named;
 
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.PseudoTerminalResult;
+import com.google.common.collect.ImmutableList;
+import com.google.errorprone.annotations.Immutable;
 import com.sun.net.httpserver.HttpServer;
 import java.io.File;
 import java.io.IOException;
@@ -9190,7 +9192,7 @@ final class InstallerScriptTest {
         return root == null ? "/" : root.toString();
     }
 
-    private enum ReleaseSignatureCheck {
+    enum ReleaseSignatureCheck {
         VERIFIED_WITH_GITHUB_CLI(
                 ReleaseArchiveScenario.signed(FakeGitHubCli.VERIFIES),
                 "OK  Release signature verified with GitHub CLI"),
@@ -9219,7 +9221,7 @@ final class InstallerScriptTest {
         }
     }
 
-    private enum RejectedReleaseSignature {
+    enum RejectedReleaseSignature {
         SIGNATURE_REJECTED_BY_GITHUB_CLI(
                 ReleaseArchiveScenario.signed(FakeGitHubCli.REJECTS),
                 "Release signature verification failed. Symphony for Trello was not installed or updated."
@@ -9235,11 +9237,11 @@ final class InstallerScriptTest {
                 "Symphony for Trello was not installed or updated. Check your network and rerun the installer.");
 
         private final ReleaseArchiveScenario release;
-        private final String[] expectedOutput;
+        private final ImmutableList<String> expectedOutput;
 
         RejectedReleaseSignature(ReleaseArchiveScenario release, String... expectedOutput) {
             this.release = release;
-            this.expectedOutput = expectedOutput;
+            this.expectedOutput = ImmutableList.copyOf(expectedOutput);
         }
     }
 
@@ -9258,6 +9260,7 @@ final class InstallerScriptTest {
         }
     }
 
+    @Immutable
     private record ReleaseArchiveScenario(String version, boolean withSignatureBundle, FakeGitHubCli gitHubCli) {
         static ReleaseArchiveScenario signed(FakeGitHubCli gitHubCli) {
             return new ReleaseArchiveScenario(SIGNED_RELEASE_VERSION, true, gitHubCli);
