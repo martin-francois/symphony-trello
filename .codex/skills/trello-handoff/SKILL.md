@@ -262,8 +262,10 @@ completion comment when useful, and move to `Done`.
 `Merging` is only for pull requests. When work that has nothing to merge goes to
 `Human Review`, say in the handoff comment that a human can move the card
 straight to `Done` after review. If such a card reaches `Merging` after that
-handoff, record in the workpad that no merge was needed and move it to `Done`
-instead of back to `Human Review`.
+handoff, use the latest handoff for the current work after any reopening.
+If a human comment is newer than the latest handoff, reply to it and return the
+card to `Human Review`. Otherwise, record that no merge was needed and move it
+to `Done`. A handoff from before a reopening does not approve the current work.
 
 ## Stop Conditions
 

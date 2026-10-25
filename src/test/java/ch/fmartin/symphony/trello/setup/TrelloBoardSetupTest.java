@@ -722,11 +722,12 @@ final class TrelloBoardSetupTest {
                 .content(StandardCharsets.UTF_8)
                 .containsIgnoringWhitespaces("For work with a PR, identify the PR before merging")
                 .containsIgnoringWhitespaces(
-                        "If the workpad or a handoff comment shows that the card's work was completed and handed off for review, no PR for that work is linked")
+                        "If a human comment is newer than the latest handoff, reply to it and return the card to \"Human Review\"")
                 .containsIgnoringWhitespaces(
-                        "no merge was needed, and move the card to \"Done\". Do not move it back to \"Human Review\"")
+                        "If the latest workpad entry or handoff comment for the current work, after any reopening, shows that the card's work was completed and handed off for review, no PR for that work is linked")
+                .containsIgnoringWhitespaces("no merge was needed, and move the card to \"Done\"")
                 .containsIgnoringWhitespaces(
-                        "neither the workpad nor a handoff comment shows completed work handed off for review, the card is not ready to close. Update the workpad and move the card to \"Blocked\"")
+                        "neither the workpad nor a handoff comment shows completed work handed off for review in the current work after any reopening, the card is not ready to close. Update the workpad and move the card to \"Blocked\"")
                 .containsIgnoringWhitespaces("If the work needs a PR and PR discovery, checks, auth")
                 .containsIgnoringWhitespaces("a human can move the card straight to \"Done\" after review");
     }
@@ -762,13 +763,15 @@ final class TrelloBoardSetupTest {
         assertThat(land)
                 .contains("there is nothing to merge")
                 .containsIgnoringWhitespaces("shows that the card's work was completed and handed off for review")
-                .containsIgnoringWhitespaces("Do not send it back to the configured review handoff list")
+                .containsIgnoringWhitespaces(
+                        "If a human comment is newer than the latest handoff, reply to it and return the card to the configured review handoff list")
                 .containsIgnoringWhitespaces("the card is not ready to close")
                 .contains("- The PR cannot be identified for work that needs one.");
         assertThat(handoff)
                 .containsIgnoringWhitespaces("a human can move the card straight to `Done` after review")
                 .containsIgnoringWhitespaces("reaches `Merging` after that handoff")
-                .containsIgnoringWhitespaces("move it to `Done` instead of back to `Human Review`");
+                .containsIgnoringWhitespaces(
+                        "If a human comment is newer than the latest handoff, reply to it and return the card to `Human Review`");
     }
 
     @Test

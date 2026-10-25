@@ -1880,6 +1880,9 @@ public final class TrelloBoardSetup {
         String blockedText = blank(blockedDestination)
                 ? "block with a visible Codex response because no blocked destination is configured"
                 : "move the card to " + quote(blockedDestination) + " with a concise blocker";
+        String noPrFeedback = blank(reviewState)
+                ? "reply to it, update the workpad, and " + blockedText
+                : "reply to it and return the card to " + quote(reviewState);
         String fixupDecision = blank(reviewState)
                 ? "If merging required material fixups, broad interpretation, or unverifiable changes, update the "
                         + "workpad and " + blockedText + "."
@@ -1899,14 +1902,15 @@ public final class TrelloBoardSetup {
                 requires it.
 
                 Deterministic merge decisions:
-                - If the workpad or a handoff comment shows that the card's work was completed and handed off for
-                  review, no PR for that work is linked from the card description, Trello comments, or workpad, no
-                  open PR exists for the card's branch, and the work did not need one, there is nothing to merge.
+                - If the latest workpad entry or handoff comment for the current work, after any reopening, shows
+                  that the card's work was completed and handed off for review, no PR for that work is linked from
+                  the card description, Trello comments, or workpad, no open PR exists for the card's branch, and the work did not need one, there is nothing to merge.
                   This covers question-only, repository-independent, and explicitly local-only or no-push work.
-                  Record in the workpad that no merge was needed, and move the card to %4$s. Do not move it back to
-                  %2$s and do not block it.
+                  If a human comment is newer than the latest handoff, %7$s. Otherwise, record in the workpad that
+                  no merge was needed, and move the card to %4$s. Do not block accepted work with no new feedback.
                 - If no PR exists for the card and neither the workpad nor a handoff comment shows completed work
-                  handed off for review, the card is not ready to close. Update the workpad and %6$s.
+                  handed off for review in the current work after any reopening, the card is not ready to close.
+                  Update the workpad and %6$s.
                 - If the card moved from %2$s to %1$s with no new feedback and the PR is clean, merge it.
                 - If exact, unambiguous feedback added before the card entered %1$s was addressed with current
                   validation and clean checks, merge it.
@@ -1926,7 +1930,8 @@ public final class TrelloBoardSetup {
                         skillPath("land"),
                         doneDestination,
                         fixupDecision,
-                        blockedText)
+                        blockedText,
+                        noPrFeedback)
                 .stripTrailing();
     }
 

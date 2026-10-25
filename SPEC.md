@@ -1248,14 +1248,15 @@ handoff comment for such work.
 When a human moves the Trello card to `Merging`, generated workflows use this deterministic merge
 policy:
 
-- a card has nothing to merge when the workpad or a handoff comment shows that its work was
-  completed and handed off for review, no PR for that work is linked from the card description,
+- a card has nothing to merge when the latest workpad entry or handoff comment for its current
+  work, after any reopening, shows completed work handed off for review, no PR for that work is linked from the card description,
   Trello comments, or workpad, no open PR exists for the card's branch, and the work did not need
   one, such as question-only, repository-independent, or explicitly local-only or no-push work; the
-  agent records in the workpad that no merge was needed and moves the card to `Done`, and MUST NOT
-  return it to `Human Review` or move it to `Blocked`
+  agent MUST reply to any human comment newer than that latest handoff and return the card to
+  `Human Review`; with no newer human feedback, it records that no merge was needed and moves the
+  card to `Done`, and MUST NOT move accepted work to `Blocked`
 - a card with no PR and no workpad or handoff comment showing completed work handed off for review
-  is not ready to close; the agent moves it to `Blocked` and MUST NOT move it to `Done`
+  in the current work after any reopening is not ready to close; the agent moves it to `Blocked` and MUST NOT move it to `Done`
 - for work that needs a PR, merge and move to `Done` only after the PR merged successfully
 - `Human Review` -> `Merging` with no new feedback and a clean PR is approval to merge
 - exact, unambiguous feedback added before the card entered `Merging` that Codex addressed with

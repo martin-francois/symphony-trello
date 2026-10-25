@@ -634,9 +634,11 @@ failing check, auth problem, or repository rule, Codex should move the card to `
 next human action.
 
 `Merging` is only for pull requests. If a reviewed card with nothing to merge lands in `Merging`
-anyway, Codex records that no merge was needed and moves it to `Done` instead of back to
-`Human Review`. A card that Codex never handed off for review and that has no PR goes to `Blocked`
-instead, so moving unstarted work to `Merging` does not close it.
+anyway, Codex checks the latest review handoff for the current work after any reopening. If a human
+comment is newer than that handoff, Codex replies and returns the card to `Human Review`. With no
+new feedback, it records that no merge was needed and moves the card to `Done`. A card with no PR
+and no review handoff for its current work goes to `Blocked`, so an old handoff cannot close a
+reopened card.
 Codex can tell which list a card is in because generated workflow prompts include the line
 `Current Trello list: {{ card.state }}`. A hand-written or older workflow file without that line
 makes Codex treat a `Merging` card like new work and return it to `Human Review`. Add the line under

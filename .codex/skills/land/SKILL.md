@@ -72,17 +72,18 @@ one, no completed work handed off for review, or unclear policy.
 
 ## Merge Decision Table
 
-- If the workpad or a handoff comment shows that the card's work was completed
-  and handed off for review, no PR for that work is linked from the card
+- If the latest workpad entry or handoff comment for the current work, after any
+  reopening, shows that the card's work was completed and handed off for review, no PR for that work is linked from the card
   description, Trello comments, or workpad, no open PR exists for the card's
   branch, and the work did not need one, there is nothing to merge. This covers
   question-only, repository-independent, and explicitly local-only or no-push
-  work. Record in the workpad that no merge was needed, and move the card to
-  the configured merge completion list. Do not send it back to the configured
-  review handoff list and do not block it. A human moving such a card to the
-  merge approval list means the work is accepted.
+  work. If a human comment is newer than the latest handoff, reply to it and
+  return the card to the configured review handoff list. Otherwise, record in
+  the workpad that no merge was needed and move the card to the configured
+  merge completion list. Do not block accepted work with no new feedback.
 - If no PR exists for the card and neither the workpad nor a handoff comment
-  shows completed work handed off for review, the card is not ready to close.
+  shows completed work handed off for review in the current work after any
+  reopening, the card is not ready to close.
   Move it to the configured blocked destination with that blocker.
 - For work with a PR, move to the configured merge completion list only after
   the PR merged successfully.

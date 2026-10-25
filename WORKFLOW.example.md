@@ -549,14 +549,16 @@ follow the repository's merge policy. Do not enable auto-merge unless the reposi
 requires it.
 
 Deterministic merge decisions:
-- If the workpad or a handoff comment shows that the card's work was completed and handed off for
-  review, no PR for that work is linked from the card description, Trello comments, or workpad, no
+- If the latest workpad entry or handoff comment for the current work, after any reopening, shows
+  that the card's work was completed and handed off for review, no PR for that work is linked from the card description, Trello comments, or workpad, no
   open PR exists for the card's branch, and the work did not need one, there is nothing to merge.
   This covers question-only, repository-independent, and explicitly local-only or no-push work.
-  Record in the workpad that no merge was needed, and move the card to `Done`. Do not move it back to
-  Human Review and do not block it.
+  If a human comment is newer than the latest handoff, reply to it and return the card to Human Review.
+  Otherwise, record in the workpad that no merge was needed, and move the card to `Done`.
+  Do not block accepted work with no new feedback.
 - If no PR exists for the card and neither the workpad nor a handoff comment shows completed work
-  handed off for review, the card is not ready to close. Update the workpad and move the card to
+  handed off for review in the current work after any reopening, the card is not ready to close.
+  Update the workpad and move the card to
   `Blocked` with a concise blocker.
 - If the card moved from Human Review to `Merging` with no new feedback and the PR is clean, merge it.
 - If exact, unambiguous feedback added before the card entered `Merging` was addressed with current

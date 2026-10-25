@@ -55,10 +55,12 @@ decisions in the generated workflow and the `land` skill.
 
 Generated prompts now show `Current Trello list: {{ card.state }}` under the card title, matching
 how upstream Symphony renders the issue state. The merge section and the `land` skill define
-"nothing to merge": the workpad or a handoff comment shows the work was completed and handed off for
-review, no PR for that work is linked from the card description, comments, or workpad, no open PR
-exists for the card's branch, and the work did not need one. Codex records that no merge was needed
-and moves the card to the configured done list. It does not return the card to review or block it.
+"nothing to merge": the latest workpad entry or handoff comment for the current work, after any
+reopening, shows completed work handed off for review, no PR for that work is linked from the card description, comments, or workpad, no open PR
+exists for the card's branch, and the work did not need one. If a human comment is newer than the
+latest handoff, Codex replies and returns the card to the configured review list. With no newer
+feedback, it records that no merge was needed and moves the card to the configured done list.
+An old handoff from before the current work or a reopening is not evidence that the work is ready.
 A card with no PR and no such handoff keeps the old rule and goes to the blocked destination, so a
 card moved to `Merging` before any work existed does not close. Work that needs a PR keeps the old
 rules. The review handoff tells the human that a card with nothing to merge can go straight to
@@ -84,7 +86,9 @@ checks the shipped `land` and `trello-handoff` skills. To confirm the behavior e
 Codex against a disposable board: hand a question-only card to `Human Review`, move it to
 `Merging`, and check that it ends in `Done` with a workpad note. A card moved from
 `Ready for Codex` straight to `Merging`, and a card whose PR link is broken, must both end in
-`Blocked`.
+`Blocked`. Add a human comment after the latest review handoff and check that Codex replies and
+returns the no-PR card to `Human Review`. Reopen a previously completed card without a new review
+handoff and check that its old handoff does not close it.
 
 ## Pros and Cons of the Options
 
