@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-10-04
-decision-makers: [François Martin, Claude]
+decision-makers: [François Martin]
 consulted:
   - "[GitHub issue #381](https://github.com/martin-francois/symphony-trello/issues/381)"
   - "[GitHub issue #565](https://github.com/martin-francois/symphony-trello/issues/565)"

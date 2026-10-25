@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-10-04
-decision-makers: [François Martin, Claude]
+decision-makers: [François Martin]
 consulted:
   - "[GitHub issue #381](https://github.com/martin-francois/symphony-trello/issues/381)"
   - "[GitHub PR #379](https://github.com/martin-francois/symphony-trello/pull/379)"
@@ -60,7 +60,7 @@ The design:
 * Writers keep the operation lock. Start, stop, ticks, retry timers, pause deadlines, worker exits
   and agent events run under it exactly as today.
 * Status readers (`snapshot()`, `cardDetails()`, `isStarted()`) read one `volatile` reference to an
-  immutable read view: running rows, retry rows, recent events, token totals, ended runtime,
+  immutable read view: `started`, running rows, retry rows, recent events, token totals, ended runtime,
   dispatch pause, rate limits and the effective config. They take no lock.
 * An operation publishes a new view at each point where a monitor section ends today with
   reader-visible state, and always when it releases the operation lock. Some intermediate points are
@@ -68,6 +68,8 @@ The design:
   requires the usage pause to be visible before the worker-exit Trello I/O.
 * `started`, `tickRunning`, the tick timer and the refresh flag move into one small object with its
   own monitor. `requestRefresh()` keeps using only that monitor, so it still never waits for a tick.
+  Every start and stop publishes each changed `started` value in the read view before returning.
+  Scheduling reads the monitor-owned value; `isStarted()` reads only the published value.
 * The 23 redundant sections from ADR 0102 are deleted without replacement.
 
 ### Consequences
@@ -94,7 +96,9 @@ The design:
 [GitHub issue #815](https://github.com/martin-francois/symphony-trello/issues/815) is done when the
 orchestrator tests pass unchanged, the ADR 0102 owning tests still fail against their mutants,
 `SymphonyOrchestrator` contains no `synchronized (this)` block or `synchronized` method outside the
-tick-schedule object, and a rerun of the ADR 0102 mutant list is recorded in this ADR.
+tick-schedule object, and a rerun of the ADR 0102 mutant list is recorded in this ADR. Lifecycle tests
+must show that `isStarted()` reads the updated view after each start and stop transition, including
+repeated calls and failed starts that leave the orchestrator stopped.
 
 ## Pros and Cons of the Options
 
