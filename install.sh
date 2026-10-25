@@ -310,6 +310,17 @@ print_installer_completion() {
   run "$BIN_DIR/symphony-trello" setup-local
 }
 
+offer_installer_tutorial() {
+  # Installation is complete; optional tutorial cancellation must not report a failed worker phase.
+  PHASE_TITLE=""
+  if [[ "$DRY_RUN" == true || ! -t 1 ]] || ! terminal_available; then
+    return 0
+  fi
+  if ! run_interactive "$BIN_DIR/symphony-trello" tutorial --offer; then
+    print_status NOTE "  Installation is complete. Start the tutorial again with: $INSTALLED_COMMAND tutorial"
+  fi
+}
+
 write_install_context() {
   if [[ "$DRY_RUN" == true ]]; then
     return
@@ -2987,6 +2998,7 @@ if [[ "$SETUP_PHASE_PLANNED" == true ]]; then
   begin_phase "$WORKER_PHASE_TITLE" "$WORKERS_RECOVERY"
   start_managed_workers_without_installer_completion
   print_installer_completion
+  offer_installer_tutorial
   exit 0
 fi
 if [[ "$WORKER_PHASE_PLANNED" == true ]]; then

@@ -489,8 +489,9 @@ temporary Trello board named `Symphony for Trello tutorial (temporary)` with the
 and one sample card. You move the card in Trello. The tutorial checks the board through the Trello
 API, and when the card is not where it should be, it prints the expected state and the board URL.
 
-Guided `setup-local` asks whether you want to try it right after setup. The installer and
-non-interactive setup print the command instead. You can run it any time:
+Guided `setup-local` asks whether you want to try it right after setup. An interactive installer
+asks after setup, worker startup and autostart are complete. No, Enter and EOF decline the offer.
+Non-interactive setup prints the command. You can run it any time:
 
 ```bash
 symphony-trello tutorial
@@ -519,6 +520,8 @@ Ctrl+C. It only archives the board it created in that run.
 
 Options:
 
+- `--offer` asks before starting and returns without prompting when no terminal is attached.
+  Declining does not read credentials or board configuration.
 - `--github` includes the GitHub pull request part and `--no-github` leaves it out. Without either
   option, the tutorial includes it when one of your connected boards uses GitHub integration.
 - `--no-cleanup` keeps the temporary board instead of asking whether to archive it.
@@ -815,6 +818,10 @@ connected Trello board with its normalized workflow path and ends with useful ch
 each connected workflow. Before those checks, it names `symphony-trello tutorial`, which starts the
 [guided tutorial](#guided-tutorial). If setup or managed worker startup fails, the installer exits
 without printing that completion block.
+
+After that handoff, an interactive installer asks whether you want to try the guided tutorial.
+The default is No. Tutorial failure or Ctrl+C leaves the completed installation and autostart
+configuration intact. Dry-run, `--no-onboard` and non-interactive runs do not ask.
 
 Setup saves Trello credentials that you type or pass directly. If credentials already come from real
 environment variables or an existing `.env` file, setup uses them without copying them into another

@@ -132,7 +132,8 @@ final class InstallerScriptSnapshotTest {
                             new TerminalAnswer("Can this machine open a browser for Codex login? [Y/n] ", "n"),
                             new TerminalAnswer(InstallerScriptFixture.TRELLO_KEY_PROMPT, TRELLO_API_KEY),
                             new TerminalAnswer(InstallerScriptFixture.TRELLO_TOKEN_PROMPT, TRELLO_API_TOKEN),
-                            new TerminalAnswer(InstallerScriptFixture.TRELLO_BOARD_PROMPT, SnapshotBoard.NAME)));
+                            new TerminalAnswer(InstallerScriptFixture.TRELLO_BOARD_PROMPT, SnapshotBoard.NAME),
+                            new TerminalAnswer(GuidedTutorial.OFFER_PROMPT, "n")));
         } finally {
             stopFakeWorkers(environment, binDirectory);
         }

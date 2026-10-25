@@ -259,6 +259,26 @@ final class ContainerRuntimeScriptTest {
         assertThat(invocationArguments).noneMatch(argument -> argument.contains(temporaryDirectory));
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"", " < /dev/null", " > /dev/null", " < /dev/null > /dev/null"})
+    void powershellWrapperAllocatesTerminalOnlyWhenBothStreamsAreTerminals(String redirection) throws Exception {
+        // given
+        Path invocation = installRecordingRuntime("podman");
+        String command = shellQuote(wrapper("pwsh-docker.sh").toString()) + " --version" + redirection;
+
+        // when
+        var result = InstallerScriptFixture.runWithPseudoTerminal(runtimeEnvironment("podman"), "", command);
+
+        // then
+        result.assertSuccess();
+        List<String> arguments = Files.readAllLines(invocation);
+        if (redirection.isEmpty()) {
+            assertThat(arguments).containsSubsequence("-i", "-t");
+        } else {
+            assertThat(arguments).doesNotContain("-i", "-t");
+        }
+    }
+
     @MethodSource("containerRuntimeRequirements")
     @ParameterizedTest
     void rejectsMissingSelectedContainerRuntime(String script, String requiredMessage) throws Exception {

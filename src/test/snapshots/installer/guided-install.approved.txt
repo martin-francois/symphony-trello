@@ -51,3 +51,8 @@ Create a Trello card with a clear task and move it to this workflow's configured
 Useful commands:<CR>
   symphony-trello status<CR>
   symphony-trello logs --workflow '<TEMP>/home/config/WORKFLOW.snapshot-queue.md'<CR>
+  <ESC>[1;38;5;32mRUN<ESC>[0m  <TEMP>/bin/symphony-trello tutorial --offer<CR>
+<CR>
+Want to try a guided walkthrough on a temporary Trello board? [y/N] n<CR>
+You can start it later with:<CR>
+  symphony-trello tutorial<CR>

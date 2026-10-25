@@ -59,6 +59,68 @@ final class InstallerScriptTest {
     @TempDir
     Path temporaryDirectory;
 
+    @Tag(NATIVE_WINDOWS)
+    @Test
+    void powershellInstallerCtrlCAfterCompletedHandoffPreservesInstallation() throws Exception {
+        // given
+        assumeTrue(isWindows());
+        assertThat(commandExists("pwsh"))
+                .as("the native Windows lane supplies PowerShell")
+                .isTrue();
+        assertThat(commandExists("git"))
+                .as("the native Windows lane supplies Git")
+                .isTrue();
+
+        // when
+        var result = WindowsConsoleProofFixture.runInstaller(temporaryDirectory);
+
+        // then
+        assertThat(result.process().exitCode())
+                .as(
+                        "native console proof: %s%n%s",
+                        result.evidence().toPrettyString(), result.process().output())
+                .isZero();
+        assertThat(result.evidence().path("status").asText())
+                .as(result.evidence().toPrettyString())
+                .isEqualTo("complete");
+        assertThat(result.evidence().path("cleanupConfirmed").asBoolean())
+                .as("all processes owned by the console proof are gone")
+                .isTrue();
+        var proof = result.evidence().path("proof");
+        assertThat(proof.path("signalSent").asBoolean())
+                .as("the helper sent a native Ctrl+C event to its verified private console")
+                .isTrue();
+        assertThat(proof.path("readyProcessId").asLong())
+                .isPositive()
+                .isNotEqualTo(proof.path("targetPid").asLong());
+        assertThat(result.shutdown())
+                .as("the ready JVM completed its shutdown hook before owned cleanup")
+                .content(StandardCharsets.UTF_8)
+                .isEqualTo(Files.readString(result.ready()));
+        assertThat(result.boundaries())
+                .content(StandardCharsets.UTF_8)
+                .containsSubsequence(
+                        "setup-deferred",
+                        "autostart-registered",
+                        "autostart-started",
+                        "handoff-complete",
+                        "tutorial-waiting");
+        assertThat(result.transcript())
+                .content(StandardCharsets.UTF_8)
+                .contains("Windows Scheduled Task started managed workers.", "tutorial --offer")
+                .doesNotContain("Installer stopped during");
+        assertThat(result.bin().resolve("symphony-trello.ps1")).isRegularFile();
+        assertThat(result.bin().resolve("symphony-trello-autostart.ps1")).isRegularFile();
+        assertThat(result.config().resolve("connected-boards.json"))
+                .content(StandardCharsets.UTF_8)
+                .contains("synthetic-board", "Native console queue", "WORKFLOW.native-console.md");
+        assertThat(result.config().resolve("WORKFLOW.native-console.md")).isRegularFile();
+        assertThat(result.config().resolve("autostart-env.ps1")).isRegularFile();
+        assertThat(result.task())
+                .content(StandardCharsets.UTF_8)
+                .contains("Symphony for Trello", "symphony-trello-autostart.ps1");
+    }
+
     @Test
     void fixtureCapturesOutputLargerThanProcessPipesWithoutDeadlocking() throws Exception {
         // given
@@ -7936,9 +7998,16 @@ final class InstallerScriptTest {
                 result.assertSuccess();
                 assertThat(result.transcript())
                         .containsOnlyOnce("You're good to go - your Trello board is now a queue for Codex work.");
-                assertThat(result.transcript().stripTrailing())
-                        .endsWith("symphony-trello logs --workflow '"
-                                + symphonyHome.resolve("config/WORKFLOW.handoff-queue.md") + "'");
+                assertThat(result.transcript())
+                        .containsSubsequence(
+                                "You're good to go - your Trello board is now a queue for Codex work.",
+                                "Connected board: Handoff Queue",
+                                "Workflow: " + symphonyHome.resolve("config/WORKFLOW.handoff-queue.md"),
+                                "symphony-trello logs --workflow '"
+                                        + symphonyHome.resolve("config/WORKFLOW.handoff-queue.md") + "'",
+                                GuidedTutorial.OFFER_PROMPT,
+                                "You can start it later with:",
+                                "  symphony-trello tutorial");
             } else {
                 assertThat(result.exitCode()).as(result.transcript()).isNotZero();
                 assertThat(result.transcript()).doesNotContain("You're good to go", "Useful commands:");

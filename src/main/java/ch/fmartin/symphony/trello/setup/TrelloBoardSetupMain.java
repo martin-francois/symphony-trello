@@ -754,11 +754,31 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 description = "Keep the temporary tutorial board at the end instead of offering to archive it.")
         boolean noCleanup;
 
+        @Option(names = "--offer", description = "Ask before starting; skip when no terminal is attached.")
+        boolean offer;
+
         @Spec
         CommandSpec spec;
 
         @Override
         public Integer call() throws IOException {
+            if (offer && SystemConsole.current() == null) {
+                return 0;
+            }
+            Terminal terminal = new StreamTerminal(parent.input, parent.out, parent.err);
+            if (offer) {
+                TutorialOffer.run(
+                        terminal,
+                        shellCommand(installedCliCommand()),
+                        "Start the tutorial again with:",
+                        () -> runTutorial(terminal));
+            } else {
+                runTutorial(terminal);
+            }
+            return 0;
+        }
+
+        private void runTutorial(Terminal terminal) throws IOException {
             if (github && noGithub) {
                 throw new ParameterException(spec.commandLine(), "--github and --no-github cannot be used together.");
             }
@@ -772,12 +792,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                     noCleanup ? GuidedTutorial.BoardCleanup.KEEP : GuidedTutorial.BoardCleanup.ARCHIVE_BY_DEFAULT,
                     workspaceId.map(String::strip),
                     shellCommand(installedCliCommand()));
-            GuidedTutorial.forCli(
-                            TrelloApiEndpoint.normalize(endpoint),
-                            credentials,
-                            new StreamTerminal(parent.input, parent.out, parent.err))
+            GuidedTutorial.forCli(TrelloApiEndpoint.normalize(endpoint), credentials, terminal)
                     .run(options);
-            return 0;
         }
 
         private boolean connectedBoardUsesGithub() throws IOException {

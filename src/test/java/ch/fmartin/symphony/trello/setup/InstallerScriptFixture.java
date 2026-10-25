@@ -49,6 +49,8 @@ final class InstallerScriptFixture {
     private static final Splitter PS_LINES =
             Splitter.onPattern("\\R").trimResults().omitEmptyStrings();
     private static final int PROCESS_TIMEOUT_SECONDS = 60;
+    private static final int DIALOG_COLUMNS = 120;
+    private static final int DIALOG_ROWS = 24;
     private static final int TEMP_FILE_DELETION_SECONDS = 5;
     static final String FAKE_SLOW_TERM_DELAYED = "true";
     static final String FAKE_SLOW_TERM_UNTIL_KILLED = "until-killed";
@@ -94,6 +96,11 @@ final class InstallerScriptFixture {
                 #!/bin/sh
                 exec %s "$@"
                 """.formatted(target));
+    }
+
+    /// Gives a pipe-backed script session dimensions before JLine reads its first prompt.
+    static String withTerminalSize(String command) {
+        return "stty cols " + DIALOG_COLUMNS + " rows " + DIALOG_ROWS + " && " + command;
     }
 
     static PseudoTerminalResult runWithPseudoTerminal(Map<String, String> environment, String input, String command)
@@ -294,8 +301,16 @@ final class InstallerScriptFixture {
             try (var terminalInput = process.getOutputStream()) {
                 for (TerminalAnswer answer : answers) {
                     answeredUpTo = awaitPrompt(process, stdout, answer.prompt(), answeredUpTo, deadline);
-                    terminalInput.write((answer.response() + "\n").getBytes(StandardCharsets.UTF_8));
+                    terminalInput.write(
+                            (answer.response() + (answer.pressEnter() ? "\n" : "")).getBytes(StandardCharsets.UTF_8));
                     terminalInput.flush();
+                }
+                // Keep the terminal attached while a raw control key is handled. Closing script's
+                // input here would inject EOF immediately after Ctrl+C or Ctrl+D.
+                if (!answers.isEmpty() && !answers.getLast().pressEnter()) {
+                    assertThat(process.waitFor(Duration.ofNanos(Math.max(0, deadline - System.nanoTime()))))
+                            .as("the child exits after the raw control key while terminal input remains attached")
+                            .isTrue();
                 }
             }
         });
@@ -1169,6 +1184,15 @@ final class InstallerScriptFixture {
 	                      ;;
 	                  esac
 	                fi
+                if [[ "${effective_cli_args[0]:-}" == "tutorial" && " ${effective_cli_args[*]} " == *" --offer "* ]]; then
+                  if [[ -t 0 && -t 1 ]]; then
+                    printf '\\n@TUTORIAL_OFFER_PROMPT@'
+                    IFS= read -r answer || true
+                    echo "You can start it later with:"
+                    echo "  symphony-trello tutorial"
+                  fi
+                  exit 0
+                fi
 	                if [[ "${effective_cli_args[0]:-}" == "setup-local" ]]; then
                   config_dir="."
                   cli_args=("${effective_cli_args[@]}")
@@ -1247,6 +1271,8 @@ final class InstallerScriptFixture {
                                         TRELLO_TOKEN_PROMPT,
                                         "@TRELLO_BOARD_PROMPT@",
                                         TRELLO_BOARD_PROMPT,
+                                        "@TUTORIAL_OFFER_PROMPT@",
+                                        GuidedTutorial.OFFER_PROMPT,
                                         "@FAKE_WORKER_TERM_HANDLER@",
                                         FAKE_WORKER_TERM_HANDLER,
                                         "@FAKE_WORKER_READY_SECONDS@",
@@ -1614,7 +1640,11 @@ final class InstallerScriptFixture {
     }
 
     /// One answer typed into a pseudo-terminal after `prompt` appeared.
-    record TerminalAnswer(String prompt, String response) {}
+    record TerminalAnswer(String prompt, String response, boolean pressEnter) {
+        TerminalAnswer(String prompt, String response) {
+            this(prompt, response, true);
+        }
+    }
 
     /// Whether a child process starts from the test JVM's environment or from an empty one. Use
     /// [#CLEARED] when output must not depend on the developer's or runner's variables, such as

@@ -1014,6 +1014,21 @@ function Test-InteractiveInput {
   }
 }
 
+function Offer-InstallerTutorial {
+  # Installation is complete; optional tutorial cancellation must not report a failed worker phase.
+  $script:InstallerPhaseTitle = ""
+  if ($DryRun -or -not (Test-InteractiveInput) -or [Console]::IsOutputRedirected) {
+    return
+  }
+  try {
+    Invoke-VisibleStep "$BinDir\symphony-trello.ps1 tutorial --offer" {
+      & "$BinDir\symphony-trello.ps1" tutorial --offer
+    }
+  } catch {
+    Write-Status "NOTE" "  Installation is complete. Start the tutorial again with: $InstalledCommand tutorial"
+  }
+}
+
 function Get-UserPathValue {
   $value = [Environment]::GetEnvironmentVariable("Path", "User")
   if ($null -eq $value) {
@@ -1760,6 +1775,7 @@ if ($SetupPhasePlanned) {
   } finally {
     Restore-InstallerCompletionEnvironment
   }
+  Offer-InstallerTutorial
   exit 0
 } elseif ($WorkerPhasePlanned) {
   Start-InstallerPhase $WorkerPhaseTitle $WorkersRecovery

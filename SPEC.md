@@ -991,7 +991,7 @@ This Java implementation provides:
   shown in a `board_hash` or `key_hash` row, or a `<path:...>` token. It is valid only with
   `--show-private-context`. That output is for local troubleshooting only and MUST NOT be pasted into
   public issue reports.
-- `tutorial [--github | --no-github] [--no-cleanup] [--workspace-id ID]`: optional guided tutorial on
+- `tutorial [--offer] [--github | --no-github] [--no-cleanup] [--workspace-id ID]`: optional guided tutorial on
   a temporary Trello board, as defined in Section 19.4
 
 During guided `setup-local` board creation or import, when `--max-agents` is omitted, the Java
@@ -4072,6 +4072,16 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
   corrections, the bounded polling window with a later manual check, skip, stop, keep and archive
   answers, archive after a failure, and a process-level interrupt that archives only the tutorial
   board
+- Installer tutorial-offer tests cover the completed setup/autostart/handoff order, Yes, No,
+  Enter and EOF, and redirected execution that performs no prompt, credential/configuration read
+  or Trello request. Failure and cancellation preserve installed files, configuration and autostart
+  artifacts. A real POSIX terminal interrupt verifies tutorial-board archival and detached worker
+  survival. Native Windows cancellation uses an owned private console and process job to verify
+  a live JVM tutorial stand-in before Ctrl+C, its shutdown-hook record, bounded child/installer
+  exit, and retained installation artifacts. The hook is installed before atomic readiness
+  publication, and the child has no timed or normal exit path. Setup and scheduled tasks remain
+  synthetic; this check does not exercise native JLine interaction, real Trello archival or a
+  persistent worker. Linux PowerShell parity tests do not replace this native cancellation check.
 - If Java setup and lifecycle commands are implemented, a failure that wraps an I/O or transport
   failure names its cause type and detail without file-system exception paths or parser content, and
   the setup failure troubleshooting report redacts that message under the public-safe diagnostics
@@ -4644,6 +4654,17 @@ When this profile is used:
   `Want to try a guided walkthrough on a temporary Trello board? [y/N]`. A blank answer or end of
   input declines it. Non-interactive setup and installer-deferred setup MUST NOT ask. A tutorial
   failure MUST NOT turn a completed setup into a failed one
+- after successful interactive onboarding, both installers MUST offer the tutorial through the
+  installed `tutorial --offer` command after managed-worker handling, autostart configuration and
+  the completed handoff. This optional question follows the final completion block. Dry-run,
+  `--no-onboard` and execution without an interactive terminal MUST NOT offer it
+- `tutorial --offer` MUST check for an attached input/output terminal before reading credentials or
+  configuration. No, blank input and EOF MUST decline without Trello requests or configuration
+  writes. Yes MUST run the existing tutorial and its temporary-board cleanup
+- optional tutorial failure MUST preserve a successful install result. Cancellation MUST preserve
+  installed files, connected-board configuration and autostart registration; it
+  MAY retain the platform's interrupt exit status. Both outcomes MUST NOT report the completed
+  worker-start phase as failed. Direct `tutorial` without `--offer` retains its existing behavior
 - installer-to-Java completion coordination MUST remain process-local and MUST NOT be written to an
   autostart environment snapshot or inherited by a managed worker. A completion-only Java invocation
   MUST load only the connected board manifest and MUST NOT run prerequisites, prompts, Trello or

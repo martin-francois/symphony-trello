@@ -98,12 +98,17 @@ final class InstallerProgressOutputTest {
                             "OK  Setup complete",
                             "[4/4] Starting managed workers",
                             "OK  User systemd service enabled: symphony-trello.service",
-                            HANDOFF)
+                            HANDOFF,
+                            RUN_LINE + installedCommand + " tutorial --offer",
+                            GuidedTutorial.OFFER_PROMPT,
+                            "You can start it later with:",
+                            "symphony-trello tutorial")
                     .containsOnlyOnce("Detected ")
                     .containsOnlyOnce("Install plan")
                     .containsOnlyOnce(symphonyHome.resolve("app").toString())
                     .containsOnlyOnce("Command: ")
-                    .containsOnlyOnce(RUN_LINE)
+                    .containsOnlyOnce(RUN_LINE + installedCommand + " setup-local")
+                    .containsOnlyOnce(RUN_LINE + installedCommand + " tutorial --offer")
                     .containsOnlyOnce(HANDOFF)
                     .doesNotContain("Update plan", "Installer stopped during");
             assertThat(update.transcript())
@@ -117,13 +122,17 @@ final class InstallerProgressOutputTest {
                             "[3/4] Running setup",
                             "OK  Setup complete",
                             "[4/4] Restarting managed workers",
-                            HANDOFF)
+                            HANDOFF,
+                            "symphony-trello logs --workflow '" + workflow + "'",
+                            RUN_LINE + installedCommand + " tutorial --offer",
+                            GuidedTutorial.OFFER_PROMPT,
+                            "You can start it later with:")
                     .containsOnlyOnce("Update plan")
-                    .containsOnlyOnce(RUN_LINE)
+                    .containsOnlyOnce(RUN_LINE + installedCommand + " setup-local")
+                    .containsOnlyOnce(RUN_LINE + installedCommand + " tutorial --offer")
                     .containsOnlyOnce(HANDOFF)
                     .doesNotContain("Install plan");
-            assertThat(update.transcript().stripTrailing())
-                    .endsWith("symphony-trello logs --workflow '" + workflow + "'");
+            assertThat(update.transcript().stripTrailing()).endsWith("symphony-trello tutorial");
         } finally {
             if (Files.isExecutable(installedCommand)) {
                 run(environment, installedCommand.toString(), "stop").assertSuccess();

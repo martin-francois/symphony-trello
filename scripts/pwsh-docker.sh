@@ -71,6 +71,12 @@ runtime_is_podman() {
   [[ "$version" == "podman version "* ]]
 }
 
+# Preserve redirected callers; a container terminal requires both terminal streams.
+container_terminal=()
+if [[ -t 0 && -t 1 ]]; then
+  container_terminal=(-i -t)
+fi
+
 container_user_namespace=()
 if runtime_is_podman; then
   container_user_namespace+=(--userns=keep-id)
@@ -83,6 +89,7 @@ fi
 
 exec "$container_runtime" run --rm --security-opt label=disable \
   "${container_user_namespace[@]}" \
+  "${container_terminal[@]}" \
   --user "$(id -u):$(id -g)" \
   "${docker_environment[@]}" \
   "${docker_mounts[@]}" \

@@ -28,6 +28,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 /// Ctrl+C shutdown hook behave like they do for a user.
 final class TutorialCommandProcessTest {
     private static final Duration PROCESS_TIMEOUT = Duration.ofMinutes(1);
+    private static final Duration CLEANUP_TIMEOUT = Duration.ofSeconds(10);
     private static final Duration CONDITION_POLL = Duration.ofMillis(50);
     /// The JVM exits with 128 plus the signal number when SIGINT (2) ends it.
     private static final int EXIT_AFTER_SIGINT = 130;
@@ -41,16 +42,52 @@ final class TutorialCommandProcessTest {
     @TempDir
     Path tempDir;
 
-    private StatefulFakeTrello trello;
+    private final List<Process> tutorialProcesses = new ArrayList<>();
+    private final StatefulFakeTrello trello = new StatefulFakeTrello();
 
     @BeforeEach
     void startTrello() throws IOException {
-        trello = new StatefulFakeTrello().start();
+        trello.start();
     }
 
     @AfterEach
-    void stopTrello() {
-        trello.close();
+    void stopTutorialsAndTrello() throws InterruptedException {
+        try (trello) {
+            for (Process process : tutorialProcesses) {
+                process.destroyForcibly();
+            }
+            boolean allExited = true;
+            for (Process process : tutorialProcesses) {
+                allExited &= process.waitFor(CLEANUP_TIMEOUT);
+            }
+            assertThat(allExited)
+                    .as("every owned tutorial process exits during cleanup")
+                    .isTrue();
+        }
+    }
+
+    @Test
+    void redirectedOfferSkipsInputAndTrelloAccess() throws Exception {
+        // given
+        Process process = startTutorial(
+                "--offer", "--config-dir", tempDir.resolve("missing-config").toString());
+        CompletableFuture<String> stdout = readAll(process.getInputStream());
+        CompletableFuture<String> stderr = readAll(process.getErrorStream());
+
+        // when
+        try (OutputStream stdin = process.getOutputStream()) {
+            stdin.write("y\n".getBytes(StandardCharsets.UTF_8));
+        }
+        boolean exited = process.waitFor(PROCESS_TIMEOUT);
+
+        // then
+        assertThat(exited)
+                .as("a redirected optional tutorial returns without asking")
+                .isTrue();
+        assertThat(process.exitValue()).as("stderr:%n%s", stderr.get()).isZero();
+        assertThat(stdout.get()).doesNotContain(GuidedTutorial.OFFER_PROMPT, "Guided tutorial");
+        assertThat(trello.boardNames()).isEmpty();
+        assertThat(tempDir.resolve("missing-config")).doesNotExist();
     }
 
     @Test
@@ -192,7 +229,9 @@ final class TutorialCommandProcessTest {
         command.addAll(List.of(options));
         ProcessBuilder builder = new ProcessBuilder(command).directory(tempDir.toFile());
         INHERITED_SETUP_ENVIRONMENT.forEach(builder.environment()::remove);
-        return builder.start();
+        Process process = builder.start();
+        tutorialProcesses.add(process);
+        return process;
     }
 
     private static CompletableFuture<String> readAll(InputStream stream) {

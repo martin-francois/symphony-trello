@@ -83,6 +83,10 @@ installer runs setup in deferred-completion mode, so setup does not ask there. I
 handoff names the `tutorial` command before the lifecycle commands, and non-interactive setup does
 the same.
 
+[ADR 0130](0130-offer-the-tutorial-after-installer-completion.md) later adds a separate installer
+offer after completed setup and autostart. It supersedes only this installer's command-only choice;
+Java still owns the tutorial prompt and cleanup, and deferred setup itself still does not ask.
+
 ### Consequences
 
 * Good, because the tutorial is safe: it writes only to its own board and card, and it costs no
@@ -146,6 +150,10 @@ Each step would block on `Terminal.readLine` and read Trello only after the answ
 * Bad, because the issue asks for gentle polling in addition to an explicit check.
 
 ### Offer The Tutorial Prompt From The Installer After Its Final Handoff
+
+This option was deferred here and later accepted in
+[ADR 0130](0130-offer-the-tutorial-after-installer-completion.md). The reasons below record the
+original decision; the later ADR permits an optional question after the final completion block.
 
 `install.sh` and `install.ps1` would call the tutorial offer after printing the handoff. Asking
 inside the installer's deferred setup run instead was also rejected, because Ctrl+C in the tutorial

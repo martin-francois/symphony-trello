@@ -203,8 +203,13 @@ final class InstallerScriptLifecycleTest {
         assertThat(install.transcript())
                 .containsOnlyOnce("You're good to go - your Trello board is now a queue for Codex work.");
         assertThat(install.transcript().stripTrailing())
-                .endsWith("symphony-trello logs --workflow '" + configDirectory.resolve("WORKFLOW.lifecycle-board.md")
-                        + "'");
+                .containsSubsequence(
+                        "symphony-trello logs --workflow '" + configDirectory.resolve("WORKFLOW.lifecycle-board.md")
+                                + "'",
+                        " tutorial --offer",
+                        GuidedTutorial.OFFER_PROMPT,
+                        "You can start it later with:")
+                .endsWith("symphony-trello tutorial");
         assertThat(userServiceContentAfterInstall)
                 .contains(
                         "Description=Symphony for Trello managed local workers",
