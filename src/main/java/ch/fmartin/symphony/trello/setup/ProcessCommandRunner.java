@@ -75,14 +75,16 @@ final class ProcessCommandRunner implements CommandRunner {
 
     @Override
     public CommandResult runInteractive(String... command) {
+        Process process = null;
         try {
-            Process process = new ProcessBuilder(executables.launchCommand(List.of(command)))
+            process = new ProcessBuilder(executables.launchCommand(List.of(command)))
                     .inheritIO()
                     .start();
             return new CommandResult(process.waitFor(), "");
         } catch (IOException e) {
             return CommandResult.launchFailed(e.getMessage());
         } catch (InterruptedException e) {
+            destroy(process);
             Thread.currentThread().interrupt();
             return new CommandResult(CommandResult.INTERRUPTED_EXIT_CODE, e.getMessage());
         }

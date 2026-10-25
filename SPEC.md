@@ -4346,6 +4346,8 @@ When this profile is used:
   `PATH` and `PATHEXT` like the Windows shell. It MUST start a `.cmd` or `.bat` match, such as the
   npm `codex.cmd` shim, through `cmd.exe` with each argument unchanged, and MUST fail the launch
   instead of passing an argument that `cmd.exe` would change
+- when an interactive setup command's waiting thread is interrupted, it MUST terminate the launched
+  process and its descendants and preserve the caller's interrupted status
 - `setup-local` is the Java-owned setup/check command for local onboarding
 - `setup-local check` MUST validate core prerequisites, Codex auth, Trello credentials and member
   identity when credentials are available, GitHub auth for GitHub-enabled boards, workflow existence

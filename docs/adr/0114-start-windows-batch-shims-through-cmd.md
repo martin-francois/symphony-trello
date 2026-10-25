@@ -78,6 +78,14 @@ The same CI run showed that spaces, `(`, `)`, `~`, `;`, `,`, `=`, `:`, `[`, `]`,
 resolver. The worker's Codex launch runs `bash -lc` with the configured `codex.command`, so bash
 resolves the command there and the worker does not use the resolver.
 
+The command runner owns the wrapper and the tool it starts. Interruption of an interactive wait
+terminates that process tree and preserves the caller's interrupt status, just as cancellation of
+a captured-output command does. Killing only `cmd.exe` leaves its tool running; returning without
+cleanup leaves both processes running. The default-branch reproduction is recorded in
+[GitHub issue #1045](https://github.com/martin-francois/symphony-trello/issues/1045).
+`InteractiveCommandCancellationTest` waits for both fixture PIDs before interrupting the caller and
+checks bounded termination. It uses a real batch shim in Windows CI and a Bash wrapper on Linux.
+
 ### Consequences
 
 * Good, because `setup-local` finds and starts an npm-installed `codex.cmd` on native Windows.
