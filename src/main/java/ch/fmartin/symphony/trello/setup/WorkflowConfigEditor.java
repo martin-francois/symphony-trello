@@ -654,7 +654,12 @@ final class WorkflowConfigEditor {
         write(workflowPath, original.content(), yaml, original.frontMatter().body());
     }
 
-    static String preserveTrelloTools(Path workflowPath, String generated) throws IOException {
+    static String preserveTrelloTools(
+            Path workflowPath,
+            String generated,
+            Set<String> boardIdentifiers,
+            Function<String, Optional<String>> environmentResolver)
+            throws IOException {
         String content = Files.readString(workflowPath);
         SequencedMap<String, Object> previous;
         try {
@@ -669,6 +674,15 @@ final class WorkflowConfigEditor {
         FrontMatter replacement = FrontMatter.parse(generated);
         SequencedMap<String, Object> yaml = parseYaml(replacement);
         Map<String, Object> tools = section(previous.get("trello_tools"));
+        if (boardId(previous, environmentResolver)
+                        .filter(boardIdentifiers::contains)
+                        .isEmpty()
+                && tools.containsKey("follow_up_cards")) {
+            // A different or unknown board has no saved opt-in. Other settings remain user-owned.
+            Map<String, Object> followUps = section(tools.get("follow_up_cards"));
+            followUps.put("enabled", false);
+            tools.put("follow_up_cards", followUps);
+        }
         yaml.put("trello_tools", tools);
         return "---\n" + YAML.writeValueAsString(yaml) + "---\n" + replacement.body();
     }

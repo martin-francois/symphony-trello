@@ -245,6 +245,8 @@ public final class TrelloBoardSetup {
         writeWorkflow(
                 workflowPath,
                 request.force(),
+                Set.copyOf(List.of(boardId, boardKey)),
+                request.envPath(),
                 workflowTemplate(
                         boardKey,
                         bodyInputs,
@@ -508,6 +510,8 @@ public final class TrelloBoardSetup {
         writeWorkflow(
                 request.workflowPath(),
                 request.force(),
+                Set.copyOf(List.of(resolvedBoardId, boardKey)),
+                request.envPath(),
                 workflowTemplate(
                         boardKey,
                         bodyInputs,
@@ -745,7 +749,8 @@ public final class TrelloBoardSetup {
         WRITE
     }
 
-    private static void writeWorkflow(Path workflowPath, boolean force, String workflow) {
+    private static void writeWorkflow(
+            Path workflowPath, boolean force, Set<String> boardIdentifiers, Path envPath, String workflow) {
         Path absolute = ensureWorkflowWritable(workflowPath, force);
         try {
             Path parent = absolute.getParent();
@@ -754,7 +759,13 @@ public final class TrelloBoardSetup {
             }
             if (force) {
                 String replacement = Files.isRegularFile(absolute)
-                        ? WorkflowConfigEditor.preserveTrelloTools(absolute, workflow)
+                        ? WorkflowConfigEditor.preserveTrelloTools(
+                                absolute,
+                                workflow,
+                                boardIdentifiers,
+                                name -> envPath == null
+                                        ? LocalEnvironment.get(name)
+                                        : LocalEnvironment.get(name, envPath))
                         : workflow;
                 Files.writeString(
                         absolute, replacement, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);

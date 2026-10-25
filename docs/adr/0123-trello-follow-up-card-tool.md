@@ -70,13 +70,19 @@ blocked comment needs `allow_comments`. The tool never deletes anything, so
 `allow_destructive_operations` does not apply.
 
 Guided setup asks for an explicit choice during board creation, import, and reconfiguration. A new
-workflow defaults to No; an existing workflow keeps its choice on Enter. Yes enables the feature
+workflow defaults to No; reconfiguration of the same board keeps its choice on Enter. Yes enables the feature
 and all permissions needed for every relationship. No disables only follow-up creation. This avoids
-silently revoking permissions used by another feature. Non-interactive setup preserves existing
-settings and never opts a new workflow in. GitHub upgrades preserve custom move allowlists too;
+silently revoking permissions used by another feature. Non-interactive setup keeps the same board's choice and never opts a new board in. GitHub upgrades preserve custom move allowlists too;
 creating the human approval list does not grant an agent permission to move cards there.
-Destination, limits, and move lists remain separate
-configuration choices.
+Destination, limits, and move lists remain separate configuration choices.
+
+The opt-in belongs to the selected board. Forced regeneration for another board, or when the
+previous board identity cannot be resolved, starts disabled. Full IDs and short links are aliases
+for the same board, including values resolved through the existing environment lookup. Setup
+changes only the enabled choice and preserves the remaining tool settings. It does not discard a
+custom destination or broaden a move allowlist. Operators review retained list IDs when switching
+boards; the tool checks destination membership before any write. This preserves user configuration
+without carrying permission to create cards onto another board.
 
 The agent classifies findings against the actual target branch before filing them. Regressions
 remain part of the current card, including the additional damage from worsening an existing

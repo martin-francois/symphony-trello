@@ -913,6 +913,7 @@ final class TrelloFollowUpCardToolTest {
                         "active list", Map.of("list_name", "Ready for Codex"), "trello_follow_up_list_not_allowed"),
                 Arguments.of("terminal list", Map.of("list_name", "Done"), "trello_follow_up_list_not_allowed"),
                 Arguments.of("missing list", Map.of("list_name", "Icebox"), "trello_follow_up_list_missing"),
+                Arguments.of("foreign list ID", Map.of("list_id", "foreign-inbox"), "trello_follow_up_list_missing"),
                 Arguments.of("duplicate list name", Map.of(), "trello_follow_up_list_ambiguous"));
     }
 

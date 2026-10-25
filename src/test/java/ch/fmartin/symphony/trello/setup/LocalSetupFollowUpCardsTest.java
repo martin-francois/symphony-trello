@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -121,14 +122,18 @@ final class LocalSetupFollowUpCardsTest extends LocalSetupFixtureSupport {
         assertThat(workflow()).content().isEqualTo(previous);
     }
 
-    @Test
-    void forcedNonInteractiveImportPreservesExistingToolsAndFollowUpSettings() throws IOException {
+    @ParameterizedTest
+    @ValueSource(strings = {"abc123", "board-1", "$SAVED_FOLLOW_UP_BOARD"})
+    void forcedNonInteractiveImportPreservesExistingToolsAndFollowUpSettings(String previousBoard) throws IOException {
         // given
         runSetup(arguments(true, true)).assertSuccess();
         configureExistingFollowUps(true);
+        Files.writeString(tempDir.resolve(".env.follow-ups"), "SAVED_FOLLOW_UP_BOARD=board-1\n");
         Files.writeString(
                 workflow(),
-                Files.readString(workflow()).replace("trello_tools:", "trello_tools:\n  custom_tool_setting: keep-me"));
+                Files.readString(workflow())
+                        .replace("  board_id: \"abc123\"", "  board_id: \"" + previousBoard + "\"")
+                        .replace("trello_tools:", "trello_tools:\n  custom_tool_setting: keep-me"));
         Object previousTools = new WorkflowLoader().load(workflow()).config().get("trello_tools");
         List<String> forced = new ArrayList<>(List.of(arguments(true, true)));
         forced.add("--force");
@@ -141,6 +146,54 @@ final class LocalSetupFollowUpCardsTest extends LocalSetupFixtureSupport {
         assertThat(new WorkflowLoader().load(workflow()).config().get("trello_tools"))
                 .as("explicit import retains every existing tool setting, move list and follow-up setting")
                 .isEqualTo(previousTools);
+    }
+
+    @CsvSource({"true,true", "true,false", "false,true", "false,false"})
+    @ParameterizedTest
+    void forcedSetupForAnotherBoardResetsOnlyTheFollowUpChoice(boolean importing, boolean nonInteractive)
+            throws IOException {
+        // given
+        trello.givenBoard("previous-board", "old123", "Previous Queue", "https://trello.com/b/old123/previous");
+        runSetup(arguments(false, true)).assertSuccess();
+        configureExistingFollowUps(true);
+        Files.writeString(
+                workflow(),
+                Files.readString(workflow())
+                        .replace(
+                                "    list_name: Later findings",
+                                "    list_name: Later findings\n    list_id: previous-inbox"));
+        var previousTools =
+                (Map<?, ?>) new WorkflowLoader().load(workflow()).config().get("trello_tools");
+        Map<Object, Object> expectedTools = new HashMap<>(previousTools);
+        Map<Object, Object> expectedFollowUps = new HashMap<>((Map<?, ?>) previousTools.get("follow_up_cards"));
+        expectedFollowUps.put("enabled", false);
+        expectedTools.put("follow_up_cards", expectedFollowUps);
+        trello.givenBoard("board-1", "abc123", "Imported Queue", "https://trello.com/b/abc123/board");
+        List<String> forced = new ArrayList<>(List.of(arguments(importing, nonInteractive)));
+        forced.add("--force");
+
+        // when
+        String input = nonInteractive ? "" : "\n".repeat(importing ? 9 : 7);
+        SetupRunResult result = runSetupWithInput(input, forced.toArray(String[]::new));
+
+        // then
+        result.assertSuccess();
+        if (nonInteractive) {
+            result.stdoutDoesNotContain(QUESTION);
+        } else {
+            result.stdoutContains(QUESTION + " [y/N]");
+        }
+        assertThat(new WorkflowLoader().load(workflow()).config().get("trello_tools"))
+                .as("a board change preserves every setting except the follow-up opt-in")
+                .isEqualTo(expectedTools);
+        EffectiveConfig.TrelloToolsConfig tools = config().trelloTools();
+        assertThat(tools.followUpCards().enabled())
+                .as("a different board requires a new opt-in")
+                .isFalse();
+        assertThat(tools.followUpCards().listId()).isEqualTo("previous-inbox");
+        assertThat(tools.followUpCards().listName()).isEqualTo("Later findings");
+        assertThat(tools.followUpCards().maxCardsPerSourceCard()).isEqualTo(2);
+        assertThat(tools.followUpCards().maxCardsPerHour()).isEqualTo(7);
     }
 
     @Test

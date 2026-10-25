@@ -62,7 +62,7 @@ completion-only mode after installer work." It preserves Java ownership of produ
 leaving service-manager setup in the platform installers.
 
 Guided setup also offers the opt-in follow-up-card choice during board creation, import, and
-reconfiguration. It preserves the existing answer on Enter and leaves new workflows disabled by
+reconfiguration. It preserves the same board's answer on Enter and leaves new board configurations disabled by
 default. The permission and preservation rules are recorded in
 [ADR 0123](0123-trello-follow-up-card-tool.md).
 

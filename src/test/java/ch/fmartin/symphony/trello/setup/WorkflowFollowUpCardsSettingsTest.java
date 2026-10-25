@@ -9,6 +9,8 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -71,7 +73,7 @@ final class WorkflowFollowUpCardsSettingsTest {
                 ---
                 tracker:
                   kind: trello
-                  board_id: regenerated-board
+                  board_id: existing-board
                 trello_tools:
                   enabled: false
                   allowed_move_list_names: [Merging, Done]
@@ -80,15 +82,41 @@ final class WorkflowFollowUpCardsSettingsTest {
                 """;
 
         // when
-        Files.writeString(workflow, WorkflowConfigEditor.preserveTrelloTools(workflow, generated));
+        Files.writeString(
+                workflow,
+                WorkflowConfigEditor.preserveTrelloTools(
+                        workflow, generated, Set.of("existing-board"), ignored -> Optional.empty()));
 
         // then
         assertThat(tools(workflow))
                 .as("regeneration preserves the full existing tools map and follow-up subsection")
                 .isEqualTo(expectedTools);
         assertThat(configuration(workflow))
-                .containsEntry("tracker", Map.of("kind", "trello", "board_id", "regenerated-board"));
+                .containsEntry("tracker", Map.of("kind", "trello", "board_id", "existing-board"));
         assertThat(new WorkflowLoader().load(workflow).promptTemplate()).isEqualTo("Regenerated prompt");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"other-board", "$UNSET_SAVED_BOARD", ""})
+    void differentOrUnknownBoardDisablesOnlyTheFollowUpChoice(String previousBoard) throws IOException {
+        // given
+        Path workflow = existingWorkflow();
+        Files.writeString(
+                workflow, Files.readString(workflow).replace("board_id: existing-board", "board_id: " + previousBoard));
+        Map<Object, Object> expectedTools = new HashMap<>(tools(workflow));
+        Map<Object, Object> expectedFollowUps = new HashMap<>(followUps(workflow));
+        expectedFollowUps.put("enabled", false);
+        expectedTools.put("follow_up_cards", expectedFollowUps);
+        String generated = "---\ntracker:\n  kind: trello\n  board_id: selected-board\n---\nGenerated prompt\n";
+
+        // when
+        Files.writeString(
+                workflow,
+                WorkflowConfigEditor.preserveTrelloTools(
+                        workflow, generated, Set.of("selected-board", "selected-key"), ignored -> Optional.empty()));
+
+        // then
+        assertThat(tools(workflow)).isEqualTo(expectedTools);
     }
 
     private Path existingWorkflow() throws IOException {

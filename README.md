@@ -1573,13 +1573,18 @@ Codex sometimes finds useful work that the current card did not ask for. Instead
 current card, Codex can file that work as its own Trello card so you can prioritize it later. This
 is off by default because it lets Codex create cards on your board. Guided setup asks whether to
 allow it when creating, importing, or reconfiguring a board. Enter selects No for a new workflow
-and preserves the current choice for an existing one. The explanation names the configured
+and preserves the current choice when reconfiguring the same board. The explanation names the configured
 destination, Inbox by default. Creating a card does not start work on it.
 
 Yes enables the feature and its required Trello permissions. No disables only follow-up creation;
-other features keep their permissions. Non-interactive setup preserves an existing choice and
+other features keep their permissions. Non-interactive setup preserves the same board's choice and
 leaves new configurations disabled. Limits, destination settings, and allowed move lists stay as
-configured. You can also enable it in `WORKFLOW.md`:
+configured. Forced regeneration for a different board starts follow-up creation disabled. It also
+starts disabled if the previous board identity cannot be resolved. The full board ID and its short
+link identify the same board. After switching boards, review any configured list IDs: setup keeps
+them, and the tool refuses a destination outside the selected board before writing.
+
+You can also enable it in `WORKFLOW.md`:
 
 ```yaml
 trello_tools:

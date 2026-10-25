@@ -2619,13 +2619,18 @@ Onboarding and findings policy:
 - Interactive guided setup, including board creation and import, MUST explain that Codex can create
   linked cards for out-of-scope findings in the configured destination and that creation does not
   start work. It MUST ask whether to allow this, defaulting to No for a new configuration.
-- Reconfiguration MUST show the existing choice and preserve it on Enter, with `[Y/n]` for enabled
+- Same-board reconfiguration MUST show the existing choice and preserve it on Enter, with `[Y/n]` for enabled
   and `[y/N]` for disabled. Non-interactive setup MUST NOT prompt or implicitly enable the feature;
-  it MUST preserve existing settings and default new configurations to disabled.
+  it MUST preserve same-board choices and default new configurations to disabled.
 - Yes MUST enable `follow_up_cards.enabled`, Trello tools, writes, comments, URL attachments, and
   checklists. No MUST disable only follow-up creation. The choice MUST preserve unrelated workflow
   settings, move allowlists, follow-up limits, and destination configuration. The explanation MUST
   name a configured destination that differs from Inbox.
+- Forced regeneration for a different board MUST start follow-up creation disabled. Regeneration
+  without a resolvable previous board identity MUST also default to disabled. A board's full ID
+  and short link MUST count as the same identity. Only the enabled choice changes; permissions,
+  move allowlists, limits, and destination settings MUST remain intact. The tool MUST reject a
+  destination outside the configured board before writing.
 - Agent instructions MUST cover actionable pre-existing bugs, errors, warnings, flaky tests, and
   environment-specific failures discovered during implementation, review, CI inspection, tests, or
   command runs. Problems introduced or worsened by the current change MUST be addressed within
