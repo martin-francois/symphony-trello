@@ -38,6 +38,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -644,6 +645,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         writeWorkflow(workflow, "60000");
         var tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
         var workerStarted = new CountDownLatch(1);
+        var workerThread = new AtomicReference<Thread>();
         var releaseWorker = new CountDownLatch(1);
         var tickFetchStarted = new CountDownLatch(1);
         var releaseTickFetch = new CountDownLatch(1);
@@ -651,6 +653,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         var hookedFetches = new AtomicInteger();
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
+            workerThread.set(Thread.currentThread());
             workerStarted.countDown();
             assertThat(releaseWorker.await(5, TimeUnit.SECONDS))
                     .as("the exiting worker should be released within 5 seconds")
@@ -687,14 +690,33 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
 
         // then
         try {
-            assertThat(concurrentWorkerExitFetch.await(500, TimeUnit.MILLISECONDS))
+            waitUntil(() -> concurrentWorkerExitFetch.getCount() == 0 || workerExitWaitsForLock(workerThread.get()));
+            assertThat(concurrentWorkerExitFetch.getCount())
                     .as("worker-exit tracker I/O must wait for the active orchestrator operation")
-                    .isFalse();
+                    .isOne();
         } finally {
             releaseTickFetch.countDown();
         }
         waitUntil(() -> orchestrator.snapshot().counts().retrying() == 1);
         orchestrator.stop();
+    }
+
+    private static boolean workerExitWaitsForLock(Thread worker) {
+        // ThreadMXBean omits virtual workers, so inspect the blocked callback's own stack.
+        if (worker.getState() != Thread.State.WAITING) {
+            return false;
+        }
+        StackTraceElement[] stack = worker.getStackTrace();
+        boolean inCallback = false;
+        boolean waitingForLock = false;
+        for (StackTraceElement frame : stack) {
+            inCallback |= frame.getClassName().equals(SymphonyOrchestrator.class.getName())
+                    && (frame.getMethodName().equals("onWorkerExit")
+                            || frame.getMethodName().equals("onWorkerExitWithoutResult"));
+            waitingForLock |= frame.getClassName().equals(ReentrantLock.class.getName())
+                    && frame.getMethodName().equals("lock");
+        }
+        return inCallback && waitingForLock;
     }
 
     @Test
