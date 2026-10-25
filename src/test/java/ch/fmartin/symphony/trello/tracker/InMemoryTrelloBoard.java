@@ -55,6 +55,15 @@ public final class InMemoryTrelloBoard {
     private int failedRequests;
     private int nextId;
 
+    /// Initializes JDK request metadata before a guarded fuzz execution. The first header validation
+    /// reads the JDK's net.properties file even though the in-memory transport never opens a socket.
+    public static void initializeRequestMetadata() {
+        HttpRequest.newBuilder(URI.create(ENDPOINT))
+                .header("Accept", "application/json")
+                .GET()
+                .build();
+    }
+
     public InMemoryTrelloBoard(String boardId) {
         this.boardId = boardId;
     }

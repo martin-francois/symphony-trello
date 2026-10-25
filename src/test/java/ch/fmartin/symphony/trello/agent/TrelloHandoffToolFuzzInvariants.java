@@ -24,6 +24,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
@@ -101,7 +102,7 @@ public final class TrelloHandoffToolFuzzInvariants {
     private static final String USAGE_SECTION = CodexUsageWorkpadSection.rechecking("Usage limit reached.");
     private static final JsonNodeFactory NODES = JsonNodeFactory.instance;
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final ConfigResolver CONFIG_RESOLVER = new ConfigResolver();
+    private static final ConfigResolver CONFIG_RESOLVER = new ConfigResolver(ignored -> Optional.empty());
 
     private static final List<String> TOOLS = List.of(
             TrelloHandoffToolHandler.ADD_COMMENT,
@@ -328,28 +329,41 @@ public final class TrelloHandoffToolFuzzInvariants {
     }
 
     private static void assertMoveAllowed(Execution execution, Write write) {
-        TrelloClient.BoardList target = execution.lists().stream()
-                .filter(list -> list.id().equals(write.value()))
-                .findFirst()
-                .orElseThrow(() -> violation(execution, write, "the card moved to a list that is not on the board"));
+        TrelloClient.BoardList target = moveTarget(execution, write);
         if (target.closed()) {
             throw violation(execution, write, "the card moved to an archived list");
         }
         Permissions permissions = execution.permissions();
         String normalizedName = StateNames.normalize(target.name());
         boolean allowedById = permissions.allowedListIds().contains(target.id());
-        boolean allowedByName = permissions.allowedListNames().stream()
-                .anyMatch(allowedName -> StateNames.normalize(allowedName).equals(normalizedName));
-        long openListsWithName = execution.lists().stream()
-                .filter(list ->
-                        !list.closed() && StateNames.normalize(list.name()).equals(normalizedName))
-                .count();
+        boolean allowedByName = false;
+        for (String allowedName : permissions.allowedListNames()) {
+            if (StateNames.normalize(allowedName).equals(normalizedName)) {
+                allowedByName = true;
+                break;
+            }
+        }
+        int openListsWithName = 0;
+        for (TrelloClient.BoardList list : execution.lists()) {
+            if (!list.closed() && StateNames.normalize(list.name()).equals(normalizedName)) {
+                openListsWithName++;
+            }
+        }
         if (!allowedById && !(allowedByName && openListsWithName == 1)) {
             throw violation(
                     execution,
                     write,
                     "the destination is neither an allowed list id nor the only open list with an allowed name");
         }
+    }
+
+    private static TrelloClient.BoardList moveTarget(Execution execution, Write write) {
+        for (TrelloClient.BoardList list : execution.lists()) {
+            if (list.id().equals(write.value())) {
+                return list;
+            }
+        }
+        throw violation(execution, write, "the card moved to a list that is not on the board");
     }
 
     private static void assertResultIsStable(Execution execution) {

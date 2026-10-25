@@ -5,8 +5,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import ch.fmartin.symphony.trello.fuzz.RepositorySourceFuzzer;
 import ch.fmartin.symphony.trello.fuzz.TrelloCardReferenceParserFuzzer;
 import ch.fmartin.symphony.trello.fuzz.TrelloChecklistClassifierFuzzer;
+import ch.fmartin.symphony.trello.fuzz.TrelloHandoffToolFuzzer;
 import ch.fmartin.symphony.trello.fuzz.WorkflowLoaderFuzzer;
 import ch.fmartin.symphony.trello.testsupport.FuzzIsolationExtension;
+import ch.fmartin.symphony.trello.tracker.InMemoryTrelloBoard;
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.google.common.base.CaseFormat;
@@ -21,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.parallel.Isolated;
@@ -34,6 +37,11 @@ import org.junit.jupiter.api.parallel.Isolated;
 final class StandaloneFuzzerIsolationTest {
     private static final Path CORPORA = Path.of("oss-fuzz/corpora");
     private static final String INPUTS_RESOURCE = StandaloneFuzzerIsolationTest.class.getSimpleName() + "Inputs/";
+
+    @BeforeAll
+    static void initializeRequestMetadata() {
+        InMemoryTrelloBoard.initializeRequestMetadata();
+    }
 
     @FuzzTest
     void repositorySourceFuzzer(FuzzedDataProvider data) {
@@ -66,6 +74,18 @@ final class StandaloneFuzzerIsolationTest {
 
         // when
         TrelloChecklistClassifierFuzzer.fuzzerTestOneInput(seed);
+
+        // then
+        // FuzzIsolationExtension checks the file and socket I/O of this execution after the class.
+    }
+
+    @FuzzTest
+    void trelloHandoffToolFuzzer(FuzzedDataProvider data) {
+        // given
+        FuzzedDataProvider seed = data;
+
+        // when
+        TrelloHandoffToolFuzzer.fuzzerTestOneInput(seed);
 
         // then
         // FuzzIsolationExtension checks the file and socket I/O of this execution after the class.

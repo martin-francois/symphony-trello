@@ -103,6 +103,10 @@ ADR 0078 sets for the aggregate budget. With five targets, each gets 66 minutes 
 and 60 minutes in the maintenance cycle. A manual `fuzz_seconds: 300` gives each target 240 seconds.
 There is no weight table until a target needs a different share.
 
+The guarded JUnit replays initialize JDK request metadata before target execution. First header
+validation reads the JDK `net.properties` file even without a real transport. This scoped bootstrap
+keeps the per-execution file and socket guard unchanged and never sends a request.
+
 ### Consequences
 
 * Good, because one execution costs a config resolution, a few in-memory requests, and the handler
@@ -208,3 +212,8 @@ each. That PR can add weighting when it needs unequal shares.
 them with a code the set does not list, the Maven regression replay fails with an unknown failure
 code, so CI shows the missing entry. `trello_tool_failed` is then no longer expected for
 any arguments.
+
+The fuzz configuration uses an empty environment provider. Process environment values and local
+dotenv files must not change generated cases or add file reads inside the isolation guard. A focused
+regression rejects local environment lookups; corpus replay with a synthetic dotenv file confirms
+that the guard stays clean.

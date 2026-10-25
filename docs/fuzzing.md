@@ -38,9 +38,7 @@ retried at the next check instead of ending the watchdog. Three cycles use a 330
 aggregate fuzzing budget; every fourth cycle uses 300
 aggregate minutes so daily maintenance can follow before the next batch. That aggregate is four full
 shares of 82.5 minutes, or 75 minutes in the maintenance cycle, however many targets run.
-`scripts/select-clusterfuzzlite-target` divides it among the targets by weight. When every target
-has the same weight, each fuzzes for the aggregate divided by the number of targets in the batch
-matrix. Each matrix job has a 100-minute timeout. Matrix jobs run one at a time because
+`scripts/select-clusterfuzzlite-target` divides it evenly among the targets in the batch matrix. Each matrix job has a 100-minute timeout. Matrix jobs run one at a time because
 ClusterFuzzLite pushes every corpus to the same Git branch; serialization prevents non-fast-forward
 races without changing the aggregate fuzzing budget. The workflow intentionally uses `ubuntu-latest`,
 not a Blacksmith runner. Each runner keeps one fuzzer wrapper before invoking ClusterFuzzLite. This
@@ -235,6 +233,10 @@ writes to standard output or error, such as log lines. Flight Recorder has no ev
 deleting, or moving a file, or for a connection attempt or DNS lookup, so the replay does not see
 those. `FuzzHarnessIsolationRulesTest` fails when a class with a `@FuzzTest` method does not use the
 extension.
+
+The handoff replay constructs request metadata before the guarded executions. The JDK reads
+`net.properties` during its first header validation, even with the in-memory transport. This
+bootstrap does not send a request. File and socket checks remain active for every target execution.
 
 During ClusterFuzzLite and OSS-Fuzz runs, Jazzer's `ServerSideRequestForgery` detector reports every
 network connection attempt as a finding. `FuzzHarnessIsolationRulesTest` also fails if `pom.xml` or

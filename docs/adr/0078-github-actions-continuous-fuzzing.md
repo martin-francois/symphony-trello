@@ -73,7 +73,7 @@ matrix with one job per target, and each job has a 100-minute timeout. A normal 
 19,800-second aggregate budget of four full shares of 4,950 seconds. Every fourth continuous cycle
 uses 4,500-second shares, for an 18,000-second aggregate budget, so prune and coverage jobs can
 follow before the next batch. `scripts/select-clusterfuzzlite-target` divides the aggregate among
-the targets by weight, so adding a target does not grow the cycle.
+the targets evenly, so adding a target does not grow the cycle.
 [ADR 0118](0118-fuzz-trello-handoff-tool-write-scope.md) records that choice. Each target's corpus is stored in the dedicated Git storage repository for
 later runs.
 
