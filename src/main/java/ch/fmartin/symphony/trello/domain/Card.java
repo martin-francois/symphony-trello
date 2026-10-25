@@ -41,16 +41,71 @@ public record Card(
         @Nullable Boolean dueComplete,
         @Nullable BigDecimal position) {
 
-    public Card {
-        labels = List.copyOf(orEmpty(labels));
-        labelIds = List.copyOf(orEmpty(labelIds));
-        members = List.copyOf(orEmpty(members));
-        checklists = List.copyOf(orEmpty(checklists));
-        attachments = List.copyOf(orEmpty(attachments));
-        trelloReferences = List.copyOf(orEmpty(trelloReferences));
-        prerequisiteProblems = List.copyOf(orEmpty(prerequisiteProblems));
-        blockedBy = List.copyOf(orEmpty(blockedBy));
-        comments = List.copyOf(orEmpty(comments));
+    public Card(
+            String id,
+            String identifier,
+            String title,
+            @Nullable String description,
+            @Nullable Integer priority,
+            String state,
+            String stateSource,
+            @Nullable String listId,
+            @Nullable String listName,
+            @Nullable Boolean listClosed,
+            @Nullable String boardId,
+            @Nullable Boolean boardClosed,
+            boolean closed,
+            @Nullable Integer idShort,
+            @Nullable String shortLink,
+            @Nullable String shortUrl,
+            @Nullable String branchName,
+            @Nullable String url,
+            @Nullable List<String> labels,
+            @Nullable List<String> labelIds,
+            @Nullable List<String> members,
+            @Nullable List<Checklist> checklists,
+            @Nullable List<Attachment> attachments,
+            @Nullable List<TrelloReference> trelloReferences,
+            @Nullable List<PrerequisiteProblem> prerequisiteProblems,
+            @Nullable List<BlockerRef> blockedBy,
+            @Nullable List<Comment> comments,
+            @Nullable Instant createdAt,
+            @Nullable Instant updatedAt,
+            @Nullable Instant dueAt,
+            @Nullable Boolean dueComplete,
+            @Nullable BigDecimal position) {
+        this.id = id;
+        this.identifier = identifier;
+        this.title = title;
+        this.description = description;
+        this.priority = priority;
+        this.state = state;
+        this.stateSource = stateSource;
+        this.listId = listId;
+        this.listName = listName;
+        this.listClosed = listClosed;
+        this.boardId = boardId;
+        this.boardClosed = boardClosed;
+        this.closed = closed;
+        this.idShort = idShort;
+        this.shortLink = shortLink;
+        this.shortUrl = shortUrl;
+        this.branchName = branchName;
+        this.url = url;
+        this.labels = List.copyOf(orEmpty(labels));
+        this.labelIds = List.copyOf(orEmpty(labelIds));
+        this.members = List.copyOf(orEmpty(members));
+        this.checklists = List.copyOf(orEmpty(checklists));
+        this.attachments = List.copyOf(orEmpty(attachments));
+        this.trelloReferences = List.copyOf(orEmpty(trelloReferences));
+        this.prerequisiteProblems = List.copyOf(orEmpty(prerequisiteProblems));
+        this.blockedBy = List.copyOf(orEmpty(blockedBy));
+        this.comments = List.copyOf(orEmpty(comments));
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
+        this.dueAt = dueAt;
+        this.dueComplete = dueComplete;
+        this.position = position;
     }
 
     public Map<String, @Nullable Object> toTemplateMap() {
@@ -152,7 +207,7 @@ public record Card(
                 position);
     }
 
-    // No nullness checker runs on callers, so a null list still becomes an empty one.
+    // Constructors accept absent lists while each accessor returns an immutable, non-null list.
     private static <T> List<T> orEmpty(@Nullable List<T> values) {
         return values == null ? List.of() : values;
     }
@@ -229,8 +284,10 @@ public record Card(
     public record Comment(@Nullable String id, String text, @Nullable String author, @Nullable Instant createdAt) {}
 
     public record Checklist(@Nullable String id, @Nullable String name, List<ChecklistItem> items) {
-        public Checklist {
-            items = List.copyOf(orEmpty(items));
+        public Checklist(@Nullable String id, @Nullable String name, @Nullable List<ChecklistItem> items) {
+            this.id = id;
+            this.name = name;
+            this.items = List.copyOf(orEmpty(items));
         }
     }
 

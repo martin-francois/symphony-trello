@@ -86,6 +86,28 @@ final class CardNullnessTest {
                 .containsOnly(List.of());
     }
 
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(classes = {Card.class, Card.Checklist.class})
+    void publicConstructorsDeclareNullableListInputs(Class<? extends Record> record)
+            throws ReflectiveOperationException {
+        // given
+        RecordComponent[] components = record.getRecordComponents();
+        Class<?>[] componentTypes = new Class<?>[components.length];
+        for (int index = 0; index < components.length; index++) {
+            componentTypes[index] = components[index].getType();
+        }
+
+        // when
+        var constructor = record.getDeclaredConstructor(componentTypes);
+
+        // then
+        assertThat(constructor.getParameters())
+                .filteredOn(parameter -> parameter.getType() == List.class)
+                .isNotEmpty()
+                .extracting(parameter -> parameter.getAnnotatedType().isAnnotationPresent(Nullable.class))
+                .containsOnly(true);
+    }
+
     private static List<String> cardSection(List<String> specification) {
         int start = specification.indexOf(CARD_SECTION_START);
         List<String> section = new ArrayList<>();
