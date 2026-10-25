@@ -324,26 +324,14 @@ public final class LocalSetup {
             throws IOException {
         String command = ShellCommandRenderer.executable(
                 options.command(), SetupSystemProperties.get(ShellCommandRenderer.SHELL_PROPERTY));
-        try {
-            terminal.info("");
-            if (!PromptSupport.yes(terminal, GuidedTutorial.OFFER_PROMPT)) {
-                terminal.info("You can start it later with:");
-                terminal.info("  " + GuidedTutorial.commandLine(command));
-                return;
-            }
-            GuidedTutorial.forCli(options.endpoint(), credentials.load(), terminal)
-                    .run(new GuidedTutorial.Options(
-                            githubEnabled,
-                            GuidedTutorial.BoardCleanup.ARCHIVE_BY_DEFAULT,
-                            options.workspaceId(),
-                            command));
-        } catch (IOException | RuntimeException e) {
-            // Setup already finished, so any tutorial failure, expected or not, is reported here
-            // instead of turning the completed setup into a failed one.
-            terminal.error("The guided tutorial stopped: " + SetupFailureCauses.commandBoundaryMessage(e));
-            terminal.error("Setup is complete. Start the tutorial again with:");
-            terminal.error("  " + GuidedTutorial.commandLine(command));
-        }
+        TutorialOffer.run(
+                terminal, command, "Setup is complete. Start the tutorial again with:", () -> GuidedTutorial.forCli(
+                                options.endpoint(), credentials.load(), terminal)
+                        .run(new GuidedTutorial.Options(
+                                githubEnabled,
+                                GuidedTutorial.BoardCleanup.ARCHIVE_BY_DEFAULT,
+                                options.workspaceId(),
+                                command)));
     }
 
     private void preflightLocalWorkflowWrite(Options options) {
