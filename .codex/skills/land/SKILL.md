@@ -24,12 +24,19 @@ description: >
 
 - The current Trello list is `Merging` or the workflow explicitly names the
   current list as the merge approval list.
-- `gh` is installed and authenticated.
+- For work with a PR, `gh` is installed and authenticated.
 - The working tree is clean or changes are intentionally committed.
 - A PR can be identified for the current branch or Trello card, unless there
   is nothing to merge. See the Merge Decision Table.
 
-## Steps
+## Decide whether a merge is needed
+
+Apply the Merge Decision Table before PR discovery, review, or merge checks. For
+completed work that did not need a PR, use the current handoff and new-feedback
+rules there, update the card, and stop. GitHub authentication and PR checks are
+required only when the work needs a PR.
+
+## Steps for work with a PR
 
 1. Use `review-sweep` and address all actionable feedback.
    Reply to addressed GitHub review threads, but leave thread resolution to the

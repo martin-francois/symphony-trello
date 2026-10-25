@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-10-04
-decision-makers: [François Martin, Claude Code]
+decision-makers: [François Martin]
 consulted: [SPEC.md, README, generated workflow prompt, land and trello-handoff skills, offline real-Codex replay]
 informed: [Future maintainers]
 ---

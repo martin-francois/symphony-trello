@@ -1845,8 +1845,9 @@ final class TrelloBoardSetupTest {
                 .contains("renewed \"Review\"")
                 .contains("move back to\n  \"Review\" with the reason")
                 .contains("move the card to \"Released\"")
+                .containsIgnoringWhitespaces("no merge was needed, and move the card to \"Released\"")
                 .containsIgnoringWhitespaces(
-                        "no merge was needed, and move the card to \"Released\". Do not move it back to \"Review\"")
+                        "If a human comment is newer than the latest handoff, reply to it and return the card to \"Review\"")
                 .doesNotContain("renewed Human Review")
                 .doesNotContain("move back to\n  \"Human Review\"")
                 .doesNotContain("move the card to \"Done\"");
