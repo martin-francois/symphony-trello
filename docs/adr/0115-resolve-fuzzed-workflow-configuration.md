@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-10-04
-decision-makers: [François Martin, Claude Code]
+decision-makers: [François Martin]
 consulted:
   - "[GitHub issue #771](https://github.com/martin-francois/symphony-trello/issues/771)"
   - "[GitHub issue #690](https://github.com/martin-francois/symphony-trello/issues/690)"
@@ -84,7 +84,8 @@ as `ConfigException`, recorded in `SPEC.md` Section 6.4.
 * Bad, because each workflow input now costs three resolutions. A 4-minute local Jazzer JUnit run
   dropped from 36,493 to 10,611 executions per second. The hosted target spends most of its time in
   the instrumented YAML library, so the hosted drop should be smaller. The first hosted batch after
-  the merge shows the real figure.
+  the merge shows the real figure. [GitHub issue #1032](https://github.com/martin-francois/symphony-trello/issues/1032)
+  records that batch, its throughput, and the configuration-class coverage.
 * Bad, because `ConfigResolver` carries a public constructor whose only caller outside production is
   the fuzz harness.
 * Neutral, because the in-memory seam means the harness never reaches device paths. `Files.size`
