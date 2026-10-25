@@ -1449,6 +1449,36 @@ test(".NET SDK image updates automerge only after PowerShell tests through the i
   );
 });
 
+test("Maven snapshot image updates run snapshots in the image they pin", () => {
+  const workflow = parse(CI_WORKFLOW) as {
+    readonly jobs?: Readonly<Record<string, {
+      readonly if?: string;
+      readonly permissions?: unknown;
+      readonly steps?: readonly {
+        readonly if?: string;
+        readonly run?: string;
+        readonly uses?: string;
+        readonly with?: Readonly<Record<string, unknown>>;
+      }[];
+    }>>;
+  };
+  const job = workflow.jobs?.["pinned-maven-snapshot-image"];
+  const steps = job?.steps ?? [];
+  const checkout = steps.find(({uses}) => uses?.startsWith("actions/checkout@"));
+  const snapshotRun = steps.find(({run}) => run === "scripts/snapshot-tests-docker.sh");
+
+  assert.match(job?.if ?? "", /github\.event_name == 'pull_request'/u);
+  assert.deepEqual(job?.permissions, {contents: "read"});
+  assert.equal(checkout?.with?.["persist-credentials"], false);
+  assert.ok(snapshotRun, "the required check must execute the pinned-image wrapper");
+  assert.equal(snapshotRun.if, undefined, "Renovate updates must not skip the snapshot run");
+  const wrapper = readFileSync(new URL("snapshot-tests-docker.sh", SCRIPTS), "utf8");
+  assert.match(wrapper, /-Dtest='\*SnapshotTest'/u);
+  assert.doesNotMatch(wrapper, /failIfNoSpecifiedTests=false/u);
+
+  assert.match(wrapper, /exec "\$container_runtime".*"\$image"/u);
+});
+
 test("Renovate permits unlimited concurrent branches and pull requests", () => {
   assert.equal(RENOVATE_CONFIG.branchConcurrentLimit, 0);
   assert.equal(RENOVATE_CONFIG.prConcurrentLimit, 0);

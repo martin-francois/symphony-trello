@@ -39,9 +39,14 @@ docker_args=(
   -w "$repo_root"
 )
 
+# An absent CI variable permits local baseline updates; preserve that distinction in the container.
+if [ "${CI+x}" = x ]; then
+  docker_args+=(-e "CI=$CI")
+fi
+
 if [ "$container_runtime" = "podman" ]; then
   docker_args+=(--userns=keep-id)
 fi
 
 exec "$container_runtime" "${docker_args[@]}" "$image" \
-  ./mvnw -q -Dtest='*SnapshotTest' -Dsurefire.failIfNoSpecifiedTests=false "$@" test
+  ./mvnw -q -Dtest='*SnapshotTest' "$@" test

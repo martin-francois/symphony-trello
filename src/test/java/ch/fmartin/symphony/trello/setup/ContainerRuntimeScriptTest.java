@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -89,6 +90,34 @@ final class ContainerRuntimeScriptTest {
                 .contains("SYMPHONY_TRELLO_CONTAINER_RUNTIME must be docker or podman")
                 .doesNotContain(wrapper.imageRepository());
         assertThat(invocation).doesNotExist();
+    }
+
+    @MethodSource("snapshotCiValues")
+    @ParameterizedTest
+    void snapshotWrapperPreservesWhetherCiIsSet(String ci) throws Exception {
+        // given
+        Path invocation = installRecordingRuntime("docker");
+        var environment = new LinkedHashMap<>(runtimeEnvironment(null));
+        environment.put("XDG_CACHE_HOME", tempDir.resolve("cache").toString());
+        if (ci != null) {
+            environment.put("CI", ci);
+        }
+
+        // when
+        ProcessResult result = runWrapper("snapshot-tests-docker.sh", environment);
+
+        // then
+        result.assertSuccess();
+        String arguments = Files.readString(invocation);
+        if (ci == null) {
+            assertThat(arguments).doesNotContain("CI=");
+        } else {
+            assertThat(arguments).contains("-e\nCI=" + ci + "\n");
+        }
+    }
+
+    private static Stream<Arguments> snapshotCiValues() {
+        return Stream.of(Arguments.of((String) null), Arguments.of("true"), Arguments.of("false"));
     }
 
     @Test
@@ -256,6 +285,7 @@ final class ContainerRuntimeScriptTest {
     private ProcessResult runWrapper(String script, Map<String, String> environment) throws Exception {
         var processBuilder = new ProcessBuilder(wrapper(script).toString(), "--version");
         processBuilder.directory(Path.of(".").toAbsolutePath().normalize().toFile());
+        processBuilder.environment().remove("CI");
         processBuilder.environment().remove("SYMPHONY_TRELLO_CONTAINER_RUNTIME");
         processBuilder.environment().remove("SYMPHONY_TRELLO_PWSH_DOCKER_IMAGE");
         processBuilder.environment().remove("SYMPHONY_TRELLO_BETTERLEAKS_IMAGE");
