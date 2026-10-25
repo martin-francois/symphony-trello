@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import {readFileSync, readdirSync} from "node:fs";
+import {execFileSync, spawnSync} from "node:child_process";
+import {mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {dirname, join} from "node:path";
 import test from "node:test";
 import {parse} from "yaml";
 import {matchesMajor, matchesNonMajor, RENOVATE_CONFIG} from "./test-support/renovate-config.ts";
@@ -36,6 +39,7 @@ interface WorkflowDocument {
         readonly "runs-on"?: unknown;
         readonly steps?: readonly {
           readonly name?: unknown;
+          readonly run?: unknown;
           readonly with?: {readonly script?: unknown};
         }[];
       }
@@ -80,6 +84,11 @@ const PNPM_WORKSPACE = parse(
   readonly trustLockfile?: boolean;
 };
 const SCRIPTS = new URL("./", import.meta.url);
+const POWERSHELL_IMAGE_CHECK_INPUTS = [
+  "scripts/pwsh-docker.sh",
+  "scripts/check-pwsh-docker",
+  "src/test/java/ch/fmartin/symphony/trello/setup/InstallerScriptTest.java",
+];
 const OPENREWRITE_GENERATION = [
   "run-openrewrite-maintenance",
   "run-openrewrite-maintenance-container",
@@ -1332,7 +1341,7 @@ test(".NET SDK image updates automerge only after PowerShell tests through the i
   const job = workflow.jobs?.["pinned-powershell-image"];
   const steps = job?.steps ?? [];
   const checkout = steps.find(({uses}) => uses?.startsWith("actions/checkout@"));
-  const detect = steps.find(({name}) => name === "Detect a PowerShell wrapper change");
+  const detect = steps.find(({name}) => name === "Detect PowerShell image-check input changes");
   const check = steps.find(({name}) => name === "PowerShell installer checks through the pinned image");
 
   // The job runs pull request code like the test job does, so it gets no secret and no write token.
@@ -1346,7 +1355,7 @@ test(".NET SDK image updates automerge only after PowerShell tests through the i
   assert.equal(detect?.id, "wrapper");
   assert.equal(
     detect?.run,
-    `git diff --quiet HEAD^1 HEAD -- ${wrapperPath} || echo "changed=true" >> "$GITHUB_OUTPUT"`,
+    `git diff --quiet HEAD^1 HEAD -- ${POWERSHELL_IMAGE_CHECK_INPUTS.join(" ")} || echo "changed=true" >> "$GITHUB_OUTPUT"`,
   );
   assert.equal(check?.if, "steps.wrapper.outputs.changed == 'true'");
   assert.equal(check?.run, "scripts/check-pwsh-docker");
@@ -1354,7 +1363,7 @@ test(".NET SDK image updates automerge only after PowerShell tests through the i
     assert.equal(step.env?.SYMPHONY_TRELLO_PWSH_DOCKER_IMAGE, undefined, "run the pinned image");
   }
 
-  // The job watches one file, so Renovate must pin the image in that file alone.
+  // The job watches the selector and tests too; the image pin stays solely in the wrapper.
   const dotnetManagers = RENOVATE_CONFIG.customManagers.filter(({matchStrings}) =>
     matchStrings?.some((pattern) => pattern.includes("mcr\\.microsoft\\.com/dotnet/sdk")),
   );
@@ -1377,6 +1386,50 @@ test(".NET SDK image updates automerge only after PowerShell tests through the i
     ),
   );
 });
+
+for (const changedPath of [...POWERSHELL_IMAGE_CHECK_INPUTS, "unrelated.md"]) {
+  test(`PowerShell image detection classifies a change to ${changedPath}`, (context) => {
+    // given
+    const root = mkdtempSync(join(tmpdir(), "powershell-image-detection-"));
+    context.after(() => rmSync(root, {recursive: true, force: true}));
+    const git = (...args: readonly string[]) => execFileSync("git", [
+      "-c", "user.name=Fixture",
+      "-c", "user.email=fixture@example.invalid",
+      "-c", "commit.gpgsign=false",
+      ...args,
+    ], {cwd: root, stdio: "pipe"});
+    git("init", "--initial-branch=main");
+    for (const path of [...POWERSHELL_IMAGE_CHECK_INPUTS, "unrelated.md"]) {
+      const file = join(root, path);
+      mkdirSync(dirname(file), {recursive: true});
+      writeFileSync(file, "base\n");
+    }
+    git("add", ".");
+    git("commit", "-m", "base fixture");
+    writeFileSync(join(root, changedPath), "changed\n");
+    git("add", changedPath);
+    git("commit", "-m", "changed fixture");
+    const workflow = parse(CI_WORKFLOW) as WorkflowDocument;
+    const detect = workflow.jobs?.["pinned-powershell-image"]?.steps
+      ?.find(({name}) => name === "Detect PowerShell image-check input changes");
+    assert.equal(typeof detect?.run, "string");
+    const output = join(root, "github-output");
+    writeFileSync(output, "");
+
+    // when
+    const result = spawnSync("bash", ["-c", String(detect?.run)], {
+      cwd: root,
+      env: {...process.env, GITHUB_OUTPUT: output},
+      encoding: "utf8",
+      timeout: 10_000,
+    });
+
+    // then
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(readFileSync(output, "utf8"),
+      changedPath === "unrelated.md" ? "" : "changed=true\n");
+  });
+}
 
 test("Maven snapshot image updates run snapshots in the image they pin", () => {
   const workflow = parse(CI_WORKFLOW) as {

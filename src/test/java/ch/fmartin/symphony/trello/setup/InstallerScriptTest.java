@@ -27,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Named;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -37,6 +38,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 final class InstallerScriptTest {
+    private static final String NATIVE_WINDOWS = "native-windows";
     private static final String INSTALL_CONTEXT_PROPERTIES = "install-context.properties";
     private static final String ANSI_ESCAPE_IN_INSTALLER_OUTPUT = "\u001B";
     private static final String STYLE_RESET = ANSI_ESCAPE_IN_INSTALLER_OUTPUT + "[0m";
@@ -8496,6 +8498,7 @@ final class InstallerScriptTest {
 
     @EnumSource(ReleaseSignatureCheck.class)
     @ParameterizedTest(name = "{0}")
+    @Tag(NATIVE_WINDOWS)
     void powershellInstallerChecksReleaseSignatureBeforeExpandingArchiveOnWindows(ReleaseSignatureCheck check)
             throws Exception {
         // given
@@ -8514,6 +8517,7 @@ final class InstallerScriptTest {
 
     @EnumSource(RejectedReleaseSignature.class)
     @ParameterizedTest(name = "{0}")
+    @Tag(NATIVE_WINDOWS)
     void powershellInstallerRefusesReleaseArchiveWhenSignatureCannotBeVerifiedOnWindows(
             RejectedReleaseSignature rejection) throws Exception {
         // given

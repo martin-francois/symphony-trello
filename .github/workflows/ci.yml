@@ -186,12 +186,12 @@ jobs:
           # The pull request's merge commit and its first parent, the base branch it merges into.
           fetch-depth: 2
           persist-credentials: false
-      - name: Detect a PowerShell wrapper change
+      - name: Detect PowerShell image-check input changes
         id: wrapper
-        run: git diff --quiet HEAD^1 HEAD -- scripts/pwsh-docker.sh || echo "changed=true" >> "$GITHUB_OUTPUT"
-      - name: Report the unchanged wrapper
+        run: git diff --quiet HEAD^1 HEAD -- scripts/pwsh-docker.sh scripts/check-pwsh-docker src/test/java/ch/fmartin/symphony/trello/setup/InstallerScriptTest.java || echo "changed=true" >> "$GITHUB_OUTPUT"
+      - name: Report unchanged PowerShell image-check inputs
         if: steps.wrapper.outputs.changed != 'true'
-        run: echo "::notice::The pull request keeps the base branch's scripts/pwsh-docker.sh, so its image needs no new run."
+        run: echo "::notice::The PowerShell wrapper, check script and installer tests are unchanged; no new image run is required."
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         if: steps.wrapper.outputs.changed == 'true'
         with:

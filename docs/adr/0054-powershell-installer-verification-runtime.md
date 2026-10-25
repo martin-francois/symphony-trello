@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-06-16
-decision-makers: [François Martin, Codex]
+decision-makers: [François Martin]
 consulted:
   - "[GitHub issue #417](https://github.com/martin-francois/symphony-trello/issues/417)"
   - "[GitHub PR #420](https://github.com/martin-francois/symphony-trello/pull/420)"
@@ -79,8 +79,7 @@ the caller's `HOME`. Installer tests give every installer run a throwaway `HOME`
 keeps its image store under `HOME`, so inheriting it made every test home pull its own copy of the
 image ([issue #777](https://github.com/martin-francois/symphony-trello/issues/777)). Pointing
 `CONTAINERS_STORAGE_CONF` at the user's store was rejected: it needs a generated `storage.conf` with
-a host-specific graph root, it only helps Podman, and the wrapper cannot tell that `docker` is a
-Podman shim because the tests remove `SYMPHONY_TRELLO_CONTAINER_RUNTIME`. Docker keeps its images in
+a host-specific graph root, and it only helps Podman. Docker keeps its images in
 the daemon, so for Docker the home override only changes which CLI config is read.
 
 By default, `scripts/pwsh-docker.sh` sets

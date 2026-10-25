@@ -13,8 +13,9 @@ cd "$repo_root"
 # The dry runs go first so they pull the image; one installer test may run for 60 seconds at most.
 "$wrapper" -NoProfile -File ./install.ps1 --dry-run --no-onboard
 "$wrapper" -NoProfile -File ./uninstall.ps1 --dry-run --yes
+# Native Windows cases run in windows-powershell; Linux must exercise every selected wrapper case.
 SYMPHONY_TRELLO_TEST_PWSH="$wrapper" ./mvnw "$@" '-Djunit.parallel.enabled=false' \
-  '-Dtest=InstallerScriptTest#*powershell*+*powerShell*' test
+  '-DexcludedGroups=native-windows' '-Dtest=InstallerScriptTest#*powershell*+*powerShell*' test
 
 # A PowerShell test skips itself when SYMPHONY_TRELLO_TEST_PWSH is unusable, and Maven counts a
 # skip as a pass, so a run that never started PowerShell would succeed without this check.

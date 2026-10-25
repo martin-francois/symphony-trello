@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-10-12
-decision-makers: [François Martin, Claude]
+decision-makers: [François Martin]
 consulted:
   - "[ADR 0054](0054-powershell-installer-verification-runtime.md)"
   - "[ADR 0124](0124-look-up-betterleaks-through-the-github-package-feed.md)"
@@ -33,35 +33,49 @@ automerges only when a required check exercises it.
 
 * A .NET SDK image update must run the PowerShell installer checks before it merges.
 * The update keeps the ordinary non-major automerge, with no manual step.
-* Normal pull requests do not pull the image; ADR 0054 removed that cost from Linux CI.
+* Pull requests unrelated to the image check do not pull the image; ADR 0054 removed that cost from
+  Linux CI.
 * A check that is required must report on every pull request, including the ones that skip the
   work.
 
 ## Considered Options
 
-* A required job that runs the PowerShell checks through the wrapper when a pull request changes it.
+* A required job that runs the PowerShell checks through the wrapper when its inputs change.
 * Run the PowerShell checks through the wrapper on every pull request.
 * Turn off automerge for .NET SDK image updates.
 * A separate workflow limited to the wrapper with an `on.pull_request.paths` filter.
 
 ## Decision Outcome
 
-Chosen option: "A required job that runs the PowerShell checks through the wrapper when a pull
-request changes it", because it exercises every image update before merge and costs a normal pull
-request one checkout.
+Chosen option: "A required job that runs the PowerShell checks through the wrapper when its inputs
+change", because it exercises image updates and selection changes before merge. An unrelated pull
+request costs one checkout.
 
 The `pinned-powershell-image` job in the CI workflow runs on every pull request. It checks out the
 merge commit GitHub builds for the pull request with its first parent, which is the base branch
-tip, and compares `scripts/pwsh-docker.sh` between the two. When the file is unchanged, the job
-reports a notice and succeeds. When it changed, the job runs `scripts/check-pwsh-docker`. That
-script runs the install and uninstall dry runs through the wrapper, then
+tip. It compares `scripts/pwsh-docker.sh`, `scripts/check-pwsh-docker` and
+`src/test/java/ch/fmartin/symphony/trello/setup/InstallerScriptTest.java` between the two. When all
+three are unchanged, the job reports a notice and succeeds. A change to any of them runs
+`scripts/check-pwsh-docker`. Watching the selector and test class catches platform-tag changes before
+they leave the Linux check with skipped cases. That script runs the install and uninstall dry runs
+through the wrapper, then
 `InstallerScriptTest#*powershell*+*powerShell*` with `SYMPHONY_TRELLO_TEST_PWSH` pointing at the
 wrapper. The dry runs go first so they pull the image; a single installer test has 60 seconds. A
 PowerShell test skips itself when the wrapper is unusable, and Maven counts skips as passes, so
 the script fails unless the test report shows zero skips.
 
-The job watches only `scripts/pwsh-docker.sh`, so the image must be pinned there and nowhere else.
-The Renovate custom manager for the image therefore matches that file alone. Before this decision it
+Native Windows cases carry the JUnit tag `native-windows`. The Linux image check excludes that
+group with `-DexcludedGroups=native-windows`; the native Windows job keeps its existing method
+selector and runs those cases. This separates operating-system requirements from wrapper availability.
+A method-name exclusion would make renaming a test change its platform selection. Allowing a fixed
+number of skips would hide an unusable wrapper, so the zero-skip guard remains strict. The behavioral
+script regression checks the selected group, dry runs, missing reports, unexpected skips and command
+failures. An actual pinned-image run verifies that the remaining installer cases all execute.
+This repairs the baseline selector defect recorded in
+[issue #1061](https://github.com/martin-francois/symphony-trello/issues/1061).
+
+The watched inputs are distinct from the image pin. Only `scripts/pwsh-docker.sh` contains the pin,
+and the Renovate custom manager still matches that file alone. Before this decision it
 also listed `.github/workflows/ci.yml`, which stopped pinning the image when ADR 0054 moved the
 PowerShell checks to Windows.
 
@@ -77,8 +91,8 @@ image update only after the job passed with the image the pull request pins.
 
 * Good, because a .NET SDK image that cannot run the installers fails its own pull request.
 * Good, because image updates keep automerging without a maintainer.
-* Good, because a pull request that leaves the wrapper alone pulls no image and finishes the job in
-  seconds.
+* Good, because a pull request that leaves all three image-check inputs unchanged pulls no image
+  and finishes the job in seconds.
 * Good, because the job also covers hand-written changes to the wrapper, such as new mounts or
   runtime detection.
 * Bad, because the required check lives in the repository ruleset, outside version control. The
@@ -86,8 +100,8 @@ image update only after the job passed with the image the pull request pins.
 * Bad, because the job tests a Linux PowerShell in a container, not Windows. It answers whether the
   image runs the installers, which is the only question an image update raises; `windows-powershell`
   still covers Windows behavior.
-* Neutral, because a change to `scripts/check-pwsh-docker` or to the PowerShell tests alone does not
-  start the image. Those run on Windows in `windows-powershell`.
+* Good, because selector and platform-tag changes run the strict zero-skip image check as well as
+  the native Windows tests.
 
 ### Confirmation
 
@@ -102,19 +116,27 @@ This decision remains implemented when:
 
 ## Pros and Cons of the Options
 
-### A Required Job That Runs The PowerShell Checks Through The Wrapper When A Pull Request Changes It
+### A required job that runs the PowerShell checks when its inputs change
 
-* Good, because the check runs exactly when the image or the wrapper changes.
+The required job checks its three inputs on every pull request. It starts the pinned image only
+when one changes.
+
+* Good, because the check runs when the image, wrapper, selector or installer test class changes.
 * Good, because the job always reports, so the ruleset can require it.
-* Bad, because the change detection is repository code that has to name the right file.
+* Bad, because the change detection is repository code that has to name every relevant input.
 
 ### Run The PowerShell Checks Through The Wrapper On Every Pull Request
 
+The existing CI workflow starts the pinned image and runs the Linux PowerShell checks on every
+pull request.
+
 * Good, because there is no change detection to get wrong.
-* Bad, because every pull request pulls an image of about 1 GB and runs 53 PowerShell tests in it,
+* Bad, because every pull request pulls an image of about 1 GB and runs the selected PowerShell tests in it,
   which ADR 0054 removed from Linux CI on purpose.
 
 ### Turn Off Automerge For .NET SDK Image Updates
+
+Renovate still proposes image updates, but a maintainer tests and merges each one manually.
 
 * Good, because it needs no new job.
 * Bad, because a maintainer would have to test and merge every digest update by hand. Microsoft
@@ -123,6 +145,8 @@ This decision remains implemented when:
   adds a required check instead, as ADR 0124 did for BetterLeaks.
 
 ### A Separate Workflow Limited To The Wrapper With An `on.pull_request.paths` Filter
+
+A separate workflow starts only when a pull request changes the wrapper, using GitHub's path filter.
 
 * Good, because GitHub skips the whole workflow for other pull requests.
 * Bad, because a workflow skipped by a path filter reports no check at all. A required check that

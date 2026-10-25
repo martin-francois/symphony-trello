@@ -252,8 +252,6 @@ account, so rootless Podman pulls the image into your existing store once
 
 - The installer tests do not use a Podman store that only `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, or a
   `HOME` other than the `getent passwd` one points to.
-- Through a podman-docker shim, some PowerShell installer tests fail until
-  [#823](https://github.com/martin-francois/symphony-trello/issues/823) is fixed.
 
 `scripts/check-pwsh-docker` runs both dry runs and the PowerShell installer option tests through the
 wrapper, and fails when one of those tests skipped. CI runs it in the required
