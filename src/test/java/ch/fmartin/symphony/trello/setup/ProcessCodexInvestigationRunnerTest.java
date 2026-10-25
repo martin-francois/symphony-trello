@@ -6,6 +6,7 @@ import ch.fmartin.symphony.trello.setup.CodexInvestigationFinding.Classification
 import ch.fmartin.symphony.trello.setup.CodexInvestigationFinding.ValidationRun;
 import ch.fmartin.symphony.trello.setup.CodexInvestigationRunner.Outcome;
 import ch.fmartin.symphony.trello.setup.CodexInvestigationRunner.Request;
+import ch.fmartin.symphony.trello.testsupport.BoundedWait;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
@@ -13,11 +14,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
-import java.util.function.BooleanSupplier;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
@@ -36,7 +35,6 @@ final class ProcessCodexInvestigationRunnerTest {
     private static final long CHILD_EXIT_WAIT_SECONDS = 10;
     private static final Duration SHUTDOWN_CHILD_LIFETIME = Duration.ofMinutes(5);
     private static final Duration PROBE_TIMEOUT = Duration.ofSeconds(10);
-    private static final Duration PROBE_POLL_INTERVAL = Duration.ofMillis(25);
     private static final int SUCCESS_EXIT_CODE = 0;
     private static final String VALID_ANSWER =
             """
@@ -180,7 +178,8 @@ final class ProcessCodexInvestigationRunnerTest {
                 .start();
         List<ProcessHandle> cleanup = new ArrayList<>();
         try {
-            awaitProbe(() -> Files.exists(ready), "the investigation reaches its registered-hook wait");
+            BoundedWait.until(
+                    PROBE_TIMEOUT, () -> Files.exists(ready), "the investigation reaches its registered-hook wait");
             Optional<ProcessHandle> codexProcess = processFromPidFile(codexPid);
             Optional<ProcessHandle> child = processFromPidFile(childPid);
             child.ifPresent(cleanup::add);
@@ -201,7 +200,8 @@ final class ProcessCodexInvestigationRunnerTest {
                     .as("the helper JVM exits after running its shutdown hooks")
                     .isTrue();
             assertThat(helper.exitValue()).isEqualTo(SUCCESS_EXIT_CODE);
-            awaitProbe(
+            BoundedWait.until(
+                    PROBE_TIMEOUT,
                     () -> codexProcess.filter(ProcessHandle::isAlive).isEmpty()
                             && child.filter(ProcessHandle::isAlive).isEmpty(),
                     "the registered hook stops the fake Codex process and its child");
@@ -213,19 +213,18 @@ final class ProcessCodexInvestigationRunnerTest {
         }
     }
 
-    private static Optional<ProcessHandle> processFromPidFile(Path path) throws IOException {
-        return Files.exists(path) ? ProcessHandle.of(Long.parseLong(Files.readString(path))) : Optional.empty();
+    private static boolean waitsForProcess(Thread investigation) {
+        for (StackTraceElement frame : investigation.getStackTrace()) {
+            if (frame.getClassName().startsWith("java.lang.Process")
+                    && frame.getMethodName().equals("waitFor")) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    private static void awaitProbe(BooleanSupplier condition, String description) throws InterruptedException {
-        long deadline = System.nanoTime() + PROBE_TIMEOUT.toNanos();
-        while (!condition.getAsBoolean()) {
-            if (System.nanoTime() - deadline >= 0) {
-                throw new AssertionError(
-                        "cannot observe shutdown probe \"" + description + "\": expected it within " + PROBE_TIMEOUT);
-            }
-            Thread.sleep(PROBE_POLL_INTERVAL);
-        }
+    private static Optional<ProcessHandle> processFromPidFile(Path path) throws IOException {
+        return Files.exists(path) ? ProcessHandle.of(Long.parseLong(Files.readString(path))) : Optional.empty();
     }
 
     public static final class ShutdownProbe {
@@ -243,12 +242,11 @@ final class ProcessCodexInvestigationRunnerTest {
                     .start(() -> new ProcessCodexInvestigationRunner()
                             .investigate(request(codex, root, List.of(), GENEROUS_TIMEOUT)));
             // run() registers its shutdown hook before entering Process.waitFor.
-            awaitProbe(
+            BoundedWait.until(
+                    PROBE_TIMEOUT,
                     () -> codexPid.toFile().length() > 0
                             && childPid.toFile().length() > 0
-                            && Arrays.stream(investigation.getStackTrace())
-                                    .anyMatch(frame -> frame.getClassName().startsWith("java.lang.Process")
-                                            && frame.getMethodName().equals("waitFor")),
+                            && waitsForProcess(investigation),
                     "the investigation waits for its child after hook registration");
             Files.writeString(ready, "ready");
             System.in.read();

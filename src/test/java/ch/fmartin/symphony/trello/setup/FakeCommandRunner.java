@@ -3,7 +3,6 @@ package ch.fmartin.symphony.trello.setup;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -11,6 +10,7 @@ import java.util.Map;
 import java.util.Queue;
 
 final class FakeCommandRunner implements CommandRunner {
+    private static final int NO_MATCHED_PREFIX_LENGTH = -1;
     private final Map<List<String>, Queue<CommandResult>> results = new LinkedHashMap<>();
     private final Map<List<String>, CommandResult> prefixResults = new HashMap<>();
     private final List<List<String>> commands = new ArrayList<>();
@@ -44,13 +44,17 @@ final class FakeCommandRunner implements CommandRunner {
         commands.add(commandLine);
         Queue<CommandResult> queue = results.get(commandLine);
         if (queue == null || queue.isEmpty()) {
-            return prefixResults.entrySet().stream()
-                    .filter(prefixResult -> startsWith(commandLine, prefixResult.getKey()))
-                    .max(Comparator.comparingInt(
-                            prefixResult -> prefixResult.getKey().size()))
-                    .map(Map.Entry::getValue)
-                    .orElseGet(() -> new CommandResult(
-                            CommandResult.COMMAND_NOT_FOUND_EXIT_CODE, "missing: " + Arrays.toString(command)));
+            var matchingResult = new CommandResult(
+                    CommandResult.COMMAND_NOT_FOUND_EXIT_CODE, "missing: " + Arrays.toString(command));
+            int longestPrefix = NO_MATCHED_PREFIX_LENGTH;
+            for (var prefixResult : prefixResults.entrySet()) {
+                int prefixLength = prefixResult.getKey().size();
+                if (prefixLength > longestPrefix && startsWith(commandLine, prefixResult.getKey())) {
+                    longestPrefix = prefixLength;
+                    matchingResult = prefixResult.getValue();
+                }
+            }
+            return matchingResult;
         }
         CommandResult result = queue.peek();
         if (queue.size() > 1) {
