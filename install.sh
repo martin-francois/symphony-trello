@@ -261,6 +261,10 @@ report_failed_phase() {
       printf '%s\n' "$PHASE_RECOVERY"
     } >&2
   fi
+  if [[ -n "${SOURCE_CHECKOUT:-}" ]] && ! rm -rf "$SOURCE_CHECKOUT"; then
+    printf 'cannot remove temporary source checkout "%s": remove it manually after the installer stops\n' "$SOURCE_CHECKOUT" >&2
+  fi
+  return "$status"
 }
 
 run_with_label() {
@@ -400,15 +404,22 @@ stable_install_context_file_safe() {
   return 0
 }
 
+command_app_version() {
+  local output version classpath
+  need java || return 1
+  classpath="$APP_DIR/target/quarkus-app/quarkus-run.jar:$APP_DIR/target/quarkus-app/app/*:$APP_DIR/target/quarkus-app/lib/main/*:$APP_DIR/target/quarkus-app/quarkus/*"
+  output="$(java "-Dsymphony.trello.app.home=$APP_DIR" "-Dsymphony.trello.config.dir=$CONFIG_DIR" -cp "$classpath" ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain --version 2>/dev/null)" || return 1
+  version="${output#symphony-trello }"
+  if [[ -n "$output" && "$output" != *$'\n'* && "$version" != "$output" && -n "$version" ]]; then
+    printf '%s\n' "$version"
+    return 0
+  fi
+  return 1
+}
+
 installed_app_version() {
-  local output version
-  if [[ -x "$BIN_DIR/symphony-trello" ]]; then
-    output="$("$BIN_DIR/symphony-trello" --version 2>/dev/null || true)"
-    version="${output#symphony-trello }"
-    if [[ -n "$output" && "$output" != *$'\n'* && "$version" != "$output" && -n "$version" ]]; then
-      printf '%s\n' "$version"
-      return
-    fi
+  if command_app_version; then
+    return
   fi
   if [[ "$INSTALL_SOURCE" == "release-archive" ]]; then
     printf '%s\n' "$VERSION"
@@ -422,6 +433,41 @@ installed_source_commit() {
     return
   fi
   git -C "$APP_DIR" rev-parse --verify HEAD 2>/dev/null || true
+}
+
+reject_major_downgrade() {
+  local previous_major="${PREVIOUS_APP_VERSION%%.*}" target_major="${VERSION%%.*}"
+  if [[ ! "$previous_major" =~ ^[0-9]+$ || ! "$target_major" =~ ^[0-9]+$ ]]; then
+    return
+  fi
+  if ((previous_major > target_major)); then
+    echo "Symphony $PREVIOUS_APP_VERSION is installed, and release $VERSION belongs to an older major version." >&2
+    echo "Downgrading to an older major version is not supported. Install a $previous_major.x release instead." >&2
+    exit 2
+  fi
+}
+
+check_generated_workflows() {
+  local migration_help
+  local -a migrate_command=("$BIN_DIR/symphony-trello" migrate-workflows)
+  if [[ "$UPDATING_EXISTING_APP" != true ]]; then
+    return
+  fi
+  echo
+  print_heading "Checking generated workflows..."
+  if ! migration_help="$("$BIN_DIR/symphony-trello" migrate-workflows --help 2>/dev/null)" ||
+    ! grep -Eq '^Usage:.* migrate-workflows([[:space:]]|$)' <<<"$migration_help"; then
+    print_status NOTE "  This Symphony version cannot check generated workflow bodies."
+    return
+  fi
+  if [[ -n "$PREVIOUS_APP_VERSION" ]]; then
+    migrate_command+=(--from-version "$PREVIOUS_APP_VERSION")
+  fi
+  if [[ "$NO_ONBOARD" == false ]] && terminal_available; then
+    run_interactive "${migrate_command[@]}"
+  else
+    run "${migrate_command[@]}" --non-interactive
+  fi
 }
 
 prompt_from_terminal() {
@@ -1333,25 +1379,6 @@ display_repo_source() {
   printf '%s\n' "$value"
 }
 
-remote_has_branch() {
-  git ls-remote --exit-code --heads "$1" "$2" >/dev/null 2>&1
-}
-
-checkout_ref() {
-  local app_dir="$1"
-  local ref="$2"
-  if [[ "$DRY_RUN" == true ]]; then
-    run git -C "$app_dir" checkout "$ref"
-    return
-  fi
-  if git -C "$app_dir" show-ref --verify --quiet "refs/remotes/origin/$ref"; then
-    run git -C "$app_dir" checkout -q -B "$ref" "origin/$ref"
-    run git -C "$app_dir" pull -q --ff-only origin "$ref"
-  else
-    run git -C "$app_dir" checkout -q --detach "$ref"
-  fi
-}
-
 assert_existing_checkout_safe() {
   if [[ -f "$APP_DIR/.symphony-trello-install" ]]; then
     return
@@ -1391,26 +1418,102 @@ assert_existing_app_safe() {
   exit 2
 }
 
+source_project_version() {
+  # Only the root project's explicit version identifies the fetched application.
+  # Parent, plugin, and dependency versions must never authorize a downgrade.
+  awk '
+{ xml = xml $0 "\n" }
+END {
+  while ((start = index(xml, "<!--")) > 0) {
+    rest = substr(xml, start + 4)
+    end = index(rest, "-->")
+    if (!end) exit 1
+    xml = substr(xml, 1, start - 1) substr(rest, end + 3)
+  }
+  while ((start = index(xml, "<")) > 0) {
+    text = substr(xml, 1, start - 1)
+    if (depth == 0 && text !~ /^[[:space:]]*$/) exit 1
+    xml = substr(xml, start + 1)
+    end = index(xml, ">")
+    if (!end) exit 1
+    tag = substr(xml, 1, end - 1)
+    xml = substr(xml, end + 1)
+    if (tag ~ /^\?xml[[:space:]]/ && depth == 0 && roots == 0) continue
+    if (tag ~ /^[!?]/) exit 1
+    if (tag ~ /^\//) {
+      name = substr(tag, 2)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", name)
+      if (depth == 0 || stack[depth] != name) exit 1
+      if (depth == 2 && name == "version") {
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", text)
+        version = text
+        versions++
+      }
+      depth--
+    } else {
+      if (depth == 2 && stack[depth] == "version") exit 1
+      name = tag
+      sub(/[[:space:]\/].*$/, "", name)
+      if (depth == 0 && (name != "project" || roots++)) exit 1
+      stack[++depth] = name
+      if (tag ~ /\/[[:space:]]*$/) depth--
+    }
+  }
+  if (xml !~ /^[[:space:]]*$/ || depth != 0 || roots != 1 || versions != 1 || version !~ /^[0-9]+[.][0-9]+[.][0-9]+(-[A-Za-z0-9.-]+)?([+][A-Za-z0-9-]+([.][A-Za-z0-9-]+)*)?$/) exit 1
+  print version
+}
+  '
+}
+
+prepare_source_checkout() {
+  if [[ -d "$APP_DIR/.git" ]]; then
+    assert_existing_checkout_safe
+    local local_changes
+    if ! local_changes="$(git -C "$APP_DIR" status --porcelain --untracked-files=no)"; then
+      echo "cannot inspect source checkout: check the repository before rerunning the installer" >&2
+      exit 2
+    fi
+    if [[ -n "$local_changes" ]]; then
+      echo "cannot update source checkout: source checkout has local changes" >&2
+      echo "Commit tracked changes on a separate branch, or save a patch and restore the files, before rerunning the installer." >&2
+      exit 2
+    fi
+  else
+    assert_existing_app_safe
+  fi
+  SOURCE_CHECKOUT="$(mktemp -d)"
+  run_with_label "git clone -q --no-checkout $(display_repo_source "$REPO_URL") $SOURCE_CHECKOUT" git clone -q --no-checkout "$REPO_URL" "$SOURCE_CHECKOUT"
+  SOURCE_BRANCH=false
+  local revision="$REF"
+  if git -C "$SOURCE_CHECKOUT" show-ref --verify --quiet "refs/remotes/origin/$REF"; then
+    SOURCE_BRANCH=true
+    revision="refs/remotes/origin/$REF"
+  fi
+  SOURCE_COMMIT="$(git -C "$SOURCE_CHECKOUT" rev-parse --verify "$revision^{commit}")"
+  if ! VERSION="$(git -C "$SOURCE_CHECKOUT" show "$SOURCE_COMMIT:pom.xml" | source_project_version)"; then
+    echo "cannot read source project/version: expected an explicit semantic version in the root pom.xml" >&2
+    echo "Choose a source ref with a resolved project version, then rerun the installer." >&2
+    exit 2
+  fi
+}
+
 install_or_update_checkout() {
   if [[ ! -d "$APP_DIR/.git" ]]; then
     if [[ -e "$APP_DIR" ]]; then
-      assert_existing_app_safe
       print_status NOTE "  Replacing the installed release archive app with a Git checkout"
       run rm -rf "$APP_DIR"
     fi
     run mkdir -p "$(dirname "$APP_DIR")"
-    if [[ "$DRY_RUN" == false ]] && remote_has_branch "$REPO_URL" "$REF"; then
-      run_with_label "git clone -q --branch $REF $(display_repo_source "$REPO_URL") $APP_DIR" git clone -q --branch "$REF" "$REPO_URL" "$APP_DIR"
-    else
-      run_with_label "git clone -q $(display_repo_source "$REPO_URL") $APP_DIR" git clone -q "$REPO_URL" "$APP_DIR"
-      run git -C "$APP_DIR" fetch -q --tags --prune origin
-      checkout_ref "$APP_DIR" "$REF"
-    fi
+    run mv "$SOURCE_CHECKOUT" "$APP_DIR"
   else
-    assert_existing_checkout_safe
     ensure_checkout_origin
-    run git -C "$APP_DIR" fetch -q --tags --prune origin
-    checkout_ref "$APP_DIR" "$REF"
+    run git -C "$APP_DIR" fetch -q "$SOURCE_CHECKOUT" "$SOURCE_COMMIT"
+  fi
+  # Install the commit whose version passed preflight, even if the remote ref moves.
+  if [[ "$SOURCE_BRANCH" == true ]]; then
+    run git -C "$APP_DIR" checkout -q -B "$REF" "$SOURCE_COMMIT"
+  else
+    run git -C "$APP_DIR" checkout -q --detach "$SOURCE_COMMIT"
   fi
 }
 
@@ -2864,6 +2967,9 @@ if [[ "$DRY_RUN" == true ]]; then
     print_status WOULD " unpack release archive into: $APP_DIR"
   fi
   print_status WOULD " install command: $BIN_DIR/symphony-trello"
+  if [[ -d "$APP_DIR" ]]; then
+    print_status WOULD " check generated workflows after the update: symphony-trello migrate-workflows"
+  fi
   offer_path_setup
   if [[ "$SETUP_PHASE_PLANNED" == true ]]; then
     begin_phase "$SETUP_PHASE_TITLE" "$SETUP_RECOVERY"
@@ -2911,6 +3017,14 @@ if [[ "$NO_ONBOARD" == false ]] && ! codex login status >/dev/null 2>&1; then
 fi
 
 begin_phase "$APP_PHASE_TITLE" "$APP_RECOVERY"
+PREVIOUS_APP_VERSION=""
+if [[ "$UPDATING_EXISTING_APP" == true ]]; then
+  PREVIOUS_APP_VERSION="$(command_app_version || true)"
+fi
+if [[ "$INSTALL_SOURCE" == "source-checkout" ]]; then
+  prepare_source_checkout
+fi
+reject_major_downgrade
 if [[ "$RESTART_MANAGED_WORKERS" == true ]]; then
   run "$BIN_DIR/symphony-trello" stop
   print_status OK "  Managed workers stopped for the update"
@@ -2988,6 +3102,7 @@ EOF
 fi
 print_status OK "  Command installed"
 write_install_context
+check_generated_workflows
 
 offer_path_setup
 

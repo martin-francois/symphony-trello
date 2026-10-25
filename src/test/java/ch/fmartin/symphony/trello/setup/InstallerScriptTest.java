@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.CliExitCodes.SETUP_FAILURE;
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -24,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Named;
@@ -4295,7 +4297,13 @@ final class InstallerScriptTest {
                     chmod +x "$app/mvnw"
                     exit 0
                     ;;
-                  -C) exit 0 ;;
+                  -C)
+                    case "${3:-}" in
+                      rev-parse) printf '1111111111111111111111111111111111111111\\n' ;;
+                      show) printf '<project><version>1.0.0</version></project>\\n' ;;
+                    esac
+                    exit 0
+                    ;;
                   *) exit 0 ;;
                 esac
                 """);
@@ -7547,7 +7555,8 @@ final class InstallerScriptTest {
                         "is_managed_pid",
                         "mapfile",
                         "nohup");
-        assertThat(posixInstaller).doesNotContain("[[:space:]");
+        // Keep the shell-regex guard scoped to shell conditions; awk uses POSIX character classes.
+        assertThat(posixInstaller).doesNotContainPattern("(?m)^.*\\[\\[.*=~.*\\[\\[:space:.*$");
         assertThat(powershellInstaller)
                 .contains(
                         "[Alias(\"-dry-run\", \"dry-run\", \"--dry-run\")]",
@@ -8148,21 +8157,26 @@ final class InstallerScriptTest {
             // then
             assertThat(install.exitCode()).as(install.transcript()).isZero();
             assertThat(update.exitCode()).as(update.transcript()).isZero();
+            assertThat(install.transcript()).doesNotContain("Checking generated workflows...");
             assertThat(update.transcript())
                     .containsSubsequence(
                             "Update plan",
                             "[2/4] Updating Symphony",
                             "Stopped WORKFLOW.docs-queue.md",
                             "OK  Managed workers stopped for the update",
+                            "Checking generated workflows...",
                             "[3/4] Running setup",
                             "[4/4] Restarting managed workers",
                             "You're good to go");
             assertThat(fakeLog)
                     .content(StandardCharsets.UTF_8)
                     .contains("mvnw -q -f " + symphonyHome.resolve("app/pom.xml") + " -DskipTests clean package")
+                    .contains("TrelloBoardSetupMain migrate-workflows --from-version test dotenv=")
+                    .doesNotContain("migrate-workflows --from-version test --non-interactive")
                     .containsSubsequence(
                             "TrelloBoardSetupMain stop",
                             "mvnw -q -f " + symphonyHome.resolve("app/pom.xml") + " -DskipTests clean package",
+                            "TrelloBoardSetupMain migrate-workflows --from-version test",
                             "TrelloBoardSetupMain setup-local",
                             "TrelloBoardSetupMain start",
                             "--all");
@@ -8208,6 +8222,25 @@ final class InstallerScriptTest {
                     "--no-onboard",
                     "--bin-dir",
                     binDirectory.toString());
+            Map<String, String> withoutMigrationCommand = new LinkedHashMap<>(environment);
+            withoutMigrationCommand.put("SYMPHONY_FAKE_WITHOUT_WORKFLOW_MIGRATION", "true");
+            withoutMigrationCommand.put("SYMPHONY_FAKE_MIGRATION_HELP", migrationHelp(false));
+            ProcessResult updateWithoutMigrationCommand = run(
+                    withoutMigrationCommand,
+                    "bash",
+                    installScript.toString(),
+                    "--no-onboard",
+                    "--bin-dir",
+                    binDirectory.toString());
+            Map<String, String> failingMigration = new LinkedHashMap<>(environment);
+            failingMigration.put("SYMPHONY_FAKE_WORKFLOW_MIGRATION_FAILURE", "true");
+            ProcessResult rejectedMigration = run(
+                    failingMigration,
+                    "bash",
+                    installScript.toString(),
+                    "--no-onboard",
+                    "--bin-dir",
+                    binDirectory.toString());
 
             // then
             assertThat(install.exitCode()).as(install.transcript()).isZero();
@@ -8216,17 +8249,510 @@ final class InstallerScriptTest {
                     .containsSubsequence(
                             "[2/3] Updating Symphony",
                             "OK  Managed workers stopped for the update",
+                            "Checking generated workflows...",
                             "[3/3] Restarting managed workers",
                             "Symphony for Trello updated.",
                             "Next step: check the managed workers with:",
                             "status");
             assertThat(fakeLog)
                     .content(StandardCharsets.UTF_8)
-                    .containsSubsequence("TrelloBoardSetupMain stop", "TrelloBoardSetupMain start", "--all");
+                    .containsSubsequence(
+                            "TrelloBoardSetupMain stop",
+                            "TrelloBoardSetupMain migrate-workflows --from-version test --non-interactive",
+                            "TrelloBoardSetupMain start",
+                            "--all");
+            assertThat(updateWithoutMigrationCommand.exitCode())
+                    .as(updateWithoutMigrationCommand.output())
+                    .isZero();
+            assertThat(updateWithoutMigrationCommand.output())
+                    .contains("NOTE  This Symphony version cannot check generated workflow bodies.")
+                    .doesNotContain("migrate-workflows --from-version");
+            assertThat(rejectedMigration.exitCode()).isNotZero();
+            assertThat(rejectedMigration.output())
+                    .contains("REJECTED  simulated workflow migration rejection")
+                    .doesNotContain("[3/3] Restarting managed workers");
         } finally {
             if (Files.exists(binDirectory.resolve("symphony-trello"))) {
                 run(environment, binDirectory.resolve("symphony-trello").toString(), "stop");
             }
+        }
+    }
+
+    @Test
+    void posixReleaseInstallRejectsAMajorVersionDowngradeBeforeReplacingTheApp() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        ReleaseArchiveUpdate update = releaseArchiveUpdate("major-downgrade", "99.0.0");
+
+        // when
+        ProcessResult result = update.runPosix();
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(SETUP_FAILURE);
+        assertThat(result.output())
+                .contains(
+                        "Symphony 99.0.0 is installed, and release "
+                                + installerDefaultRef().substring(1) + " belongs to an older major version.",
+                        "Downgrading to an older major version is not supported. Install a 99.x release instead.")
+                .doesNotContain("Checking generated workflows...");
+        update.assertAppUntouched();
+    }
+
+    @Test
+    void posixReleaseInstallLetsASameMajorDowngradeReachTheReleaseDownload() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("curl"));
+        String release = installerDefaultRef().substring(1);
+        String newerSameMajor = release.substring(0, release.indexOf('.')) + ".99.0";
+        ReleaseArchiveUpdate update = releaseArchiveUpdate("same-major-downgrade", newerSameMajor);
+
+        // when
+        ProcessResult result = update.runPosix();
+
+        // then
+        assertThat(result.exitCode())
+                .as("the release directory is empty, so the download must fail after the version check passed")
+                .isNotZero();
+        assertThat(result.output())
+                .contains(
+                        "[2/2] Updating Symphony", update.releaseBaseUrl() + "/symphony-trello-" + release + ".tar.gz")
+                .doesNotContain("belongs to an older major version");
+        update.assertAppUntouched();
+    }
+
+    @Test
+    void powershellReleaseInstallRejectsAMajorVersionDowngradeBeforeReplacingTheAppWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        ReleaseArchiveUpdate update = releaseArchiveUpdate("ps-major-downgrade", "99.0.0");
+
+        // when
+        ProcessResult result = update.runPowerShell(pwsh);
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isOne();
+        assertThat(normalizedWhitespace(result.output()))
+                .contains(
+                        "Symphony 99.0.0 is installed, and release "
+                                + installerDefaultRef().substring(1) + " belongs to an older major version.",
+                        "Downgrading to an older major version is not supported. Install a 99.x release instead.")
+                .doesNotContain("Checking generated workflows...");
+        update.assertAppUntouched();
+    }
+
+    @Test
+    void powershellReleaseInstallLetsASameMajorDowngradeReachTheReleaseDownloadWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        String release = installerDefaultRef().substring(1);
+        String newerSameMajor = release.substring(0, release.indexOf('.')) + ".99.0";
+        ReleaseArchiveUpdate update = releaseArchiveUpdate("ps-same-major-downgrade", newerSameMajor);
+
+        // when
+        ProcessResult result = update.runPowerShell(pwsh);
+
+        // then
+        assertThat(result.exitCode())
+                .as("the release directory is empty, so the download must fail after the version check passed")
+                .isNotZero();
+        assertThat(result.output())
+                .contains("[2/2] Updating Symphony", update.releaseBaseUrl() + "/symphony-trello-" + release + ".zip")
+                .doesNotContain("belongs to an older major version");
+        update.assertAppUntouched();
+    }
+
+    @ParameterizedTest(name = "POSIX source downgrade from existing checkout: {0}")
+    @ValueSource(booleans = {false, true})
+    void posixSourceInstallRejectsAMajorDowngradeBeforeReplacingTheApp(boolean existingCheckout) throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        SourceDowngrade update = sourceDowngrade(existingCheckout);
+
+        // when
+        ProcessResult result = update.run(List.of("bash", "./install.sh"));
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(SETUP_FAILURE);
+        assertThat(result.output()).contains("belongs to an older major version");
+        update.assertAppUntouched();
+    }
+
+    @ParameterizedTest(name = "PowerShell source downgrade from existing checkout: {0}")
+    @ValueSource(booleans = {false, true})
+    void powershellSourceInstallRejectsAMajorDowngradeBeforeReplacingTheAppWhenAvailable(boolean existingCheckout)
+            throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        assumeTrue(commandExists("git"));
+        SourceDowngrade update = sourceDowngrade(existingCheckout);
+
+        // when
+        ProcessResult result = update.run(command(pwsh, "-NoProfile", "-File", "./install.ps1"));
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isOne();
+        assertThat(normalizedWhitespace(result.output())).contains("belongs to an older major version");
+        update.assertAppUntouched();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void posixSourceInstallRejectsAMajorDowngradeWithoutTheOldWrapper(boolean newCommandDirectory) throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        SourceDowngrade update = sourceDowngrade(false);
+        ReleaseArchiveUpdate installed = update.installed();
+        if (newCommandDirectory) {
+            installed = new ReleaseArchiveUpdate(
+                    installed.appHome(),
+                    installed.binDirectory().resolveSibling("replacement-bin"),
+                    installed.environment());
+            update = new SourceDowngrade(installed, update.source(), update.sentinel(), update.originalHead());
+        } else {
+            Files.delete(installed.binDirectory().resolve("symphony-trello"));
+        }
+
+        // when
+        ProcessResult result = update.run(List.of("bash", "./install.sh"));
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(SETUP_FAILURE);
+        assertThat(result.output()).contains("belongs to an older major version");
+        update.assertAppUntouched();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void posixSourceInstallRejectsAMajorDowngradeHiddenByDirtyPom(boolean staged) throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        SourceDowngrade update = dirtySourceDowngrade(staged);
+
+        // when
+        ProcessResult result = update.run(List.of("bash", "./install.sh"));
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(SETUP_FAILURE);
+        assertThat(result.output()).contains("source checkout has local changes");
+        update.assertAppUntouched();
+        assertThat(update.installed().appHome().resolve("pom.xml"))
+                .hasContent("<project><version>1.0.0</version></project>\n");
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void powershellSourceInstallRejectsAMajorDowngradeHiddenByDirtyPomWhenAvailable(boolean staged) throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        assumeTrue(commandExists("git"));
+        SourceDowngrade update = dirtySourceDowngrade(staged);
+
+        // when
+        ProcessResult result = update.run(command(pwsh, "-NoProfile", "-File", "./install.ps1"));
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isOne();
+        assertThat(normalizedWhitespace(result.output())).contains("source checkout has local changes");
+        update.assertAppUntouched();
+        assertThat(update.installed().appHome().resolve("pom.xml"))
+                .hasContent("<project><version>1.0.0</version></project>\n");
+    }
+
+    private SourceDowngrade dirtySourceDowngrade(boolean staged) throws Exception {
+        SourceDowngrade update = sourceDowngrade(true);
+        addSourceRepositoryCommit(update.source(), "pom.xml", "<project><version>99.0.0</version></project>\n");
+        Path app = update.installed().appHome();
+        run(Map.of(), "git", "-C", app.toString(), "fetch", update.source().toString(), "main")
+                .assertSuccess();
+        run(Map.of(), "git", "-C", app.toString(), "checkout", "--detach", "FETCH_HEAD")
+                .assertSuccess();
+        String head = run(Map.of(), "git", "-C", app.toString(), "rev-parse", "HEAD")
+                .output()
+                .strip();
+        Files.writeString(app.resolve("pom.xml"), "<project><version>1.0.0</version></project>\n");
+        if (staged) {
+            run(Map.of(), "git", "-C", app.toString(), "add", "pom.xml").assertSuccess();
+        }
+        return new SourceDowngrade(update.installed(), update.source(), update.sentinel(), head);
+    }
+
+    @MethodSource("sourcePomVersions")
+    @ParameterizedTest
+    void posixSourcePreflightReadsOnlyAnExplicitRootVersion(SourcePom sourcePom) throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        SourceDowngrade update = sourceDowngrade(false);
+        addSourceRepositoryCommit(update.source(), "pom.xml", sourcePom.xml());
+
+        // when
+        ProcessResult result = update.run(List.of("bash", "./install.sh"));
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(SETUP_FAILURE);
+        assertThat(result.output())
+                .contains(sourcePom.expectedMessage(), "Installer stopped during [2/2] Updating Symphony.");
+        update.assertAppUntouched();
+    }
+
+    @MethodSource("sourcePomVersions")
+    @ParameterizedTest
+    void powershellSourcePreflightReadsOnlyAnExplicitRootVersionWhenAvailable(SourcePom sourcePom) throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        assumeTrue(commandExists("git"));
+        SourceDowngrade update = sourceDowngrade(false);
+        addSourceRepositoryCommit(update.source(), "pom.xml", sourcePom.xml());
+
+        // when
+        ProcessResult result = update.run(command(pwsh, "-NoProfile", "-File", "./install.ps1"));
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isOne();
+        assertThat(normalizedWhitespace(result.output()))
+                .contains(sourcePom.expectedMessage(), "Installer stopped during [2/2] Updating Symphony.");
+        update.assertAppUntouched();
+    }
+
+    @Test
+    void posixSourcePreflightKeepsTheFailureWhenTemporaryCheckoutCleanupFails() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        SourceDowngrade update = sourceDowngrade(false);
+        addSourceRepositoryCommit(update.source(), "pom.xml", "<project />\n");
+        Path fakeBin = temporaryDirectory.resolve("cleanup-failure-bin");
+        Files.createDirectories(fakeBin);
+        writeExecutable(fakeBin.resolve("rm"), "#!/usr/bin/env bash\nexit 17\n");
+        update.installed()
+                .environment()
+                .put(
+                        "PATH",
+                        fakeBin
+                                + File.pathSeparator
+                                + update.installed().environment().get("PATH"));
+        update.installed().environment().put("TMPDIR", temporaryDirectory.toString());
+
+        // when
+        ProcessResult result = update.run(List.of("bash", "./install.sh"));
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(SETUP_FAILURE);
+        assertThat(result.output())
+                .contains(
+                        "cannot read source project/version",
+                        "Installer stopped during [2/2] Updating Symphony.",
+                        "cannot remove temporary source checkout",
+                        "remove it manually after the installer stops");
+        update.assertAppUntouched();
+    }
+
+    @Test
+    void powershellSourcePreflightKeepsTheFailureWhenTemporaryCheckoutCleanupFailsWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        assumeTrue(commandExists("git"));
+        SourceDowngrade update = sourceDowngrade(false);
+        addSourceRepositoryCommit(update.source(), "pom.xml", "<project />\n");
+        Path installer = temporaryDirectory.resolve("cleanup-failure-install.ps1");
+        Files.writeString(
+                installer,
+                Files.readString(Path.of("install.ps1"))
+                        .replace(
+                                "$ErrorActionPreference = \"Stop\"",
+                                """
+                                function Remove-Item { throw 'synthetic cleanup failure' }
+                                $ErrorActionPreference = "Stop"\
+                                """));
+
+        // when
+        ProcessResult result = update.run(command(pwsh, "-NoProfile", "-File", installer.toString()));
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isOne();
+        assertThat(normalizedWhitespace(result.output()))
+                .contains(
+                        "cannot read source project/version",
+                        "Installer stopped during [2/2] Updating Symphony.",
+                        "cannot remove temporary source checkout",
+                        "remove it manually after the installer stops");
+        update.assertAppUntouched();
+    }
+
+    private static List<SourcePom> sourcePomVersions() {
+        return List.of(
+                new SourcePom(
+                        "<project><version>1.5.0-rc.10+build.2</version></project>",
+                        "release 1.5.0-rc.10+build.2 belongs to an older major version"),
+                new SourcePom(
+                        "<project><version>1.5.0+build.2</version></project>", "belongs to an older major version"),
+                new SourcePom(
+                        "<project><version>1.5.0+build..2</version></project>", "cannot read source project/version"),
+                new SourcePom(
+                        """
+                        <project xmlns="http://maven.apache.org/POM/4.0.0">
+                          <!-- <version>99.0.0</version>
+                               <project><version>99.0.0</version></project> -->
+                          <parent><version>99.0.0</version></parent>
+                          <version>1.0.0</version>
+                        </project>
+                        """,
+                        "belongs to an older major version"),
+                new SourcePom(
+                        """
+                        <project><dependencyManagement><dependencies><dependency>
+                          <version>99.0.0</version>
+                        </dependency></dependencies></dependencyManagement>
+                        <build><plugins><plugin><version>99.0.0</version></plugin></plugins></build>
+                        <version>1.0.0</version></project>
+                        """,
+                        "belongs to an older major version"),
+                new SourcePom(
+                        "<project><parent><version>1.0.0</version></parent></project>",
+                        "cannot read source project/version"),
+                new SourcePom(
+                        "<project><build><plugins><plugin><version>1.0.0</version></plugin></plugins></build></project>",
+                        "cannot read source project/version"),
+                new SourcePom("<project />", "cannot read source project/version"),
+                new SourcePom(
+                        "<project><version>${revision}</version></project>", "cannot read source project/version"));
+    }
+
+    record SourcePom(String xml, String expectedMessage) {}
+
+    private SourceDowngrade sourceDowngrade(boolean existingCheckout) throws Exception {
+        ReleaseArchiveUpdate installed = releaseArchiveUpdate("source-downgrade", "99.0.0");
+        Path source = createPowerShellSourceRepository(temporaryDirectory);
+        if (existingCheckout) {
+            Files.delete(installed.appHome().resolve(".symphony-trello-install"));
+            run(Map.of(), "git", "clone", source.toString(), installed.appHome().toString())
+                    .assertSuccess();
+            Files.writeString(installed.appHome().resolve(".symphony-trello-install"), "installer-managed archive\n");
+        }
+        Path sentinel = Files.writeString(installed.appHome().resolve("installed.txt"), "original app");
+        String head = existingCheckout
+                ? run(Map.of(), "git", "-C", installed.appHome().toString(), "rev-parse", "HEAD")
+                        .output()
+                        .strip()
+                : "";
+        addSourceRepositoryCommit(source, "pom.xml", "<project><version>1.0.1</version></project>\n");
+        return new SourceDowngrade(installed, source, sentinel, head);
+    }
+
+    private record SourceDowngrade(ReleaseArchiveUpdate installed, Path source, Path sentinel, String originalHead) {
+        ProcessResult run(List<String> launcher) throws Exception {
+            return InstallerScriptFixture.run(
+                    installed.environment(),
+                    command(
+                                    launcher,
+                                    "--no-onboard",
+                                    "--from-source",
+                                    "--repo",
+                                    source.toUri().toString(),
+                                    "--ref",
+                                    "main",
+                                    "--prefix",
+                                    installed.appHome().toString(),
+                                    "--bin-dir",
+                                    installed.binDirectory().toString())
+                            .toArray(String[]::new));
+        }
+
+        void assertAppUntouched() throws Exception {
+            assertThat(sentinel).hasContent("original app");
+            installed.assertAppUntouched();
+            if (!originalHead.isEmpty()) {
+                assertThat(InstallerScriptFixture.run(
+                                        Map.of(),
+                                        "git",
+                                        "-C",
+                                        installed.appHome().toString(),
+                                        "rev-parse",
+                                        "HEAD")
+                                .output()
+                                .strip())
+                        .isEqualTo(originalHead);
+            }
+        }
+    }
+
+    /// An existing installer-managed release-archive app whose installed command reports
+    /// `installedVersion`, updated without onboarding from a local release directory that holds no
+    /// archive, so no run can download anything.
+    private ReleaseArchiveUpdate releaseArchiveUpdate(String name, String installedVersion) throws IOException {
+        Path fakeBin = createPowerShellFakeToolchain(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve(name + "-home");
+        Path appHome = symphonyHome.resolve("app");
+        Path binDirectory = temporaryDirectory.resolve(name + "-bin");
+        Files.createDirectories(appHome);
+        Files.writeString(appHome.resolve(".symphony-trello-install"), "installer-managed archive\n");
+        Files.createDirectories(binDirectory);
+        // Keep an existing command wrapper while both installers read the app version through the Java stub.
+        writeExecutable(
+                binDirectory.resolve("symphony-trello"),
+                """
+                #!/usr/bin/env bash
+                echo "symphony-trello %s"
+                """
+                        .formatted(installedVersion));
+        Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
+        environment.put("PATH", fakeBin + File.pathSeparator + System.getenv("PATH"));
+        environment.put("SYMPHONY_HOME", symphonyHome.toString());
+        environment.put("SYMPHONY_FAKE_JAVA", fakeBin.resolve("fake-java.ps1").toString());
+        environment.put(
+                "SYMPHONY_FAKE_LOG",
+                temporaryDirectory.resolve(name + "-fake-tools.log").toString());
+        environment.put("SYMPHONY_FAKE_VERSION", installedVersion);
+        environment.put(
+                "SYMPHONY_TRELLO_RELEASE_BASE_URL",
+                temporaryDirectory.resolve(name + "-empty-release").toUri().toString());
+        return new ReleaseArchiveUpdate(appHome, binDirectory, environment);
+    }
+
+    private record ReleaseArchiveUpdate(Path appHome, Path binDirectory, Map<String, String> environment) {
+        String releaseBaseUrl() {
+            return environment.get("SYMPHONY_TRELLO_RELEASE_BASE_URL");
+        }
+
+        ProcessResult runPosix() throws Exception {
+            return run(
+                    environment,
+                    "bash",
+                    Path.of("install.sh").toAbsolutePath().toString(),
+                    "--no-onboard",
+                    "--bin-dir",
+                    binDirectory.toString());
+        }
+
+        ProcessResult runPowerShell(List<String> pwsh) throws Exception {
+            return run(
+                    environment,
+                    command(
+                                    pwsh,
+                                    "-NoProfile",
+                                    "-File",
+                                    "./install.ps1",
+                                    "--no-onboard",
+                                    "--prefix",
+                                    appHome.toString(),
+                                    "--bin-dir",
+                                    binDirectory.toString())
+                            .toArray(String[]::new));
+        }
+
+        void assertAppUntouched() {
+            assertThat(appHome).isDirectoryContaining("glob:**/.symphony-trello-install");
+            assertThat(appHome.resolve("target")).doesNotExist();
         }
     }
 
@@ -8726,10 +9252,27 @@ final class InstallerScriptTest {
         Files.createDirectories(appHome);
         Files.writeString(appHome.resolve(".symphony-trello-install"), "installer-managed archive\n");
         Files.writeString(appHome.resolve("old-archive-file.txt"), "old archive content\n");
+        Path installer = temporaryDirectory.resolve("same-volume-install.ps1");
+        Files.writeString(
+                installer,
+                Files.readString(Path.of("install.ps1"))
+                        .replaceFirst(
+                                Pattern.quote("$ErrorActionPreference = \"Stop\""),
+                                Matcher.quoteReplacement(
+                                        """
+                                function Move-Item {
+                                  param([string]$LiteralPath, [string]$Destination)
+                                  if ((Split-Path $LiteralPath) -ne (Split-Path $Destination)) {
+                                    throw 'source checkout must be staged beside its destination'
+                                  }
+                                  Microsoft.PowerShell.Management\\Move-Item -LiteralPath $LiteralPath -Destination $Destination
+                                }
+                                $ErrorActionPreference = "Stop"\
+                                """)));
 
         // when
         ProcessResult result = runPowerShellSourceCheckoutInstall(
-                pwsh, sourceRepository, fakeBin, symphonyHome, binDirectory, fakeLog);
+                pwsh, sourceRepository, fakeBin, symphonyHome, binDirectory, fakeLog, Map.of(), installer);
 
         // then
         result.assertSuccess();
@@ -8768,6 +9311,46 @@ final class InstallerScriptTest {
                 .contains("install_source=source-checkout", "app_version=test", "source_commit=" + expectedCommit)
                 .doesNotContain(
                         "app_version=" + installerDefaultRef().substring(1), "release_tag=", "release_base_url=");
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void powershellSourceCheckoutUpdateChecksGeneratedWorkflowsWhenAvailable(boolean migrationSupported)
+            throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        assumeTrue(commandExists("git"));
+        Path sourceRepository = createPowerShellSourceRepository(temporaryDirectory);
+        Path fakeBin = createPowerShellFakeToolchain(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve("ps-workflow-check-home");
+        Path binDirectory = temporaryDirectory.resolve("ps-workflow-check-bin");
+        Path fakeLog = temporaryDirectory.resolve("ps-workflow-check.log");
+        ProcessResult install = runPowerShellSourceCheckoutInstall(
+                pwsh, sourceRepository, fakeBin, symphonyHome, binDirectory, fakeLog);
+
+        // when
+        Map<String, String> environment = new LinkedHashMap<>();
+        environment.put("SYMPHONY_FAKE_MIGRATION_HELP", migrationHelp(migrationSupported));
+        if (!migrationSupported) {
+            environment.put("SYMPHONY_FAKE_WITHOUT_WORKFLOW_MIGRATION", "true");
+        }
+        ProcessResult update = runPowerShellSourceCheckoutInstall(
+                pwsh, sourceRepository, fakeBin, symphonyHome, binDirectory, fakeLog, environment);
+
+        // then
+        install.assertSuccess();
+        update.assertSuccess();
+        assertThat(install.output()).doesNotContain("Checking generated workflows...");
+        assertThat(update.output()).contains("Checking generated workflows...");
+        if (migrationSupported) {
+            assertThat(fakeLog)
+                    .content(StandardCharsets.UTF_8)
+                    .contains("TrelloBoardSetupMain migrate-workflows --from-version test --non-interactive");
+        } else {
+            assertThat(update.output()).contains("NOTE  This Symphony version cannot check generated workflow bodies.");
+            assertThat(fakeLog).content(StandardCharsets.UTF_8).doesNotContain("migrate-workflows --from-version");
+        }
     }
 
     @ParameterizedTest(name = "PowerShell source checkout app_version fallback for {0} version output")
@@ -8834,6 +9417,27 @@ final class InstallerScriptTest {
             Path fakeLog,
             Map<String, String> extraEnvironment)
             throws Exception {
+        return runPowerShellSourceCheckoutInstall(
+                pwsh,
+                sourceRepository,
+                fakeBin,
+                symphonyHome,
+                binDirectory,
+                fakeLog,
+                extraEnvironment,
+                Path.of("install.ps1"));
+    }
+
+    private static ProcessResult runPowerShellSourceCheckoutInstall(
+            List<String> pwsh,
+            Path sourceRepository,
+            Path fakeBin,
+            Path symphonyHome,
+            Path binDirectory,
+            Path fakeLog,
+            Map<String, String> extraEnvironment,
+            Path installer)
+            throws Exception {
         Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
         environment.put("PATH", fakeBin + File.pathSeparator + System.getenv("PATH"));
         environment.put("SYMPHONY_HOME", symphonyHome.toString());
@@ -8846,7 +9450,7 @@ final class InstallerScriptTest {
                                 pwsh,
                                 "-NoProfile",
                                 "-File",
-                                "./install.ps1",
+                                installer.toAbsolutePath().toString(),
                                 "--no-onboard",
                                 "--from-source",
                                 "--repo",

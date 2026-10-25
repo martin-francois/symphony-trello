@@ -759,7 +759,8 @@ instead. `--non-interactive` runs never start Codex.
 The installer downloads the latest GitHub Release archive and checks its SHA3-256 checksum. When
 GitHub CLI is installed, it also checks the release signature. Then it unpacks the archive into the
 local app directory. It installs or updates Symphony for Trello, then runs guided
-setup and starts the managed local worker unless you pass `--no-onboard`.
+setup and starts the managed local worker unless you pass `--no-onboard`. Updates also run the
+[generated workflow check](#migrate-generated-workflows) before setup or worker restart.
 
 For Windows, WSL2 is the recommended setup path. Run the Linux installer inside WSL2, keep Codex CLI
 and Git on the WSL2 `PATH`, and use Linux paths for allowed local files and folders. Native Windows
@@ -993,6 +994,9 @@ symphony-trello migrate-workflows --board "My Board Name"
 ```
 
 `migrate-workflows --dry-run` shows classifications and planned changes without writing files.
+The installer's own `--dry-run` only says that this check would run after an update; it does not
+classify workflows before the target version is installed. Updates with `--no-onboard` pass
+`--non-interactive` to the command.
 Without a terminal, or with `--non-interactive`, the command only reports, leaves every workflow
 unchanged, and writes no preview files. It still records `CURRENT`
 workflows in `generated-workflows.json`, so later checks compare against the prompt they already
@@ -1002,6 +1006,11 @@ Downgrading to an older release of the same major version runs the same check in
 says that the workflow was made for a newer version. If you keep the newer prompt, it warns that the
 prompt may mention features the older version does not support, which can cause unexpected
 behavior. The command rejects a workflow or `--from-version` from a newer major version without changing any workflow.
+Both installers reject a major-version downgrade before replacing the app. For source installs,
+they read the root project version from the fetched ref's `pom.xml` and install that checked commit.
+A missing or unresolved source project version stops the install before replacing the app.
+Source updates also stop when tracked files have local changes. Commit those changes on a separate
+branch, or save a patch and restore the files, before rerunning the installer.
 
 ### Verify Release Downloads
 

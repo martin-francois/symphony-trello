@@ -95,8 +95,27 @@ execution stays unattended even without the flag. Recovery commands retain the s
 directory. The writer reports separate outcomes for an untouched original, a successful restore,
 and a failed restore, so a backup path alone never implies successful rollback.
 
-For release-archive installs, both installers also refuse an older major release before they replace
-the app.
+Both installers refuse an older major version before replacing the app. Source preflight clones
+the requested repository without checking out files, resolves the requested ref to a commit, and
+reads that commit's root project version from `pom.xml`. It checks the version before touching the
+installed checkout or stopping workers, then installs the same commit so a moving branch cannot
+change the checked version. PowerShell uses its XML reader with DTD processing prohibited. The
+POSIX installer uses a narrow root-project version extractor because XML command-line tools are
+not prerequisites. It ignores comments and nested parent, dependency, and plugin versions, and
+rejects missing or unresolved root versions. Cleanup runs after success or failure. If temporary
+clone removal fails, the installer reports that failure without hiding the original error or phase.
+Preflight rejects staged or unstaged tracked changes in the installed checkout because checkout
+retains compatible local edits, which would otherwise let the build use a different version from
+the checked commit. Untracked build output and the installer marker do not block updates. Both
+installers read the previous app version directly from its classes, so a moved or removed command
+wrapper does not bypass the major-version guard.
+
+The migration capability check requires help for the migration subcommand. Picocli also exits
+successfully when an unknown command is followed by `--help`, but prints root help instead.
+That response means the installer prints its unsupported-version note and continues. PowerShell
+stages a source checkout beside the app when it will move the checkout into place, so a temporary
+directory on another volume does not prevent installation. Existing Git checkouts still use a
+temporary clone and fetch the checked commit from it.
 
 Line endings. Classification compares bodies after turning CRLF into LF, so the line-ending style
 alone never counts as a customization. A migration writes the target body in the style of the
@@ -130,7 +149,7 @@ different kept text before the confirmation, while the metadata and the target b
 * Bad, because a workflow that is moved or renamed outside Symphony loses its record and becomes
   unversioned.
 * Bad, because the store keeps a copy of each generated body, about 30 KB per workflow.
-* Bad, because the major-version check before a release-archive install repeats the Java major
+* Bad, because the major-version check before an install repeats the Java major
   comparison in shell and PowerShell. It is a single version comparison, not a classifier, and it
   is the only check that can run before the older app replaces the newer one.
 * Neutral, because an installer dry run cannot preview a target version's classification before
@@ -151,7 +170,7 @@ This decision remains implemented when:
 * `TrelloBoardSetupMainTest` and `LocalSetupGithubConfigurationTest` prove that generated workflows
   are recorded and that a freshly generated workflow is reported as unchanged;
 * the POSIX and PowerShell installer tests show the `migrate-workflows` call on update, refuse an
-  older major release before the app is replaced, and let a same-major downgrade through; and
+  older major release or source ref before the app is replaced, and let a same-major downgrade through; and
 * `SPEC.md` Section 19.4.1 describes the same contract.
 
 ## Pros and Cons of the Options

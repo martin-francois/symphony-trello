@@ -32,11 +32,20 @@ $script:InstallerPlannedPhases = @()
 $script:InstallerPhaseIndex = 0
 $script:InstallerPhaseTitle = ""
 $script:InstallerPhaseRecovery = ""
+$SourceCheckout = $null
 trap {
-  $message = if ($_.Exception -and -not [string]::IsNullOrWhiteSpace($_.Exception.Message)) {
-    $_.Exception.Message
+  $installerError = $_
+  if ($SourceCheckout -and (Test-Path -LiteralPath $SourceCheckout)) {
+    try {
+      Remove-Item -Recurse -Force -LiteralPath $SourceCheckout -ErrorAction Stop
+    } catch {
+      [Console]::Error.WriteLine("cannot remove temporary source checkout `"$SourceCheckout`": remove it manually after the installer stops")
+    }
+  }
+  $message = if ($installerError.Exception -and -not [string]::IsNullOrWhiteSpace($installerError.Exception.Message)) {
+    $installerError.Exception.Message
   } else {
-    $_.ToString()
+    $installerError.ToString()
   }
   [Console]::Error.WriteLine($message)
   if (-not [string]::IsNullOrEmpty($script:InstallerPhaseTitle)) {
@@ -751,9 +760,9 @@ function Get-InstalledAppVersionFallback {
   return "unknown"
 }
 
-function Get-InstalledAppVersion {
+function Get-AppCommandVersion {
   if (-not (Test-Command "java")) {
-    return (Get-InstalledAppVersionFallback)
+    return $null
   }
   $classpath = @(
     (Join-Path $Prefix "target\quarkus-app\quarkus-run.jar"),
@@ -767,9 +776,55 @@ function Get-InstalledAppVersion {
       return $Matches[1].Trim()
     }
   } catch {
-    return (Get-InstalledAppVersionFallback)
+    return $null
+  }
+  return $null
+}
+
+function Get-InstalledAppVersion {
+  $commandVersion = Get-AppCommandVersion
+  if ($commandVersion) {
+    return $commandVersion
   }
   return (Get-InstalledAppVersionFallback)
+}
+
+function Assert-NoMajorDowngrade {
+  if (-not $PreviousAppVersion) {
+    return
+  }
+  $previousMajor = ($PreviousAppVersion -split '\.')[0]
+  $targetMajor = ($Version -split '\.')[0]
+  if ($previousMajor -notmatch '^[0-9]+$' -or $targetMajor -notmatch '^[0-9]+$') {
+    return
+  }
+  if ([int]$previousMajor -gt [int]$targetMajor) {
+    throw "Symphony $PreviousAppVersion is installed, and release $Version belongs to an older major version.`nDowngrading to an older major version is not supported. Install a $previousMajor.x release instead."
+  }
+}
+
+function Invoke-GeneratedWorkflowCheck {
+  if (-not $UpdatingExistingApp) {
+    return
+  }
+  Write-Host
+  Write-Heading "Checking generated workflows..."
+  $global:LASTEXITCODE = 0
+  $migrationHelp = (& "$BinDir\symphony-trello.ps1" migrate-workflows --help 2>$null) -join "`n"
+  if ($LASTEXITCODE -ne 0 -or $migrationHelp -notmatch '(?m)^Usage:.* migrate-workflows(\s|$)') {
+    Write-Status "NOTE" "  This Symphony version cannot check generated workflow bodies."
+    return
+  }
+  $migrateArgs = @("migrate-workflows")
+  if ($PreviousAppVersion) {
+    $migrateArgs += @("--from-version", $PreviousAppVersion)
+  }
+  if ($NoOnboard -or -not (Test-InteractiveInput)) {
+    $migrateArgs += "--non-interactive"
+    Invoke-Step "$BinDir\symphony-trello.ps1 $($migrateArgs -join ' ')" { & "$BinDir\symphony-trello.ps1" @migrateArgs }
+  } else {
+    Invoke-VisibleStep "$BinDir\symphony-trello.ps1 $($migrateArgs -join ' ')" { & "$BinDir\symphony-trello.ps1" @migrateArgs }
+  }
 }
 
 function Get-InstalledSourceCommit {
@@ -1288,27 +1343,6 @@ function Write-DryRunPrerequisitePlan {
   }
 }
 
-function Test-RemoteBranch([string]$Remote, [string]$GitRef) {
-  & git ls-remote --exit-code --heads $Remote $GitRef *> $null
-  return $LASTEXITCODE -eq 0
-}
-
-function Invoke-CheckoutRef([string]$CheckoutPath, [string]$GitRef) {
-  & git -C $CheckoutPath show-ref --verify --quiet "refs/remotes/origin/$GitRef"
-  if ($LASTEXITCODE -eq 0) {
-    Invoke-Step "git -C $CheckoutPath checkout -q -B $GitRef origin/$GitRef" {
-      & git -C $CheckoutPath checkout -q -B $GitRef "origin/$GitRef"
-    }
-    Invoke-Step "git -C $CheckoutPath pull -q --ff-only origin $GitRef" {
-      & git -C $CheckoutPath pull -q --ff-only origin $GitRef
-    }
-  } else {
-    Invoke-Step "git -C $CheckoutPath checkout -q --detach $GitRef" {
-      & git -C $CheckoutPath checkout -q --detach $GitRef
-    }
-  }
-}
-
 function Assert-ExistingCheckoutSafe {
   if (Test-Path "$Prefix\.symphony-trello-install") {
     return
@@ -1334,6 +1368,85 @@ function Assert-ExistingAppSafe {
     return
   }
   throw "Refusing to replace existing app directory without Symphony installer marker:`n  $Prefix`nUse a dedicated app install path or remove the directory manually after backing up anything important."
+}
+
+function Prepare-SourceCheckout {
+  if (Test-Path -LiteralPath (Join-Path $Prefix ".git")) {
+    Assert-ExistingCheckoutSafe
+    $localChanges = @(& git -C $Prefix status --porcelain --untracked-files=no)
+    if ($LASTEXITCODE -ne 0) {
+      throw "cannot inspect source checkout: check the repository before rerunning the installer"
+    }
+    if ($localChanges.Count -gt 0) {
+      throw "cannot update source checkout: source checkout has local changes. Commit tracked changes on a separate branch, or save a patch and restore the files, before rerunning the installer."
+    }
+  } else {
+    Assert-ExistingAppSafe
+  }
+  $checkoutParent = [IO.Path]::GetTempPath()
+  if (-not (Test-Path -LiteralPath (Join-Path $Prefix ".git"))) {
+    $checkoutParent = Split-Path $Prefix
+    New-Item -ItemType Directory -Force -Path $checkoutParent | Out-Null
+  }
+  $script:SourceCheckout = Join-Path $checkoutParent (".symphony-source-" + [Guid]::NewGuid().ToString())
+  $displayRepo = Format-RepositoryForOutput $Repo
+  Invoke-Step "git clone -q --no-checkout $displayRepo $SourceCheckout" {
+    & git clone -q --no-checkout $Repo $SourceCheckout
+  }
+  & git -C $SourceCheckout show-ref --verify --quiet "refs/remotes/origin/$Ref"
+  $script:SourceBranch = $LASTEXITCODE -eq 0
+  $revision = if ($SourceBranch) { "refs/remotes/origin/$Ref" } else { $Ref }
+  $script:SourceCommit = & git -C $SourceCheckout rev-parse --verify "$revision^{commit}"
+  if ($LASTEXITCODE -ne 0) {
+    throw "cannot resolve source ref: choose a branch, tag, or commit and rerun the installer"
+  }
+  $pom = & git -C $SourceCheckout show "${SourceCommit}:pom.xml"
+  if ($LASTEXITCODE -ne 0) {
+    throw "cannot read source pom.xml: choose a Symphony source ref and rerun the installer"
+  }
+  # Read only the root project version. Dependencies and parents identify other artifacts.
+  $settings = [System.Xml.XmlReaderSettings]::new()
+  $settings.DtdProcessing = [System.Xml.DtdProcessing]::Prohibit
+  $reader = [System.Xml.XmlReader]::Create([IO.StringReader]::new(($pom -join "`n")), $settings)
+  try {
+    $document = [System.Xml.XmlDocument]::new()
+    $document.XmlResolver = $null
+    $document.Load($reader)
+  } finally {
+    $reader.Dispose()
+  }
+  $versions = $document.SelectNodes("/*[local-name()='project']/*[local-name()='version']")
+  if ($versions.Count -ne 1 -or $versions[0].InnerText.Trim() -notmatch '^[0-9]+[.][0-9]+[.][0-9]+(-[A-Za-z0-9.-]+)?([+][A-Za-z0-9-]+([.][A-Za-z0-9-]+)*)?$') {
+    throw "cannot read source project/version: expected an explicit semantic version in the root pom.xml Choose a source ref with a resolved project version, then rerun the installer."
+  }
+  $script:Version = $versions[0].InnerText.Trim()
+}
+
+function Install-SourceCheckout {
+  if (-not (Test-Path -LiteralPath (Join-Path $Prefix ".git"))) {
+    if (Test-Path -LiteralPath $Prefix) {
+      Write-Status "NOTE" "  Replacing the installed release archive app with a Git checkout"
+      Invoke-Step "remove existing release archive app $Prefix" { Remove-Item -Recurse -Force $Prefix }
+    }
+    Invoke-Step "move fetched checkout to $Prefix" {
+      New-Item -ItemType Directory -Force -Path (Split-Path $Prefix) | Out-Null
+      Move-Item -LiteralPath $SourceCheckout -Destination $Prefix
+    }
+  } else {
+    Invoke-Step "git -C $Prefix fetch -q $SourceCheckout $SourceCommit" {
+      & git -C $Prefix fetch -q $SourceCheckout $SourceCommit
+    }
+  }
+  # Keep the checked commit even when the remote ref moves after preflight.
+  if ($SourceBranch) {
+    Invoke-Step "git -C $Prefix checkout -q -B $Ref $SourceCommit" { & git -C $Prefix checkout -q -B $Ref $SourceCommit }
+  } else {
+    Invoke-Step "git -C $Prefix checkout -q --detach $SourceCommit" { & git -C $Prefix checkout -q --detach $SourceCommit }
+  }
+  if (Test-Path -LiteralPath $SourceCheckout) {
+    Remove-Item -Recurse -Force -LiteralPath $SourceCheckout
+  }
+  $script:SourceCheckout = $null
 }
 
 function Invoke-DownloadFile([string]$Url, [string]$OutputPath) {
@@ -1593,6 +1706,9 @@ if ($DryRun) {
     Write-Status "WOULD" " unpack release archive into: $Prefix"
   }
   Write-Status "WOULD" " install command: $BinDir\symphony-trello.ps1"
+  if (Test-Path -LiteralPath $Prefix) {
+    Write-Status "WOULD" " check generated workflows after the update: symphony-trello migrate-workflows"
+  }
   Offer-PathSetup
   if ($SetupPhasePlanned) {
     Start-InstallerPhase $SetupPhaseTitle $SetupRecovery
@@ -1642,43 +1758,20 @@ if (-not $NoOnboard) {
 }
 
 Start-InstallerPhase $AppPhaseTitle $AppRecovery
+$PreviousAppVersion = $null
+if ($UpdatingExistingApp) {
+  $PreviousAppVersion = Get-AppCommandVersion
+}
+if ($InstallSource -eq "source-checkout") {
+  Prepare-SourceCheckout
+}
+Assert-NoMajorDowngrade
 if ($RestartManagedWorkers) {
   Invoke-Step "$BinDir\symphony-trello.ps1 stop" { & "$BinDir\symphony-trello.ps1" stop }
   Write-Status "OK" "  Managed workers stopped for the update"
 }
 if ($InstallSource -eq "source-checkout") {
-  $UpdatingExistingCheckout = Test-Path -LiteralPath (Join-Path $Prefix ".git")
-  if (-not $UpdatingExistingCheckout) {
-    if (Test-Path -LiteralPath $Prefix) {
-      Assert-ExistingAppSafe
-      Write-Status "NOTE" "  Replacing the installed release archive app with a Git checkout"
-      Invoke-Step "remove existing release archive app $Prefix" {
-        Remove-Item -Recurse -Force $Prefix
-      }
-    }
-    $displayRepo = Format-RepositoryForOutput $Repo
-    if (Test-RemoteBranch $Repo $Ref) {
-      Invoke-Step "git clone -q --branch $Ref $displayRepo $Prefix" {
-        New-Item -ItemType Directory -Force -Path (Split-Path $Prefix) | Out-Null
-        & git clone -q --branch $Ref $Repo $Prefix
-      }
-    } else {
-      Invoke-Step "git clone -q $displayRepo $Prefix" {
-        New-Item -ItemType Directory -Force -Path (Split-Path $Prefix) | Out-Null
-        & git clone -q $Repo $Prefix
-      }
-      Invoke-Step "git -C $Prefix fetch -q --tags --prune origin" {
-        & git -C $Prefix fetch -q --tags --prune origin
-      }
-      Invoke-CheckoutRef $Prefix $Ref
-    }
-  } else {
-    Assert-ExistingCheckoutSafe
-    Invoke-Step "git -C $Prefix fetch -q --tags --prune origin" {
-      & git -C $Prefix fetch -q --tags --prune origin
-    }
-    Invoke-CheckoutRef $Prefix $Ref
-  }
+  Install-SourceCheckout
   Write-Status "OK" "  Source checked out"
   Invoke-Step "$Prefix\mvnw.cmd -q -DskipTests clean package" { & "$Prefix\mvnw.cmd" -q -f "$Prefix\pom.xml" -DskipTests clean package }
   Write-Status "OK" "  App built with Maven wrapper"
@@ -1755,6 +1848,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0symphony-trello.ps
 }
 Write-Status "OK" "  Command installed"
 Write-InstallContext
+Invoke-GeneratedWorkflowCheck
 
 Offer-PathSetup
 

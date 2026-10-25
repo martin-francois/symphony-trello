@@ -119,7 +119,10 @@ final class InstallerProgressOutputTest {
                             "Stopped WORKFLOW.transcript-board.md",
                             "OK  Managed workers stopped for the update",
                             "OK  Command installed",
+                            "Checking generated workflows",
+                            RUN_LINE + installedCommand + " migrate-workflows --from-version test",
                             "[3/4] Running setup",
+                            RUN_LINE + installedCommand + " setup-local",
                             "OK  Setup complete",
                             "[4/4] Restarting managed workers",
                             HANDOFF,
@@ -132,6 +135,12 @@ final class InstallerProgressOutputTest {
                     .containsOnlyOnce(RUN_LINE + installedCommand + " tutorial --offer")
                     .containsOnlyOnce(HANDOFF)
                     .doesNotContain("Install plan");
+            assertThat(update.transcript().lines())
+                    .filteredOn(line -> line.startsWith(RUN_LINE))
+                    .containsExactly(
+                            RUN_LINE + installedCommand + " migrate-workflows --from-version test",
+                            RUN_LINE + installedCommand + " setup-local",
+                            RUN_LINE + installedCommand + " tutorial --offer");
             assertThat(update.transcript().stripTrailing()).endsWith("symphony-trello tutorial");
         } finally {
             if (Files.isExecutable(installedCommand)) {

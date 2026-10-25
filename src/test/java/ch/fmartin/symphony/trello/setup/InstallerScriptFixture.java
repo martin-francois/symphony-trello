@@ -2,13 +2,18 @@ package ch.fmartin.symphony.trello.setup;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 import ch.fmartin.symphony.trello.testsupport.CapturedStreams;
 import com.google.common.base.Splitter;
 import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.SimpleFileServer;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringReader;
+import java.io.StringWriter;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -37,6 +42,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+import picocli.CommandLine;
 
 final class InstallerScriptFixture {
     static final String TRELLO_KEY_PROMPT = "Trello API key: ";
@@ -737,7 +743,7 @@ final class InstallerScriptFixture {
     static Path createSourceRepository(Path temporaryDirectory) throws Exception {
         Path repository = temporaryDirectory.resolve("source");
         Files.createDirectories(repository);
-        Files.writeString(repository.resolve("pom.xml"), "<project />\n");
+        Files.writeString(repository.resolve("pom.xml"), "<project><version>1.0.0</version></project>\n");
         Files.writeString(repository.resolve("WORKFLOW.example.md"), "# Example workflow\n");
         Files.writeString(
                 repository.resolve("mvnw"),
@@ -757,7 +763,7 @@ final class InstallerScriptFixture {
     static Path createWindowsSourceRepository(Path temporaryDirectory) throws Exception {
         Path repository = temporaryDirectory.resolve("windows source");
         Files.createDirectories(repository);
-        Files.writeString(repository.resolve("pom.xml"), "<project />\n");
+        Files.writeString(repository.resolve("pom.xml"), "<project><version>1.0.0</version></project>\n");
         Files.writeString(repository.resolve("WORKFLOW.example.md"), "# Example workflow\n");
         Files.writeString(
                 repository.resolve("mvnw.cmd"),
@@ -1052,8 +1058,26 @@ final class InstallerScriptFixture {
                     exit 2
                   fi
                   if [[ "$*" == *"--help"* || "$*" == *" -h"* ]]; then
-                    echo "Usage: symphony-trello"
+                    if [[ "${raw_cli_args[0]:-}" == "migrate-workflows" ]]; then
+                      if [[ -n "${SYMPHONY_FAKE_MIGRATION_HELP:-}" ]]; then
+                        printf '%s\\n' "$SYMPHONY_FAKE_MIGRATION_HELP"
+                      elif [[ -n "${SYMPHONY_FAKE_WITHOUT_WORKFLOW_MIGRATION:-}" ]]; then
+                        echo "Usage: symphony-trello"
+                      else
+                        echo "Usage: symphony-trello migrate-workflows"
+                      fi
+                    else
+                      echo "Usage: symphony-trello"
+                    fi
                     exit 0
+                  fi
+                  if [[ -n "${SYMPHONY_FAKE_WITHOUT_WORKFLOW_MIGRATION:-}" && "${raw_cli_args[0]:-}" == "migrate-workflows" ]]; then
+                    echo "setup_failed code=setup_invalid_arguments message=Unmatched argument: 'migrate-workflows'" >&2
+                    exit 2
+                  fi
+                  if [[ -n "${SYMPHONY_FAKE_WORKFLOW_MIGRATION_FAILURE:-}" && "${raw_cli_args[0]:-}" == "migrate-workflows" ]]; then
+                    echo "  REJECTED  simulated workflow migration rejection"
+                    exit 2
                   fi
                   if [[ "$*" == *"--version"* ]]; then
                     case "${SYMPHONY_FAKE_VERSION_MODE:-ok}" in
@@ -1071,7 +1095,7 @@ final class InstallerScriptFixture {
                         exit 0
                         ;;
                       *)
-                        echo "symphony-trello test"
+                        echo "symphony-trello ${SYMPHONY_FAKE_VERSION:-test}"
                         exit 0
                         ;;
                     esac
@@ -1498,8 +1522,16 @@ final class InstallerScriptFixture {
                     exit 2
                   }
                   if (($args -join " ") -like "*--help*" -or ($args -join " ") -like "* -h*") {
-                    Write-Output "Usage: symphony-trello"
+                    if ($args -contains "migrate-workflows") {
+                      if ($env:SYMPHONY_FAKE_MIGRATION_HELP) { Write-Output $env:SYMPHONY_FAKE_MIGRATION_HELP }
+                      elseif ($env:SYMPHONY_FAKE_WITHOUT_WORKFLOW_MIGRATION) { Write-Output "Usage: symphony-trello" }
+                      else { Write-Output "Usage: symphony-trello migrate-workflows" }
+                    } else { Write-Output "Usage: symphony-trello" }
                     exit 0
+                  }
+                  if ($env:SYMPHONY_FAKE_WITHOUT_WORKFLOW_MIGRATION -and $args -contains "migrate-workflows") {
+                    [Console]::Error.WriteLine("setup_failed code=setup_invalid_arguments message=Unmatched argument: 'migrate-workflows'")
+                    exit 2
                   }
                   if (($args -join " ") -like "*--version*") {
                     if ($env:SYMPHONY_FAKE_VERSION_MODE -eq "fail") {
@@ -1515,7 +1547,7 @@ final class InstallerScriptFixture {
                       Write-Output "symphony-trello test"
                       exit 0
                     }
-                    Write-Output "symphony-trello test"
+                    Write-Output "symphony-trello $(if ($env:SYMPHONY_FAKE_VERSION) { $env:SYMPHONY_FAKE_VERSION } else { 'test' })"
                     exit 0
                   }
 	                  if (($args -join " ") -like "*TrelloBoardSetupMain start*" -or
@@ -1566,6 +1598,20 @@ final class InstallerScriptFixture {
         return fakeBin;
     }
 
+    static String migrationHelp(boolean supported) throws IOException {
+        var output = new StringWriter();
+        try (var input = new BufferedReader(new StringReader(""))) {
+            var main = new TrelloBoardSetupMain(
+                    mock(TrelloBoardSetupService.class), mock(LocalWorkerManager.class), input, System.out, System.err);
+            var command = new CommandLine(main).setOut(new PrintWriter(output)).setErr(new PrintWriter(output));
+            if (!supported) {
+                command.getCommandSpec().removeSubcommand("migrate-workflows");
+            }
+            assertThat(command.execute("migrate-workflows", "--help")).isZero();
+        }
+        return output.toString();
+    }
+
     static List<String[]> installedPicocliHelpCommands() {
         return List.of(
                 new String[] {"--help"},
@@ -1581,7 +1627,8 @@ final class InstallerScriptFixture {
                 new String[] {"stop", "--help"},
                 new String[] {"status", "--help"},
                 new String[] {"logs", "--help"},
-                new String[] {"diagnostics", "--help"});
+                new String[] {"diagnostics", "--help"},
+                new String[] {"migrate-workflows", "--help"});
     }
 
     static String[] commandWithPrefix(String executable, String[] arguments) {
