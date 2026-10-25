@@ -23,7 +23,6 @@ final class ContinuousFuzzingWorkflowTest {
     private static final String UNSAFE_WORKAROUND_EXPIRY_CHECK =
             ".clusterfuzzlite/check-unsafe-memory-access-workaround";
     private static final Path STANDALONE_FUZZERS = of("src/test/java/ch/fmartin/symphony/trello/fuzz");
-    private static final Path TARGET_SELECTOR = of("scripts/select-clusterfuzzlite-target");
     private static final Path COVERAGE_VERIFIER = of("scripts/verify-clusterfuzzlite-coverage");
     private static final String CLUSTERFUZZLITE_COMMIT = "884713a6c30a92e5e8544c39945cd7cb630abcd1";
     private static final Pattern UNPINNED_ACTION = Pattern.compile("uses: [^\\s]+@(?![0-9a-f]{40}(?:\\s|$))");
@@ -387,10 +386,6 @@ final class ContinuousFuzzingWorkflowTest {
                 .allSatisfy(fuzzer -> {
                     assertThat(batchMatrix).as("batch matrix").contains("- " + fuzzer + "\n");
                     assertThat(prunedCorpora).as("pruned corpus verification").contains(" " + fuzzer + "\n");
-                    assertThat(TARGET_SELECTOR)
-                            .as("target budget")
-                            .content(StandardCharsets.UTF_8)
-                            .contains("[" + fuzzer + "]=");
                     assertThat(COVERAGE_VERIFIER)
                             .as("coverage contract")
                             .content(StandardCharsets.UTF_8)

@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-10-04
-decision-makers: [François Martin, Claude]
+decision-makers: [François Martin]
 consulted:
   - "[GitHub issue #773](https://github.com/martin-francois/symphony-trello/issues/773)"
   - "[GitHub issue #690](https://github.com/martin-francois/symphony-trello/issues/690)"
@@ -98,10 +98,10 @@ production, and it runs one `handle` call. It then checks these properties:
 test's regression inputs. The seeds are the smallest input for each tool and outcome from a local
 active run, plus the inputs that found each permission check removed in the experiment below.
 
-`scripts/select-clusterfuzzlite-target` gives each target a weight. A batch cycle fuzzes four full
-shares in total, as ADR 0078 sets, and each target gets that aggregate in proportion to its weight.
-With five targets at weight 1, each gets 66 minutes in a normal cycle and 60 minutes in the
-maintenance cycle.
+`scripts/select-clusterfuzzlite-target` divides four full shares evenly among all targets, as
+ADR 0078 sets for the aggregate budget. With five targets, each gets 66 minutes in a normal cycle
+and 60 minutes in the maintenance cycle. A manual `fuzz_seconds: 300` gives each target 240 seconds.
+There is no weight table until a target needs a different share.
 
 ### Consequences
 
@@ -114,8 +114,8 @@ maintenance cycle.
   `allow_destructive_operations`, or move allowlist check failed an active run within about 100 to
   110,000 executions. The inputs that found them are seeds, so each removal also fails the Maven
   regression replay.
-* Good, because adding a target to the batch matrix only adds a weight. The cycle length and the
-  daily prune and coverage stay as ADR 0078 sets them.
+* Good, because adding a target divides the same total time among more targets. The cycle length
+  and the daily prune and coverage stay as ADR 0078 sets them.
 * Bad, because `TrelloClient` has a package-private constructor that only tests use.
 * Bad, because the fake answers what Trello answers in the tested paths, not every Trello behavior.
   A Trello response shape the fake never sends is not covered.
@@ -177,11 +177,10 @@ Call `handle` with fuzzed arguments and report uncaught exceptions.
 ### Give every target an equal part of the fixed aggregate batch budget
 
 The `fuzz_seconds` input stays one full share. The selector divides four full shares among all
-targets by weight, and all weights are 1.
+targets evenly.
 
 * Good, because the aggregate budget and cycle length stay as ADR 0078 sets them.
-* Good, because a later target only adds a weight, and a reviewer can give a plateaued target a lower
-  weight without changing the total.
+* Good, because no per-target weight table needs to stay synchronized with the target list.
 * Bad, because every existing target gets less time per cycle.
 
 ### Give the new target a full share and grow the aggregate batch budget
@@ -201,10 +200,10 @@ uncovered handler branches are in `toolSpecs` and `updateCodexUsageSection`, whi
 reaches.
 
 [GitHub PR #836](https://github.com/martin-francois/symphony-trello/pull/836) adds a card payload target and gives the two reference-parsing targets half a share
-each. When both changes meet, its targets keep their relative shares as weights in this selector.
+each. That PR can add weighting when it needs unequal shares.
 [GitHub PR #784](https://github.com/martin-francois/symphony-trello/pull/784) moves argument validation in front of the tools and reports it as
 `invalid_tool_arguments`. The refusal set lists only codes the handler on `main` can return, so
-whichever of the two changes merges second adds that code. The seeds named
+#784 adds that code after this PR merges. The seeds named
 `<tool>--trello-tool-failed` carry arguments outside the advertised schema. Once validation refuses
 them with a code the set does not list, the Maven regression replay fails with an unknown failure
 code, so CI shows the missing entry. `trello_tool_failed` is then no longer expected for
