@@ -92,12 +92,10 @@ runners were slower than this host for the old harness too.
   Replaying the stored corpus alone through the new harness covers 187 of 219 branches. The
   checked-in seeds cover the difference, and fuzzing adds new inputs from there.
 * Bad, because a seed that needs choices is a binary file. The harness Javadoc describes its layout.
-* Neutral, because 14 branch outcomes were uncovered in the original measurement. Analysis for
-  issue #1039 confirms 13 are unreachable. The remaining path comparison rejects Linux file URIs
-  `file:///tmp/repo%FF` and `file:///tmp/repo%FE`, whose unequal filename bytes have identical display
-  strings. The follow-up retains that guard and adds its regression and seed. The four SCP-style
-  checks named in [issue #691](https://github.com/martin-francois/symphony-trello/issues/691) were
-  already removed because they repeated an earlier check on the same value.
+* Neutral, because 14 branch outcomes were uncovered in the original measurement. The follow-up
+  analysis below confirms 13 are unreachable and adds a regression for the remaining path comparison.
+  The four SCP-style checks named in [issue #691](https://github.com/martin-francois/symphony-trello/issues/691)
+  were already removed because they repeated an earlier check on the same value.
 
 ### Confirmation
 
@@ -105,9 +103,48 @@ runners were slower than this host for the old harness too.
 name and its storage path did not change, so the batch job's existing corpus verification step
 checks persistence on the first batch after merge.
 `RepositorySourceResolverFuzzTest` replays the structured seeds in every Maven verify. After merge,
-the hosted coverage report published by a maintenance cycle should show
-`RepositorySourceResolver` at 205 of 219 branches or more. [Fuzzing](../fuzzing.md) documents how to
+the hosted coverage report published by a maintenance cycle should retain the coverage measured
+by the cleanup replay below. [Fuzzing](../fuzzing.md) documents how to
 replay a corpus under JaCoCo locally.
+
+### Unreachable branch cleanup
+
+The follow-up for [issue #1039](https://github.com/martin-francois/symphony-trello/issues/1039)
+removes 13 unreachable branch outcomes from the original 14 missed outcomes. Each removed condition
+has a caller or parser guarantee; the percentage alone is not evidence that a check is redundant.
+
+| Removed check | Branch outcomes | Guarantee that remains |
+| --- | ---: | --- |
+| SSH user-info safety after authority safety | 1 | Decoded authority includes the complete decoded user-info. |
+| Bracketed host has a closing bracket and a colon after it | 2 | `URI` rejects an unclosed bracket or a non-port suffix before this helper runs. The suffix-length check still detects an explicit empty port. |
+| Explicit URI scheme inside the SCP parser | 1 | `remote` calls the SCP parser only when `explicitUriScheme` is false. The separate `://` rejection remains. |
+| SCP separator is the final character | 1 | `parse` removes trailing token punctuation, including colons, before calling `remote`. |
+| Raw SCP host and path safety | 2 | `parse` checks the whole token with `safePromptLine` before splitting it. |
+| Blank SCP path | 1 | The path is nonempty because the separator is not final; the preceding whitespace check rejects a path containing only whitespace. |
+| File URI scheme is `file` | 1 | `parse` dispatches here only after the case-insensitive `file://` prefix check. |
+| Local path prompt-line safety | 1 | `parse` checks the input before dispatch. Removing token punctuation or angle brackets introduces no unsafe character. |
+| Identity equality after normalized value equality | 1 | Both selections come from explicit declarations. Their kind and normalized remote value determine the repository identity. Local selections have no repository identity. |
+| Raw URI component safety | 1 | `parse` checks the raw token. Decoded component checks remain, so encoded control characters are still rejected. |
+| Local-only mode inside `allowsLocalPath` | 1 | `parse` returns the local-only case before reaching the Windows-path condition. |
+
+The path-equality check remains. On Linux, `file:///tmp/repo%FF` and `file:///tmp/repo%FE` preserve
+unequal filename bytes in `Path`, but their display strings contain the same replacement character.
+Removing path equality accepts the first declaration instead of reporting `repository_source_conflict`.
+A Linux regression reproduces that failure with the check removed and verifies the retained guard.
+
+The cleanup leaves input generation, expected-value helpers, and rejection oracles unchanged.
+Existing resolver tests continue to check encoded controls, URI ports, SCP-style paths,
+local paths, and conflicting declarations. The same stored corpus and checked-in seeds are replayed
+before and after the cleanup, with their SHA-256 hashes checked before the second replay.
+
+On 2026-10-25, Java 25.0.4.1, Jazzer 0.30.0 and JaCoCo 0.8.15 replayed 425 total inputs:
+396 stored inputs from commit `d0d502622136f3a8169f73dccca7d974fcf32dd7` and 29 checked-in seeds. The baseline at
+`aa6212016064dcec44e0b586c2512e60022d0c32` covered 205 of 219 branches across the resolver and
+its `SourceMode` helper. The same 425 input hashes after cleanup cover 188 of 189 branches. Removing
+helper conditions also removes their reachable branch outcomes, so the denominator falls by more
+than twice the 13 unreachable outcomes. Adding only `file-uri-distinct-bytes-same-display` covers
+189 of 189 branches. The new input reaches the retained conflict check; the unit regression asserts
+the expected conflict rather than relying on coverage alone.
 
 ## Pros and Cons of the Options
 

@@ -8,12 +8,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import ch.fmartin.symphony.trello.TestCards;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
+import java.net.URI;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -354,6 +357,30 @@ final class RepositorySourceResolverTest {
         assertThat(selection.status()).isEqualTo(RepositorySourceSelection.Status.INVALID_SELECTED);
         assertThat(selection.problem().code()).isEqualTo("repository_source_conflict");
         assertThat(selection.problem().guidance()).doesNotContain("github.example");
+    }
+
+    @EnabledOnOs(OS.LINUX)
+    @Test
+    void distinctFileUriBytesConflictEvenWhenTheirDisplayPathsMatch() {
+        // given
+        URI firstUri = URI.create("file:///tmp/repo%FF");
+        URI secondUri = URI.create("file:///tmp/repo%FE");
+        Path firstPath = Path.of(firstUri);
+        Path secondPath = Path.of(secondUri);
+        assertThat(firstPath).as("the file URIs retain distinct filename bytes").isNotEqualTo(secondPath);
+        assertThat(firstPath.toString())
+                .as("invalid UTF-8 filename bytes share the same replacement-character display")
+                .isEqualTo(secondPath.toString());
+        Card card = cardWithText("Repository: " + firstUri, "Repository: " + secondUri, List.of());
+
+        // when
+        RepositorySourceSelection selection = resolver.select(card, noDefault());
+
+        // then
+        assertThat(selection.status())
+                .as("display equality must not hide two different local repositories")
+                .isEqualTo(RepositorySourceSelection.Status.INVALID_SELECTED);
+        assertThat(selection.problem().code()).isEqualTo("repository_source_conflict");
     }
 
     @Test

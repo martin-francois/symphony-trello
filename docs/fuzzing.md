@@ -99,11 +99,11 @@ Seeds that need other card fields or a workflow default use the byte layout desc
 harness Javadoc. Its seeds cover bracketed IPv6 hosts with and without ports, `user@host:path`
 remotes, `file:` URLs, workflow defaults, and malformed variants of each.
 
-The original repository-source replay misses 14 branch outcomes. Analysis for the follow-up
-in [issue #1039](https://github.com/martin-francois/symphony-trello/issues/1039) identifies 13 as
-unreachable and one reachable path comparison for distinct file-URI bytes with equal display
-strings. [ADR 0089](adr/0089-structured-input-for-the-repository-source-fuzz-target.md) records the
-correction. The follow-up removes only proven unreachable checks and retains that conflict guard.
+The repository-source cleanup removes 13 unreachable branch outcomes and retains a path comparison
+that rejects distinct file-URI byte paths with identical display strings. Replaying the same 425
+stored and seed inputs covers 188 of 189 branches after cleanup; the added byte-path regression seed
+covers the remaining branch. [ADR 0089](adr/0089-structured-input-for-the-repository-source-fuzz-target.md)
+records the caller proofs, corpus revision, and before-and-after measurements.
 
 ClusterFuzzLite's `v1` runner image bundles JaCoCo 0.8.7, which rejects Java 25 class files after
 the fuzzers run and then uploads an incomplete coverage directory. The coverage job therefore uses

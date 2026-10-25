@@ -121,7 +121,7 @@ public final class RepositorySourceResolver {
         if (mode == SourceMode.LOCAL_PATH) {
             return localPath(value, origin);
         }
-        if (mode.allowsLocalPath() && windowsDrivePath(value)) {
+        if (mode == SourceMode.REMOTE_FILE_OR_LOCAL && windowsDrivePath(value)) {
             return localPath(value, origin);
         }
         if (fileUri(value)) {
@@ -167,8 +167,7 @@ public final class RepositorySourceResolver {
                     "repository_remote_credentials_unsupported",
                     "HTTP(S) repository URLs must not include embedded credentials, query strings, or fragments. Use a credential helper or SSH.");
         }
-        if (unsafeUriComponent(uri.getRawAuthority(), uri.getAuthority())
-                || unsafeUriComponent(uri.getRawPath(), uri.getPath())) {
+        if (unsafeDecodedComponent(uri.getAuthority()) || unsafeDecodedComponent(uri.getPath())) {
             return invalid(
                     "repository_remote_malformed",
                     "The selected repository URL contains unsupported control characters.");
@@ -187,9 +186,7 @@ public final class RepositorySourceResolver {
                     "repository_remote_credentials_unsupported",
                     "SSH repository URLs must not include password-like user information. Use a username-only SSH URL.");
         }
-        if (unsafeUriComponent(uri.getRawAuthority(), uri.getAuthority())
-                || unsafeUriComponent(uri.getRawUserInfo(), uri.getUserInfo())
-                || unsafeUriComponent(uri.getRawPath(), uri.getPath())) {
+        if (unsafeDecodedComponent(uri.getAuthority()) || unsafeDecodedComponent(uri.getPath())) {
             return invalid(
                     "repository_remote_malformed",
                     "The selected repository URL contains unsupported control characters.");
@@ -235,20 +232,19 @@ public final class RepositorySourceResolver {
         }
         String hostAndPort = authority.substring(authority.lastIndexOf('@') + 1);
         if (hostAndPort.startsWith("[")) {
+            // URI rejects unclosed brackets and any suffix other than a port before this point.
             int closingBracket = hostAndPort.indexOf(']');
-            return closingBracket >= 0
-                    && closingBracket + 1 < hostAndPort.length()
-                    && hostAndPort.charAt(closingBracket + 1) == ':';
+            return closingBracket + 1 < hostAndPort.length();
         }
         return hostAndPort.indexOf(':') >= 0;
     }
 
     private static RepositorySourceSelection scpRemote(String value, RepositorySource.Origin origin) {
-        if (value.contains("://") || explicitUriScheme(value)) {
+        if (value.contains("://")) {
             return RepositorySourceSelection.none();
         }
         int colon = value.indexOf(':');
-        if (colon <= 0 || colon == value.length() - 1) {
+        if (colon <= 0) {
             return RepositorySourceSelection.none();
         }
         String hostPart = value.substring(0, colon);
@@ -257,11 +253,7 @@ public final class RepositorySourceResolver {
         if (at < 0) {
             return RepositorySourceSelection.none();
         }
-        if (containsWhitespace(hostPart)
-                || containsWhitespace(rawPath)
-                || unsafeRawComponent(hostPart)
-                || unsafeRawComponent(rawPath)
-                || rawPath.isBlank()) {
+        if (containsWhitespace(hostPart) || containsWhitespace(rawPath)) {
             return RepositorySourceSelection.none();
         }
         String user = hostPart.substring(0, at);
@@ -284,9 +276,7 @@ public final class RepositorySourceResolver {
     private static RepositorySourceSelection fileUriPath(String value, RepositorySource.Origin origin) {
         try {
             var uri = new URI(value);
-            if (!"file".equals(lower(uri.getScheme()))
-                    || hasQueryOrFragment(uri)
-                    || unsafeUriComponent(uri.getRawPath(), uri.getPath())) {
+            if (hasQueryOrFragment(uri) || unsafeDecodedComponent(uri.getPath())) {
                 return invalid(
                         "repository_path_malformed",
                         "The selected file repository URL is malformed. Use a valid file URL or local checkout path.");
@@ -303,9 +293,6 @@ public final class RepositorySourceResolver {
 
     private static RepositorySourceSelection localPath(String value, RepositorySource.Origin origin) {
         try {
-            if (!RepositorySourceText.safePromptLine(stripAngleBrackets(value))) {
-                return invalid("repository_path_malformed", "The selected local repository path is malformed.");
-            }
             Path path = Path.of(stripAngleBrackets(value)).toAbsolutePath().normalize();
             return RepositorySourceSelection.selected(
                     new RepositorySource(RepositorySource.Kind.LOCAL_PATH, origin, path.toString(), null, path));
@@ -353,9 +340,9 @@ public final class RepositorySourceResolver {
         }
         RepositorySource left = expected.source();
         RepositorySource right = actual.source();
+        // File URI bytes can differ even when Path.toString replaces both with the same character.
         return left.kind() == right.kind()
                 && left.value().equals(right.value())
-                && Objects.equals(left.identity(), right.identity())
                 && Objects.equals(left.path(), right.path());
     }
 
@@ -437,14 +424,6 @@ public final class RepositorySourceResolver {
         return value.chars().anyMatch(Character::isWhitespace);
     }
 
-    private static boolean unsafeUriComponent(String rawValue, String decodedValue) {
-        return unsafeRawComponent(rawValue) || unsafeDecodedComponent(decodedValue);
-    }
-
-    private static boolean unsafeRawComponent(String value) {
-        return RepositorySourceText.unsafePromptLine(value);
-    }
-
     private static boolean unsafeDecodedComponent(String value) {
         return RepositorySourceText.unsafePromptLine(value);
     }
@@ -465,11 +444,7 @@ public final class RepositorySourceResolver {
         REMOTE_ONLY,
         REMOTE_OR_FILE,
         REMOTE_FILE_OR_LOCAL,
-        LOCAL_PATH;
-
-        private boolean allowsLocalPath() {
-            return this == REMOTE_FILE_OR_LOCAL || this == LOCAL_PATH;
-        }
+        LOCAL_PATH
     }
 
     private record Declaration(String value, SourceMode mode) {}
