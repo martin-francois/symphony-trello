@@ -183,9 +183,13 @@ description: >
 
 ## Branch-Only Handoff
 
-When the workflow's Pull Request Handoff Mode section selects `branch_only`,
-run steps 1 to 6 to check, verify authors, and push the branch, then stop. Do
-not create a pull request. Write the proposed PR title and description to
+Use this section when the workflow's Pull Request Handoff Mode selects
+`branch_only` and the current branch has no pull request. If a pull request
+already exists, follow the normal workflow, including its metadata and
+ready-for-review updates.
+
+Complete steps 1 to 5 first. Before the push in step 6, write the proposed
+PR title and description to
 `PR.md` in the root of the task checkout, or to the first unused name of
 `PR-2.md`, `PR-3.md`, and so on when `PR.md` already exists and an earlier
 branch-only handoff of this card did not create it:
@@ -210,6 +214,9 @@ if git diff --cached --name-only | grep -qFx "$proposal_file" ||
   exit 1
 fi
 ```
+
+After the file passes these checks, complete step 6 to push the branch, then
+stop without creating a pull request.
 
 ## Creating A PR From A Proposed Description
 
