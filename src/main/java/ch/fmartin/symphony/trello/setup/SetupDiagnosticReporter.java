@@ -83,6 +83,8 @@ final class SetupDiagnosticReporter {
     private static final Pattern GIT_COMMIT_ID = Pattern.compile("(?i)[0-9a-f]{7,64}");
     private static final Pattern SECRET_ASSIGNMENT = Pattern.compile(
             "(?i)([\"']?(?:key|token|secret|password|api[_-]?key|api[_-]?token|oauth_consumer_key|oauth_token|authorization|bearer)[\"']?\\s*[:=]\\s*[\"']?)([^\\s,\"'}]+)");
+    private static final Pattern QUOTED_SECRET_ASSIGNMENT = Pattern.compile(
+            "(?i)([\"']?(?:key|token|secret|password|api[_-]?key|api[_-]?token|oauth_consumer_key|oauth_token|authorization|bearer)[\"']?\\s*[:=]\\s*)([\"'`])");
     private static final Pattern AUTHORIZATION_HEADER = Pattern.compile("(?i)(Authorization\\s*[:=]\\s*)[^\\r\\n]+");
     private static final Pattern BEARER_TOKEN = Pattern.compile("(?i)(Bearer\\s+)[A-Za-z0-9._~+/=-]+");
     private static final Pattern GITHUB_TOKEN =
@@ -96,8 +98,8 @@ final class SetupDiagnosticReporter {
     private static final Pattern TRELLO_CARD_FIELD = Pattern.compile(
             "(?i)([\"']?(?:card[_-]?id|card[_-]?identifier|cardId|cardIdentifier)[\"']?\\s*[:=]\\s*[\"']?)([^\\s,\"'}]+)");
     private static final Pattern YAML_PARSER_CONTINUATION_LINE = Pattern.compile("(?m)^(\\s*\\.\\.\\.\\s+)[^\\r\\n]+$");
-    private static final Pattern PATH_ASSIGNMENT =
-            Pattern.compile("(?i)(\\b(?:path|file|directory|dir|workspace|config|state|home)=)([^\\r\\n]+)");
+    private static final Pattern PATH_ASSIGNMENT = Pattern.compile(
+            "(?i)(\\b(?:path|file|directory|dir|workspace|config|state|home)=)(?![\"'`]?<path:[0-9a-f]{12}>[\"'`]?(?=$|\\s+(?=[\\p{L}_][\\p{L}\\p{N}_]*=)))([^\\r\\n]+)");
     private static final Pattern QUOTED_POSIX_PATH = Pattern.compile("([\"'`])(/[^\"'`\\r\\n]+)\\1");
     private static final Pattern QUOTED_WINDOWS_PATH = Pattern.compile("(?i)([\"'`])([A-Z]:\\\\[^\"'`\\r\\n]+)\\1");
     private static final Pattern WINDOWS_PATH = Pattern.compile("(?i)\\b[A-Z]:\\\\[^\\r\\n:'\"<>|]+");
@@ -110,7 +112,8 @@ final class SetupDiagnosticReporter {
     private static final CharMatcher POSIX_PATH_START = SLASHES;
     private static final CharMatcher URL_AUTHORITY_TERMINATOR =
             CharMatcher.whitespace().or(CharMatcher.anyOf("/?#")).precomputed();
-    private static final CharMatcher WHITESPACE = CharMatcher.whitespace().precomputed();
+    private static final Pattern LOG_FIELD_BOUNDARY = Pattern.compile("\\s+(?=[\\p{L}_][\\p{L}\\p{N}_]*=)");
+    private static final String PATH_ROOT_BOUNDARY = "(?=$|[/\\\\\\r\\n\"'`<>|]|" + LOG_FIELD_BOUNDARY.pattern() + ")";
     private static final BiConsumer<String, String> IGNORE_PATH_TOKENS = (token, path) -> {};
     private static final CharMatcher TOKEN_TERMINATOR =
             CharMatcher.whitespace().or(CharMatcher.anyOf(")>'\"`")).precomputed();
@@ -661,6 +664,11 @@ final class SetupDiagnosticReporter {
                                     context.paths().stateHome(),
                                     context.selectedWorkflowPaths(),
                                     context.selected());
+
+                            section(body, "Tool Path Identifiers");
+                            List<PrivateContextMapping> toolMappings = new ArrayList<>();
+                            addToolMappings(toolMappings);
+                            appendPrivateContextMappings(body, toolMappings);
                         });
 
         return body.toString();
@@ -693,8 +701,12 @@ final class SetupDiagnosticReporter {
             body.append(
                     "Multiple private-context values matched this token. Review the rows below instead of choosing silently.\n");
         }
+        appendPrivateContextMappings(body, matches);
+    }
+
+    private static void appendPrivateContextMappings(StringBuilder body, List<PrivateContextMapping> mappings) {
         MarkdownTable table = MarkdownTable.leftAligned(List.of("category", "name", "token", "value"));
-        matches.forEach(mapping -> table.row(mapping.category(), mapping.name(), mapping.token(), mapping.value()));
+        mappings.forEach(mapping -> table.row(mapping.category(), mapping.name(), mapping.token(), mapping.value()));
         table.appendTo(body);
     }
 
@@ -894,8 +906,11 @@ final class SetupDiagnosticReporter {
 
     private List<Map.Entry<String, String>> emittedPathTokens(String text) {
         List<Map.Entry<String, String>> emitted = new ArrayList<>();
-        sanitize(text, (token, path) -> emitted.add(Map.entry(token, path)));
-        return emitted.stream().distinct().toList();
+        String sanitized = sanitize(text, (token, path) -> emitted.add(Map.entry(token, redactCredentials(path))));
+        return emitted.stream()
+                .filter(entry -> sanitized.contains(entry.getKey()))
+                .distinct()
+                .toList();
     }
 
     private static void addMapping(
@@ -2422,19 +2437,20 @@ final class SetupDiagnosticReporter {
         if (value == null || value.isBlank()) {
             return "";
         }
-        String sanitized = redactSensitivePaths(value, pathTokens);
+        String sanitized = redactQuotedCredentials(value);
+        sanitized = QUOTED_WINDOWS_PATH
+                .matcher(sanitized)
+                .replaceAll(match -> match.group(1) + pathToken(match.group(2), pathTokens) + match.group(1));
+        sanitized = QUOTED_POSIX_PATH
+                .matcher(sanitized)
+                .replaceAll(match -> match.group(1) + pathToken(match.group(2), pathTokens) + match.group(1));
+        sanitized = redactSensitivePaths(sanitized, pathTokens);
         for (String sensitiveValue : sensitiveValues) {
             sanitized = replaceSensitiveValue(sanitized, sensitiveValue, pathTokens);
         }
-        sanitized = AUTHORIZATION_HEADER.matcher(sanitized).replaceAll("$1<redacted>");
-        sanitized = BEARER_TOKEN.matcher(sanitized).replaceAll("$1<redacted>");
-        sanitized = SECRET_ASSIGNMENT.matcher(sanitized).replaceAll("$1<redacted>");
-        sanitized = GITHUB_TOKEN.matcher(sanitized).replaceAll("<redacted>");
-        sanitized = OPENAI_TOKEN.matcher(sanitized).replaceAll("<redacted>");
-        sanitized = TRELLO_TOKEN.matcher(sanitized).replaceAll("<redacted>");
-        sanitized = TRELLO_API_KEY_CONTEXT.matcher(sanitized).replaceAll("$1<redacted>");
+        // Credential values can contain paths; their tokens are removed before mappings are retained.
+        sanitized = redactCredentials(sanitized);
         sanitized = YAML_PARSER_CONTINUATION_LINE.matcher(sanitized).replaceAll("$1<redacted>");
-        sanitized = redactUrlUserInfo(sanitized);
         sanitized = redactGithubSshRemotes(sanitized);
         sanitized = GITHUB_HTTPS_URL.matcher(sanitized).replaceAll(match -> "<github-url:" + hash(match.group()) + ">");
         sanitized = TRELLO_URL.matcher(sanitized).replaceAll(match -> "<trello-url:" + hash(match.group()) + ">");
@@ -2443,14 +2459,54 @@ final class SetupDiagnosticReporter {
         sanitized = PATH_ASSIGNMENT
                 .matcher(sanitized)
                 .replaceAll(match -> match.group(1) + pathToken(match.group(2), pathTokens));
-        sanitized = QUOTED_WINDOWS_PATH
-                .matcher(sanitized)
-                .replaceAll(match -> match.group(1) + pathToken(match.group(2), pathTokens) + match.group(1));
-        sanitized = QUOTED_POSIX_PATH
-                .matcher(sanitized)
-                .replaceAll(match -> match.group(1) + pathToken(match.group(2), pathTokens) + match.group(1));
         sanitized = WINDOWS_PATH.matcher(sanitized).replaceAll(match -> pathToken(match.group(), pathTokens));
         return CliInputValidation.safeDiagnosticsText(redactAbsolutePosixPaths(sanitized, pathTokens));
+    }
+
+    private String redactCredentials(String value) {
+        String sanitized = redactQuotedCredentials(value);
+        sanitized = AUTHORIZATION_HEADER.matcher(sanitized).replaceAll("$1<redacted>");
+        sanitized = BEARER_TOKEN.matcher(sanitized).replaceAll("$1<redacted>");
+        sanitized = SECRET_ASSIGNMENT.matcher(sanitized).replaceAll("$1<redacted>");
+        sanitized = GITHUB_TOKEN.matcher(sanitized).replaceAll("<redacted>");
+        sanitized = OPENAI_TOKEN.matcher(sanitized).replaceAll("<redacted>");
+        sanitized = TRELLO_TOKEN.matcher(sanitized).replaceAll("<redacted>");
+        sanitized = TRELLO_API_KEY_CONTEXT.matcher(sanitized).replaceAll("$1<redacted>");
+        return redactUrlUserInfo(sanitized);
+    }
+
+    /// Scans quoted credentials without a recursive regex, including truncated log lines.
+    private static String redactQuotedCredentials(String value) {
+        Matcher matcher = QUOTED_SECRET_ASSIGNMENT.matcher(value);
+        var redacted = new StringBuilder(value.length());
+        int cursor = 0;
+        while (matcher.find(cursor)) {
+            char quote = matcher.group(2).charAt(0);
+            int end = quotedCredentialEnd(value, matcher.end(), quote);
+            redacted.append(value, cursor, matcher.end()).append("<redacted>");
+            if (end < value.length() && value.charAt(end) == quote) {
+                redacted.append(quote);
+                end++;
+            }
+            cursor = end;
+        }
+        return redacted.append(value, cursor, value.length()).toString();
+    }
+
+    private static int quotedCredentialEnd(String value, int start, char quote) {
+        boolean escaped = false;
+        for (int index = start; index < value.length(); index++) {
+            char character = value.charAt(index);
+            if (character == '\r' || character == '\n' || (!escaped && character == quote)) {
+                return index;
+            }
+            if (escaped) {
+                escaped = false;
+            } else if (character == '\\') {
+                escaped = true;
+            }
+        }
+        return value.length();
     }
 
     /// Replaces a sensitive value. An absolute-path value extends over a following path remainder
@@ -2461,7 +2517,8 @@ final class SetupDiagnosticReporter {
         if (!looksLikeAbsolutePath(sensitiveValue)) {
             return text.replace(sensitiveValue, "<value:" + hash(sensitiveValue) + ">");
         }
-        Pattern sensitivePath = Pattern.compile(Pattern.quote(sensitiveValue) + "(?:[/\\\\][^\\s\"'`|)\\]]*)?");
+        Pattern sensitivePath =
+                Pattern.compile(Pattern.quote(sensitiveValue) + PATH_ROOT_BOUNDARY + "(?:[/\\\\][^\\s\"'`|)\\]]*)?");
         return sensitivePath
                 .matcher(text)
                 .replaceAll(match -> Matcher.quoteReplacement(pathToken(match.group(), pathTokens)));
@@ -2860,53 +2917,31 @@ final class SetupDiagnosticReporter {
         String redacted = value;
         for (String path : sensitivePaths()) {
             if (!path.isBlank()) {
-                Pattern pathWithChildren = Pattern.compile(Pattern.quote(path) + "(?:[/\\\\][^\\r\\n\"'`<>|]*)?");
+                Pattern pathWithChildren =
+                        Pattern.compile(Pattern.quote(path) + PATH_ROOT_BOUNDARY + "(?:[/\\\\][^\\r\\n\"'`<>|]*)?");
                 redacted = redactPathMatches(redacted, pathWithChildren, pathTokens);
             }
         }
         return redacted;
     }
 
-    /// Replaces each match with one path token. A match can run past the end of the path into the
-    /// rest of a log line, because child paths may contain spaces. The token therefore ends at the
-    /// longest prefix that ends before whitespace and exists on disk, which keeps text such as
-    /// ` outcome=loaded` visible and lets the private-context lookup resolve the token. Without such
-    /// a prefix the whole match stays in one token. A shorter existing prefix of a missing path still
-    /// ends the token early, see docs/adr/0111-resolvable-diagnostics-path-tokens.md.
+    /// Keeps paths with spaces in one token. Only a following key=value log field marks a
+    /// boundary; an existing shorter directory must not expose the rest of a missing child path.
     private String redactPathMatches(String value, Pattern pathPattern, BiConsumer<String, String> pathTokens) {
         Matcher matcher = pathPattern.matcher(value);
         var redacted = new StringBuilder(value.length());
         int cursor = 0;
         while (matcher.find(cursor)) {
-            String path = existingPathPrefix(matcher.group());
+            String path = pathBeforeLogFields(matcher.group());
             redacted.append(value, cursor, matcher.start()).append(pathToken(path, pathTokens));
             cursor = matcher.start() + path.length();
         }
         return redacted.append(value, cursor, value.length()).toString();
     }
 
-    private static String existingPathPrefix(String candidate) {
-        if (WHITESPACE.matchesNoneOf(candidate) || existsAsPath(candidate)) {
-            return candidate;
-        }
-        for (int end = candidate.length() - 1; end > 0; end--) {
-            if (WHITESPACE.matches(candidate.charAt(end))
-                    && !WHITESPACE.matches(candidate.charAt(end - 1))
-                    && existsAsPath(candidate.substring(0, end))) {
-                return candidate.substring(0, end);
-            }
-        }
-        return candidate;
-    }
-
-    /// Text that is not a valid path on this platform is not an existing path, so the caller keeps
-    /// the whole match in one token.
-    private static boolean existsAsPath(String path) {
-        try {
-            return Files.exists(Path.of(path), LinkOption.NOFOLLOW_LINKS);
-        } catch (InvalidPathException e) {
-            return false;
-        }
+    private static String pathBeforeLogFields(String candidate) {
+        Matcher boundary = LOG_FIELD_BOUNDARY.matcher(candidate);
+        return boundary.find() ? candidate.substring(0, boundary.start()) : candidate;
     }
 
     private static void addPath(List<String> paths, String value) {

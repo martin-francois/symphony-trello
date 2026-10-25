@@ -2045,7 +2045,7 @@ final class SetupDiagnosticReporterTest {
         Path configDir = tempDir.resolve("log-line-lookup-config");
         Path stateHome = tempDir.resolve("log-line-lookup-state");
         Path workflow = configDir.resolve("WORKFLOW.log-line.md");
-        Files.createDirectories(configDir);
+        Files.createDirectories(configDir.resolve("private"));
         Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19205));
         saveSyntheticBoard(configDir, workflow, 19205);
         Path workerLog = new ManagedProcessStore(stateHome).files(workflow).stdoutLog();
@@ -2055,8 +2055,9 @@ final class SetupDiagnosticReporterTest {
                 """
                 INFO (main) workflow=%s outcome=loaded
                 INFO (main) cloned into %s/private client/repo
+                INFO (main) cloned into %s/private client/repo outcome=loaded
                 """
-                        .formatted(workflow, configDir));
+                        .formatted(workflow, configDir, configDir));
         Map<String, String> environment = Map.of("SYMPHONY_TRELLO_CONFIG_DIR", configDir.toString());
 
         // when
@@ -2119,15 +2120,177 @@ final class SetupDiagnosticReporterTest {
                 dockerToken);
         String codexLookup = lookupDiagnostics(
                 new SetupDiagnosticReporter(environment, commands), configDir, stateHome, Optional.empty(), codexToken);
+        String privateReport = new SetupDiagnosticReporter(environment, commands)
+                .renderPrivateContext(new SetupDiagnosticReporter.DiagnosticsRequest(
+                        Optional.empty(),
+                        Optional.empty(),
+                        false,
+                        true,
+                        Optional.empty(),
+                        Optional.of(configDir),
+                        Optional.empty(),
+                        Optional.of(stateHome),
+                        Optional.empty(),
+                        Optional.empty()));
 
         // then
-        assertThat(report).contains(codexToken + "; login=ok |");
+        assertThat(report)
+                .contains(codexToken + "; login=ok |")
+                .doesNotContain("/etc/containers/nodocker", "/opt/codex/bin/codex", toolDirectory.toString());
         assertThat(dockerLookup)
                 .contains(
                         "- **lookup_status:** found",
                         "| tool | docker | " + dockerToken + " | /etc/containers/nodocker");
         assertThat(codexLookup)
                 .contains("- **lookup_status:** found", "| tool | codex | " + codexToken + " | /opt/codex/bin/codex |");
+        assertThat(privateReport)
+                .contains("Tool Path Identifiers", dockerToken, codexToken, "/opt/codex/bin/codex")
+                .doesNotContain("Logged in using ChatGPT", "login=ok");
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "%s -Djavax.net.ssl.keyStorePassword=fixture-secret",
+                "-Djava.library.path=%s",
+                "-Djava.library.path=\"%s\"",
+                "-Djava.library.path='%s'",
+                "-Djava.library.path=`%s`"
+            })
+    void privateToolPathLookupKeepsPathsAndRedactsCredentialSuffixes(String versionLine) throws Exception {
+        // given
+        Path configDir = tempDir.resolve("tool-mapping-config");
+        Path stateHome = tempDir.resolve("tool-mapping-state");
+        Path toolDirectory = fakeToolDirectory(tempDir, "codex");
+        Path codex = toolDirectory.resolve("codex");
+        Path privatePath = configDir.resolve(
+                versionLine.contains("\"") || versionLine.contains("'") || versionLine.contains("`")
+                        ? "private tenant=customer/repo"
+                        : "private client/lib");
+        Files.createDirectories(configDir);
+        FakeCommandRunner fixtures = new FakeCommandRunner()
+                .returns(0, versionLine.formatted(privatePath), codex.toString(), "--version")
+                .returns(0, "Logged in using ChatGPT", codex.toString(), "login", "status");
+        List<List<String>> commands = new ArrayList<>();
+        CommandRunner runner = command -> {
+            commands.add(List.of(command));
+            return fixtures.run(command);
+        };
+        Map<String, String> environment =
+                Map.of("PATH", toolDirectory.toString(), "SYMPHONY_TRELLO_CONFIG_DIR", configDir.toString());
+        String report = renderDeepDiagnostics(new SetupDiagnosticReporter(environment, runner), configDir, stateHome);
+        String emittedToken =
+                firstMatch(report, Pattern.compile("\\| codex \\| available \\| [^\\r\\n]*?(<path:[0-9a-f]{12}>)"));
+        commands.clear();
+
+        // when
+        String lookup = lookupDiagnostics(
+                new SetupDiagnosticReporter(environment, runner), configDir, stateHome, Optional.empty(), emittedToken);
+
+        // then
+        assertThat(report)
+                .doesNotContain(privatePath.toString(), "client/lib", "tenant=customer/repo", "fixture-secret");
+        assertThat(lookup)
+                .contains("- **lookup_status:** found", "| tool | codex | " + emittedToken + " | " + privatePath)
+                .doesNotContain("fixture-secret");
+        assertThat(commands).containsExactly(List.of(codex.toString(), "--version"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "-Djavax.net.ssl.keyStorePassword=%s",
+                "-Djavax.net.ssl.keyStorePassword=%s secret-suffix",
+                "-Djavax.net.ssl.keyStorePassword=\"%s secret-suffix\"",
+                "-Djavax.net.ssl.keyStorePassword='%s secret-suffix'",
+                "-Djavax.net.ssl.keyStorePassword=`%s secret-suffix`",
+                "-Djavax.net.ssl.keyStorePassword=\"%s\\\" secret-suffix\"",
+                "-Djavax.net.ssl.keyStorePassword=\"%s secret-suffix",
+                "-Djavax.net.ssl.keyStorePassword=\"%s secret-suffix\\",
+                "-Dtoken=%s",
+                "-Dapi_key=\"%s secret-suffix\""
+            })
+    void privateToolMappingsExcludePathShapedCredentials(String credential) throws Exception {
+        // given
+        Path configDir = tempDir.resolve("tool-password-config");
+        Path toolDirectory = fakeToolDirectory(tempDir, "codex");
+        Path codex = toolDirectory.resolve("codex");
+        Path password = configDir.resolve("private-password-value");
+        Files.createDirectories(configDir);
+        FakeCommandRunner commands =
+                new FakeCommandRunner().returns(0, credential.formatted(password), codex.toString(), "--version");
+        var reporter = new SetupDiagnosticReporter(
+                Map.of("PATH", toolDirectory.toString(), "SYMPHONY_TRELLO_CONFIG_DIR", configDir.toString()), commands);
+
+        // when
+        String report = reporter.renderPrivateContext(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                true,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.empty(),
+                Optional.of(tempDir.resolve("tool-password-state")),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains("Tool Path Identifiers")
+                .doesNotContain(password.toString(), "private-password-value", "secret-suffix", "| tool | codex |");
+        assertThat(renderDeepDiagnostics(reporter, configDir, tempDir.resolve("tool-password-state")))
+                .doesNotContain(password.toString(), "private-password-value", "secret-suffix");
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 1000})
+    void redactsPrivatePathSuffixAfterCredentialShapedDirectoryName(int repetitions) throws Exception {
+        // given
+        Path configDir = tempDir.resolve("credential-directory-config");
+        Path stateHome = tempDir.resolve("credential-directory-state");
+        Path toolDirectory = fakeToolDirectory(tempDir, "codex");
+        Path privatePath = configDir.resolve("token=fixture " + "private-client/".repeat(repetitions) + "repo");
+        FakeCommandRunner commands = new FakeCommandRunner()
+                .returns(
+                        0,
+                        privatePath.toString(),
+                        toolDirectory.resolve("codex").toString(),
+                        "--version");
+        var reporter = new SetupDiagnosticReporter(
+                Map.of("PATH", toolDirectory.toString(), "SYMPHONY_TRELLO_CONFIG_DIR", configDir.toString()), commands);
+
+        // when
+        String report = renderDeepDiagnostics(reporter, configDir, stateHome);
+
+        // then
+        assertThat(report).doesNotContain(privatePath.toString(), "private-client/repo", "fixture");
+    }
+
+    @Test
+    void keepsSiblingDirectoryPathsAtomicInToolAssignments() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("sibling-config");
+        Path stateHome = tempDir.resolve("sibling-state");
+        Path toolDirectory = fakeToolDirectory(tempDir, "codex");
+        Path privatePath = tempDir.resolve("sibling-config-backup/private-client/repo");
+        Files.createDirectories(configDir);
+        FakeCommandRunner commands = new FakeCommandRunner()
+                .returns(
+                        0, "path=" + privatePath, toolDirectory.resolve("codex").toString(), "--version");
+        Map<String, String> environment =
+                Map.of("PATH", toolDirectory.toString(), "SYMPHONY_TRELLO_CONFIG_DIR", configDir.toString());
+        String report = renderDeepDiagnostics(new SetupDiagnosticReporter(environment, commands), configDir, stateHome);
+        String token =
+                firstMatch(report, Pattern.compile("\\| codex \\| available \\| [^\\r\\n]*?(<path:[0-9a-f]{12}>)"));
+
+        // when
+        String lookup = lookupDiagnostics(
+                new SetupDiagnosticReporter(environment, commands), configDir, stateHome, Optional.empty(), token);
+
+        // then
+        assertThat(report).doesNotContain(privatePath.toString(), "-backup/private-client/repo");
+        assertThat(lookup).contains("- **lookup_status:** found", "| " + privatePath + " |");
     }
 
     @ParameterizedTest
@@ -2554,8 +2717,8 @@ final class SetupDiagnosticReporterTest {
         Files.writeString(
                 stateHome.resolve("single-token.log"),
                 """
-                exact %s end
-                nested %s/nested/output.txt end
+                exact %s status=end
+                nested %s/nested/output.txt status=end
                 ref private-ref-value end
                 """
                         .formatted(configDir, configDir));
@@ -2569,8 +2732,8 @@ final class SetupDiagnosticReporterTest {
         byte[] key = diagnosticsKey(configDir);
         assertThat(report)
                 .contains(
-                        "exact <path:" + token(key, configDir.toString()) + "> end",
-                        "nested <path:" + token(key, configDir + "/nested/output.txt") + "> end",
+                        "exact <path:" + token(key, configDir.toString()) + "> status=end",
+                        "nested <path:" + token(key, configDir + "/nested/output.txt") + "> status=end",
                         "ref <value:" + token(key, "private-ref-value") + "> end")
                 .doesNotContain(
                         "><path:",

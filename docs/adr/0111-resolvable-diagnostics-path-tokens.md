@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-10-04
-decision-makers: [François Martin, Claude]
+decision-makers: [François Martin]
 consulted: ["[GitHub issue #803](https://github.com/martin-francois/symphony-trello/issues/803)", SPEC.md, SetupDiagnosticReporter.java]
 informed: [Future maintainers]
 ---
@@ -54,39 +54,41 @@ For paths in tool output:
 
 ## Decision Outcome
 
-Chosen options: "Longest existing prefix before whitespace" and "Lookup reruns tool version probes",
-because together they make the reported tokens resolve while a missing path with a space stays in
-one token, as long as no shorter prefix of it exists on disk.
+Chosen options: "Whitespace before a `key=` pair" and "Lookup reruns tool version probes".
+A known-root path ends only before a key-value log field or at the end of the matched line.
+Otherwise the whole match stays in one token. This keeps ` outcome=loaded` visible without
+exposing `client/repo` from a missing `private client/repo` path when a directory named
+`private` exists.
 
-The workflow, log, and PID file paths that worker log lines name normally exist while diagnostics
-runs, so their tokens now end at the real path and the lookup finds them. A path that no longer
-exists stays one token with the text after it, as before.
+The boundary does not depend on filesystem contents. A deleted file and its text have the same
+token as before deletion, though a lookup cannot resolve a path absent from its current mappings.
 
 The private-context report, and so every lookup, runs the same `--version` commands as the public
 report and records the path tokens that sanitizing the first output line emits, under the `tool`
 category. The codex and gh auth status (`; login=...`, `; auth=...`) is now appended after the
 sanitized version line, so a path token in that line is the same with and without `--deep`. The
-lookup never runs the auth probes.
+lookup never runs the auth probes. The full private-context report includes the same tool-path
+mapping table. A linear scanner removes quoted credentials first, preserving escaped-quote context.
+Quoted paths stay atomic and unquoted known-root paths use the log-field boundary.
+Known roots match complete directory names, so a sibling such as `config-backup` is not split at
+`config`. Credential redaction then removes credential values, including path tokens within them.
+Only tokens present in the final sanitized output appear in the mapping. Mapped values also pass
+credential redaction because a path match can contain trailing tool options. The quoted scanner
+handles escaped quotes and truncated lines. A path assignment whose whole value is
+already a token keeps that token, including quoted assignments.
 
 ### Consequences
 
 * Good, because `workflow=<path:...> outcome=loaded` keeps its trailing text and resolves to the
   workflow path.
-* Good, because a path with a space, such as a directory named `private client`, still renders as one
-  token when neither it nor a shorter prefix of it that ends before a space exists on disk.
+* Good, because a path with a space, such as `private client/repo`, stays in one token even when
+  only a shorter prefix exists on disk.
 * Good, because any path that a tool prints in its version line, such as the Podman notice or a
   `Picked up JAVA_TOOL_OPTIONS:` line from `java -version`, resolves without a hand-kept list.
-* Bad, because a missing path with a space still shows its tail when a shorter prefix of it exists.
-  For `<config>/private client/repo outcome=loaded`, where the `<config>/private` directory exists
-  and `<config>/private client/repo` does not, the report shows
-  `<path:...> client/repo outcome=loaded`.
-* Bad, because the token for a path followed by text now depends on whether the path exists when
-  diagnostics runs. A file deleted between two reports changes its token in the second report.
-  The lookup sanitizes the tool version lines again, so a file created or deleted between the public
-  report and the lookup changes where a tool token ends, and the lookup returns `not_found` for the
-  token from the report.
-* Bad, because a path followed by text still swallows that text when the path is gone. The lookup then
-  resolves nothing for it, which matches the behavior before this change.
+* Bad, because free text after a path stays inside its token when it does not start with a
+  `key=` field. Preserving that text requires a separate rule for those log formats.
+* Bad, because a literal path segment that starts with `key=` after whitespace is indistinguishable
+  from a log field in unquoted text.
 * Bad, because the private-context report and every focused lookup now run the local tool version
   commands, which adds a short delay.
 * Bad, because the tool token for the Podman notice still covers ` to quiet msg.`, since that path
@@ -98,9 +100,12 @@ lookup never runs the auth probes.
 
 * `privateContextLookupResolvesWorkerLogPathTokenFollowedByText` checks that the log line keeps
   ` outcome=loaded`, that the emitted token resolves to the workflow path, and that a missing child
-  path with a space leaves no fragment in the report.
+  path with a space leaves no fragment in the report even when a shorter prefix exists.
 * `privateContextLookupResolvesPathTokensFromToolVersionOutput` checks that the docker and codex tool
-  tokens from a `--deep` report resolve through a lookup.
+  tokens from a `--deep` report resolve through a lookup and the full private report, and that the
+  public report hides the paths.
+* `privateToolPathLookupKeepsPathsAndRedactsCredentialSuffixes` checks that assignment values resolve
+  to paths, tool-option credentials stay redacted, and lookup runs only version probes.
 
 The `diagnostics-focused-lookup-for-emitted-path-tokens` row of the live bug-bash harness from
 [GitHub PR #809](https://github.com/martin-francois/symphony-trello/pull/809) replays the original
@@ -172,10 +177,9 @@ Add mappings for the resolved tool executables and other known tool locations.
 ## More Information
 
 The generic absolute-path redaction for paths outside the known roots keeps its current end rule.
-Those paths are not in the private-context mapping unless a tool printed them, and checking whether
-arbitrary text exists on disk could reach a network share on Windows. The existence check runs only
-on matches that start with a known root, so it reaches a network share only when that root, such as
-a redirected Windows home directory, already lives on one.
+Those paths are not in the private-context mapping unless a tool printed them. Preserving trailing
+text outside known roots and updating the bug-bash manifest after #809 are tracked in
+[GitHub issue #1030](https://github.com/martin-francois/symphony-trello/issues/1030).
 
 The setup-failure report shows a longer tool list than `diagnostics`. The lookup maps only the
 `diagnostics` tool list, because the lookup is part of the `diagnostics` command.
