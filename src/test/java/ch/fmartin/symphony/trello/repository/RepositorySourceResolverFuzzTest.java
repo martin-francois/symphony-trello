@@ -10,15 +10,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
-import ch.fmartin.symphony.trello.testsupport.FuzzIsolationExtension;
 import ch.fmartin.symphony.trello.fuzz.RepositorySourceFuzzInputs;
 import ch.fmartin.symphony.trello.fuzz.RepositorySourceFuzzInputs.WorkflowDefault;
+import ch.fmartin.symphony.trello.testsupport.FuzzIsolationExtension;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.code_intelligence.jazzer.mutation.annotation.NotNull;
 import com.code_intelligence.jazzer.mutation.annotation.WithSize;
 import com.code_intelligence.jazzer.mutation.annotation.WithUtf8Length;
 import java.net.URI;
+import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,7 +44,12 @@ final class RepositorySourceResolverFuzzTest {
     @ParameterizedTest(name = "{0}")
     void everyFuzzedDeclarationLabelDeclaresACardSource(String label) {
         // given
-        Card card = cardWithDescription(label + ": " + REMOTE);
+        boolean remoteLabel =
+                Set.of("Repository", "Repository URL", "Repo", "Repo URL").contains(label);
+        String value = remoteLabel
+                ? REMOTE
+                : Path.of("repository-checkout").toAbsolutePath().toString();
+        Card card = cardWithDescription(label + ": " + value);
 
         // when
         RepositorySourceSelection selection = resolver.select(card, NO_DEFAULT);

@@ -417,15 +417,15 @@ final class ConfigResolverTest {
         assertThat(error).hasMessage(expectedMessage);
     }
 
-    /// The platform rejects only the NUL character in a path. The others form a valid path that the
-    /// repository source context cannot show on one prompt line.
+    /// Windows rejects low control characters before prompt-line validation; POSIX rejects only NUL.
     private static Stream<Arguments> repositoryPathCharactersThatBreakAPromptLine() {
         String unusable = "repository.default_path must not contain control characters or line separators";
+        String invalidPath = "repository.default_path must be a valid local path";
+        String lowControl = Path.of("").getFileSystem().getSeparator().equals("\\") ? invalidPath : unusable;
         return Stream.of(
-                Arguments.of(
-                        "NUL character", NUL_IN_PATH, "repository.default_path must be a valid local path"),
-                Arguments.of("line feed", "\n", unusable),
-                Arguments.of("other control character", UNIT_SEPARATOR_IN_REPOSITORY_PATH, unusable),
+                Arguments.of("NUL character", NUL_IN_PATH, invalidPath),
+                Arguments.of("line feed", "\n", lowControl),
+                Arguments.of("other control character", UNIT_SEPARATOR_IN_REPOSITORY_PATH, lowControl),
                 Arguments.of("next line", UNICODE_NEXT_LINE, unusable),
                 Arguments.of("line separator", String.valueOf(UNICODE_LINE_SEPARATOR), unusable));
     }
