@@ -4334,7 +4334,7 @@ final class InstallerScriptTest {
                         "Version: " + installerDefaultRef().substring(1),
                         "WOULD download release archive:",
                         "WOULD verify SHA3-256 checksum from:",
-                        "WOULD skip release signature check: install GitHub CLI (gh) 2.49 or newer to check it",
+                        "WOULD skip release signature check: install GitHub CLI (gh) 2.65 or newer to check it",
                         "WOULD offer to install Java 25+ JDK",
                         "WOULD offer to install Codex CLI with Symphony-managed npm:",
                         "Node.js/npm installed: no");
@@ -8560,7 +8560,8 @@ final class InstallerScriptTest {
                 .contains(style + label + STYLE_RESET + check.expectedOutput.substring(label.length()));
         assertThat(install.appHome().resolve("target/quarkus-app/quarkus-run.jar"))
                 .isRegularFile();
-        if (check == ReleaseSignatureCheck.VERIFIED_WITH_GITHUB_CLI) {
+        if (check == ReleaseSignatureCheck.VERIFIED_WITH_GITHUB_CLI
+                || check == ReleaseSignatureCheck.VERIFIED_WITH_PACKAGED_GITHUB_CLI) {
             assertThat(install.fakeLog())
                     .content()
                     .contains(
@@ -9193,9 +9194,16 @@ final class InstallerScriptTest {
         VERIFIED_WITH_GITHUB_CLI(
                 ReleaseArchiveScenario.signed(FakeGitHubCli.VERIFIES),
                 "OK  Release signature verified with GitHub CLI"),
+        VERIFIED_WITH_PACKAGED_GITHUB_CLI(
+                ReleaseArchiveScenario.signed(FakeGitHubCli.PACKAGED_VERSION),
+                "OK  Release signature verified with GitHub CLI"),
         SKIPPED_WITHOUT_GITHUB_CLI_ATTESTATION_SUPPORT(
                 ReleaseArchiveScenario.signed(FakeGitHubCli.LACKS_ATTESTATION_SUPPORT),
-                "NOTE  Release signature not checked: install GitHub CLI (gh) 2.49 or newer to check it."
+                "NOTE  Release signature not checked: install GitHub CLI (gh) 2.65 or newer to check it."
+                        + " SHA3-256 checksum verified."),
+        SKIPPED_WITH_OUTDATED_GITHUB_CLI_TRUST_SUPPORT(
+                ReleaseArchiveScenario.signed(FakeGitHubCli.OUTDATED_TRUST_SUPPORT),
+                "NOTE  Release signature not checked: install GitHub CLI (gh) 2.65 or newer to check it."
                         + " SHA3-256 checksum verified."),
         SKIPPED_FOR_RELEASE_BEFORE_SIGNED_ASSETS(
                 new ReleaseArchiveScenario(UNSIGNED_RELEASE_VERSION, false, FakeGitHubCli.VERIFIES),
@@ -9238,8 +9246,10 @@ final class InstallerScriptTest {
     /// Behaviors of the fake GitHub CLI; `mode` is its `SYMPHONY_FAKE_GH_ATTESTATION` value.
     private enum FakeGitHubCli {
         VERIFIES("verified"),
+        PACKAGED_VERSION("packaged"),
         REJECTS("rejected"),
-        LACKS_ATTESTATION_SUPPORT("unsupported");
+        LACKS_ATTESTATION_SUPPORT("unsupported"),
+        OUTDATED_TRUST_SUPPORT("outdated");
 
         private final String mode;
 

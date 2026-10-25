@@ -4366,10 +4366,10 @@ When this profile is used:
   stay free of escape sequences
 - the release workflow MUST publish a Sigstore attestation bundle for the release assets, signed
   without a long-lived key by the release workflow on the default branch. For releases from the
-  first signed release onward, when GitHub CLI with `gh attestation verify` is installed, the
+  first signed release onward, when GitHub CLI 2.65 or newer with `gh attestation verify` is installed, the
   default installer MUST verify the downloaded archive against that bundle with that signer identity
   before unpacking, and MUST stop without unpacking when the bundle download or the verification
-  fails. When GitHub CLI or `gh attestation verify` is not installed, or the release predates the
+  fails. When GitHub CLI is absent, is older than 2.65, or lacks `gh attestation verify`, or the release predates the
   first signed release, the installer MUST keep the checksum check, print one note that the
   signature was not checked, and continue
 - the installer MAY support an explicit source-checkout mode for development and testing. In that

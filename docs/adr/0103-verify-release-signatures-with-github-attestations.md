@@ -84,9 +84,9 @@ continue.
 1. The installer downloads the archive and `checksums.txt` and checks the SHA3-256 hash, as before.
 2. For releases older than 1.2.0, it prints a note that the release predates signed assets and
    continues. This keeps `--version` working for older releases.
-3. If `gh` is not on `PATH`, or `gh attestation verify --help` fails because the version is older
-   than 2.49, it prints one note and continues:
-   `Release signature not checked: install GitHub CLI (gh) 2.49 or newer to check it. SHA3-256 checksum verified.`
+3. If `gh` is not on `PATH`, its version is older than 2.65, or
+   `gh attestation verify --help` fails, it prints one note and continues:
+   `Release signature not checked: install GitHub CLI (gh) 2.65 or newer to check it. SHA3-256 checksum verified.`
 4. Otherwise it downloads the bundle and runs:
 
    ```bash
@@ -114,7 +114,7 @@ The installers verify the archive they install. Users who also want to verify `i
 * Good, because users can verify any asset by hand with `gh` or with `cosign`, using the published
   bundle and the identity above.
 * Good, because the release workflow tests the installer's exact check before publication.
-* Bad, because the automatic check depends on GitHub CLI 2.49 or newer and on HTTPS access to
+* Bad, because the automatic check depends on GitHub CLI 2.65 or newer and on HTTPS access to
   Sigstore's public trust data. Without network access to Sigstore, `gh` cannot verify and the
   install stops. There is no flag that skips the check. A user who cannot reach Sigstore can run the
   installer in a shell without `gh` on `PATH`, which falls back to the checksum check. The README
@@ -220,7 +220,7 @@ The installer refuses to install unless it can verify the signature.
 ### Verify When GitHub CLI Can, Otherwise Print A Note
 
 The installer checks the SHA3-256 checksum, then verifies the archive with
-`gh attestation verify` and the published bundle when GitHub CLI 2.49 or newer is installed, and
+`gh attestation verify` and the published bundle when GitHub CLI 2.65 or newer is installed, and
 stops when that check fails. Without such a GitHub CLI, or for releases before 1.2.0, it prints one
 note and installs after the checksum check.
 

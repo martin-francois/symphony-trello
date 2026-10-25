@@ -1469,10 +1469,22 @@ padded_release_version() {
 }
 
 # Prints verify, unsigned-release, or no-github-cli.
+github_cli_supports_release_signatures() {
+  local version
+  need gh || return 1
+  version="$(gh --version 2>/dev/null)" || return 1
+  version="${version#gh version }"
+  version="${version%% *}"
+  [[ "$version" =~ ^([0-9]+\.[0-9]+\.[0-9]+)([-+].*)?$ ]] || return 1
+  version="${BASH_REMATCH[1]}"
+  [[ "$(padded_release_version "$version")" < "$(padded_release_version 2.65.0)" ]] && return 1
+  gh attestation verify --help >/dev/null 2>&1
+}
+
 release_signature_check_mode() {
   if [[ "$(padded_release_version "$VERSION")" < "$(padded_release_version "$FIRST_SIGNED_RELEASE_VERSION")" ]]; then
     echo "unsigned-release"
-  elif need gh && gh attestation verify --help >/dev/null 2>&1; then
+  elif github_cli_supports_release_signatures; then
     echo "verify"
   else
     echo "no-github-cli"
@@ -1482,7 +1494,7 @@ release_signature_check_mode() {
 release_signature_skip_reason() {
   case "$1" in
   unsigned-release) echo "release $VERSION predates signed release assets" ;;
-  *) echo "install GitHub CLI (gh) 2.49 or newer to check it" ;;
+  *) echo "install GitHub CLI (gh) 2.65 or newer to check it" ;;
   esac
 }
 

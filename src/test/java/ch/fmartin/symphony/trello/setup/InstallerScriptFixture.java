@@ -1342,8 +1342,9 @@ final class InstallerScriptFixture {
     }
 
     /// Writes a GitHub CLI double for release signature checks. `SYMPHONY_FAKE_GH_ATTESTATION`
-    /// selects `verified`, `rejected`, or `unsupported` (a gh without attestation
-    /// support). Calls go to `SYMPHONY_FAKE_LOG` with the `GH_HOST` they saw.
+    /// selects `verified`, `rejected`, `outdated`, or `unsupported`. The outdated CLI
+    /// has the command but lacks current trust support. Calls go to `SYMPHONY_FAKE_LOG` with the `GH_HOST` they
+    // saw.
     static Path createFakeGitHubCli(Path temporaryDirectory) throws IOException {
         Path fakeBin = temporaryDirectory.resolve("fake-gh-bin");
         Files.createDirectories(fakeBin);
@@ -1358,6 +1359,12 @@ final class InstallerScriptFixture {
                 set -euo pipefail
                 echo "gh GH_HOST=${GH_HOST:-} $*" >> "${SYMPHONY_FAKE_LOG:?}"
                 mode="${SYMPHONY_FAKE_GH_ATTESTATION:-verified}"
+                if [[ "${1:-}" == "--version" ]]; then
+                  if [[ "$mode" == "outdated" ]]; then echo 'gh version 2.49.0 (2024-05-08)';
+                  elif [[ "$mode" == "packaged" ]]; then echo 'gh version 2.65.0+dfsg1 (2025-01-06)';
+                  else echo 'gh version 2.65.0 (2025-01-06)'; fi
+                  exit 0
+                fi
                 if [[ "${1:-} ${2:-}" != "attestation verify" ]]; then
                   exit 0
                 fi
@@ -1365,7 +1372,7 @@ final class InstallerScriptFixture {
                   [[ "$mode" != "unsupported" ]]
                   exit $?
                 fi
-                if [[ "$mode" == "verified" && -f "${5:-}" ]]; then
+                if [[ ( "$mode" == "verified" || "$mode" == "packaged" ) && -f "${5:-}" ]]; then
                   exit 0
                 fi
                 echo
@@ -1388,13 +1395,19 @@ final class InstallerScriptFixture {
                 """
                 Add-Content -Path $env:SYMPHONY_FAKE_LOG -Value ("gh GH_HOST=$env:GH_HOST " + ($args -join " "))
                 $mode = if ($env:SYMPHONY_FAKE_GH_ATTESTATION) { $env:SYMPHONY_FAKE_GH_ATTESTATION } else { "verified" }
+                if ($args.Count -gt 0 -and $args[0] -eq "--version") {
+                  if ($mode -eq "outdated") { Write-Output 'gh version 2.49.0 (2024-05-08)' }
+                  elseif ($mode -eq "packaged") { Write-Output 'gh version 2.65.0+dfsg1 (2025-01-06)' }
+                  else { Write-Output 'gh version 2.65.0 (2025-01-06)' }
+                  exit 0
+                }
                 if ($args.Count -lt 2 -or $args[0] -ne "attestation" -or $args[1] -ne "verify") {
                   exit 0
                 }
                 if ($args.Count -ge 3 -and $args[2] -eq "--help") {
                   exit $(if ($mode -eq "unsupported") { 1 } else { 0 })
                 }
-                if ($mode -eq "verified" -and $args.Count -ge 5 -and (Test-Path -LiteralPath $args[4] -PathType Leaf)) {
+                if (($mode -eq "verified" -or $mode -eq "packaged") -and $args.Count -ge 5 -and (Test-Path -LiteralPath $args[4] -PathType Leaf)) {
                   exit 0
                 }
                 [Console]::Error.WriteLine('Error: verifying with issuer "sigstore.dev"')

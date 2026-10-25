@@ -966,7 +966,7 @@ as `symphony-trello-<version>.intoto.jsonl` next to `checksums.txt`. Releases be
 signed.
 
 The installer always checks the archive's SHA3-256 hash against `checksums.txt`. That catches broken
-or mismatched downloads. If GitHub CLI (`gh`) 2.49 or newer is installed, the installer also checks
+or mismatched downloads. If GitHub CLI (`gh`) 2.65 or newer is installed, the installer also checks
 the archive's signature, which proves that this repository's release workflow on `main` built it.
 You do not need to log in to GitHub CLI for this check. Without GitHub CLI, the installer prints a
 note and continues with the checksum check.
@@ -984,23 +984,27 @@ with the signature bundle of the same release and run `gh attestation verify`:
 ```bash
 version=1.2.0
 base="https://github.com/martin-francois/symphony-trello/releases/download/v$version"
-curl -fsSLO "$base/install.sh"
-curl -fsSLO "$base/symphony-trello-$version.intoto.jsonl"
+curl -fsSLO "$base/install.sh" &&
+curl -fsSLO "$base/symphony-trello-$version.intoto.jsonl" &&
 gh attestation verify install.sh --bundle "symphony-trello-$version.intoto.jsonl" \
   --repo martin-francois/symphony-trello \
-  --cert-identity https://github.com/martin-francois/symphony-trello/.github/workflows/release-please.yml@refs/heads/main
+  --cert-identity https://github.com/martin-francois/symphony-trello/.github/workflows/release-please.yml@refs/heads/main &&
 bash install.sh
 ```
 
 ```powershell
-$version = "1.2.0"
-$base = "https://github.com/martin-francois/symphony-trello/releases/download/v$version"
-Invoke-WebRequest "$base/install.ps1" -OutFile install.ps1
-Invoke-WebRequest "$base/symphony-trello-$version.intoto.jsonl" -OutFile "symphony-trello-$version.intoto.jsonl"
-gh attestation verify install.ps1 --bundle "symphony-trello-$version.intoto.jsonl" `
-  --repo martin-francois/symphony-trello `
-  --cert-identity https://github.com/martin-francois/symphony-trello/.github/workflows/release-please.yml@refs/heads/main
-powershell -ExecutionPolicy Bypass -File .\install.ps1
+& {
+  $ErrorActionPreference = "Stop"
+  $version = "1.2.0"
+  $base = "https://github.com/martin-francois/symphony-trello/releases/download/v$version"
+  Invoke-WebRequest "$base/install.ps1" -OutFile install.ps1 -ErrorAction Stop
+  Invoke-WebRequest "$base/symphony-trello-$version.intoto.jsonl" -OutFile "symphony-trello-$version.intoto.jsonl" -ErrorAction Stop
+  gh attestation verify install.ps1 --bundle "symphony-trello-$version.intoto.jsonl" `
+    --repo martin-francois/symphony-trello `
+    --cert-identity https://github.com/martin-francois/symphony-trello/.github/workflows/release-please.yml@refs/heads/main
+  if ($LASTEXITCODE -ne 0) { throw "Release signature verification failed. Do not run this installer." }
+  powershell -ExecutionPolicy Bypass -File .\install.ps1
+}
 ```
 
 Replace `1.2.0` with the release you want. A versioned `install.sh` or `install.ps1` installs its own

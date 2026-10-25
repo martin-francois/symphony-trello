@@ -1383,6 +1383,13 @@ function Test-GitHubCliAttestationSupport {
     return $false
   }
   try {
+    $versionOutput = @(& gh --version 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $versionOutput.Count -eq 0 -or $versionOutput[0] -notmatch '^gh version ([0-9]+\.[0-9]+\.[0-9]+)(?:[-+][^ ]*)?(?: |$)') {
+      return $false
+    }
+    if ([version]$Matches[1] -lt [version]"2.65.0") {
+      return $false
+    }
     & gh attestation verify --help *> $null
     return $LASTEXITCODE -eq 0
   } catch {
@@ -1405,7 +1412,7 @@ function Get-ReleaseSignatureSkipReason([string]$Mode) {
   if ($Mode -eq "unsigned-release") {
     return "release $Version predates signed release assets"
   }
-  return "install GitHub CLI (gh) 2.49 or newer to check it"
+  return "install GitHub CLI (gh) 2.65 or newer to check it"
 }
 
 function Assert-ReleaseArchiveSignature([string]$ArchivePath, [string]$TempDir) {
