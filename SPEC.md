@@ -4896,8 +4896,8 @@ Workflow fields, under the top-level `github` key:
 - `pull_request_mode` (string)
   - `create` (default): repository-changing work hands off with a pull request.
   - `branch_only`: repository-changing work hands off with a pushed branch and no pull request.
-  - Values are matched ignoring case and surrounding whitespace. Other values are configuration
-    errors.
+  - Values are matched ignoring case and surrounding whitespace. An omitted key uses the default;
+    an explicit null and other unsupported values are configuration errors.
 - `no_pr_label` (string or null)
   - Default: `No PR`.
   - A card that carries this Trello label uses branch-only handoff on a `create` workflow. Label
@@ -4962,6 +4962,10 @@ comments remain intact. Generated instructions require explicit labeled fields a
 writes before the review transition; disabled move tools leave that transition to a person.
 The checkout field uses `Task checkout:` so the informational path does not become an explicit
 repository-source declaration. A user-authored `Checkout:` source keeps its existing selection semantics.
+When both handoff evidence tools are disabled, the final response MUST ask a person to copy the
+complete handoff onto the Trello card before moving it to merge approval. A later merge run reads
+Trello workpad or comment evidence, not a prior final response. Missing durable evidence blocks
+completion; this fallback does not enable disabled tools.
 
 Rework continues the same branch and checkout and may update the code and the proposed description
 file. When a later run uses `create` for a branch that went through a branch-only handoff, Codex
@@ -4984,6 +4988,16 @@ branch merge continues only after renewed approval with no newer feedback.
 This refresh follows the complete handoff procedure, including enabled workpad updates and a fresh
 ordinary comment containing all labeled handoff fields when the comment tool is available. Its
 disabled-tool and manual-transition rules still apply.
+
+Before either the already-merged decision or a branch merge, any fetched card branch tip MUST equal
+`Pushed commit` from the latest complete current-work handoff. A mismatch requires validation and a
+complete fresh handoff for the new tip, return to the configured review list, and renewed approval.
+The ancestry check and merge use the recorded commit. A missing remote card branch permits completion
+only when that commit is verified on the target; otherwise the merge blocks.
+Failed remote probes, fetches and ref resolution block the merge. Cached refs are not evidence of
+successful remote verification; only a confirmed no-match result means the branch is absent.
+Use the commits returned by the successful fetches even when configured fetch mappings leave
+remote-tracking refs unchanged. Start the merge worktree at the fetched target commit.
 
 When a human moves a branch-only card without a pull request to the merge approval list, Codex merges
 the card branch into the target branch named by the card, or into the repository default branch

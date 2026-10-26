@@ -54,9 +54,10 @@ Chosen option: "Resolve the mode in Java from a `github` workflow section and th
 it into the prompt, and let the generated workflow describe the git steps", together with "Strict
 board-level branch-only mode".
 
-The workflow gets a `github` section with `pull_request_mode` (`create` or `branch_only`, default
-`create`) and `no_pr_label` (default `No PR`; `""` or null turns it off). Java resolves a
-`pull_request_handoff` prompt variable for every run:
+The workflow gets a `github` section. `pull_request_mode` accepts `create` or `branch_only`.
+Omitting it defaults to `create`; an explicit `null` fails configuration. `no_pr_label` defaults to
+`No PR`; `""` or `null` disables the label. Java resolves a `pull_request_handoff` prompt variable
+for every run:
 
 1. A `branch_only` workflow is strict. No card on that board creates a pull request.
 2. On a `create` workflow, a Trello comment that explicitly asks for a pull request, newer than the
@@ -134,6 +135,12 @@ before merging.
 The refresh uses the complete handoff procedure. With comment tools available, a fresh ordinary
 comment contains all labeled fields, so the reply to feedback does not replace the review evidence.
 Enabled workpad updates and disabled-tool behavior follow the same procedure.
+When both evidence tools are disabled, a person copies the complete final-response handoff onto the
+Trello card before merge approval. Subsequent runs cannot use that earlier final response as evidence.
+The fetched card branch tip must match the handoff's recorded commit before either ancestry or merge
+decisions. Changed tips require a complete refreshed handoff and renewed approval. Both the ancestry
+check and merge use the recorded commit, so a later branch update cannot substitute unreviewed work.
+A missing remote branch permits completion only when the recorded commit is verified on the target.
 
 ### Confirmation
 

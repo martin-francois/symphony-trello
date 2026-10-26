@@ -203,8 +203,11 @@ Before moving to `Human Review`:
 4. When the comment tool is available, add one concise visible handoff comment with
    `trello_add_comment`. Branch-only comments retain every labeled handoff field,
    including both absolute paths. Check the submitted fields and successful results
-   for every enabled evidence write before moving the card. When these tools are
-   disabled, include the same complete handoff in the final response instead.
+   for every enabled evidence write before moving the card. When both evidence
+   tools are disabled, include the same complete handoff in the final response and
+   ask a person to copy the complete handoff onto the Trello card before moving it
+   to the merge approval list. A later merge run reads the card's workpad or
+   comments, not this final response. Missing durable evidence blocks completion.
 5. Move the card to `Human Review` only when the configured move tool is available.
    Otherwise request that transition from a person without claiming it happened.
 

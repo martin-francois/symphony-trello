@@ -48,8 +48,17 @@ final class PullRequestHandoffPrompt {
                 returning to review; a short answer alone is not the refreshed handoff. Continue the branch merge
                 only after renewed approval with no newer feedback.
                 Follow the branch-only merge steps in `%s`. Merge into the target branch the card
-                names, or the repository default branch otherwise. If the branch commits are already on the target
-                branch, skip the merge. Push the target branch normally and never force-push it. Do not apply pull
+                names, or the repository default branch otherwise. Read `Pushed commit` from the latest handoff.
+                Before either the already-merged check or a merge, compare the fetched card branch tip with that
+                recorded commit. If they differ, do not merge or declare the work already merged. Validate the
+                changed branch, refresh the complete handoff for its new tip, and return the card to %s without
+                merging. Require renewed approval before continuing. Use the recorded commit for both the ancestry
+                check and the merge. Capture each fetched commit immediately from `FETCH_HEAD`; use the fetched
+                target commit as the merge base. Remote probe or fetch failures use the blocked merge path;
+                cached refs do not replace successful remote verification. If the remote card branch is absent, completion requires verifying that the
+                recorded commit is already on the target; otherwise use the blocked merge path. When the recorded
+                commit is already on the target and any existing card branch matches it, skip the merge.
+                Push the target branch normally and never force-push it. Do not apply pull
                 request review-thread handling. After the merge, or when no merge was needed, say in the completion
                 comment which branch was merged into which target, or why no merge was needed, and move the card to
                 %s. If the merge or push is rejected, %s.
@@ -64,6 +73,7 @@ final class PullRequestHandoffPrompt {
                         SECTION_TITLE,
                         reviewHandoff,
                         landSkill,
+                        reviewHandoff,
                         doneDestination,
                         blockedText,
                         mergingState,
@@ -165,11 +175,13 @@ final class PullRequestHandoffPrompt {
                    on its own line when the repository is on GitHub.
                 7. When the workpad is enabled, call `trello_upsert_workpad` with the completed handoff and
                    replace resolved blocker text with the completed work and current checks. Preserve useful
-                   history; leave Symphony-managed sections to the tool. Then call `trello_add_comment` with the
-                   same complete handoff;
-                   do not shorten away its paths. Inspect the submitted text and tool results: confirm that
-                   every required field is present and both writes succeeded before moving the card. If tools
-                   are disabled, put the complete handoff in the final response instead.
+                   history; leave Symphony-managed sections to the tool. When the comment tool is available,
+                   call `trello_add_comment` with the same complete handoff; do not shorten away its paths.
+                   Inspect the submitted text and tool results: confirm that every required field is present
+                   and every enabled evidence write succeeded before moving the card. If both evidence tools
+                   are disabled, put the complete handoff in the final response and ask a person to copy the
+                   complete handoff onto the Trello card before moving it to the merge approval list. A later
+                   merge run reads the card's workpad or comments, not this final response.
                 8. Move the card to %s only when the configured move tool is available. Otherwise request
                    that transition from a person; do not claim that the card moved.
 

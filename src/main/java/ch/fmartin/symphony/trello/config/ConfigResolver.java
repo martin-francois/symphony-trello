@@ -287,9 +287,9 @@ public class ConfigResolver {
 
     private static EffectiveConfig.GitHubConfig gitHubConfig(Map<String, Object> github) {
         Object configuredMode = github.get(EffectiveConfig.GitHubConfig.PULL_REQUEST_MODE_KEY);
-        PullRequestMode mode = configuredMode == null
+        PullRequestMode mode = !github.containsKey(EffectiveConfig.GitHubConfig.PULL_REQUEST_MODE_KEY)
                 ? EffectiveConfig.GitHubConfig.DEFAULTS.pullRequestMode()
-                : PullRequestMode.fromWorkflowValue(configuredMode.toString())
+                : PullRequestMode.fromWorkflowValue(String.valueOf(configuredMode))
                         .orElseThrow(() -> new ConfigException(
                                 "config_value_error",
                                 EffectiveConfig.GitHubConfig.qualifiedKey(

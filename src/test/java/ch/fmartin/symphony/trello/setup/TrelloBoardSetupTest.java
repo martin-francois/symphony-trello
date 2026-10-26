@@ -1312,6 +1312,8 @@ final class TrelloBoardSetupTest {
                 .contains("trello_tools:\n  enabled: false\n  allow_writes: false")
                 .contains(
                         "Record the plan, acceptance criteria, validation plan, and current-state signal for the final response.")
+                .containsIgnoringWhitespaces("ask a person to copy the complete handoff onto the Trello card")
+                .containsIgnoringWhitespaces("before moving it to the merge approval list")
                 .doesNotContain("required initial `checking` call")
                 .doesNotContain("## Stale Blocker Recheck");
         EffectiveConfig config = resolve(workflow);
@@ -3155,6 +3157,7 @@ final class TrelloBoardSetupTest {
                 .contains("## Pull Request Handoff Mode")
                 .contains("A workflow default of `branch_only` is strict")
                 .contains("explicitly asks Symphony to create a pull request")
+                .containsIgnoringWhitespaces("when the comment is newer than the latest branch-only handoff")
                 .contains("### Branch-Only Handoff")
                 .contains("run the local checks that would normally gate CI")
                 .contains("`PR.md` in the root of the task")
@@ -3173,7 +3176,8 @@ final class TrelloBoardSetupTest {
                 .containsIgnoringWhitespaces(
                         "the latest handoff for the current work after any reopening records a pushed repository-changing branch")
                 .containsIgnoringWhitespaces("A closed, unmerged PR must not become a direct branch merge")
-                .contains("If the branch commits are already on the target\nbranch, skip the merge.")
+                .containsIgnoringWhitespaces(
+                        "When the recorded commit is already on the target and any existing card branch matches it, skip the merge.")
                 .contains("Do not apply pull\nrequest review-thread handling.")
                 .as("a create-mode card that went through a branch-only handoff gets its pull request before merging")
                 .contains(
@@ -3203,7 +3207,8 @@ final class TrelloBoardSetupTest {
                 .contains("trello_upsert_workpad", "trello_add_comment")
                 .containsIgnoringWhitespaces("Both paths are permitted in this branch-only handoff")
                 .containsIgnoringWhitespaces("replace resolved blocker text with the completed work and current checks")
-                .containsIgnoringWhitespaces("confirm that every required field is present and both writes succeeded");
+                .containsIgnoringWhitespaces(
+                        "confirm that every required field is present and every enabled evidence write succeeded");
         assertThat(handoff.indexOf("trello_upsert_workpad")).isLessThan(handoff.indexOf("trello_add_comment"));
         assertThat(handoff.indexOf("trello_add_comment")).isLessThan(handoff.indexOf("Move the card to"));
     }
@@ -3273,29 +3278,55 @@ final class TrelloBoardSetupTest {
         Path workflow = tempDir.resolve("WORKFLOW.merge-feedback.md");
 
         // when
-        createRecommendedGithubBoard(workflow);
-        String content = Files.readString(workflow);
-        String mergeRules = content.substring(content.indexOf("Branch-only exception:"));
-        String landSkill = Files.readString(Path.of(".codex/skills/land/SKILL.md"));
-        String branchMerge =
-                landSkill.substring(landSkill.indexOf("## Branch-Only Merge"), landSkill.indexOf("## Blocked Merge"));
+        BranchMergeGuidance guidance = generatedBranchMergeGuidance(workflow);
 
         // then
-        assertThat(mergeRules)
+        assertThat(guidance.workflow())
                 .containsIgnoringWhitespaces("If a human comment is newer than the latest branch-only handoff")
                 .containsIgnoringWhitespaces("reply to it and return the card to \"Human Review\" without merging")
                 .containsIgnoringWhitespaces("Refresh the branch-only handoff before that review transition")
                 .containsIgnoringWhitespaces("fresh ordinary comment with every labeled handoff field");
         assertThat(PullRequestHandoffPrompt.mergeRules("Approval", "Review", "Finished", "block", "land"))
                 .containsIgnoringWhitespaces("reply to it and return the card to Review without merging");
-        assertThat(branchMerge)
+        assertThat(guidance.skill())
                 .containsIgnoringWhitespaces("If a human comment is newer than the latest branch-only handoff")
                 .containsIgnoringWhitespaces(
                         "reply to it and return the card to the configured review handoff list without merging")
                 .containsIgnoringWhitespaces("Refresh the branch-only handoff before that review transition")
                 .containsIgnoringWhitespaces("fresh ordinary comment with every labeled handoff field");
-        assertThat(branchMerge.indexOf("If a human comment"))
-                .isLessThan(branchMerge.indexOf("1. Pick the target branch"));
+        assertThat(guidance.skill().indexOf("If a human comment"))
+                .isLessThan(guidance.skill().indexOf("1. Pick the target branch"));
+    }
+
+    @Test
+    void branchOnlyMergeChecksTheApprovedCommitBeforeAncestryOrMerging() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.merge-approved-commit.md");
+
+        // when
+        BranchMergeGuidance guidance = generatedBranchMergeGuidance(workflow);
+        String handoffSkill = Files.readString(Path.of(".codex/skills/trello-handoff/SKILL.md"));
+
+        // then
+        assertThat(guidance.workflow())
+                .containsIgnoringWhitespaces("Before either the already-merged check or a merge")
+                .containsIgnoringWhitespaces("compare the fetched card branch tip with that recorded commit")
+                .containsIgnoringWhitespaces("return the card to \"Human Review\" without merging")
+                .containsIgnoringWhitespaces("Use the recorded commit for both the ancestry check and the merge")
+                .containsIgnoringWhitespaces("Remote probe or fetch failures use the blocked merge path")
+                .containsIgnoringWhitespaces("Capture each fetched commit immediately from `FETCH_HEAD`");
+        assertThat(PullRequestHandoffPrompt.mergeRules("Approval", "Review", "Finished", "block", "land"))
+                .containsIgnoringWhitespaces("return the card to Review without merging");
+        assertThat(guidance.skill())
+                .contains("card_tip=$(git rev-parse --verify 'FETCH_HEAD^{commit}')")
+                .contains("git merge-base --is-ancestor \"$card_commit\" \"$target_commit\"")
+                .doesNotContain("git merge-base --is-ancestor \"origin/$card_branch\"")
+                .containsIgnoringWhitespaces("merge the recorded `$card_commit`");
+        assertThat(guidance.skill().indexOf("card_tip=$(git rev-parse"))
+                .isLessThan(guidance.skill().indexOf("git merge-base --is-ancestor"));
+        assertThat(handoffSkill)
+                .containsIgnoringWhitespaces("ask a person to copy the complete handoff onto the Trello card")
+                .containsIgnoringWhitespaces("before moving it to the merge approval list");
     }
 
     @Test
@@ -3380,6 +3411,17 @@ final class TrelloBoardSetupTest {
                         "- Effective mode for this run: `create`, selected by\n  `workflow`.",
                         "- Card label from `github.no_pr_label`: turned off in this workflow."));
     }
+
+    private BranchMergeGuidance generatedBranchMergeGuidance(Path workflow) throws IOException {
+        createRecommendedGithubBoard(workflow);
+        String content = Files.readString(workflow);
+        String landSkill = Files.readString(Path.of(".codex/skills/land/SKILL.md"));
+        return new BranchMergeGuidance(
+                content.substring(content.indexOf("Branch-only exception:")),
+                landSkill.substring(landSkill.indexOf("## Branch-Only Merge"), landSkill.indexOf("## Blocked Merge")));
+    }
+
+    private record BranchMergeGuidance(String workflow, String skill) {}
 
     private void createRecommendedGithubBoard(Path workflow) {
         setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(

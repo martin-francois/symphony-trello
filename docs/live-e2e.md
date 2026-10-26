@@ -772,7 +772,14 @@ request anyway, committing its proposed description file, or reaching `Done` wit
 11. On the `create` board, remove the `No PR` label from another branch-only card without a pull
     request and move it straight to `Merging`. Verify that Codex creates the pull request from
     `PR.md`, keeps the card in `Merging`, and merges through the pull request flow.
-12. Delete the temporary branches, close any temporary pull requests, and archive the boards.
+12. After a separate branch-only handoff, push another commit to that task branch. Move the card to
+    `Merging` without changing its recorded handoff. Verify that the target stays unchanged and Codex
+    validates the new tip, refreshes the complete handoff and returns the card to review. Move it to
+    `Merging` again without further changes and verify that the newly approved commit merges.
+13. On a separate workflow with both comment and workpad writes disabled, complete branch-only work.
+    Verify that the final response asks a person to copy its complete handoff onto the Trello card
+    before merge approval. Copy that evidence, then verify that a subsequent merge run uses it.
+14. Delete the temporary branches, close any temporary pull requests, and archive the boards.
 
 ### Regression Scenario: In-Progress Pickup Visibility
 

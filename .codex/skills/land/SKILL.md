@@ -99,26 +99,45 @@ with no newer feedback.
 
 1. Pick the target branch: the branch the Trello card names, otherwise the
    repository default branch.
-2. Fetch the target branch. Skip the merge when the card's commits are
-   already on it: the work was committed directly on the target branch, or
-   the card branch tip is an ancestor of the target branch. A card branch
-   that no longer exists on origin is not a blocker when the head commit
-   named in the earlier branch-only handoff is on the target branch:
+2. Read `card_commit` from `Pushed commit` in the latest complete handoff for
+   the current work. Fetch the target and card branches. Before either the
+   already-merged check or a merge, compare the fetched card branch tip with
+   that recorded commit. A mismatch stops this merge attempt, even when the
+   new tip is already on the target. Validate the changed branch, refresh the
+   complete handoff for its new tip, return the card to the configured review
+   handoff list, and require renewed approval. The example exits with status
+   78 at that boundary; do not treat it as an ancestry result. Remote probe,
+   fetch or ref-resolution failure blocks the merge with status 79. Only
+   `ls-remote` status 2 means that the remote branch is absent:
 
    ```bash
-   git fetch origin "$target_branch"
-   if git ls-remote --exit-code --heads origin "$card_branch" >/dev/null; then
-     git fetch origin "$card_branch"
-     git merge-base --is-ancestor "origin/$card_branch" "origin/$target_branch"
-   else
-     git merge-base --is-ancestor "$card_commit" "origin/$target_branch"
-   fi
+   git fetch origin "$target_branch" || exit 79
+   target_commit=$(git rev-parse --verify 'FETCH_HEAD^{commit}') || exit 79
+   branch_probe_status=0
+   git ls-remote --exit-code --heads origin "$card_branch" >/dev/null || branch_probe_status=$?
+   case "$branch_probe_status" in
+     0)
+       git fetch origin "$card_branch" || exit 79
+       card_tip=$(git rev-parse --verify 'FETCH_HEAD^{commit}') || exit 79
+       [ "$card_tip" = "$card_commit" ] || exit 78
+       ;;
+     2) ;;
+     *) exit 79 ;;
+   esac
+   git merge-base --is-ancestor "$card_commit" "$target_commit"
    ```
 
-3. Otherwise merge the card branch into the target branch in a separate
-   worktree, following any merge strategy the repository documents. When
-   none is documented, fast-forward when possible and create a merge commit
-   otherwise. Never commit the proposed description file.
+   Capture each successful fetch's commit immediately from `FETCH_HEAD`;
+   configured fetch mappings can leave remote-tracking refs stale.
+   Skip the merge only when the recorded commit is already on the target and
+   any existing card branch matches it. A missing remote card branch permits
+   completion only when the recorded commit is verified on the target;
+   otherwise use the blocked merge path. Missing or unverifiable handoff
+   evidence also blocks completion.
+3. Otherwise start a separate worktree at the fetched `$target_commit` and
+   merge the recorded `$card_commit`, following any merge strategy the repository documents.
+   When none is documented, fast-forward when possible and create a merge
+   commit otherwise. Never commit the proposed description file.
 4. Run local validation on the merge result, then push the target branch
    normally. Never force-push it.
 5. Do not resolve GitHub review threads; there is no PR.

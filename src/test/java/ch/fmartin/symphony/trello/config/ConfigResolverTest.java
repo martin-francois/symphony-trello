@@ -683,6 +683,26 @@ final class ConfigResolverTest {
                         "github:\n  pull_request_mode: draft\n",
                         "github.pull_request_mode must be create or branch_only"),
                 Arguments.of(
+                        "null-mode",
+                        "github:\n  pull_request_mode: null\n",
+                        "github.pull_request_mode must be create or branch_only"),
+                Arguments.of(
+                        "empty-mode",
+                        "github:\n  pull_request_mode:\n",
+                        "github.pull_request_mode must be create or branch_only"),
+                Arguments.of(
+                        "tilde-mode",
+                        "github:\n  pull_request_mode: ~\n",
+                        "github.pull_request_mode must be create or branch_only"),
+                Arguments.of(
+                        "boolean-mode",
+                        "github:\n  pull_request_mode: false\n",
+                        "github.pull_request_mode must be create or branch_only"),
+                Arguments.of(
+                        "list-mode",
+                        "github:\n  pull_request_mode: [create]\n",
+                        "github.pull_request_mode must be create or branch_only"),
+                Arguments.of(
                         "list-label", "github:\n  no_pr_label: [No PR]\n", ConfigResolver.NO_PR_LABEL_TYPE_MESSAGE),
                 Arguments.of(
                         "boolean-label", "github:\n  no_pr_label: false\n", ConfigResolver.NO_PR_LABEL_TYPE_MESSAGE));
