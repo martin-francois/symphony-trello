@@ -185,7 +185,9 @@ Before moving to `Human Review`:
    For branch-only work, follow `push-pr` to push the branch and keep the proposed
    description file uncommitted. Include the branch, pushed head, branch link,
    absolute task checkout and proposal paths, mode source, and local checks in the handoff.
-   Use the labeled fields from the workflow without shortening away either path. Obtain
+   Use the labeled fields from the workflow without shortening away either path. Keep
+   `Task checkout:` as the informational path label; bare `Checkout:` selects an explicit
+   repository source, which becomes unavailable after terminal workspace cleanup. Obtain
    the checkout root with `git rev-parse --show-toplevel` in the task worktree. Both
    paths are permitted in this successful branch-only handoff and its workpad entry;
    unrelated paths and filesystem blocker details retain their redaction rules.

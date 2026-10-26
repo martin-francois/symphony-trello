@@ -738,6 +738,8 @@ request anyway, committing its proposed description file, or reaching `Done` wit
    path, and check results. Verify that both paths are absolute and name the actual task checkout
    and proposal file, not just "the task checkout" or `PR.md`. Check that the managed workpad
    describes the completed work and current checks, including after recovery from a resolved blocker.
+   The path field is `Task checkout:`. Confirm the runtime repository-source context still selects
+   the configured remote rather than treating that handoff path as an explicit local source.
 3. On the `create` board, add the label `No PR` to a repository-changing card. Verify the same result,
    with the card label named as the source.
 4. In both checkouts, verify that `git status --short --ignored` lists the proposed description file
@@ -760,7 +762,8 @@ request anyway, committing its proposed description file, or reaching `Done` wit
    returns it to `Human Review`, with the target branch unchanged. Move it to `Merging` again
    without newer feedback and verify that the merge completes.
 9. Move a labelled card whose commits are already on the default branch to `Merging`. Verify that
-   Codex skips the merge, says why, and moves the card to `Done`.
+   Codex skips the merge, says why, and moves the card to `Done`. Include re-entry after Done has
+   removed the per-card checkout; the informational handoff path must not block remote verification.
 10. On the branch-only board, add a comment that asks for a pull request and move the card back to
     `Ready for Codex`. Verify that no pull request is created and the handoff explains how to get
     one.

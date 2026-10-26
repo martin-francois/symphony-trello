@@ -23,6 +23,9 @@ import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.PullRequestMode;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
+import ch.fmartin.symphony.trello.repository.RepositorySource;
+import ch.fmartin.symphony.trello.repository.RepositorySourceResolver;
+import ch.fmartin.symphony.trello.repository.RepositorySourceSelection;
 import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
 import ch.fmartin.symphony.trello.testsupport.TestFileContents;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
@@ -37,6 +40,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -3193,7 +3197,7 @@ final class TrelloBoardSetupTest {
 
         // then
         assertThat(handoff)
-                .contains("Checkout: <absolute task checkout path>")
+                .contains("Task checkout: <absolute task checkout path>")
                 .contains("Proposed PR: <absolute proposed description file path>")
                 .contains("git rev-parse --show-toplevel")
                 .contains("trello_upsert_workpad", "trello_add_comment")
@@ -3202,6 +3206,65 @@ final class TrelloBoardSetupTest {
                 .containsIgnoringWhitespaces("confirm that every required field is present and both writes succeeded");
         assertThat(handoff.indexOf("trello_upsert_workpad")).isLessThan(handoff.indexOf("trello_add_comment"));
         assertThat(handoff.indexOf("trello_add_comment")).isLessThan(handoff.indexOf("Move the card to"));
+    }
+
+    @Test
+    void generatedBranchOnlyHandoffDoesNotSelectItsDisposableCheckoutAsRepositorySource() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.handoff-source.md");
+        createRecommendedGithubBoard(workflow);
+        String content = Files.readString(workflow);
+        int templateStart =
+                content.indexOf("```text\n", content.indexOf("### Branch-Only Handoff")) + "```text\n".length();
+        String handoff = content.substring(templateStart, content.indexOf("```", templateStart))
+                .replace(
+                        "<absolute task checkout path>",
+                        tempDir.resolve("removed-checkout").toString())
+                .replace(
+                        "<absolute proposed description file path>",
+                        tempDir.resolve("removed-checkout/PR.md").toString())
+                .replace("<workflow default or card label>", "workflow default")
+                .replace("<task branch>", "task-branch")
+                .replace("<full pushed commit id>", "a".repeat(40))
+                .replace(
+                        "<https://github.com/owner/repo/tree/branch-name>",
+                        "https://github.com/owner/repo/tree/task-branch")
+                .replace("<commands and results>", "Local checks passed");
+        Instant createdAt = Instant.parse("2026-01-01T00:00:00Z");
+        Card card = TestCards.cardWithText(
+                "card-1",
+                "TRELLO-source",
+                "Merging",
+                "Verify completed work",
+                "Confirm the merged branch",
+                List.of(
+                        new Card.Comment("workpad", "## Codex Workpad\n\n" + handoff, "agent", createdAt),
+                        new Card.Comment("handoff", handoff, "agent", createdAt)));
+        var resolver = new RepositorySourceResolver();
+        var repository = new EffectiveConfig.RepositoryConfig("https://github.com/owner/repo.git", null);
+        Path explicitPath = tempDir.resolve("selected-source");
+        Card explicitCard = TestCards.cardWithText(
+                "card-2",
+                "TRELLO-explicit",
+                "Merging",
+                "Verify completed work",
+                "Checkout: " + explicitPath,
+                card.comments());
+
+        // when
+        RepositorySourceSelection selection = resolver.select(card, repository);
+        RepositorySourceSelection withoutDefault =
+                resolver.select(card, new EffectiveConfig.RepositoryConfig(null, null));
+        RepositorySourceSelection explicitSelection = resolver.select(explicitCard, repository);
+
+        // then
+        assertThat(selection.status()).isEqualTo(RepositorySourceSelection.Status.SELECTED);
+        assertThat(selection.source().kind()).isEqualTo(RepositorySource.Kind.REMOTE);
+        assertThat(selection.source().origin()).isEqualTo(RepositorySource.Origin.WORKFLOW_DEFAULT_URL);
+        assertThat(withoutDefault.status()).isEqualTo(RepositorySourceSelection.Status.NONE);
+        assertThat(explicitSelection.source().kind()).isEqualTo(RepositorySource.Kind.LOCAL_PATH);
+        assertThat(explicitSelection.source().origin()).isEqualTo(RepositorySource.Origin.CARD);
+        assertThat(explicitSelection.source().path()).isEqualTo(explicitPath);
     }
 
     @Test

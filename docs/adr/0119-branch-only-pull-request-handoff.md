@@ -77,6 +77,9 @@ successful handoff and its workpad entry; filesystem blocker text keeps its reda
 Before the review transition, Codex updates the current workpad status, replaces resolved blockers
 with completed work and checks, and confirms that both evidence writes succeeded. This makes the
 required evidence explicit while keeping checkout and publication work agent-owned.
+The informational path field is `Task checkout:`. Bare `Checkout:` is reserved for explicit
+repository-source selection; using it in a handoff would override a remote source with a disposable
+worktree that terminal cleanup later removes.
 
 A card in `Merging` that runs as `create` but still has no pull request after a branch-only
 handoff, for example because a human removed the label and moved the card straight to `Merging`,

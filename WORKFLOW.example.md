@@ -539,7 +539,7 @@ request requirement above does not apply. For repository-changing work:
    ```text
    Branch-only handoff, no pull request.
    Mode source: <workflow default or card label>
-   Checkout: <absolute task checkout path>
+   Task checkout: <absolute task checkout path>
    Branch name: <task branch>
    Pushed commit: <full pushed commit id>
    Branch: <https://github.com/owner/repo/tree/branch-name>
@@ -547,9 +547,11 @@ request requirement above does not apply. For repository-changing work:
    Validation: <commands and results>
    ```
 
-   Derive Checkout with `git rev-parse --show-toplevel` in the task checkout and Proposed PR
+   Derive Task checkout with `git rev-parse --show-toplevel` in the task checkout and Proposed PR
    from that root and the actual proposal filename. Do not substitute "the task checkout" or
-   a bare `PR.md` for either path. Both paths are permitted in this branch-only handoff,
+   a bare `PR.md` for either path. Keep the `Task checkout:` label: `Checkout:` declares a
+   repository source and would select this disposable worktree on later runs.
+   Both paths are permitted in this branch-only handoff,
    including its workpad entry, as a deliberate exception to path-free Trello text. Name no
    unrelated local path. Keep `Branch: <https://github.com/owner/repo/tree/branch-name>`
    on its own line when the repository is on GitHub.
