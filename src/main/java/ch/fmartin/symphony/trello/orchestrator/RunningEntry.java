@@ -31,6 +31,9 @@ final class RunningEntry {
     long lastReportedOutputTokens;
     long lastReportedTotalTokens;
     Future<?> workerTask;
+    volatile boolean workerExited;
+    volatile boolean workspaceReleased = true;
+    boolean removeWorkspaceAfterExit;
     int turnCount;
     CardHandoffMove handoffMove;
     Instant handoffDeadline;

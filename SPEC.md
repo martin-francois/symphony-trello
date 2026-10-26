@@ -1957,6 +1957,33 @@ Termination policies:
 - When workspace cleanup follows worker termination, implementations SHOULD either wait until the
   worker is confirmed stopped or document a bounded grace/force-kill policy before deleting the
   workspace.
+- Java implementation: terminal workspace removal MUST wait for actual runner return, including
+  `after_run`, independently of a canceled Future's state. Deferred removal MUST retain the card
+  claim and original workspace configuration. Reconciliation MUST NOT block waiting for runner
+  return. A runner that does not return leaves a reported retained workspace. Retained normalized workspace
+  paths MUST NOT be dispatched to another card or tracker target while shutdown remains unresolved.
+  Every canceled worker MUST retain this ownership while its shutdown remains unresolved, including
+  nonterminal cancellation and handoff expiry that do not request deletion. Pending retries MUST
+  preserve their attempt metadata but MUST NOT dispatch or remove the directory before confirmation.
+  Unconfirmed exit MUST cancel that worker's queued retry and retire its bound usage probe so unrelated
+  cards can proceed. Pending ownership contributes to the existing 128-entry cleanup dispatch threshold.
+  Deferred `before_remove` MUST receive its configured execution budget independently of a worker's
+  cancellation interrupt; cleanup MUST restore the caller's interruption afterwards.
+  Unconfirmed removal-hook exit MUST retain ownership for every cleanup caller, including startup
+  and terminal/missing retry cleanup without a running worker. The retained identifier and workspace
+  configuration MUST remain those of the removal attempt. Startup MUST stop starting removal hooks
+  when the combined retained/pending ownership reaches the existing 128-key dispatch threshold.
+- Runtime app-server and hook shutdown MUST confirm exit of the direct process and attached
+  descendants captured before shutdown. Each shutdown allows two seconds for graceful termination
+  and two seconds after forcible termination, using a shared deadline per phase. Interruptions MUST
+  NOT bypass confirmation. If exit remains unconfirmed, the runtime MUST retain the workspace and
+  its claim, report the failure and suppress further dispatch for that card until operator recovery.
+  Secondary final-response finalization failures MUST NOT replace a known unconfirmed-shutdown
+  result with a retryable failure. Ordinary final-response failure behavior remains unchanged.
+  Configured commands MUST remain foreground, keep children attached and MUST NOT replace children
+  during shutdown. Detached/reparented processes and adversarial fork loops are outside this bounded
+  ownership contract. Retained claims are process-local; operators MUST confirm process exit before
+  restarting the service or manually removing a retained workspace. These rules add no configuration fields.
 
 ### 8.6 Startup Terminal Workspace Cleanup
 
@@ -4020,6 +4047,13 @@ that a second formatting pass leaves the source unchanged.
 - If a snapshot API is implemented, it returns running rows, retry rows, token totals, and rate
   limits
 - If a snapshot API is implemented, timeout/unavailable cases are surfaced
+
+- `SymphonyOrchestratorShutdownTest` holds a canceled runner and its `after_run` hook alive to verify
+  terminal/missing cleanup ordering, retained claims and original workspace ownership. Its real
+  fake-app-server fixture confirms both direct-process and attached-child exit before removal.
+- `RuntimeProcessShutdownTest` verifies bounded no-exit failure and interruption preservation.
+  `LocalAgentRunnerTest` verifies that unconfirmed app-server shutdown prevents `after_run` from
+  starting in the retained workspace.
 
 ### 17.5 Coding-Agent App-Server Client
 

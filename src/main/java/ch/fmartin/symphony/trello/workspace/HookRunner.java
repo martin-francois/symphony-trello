@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.workspace;
 
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.process.ProcessEnvironment;
+import ch.fmartin.symphony.trello.process.RuntimeProcessShutdown;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -56,7 +57,6 @@ public class HookRunner {
         try {
             boolean finished = process.waitFor(timeout);
             if (!finished) {
-                process.destroyForcibly();
                 return HookResult.failure("timeout after " + timeout.toMillis() + " ms");
             }
             String output = truncate(new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8));
@@ -67,10 +67,11 @@ public class HookRunner {
             return HookResult.failure("exit_code=" + process.exitValue() + " output=" + output);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            process.destroyForcibly();
             return HookResult.failure("interrupted");
         } catch (IOException e) {
             return HookResult.failure("output_read_failed: " + e.getMessage());
+        } finally {
+            RuntimeProcessShutdown.stop(process);
         }
     }
 

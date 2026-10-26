@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.agent;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.process.ProcessEnvironment;
+import ch.fmartin.symphony.trello.process.RuntimeProcessShutdown;
 import ch.fmartin.symphony.trello.time.ApplicationClock;
 import ch.fmartin.symphony.trello.workflow.CodexSandboxPolicy;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
@@ -148,7 +149,6 @@ public class CodexAppServerClient {
                     completed =
                             session.awaitTurnCompleted(turnId, config.codex().turnTimeout());
                 } catch (TimeoutException e) {
-                    process.destroyForcibly();
                     return AgentRunResult.fail("turn_timeout: " + e.getMessage());
                 }
                 JsonNode completedTurn = completed.path("turn");
@@ -174,18 +174,30 @@ public class CodexAppServerClient {
                 nextPrompt = decision.nextPrompt();
             }
             return AgentRunResult.ok();
-        } catch (CodexAppServerTerminalException e) {
-            process.destroyForcibly();
-            return e.failureCategory() == AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT
-                    ? AgentRunResult.codexUsageLimit(e.code() + ": " + e.getMessage(), e.retryNotBefore())
-                    : AgentRunResult.fail(e.code() + ": " + e.getMessage());
-        } catch (TimeoutException e) {
-            process.destroyForcibly();
-            return AgentRunResult.fail("response_timeout: " + e.getMessage());
         } catch (Exception e) {
-            process.destroyForcibly();
-            return AgentRunResult.fail("codex_protocol_error: " + e.getMessage());
+            return sessionFailure(e);
         }
+    }
+
+    static AgentRunResult sessionFailure(Exception failure) {
+        if (failure instanceof RuntimeProcessShutdown.UnconfirmedExitException) {
+            return AgentRunResult.shutdownIncomplete(failure.getMessage());
+        }
+        for (Throwable suppressed : failure.getSuppressed()) {
+            if (suppressed instanceof RuntimeProcessShutdown.UnconfirmedExitException) {
+                return AgentRunResult.shutdownIncomplete(suppressed.getMessage());
+            }
+        }
+        if (failure instanceof CodexAppServerTerminalException terminal) {
+            return terminal.failureCategory() == AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT
+                    ? AgentRunResult.codexUsageLimit(
+                            terminal.code() + ": " + terminal.getMessage(), terminal.retryNotBefore())
+                    : AgentRunResult.fail(terminal.code() + ": " + terminal.getMessage());
+        }
+        if (failure instanceof TimeoutException) {
+            return AgentRunResult.fail("response_timeout: " + failure.getMessage());
+        }
+        return AgentRunResult.fail("codex_protocol_error: " + failure.getMessage());
     }
 
     @FunctionalInterface
@@ -815,15 +827,10 @@ public class CodexAppServerClient {
 
         @Override
         public void close() {
-            closeWriter();
-            process.destroy();
             try {
-                if (!process.waitFor(Duration.ofSeconds(2))) {
-                    process.destroyForcibly();
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                process.destroyForcibly();
+                RuntimeProcessShutdown.stop(process);
+            } finally {
+                closeWriter();
             }
         }
 

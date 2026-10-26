@@ -319,3 +319,29 @@ the slowdown shows up often, raise `polling.interval_ms` instead of relying on i
 
 If your workflow uses different list names, read `routing` in `/api/v1/state`; it is the runtime
 source for what this process considers active, terminal, and allowed handoff destinations.
+
+## Retained workspaces after cancellation
+
+Terminal and missing-card cleanup waits for the runner to return, including its `after_run` hook.
+The runtime confirms foreground app-server and hook process exit before deleting the workspace.
+Shutdown allows two seconds for graceful termination and two seconds after forceful termination.
+An unconfirmed exit retains the workspace and card claim and logs `retained=true` with the workspace
+path and worker identity. Unrelated cards continue while the combined pending-cleanup count is below
+128; at that threshold, new dispatch pauses until cleanup progresses.
+
+Inspect the retained workspace's owned processes before intervening. Do not delete the directory or
+restart the service until those processes have stopped. The retained claims are process-local, so a
+restart does not preserve this protection. Configured commands must run in the foreground, keep their
+children attached and must not start replacement children during shutdown. Detached processes are
+outside the runtime's shutdown ownership contract.
+
+Every canceled worker keeps ownership while unwinding, including stall and handoff cancellation
+that does not request deletion. Retries wait for confirmed exit; an unconfirmed exit cancels that
+worker's retry and releases its usage-probe slot so unrelated cards can proceed. `before_remove`
+receives its configured timeout even when cleanup runs on an interrupted worker.
+
+Filesystem-removal failures during deferred worker cleanup retry on ordinary ticks. A process whose exit remains unconfirmed needs operator inspection; its workspace
+is not reused for another card or tracker target. The same retention applies when an unconfirmed
+`before_remove` exit occurs during startup or terminal/missing retry cleanup, without a current worker.
+Startup stops starting removal hooks when retained ownership reaches the 128-key threshold. The runtime skips `after_run` when app-server exit
+is unconfirmed to avoid starting another command in that workspace.

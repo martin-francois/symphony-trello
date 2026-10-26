@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.agent;
 
 import ch.fmartin.symphony.trello.codex.CodexSkillCatalog;
+import ch.fmartin.symphony.trello.process.RuntimeProcessShutdown;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import ch.fmartin.symphony.trello.repository.RepositorySourcePrompt;
 import ch.fmartin.symphony.trello.repository.RepositorySourceResolver;
@@ -72,6 +73,19 @@ public class LocalAgentRunner implements AgentRunner {
     public AgentRunResult run(AgentRunRequest request) {
         Thread.currentThread().setName("symphony-worker-" + request.workerIdentity());
         active.put(request.workerIdentity(), Thread.currentThread());
+        try {
+            return runAttempt(request);
+        } catch (RuntimeProcessShutdown.UnconfirmedExitException e) {
+            return AgentRunResult.shutdownIncomplete(e.getMessage());
+        } catch (RuntimeException e) {
+            return AgentRunResult.fail(e.getMessage());
+        } finally {
+            active.remove(request.workerIdentity(), Thread.currentThread());
+        }
+    }
+
+    private AgentRunResult runAttempt(AgentRunRequest request) {
+        boolean workspaceReleased = true;
         Workspace workspace = null;
         Optional<FinalResponseRecording> recording = Optional.empty();
         try {
@@ -97,19 +111,62 @@ public class LocalAgentRunner implements AgentRunner {
                     request.workerIdentity(),
                     listener,
                     turn -> continuationDecision(request, turn));
+            workspaceReleased = result.failureCategory() != AgentRunResult.FailureCategory.SHUTDOWN_INCOMPLETE;
+            return finishRecording(recording, result, request.workerIdentity());
+        } catch (RuntimeProcessShutdown.UnconfirmedExitException e) {
+            workspaceReleased = false;
+            throw e;
+        } finally {
+            closeRecording(recording, workspaceReleased, request.workerIdentity());
+            if (workspace != null && workspaceReleased) {
+                runAfterHook(request, workspace);
+            }
+        }
+    }
+
+    private static AgentRunResult finishRecording(
+            Optional<FinalResponseRecording> recording, AgentRunResult result, String workerIdentity) {
+        try {
             return recording.map(output -> output.finish(result)).orElse(result);
         } catch (RuntimeException e) {
-            return AgentRunResult.fail(e.getMessage());
-        } finally {
-            recording.ifPresent(FinalResponseRecording::close);
-            if (workspace != null) {
-                hooks.runBestEffort(
-                        "after_run",
-                        request.config().hooks().afterRun(),
-                        workspace.path(),
-                        request.config().hooks());
+            if (result.failureCategory() != AgentRunResult.FailureCategory.SHUTDOWN_INCOMPLETE) {
+                throw e;
             }
-            active.remove(request.workerIdentity(), Thread.currentThread());
+            reportUnconfirmedFinalizationFailure(workerIdentity);
+            return result;
+        }
+    }
+
+    private static void closeRecording(
+            Optional<FinalResponseRecording> recording, boolean workspaceReleased, String workerIdentity) {
+        try {
+            recording.ifPresent(FinalResponseRecording::close);
+        } catch (RuntimeException e) {
+            if (workspaceReleased) {
+                throw e;
+            }
+            reportUnconfirmedFinalizationFailure(workerIdentity);
+        }
+    }
+
+    private static void reportUnconfirmedFinalizationFailure(String workerIdentity) {
+        FinalResponseStore.reportFailure(
+                workerIdentity,
+                "cannot finalize local final response: storage cleanup failed after unconfirmed shutdown; retain the workspace and inspect local storage");
+    }
+
+    private void runAfterHook(AgentRunRequest request, Workspace workspace) {
+        boolean interrupted = Thread.interrupted();
+        try {
+            hooks.runBestEffort(
+                    "after_run",
+                    request.config().hooks().afterRun(),
+                    workspace.path(),
+                    request.config().hooks());
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 

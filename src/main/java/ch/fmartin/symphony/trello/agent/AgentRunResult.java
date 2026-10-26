@@ -24,8 +24,13 @@ public record AgentRunResult(
         return new AgentRunResult(false, reason, FailureCategory.CODEX_USAGE_LIMIT, retryNotBefore);
     }
 
+    public static AgentRunResult shutdownIncomplete(String reason) {
+        return new AgentRunResult(false, reason, FailureCategory.SHUTDOWN_INCOMPLETE, Optional.empty());
+    }
+
     public enum FailureCategory {
         GENERIC,
-        CODEX_USAGE_LIMIT
+        CODEX_USAGE_LIMIT,
+        SHUTDOWN_INCOMPLETE
     }
 }

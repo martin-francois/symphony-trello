@@ -16,6 +16,7 @@ import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.StateNames;
 import ch.fmartin.symphony.trello.domain.Card;
+import ch.fmartin.symphony.trello.process.RuntimeProcessShutdown;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import ch.fmartin.symphony.trello.time.ApplicationClock;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
@@ -24,6 +25,7 @@ import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workflow.WorkflowException;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
+import ch.fmartin.symphony.trello.workspace.WorkspaceException;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
 import com.google.common.collect.EvictingQueue;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -57,6 +59,7 @@ import java.util.SplittableRandom;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -115,6 +118,8 @@ public class SymphonyOrchestrator {
 
     private final Map<RuntimeCardKey, RunningEntry> running = new LinkedHashMap<>();
     private final Map<RuntimeCardKey, RunningEntry> pendingHandoffCleanup = new HashMap<>();
+    private final Map<RuntimeCardKey, RunningEntry> pendingWorkspaceRelease = new HashMap<>();
+    private final Map<RuntimeCardKey, WorkspaceOwner> retainedWorkspaces = new HashMap<>();
     private final Map<RuntimeCardKey, RetryEntry> retryAttempts = new LinkedHashMap<>();
     private final Set<RuntimeCardKey> claimed = new HashSet<>();
     private final Set<RuntimeCardKey> completed = new HashSet<>();
@@ -298,6 +303,8 @@ public class SymphonyOrchestrator {
                 entries.forEach(this::addRuntime);
                 running.clear();
                 pendingHandoffCleanup.clear();
+                pendingWorkspaceRelease.clear();
+                retainedWorkspaces.clear();
                 retryAttempts.clear();
                 claimed.clear();
                 trimIgnoredWorkers();
@@ -448,6 +455,7 @@ public class SymphonyOrchestrator {
                 consumeRefreshRequest();
                 reloadIfChanged();
                 retryPendingUsageWorkpadCleanup(false);
+                reconcilePendingWorkspaceRelease();
                 reconcilePendingHandoffCleanup();
                 reconcileRunningCards();
                 dispatchCandidates();
@@ -588,7 +596,7 @@ public class SymphonyOrchestrator {
                 RetryEntry current = retryAttempts.remove(retryKey);
                 if (current != null && current.generation() == retry.generation()) {
                     current.timer().cancel(false);
-                    claimed.remove(retryKey);
+                    removeClaim(retryKey);
                 }
             }
         }
@@ -700,8 +708,13 @@ public class SymphonyOrchestrator {
 
     private void startupTerminalWorkspaceCleanup() {
         try {
-            tracker.fetchTerminalCards(config)
-                    .forEach(card -> workspaces.removeForIdentifierIfPresent(card.identifier(), config));
+            for (Card card : tracker.fetchTerminalCards(config)) {
+                if (handoffCleanupBacklogFull()) {
+                    break;
+                }
+                removeWorkspaceWithOwnership(
+                        currentRuntimeKey(card.id()), new WorkspaceOwner(card.identifier(), config, "startup"));
+            }
         } catch (RuntimeException e) {
             LOG.warnf("startup_cleanup outcome=failed reason=%s", e.getMessage());
         }
@@ -794,6 +807,7 @@ public class SymphonyOrchestrator {
                 return;
             }
             cancelHandoffTimer(entry);
+            retainWorkspaceOwnership(entry, cleanupWorkspace);
             boolean retainHandoffCleanup = entry.handoffCancellationRequested && !cleanupWorkspace && !suppressRetry;
             if (retainHandoffCleanup) {
                 pendingHandoffCleanup.put(cardKey, entry);
@@ -807,14 +821,14 @@ public class SymphonyOrchestrator {
             trimIgnoredWorkers();
             addRuntime(entry);
             if (suppressRetry && !retainHandoffCleanup) {
-                claimed.remove(cardKey);
+                removeClaim(cardKey);
             }
         }
         if (usageProbe) {
             try {
                 cancelWorker(entry);
                 if (cleanupWorkspace) {
-                    workspaces.removeForIdentifierIfPresent(entry.identifier(), entry.launchConfig);
+                    removeStoppedWorkerWorkspace(entry);
                 }
                 if (!suppressRetry) {
                     releaseCurrentFromDispatch(entry.launchConfig, entry.card, entry.dispatchSource, reason);
@@ -834,7 +848,7 @@ public class SymphonyOrchestrator {
         } else {
             cancelWorker(entry);
             if (cleanupWorkspace) {
-                workspaces.removeForIdentifierIfPresent(entry.identifier(), entry.launchConfig);
+                removeStoppedWorkerWorkspace(entry);
             }
             if (!suppressRetry) {
                 releaseCurrentFromDispatch(entry.launchConfig, entry.card, entry.dispatchSource, reason);
@@ -851,6 +865,7 @@ public class SymphonyOrchestrator {
                 }
             }
         }
+        finishPendingWorkspaceRelease(entry);
         LOG.infof(
                 "card_id=%s card_identifier=%s outcome=terminated reason=%s", entry.cardId, entry.identifier(), reason);
     }
@@ -859,7 +874,7 @@ public class SymphonyOrchestrator {
         if (handoffCleanupBacklogFull()) {
             LOG.warnf(
                     "cannot dispatch new worker: expected fewer than %d pending handoff cleanups; pending=%d",
-                    HANDOFF_CLEANUP_BACKLOG_THRESHOLD, pendingHandoffCleanup.size());
+                    HANDOFF_CLEANUP_BACKLOG_THRESHOLD, pendingCleanupCount());
             return;
         }
         if (isDispatchPaused()) {
@@ -949,16 +964,20 @@ public class SymphonyOrchestrator {
         }
         bindUsageProbe(dispatchCard.id(), workerIdentity, launchConfig);
         try {
-            entry.workerTask = workers.submit(() -> {
-                try {
-                    workerLaunchHookForTests.run();
-                    AgentRunResult result = agentRunner.run(new AgentRunner.AgentRunRequest(
-                            dispatchCard, attempt, prompt, launchConfig, workerIdentity, agentEventListener()));
-                    onWorkerExit(runningKey, workerIdentity, result);
-                } catch (RuntimeException e) {
-                    onWorkerExitWithoutResult(runningKey, workerIdentity, e);
+            var task = new FutureTask<Void>(() -> runWorker(entry, dispatchCard, attempt, prompt, launchConfig), null) {
+                @Override
+                public void run() {
+                    try {
+                        super.run();
+                    } finally {
+                        // Also acknowledges cancellation before execution, when the callable never ran.
+                        entry.workerExited = true;
+                        onWorkerTaskStopped(entry);
+                    }
                 }
-            });
+            };
+            entry.workerTask = task;
+            workers.execute(task);
         } catch (RuntimeException e) {
             synchronized (this) {
                 running.remove(runningKey);
@@ -977,6 +996,149 @@ public class SymphonyOrchestrator {
                 "card_id=%s card_identifier=%s worker_identity=%s outcome=dispatched",
                 dispatchCard.id(), dispatchCard.identifier(), workerIdentity);
         return Optional.of(dispatchCard);
+    }
+
+    private void runWorker(
+            RunningEntry entry, Card card, Integer attempt, String prompt, EffectiveConfig launchConfig) {
+        try {
+            workerLaunchHookForTests.run();
+            AgentRunResult result = agentRunner.run(new AgentRunner.AgentRunRequest(
+                    card, attempt, prompt, launchConfig, entry.workerIdentity, agentEventListener()));
+            entry.workspaceReleased = result.failureCategory() != AgentRunResult.FailureCategory.SHUTDOWN_INCOMPLETE;
+            entry.workerExited = true;
+            onWorkerExit(runtimeKey(entry), entry.workerIdentity, result);
+        } catch (RuntimeException e) {
+            entry.workerExited = true;
+            onWorkerExitWithoutResult(runtimeKey(entry), entry.workerIdentity, e);
+        }
+    }
+
+    private void onWorkerTaskStopped(RunningEntry entry) {
+        operationLock.lock();
+        try {
+            finishPendingWorkspaceRelease(entry);
+        } finally {
+            operationLock.unlock();
+        }
+    }
+
+    private synchronized void retainWorkspaceOwnership(RunningEntry entry, boolean removeWorkspace) {
+        entry.removeWorkspaceAfterExit |= removeWorkspace;
+        RunningEntry previous = pendingWorkspaceRelease.put(runtimeKey(entry), entry);
+        claimed.add(runtimeKey(entry));
+        if (!entry.equals(previous) && !entry.workerExited) {
+            LOG.infof(
+                    "worker_shutdown=pending workspace=%s worker=%s retained=true",
+                    workspacePath(entry.launchConfig, entry.identifier()), entry.workerIdentity);
+        }
+    }
+
+    private boolean removeStoppedWorkerWorkspace(RunningEntry entry) {
+        retainWorkspaceOwnership(entry, true);
+        finishPendingWorkspaceRelease(entry);
+        boolean removed = !pendingWorkspaceRelease.containsKey(runtimeKey(entry))
+                && !retainedWorkspaces.containsKey(runtimeKey(entry));
+        if (!removed) {
+            LOG.warnf(
+                    "cannot remove worker workspace: shutdown or removal is not confirmed; workspace=%s worker=%s retained=true",
+                    workspacePath(entry.launchConfig, entry.identifier()), entry.workerIdentity);
+        }
+        return removed;
+    }
+
+    private void reconcilePendingWorkspaceRelease() {
+        for (RunningEntry entry : List.copyOf(pendingWorkspaceRelease.values())) {
+            finishPendingWorkspaceRelease(entry);
+        }
+    }
+
+    private void finishPendingWorkspaceRelease(RunningEntry entry) {
+        RuntimeCardKey key = runtimeKey(entry);
+        if (!entry.equals(pendingWorkspaceRelease.get(key)) || !entry.workerExited) {
+            return;
+        }
+        if (!entry.workspaceReleased) {
+            retainUnconfirmedShutdown(entry);
+            return;
+        }
+        if (entry.removeWorkspaceAfterExit && !removeReleasedWorkspace(entry)) {
+            return;
+        }
+        synchronized (this) {
+            pendingWorkspaceRelease.remove(key);
+            if (!retryAttempts.containsKey(key)) {
+                removeClaim(key);
+            }
+        }
+    }
+
+    private void retainUnconfirmedShutdown(RunningEntry entry) {
+        retainUnconfirmedWorkspace(runtimeKey(entry), workspaceOwner(entry));
+    }
+
+    private void retainUnconfirmedWorkspace(RuntimeCardKey key, WorkspaceOwner owner) {
+        RetryEntry retry;
+        boolean firstReport;
+        synchronized (this) {
+            firstReport = retainedWorkspaces.putIfAbsent(key, owner) == null;
+            pendingWorkspaceRelease.remove(key);
+            retry = retryAttempts.remove(key);
+            claimed.add(key);
+        }
+        if (retry != null) {
+            retry.timer().cancel(false);
+        }
+        retireUsageProbeWithoutResult(new UsageWorkpadTarget(key.trackerTarget(), key.cardId()));
+        if (firstReport) {
+            LOG.warnf(
+                    "cannot release workspace: process exit is unconfirmed; workspace=%s owner=%s retained=true; inspect its processes",
+                    owner.path(), owner.source());
+        }
+    }
+
+    private boolean removeReleasedWorkspace(RunningEntry entry) {
+        try {
+            boolean removed = removeWorkspaceWithOwnership(runtimeKey(entry), workspaceOwner(entry));
+            if (!removed) {
+                entry.workspaceReleased = false;
+            }
+            return removed;
+        } catch (RuntimeException e) {
+            LOG.warnf(
+                    "cannot remove stopped worker workspace: removal failed; workspace=%s worker=%s failure_type=%s failure_code=%s cause_type=%s retained=true; retry on a later tick",
+                    workspacePath(entry.launchConfig, entry.identifier()),
+                    entry.workerIdentity,
+                    e.getClass().getSimpleName(),
+                    e instanceof WorkspaceException workspaceFailure ? workspaceFailure.code() : "unknown",
+                    e.getCause() == null ? "none" : e.getCause().getClass().getSimpleName());
+            return false;
+        }
+    }
+
+    private boolean removeWorkspaceWithOwnership(RuntimeCardKey key, WorkspaceOwner owner) {
+        if (blank(owner.identifier())) {
+            return true;
+        }
+        if (retainedWorkspaces.containsKey(key) || isRetainedWorkspacePath(owner.path())) {
+            retainUnconfirmedWorkspace(key, owner);
+            return false;
+        }
+        boolean interrupted = Thread.interrupted();
+        try {
+            workspaces.removeForIdentifierIfPresent(owner.identifier(), owner.config());
+            return true;
+        } catch (RuntimeProcessShutdown.UnconfirmedExitException e) {
+            retainUnconfirmedWorkspace(key, owner);
+            return false;
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    private static WorkspaceOwner workspaceOwner(RunningEntry entry) {
+        return new WorkspaceOwner(entry.identifier(), entry.launchConfig, entry.workerIdentity);
     }
 
     private void reconcileStaleUsageWorkpad(Card card) {
@@ -1057,8 +1219,15 @@ public class SymphonyOrchestrator {
                 addRuntime(entry);
             }
         }
+        if (!entry.workspaceReleased) {
+            retainWorkspaceOwnership(entry, false);
+            finishPendingWorkspaceRelease(entry);
+        }
         if (handoffCancelled) {
             finishExpiredHandoff(entry);
+            return;
+        }
+        if (!entry.workspaceReleased) {
             return;
         }
         boolean currentTrackerTarget = isCurrentTrackerTarget(entry.launchTarget);
@@ -1156,7 +1325,7 @@ public class SymphonyOrchestrator {
             claimed.remove(cardKey);
         }
         if (state.cleanupWorkspace()) {
-            workspaces.removeForIdentifierIfPresent(entry.identifier(), entry.launchConfig);
+            removeStoppedWorkerWorkspace(entry);
         }
     }
 
@@ -1405,18 +1574,23 @@ public class SymphonyOrchestrator {
         if (!entry.equals(pendingHandoffCleanup.get(key))) {
             return;
         }
-        if (cleanupWorkspace) {
-            workspaces.removeForIdentifierIfPresent(entry.identifier(), entry.launchConfig);
-        }
+        boolean removed = cleanupWorkspace && removeStoppedWorkerWorkspace(entry);
         synchronized (this) {
             pendingHandoffCleanup.remove(key);
-            claimed.remove(key);
+            removeClaim(key);
         }
-        LOG.infof("card_id=%s handoff_cleanup outcome=completed workspace_removed=%s", entry.cardId, cleanupWorkspace);
+        LOG.infof("card_id=%s handoff_cleanup outcome=completed workspace_removed=%s", entry.cardId, removed);
+    }
+
+    private int pendingCleanupCount() {
+        Set<RuntimeCardKey> pending = new HashSet<>(pendingHandoffCleanup.keySet());
+        pending.addAll(pendingWorkspaceRelease.keySet());
+        pending.addAll(retainedWorkspaces.keySet());
+        return pending.size();
     }
 
     private boolean handoffCleanupBacklogFull() {
-        return pendingHandoffCleanup.size() >= HANDOFF_CLEANUP_BACKLOG_THRESHOLD;
+        return pendingCleanupCount() >= HANDOFF_CLEANUP_BACKLOG_THRESHOLD;
     }
 
     private static void cancelHandoffTimer(RunningEntry entry) {
@@ -2030,6 +2204,7 @@ public class SymphonyOrchestrator {
         }
         if (pendingRetry == null
                 || pendingRetry.generation() != generation
+                || deferRetryForWorkspaceRelease(pendingRetry)
                 || deferRetryForDispatchPause(pendingRetry)) {
             return;
         }
@@ -2067,7 +2242,7 @@ public class SymphonyOrchestrator {
             if (result instanceof CardLookupResult.Missing) {
                 retireUsageProbe = usageRecheck;
                 removeClaim(cardKey);
-                workspaces.removeForIdentifierIfPresent(retry.identifier(), config);
+                removeWorkspaceWithOwnership(cardKey, new WorkspaceOwner(retry.identifier(), config, "retry"));
             } else if (result instanceof CardLookupResult.Failed) {
                 scheduleRetry(
                         cardId,
@@ -2084,7 +2259,7 @@ public class SymphonyOrchestrator {
                 } else if (TrelloClient.isTerminal(card, config)) {
                     retireUsageProbe = usageRecheck;
                     removeClaim(cardKey);
-                    workspaces.removeForIdentifierIfPresent(card.identifier(), config);
+                    removeWorkspaceWithOwnership(cardKey, new WorkspaceOwner(card.identifier(), config, "retry"));
                 } else if (!TrelloClient.isActive(card, config)) {
                     retireUsageProbe = usageRecheck;
                     removeClaim(cardKey);
@@ -2163,6 +2338,31 @@ public class SymphonyOrchestrator {
             retryPendingUsageWorkpadCleanup(false);
         }
         LOG.infof("card_id=%s codex_dispatch_pause=%s probe=retired", workpadTarget.cardId(), CODEX_USAGE_LIMIT_PAUSE);
+    }
+
+    private boolean deferRetryForWorkspaceRelease(RetryEntry retry) {
+        if (retainedWorkspaces.containsKey(runtimeKey(retry))) {
+            retry.timer().cancel(false);
+            synchronized (this) {
+                retryAttempts.remove(runtimeKey(retry));
+            }
+            return true;
+        }
+        RunningEntry entry = pendingWorkspaceRelease.get(runtimeKey(retry));
+        if (entry == null) {
+            return false;
+        }
+        finishPendingWorkspaceRelease(entry);
+        if (retainedWorkspaces.containsKey(runtimeKey(retry))) {
+            return true;
+        }
+        if (!pendingWorkspaceRelease.containsKey(runtimeKey(retry))) {
+            return false;
+        }
+        if (entry.workspaceReleased) {
+            rescheduleRetryEntry(retry, clock.instant().plus(CONTINUATION_DELAY));
+        }
+        return true;
     }
 
     private boolean deferRetryForDispatchPause(RetryEntry retry) {
@@ -2256,7 +2456,7 @@ public class SymphonyOrchestrator {
                 scheduler.schedule(() -> onRetryTimer(replacementKey, generation), delayMillis, TimeUnit.MILLISECONDS);
         if (!previousKey.equals(replacementKey)) {
             retryAttempts.remove(previousKey);
-            claimed.remove(previousKey);
+            removeClaim(previousKey);
             claimed.add(replacementKey);
         }
         retryAttempts.put(
@@ -2289,7 +2489,11 @@ public class SymphonyOrchestrator {
     }
 
     private synchronized void removeClaim(RuntimeCardKey cardKey) {
-        claimed.remove(cardKey);
+        if (!pendingWorkspaceRelease.containsKey(cardKey)
+                && !pendingHandoffCleanup.containsKey(cardKey)
+                && !retainedWorkspaces.containsKey(cardKey)) {
+            claimed.remove(cardKey);
+        }
     }
 
     private boolean shouldDispatch(Card card, boolean ignoreClaim) {
@@ -2304,7 +2508,35 @@ public class SymphonyOrchestrator {
         RuntimeCardKey cardKey = currentRuntimeKey(card.id());
         return isCandidateEligibleIgnoringRuntimeState(card)
                 && (ignoreClaim || !claimed.contains(cardKey))
-                && !running.containsKey(cardKey);
+                && !running.containsKey(cardKey)
+                && !retainedWorkspaces.containsKey(cardKey)
+                && !hasRetainedWorkspace(card);
+    }
+
+    private boolean hasRetainedWorkspace(Card card) {
+        Path candidate = workspacePath(config, card.identifier());
+        return isRetainedWorkspacePath(candidate)
+                || pendingWorkspaceRelease.values().stream()
+                        .anyMatch(entry -> candidate.equals(workspacePath(entry.launchConfig, entry.identifier())));
+    }
+
+    private boolean isRetainedWorkspacePath(Path candidate) {
+        return retainedWorkspaces.values().stream().map(WorkspaceOwner::path).anyMatch(candidate::equals);
+    }
+
+    private record WorkspaceOwner(String identifier, EffectiveConfig config, String source) {
+        Path path() {
+            return workspacePath(config, identifier);
+        }
+    }
+
+    private static Path workspacePath(EffectiveConfig workspaceConfig, String identifier) {
+        return workspaceConfig
+                .workspace()
+                .root()
+                .resolve(WorkspaceManager.sanitize(identifier))
+                .toAbsolutePath()
+                .normalize();
     }
 
     private boolean isCandidateEligibleIgnoringRuntimeState(Card card) {

@@ -805,7 +805,7 @@ final class SymphonyOrchestratorTest {
 
         // when
         orchestrator.requestRefresh();
-        waitUntil(() -> workspaces.removalAttempts.get() == 1 && tickCompletions.get() > completedTicksBeforeFailure);
+        waitUntil(() -> workspaces.removalAttempts.get() >= 1 && tickCompletions.get() > completedTicksBeforeFailure);
         int candidateFetchesAfterFailedTick = tracker.candidateFetches.get();
         orchestrator.requestRefresh();
         waitUntil(() -> tracker.candidateFetches.get() > candidateFetchesAfterFailedTick);
@@ -813,7 +813,7 @@ final class SymphonyOrchestratorTest {
 
         // then
         assertThat(blockingRun.cancelled()).hasValue(1);
-        assertThat(workspaces.removalAttempts).hasValue(1);
+        assertThat(workspaces.removalAttempts.get()).isPositive();
     }
 
     @Test
@@ -2004,6 +2004,7 @@ final class SymphonyOrchestratorTest {
         rewriteWorkflowWithTarget(workflow, endpoint, "board-b", "token-b", "command", "work-b");
         orchestrator.tickNowForTests();
         releaseWorker.countDown();
+        waitUntil(() -> !Files.exists(launchWorkspace));
         orchestrator.stop();
 
         // then

@@ -4,7 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockConstruction;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -13,6 +16,7 @@ import ch.fmartin.symphony.trello.TestCards;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
+import ch.fmartin.symphony.trello.process.RuntimeProcessShutdown;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.TrackerClient;
@@ -20,7 +24,10 @@ import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workspace.CodexSkillInstaller;
 import ch.fmartin.symphony.trello.workspace.HookRunner;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryIteratorException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -36,11 +43,78 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 
 final class LocalAgentRunnerTest {
     @TempDir
     Path tempDir;
+
+    @ParameterizedTest
+    @ValueSource(strings = {"app_server", "before_run", "successful_run"})
+    void finalResponseCleanupFailurePreservesUnconfirmedShutdown(String failurePoint) {
+        // given
+        var hooks = mock(HookRunner.class);
+        var codex = mock(CodexAppServerClient.class);
+        var unconfirmed = AgentRunResult.shutdownIncomplete("cannot release test workspace: exit is unconfirmed");
+        if ("before_run".equals(failurePoint)) {
+            doThrow(new RuntimeProcessShutdown.UnconfirmedExitException())
+                    .when(hooks)
+                    .runRequired(eq("before_run"), any(), any(), any());
+        } else {
+            when(codex.runSession(any(), any(), any(), any(), any(), any(), any()))
+                    .thenReturn("successful_run".equals(failurePoint) ? AgentRunResult.ok() : unconfirmed);
+        }
+        var card = TestCards.card("card-1", "TRELLO-local", "Ready for Codex");
+        var request = new AgentRunner.AgentRunRequest(
+                card, null, "Task", config(Map.of("before_run", "true")), "worker-finalization", event -> {});
+        var storageFailure = new DirectoryIteratorException(new IOException("controlled abandonment failure"));
+        try (var stores = mockConstruction(FinalResponseStore.class, (store, ignored) -> {
+            when(store.begin(any()))
+                    .thenAnswer(invocation -> Optional.of(new FinalResponseRecording(
+                            store,
+                            tempDir.resolve("record.json"),
+                            invocation.getArgument(0),
+                            new ObjectMapper().createObjectNode())));
+            doThrow(storageFailure).when(store).abandon(any(), any(), any());
+        })) {
+            var runner = new LocalAgentRunner(
+                    new WorkspaceManager(hooks), hooks, codex, mock(TrackerClient.class), new PromptRenderer());
+
+            // when
+            AgentRunResult result = runner.run(request);
+
+            // then
+            assertThat(stores.constructed()).hasSize(1);
+            assertThat(result.failureCategory())
+                    .isEqualTo(
+                            "successful_run".equals(failurePoint)
+                                    ? AgentRunResult.FailureCategory.GENERIC
+                                    : AgentRunResult.FailureCategory.SHUTDOWN_INCOMPLETE);
+            verify(hooks, never()).runBestEffort(eq("after_run"), any(), any(), any());
+        }
+    }
+
+    @Test
+    void unconfirmedAppServerExitSkipsAfterRunInRetainedWorkspace() {
+        // given
+        CodexAppServerClient codex = mock();
+        var failure = AgentRunResult.shutdownIncomplete("cannot release test workspace: process exit is unconfirmed");
+        when(codex.runSession(any(), any(), any(), any(), any(), any(), any())).thenReturn(failure);
+        var runner = runner(codex, CardLookupResult.Found::new);
+        EffectiveConfig config = config(Map.of("after_run", "echo after > after.txt"));
+        Card card = TestCards.card("card-1", "TRELLO-local", "Ready for Codex");
+
+        // when
+        AgentRunResult result =
+                runner.run(new AgentRunner.AgentRunRequest(card, null, "Task", config, "worker-retained", event -> {}));
+
+        // then
+        assertThat(result).isEqualTo(failure);
+        Path workspace = config.workspace().root().resolve("TRELLO-local");
+        assertThat(workspace).isDirectory();
+        assertThat(workspace.resolve("after.txt")).doesNotExist();
+    }
 
     @Test
     void createsWorkspaceRunsHooksAndPassesPromptToCodexClient() throws Exception {

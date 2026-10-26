@@ -301,6 +301,33 @@ final class SymphonyOrchestratorHandoffTest {
     }
 
     @Test
+    void expiredHandoffWithUnconfirmedShutdownRetainsActiveWorkspace() throws Exception {
+        // given
+        try (var run = new HandoffRun(false, false, REVIEW_LIST, DEFAULT_TURN_TIMEOUT_MS)) {
+            run.unconfirmedShutdown = true;
+            var exited = new CountDownLatch(1);
+            run.orchestrator.workerExitCompletionHookForTests = exited::countDown;
+            run.start();
+            run.awaitFinalStarted();
+            run.tracker.setCardState(TestCards.card(CARD_ID, CARD_IDENTIFIER, ACTIVE_STATE));
+
+            // when
+            run.clock.advance(HANDOFF_COMPLETION_WINDOW);
+            run.deadlineTasks.getFirst().run();
+            assertThat(exited.await(5, TimeUnit.SECONDS))
+                    .as("the expired handoff reports unconfirmed exit")
+                    .isTrue();
+            run.refresh();
+
+            // then
+            assertThat(run.workspace.get()).exists();
+            assertThat(run.orchestrator.snapshot().counts().running()).isZero();
+            assertThat(run.orchestrator.snapshot().counts().retrying()).isZero();
+            verify(run.runner).run(any());
+        }
+    }
+
+    @Test
     void ownedHandoffDoesNotExtendStallTimeout() throws Exception {
         // given
         try (var run = new HandoffRun(false, false, REVIEW_LIST, DEFAULT_TURN_TIMEOUT_MS, "stall_timeout_ms: 1000")) {
@@ -736,6 +763,7 @@ final class SymphonyOrchestratorHandoffTest {
         final AgentRunner runner = mock();
         final TrelloClient trello = mock();
         boolean afterTurnMove;
+        boolean unconfirmedShutdown;
         final SymphonyOrchestrator orchestrator;
 
         HandoffRun(boolean pauseMove, boolean failMove, String target, int timeoutMillis) throws Exception {
@@ -788,6 +816,9 @@ final class SymphonyOrchestratorHandoffTest {
                             }
                             return CodexAppServerClient.TurnDecision.continueWith("This turn must not start.");
                         });
+                if (unconfirmedShutdown) {
+                    completed = AgentRunResult.shutdownIncomplete("cannot release test workspace: exit is unconfirmed");
+                }
                 result.set(completed);
                 return completed;
             });
