@@ -71,6 +71,13 @@ description to an untracked `PR.md` (or `PR-2.md`, `PR-3.md`, and so on), never 
 branch, and hand off with the checkout path, branch, branch link, and file path. The `push-pr` and
 `land` skills describe the branch-only push and the branch merge from `Merging`.
 
+The handoff uses labeled fields for the absolute checkout and proposed description paths, mode
+source, branch, pushed commit, branch link and validation. The two paths are permitted in that
+successful handoff and its workpad entry; filesystem blocker text keeps its redaction rules.
+Before the review transition, Codex updates the current workpad status, replaces resolved blockers
+with completed work and checks, and confirms that both evidence writes succeeded. This makes the
+required evidence explicit while keeping checkout and publication work agent-owned.
+
 A card in `Merging` that runs as `create` but still has no pull request after a branch-only
 handoff, for example because a human removed the label and moved the card straight to `Merging`,
 gets its pull request from the proposed description first and then takes the pull request merge
@@ -105,8 +112,8 @@ replace it with the documented `github` settings before upgrading.
   by hand from `PR.md`, or changes the workflow setting.
 * Bad, because the free-text "create a PR" comment override still depends on Codex reading the
   comments correctly.
-* Bad, because the branch-only handoff names the local checkout path in Trello. Other handoff text
-  avoids host paths, but without the path the user cannot find unmerged work that has no pull
+* Bad, because the branch-only handoff names the local checkout and proposal paths in Trello. Other
+  handoff text avoids host paths, but these paths let the user find unmerged work that has no pull
   request.
 * Bad, because a branch merge from `Merging` fails on repositories whose branch protection requires
   pull requests. The card then moves to `Blocked`.

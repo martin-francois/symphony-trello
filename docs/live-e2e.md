@@ -735,7 +735,9 @@ request anyway, committing its proposed description file, or reaching `Done` wit
    checks, pushes a branch, creates no pull request, leaves an untracked `PR.md` in the task
    checkout, and moves the card to `Human Review`. The handoff comment must say that the workflow
    default selected branch-only handoff and name the checkout path, branch, branch link, `PR.md`
-   path, and check results.
+   path, and check results. Verify that both paths are absolute and name the actual task checkout
+   and proposal file, not just "the task checkout" or `PR.md`. Check that the managed workpad
+   describes the completed work and current checks, including after recovery from a resolved blocker.
 3. On the `create` board, add the label `No PR` to a repository-changing card. Verify the same result,
    with the card label named as the source.
 4. In both checkouts, verify that `git status --short` lists the proposed description file as

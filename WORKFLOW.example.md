@@ -533,14 +533,35 @@ request requirement above does not apply. For repository-changing work:
    from every commit on the branch.
 5. Verify commit authors and push the branch with `.codex/skills/symphony-trello-push-pr/SKILL.md`,
    then stop before its pull request steps. Do not create a pull request.
-6. In the workpad and the visible handoff comment, say that this is a branch-only handoff without a
-   pull request and whether the workflow default or the card label selected it. Include the path of
-   the task checkout, the branch name and its pushed head commit, the branch link on its own line as
-   `Branch: <https://github.com/owner/repo/tree/branch-name>` when the repository is on GitHub, the
-   proposed description file path, and the local check results. Naming the task checkout path is a
-   deliberate exception to the rules that keep host paths out of Trello text, because the user needs
-   it to find the work. Name no other local path.
-7. Move the card to Human Review.
+6. Prepare a complete branch-only handoff for the workpad and the visible handoff comment. Use these labeled lines without an enclosing
+   code fence, replacing every placeholder with the actual value:
+
+   ```text
+   Branch-only handoff, no pull request.
+   Mode source: <workflow default or card label>
+   Checkout: <absolute task checkout path>
+   Branch name: <task branch>
+   Pushed commit: <full pushed commit id>
+   Branch: <https://github.com/owner/repo/tree/branch-name>
+   Proposed PR: <absolute proposed description file path>
+   Validation: <commands and results>
+   ```
+
+   Derive Checkout with `git rev-parse --show-toplevel` in the task checkout and Proposed PR
+   from that root and the actual proposal filename. Do not substitute "the task checkout" or
+   a bare `PR.md` for either path. Both paths are permitted in this branch-only handoff,
+   including its workpad entry, as a deliberate exception to path-free Trello text. Name no
+   unrelated local path. Keep `Branch: <https://github.com/owner/repo/tree/branch-name>`
+   on its own line when the repository is on GitHub.
+7. When the workpad is enabled, call `trello_upsert_workpad` with the completed handoff and
+   replace resolved blocker text with the completed work and current checks. Preserve useful
+   history; leave Symphony-managed sections to the tool. Then call `trello_add_comment` with the
+   same complete handoff;
+   do not shorten away its paths. Inspect the submitted text and tool results: confirm that
+   every required field is present and both writes succeeded before moving the card. If tools
+   are disabled, put the complete handoff in the final response instead.
+8. Move the card to "Human Review" only when the configured move tool is available. Otherwise request
+   that transition from a person; do not claim that the card moved.
 
 On rework, continue the same branch and checkout, and update the code and the proposed description
 file from the new Trello comments.

@@ -13,7 +13,8 @@ description: >
 - Keep exactly one current-card comment that starts with `## Codex Workpad`.
 - Preserve useful context across retries, rework, and later human review.
 - Avoid noisy progress comments.
-- Keep private host paths and unrelated local details out of Trello.
+- Keep private host paths and unrelated local details out of Trello, except for the
+  task checkout and proposal paths required by a successful branch-only handoff.
 
 ## Required Sections
 
@@ -61,6 +62,10 @@ Update the workpad:
   workspace locations into the workpad. Refer to them as "the requested path"
   or "the per-card workspace", explain that undeclared host paths are blocked by
   default, and point the operator to the allowed-host-path settings.
+- At a successful branch-only handoff, use the workflow's labeled fields with the
+  absolute task checkout and proposal paths. Replace resolved current blockers with
+  completed work and current checks before the review transition. Preserve useful
+  history; leave Symphony-managed sections to the tool.
 - If the tool fails because the existing workpad cannot be updated, treat the
   card as blocked instead of creating duplicate progress comments.
 

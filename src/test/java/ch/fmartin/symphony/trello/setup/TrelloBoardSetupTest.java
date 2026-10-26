@@ -3159,7 +3159,7 @@ final class TrelloBoardSetupTest {
                 .contains("git rev-parse --git-path info/exclude")
                 .contains("Do not create a pull request.")
                 .contains("`Branch: <https://github.com/owner/repo/tree/branch-name>`")
-                .contains("Move the card to \"Human Review\".")
+                .contains("Move the card to \"Human Review\" only when")
                 .contains("### Creating The Pull Request Later")
                 .contains("after a human removed the label")
                 .contains("or push the branch without one when the Pull Request Handoff Mode section selects")
@@ -3178,6 +3178,30 @@ final class TrelloBoardSetupTest {
                         in Creating The Pull Request Later, but keep the card in "Merging" instead of moving it to "Human Review".""");
         assertThat(resolve(workflow).github())
                 .isEqualTo(new EffectiveConfig.GitHubConfig(PullRequestMode.CREATE, "No PR"));
+    }
+
+    @Test
+    void branchOnlyHandoffRequiresCompletePathsAndCurrentWorkpadBeforeReview() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.handoff-evidence.md");
+
+        // when
+        createRecommendedGithubBoard(workflow);
+        String content = Files.readString(workflow);
+        String handoff = content.substring(
+                content.indexOf("### Branch-Only Handoff"), content.indexOf("### Creating The Pull Request Later"));
+
+        // then
+        assertThat(handoff)
+                .contains("Checkout: <absolute task checkout path>")
+                .contains("Proposed PR: <absolute proposed description file path>")
+                .contains("git rev-parse --show-toplevel")
+                .contains("trello_upsert_workpad", "trello_add_comment")
+                .containsIgnoringWhitespaces("Both paths are permitted in this branch-only handoff")
+                .containsIgnoringWhitespaces("replace resolved blocker text with the completed work and current checks")
+                .containsIgnoringWhitespaces("confirm that every required field is present and both writes succeeded");
+        assertThat(handoff.indexOf("trello_upsert_workpad")).isLessThan(handoff.indexOf("trello_add_comment"));
+        assertThat(handoff.indexOf("trello_add_comment")).isLessThan(handoff.indexOf("Move the card to"));
     }
 
     @MethodSource("generatedHandoffModes")

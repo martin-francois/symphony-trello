@@ -4953,9 +4953,13 @@ A branch-only handoff MUST:
   link when available,
   the proposed description file path, and the local check results
 
-The task checkout path is the one local path that a branch-only handoff names in Trello, because the
-user needs it to find the unmerged work. This is a deliberate exception to the path-free handoff text
-used elsewhere. Filesystem blocker comments still follow Section 19.2.
+The absolute task checkout and proposed description paths are permitted in the successful branch-only
+handoff and its workpad entry so the user can find the unmerged work. These two paths are a deliberate
+exception to the path-free handoff text used elsewhere. Filesystem blocker comments still follow
+Section 19.2. When a workpad is enabled, the handoff MUST update its current status and replace resolved
+blockers with completed work and current checks before moving the card to review. Historical ordinary
+comments remain intact. Generated instructions require explicit labeled fields and successful evidence
+writes before the review transition; disabled move tools leave that transition to a person.
 
 Rework continues the same branch and checkout and may update the code and the proposed description
 file. When a later run uses `create` for a branch that went through a branch-only handoff, Codex
