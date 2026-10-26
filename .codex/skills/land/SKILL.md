@@ -1,8 +1,8 @@
 ---
 name: land
 description: >
-  Merge an approved pull request after a Trello card has been moved to Merging. Use only
-  for human-approved work where the workflow explicitly allows merging from Merging.
+  Complete approved Trello work from Merging: pull requests, branch-only merges,
+  or cards with nothing to merge. Use only when the workflow enables that merge flow.
 ---
 
 # Land
@@ -26,13 +26,15 @@ description: >
   current list as the merge approval list.
 - For work with a PR, `gh` is installed and authenticated.
 - The working tree is clean or changes are intentionally committed.
-- A PR can be identified for the current branch or Trello card, unless there
-  is nothing to merge. See the Merge Decision Table.
+- A PR can be identified for the current branch or Trello card, the workflow selects
+  a branch-only merge, or there is nothing to merge. See the Merge Decision Table.
 
 ## Decide whether a merge is needed
 
-Apply the Merge Decision Table before PR discovery, review, or merge checks. For
-completed work that did not need a PR, use the current handoff and new-feedback
+When the workflow selects `branch_only`, the latest handoff for the current work
+after any reopening records a pushed repository-changing branch, and no PR exists for that branch, follow Branch-Only
+Merge first. Otherwise, apply the Merge Decision Table before PR discovery, review,
+or merge checks. For completed work that did not need a PR, use the current handoff and new-feedback
 rules there, update the card, and stop. GitHub authentication and PR checks are
 required only when the work needs a PR.
 
@@ -69,6 +71,84 @@ required only when the work needs a PR.
    - update the workpad with merge evidence,
    - add a short Trello comment if useful,
    - move the card to the configured merge completion list.
+
+## Branch-Only Merge
+
+Use this section instead of the PR steps when the workflow's Pull Request
+Handoff Mode section selects `branch_only`, the latest handoff for the current work
+after any reopening records a pushed repository-changing branch, and no PR exists for the card branch. Inspect linked
+and historical PRs before choosing this path. A closed, unmerged PR must not become
+a direct branch merge; follow the PR flow and block when its state prevents merging.
+A merged PR takes the already-merged completion path. Work without a pushed branch
+keeps the Merge Decision Table, including its no-work and newer-feedback rules.
+
+When the workflow selects `create`, the latest handoff for the current work after
+any reopening records a pushed branch, and that branch still has no PR, do not use
+this section. Create the
+PR first with `push-pr` ("Creating A PR From A Proposed Description"), keep the
+card in the merge approval list, and then take the normal PR steps above.
+
+If a human comment is newer than the latest branch-only handoff, reply to it and
+return the card to the configured review handoff list without merging. Refresh
+the branch-only handoff before that review transition using the complete
+Branch-Only Handoff procedure, including its workpad and disabled-tool rules.
+When the comment tool is available, post a fresh ordinary comment with every
+labeled handoff field before returning to review; a short answer alone is not
+the refreshed handoff. Continue the branch merge only after renewed approval
+with no newer feedback.
+
+1. Pick the target branch: the branch the Trello card names, otherwise the
+   repository default branch.
+2. Read `card_commit` from `Pushed commit` in the latest complete handoff for
+   the current work. Fetch the target and card branches. Before either the
+   already-merged check or a merge, compare the fetched card branch tip with
+   that recorded commit. A mismatch stops this merge attempt, even when the
+   new tip is already on the target. Validate the changed branch, refresh the
+   complete handoff for its new tip, return the card to the configured review
+   handoff list, and require renewed approval. The example exits with status
+   78 at that boundary; do not treat it as an ancestry result. Remote probe,
+   fetch or ref-resolution failure blocks the merge with status 79. Only
+   `ls-remote` status 2 means that the remote branch is absent:
+
+   ```bash
+   git fetch origin "$target_branch" || exit 79
+   target_commit=$(git rev-parse --verify 'FETCH_HEAD^{commit}') || exit 79
+   branch_probe_status=0
+   git ls-remote --exit-code --heads origin "$card_branch" >/dev/null || branch_probe_status=$?
+   case "$branch_probe_status" in
+     0)
+       git fetch origin "$card_branch" || exit 79
+       card_tip=$(git rev-parse --verify 'FETCH_HEAD^{commit}') || exit 79
+       [ "$card_tip" = "$card_commit" ] || exit 78
+       ;;
+     2) ;;
+     *) exit 79 ;;
+   esac
+   git merge-base --is-ancestor "$card_commit" "$target_commit"
+   ```
+
+   Capture each successful fetch's commit immediately from `FETCH_HEAD`;
+   configured fetch mappings can leave remote-tracking refs stale.
+   Skip the merge only when the recorded commit is already on the target and
+   any existing card branch matches it. A missing remote card branch permits
+   completion only when the recorded commit is verified on the target;
+   otherwise use the blocked merge path. Missing or unverifiable handoff
+   evidence also blocks completion.
+3. Otherwise start a separate worktree at the fetched `$target_commit` and
+   merge the recorded `$card_commit`, following any merge strategy the repository documents.
+   When none is documented, fast-forward when possible and create a merge
+   commit otherwise. Never commit the proposed description file.
+4. Run local validation on the merge result, then push the target branch
+   normally. Never force-push it.
+5. Do not resolve GitHub review threads; there is no PR.
+6. Record which branch was merged into which target, or why no merge was needed,
+   with each enabled evidence tool. If both evidence tools are disabled, put that
+   result in the final response. Disabled evidence tools do not block the completion
+   move after a verified merge. A failed enabled evidence write still blocks handoff.
+   Move the card to the configured merge completion list only when the move tool is
+   available; otherwise ask a person to move it without claiming that it moved.
+7. If the merge conflicts, validation fails, or the push is rejected by
+   branch protection or a required-PR rule, use the blocked merge path below.
 
 ## Blocked Merge
 

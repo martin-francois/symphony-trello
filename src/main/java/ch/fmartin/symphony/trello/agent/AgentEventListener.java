@@ -11,4 +11,14 @@ public interface AgentEventListener {
         onEvent(event);
         return true;
     }
+
+    /// Registers an owned move before the remote write. A rejected owner must not perform the write.
+    default boolean beforeHandoffMove(CardHandoffMove move) {
+        return true;
+    }
+
+    default void afterHandoffMove(CardHandoffMove move, boolean succeeded) {}
+
+    /// Called after a turn completes successfully, before any continuation decision.
+    default void onSuccessfulTurn(String threadId, String turnId) {}
 }

@@ -181,14 +181,41 @@ must enter `checking` before it can resume.
 Before moving to `Human Review`:
 
 1. For repository-changing work, create or update the PR unless the card
-   explicitly asks for local-only/no-push work.
-2. Update the workpad with final summary, acceptance criteria status,
+   explicitly asks for local-only/no-push work or the Pull Request Handoff Mode selects branch-only handoff.
+   For branch-only work, follow `push-pr` to push the branch and keep the proposed
+   description file uncommitted. Include the branch, pushed head, branch link,
+   absolute task checkout and proposal paths, mode source, and local checks in the handoff.
+   Use the labeled fields from the workflow without shortening away either path. Keep
+   `Task checkout:` as the informational path label; bare `Checkout:` selects an explicit
+   repository source, which becomes unavailable after terminal workspace cleanup. Obtain
+   the checkout root with `git rev-parse --show-toplevel` in the task worktree. Both
+   paths are permitted in this successful branch-only handoff and its workpad entry;
+   unrelated paths and filesystem blocker details retain their redaction rules.
+2. When the workpad tool is available, update it with final summary, acceptance criteria status,
    validation evidence, PR URL when applicable, and known limitations.
    Format PR links in Trello-visible text on their own line as
    `PR: <https://github.com/owner/repo/pull/123>` so punctuation cannot become
    part of the link.
-3. Add one concise visible handoff comment.
-4. Move the card to `Human Review`.
+3. When the workflow enables the workpad tool, replace resolved current blockers for
+   branch-only work with completed work and current checks. Preserve useful history,
+   leave Symphony-managed sections to the tool, and require a successful
+   `trello_upsert_workpad` result.
+4. When the comment tool is available, add one concise visible handoff comment with
+   `trello_add_comment`. Branch-only comments retain every labeled handoff field,
+   including both absolute paths. Check the submitted fields and successful results
+   for every enabled evidence write before moving the card. When both evidence
+   tools are disabled, include the same complete handoff in the final response and
+   ask a person to copy the complete handoff onto the Trello card before moving it
+   to the merge approval list. A later merge run reads the card's workpad or
+   comments, not this final response. This fallback satisfies the general workpad and comment
+   prerequisites for human review. Disabled evidence tools do not block the review transition.
+   Do not wait for those tools to be enabled or repeat completed work.
+   Missing durable evidence blocks the later merge, not human review.
+   A failed enabled evidence write still blocks handoff.
+5. Move the card to `Human Review` only when the configured move tool is available.
+   Otherwise request that transition from a person without claiming it happened.
+   For the disabled-evidence fallback:
+   After the review move, end the run with the complete handoff and copy request.
 
 Do not merge from `Human Review`; that list is for a person.
 
@@ -259,7 +286,13 @@ Use `Merging` only when a human has approved the work and the workflow enables a
 merge flow. After successful merge, update the workpad, add a concise
 completion comment when useful, and move to `Done`.
 
-`Merging` is only for pull requests. When work that has nothing to merge goes to
+For branch-only work, use only enabled evidence tools after verifying the merge. If both are
+disabled, put the merge result in the final response and use the configured completion move when
+available. A failed enabled evidence write still blocks handoff. The approved input handoff must
+already be present on the card before the merge; this completion fallback does not replace it.
+
+Merging supports pull requests and pushed branch-only work. Follow `land` for
+either merge path. When work that has nothing to merge goes to
 `Human Review`, say in the handoff comment that a human can move the card
 straight to `Done` after review. If such a card reaches `Merging` after that
 handoff, use the latest handoff for the current work after any reopening.

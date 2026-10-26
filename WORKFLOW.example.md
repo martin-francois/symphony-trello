@@ -25,6 +25,9 @@ workspace:
 repository:
   default_url: null
   default_path: null
+github:
+  pull_request_mode: create
+  no_pr_label: No PR
 server:
   port: 18080
 polling:
@@ -100,6 +103,10 @@ acceptance criteria, progress, validation evidence, blockers, and handoff notes.
 
 ## Stale Blocker Recheck
 
+The recheck procedure applies only when trello_update_blocker_recheck_status is advertised.
+When it is unavailable, skip its status-write prerequisite. This does not establish that no
+blocker exists; preserve known blockers and use the workflow's tool-disabled handoff path.
+
 The rendered prompt contains only recent Trello comments, so do not use it to decide whether a stale
 blocker exists. Before changing code, always call trello_update_blocker_recheck_status with status
 `checking`. The tool inspects the deep current-card comment window and classifies the newest ordinary
@@ -150,9 +157,10 @@ This is an unattended orchestration run. Do not ask a human to perform routine f
 Work autonomously end to end unless the card is blocked by missing requirements, permissions,
 credentials, tools, or unsafe repository state.
 
-Start from the current Trello list shown under Trello Card and route from that list. After the
-required initial `checking` call classifies the deep comment window, open or create the workpad,
-then keep it current as the single detailed progress record. Spend extra effort up front on planning
+Start from the current Trello list shown under Trello Card and route from that list. When the recheck
+tool is advertised, complete its required initial `checking` call before pickup or implementation.
+When the workpad tool is advertised, open or create the workpad and keep it current as the single
+detailed progress record. Spend extra effort up front on planning
 and validation design before implementation. Reproduce bugs or capture a concrete current-state
 signal before changing behavior. When meaningful out-of-scope improvements are discovered, record
 them as separate follow-up work instead of expanding this card.
@@ -369,14 +377,16 @@ with path-safe guidance instead of guessing.
 1. Determine the current list. When a repository is involved, also determine its state, branch,
    working tree status, and HEAD.
 2. Read the full Trello card description and all rendered Trello comments before editing.
-3. Call `checking` to classify stale blockers from the deep comment window; then update the workpad
-   with the plan, acceptance criteria, validation plan, and current-state signal.
+3. When the recheck tool is advertised, call `checking` to classify stale blockers from the deep
+   comment window. Record the plan, acceptance criteria, validation plan, and current-state signal
+   with the workpad tool when advertised, or in the final response otherwise.
 4. Sync with the repository default branch before implementation when a Git repository is involved.
 5. Implement the smallest maintainable change that satisfies the card.
 6. Keep the workpad checklist current when scope, risks, validation, or blockers change.
 7. Run the validation required by the card and the repository.
 8. Commit logical changes with a clear message when repository files changed.
-9. Publish or update a pull request when repository changes should be reviewed.
+9. Publish or update a pull request when repository changes should be reviewed, or push the branch
+   without one when the Pull Request Handoff Mode section selects a branch-only handoff.
 10. Only move to Human Review after the completion bar below is met. Move to `Blocked` when the work
     cannot safely reach the completion bar.
 
@@ -385,8 +395,10 @@ the workpad contains the details.
 
 ## GitHub Issue Assignment
 
-After the initial `checking` call succeeds and no stale blocker stops this card, and before you
-implement the change, assign the GitHub issues this card implements to the authenticated GitHub
+When the recheck tool is advertised, first complete its initial `checking` call successfully.
+When it is unavailable, issue assignment does not require that call.
+
+Before you implement the change, assign the GitHub issues this card implements to the authenticated GitHub
 account so other contributors can see that the work is taken. Do not assign anything when you stop
 the card on a blocker before implementation. An issue qualifies only when the card clearly asks to
 implement it and the issue belongs to the repository selected for this card under Repository Source
@@ -407,8 +419,8 @@ for this step, and do not remove existing assignees.
 
 Assignment is best effort. If GitHub CLI is not authenticated, the account lacks permission, the
 issue cannot be resolved, a command fails, or the login is missing from the assignees afterwards,
-continue the implementation and record in the workpad which issue was not assigned and why. Do not
-treat a failed assignment as a blocker.
+continue the implementation and record which issue was not assigned and why in the workpad when its
+tool is advertised, otherwise the final response. Do not treat a failed assignment as a blocker.
 
 ## Acceptance Criteria And Validation
 
@@ -470,7 +482,8 @@ unrelated human-owned work; move the card to "Blocked" with the exact mismatch i
 
 This PR requirement applies when the card asks for code, documentation, configuration, tests, or
 other version-controlled repository changes. It does not apply when the card explicitly asks for a
-local-only investigation, says not to push, or requires no repository change. In those cases,
+local-only investigation, says not to push, or requires no repository change. The Pull Request
+Handoff Mode section below can also replace it with a branch-only handoff. In the local-only cases,
 explain the local-only or repository-independent result and only the evidence that applies in the
 workpad and handoff comment. Do not require branch or commit evidence when no repository changed.
 
@@ -478,6 +491,110 @@ If GitHub auth, push permission, branch protection, or repository policy prevent
 the fallback strategies in `.codex/skills/symphony-trello-push-pr/SKILL.md`. If a PR is still
 required and cannot be created or updated, move the card to `Blocked` with the exact blocker instead
 of moving to Human Review.
+
+## Pull Request Handoff Mode
+
+Symphony resolves the pull request handoff mode for each run from the workflow's `github` settings
+and the card's current Trello labels:
+
+- Effective mode for this run: `{{ pull_request_handoff.mode }}`, selected by
+  `{{ pull_request_handoff.selected_by }}`.
+- Workflow default from `github.pull_request_mode`: `{{ pull_request_handoff.workflow_mode }}`.
+- Card label from `github.no_pr_label`: {% if pull_request_handoff.no_pr_label_enabled %}`{{ pull_request_handoff.no_pr_label }}`. This card has it: {% if pull_request_handoff.card_has_no_pr_label %}yes{% else %}no{% endif %}{% else %}turned off in this workflow{% endif %}.
+
+Apply these rules in order:
+
+1. A workflow default of `branch_only` is strict. Symphony creates no pull request for any card on
+   this board, whatever its labels or comments say. If a card or comment asks for a pull request,
+   do the branch-only handoff and explain that a human can open the pull request from the proposed
+   description, or change `github.pull_request_mode` to `create` in the workflow.
+2. On a `create` board, a Trello comment that explicitly asks Symphony to create a pull request
+   overrides the card label for this run when the comment is newer than the latest branch-only
+   handoff. Treat the run as `create`.
+3. Otherwise the card label selects `branch_only`.
+4. Without these signals, use the pull request publication flow above.
+
+Once a pull request exists for the card branch, keep using the pull request flow for rework and
+merging, even when the label is still on the card.
+
+### Branch-Only Handoff
+
+When the effective mode is `branch_only` and no pull request exists for the card branch, the pull
+request requirement above does not apply. For repository-changing work:
+
+1. Implement and commit on a non-default task branch with the same commit author rules as PR-bound
+   work.
+2. Before pushing, run the local checks that would normally gate CI for this repository, such as its
+   CI workflow commands and the checks named in `AGENTS.md` or `CONTRIBUTING.md`, because no pull
+   request or CI run may follow. If a check fails because of the change, keep the card active and
+   fix it. Record failures that are clearly unrelated. If required checks cannot run, follow the
+   validation blocker rule above.
+3. Write the proposed pull request title and description to `PR.md` in the root of the task
+   checkout. Start the file with `# <proposed PR title>`, then a blank line, then the description.
+   Build the description from the repository pull request template as described above. If `PR.md`
+   already exists and an earlier branch-only handoff of this card did not create it, use the first
+   unused name of `PR-2.md`, `PR-3.md`, and so on, and say which file you used. On rework, reuse
+   and update the file named in the earlier handoff.
+4. Never stage or commit the proposed description file. Add its file name to the checkout's local
+   exclude file (`git rev-parse --git-path info/exclude`), stage only explicit paths, and before
+   each commit and push confirm that the file is absent from `git diff --cached --name-only` and
+   from every commit on the branch.
+5. Verify commit authors and push the branch with `.codex/skills/symphony-trello-push-pr/SKILL.md`,
+   then stop before its pull request steps. Do not create a pull request.
+6. Prepare a complete branch-only handoff for the workpad and the visible handoff comment. Use these labeled lines without an enclosing
+   code fence, replacing every placeholder with the actual value:
+
+   ```text
+   Branch-only handoff, no pull request.
+   Mode source: <workflow default or card label>
+   Task checkout: <absolute task checkout path>
+   Branch name: <task branch>
+   Pushed commit: <full pushed commit id>
+   Branch: <https://github.com/owner/repo/tree/branch-name>
+   Proposed PR: <absolute proposed description file path>
+   Validation: <commands and results>
+   ```
+
+   Derive Task checkout with `git rev-parse --show-toplevel` in the task checkout and Proposed PR
+   from that root and the actual proposal filename. Do not substitute "the task checkout" or
+   a bare `PR.md` for either path. Keep the `Task checkout:` label: `Checkout:` declares a
+   repository source and would select this disposable worktree on later runs.
+   Both paths are permitted in this branch-only handoff,
+   including its workpad entry, as a deliberate exception to path-free Trello text. Name no
+   unrelated local path. Keep `Branch: <https://github.com/owner/repo/tree/branch-name>`
+   on its own line when the repository is on GitHub.
+7. When the workpad is enabled, call `trello_upsert_workpad` with the completed handoff and
+   replace resolved blocker text with the completed work and current checks. Preserve useful
+   history; leave Symphony-managed sections to the tool. When the comment tool is available,
+   call `trello_add_comment` with the same complete handoff; do not shorten away its paths.
+   Inspect the submitted text and tool results: confirm that every required field is present
+   and every enabled evidence write succeeded before moving the card. If both evidence tools
+   are disabled, put the complete handoff in the final response and ask a person to copy the
+   complete handoff onto the Trello card before moving it to the merge approval list. A later
+   merge run reads the card's workpad or comments, not this final response.
+   This fallback satisfies the general workpad and comment prerequisites for human review.
+   Disabled evidence tools do not block the review transition. Do not wait for those tools to
+   be enabled or repeat completed work. A failed enabled evidence write still blocks handoff.
+8. Move the card to "Human Review" only when the configured move tool is available. Otherwise request
+   that transition from a person; do not claim that the card moved.
+   For the disabled-evidence fallback:
+   After the review move, end the run with the complete handoff and copy request.
+
+On rework, continue the same branch and checkout, and update the code and the proposed description
+file from the new Trello comments.
+
+### Creating The Pull Request Later
+
+When the effective mode is `create`, for example after a human removed the label, or a comment
+override applies, and an earlier branch-only handoff left a proposed description file, create the
+pull request with `.codex/skills/symphony-trello-push-pr/SKILL.md`. Use the file's first `# ` heading as the title. Copy the description
+after that heading and its blank separator line into a body-only temporary file outside the
+checkout, reconciled with the repository pull request template. Pass that temporary file to
+`--body-file`, so the published body contains the description without the proposal's title heading.
+Keep the proposal file uncommitted. After creation, use `gh pr view --json title,body` to compare
+the published title and body with the intended title and reconciled description. Correct any
+metadata mismatch before recording the PR link or moving the card to "Human Review". Remove the temporary
+body file after successful verification.
 
 ## Pull Request Feedback Sweep
 
@@ -537,6 +654,9 @@ Before returning the card to Human Review, rerun the card-specific validation an
 update the existing workpad with the rework evidence, and add one concise handoff comment. Do not
 create duplicate progress summary comments when the workpad already contains the details.
 
+For a branch-only handoff without a pull request, continue the same branch and checkout, update the
+proposed description file when the instructions change, and keep that file uncommitted.
+
 ## Merge From Merging
 
 `Merging` is human approval for merging. Only run the merge helper when the current Trello list is
@@ -547,6 +667,8 @@ For work with a PR, identify the PR before merging, run the PR feedback sweep, r
 card-specific validation, check mergeability, branch state, required reviews, and CI/check status, and
 follow the repository's merge policy. Do not enable auto-merge unless the repository policy explicitly
 requires it.
+
+Apply the branch-only exception below before these decisions when its conditions hold.
 
 Deterministic merge decisions:
 - If the latest workpad entry or handoff comment for the current work, after any reopening, shows
@@ -572,8 +694,47 @@ Deterministic merge decisions:
 After successful merge, update the workpad with merge evidence, add a concise completion comment
 when useful, and move the card to `Done`.
 
-`Merging` is only for pull requests. When you hand off work with nothing to merge, say in the handoff
-comment that a human can move the card straight to `Done` after review.
+`Merging` is for pull requests and branch-only work. When you hand off work with nothing to merge,
+say in the handoff comment that a human can move the card straight to `Done` after review.
+
+Branch-only exception: when the Pull Request Handoff Mode section selects `branch_only`,
+the latest handoff for the current work after any reopening records a pushed repository-changing
+branch, and no pull request exists for the card branch, skip the PR steps above and merge the branch itself.
+Inspect linked and historical PRs first. A closed, unmerged PR must not become a direct branch merge; follow the PR flow and block
+when its state prevents merging. A merged PR takes the already-merged completion path. Work without
+a pushed branch keeps the no-work and newer-feedback decisions above, even on a branch-only board.
+If a human comment is newer than the latest branch-only handoff, reply to it and return the card
+to Human Review without merging. Refresh the branch-only handoff before that review transition using the
+complete Branch-Only Handoff procedure, including its workpad and disabled-tool rules. When the
+comment tool is available, post a fresh ordinary comment with every labeled handoff field before
+returning to review; a short answer alone is not the refreshed handoff. Continue the branch merge
+only after renewed approval with no newer feedback.
+Follow the branch-only merge steps in `.codex/skills/symphony-trello-land/SKILL.md`. Merge into the target
+branch the card names, or the repository default branch otherwise. Read `Pushed commit` from the latest handoff.
+Before either the already-merged check or a merge, compare the fetched card branch tip with that
+recorded commit. If they differ, do not merge or declare the work already merged. Validate the
+changed branch, refresh the complete handoff for its new tip, and return the card to Human Review without
+merging. Require renewed approval before continuing. Use the recorded commit for both the ancestry
+check and the merge. Capture each fetched commit immediately from `FETCH_HEAD`; use the fetched
+target commit as the merge base. Remote probe or fetch failures use the blocked merge path;
+cached refs do not replace successful remote verification. If the remote card branch is absent, completion requires verifying that the
+recorded commit is already on the target; otherwise use the blocked merge path. When the recorded
+commit is already on the target and any existing card branch matches it, skip the merge.
+Push the target branch normally and never force-push it. Do not apply pull request review-thread
+handling. After the merge, or when no merge was needed, record which branch was merged into which
+target, or why no merge was needed, with each enabled evidence tool. If both evidence tools are
+disabled, report that result in the final response. Disabled evidence tools do not block the
+completion move after a verified merge. A failed enabled evidence write still blocks handoff.
+Move the card to `Done` only when the configured move tool is available; otherwise ask a person
+to move it without claiming that it moved. If the merge or push is rejected, move the card to
+`Blocked` with a concise blocker.
+
+When the effective mode is `create`, no pull request exists for the card branch, and the latest
+handoff for the current work after any reopening pushed that branch, for example because a human
+removed the label and moved the
+card straight to `Merging`, do not merge the branch directly. Create the pull request first as
+described in Creating The Pull Request Later, but keep the card in `Merging` instead of moving it to
+Human Review. Then follow the PR merge steps above for the new pull request.
 
 ## Completion Bar Before Human Review
 
@@ -584,7 +745,10 @@ Do not move the card to Human Review until all applicable items are true:
 - Repository changes are committed on a branch based on the repository default branch unless the
   card requested another base.
 - A pull request exists and is linked in the workpad and handoff comment for repository-changing work
-  unless the card explicitly requested local-only/no-push work.
+  unless the card explicitly requested local-only/no-push work or the Pull Request Handoff Mode
+  section selects a branch-only handoff, which needs the pushed branch and its handoff details instead.
+  That section's disabled-evidence fallback also satisfies this completion bar's workpad and
+  comment prerequisites for human review.
 - PR feedback sweep is complete for any existing or newly created PR.
 - Relevant local validation is current after the latest commit.
 - The working tree does not contain unrelated uncommitted changes.

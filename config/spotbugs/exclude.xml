@@ -15,7 +15,7 @@
   <!-- These methods generate stable HTML, Markdown, YAML, or prompt text that must use LF separators independent of the host platform. -->
   <Match>
     <Bug pattern="VA_FORMAT_STRING_USES_NEWLINE"/>
-    <Class name="~ch\.fmartin\.symphony\.trello\.(api\.StatusResource|prompt\.PromptRenderer|setup\.TrelloBoardSetup)"/>
+    <Class name="~ch\.fmartin\.symphony\.trello\.(api\.StatusResource|prompt\.PromptRenderer|setup\.PullRequestHandoffPrompt|setup\.TrelloBoardSetup)"/>
   </Match>
 
   <!-- The investigation prompt uses stable Markdown line separators on every host. -->

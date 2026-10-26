@@ -495,6 +495,7 @@ Extension top-level keys defined in this specification:
 - `server`
 - `trello_tools`
 - `worker`
+- `github` (Java implementation extension, see Section 19.6)
 
 Unknown keys SHOULD be ignored for forward compatibility.
 
@@ -901,6 +902,9 @@ Template input variables:
 - `attempt` (integer or null)
   - `null`/absent on first attempt.
   - Integer on retry or continuation run.
+- `pull_request_handoff` (object, Java implementation extension)
+  - The pull request handoff mode resolved for this run from the `github` workflow settings and the
+    card labels. Section 19.6 defines its fields.
 
 Fallback prompt behavior:
 
@@ -1228,7 +1232,8 @@ guidance, or to record a path-safe blocker when no move destination is configure
 The generated workflow treats unavailable push credentials as blocking only when a card, repository
 policy, or human requires a push or pull request. For repository-changing work in the recommended
 workflow, `Human Review` means a pull request is available for review unless the card explicitly asks
-for local-only or no-push work. Generated workflows create ready-for-review, non-draft pull requests
+for local-only or no-push work, or the branch-only handoff extension in Section 19.6 selects a pushed
+branch without a pull request. Generated workflows create ready-for-review, non-draft pull requests
 by default and create draft pull requests only when the Trello card explicitly asks for a draft PR.
 They also allow handoff with documented, clearly unrelated broad validation failures when
 card-specific validation passed.
@@ -1296,6 +1301,7 @@ policy:
   mergeability, checks, auth, or repository policy move the card to `Blocked` with the blocker class
   and next human action
 - the workflow SHOULD NOT leave the card parked in `Merging` after a failed merge attempt
+- a branch-only card without a pull request follows the branch merge rules in Section 19.6 instead
 
 When `new-board` would otherwise write `WORKFLOW.md` and that file already exists, the Java
 implementation writes a board-specific file named `WORKFLOW.<slugified-board-name>.md`. If that file
@@ -1524,6 +1530,9 @@ as a checkout candidate instead of failing.
 - `trello_tools.follow_up_cards.move_current_card_to_blocked`: boolean, default `false`
 - `trello_tools.follow_up_cards.max_cards_per_source_card`: positive integer, default `3`
 - `trello_tools.follow_up_cards.max_cards_per_hour`: positive integer, default `10`
+
+- `github.pull_request_mode`: Java extension, `create` or `branch_only`, default `create`
+- `github.no_pr_label`: Java extension, Trello label name, default `No PR`; `""` or null disables it
 
 ## 7. Orchestration State Machine
 
@@ -1907,6 +1916,30 @@ Part B: Trello state refresh
   - If Trello state/list ID is still active: update the in-memory card snapshot.
   - If Trello state/list ID is neither active nor terminal: terminate worker without workspace
     cleanup and suppress retry.
+- Java implementation extension: an authorized current-card move to an inactive or terminal list
+  registers its worker, current turn, board and resolved list before the Trello request. Reconciliation
+  MAY let that existing turn finish while the open card remains at that exact destination. This
+  exception expires 60 seconds after the first registration and MUST NOT extend the existing turn
+  timeout or stall policy. Failed moves clear the exception; repeated moves and agent events MUST NOT
+  renew its deadline. A successful handoff MUST stop turn continuation even if the card becomes active
+  again. This bounded completion window preserves the current turn's existing permissions; it is not
+  a final-answer-only sandbox. Missing cards, archival, a different board or another inactive target
+  retain immediate cancellation. Deadline cancellation MUST run independently of tracker requests
+  and the reconciliation operation lock. It MUST interrupt only the captured current worker before
+  requesting any fresh tracker state. Terminal workspace cleanup waits for the ordinary serialized
+  worker-exit or reconciliation path after cancellation establishes the current cleanup decision.
+- If that cleanup lookup fails or omits the card, the Java implementation MUST remove the canceled
+  worker from running counts and runtime accrual while retaining its card claim in separate pending
+  cleanup bookkeeping. Ordinary ticks MUST retry the lookup without restarting that worker. A known
+  terminal or missing card permits workspace cleanup; a known active, inactive or out-of-scope card
+  releases the pending claim without removing its workspace. Lookup MUST use the current tracker
+  configuration when it names the same target, including equivalent endpoint spellings, while
+  workspace cleanup MUST use the attempt's original workspace configuration.
+- A pending handoff cleanup backlog of 128 MUST pause new dispatch until it falls below that
+  threshold. Already-running workers MAY finish and add pending cleanup, so the bound is the threshold
+  plus in-flight capacity. Unknown cleanup decisions MUST NOT be discarded to reduce the backlog.
+  Below the threshold, unrelated cards retain their normal concurrency capacity. The runtime MUST
+  log why dispatch is paused; this extension adds no configuration or status-API field.
 - If state refresh fails globally, keep workers running and try again on the next tick.
 - If state refresh partially fails for some cards, implementations MAY keep those workers running
   and retry them on the next tick, but MUST log which card IDs were not refreshed.
@@ -2334,13 +2367,15 @@ Optional client-side tool extension:
   blocker comment action. A repeated `checking` call for that same action is idempotent. A managed
   `resumed` state for the same blocker MUST NOT regress on a continuation or retry. A newer qualifying
   blocker action MUST re-enter `checking` on the same managed comment.
-- The rendered prompt's recent-comment window MUST NOT determine whether a stale blocker exists. The
-  workflow MUST always call `checking` before testing for a blocker or making another Codex-requested
+- The rendered prompt's recent-comment window MUST NOT determine whether a stale blocker exists. When
+  the recheck tool is advertised, the workflow MUST call `checking` before testing for a blocker or making another Codex-requested
   Trello write, so the tool can classify its deep current-card comment window. A no-blocker result
   MUST create no managed status. When a blocker qualifies, it is the comment being rechecked and MUST
   remain unchanged; `checking` creates or updates a separate Symphony-managed status. The absence of
   an existing managed recheck comment MUST NOT suppress that call. A configured automatic
   pre-dispatch move MAY occur before the Codex session starts.
+  When the tool is unavailable, its status-write prerequisite does not apply. This does not establish
+  that no blocker exists; preserve known blockers and use the configured tool-disabled handoff path.
 - If the initial `checking` call returns a tool failure, including a refresh failure or missing-card
   result, the workflow MUST stop that attempt without testing the blocker, calling `resumed`, or
   requesting another Trello write. It MUST report the failure in the final response and begin the next
@@ -2876,6 +2911,7 @@ Inputs to prompt rendering:
 - normalized `card` object
 - compatibility alias `issue`, pointing to the same normalized card object
 - OPTIONAL `attempt` integer, retry/continuation metadata
+- Java implementation extension `pull_request_handoff` object (Section 19.6)
 
 ### 12.2 Rendering Rules
 
@@ -3872,6 +3908,10 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - Prompt template renders `card`, compatibility alias `issue`, and `attempt`
 - `card` and `issue` prompt variables contain identical normalized card data
 - Prompt rendering fails on unknown variables, strict mode
+- `github.pull_request_mode` accepts `create` and `branch_only`, ignoring case, and rejects other
+  values; `github.no_pr_label` defaults to `No PR`, and an empty or null value disables it
+- `pull_request_handoff` resolves the documented precedence between the workflow default and the
+  card label, matching the label like other Trello label names
 
 ### 17.2 Workspace Manager and Safety
 
@@ -4126,6 +4166,23 @@ network access, or external service permissions are unavailable.
 - Real integration tests SHOULD verify behavior against open cards, archived cards, cards in
   archived lists, terminal-list cards, and per-card not-found/deleted lookup behavior when
   practical.
+- When the branch-only handoff profile in Section 19.6 changes, real integration checks SHOULD cover
+  a branch-only board, a `No PR` card on a `create` board, the untracked proposed description file,
+  rework, later pull request creation, and the branch merge from `Merging`, as listed in the live
+  E2E guide.
+- The branch-only live profile also covers changed branch tips returning to review without merging,
+  a complete refreshed handoff, and merging only after renewed approval. With evidence writes
+  disabled and move destinations retained, it covers the complete final-response handoff, explicit
+  human-copy request, review transition with no active or retrying work, and later merge completion
+  from the copied card evidence. `docs/live-e2e.md` scenarios 12 and 13 own these live boundaries.
+  `TrelloBoardSetupTest.branchOnlyHandoffWithoutEvidenceToolsStillMovesToReviewAndEndsTheRun`
+  checks the generated instructions against actual runtime tool advertisement; the shipped-skill
+  checks preserve the same disabled-tool and enabled-write-failure rules. Those automated checks
+  do not replace the real-Codex evidence.
+- `SymphonyOrchestratorHandoffTest` forces reconciliation during an owned move and during the final
+  response. It covers completed protocol output, bounded expiry and external-state cancellation.
+  The live disabled-evidence case MUST preserve a complete final message and successful turn
+  completion, not only a transition to the review list.
 - A skipped real-integration test SHOULD be reported as skipped, not silently treated as passed.
 - If a real-integration profile is explicitly enabled in CI or release validation, failures SHOULD
   fail that job.
@@ -4864,6 +4921,165 @@ When this profile is used:
 - the release workflow MAY publish the jar, sources jar, Javadoc jar, and POM to Maven Central with
   JReleaser after the GitHub Release is published; that publication MUST NOT build, replace, or
   re-sign the GitHub Release assets, `checksums.txt`, or the release attestation bundle
+
+### 19.6 Branch-Only Pull Request Handoff Profile
+
+This profile is a Java implementation extension. It changes the `Human Review` and `Merging`
+expectations of Section 5.6 only for cards that it explicitly selects. Repository work stays
+workflow-owned and agent-owned: Java resolves the handoff mode from structured data and renders it
+into the prompt, and the generated workflow tells Codex how to commit, push, and merge. Java does not
+prepare checkouts, manage branches, or publish branches.
+
+Workflow fields, under the top-level `github` key:
+
+- `pull_request_mode` (string)
+  - `create` (default): repository-changing work hands off with a pull request.
+  - `branch_only`: repository-changing work hands off with a pushed branch and no pull request.
+  - Values are matched ignoring case and surrounding whitespace. An omitted key uses the default;
+    an explicit null and other unsupported values are configuration errors.
+- `no_pr_label` (string or null)
+  - Default: `No PR`.
+  - A card that carries this Trello label uses branch-only handoff on a `create` workflow. Label
+    matching follows the label normalization in Section 11.3, so it ignores case and repeated
+    whitespace.
+  - An empty string or null disables the card-level label signal. Non-string values are
+    configuration errors.
+- An omitted `github` key behaves like the defaults above.
+
+Generated GitHub workflows write `github.pull_request_mode: create` and `github.no_pr_label: "No PR"`
+explicitly and include the branch-only handoff instructions. Generated non-GitHub workflows write no
+`github` key and keep their local handoff. Setup does not ask about the handoff mode; operators
+change it by editing the workflow. Workflow bodies that do not reference `pull_request_handoff`
+keep their previous behavior, because the mode reaches Codex only through the prompt.
+
+A board that already uses a Trello label named `No PR` for another purpose gets branch-only handoff
+for those cards once its workflow is generated, regenerated, or migrated with the current body. To
+keep the old meaning, rename that Trello label, or set `github.no_pr_label` to another name or to
+`""`.
+
+The `pull_request_handoff` prompt variable contains:
+
+- `mode`: the effective mode for this run, `create` or `branch_only`.
+- `workflow_mode`: the configured `github.pull_request_mode`.
+- `selected_by`: `workflow` or `card_label`.
+- `no_pr_label_enabled`: whether a card-level label is configured.
+- `no_pr_label`: the configured label name, or an empty string when disabled.
+- `card_has_no_pr_label`: whether the card carries the configured label.
+
+Effective mode precedence:
+
+1. A `branch_only` workflow is strict. No card on that board creates a pull request, whatever its
+   labels or comments say. Creating pull requests requires changing the workflow setting.
+2. On a `create` workflow, a Trello comment that explicitly asks Symphony to create a pull request
+   and is newer than the latest branch-only handoff selects `create` for that run. Codex applies
+   this rule because the request is free text.
+3. On a `create` workflow, the configured card label selects `branch_only`.
+4. Otherwise the run uses `create`.
+
+Once a pull request exists for the card branch, rework and merging use the pull request flow.
+
+A branch-only handoff MUST:
+
+- commit on a non-default task branch with the commit author policy of pull request work
+- run the local checks that would normally gate CI before pushing, keep the card active while
+  change-related failures remain, and record unrelated or unavailable checks
+- write the proposed pull request title and description to `PR.md` in the task checkout root, or to
+  the first unused `PR-<n>.md` name starting at 2 when an unrelated `PR.md` exists
+- never stage or commit the proposed description file
+- push the branch and create no pull request
+- move the card to the review handoff list with a handoff comment that names the branch-only mode
+  and its source, the task checkout path, the branch name and pushed head commit, the GitHub branch
+  link when available,
+  the proposed description file path, and the local check results
+
+The absolute task checkout and proposed description paths are permitted in the successful branch-only
+handoff and its workpad entry so the user can find the unmerged work. These two paths are a deliberate
+exception to the path-free handoff text used elsewhere. Filesystem blocker comments still follow
+Section 19.2. When a workpad is enabled, the handoff MUST update its current status and replace resolved
+blockers with completed work and current checks before moving the card to review. Historical ordinary
+comments remain intact. Generated instructions require explicit labeled fields and successful evidence
+writes before the review transition; disabled move tools leave that transition to a person.
+The checkout field uses `Task checkout:` so the informational path does not become an explicit
+repository-source declaration. A user-authored `Checkout:` source keeps its existing selection semantics.
+When both handoff evidence tools are disabled, the final response MUST ask a person to copy the
+complete handoff onto the Trello card before moving it to merge approval. A later merge run reads
+Trello workpad or comment evidence, not a prior final response. The final-response fallback satisfies
+the general workpad and comment prerequisites for human review. Disabled evidence tools MUST NOT
+prevent an available review move or cause repeated implementation after the handoff is ready.
+After the review move, the run ends with the complete handoff and copy request. Missing durable input
+evidence blocks the later merge. After a verified merge, disabled evidence tools permit final-response
+completion evidence and an available completion move. Failed writes from enabled evidence tools
+still block handoff; neither fallback enables disabled tools.
+
+For branch-only handoffs with unavailable comment/workpad tools, the Java runner MUST also retain
+successful final output outside the task checkout so a person can retrieve it after worker exit,
+service restart or terminal workspace cleanup. The private local record lives under
+`<workspace.root>/.symphony+final-responses/<workflow-and-board-hash>/<card-id-hash>.json`.
+The endpoint part of this namespace MUST use the same endpoint identity as tracker dispatch.
+Equivalent endpoint spellings MUST share the current response record; distinct endpoints remain
+separate. A new attempt under an equivalent spelling MUST invalidate the previous current response.
+The record MUST identify the card, worker, thread and turn and contain the exact non-empty completed final
+message only when the matching turn succeeded. Starting another attempt MUST invalidate the previous
+current response even if that attempt no longer qualifies for local recording. Eligible attempts MUST
+replace the current record with a running state without the previous response; failed or interrupted
+attempts MUST NOT expose an older response as current. Partial messages and final messages from rejected worker events MUST NOT become
+completed records. This file is human-readable local evidence, not approval input for a later merge.
+
+Local final-response storage MUST use atomic replacement, private POSIX directories/files (0700/0600)
+where supported, and inherited permissions elsewhere. It MUST reject symlinks and unsafe ancestors,
+including POSIX ancestors owned by neither the process user nor system root. Group-writable or
+other-writable POSIX ancestors MUST have verified sticky protection; required owner or mode metadata
+that cannot be verified MUST fail storage. It MUST limit a response to 1 MiB and retain at most 128
+completed records per workflow/board namespace
+without evicting active attempts. Storage failures MUST fail the affected attempt visibly without
+logging response contents. This protection does not claim to defend against a concurrent writer
+running as the same operating-system user.
+
+Rework continues the same branch and checkout and may update the code and the proposed description
+file. When a later run uses `create` for a branch that went through a branch-only handoff, Codex
+creates the pull request from the proposed description file, honoring the repository pull request
+template. The first heading supplies the title; the body contains the remaining description without
+that title heading. Generated instructions require a separate body-only temporary file and a readback
+of the published title and body before the review handoff. Template reconciliation still applies.
+
+A branch-only merge requires the latest handoff for the current work after any reopening to record
+a pushed repository-changing branch. Work with
+nothing to merge retains the completed-work and newer-feedback rules in Section 5.6, including on
+a strict branch-only board. Inspect linked and historical pull requests before selecting direct
+branch merging. A closed, unmerged pull request remains in the pull request flow and blocks merging
+until its state permits it; closing a pull request does not authorize a direct branch merge.
+
+Before a branch-only merge, a human comment newer than the latest branch-only handoff requires a
+reply and a return to the configured review handoff list without merging. Codex refreshes the
+branch-only handoff before that transition so renewed approval refers to the current work. The
+branch merge continues only after renewed approval with no newer feedback.
+This refresh follows the complete handoff procedure, including enabled workpad updates and a fresh
+ordinary comment containing all labeled handoff fields when the comment tool is available. Its
+disabled-tool and manual-transition rules still apply.
+
+Before either the already-merged decision or a branch merge, any fetched card branch tip MUST equal
+`Pushed commit` from the latest complete current-work handoff. A mismatch requires validation and a
+complete fresh handoff for the new tip, return to the configured review list, and renewed approval.
+The ancestry check and merge use the recorded commit. A missing remote card branch permits completion
+only when that commit is verified on the target; otherwise the merge blocks.
+Failed remote probes, fetches and ref resolution block the merge. Cached refs are not evidence of
+successful remote verification; only a confirmed no-match result means the branch is absent.
+Use the commits returned by the successful fetches even when configured fetch mappings leave
+remote-tracking refs unchanged. Start the merge worktree at the fetched target commit.
+
+When a human moves a branch-only card without a pull request to the merge approval list, Codex merges
+the card branch into the target branch named by the card, or into the repository default branch
+otherwise, pushes it without force, and moves the card to the configured done list. When the branch
+commits are already on the target branch, Codex skips the merge and moves the card to the done list.
+The completion comment names the merged branch and target, or why no merge was needed. Review-thread
+resolution does not apply without a pull request. A rejected merge or push moves the card to the
+blocked destination.
+
+When a later run in the merge approval list uses `create`, the latest handoff for the current work
+after any reopening records a pushed branch, and that branch still has no pull request, for example because a human removed the label
+and moved the card straight to the merge approval list, Codex does not merge the branch directly. It
+creates the pull request from the proposed description file first, keeps the card in the merge
+approval list, and then follows the pull request merge flow.
 
 ## Appendix A. SSH Worker Extension (OPTIONAL)
 

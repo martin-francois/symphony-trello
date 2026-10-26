@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -121,6 +122,7 @@ public class CodexAppServerClient {
             int turnNumber = 0;
             while (nextPrompt != null) {
                 turnNumber++;
+                session.currentTurn = new CompletableFuture<>();
                 JsonNode turn = request(
                         session,
                         "turn/start",
@@ -139,6 +141,7 @@ public class CodexAppServerClient {
                         null,
                         Map.of(),
                         turn));
+                session.currentTurn.complete(new TurnIdentity(threadId, turnId));
 
                 JsonNode completed;
                 try {
@@ -159,6 +162,10 @@ public class CodexAppServerClient {
                 }
                 if ("failed".equals(status)) {
                     return AgentRunResult.fail("turn_failed: " + turnFailureSummary(completedTurn, completed));
+                }
+                listener.onSuccessfulTurn(threadId, turnId);
+                if (session.handoffSucceeded) {
+                    break;
                 }
                 TurnDecision decision = controller.afterSuccessfulTurn(turnNumber);
                 if (decision.failureReason() != null) {
@@ -329,12 +336,17 @@ public class CodexAppServerClient {
         }
     }
 
+    private record TurnIdentity(String threadId, String turnId) {}
+
     private final class AppServerSession implements AutoCloseable {
         private final Process process;
         private final EffectiveConfig config;
         private final Card card;
         private final String workerIdentity;
         private final AgentEventListener listener;
+        private volatile CompletableFuture<TurnIdentity> currentTurn = new CompletableFuture<>();
+        private volatile boolean handoffSucceeded;
+        private volatile String endedTurnId;
         // One session owner sends protocol requests sequentially; reader threads only consume IDs.
         private int nextRequestId;
         private final Map<Integer, CompletableFuture<JsonNode>> responses = new ConcurrentHashMap<>();
@@ -496,7 +508,7 @@ public class CodexAppServerClient {
                         case "item/permissions/requestApproval" -> object("decision", "cancel");
                         case "item/tool/requestUserInput", "mcpServer/elicitation/request" ->
                             object("answers", object());
-                        case "item/tool/call" -> trelloTools.handle(config, card, request.path("params"));
+                        case "item/tool/call" -> handleToolCall(request.path("params"));
                         default -> null;
                     };
             if (result == null) {
@@ -507,12 +519,60 @@ public class CodexAppServerClient {
             }
         }
 
+        private ObjectNode handleToolCall(JsonNode params) {
+            return trelloTools.handle(config, card, params, new TrelloHandoffToolHandler.HandoffMoveObserver() {
+                private CardHandoffMove move;
+
+                @Override
+                public boolean beforeMove(String boardId, String listId) {
+                    TurnIdentity owner;
+                    try {
+                        owner = currentTurn.get(config.codex().readTimeout().toMillis(), TimeUnit.MILLISECONDS);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return false;
+                    } catch (ExecutionException | TimeoutException e) {
+                        return false;
+                    }
+                    if (owner.turnId().equals(endedTurnId)
+                            || !owner.threadId().equals(params.path("threadId").asText())
+                            || !owner.turnId().equals(params.path("turnId").asText())) {
+                        return false;
+                    }
+                    move = new CardHandoffMove(
+                            UUID.randomUUID().toString(),
+                            workerIdentity,
+                            owner.threadId(),
+                            owner.turnId(),
+                            card.id(),
+                            boardId,
+                            listId);
+                    return listener.beforeHandoffMove(move);
+                }
+
+                @Override
+                public void afterMove(boolean succeeded) {
+                    if (succeeded) {
+                        handoffSucceeded = true;
+                    }
+                    listener.afterHandoffMove(move, succeeded);
+                }
+            });
+        }
+
         private void handleNotification(JsonNode message) {
             String method = message.path("method").asText();
             JsonNode params = message.path("params");
             String threadId = params.path("threadId").asText(null);
             String turnId = turnId(params);
             Map<String, Long> usage = extractUsage(method, params);
+            if (turnId != null
+                    && (Objects.equals(method, "turn/completed")
+                            || isTurnFailure(method)
+                            || isTurnCancellation(method)
+                            || isTerminalError(method, params))) {
+                endedTurnId = turnId;
+            }
             if (Objects.equals(method, "account/rateLimits/updated")) {
                 synchronized (rateLimitState) {
                     JsonNode update = params.path("rateLimits");

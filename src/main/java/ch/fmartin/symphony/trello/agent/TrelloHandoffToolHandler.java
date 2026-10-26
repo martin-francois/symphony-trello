@@ -119,7 +119,7 @@ public class TrelloHandoffToolHandler {
         if (!writesEnabled(config)) {
             return tools;
         }
-        if (config.trelloTools().allowComments()) {
+        if (evidenceWritesEnabled(config)) {
             addToolSpecs(tools, ADD_COMMENT, UPSERT_WORKPAD, UPDATE_BLOCKER_RECHECK_STATUS);
         }
         if (config.trelloTools().allowChecklists()) {
@@ -135,6 +135,10 @@ public class TrelloHandoffToolHandler {
             addToolSpecs(tools, MOVE_CURRENT_CARD);
         }
         return tools;
+    }
+
+    static boolean evidenceWritesEnabled(EffectiveConfig config) {
+        return writesEnabled(config) && config.trelloTools().allowComments();
     }
 
     private static void addToolSpecs(ArrayNode tools, String... names) {
@@ -253,6 +257,18 @@ public class TrelloHandoffToolHandler {
     }
 
     public ObjectNode handle(EffectiveConfig config, Card card, JsonNode params) {
+        return handle(config, card, params, new HandoffMoveObserver() {});
+    }
+
+    interface HandoffMoveObserver {
+        default boolean beforeMove(String boardId, String listId) {
+            return true;
+        }
+
+        default void afterMove(boolean succeeded) {}
+    }
+
+    ObjectNode handle(EffectiveConfig config, Card card, JsonNode params, HandoffMoveObserver observer) {
         String tool = params.path("tool").asText("");
         ToolDefinition definition = TOOLS.get(tool);
         if (definition == null) {
@@ -279,7 +295,9 @@ public class TrelloHandoffToolHandler {
         }
 
         try {
-            return definition.call().invoke(this, config, card, arguments);
+            return MOVE_CURRENT_CARD.equals(tool)
+                    ? moveCurrentCard(config, card, arguments, observer)
+                    : definition.call().invoke(this, config, card, arguments);
         } catch (TrelloException e) {
             return failure(e.code(), e.getMessage());
         } catch (RuntimeException e) {
@@ -805,7 +823,7 @@ public class TrelloHandoffToolHandler {
     }
 
     public boolean updateCodexUsageSection(EffectiveConfig config, String cardId, String section) {
-        if (!writesEnabled(config) || !config.trelloTools().allowComments()) {
+        if (!evidenceWritesEnabled(config)) {
             return false;
         }
         try {
@@ -1181,6 +1199,11 @@ public class TrelloHandoffToolHandler {
     }
 
     private ObjectNode moveCurrentCard(EffectiveConfig config, Card card, JsonNode arguments) {
+        return moveCurrentCard(config, card, arguments, new HandoffMoveObserver() {});
+    }
+
+    private ObjectNode moveCurrentCard(
+            EffectiveConfig config, Card card, JsonNode arguments, HandoffMoveObserver observer) {
         if (!moveAllowlistConfigured(config)) {
             return failure(
                     "trello_move_allowlist_required",
@@ -1197,7 +1220,22 @@ public class TrelloHandoffToolHandler {
             return failure("trello_move_not_allowed", target.error());
         }
 
-        trello.moveCardToList(config, card.id(), target.list().id());
+        boolean handoff =
+                TrelloClient.isTerminalList(config, target.list()) || !TrelloClient.isActiveList(config, target.list());
+        if (handoff
+                && !observer.beforeMove(
+                        config.tracker().resolvedBoardId(), target.list().id())) {
+            return failure("stale_handoff_owner", "cannot move current card: expected a current worker and turn");
+        }
+        boolean succeeded = false;
+        try {
+            trello.moveCardToList(config, card.id(), target.list().id());
+            succeeded = true;
+        } finally {
+            if (handoff) {
+                observer.afterMove(succeeded);
+            }
+        }
         return success(Map.of(
                 "status",
                 "card_moved",
@@ -1274,7 +1312,7 @@ public class TrelloHandoffToolHandler {
         return config.trelloTools().allowedMoveListNames().contains(normalized);
     }
 
-    private boolean writesEnabled(EffectiveConfig config) {
+    private static boolean writesEnabled(EffectiveConfig config) {
         return config.trelloTools().enabled() && config.trelloTools().allowWrites();
     }
 

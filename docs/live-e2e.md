@@ -719,6 +719,79 @@ commit.
    or rewritten, and `/api/v1/state` reaches zero running and retrying entries.
 8. Close the temporary PR and delete the temporary branch after recording the result.
 
+### Regression Scenario: Branch-Only Handoff
+
+Use this when changing the `github` workflow section, the `pull_request_handoff` prompt variable,
+the generated `Pull Request Handoff Mode` section, or the branch-only parts of the `push-pr` and
+`land` skills. Use a disposable repository or a private test repository whose branches can be
+deleted afterwards.
+
+The problem this protects against is a card that should stop at a pushed branch creating a pull
+request anyway, committing its proposed description file, or reaching `Done` without a merge.
+
+1. Create a temporary recommended Trello board with GitHub support and deploy its workflow. Create a
+   second board and set `github.pull_request_mode: branch_only` in its workflow.
+2. On the branch-only board, create a repository-changing card. Verify that Codex runs the local
+   checks, pushes a branch, creates no pull request, leaves an untracked `PR.md` in the task
+   checkout, and moves the card to `Human Review`. The handoff comment must say that the workflow
+   default selected branch-only handoff and name the checkout path, branch, branch link, `PR.md`
+   path, and check results. Verify that both paths are absolute and name the actual task checkout
+   and proposal file, not just "the task checkout" or `PR.md`. Check that the managed workpad
+   describes the completed work and current checks, including after recovery from a resolved blocker.
+   The path field is `Task checkout:`. Confirm the runtime repository-source context still selects
+   the configured remote rather than treating that handoff path as an explicit local source.
+3. On the `create` board, add the label `No PR` to a repository-changing card. Verify the same result,
+   with the card label named as the source.
+4. In both checkouts, verify that `git status --short --ignored` lists the proposed description file
+   as `??` for untracked or `!!` for excluded through `info/exclude`, and that
+   `git log --name-only --format= origin/<default-branch>..HEAD` never lists it.
+5. Create a third card whose checkout already has an unrelated `PR.md`. Verify that Codex uses
+   `PR-2.md` and says so.
+6. Add a Trello comment with a follow-up instruction to the labelled card and move it back to
+   `Ready for Codex`. Verify that Codex continues the same branch and updates the code and `PR.md`.
+7. Remove the `No PR` label from that card and move it back to `Ready for Codex`. Verify that Codex
+   creates a pull request whose title and body come from `PR.md` and the repository PR template,
+   and moves the card to `Human Review`. Read `gh pr view --json title,body`: the proposal's first
+   heading supplies only the title, and the body contains the remaining description reconciled with
+   the template. Repeat with another labelled card and a comment that asks
+   Symphony to create a PR instead of removing the label.
+8. Move a different labelled card without a pull request to `Merging`. Verify that Codex merges the
+   branch into the default branch, pushes it without force, and moves the card to `Done` with a
+   comment that names the merged branch. On a separate card, add human feedback after branch-only
+   handoff and move it directly to `Merging`. Verify that Codex replies, refreshes the handoff and
+   returns it to `Human Review`, with the target branch unchanged. Verify that the refreshed workpad
+   and fresh ordinary handoff comment both contain the complete labeled fields, including both
+   absolute paths. A short answer to the feedback is not sufficient evidence. Move it to `Merging`
+   again without newer feedback and verify that the merge completes.
+9. Move a labelled card whose commits are already on the default branch to `Merging`. Verify that
+   Codex skips the merge, says why, and moves the card to `Done`. Include re-entry after Done has
+   removed the per-card checkout; the informational handoff path must not block remote verification.
+10. On the branch-only board, add a comment that asks for a pull request and move the card back to
+    `Ready for Codex`. Verify that no pull request is created and the handoff explains how to get
+    one.
+11. On the `create` board, remove the `No PR` label from another branch-only card without a pull
+    request and move it straight to `Merging`. Verify that Codex creates the pull request from
+    `PR.md`, keeps the card in `Merging`, and merges through the pull request flow.
+12. After a separate branch-only handoff, push another commit to that task branch. Move the card to
+    `Merging` without changing its recorded handoff. Verify that the target stays unchanged and Codex
+    validates the new tip, refreshes the complete handoff and returns the card to review. Move it to
+    `Merging` again without further changes and verify that the newly approved commit merges.
+13. On a separate workflow with both comment and workpad writes disabled, complete branch-only work.
+    Keep the review and completion move destinations enabled. Verify that Codex reaches review with
+    no running or retrying task and no evidence write. Read the completed private local response record after the worker drains, using the path in
+    `final_response outcome=completed`. Require its exact final text and matching card, worker,
+    thread and successful turn metadata. Restart the idle worker and verify that the same completed
+    record remains readable without a capture wrapper. An independent app-server capture MAY be
+    used as an oracle: the production record's response MUST equal the completed final message.
+    The running status summary is replaced by later events, and ephemeral sessions leave no
+    transcript; neither is the operator retrieval route.
+    Require every labeled handoff field and an explicit request to copy the complete handoff onto the
+    Trello card before merge approval. It must not request enabling disabled tools or repeat completed
+    implementation. Copy that evidence, then verify that a subsequent merge run uses it, reports the
+    verified merge in the final response and reaches the configured completion list without evidence
+    writes. Preserve a failed attempt before retrying on a repaired artifact.
+14. Delete the temporary branches, close any temporary pull requests, and archive the boards.
+
 ### Regression Scenario: In-Progress Pickup Visibility
 
 Use this when changing generated workflows, Trello move tools, or the recommended board layout.

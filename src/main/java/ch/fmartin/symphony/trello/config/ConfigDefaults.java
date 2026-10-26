@@ -14,6 +14,7 @@ public final class ConfigDefaults {
     public static final long GENERATED_WORKFLOW_POLLING_INTERVAL_MS = GENERATED_WORKFLOW_POLLING_INTERVAL.toMillis();
     public static final int DEFAULT_SERVER_PORT = 18080;
     public static final String DEFAULT_CARD_IDENTIFIER_PREFIX = "TRELLO";
+    public static final String DEFAULT_NO_PR_LABEL = "No PR";
 
     public static final Duration DEFAULT_TRACKER_REQUEST_TIMEOUT = Duration.ofSeconds(30);
     public static final long DEFAULT_TRACKER_REQUEST_TIMEOUT_MS = DEFAULT_TRACKER_REQUEST_TIMEOUT.toMillis();

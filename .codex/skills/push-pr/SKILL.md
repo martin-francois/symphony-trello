@@ -181,6 +181,60 @@ description: >
     own line as `PR: <https://github.com/owner/repo/pull/123>` so trailing
     punctuation cannot be absorbed into the link.
 
+## Branch-Only Handoff
+
+Use this section when the workflow's Pull Request Handoff Mode selects
+`branch_only` and the current branch has no pull request. If a pull request
+already exists, follow the normal workflow, including its metadata and
+ready-for-review updates.
+
+Complete the branch inspection, local checks, and author verification above.
+Before executing any push, write the proposed PR title and description to
+`PR.md` in the root of the task checkout, or to the first unused name of
+`PR-2.md`, `PR-3.md`, and so on when `PR.md` already exists and an earlier
+branch-only handoff of this card did not create it:
+
+```markdown
+# Proposed PR title
+
+Proposed PR description, built from the repository PR template as in step 8.
+```
+
+Keep that file untracked. Add its name to the local exclude file and stage
+only explicit paths. Set `proposal_file` to the name you actually used:
+
+```bash
+proposal_file="${proposal_file:-PR.md}"
+exclude_file="$(git rev-parse --git-path info/exclude)"
+grep -qFx "/$proposal_file" "$exclude_file" 2>/dev/null ||
+  printf '%s\n' "/$proposal_file" >> "$exclude_file"
+if git diff --cached --name-only | grep -qFx "$proposal_file" ||
+  git log --name-only --format= "origin/$default_branch..HEAD" | grep -qFx "$proposal_file"; then
+  echo "$proposal_file is staged or committed; remove it from the index and history before pushing" >&2
+  exit 1
+fi
+```
+
+After the file passes these checks, run the Push normally step and follow the
+push-failure handling above. Stop without creating a pull request.
+
+## Creating A PR From A Proposed Description
+
+When a later run creates the pull request for a branch that went through a
+branch-only handoff:
+
+1. Read the proposed description file's first `# ` heading as the PR title.
+2. Copy the description after that heading and its blank separator line into a
+   body-only temporary file outside the checkout. Reconcile that body with the
+   repository PR template from step 8.
+3. Create the PR using the extracted title and `--body-file` with the temporary
+   file. The body contains the description without the proposal's title heading.
+4. Read the created metadata with `gh pr view --json title,body`. Compare both
+   fields with the intended title and reconciled description. Correct any mismatch
+   before recording the PR link or handing off the card.
+5. Remove the temporary body file after verification. Keep the original proposal
+   file untracked after the PR exists.
+
 ## Stop Conditions
 
 - The working tree has uncommitted unrelated changes.

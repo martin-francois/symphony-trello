@@ -20,7 +20,8 @@ public record EffectiveConfig(
         AgentConfig agent,
         CodexConfig codex,
         TrelloToolsConfig trelloTools,
-        ServerConfig server) {
+        ServerConfig server,
+        GitHubConfig github) {
 
     public EffectiveConfig withResolvedBoardId(String resolvedBoardId) {
         return new EffectiveConfig(
@@ -52,7 +53,8 @@ public record EffectiveConfig(
                 agent,
                 codex,
                 trelloTools,
-                server);
+                server,
+                github);
     }
 
     public record TrackerConfig(
@@ -194,4 +196,23 @@ public record EffectiveConfig(
     }
 
     public record ServerConfig(OptionalInt port) {}
+
+    /// Branch-only handoff settings from the workflow's `github` section. A `null` label means the
+    /// card-level label signal is disabled.
+    @NullMarked
+    public record GitHubConfig(PullRequestMode pullRequestMode, @Nullable String noPrLabel) {
+        public static final GitHubConfig DEFAULTS =
+                new GitHubConfig(PullRequestMode.CREATE, ConfigDefaults.DEFAULT_NO_PR_LABEL);
+
+        /// Workflow key names shared by the resolver, the generated front matter, and the generated prompt.
+        public static final String SECTION_KEY = "github";
+
+        public static final String PULL_REQUEST_MODE_KEY = "pull_request_mode";
+        public static final String NO_PR_LABEL_KEY = "no_pr_label";
+
+        /// The dotted workflow path of a key in this section, for example `github.no_pr_label`.
+        public static String qualifiedKey(String key) {
+            return SECTION_KEY + "." + key;
+        }
+    }
 }

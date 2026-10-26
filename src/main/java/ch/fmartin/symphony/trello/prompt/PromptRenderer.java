@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.prompt;
 
+import ch.fmartin.symphony.trello.config.EffectiveConfig;
+import ch.fmartin.symphony.trello.config.PullRequestHandoffField;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.workflow.WorkflowException;
 import io.pebbletemplates.pebble.PebbleEngine;
@@ -19,13 +21,17 @@ public class PromptRenderer {
     private final PebbleEngine engine =
             new PebbleEngine.Builder().strictVariables(true).build();
 
-    public String render(@Nullable String template, Card card, @Nullable Integer attempt) {
+    public String render(
+            @Nullable String template, Card card, @Nullable Integer attempt, EffectiveConfig.GitHubConfig github) {
         String effectiveTemplate = template == null || template.isBlank() ? DEFAULT_PROMPT : template;
         Map<String, @Nullable Object> cardData = card.toTemplateMap();
         Map<String, @Nullable Object> context = new HashMap<>();
         context.put("card", cardData);
         context.put("issue", cardData);
         context.put("attempt", attempt);
+        context.put(
+                PullRequestHandoffField.VARIABLE,
+                PullRequestHandoff.resolve(github, card).toTemplateMap());
 
         try {
             PebbleTemplate compiled = engine.getLiteralTemplate(effectiveTemplate);

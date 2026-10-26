@@ -1,9 +1,12 @@
 package ch.fmartin.symphony.trello.orchestrator;
 
+import ch.fmartin.symphony.trello.agent.CardHandoffMove;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
 import java.time.Instant;
 import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 final class RunningEntry {
     final String cardId;
@@ -29,6 +32,13 @@ final class RunningEntry {
     long lastReportedTotalTokens;
     Future<?> workerTask;
     int turnCount;
+    CardHandoffMove handoffMove;
+    Instant handoffDeadline;
+    ScheduledFuture<?> handoffTimer;
+    boolean handoffSucceeded;
+    Instant handoffCancelledAt;
+    volatile boolean handoffCancellationRequested;
+    final AtomicBoolean handoffRunnerCancellationStarted = new AtomicBoolean();
 
     RunningEntry(
             Card card,
