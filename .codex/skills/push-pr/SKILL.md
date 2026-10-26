@@ -188,8 +188,8 @@ Use this section when the workflow's Pull Request Handoff Mode selects
 already exists, follow the normal workflow, including its metadata and
 ready-for-review updates.
 
-Complete steps 1 to 5 first. Before the push in step 6, write the proposed
-PR title and description to
+Complete the branch inspection, local checks, and author verification above.
+Before executing any push, write the proposed PR title and description to
 `PR.md` in the root of the task checkout, or to the first unused name of
 `PR-2.md`, `PR-3.md`, and so on when `PR.md` already exists and an earlier
 branch-only handoff of this card did not create it:
@@ -215,8 +215,8 @@ if git diff --cached --name-only | grep -qFx "$proposal_file" ||
 fi
 ```
 
-After the file passes these checks, complete step 6 to push the branch, then
-stop without creating a pull request.
+After the file passes these checks, run the Push normally step and follow the
+push-failure handling above. Stop without creating a pull request.
 
 ## Creating A PR From A Proposed Description
 

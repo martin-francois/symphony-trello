@@ -788,6 +788,31 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
+    void shippedBranchOnlySkillsPreservePublicationAndMergeGuards() throws IOException {
+        // given
+        Path skills = Path.of(".codex/skills");
+
+        // when
+        String push = Files.readString(skills.resolve("push-pr/SKILL.md"));
+        String land = Files.readString(skills.resolve("land/SKILL.md"));
+        String handoff = Files.readString(skills.resolve("trello-handoff/SKILL.md"));
+
+        // then
+        assertThat(push)
+                .containsIgnoringWhitespaces("Before executing any push, write the proposed PR title and description")
+                .containsIgnoringWhitespaces("After the file passes these checks, run the Push normally step")
+                .doesNotContain("Complete steps 1 to 5 first");
+        assertThat(land)
+                .containsIgnoringWhitespaces(
+                        "the latest handoff for the current work after any reopening records a pushed repository-changing branch")
+                .containsIgnoringWhitespaces("A closed, unmerged PR must not become a direct branch merge");
+        assertThat(handoff)
+                .containsIgnoringWhitespaces("or the Pull Request Handoff Mode selects branch-only handoff")
+                .containsIgnoringWhitespaces("Merging supports pull requests and pushed branch-only work")
+                .containsIgnoringWhitespaces("When work that has nothing to merge goes to");
+    }
+
+    @Test
     void shippedDebugSkillDoesNotAskAgentsToCopyExactFilesystemBlockerPaths() throws IOException {
         // given
         Path skill = Path.of(".codex/skills/debug/SKILL.md");
@@ -3141,6 +3166,9 @@ final class TrelloBoardSetupTest {
                 .contains("section selects a branch-only handoff")
                 .contains("keep that file uncommitted")
                 .contains("skip the PR steps above and merge the branch itself")
+                .containsIgnoringWhitespaces(
+                        "the latest handoff for the current work after any reopening records a pushed repository-changing branch")
+                .containsIgnoringWhitespaces("A closed, unmerged PR must not become a direct branch merge")
                 .contains("If the branch commits are already on the target\nbranch, skip the merge.")
                 .contains("Do not apply pull\nrequest review-thread handling.")
                 .as("a create-mode card that went through a branch-only handoff gets its pull request before merging")

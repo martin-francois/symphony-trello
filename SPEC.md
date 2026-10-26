@@ -4962,6 +4962,13 @@ file. When a later run uses `create` for a branch that went through a branch-onl
 creates the pull request from the proposed description file, honoring the repository pull request
 template, and moves the card to the review handoff list.
 
+A branch-only merge requires the latest handoff for the current work after any reopening to record
+a pushed repository-changing branch. Work with
+nothing to merge retains the completed-work and newer-feedback rules in Section 5.6, including on
+a strict branch-only board. Inspect linked and historical pull requests before selecting direct
+branch merging. A closed, unmerged pull request remains in the pull request flow and blocks merging
+until its state permits it; closing a pull request does not authorize a direct branch merge.
+
 When a human moves a branch-only card without a pull request to the merge approval list, Codex merges
 the card branch into the target branch named by the card, or into the repository default branch
 otherwise, pushes it without force, and moves the card to the configured done list. When the branch
@@ -4970,8 +4977,8 @@ The completion comment names the merged branch and target, or why no merge was n
 resolution does not apply without a pull request. A rejected merge or push moves the card to the
 blocked destination.
 
-When a later run in the merge approval list uses `create` for a card branch that went through a
-branch-only handoff and still has no pull request, for example because a human removed the label
+When a later run in the merge approval list uses `create`, the latest handoff for the current work
+after any reopening records a pushed branch, and that branch still has no pull request, for example because a human removed the label
 and moved the card straight to the merge approval list, Codex does not merge the branch directly. It
 creates the pull request from the proposed description file first, keeps the card in the merge
 approval list, and then follows the pull request merge flow.

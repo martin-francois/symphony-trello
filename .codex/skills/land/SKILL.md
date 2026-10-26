@@ -1,8 +1,8 @@
 ---
 name: land
 description: >
-  Merge an approved pull request after a Trello card has been moved to Merging. Use only
-  for human-approved work where the workflow explicitly allows merging from Merging.
+  Complete approved Trello work from Merging: pull requests, branch-only merges,
+  or cards with nothing to merge. Use only when the workflow enables that merge flow.
 ---
 
 # Land
@@ -31,10 +31,10 @@ description: >
 
 ## Decide whether a merge is needed
 
-When the workflow selects `branch_only` and no open PR exists for the card branch,
-follow Branch-Only Merge first. Otherwise, apply the Merge Decision Table before
-PR discovery, review, or merge checks. For
-completed work that did not need a PR, use the current handoff and new-feedback
+When the workflow selects `branch_only`, the latest handoff for the current work
+after any reopening records a pushed repository-changing branch, and no PR exists for that branch, follow Branch-Only
+Merge first. Otherwise, apply the Merge Decision Table before PR discovery, review,
+or merge checks. For completed work that did not need a PR, use the current handoff and new-feedback
 rules there, update the card, and stop. GitHub authentication and PR checks are
 required only when the work needs a PR.
 
@@ -75,12 +75,16 @@ required only when the work needs a PR.
 ## Branch-Only Merge
 
 Use this section instead of the PR steps when the workflow's Pull Request
-Handoff Mode section selects `branch_only` and no open PR exists for the card
-branch. A PR that a human opened from the proposed description takes the
-normal PR steps above.
+Handoff Mode section selects `branch_only`, the latest handoff for the current work
+after any reopening records a pushed repository-changing branch, and no PR exists for the card branch. Inspect linked
+and historical PRs before choosing this path. A closed, unmerged PR must not become
+a direct branch merge; follow the PR flow and block when its state prevents merging.
+A merged PR takes the already-merged completion path. Work without a pushed branch
+keeps the Merge Decision Table, including its no-work and newer-feedback rules.
 
-When the workflow selects `create` for a card branch that went through a
-branch-only handoff and still has no PR, do not use this section. Create the
+When the workflow selects `create`, the latest handoff for the current work after
+any reopening records a pushed branch, and that branch still has no PR, do not use
+this section. Create the
 PR first with `push-pr` ("Creating A PR From A Proposed Description"), keep the
 card in the merge approval list, and then take the normal PR steps above.
 

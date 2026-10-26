@@ -654,9 +654,13 @@ when useful, and move the card to `Done`.
 `Merging` is for pull requests and branch-only work. When you hand off work with nothing to merge,
 say in the handoff comment that a human can move the card straight to `Done` after review.
 
-Branch-only exception: when the Pull Request Handoff Mode section selects `branch_only` and no open
-pull request exists for the card branch, skip the PR steps above and merge the branch itself. Follow
-the branch-only merge steps in `.codex/skills/symphony-trello-land/SKILL.md`. Merge into the target
+Branch-only exception: when the Pull Request Handoff Mode section selects `branch_only`,
+the latest handoff for the current work after any reopening records a pushed repository-changing
+branch, and no pull request exists for the card branch, skip the PR steps above and merge the branch itself.
+Inspect linked and historical PRs first. A closed, unmerged PR must not become a direct branch merge; follow the PR flow and block
+when its state prevents merging. A merged PR takes the already-merged completion path. Work without
+a pushed branch keeps the no-work and newer-feedback decisions above, even on a branch-only board.
+Follow the branch-only merge steps in `.codex/skills/symphony-trello-land/SKILL.md`. Merge into the target
 branch the card names, or the repository default branch otherwise. If the branch commits are already
 on the target branch, skip the merge. Push the target branch normally and never force-push it. Do not
 apply pull request review-thread handling. After the merge, or when no merge was needed, say in the
@@ -664,8 +668,9 @@ completion comment which branch was merged into which target, or why no merge wa
 the card to `Done`. If the merge or push is rejected, move the card to `Blocked` with a concise
 blocker.
 
-When the effective mode is `create`, no pull request exists for the card branch, and an earlier
-branch-only handoff pushed that branch, for example because a human removed the label and moved the
+When the effective mode is `create`, no pull request exists for the card branch, and the latest
+handoff for the current work after any reopening pushed that branch, for example because a human
+removed the label and moved the
 card straight to `Merging`, do not merge the branch directly. Create the pull request first as
 described in Creating The Pull Request Later, but keep the card in `Merging` instead of moving it to
 Human Review. Then follow the PR merge steps above for the new pull request.

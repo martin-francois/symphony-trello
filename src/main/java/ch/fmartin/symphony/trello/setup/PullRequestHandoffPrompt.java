@@ -35,8 +35,12 @@ final class PullRequestHandoffPrompt {
     static String mergeRules(
             String mergingState, String reviewHandoff, String doneDestination, String blockedText, String landSkill) {
         return """
-                Branch-only exception: when the %s section selects `branch_only` and no open
-                pull request exists for the card branch, skip the PR steps above and merge the branch itself.
+                Branch-only exception: when the %s section selects `branch_only`,
+                the latest handoff for the current work after any reopening records a pushed repository-changing
+                branch, and no pull request exists for the card branch, skip the PR steps above and merge the branch itself.
+                Inspect linked and historical PRs first. A closed, unmerged PR must not become a direct branch merge; follow the PR flow and block
+                when its state prevents merging. A merged PR takes the already-merged completion path. Work without
+                a pushed branch keeps the no-work and newer-feedback decisions above, even on a branch-only board.
                 Follow the branch-only merge steps in `%s`. Merge into the target branch the card
                 names, or the repository default branch otherwise. If the branch commits are already on the target
                 branch, skip the merge. Push the target branch normally and never force-push it. Do not apply pull
@@ -44,8 +48,9 @@ final class PullRequestHandoffPrompt {
                 comment which branch was merged into which target, or why no merge was needed, and move the card to
                 %s. If the merge or push is rejected, %s.
 
-                When the effective mode is `create`, no pull request exists for the card branch, and an earlier
-                branch-only handoff pushed that branch, for example because a human removed the label and moved the
+                When the effective mode is `create`, no pull request exists for the card branch, and the latest
+                handoff for the current work after any reopening pushed that branch, for example because a human
+                removed the label and moved the
                 card straight to %s, do not merge the branch directly. Create the pull request first as described
                 in %s, but keep the card in %s instead of moving it to %s. Then follow the PR
                 merge steps above for the new pull request."""

@@ -113,6 +113,10 @@ replace it with the documented `github` settings before upgrading.
 * Bad, because the runtime now validates a top-level `github` key. A hand-written workflow that
   already used that key for something else fails configuration until the key is fixed.
 
+Branch-only merge routing requires the latest handoff for the current work after any reopening
+to record a pushed repository-changing branch, and checks linked and historical pull requests. This preserves the completed no-work path from ADR 0087 and
+prevents a closed, unmerged pull request from becoming a direct branch merge.
+
 ### Confirmation
 
 Run `./mvnw -q -Dtest=PullRequestHandoffTest,ConfigResolverTest,TrelloBoardSetupTest,WorkflowConfigPromptTest,SymphonyOrchestratorTest test`.

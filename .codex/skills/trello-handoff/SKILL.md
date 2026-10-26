@@ -181,7 +181,10 @@ must enter `checking` before it can resume.
 Before moving to `Human Review`:
 
 1. For repository-changing work, create or update the PR unless the card
-   explicitly asks for local-only/no-push work.
+   explicitly asks for local-only/no-push work or the Pull Request Handoff Mode selects branch-only handoff.
+   For branch-only work, follow `push-pr` to push the branch and keep the proposed
+   description file uncommitted. Include the branch, pushed head, branch link,
+   task checkout and proposal paths, mode source, and local checks in the handoff.
 2. Update the workpad with final summary, acceptance criteria status,
    validation evidence, PR URL when applicable, and known limitations.
    Format PR links in Trello-visible text on their own line as
@@ -259,7 +262,8 @@ Use `Merging` only when a human has approved the work and the workflow enables a
 merge flow. After successful merge, update the workpad, add a concise
 completion comment when useful, and move to `Done`.
 
-`Merging` is only for pull requests. When work that has nothing to merge goes to
+Merging supports pull requests and pushed branch-only work. Follow `land` for
+either merge path. When work that has nothing to merge goes to
 `Human Review`, say in the handoff comment that a human can move the card
 straight to `Done` after review. If such a card reaches `Merging` after that
 handoff, use the latest handoff for the current work after any reopening.
