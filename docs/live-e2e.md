@@ -749,7 +749,9 @@ request anyway, committing its proposed description file, or reaching `Done` wit
    `Ready for Codex`. Verify that Codex continues the same branch and updates the code and `PR.md`.
 7. Remove the `No PR` label from that card and move it back to `Ready for Codex`. Verify that Codex
    creates a pull request whose title and body come from `PR.md` and the repository PR template,
-   and moves the card to `Human Review`. Repeat with another labelled card and a comment that asks
+   and moves the card to `Human Review`. Read `gh pr view --json title,body`: the proposal's first
+   heading supplies only the title, and the body contains the remaining description reconciled with
+   the template. Repeat with another labelled card and a comment that asks
    Symphony to create a PR instead of removing the label.
 8. Move a different labelled card without a pull request to `Merging`. Verify that Codex merges the
    branch into the default branch, pushes it without force, and moves the card to `Done` with a

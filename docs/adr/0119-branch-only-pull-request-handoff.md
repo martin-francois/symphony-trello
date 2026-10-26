@@ -82,7 +82,9 @@ A card in `Merging` that runs as `create` but still has no pull request after a 
 handoff, for example because a human removed the label and moved the card straight to `Merging`,
 gets its pull request from the proposed description first and then takes the pull request merge
 flow. On a `create` board, merging keeps going through a pull request, so branch protection and CI
-still apply.
+still apply. Later PR creation extracts the title heading and writes the remaining description to a
+separate temporary body file. Codex compares the published title and body with those intended values
+before handoff, preserving repository-template reconciliation and the original uncommitted proposal.
 
 Setup does not ask about the mode. The maintainer chose to activate the default `No PR` label in
 newly generated GitHub workflows without an extra opt-in. This is a breaking change, as recorded in

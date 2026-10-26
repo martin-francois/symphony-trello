@@ -221,9 +221,19 @@ push-failure handling above. Stop without creating a pull request.
 ## Creating A PR From A Proposed Description
 
 When a later run creates the pull request for a branch that went through a
-branch-only handoff, use the proposed description file's first `# ` heading as
-the PR title and the rest as the body. Reconcile the body with the repository
-PR template from step 8. Keep the file untracked after the PR exists.
+branch-only handoff:
+
+1. Read the proposed description file's first `# ` heading as the PR title.
+2. Copy the description after that heading and its blank separator line into a
+   body-only temporary file outside the checkout. Reconcile that body with the
+   repository PR template from step 8.
+3. Create the PR using the extracted title and `--body-file` with the temporary
+   file. The body contains the description without the proposal's title heading.
+4. Read the created metadata with `gh pr view --json title,body`. Compare both
+   fields with the intended title and reconciled description. Correct any mismatch
+   before recording the PR link or handing off the card.
+5. Remove the temporary body file after verification. Keep the original proposal
+   file untracked after the PR exists.
 
 ## Stop Conditions
 

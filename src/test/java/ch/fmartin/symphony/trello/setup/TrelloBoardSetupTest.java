@@ -3204,6 +3204,31 @@ final class TrelloBoardSetupTest {
         assertThat(handoff.indexOf("trello_add_comment")).isLessThan(handoff.indexOf("Move the card to"));
     }
 
+    @Test
+    void laterPrCreationSeparatesProposalTitleAndBodyBeforeHandoff() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.create-later-evidence.md");
+
+        // when
+        createRecommendedGithubBoard(workflow);
+        String content = Files.readString(workflow);
+        String createLater = content.substring(content.indexOf("### Creating The Pull Request Later"));
+        String pushSkill = Files.readString(Path.of(".codex/skills/push-pr/SKILL.md"));
+
+        // then
+        assertThat(createLater)
+                .contains("body-only temporary file")
+                .contains("--body-file")
+                .contains("gh pr view --json title,body")
+                .containsIgnoringWhitespaces("without the proposal's title heading")
+                .containsIgnoringWhitespaces("Correct any metadata mismatch before recording the PR link");
+        assertThat(pushSkill)
+                .contains("body-only temporary file")
+                .contains("--body-file")
+                .contains("gh pr view --json title,body")
+                .containsIgnoringWhitespaces("without the proposal's title heading");
+    }
+
     @MethodSource("generatedHandoffModes")
     @ParameterizedTest(name = "{0}")
     void generatedGithubWorkflowRendersTheResolvedPullRequestHandoffMode(

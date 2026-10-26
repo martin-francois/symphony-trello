@@ -175,9 +175,14 @@ final class PullRequestHandoffPrompt {
 
                 When the effective mode is `create`, for example after a human removed the label, or a comment
                 override applies, and an earlier branch-only handoff left a proposed description file, create the
-                pull request with `%s`. Use the file's first `# ` heading as the title and the rest as
-                the body, reconciled with the repository pull request template. Keep the file uncommitted, record
-                the PR link as usual, and move the card to %s."""
+                pull request with `%s`. Use the file's first `# ` heading as the title. Copy the description
+                after that heading and its blank separator line into a body-only temporary file outside the
+                checkout, reconciled with the repository pull request template. Pass that temporary file to
+                `--body-file`, so the published body contains the description without the proposal's title heading.
+                Keep the proposal file uncommitted. After creation, use `gh pr view --json title,body` to compare
+                the published title and body with the intended title and reconciled description. Correct any
+                metadata mismatch before recording the PR link or moving the card to %s. Remove the temporary
+                body file after successful verification."""
                 .formatted(CREATE_LATER_TITLE, pushPrSkill, reviewHandoff);
     }
 }

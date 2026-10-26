@@ -4964,7 +4964,9 @@ writes before the review transition; disabled move tools leave that transition t
 Rework continues the same branch and checkout and may update the code and the proposed description
 file. When a later run uses `create` for a branch that went through a branch-only handoff, Codex
 creates the pull request from the proposed description file, honoring the repository pull request
-template, and moves the card to the review handoff list.
+template. The first heading supplies the title; the body contains the remaining description without
+that title heading. Generated instructions require a separate body-only temporary file and a readback
+of the published title and body before the review handoff. Template reconciliation still applies.
 
 A branch-only merge requires the latest handoff for the current work after any reopening to record
 a pushed repository-changing branch. Work with
