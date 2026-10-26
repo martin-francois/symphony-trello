@@ -233,8 +233,8 @@ final class FakeTrelloCommentBoard implements AutoCloseable {
             return this;
         }
 
-        /// Edits the newest comment as a board user would. Like every comment edit in this fake, it
-        /// moves `dateLastActivity`; ADR 0117 records that real Trello is not verified to do so.
+        /// Edits the newest comment and moves `dateLastActivity`, matching the live API edit
+        /// observation recorded in ADR 0117.
         FakeCard withNewestCommentEdited(String text) {
             synchronized (FakeTrelloCommentBoard.this) {
                 editComment(comments.getFirst().id, text);

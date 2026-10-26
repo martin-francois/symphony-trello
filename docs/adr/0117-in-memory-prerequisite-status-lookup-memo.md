@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-10-04
-decision-makers: [François Martin, Claude]
+decision-makers: [François Martin]
 consulted:
   - "[GitHub issue #475](https://github.com/martin-francois/symphony-trello/issues/475)"
   - "[GitHub PR #474](https://github.com/martin-francois/symphony-trello/pull/474)"
@@ -97,16 +97,29 @@ requests and no lookups, and takes about 60 milliseconds against the local fake.
 * Bad, because the first poll after a restart still pays one lookup per card with comments.
 * Bad, because the memo cannot see a hand edit of a status comment if Trello leaves the card's comment
   count and `dateLastActivity` unchanged. The next status change on that card overwrites the edit, as
-  it did before this decision. Whether Trello moves `dateLastActivity` when a comment is edited is not
-  verified: the [object definitions](https://developer.atlassian.com/cloud/trello/guides/rest-api/object-definitions/)
-  describe the field only as the time of the last activity on the card and do not list which events
-  move it. Editing a comment on a disposable board and comparing the card's `dateLastActivity` before
-  and after would settle it. If it does move, the next poll reads the edited comment again.
+  it did before this decision. The live API edit observation below advanced `dateLastActivity`
+  without changing the comment count, so that observed edit invalidates the memo. A real web UI edit
+  remains unverified. The [object definitions](https://developer.atlassian.com/cloud/trello/guides/rest-api/object-definitions/)
+  describe the field as the time of the last activity on the card without listing every event that
+  moves it; the observation does not establish a guarantee for every editing client.
 * Neutral, because the memo is shared by every caller of `TrelloClient`. A lookup that runs while
   another thread writes the status does not replace the forgotten entry, so the next poll reads the
   comment again.
 
 ### Confirmation
+
+A live API control on 2026-10-26 used one disposable private card with one synthetic comment.
+After waiting more than 60 seconds, `PUT /1/actions/{id}/text` changed the existing comment.
+The following `GET /1/cards/{id}?fields=dateLastActivity,badges` read showed:
+
+| Observation | `dateLastActivity` | `badges.comments` |
+| --- | --- | --- |
+| Immediately before the edit | `2026-10-26T02:51:11.899Z` | 1 |
+| After the edit | `2026-10-26T02:52:17.439Z` | 1 |
+
+A separate action read confirmed the edited text. This completes the chosen live comment-edit
+and activity-read check. These are API observations; they do not establish web UI behavior or
+guarantee that every editing client moves the field. No additional browser check is a merge gate.
 
 This decision is still implemented when:
 
