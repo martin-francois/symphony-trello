@@ -34,6 +34,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.PrimitiveIterator;
 import java.util.regex.Matcher;
@@ -642,7 +643,7 @@ public class TrelloHandoffToolHandler {
             Matcher link = LINK.matcher(detail);
             if (!safeShortLink(card.shortLink())
                     || !link.matches()
-                    || !card.shortLink().equals(link.group(SHORT_LINK_GROUP))) {
+                    || !Objects.equals(card.shortLink(), link.group(SHORT_LINK_GROUP))) {
                 return Optional.empty();
             }
             return Optional.of(link.group(ACTION_ID_GROUP)).filter(TrelloHandoffToolHandler::safeActionId);
