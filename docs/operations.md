@@ -71,6 +71,61 @@ The endpoint only returns cards that are currently running or retrying. A `404` 
 card is no longer active in this process, reached a terminal list, or belongs to a different
 workflow file.
 
+## Local final responses
+
+For an effective branch-only run whose comment and workpad tools are both unavailable, Symphony
+saves the completed final answer locally. This includes branch-only mode selected by the configured
+card label. It does not enable Trello writes or save raw protocol events, reasoning, prompts or auth
+metadata.
+
+The private record is stored at:
+
+```text
+<workspace.root>/.symphony+final-responses/<workflow-and-board-hash>/<card-id-hash>.json
+```
+
+After a successful turn and completed final answer, the worker log reports
+`final_response outcome=completed path=...`. Open that local JSON file and read its `response`
+field. It contains the exact completed answer. For example, if `jq` is available:
+
+```bash
+jq -ej 'if .status == "completed" then .response else error("cannot read final response: expected a completed record") end' /path/from/the/worker-log.json
+```
+
+Check that the record's card and worker identities match the attempt you are reviewing. Metadata
+also identifies the completed thread and turn. A successful final response is retained after the
+card leaves the running/retry API and after a service restart. It is outside the per-card task
+checkout, so terminal-workspace cleanup does not remove it or add it to Git history.
+
+The next accepted attempt replaces the current record with `status: running` and no response before
+work begins. Failed or interrupted attempts do not expose a current response. If the card switches
+to PR creation or enables evidence writes, its next attempt removes the old local record. An
+incomplete, empty or oversized answer is not published as completed. Persistence failures fail the
+attempt with a controlled error; do not treat an older record as evidence for that failed attempt.
+Storage failures log a `cannot prepare local final response` or `cannot save local final response`
+diagnostic with an `attempt` digest of the worker identity. These logs omit response text and
+exception details. A successful card move does not establish that its final response was saved.
+
+Response text is limited to 1 MiB of UTF-8. Each workflow/board namespace retains at most 128
+finished records, evicting the oldest first; active attempts are not evicted. Records left running
+by an earlier process are incomplete and become eligible for retention cleanup after restart. This
+is a current-answer store, not an archive. Save any completed evidence you need before later work
+or retention replaces it.
+
+Directories and files use owner-only permissions on POSIX filesystems. Every ancestor must be
+owned by the process user or system root. Group-writable or other-writable directories require a
+verified sticky bit, which permits protected shared parents such as `/tmp`. Choose a private workspace
+path, or remove group/other write permissions from a directory you own when this check fails. If the
+filesystem cannot verify the required owner or sticky metadata, storage fails without writing a
+response. Other filesystems inherit their directory permissions, as with the existing credential
+store; protect the workspace root with the operating system's access controls. Symbolic-link output
+paths and invalid existing records are rejected. Local records contain private card identities and the
+unredacted final answer. Do not publish the JSON file or its private path.
+
+For a disabled-write branch-only handoff, copy the complete handoff from `response` onto the Trello
+card before moving it to merge approval. The later run reads that durable Trello evidence; it does
+not read a previous local response automatically.
+
 ## Logs
 
 Logs use stable `key=value` fields where practical. Useful fields include:

@@ -141,9 +141,12 @@ with no newer feedback.
 4. Run local validation on the merge result, then push the target branch
    normally. Never force-push it.
 5. Do not resolve GitHub review threads; there is no PR.
-6. Say in the completion comment which branch was merged into which target,
-   or why no merge was needed, then move the card to the configured merge
-   completion list.
+6. Record which branch was merged into which target, or why no merge was needed,
+   with each enabled evidence tool. If both evidence tools are disabled, put that
+   result in the final response. Disabled evidence tools do not block the completion
+   move after a verified merge. A failed enabled evidence write still blocks handoff.
+   Move the card to the configured merge completion list only when the move tool is
+   available; otherwise ask a person to move it without claiming that it moved.
 7. If the merge conflicts, validation fails, or the push is rejected by
    branch protection or a required-PR rule, use the blocked merge path below.
 

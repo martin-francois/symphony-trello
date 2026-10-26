@@ -17,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
 import ch.fmartin.symphony.trello.TestCards;
+import ch.fmartin.symphony.trello.agent.TrelloHandoffToolHandler;
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
@@ -28,6 +29,7 @@ import ch.fmartin.symphony.trello.repository.RepositorySourceResolver;
 import ch.fmartin.symphony.trello.repository.RepositorySourceSelection;
 import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
 import ch.fmartin.symphony.trello.testsupport.TestFileContents;
+import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -1055,11 +1057,12 @@ final class TrelloBoardSetupTest {
                 .content(StandardCharsets.UTF_8)
                 .contains(GITHUB_ISSUE_ASSIGNMENT_HEADING)
                 .containsIgnoringWhitespaces(
-                        "After the initial `checking` call succeeds and no stale blocker stops this card, and before you implement the change",
+                        "When the recheck tool is advertised, first complete its initial `checking` call successfully.",
+                        "Before you implement the change, assign",
                         "skip the number when the response has a `pull_request` field",
                         "`gh issue edit <number> --repo <owner>/<repository> --add-assignee @me`",
                         "`gh issue view <number> --repo <owner>/<repository> --json assignees`",
-                        "record in the workpad which issue was not assigned and why",
+                        "record which issue was not assigned and why in the workpad when its tool is advertised, otherwise the final response",
                         "Do not treat a failed assignment as a blocker.");
         assertThat(markdownSection(Files.readString(Path.of("WORKFLOW.example.md")), GITHUB_ISSUE_ASSIGNMENT_HEADING))
                 .as("shipped workflow example GitHub issue assignment section")
@@ -1105,7 +1108,7 @@ final class TrelloBoardSetupTest {
                 .containsIgnoringWhitespaces(
                         "Before you implement the change, assign",
                         "Do not assign anything when you stop the card on a blocker before implementation.",
-                        "record in the final response which issue was not assigned and why")
+                        "record which issue was not assigned and why in the final response")
                 .doesNotContain("After the initial `checking` call succeeds");
     }
 
@@ -1329,6 +1332,72 @@ final class TrelloBoardSetupTest {
                         false,
                         false,
                         EffectiveConfig.FollowUpCardsConfig.disabled()));
+    }
+
+    @Test
+    void branchOnlyHandoffWithoutEvidenceToolsStillMovesToReviewAndEndsTheRun() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.branch-only-move-without-evidence.md");
+        createRecommendedGithubBoard(workflow);
+        Files.writeString(
+                workflow,
+                Files.readString(workflow)
+                        .replace("pull_request_mode: create", "pull_request_mode: branch_only")
+                        .replace("allow_comments: true", "allow_comments: false"));
+        WorkflowDefinition definition = new WorkflowLoader().load(workflow);
+        EffectiveConfig config = resolve(workflow);
+        var json = new ObjectMapper();
+        var handler = new TrelloHandoffToolHandler(json, new TrelloClient(json));
+        Card card = TestCards.card("card-1", "TRELLO-no-evidence", "In Progress");
+
+        // when
+        String prompt = new PromptRenderer().render(definition.promptTemplate(), card, null, config.github());
+        var tools = handler.toolSpecs(config);
+        String handoffSkill = Files.readString(Path.of(".codex/skills/trello-handoff/SKILL.md"));
+        String workpadSkill = Files.readString(Path.of(".codex/skills/trello-workpad/SKILL.md"));
+        String landSkill = Files.readString(Path.of(".codex/skills/land/SKILL.md"));
+
+        // then
+        assertThat(config.trelloTools().allowedMoveListNames()).contains("human review", "done");
+        assertThat(tools).extracting(tool -> tool.path("name").asText()).containsExactly("trello_move_current_card");
+        assertThat(markdownSection(prompt, GITHUB_ISSUE_ASSIGNMENT_HEADING))
+                .containsIgnoringWhitespaces(
+                        "When the recheck tool is advertised, first complete its initial `checking` call successfully.",
+                        "When it is unavailable, issue assignment does not require that call.",
+                        "the workpad when its tool is advertised, otherwise the final response")
+                .doesNotContain("After the initial `checking` call succeeds");
+        assertThat(prompt)
+                .contains("- Effective mode for this run: `branch_only`")
+                .containsIgnoringWhitespaces(
+                        "The recheck procedure applies only when trello_update_blocker_recheck_status is advertised.")
+                .containsIgnoringWhitespaces("When it is unavailable, skip its status-write prerequisite.")
+                .contains("## Completion Bar Before \"Human Review\"")
+                .containsIgnoringWhitespaces(
+                        "This fallback satisfies the general workpad and comment prerequisites for human review.")
+                .containsIgnoringWhitespaces("Disabled evidence tools do not block the review transition.")
+                .containsIgnoringWhitespaces("A failed enabled evidence write still blocks handoff.")
+                .containsIgnoringWhitespaces("put the complete handoff in the final response")
+                .containsIgnoringWhitespaces("ask a person to copy the complete handoff onto the Trello card")
+                .containsIgnoringWhitespaces("before moving it to the merge approval list")
+                .containsIgnoringWhitespaces(
+                        "Move the card to \"Human Review\" only when the configured move tool is available")
+                .containsIgnoringWhitespaces(
+                        "After the review move, end the run with the complete handoff and copy request.");
+        assertThat(handoffSkill)
+                .containsIgnoringWhitespaces("Missing durable evidence blocks the later merge, not human review.")
+                .containsIgnoringWhitespaces("A failed enabled evidence write still blocks handoff.");
+        assertThat(workpadSkill)
+                .containsIgnoringWhitespaces("Disabled evidence tools do not block the review transition.")
+                .containsIgnoringWhitespaces("complete handoff");
+        assertThat(prompt)
+                .containsIgnoringWhitespaces(
+                        "Disabled evidence tools do not block the completion move after a verified merge.")
+                .containsIgnoringWhitespaces(
+                        "That section's disabled-evidence fallback also satisfies this completion bar");
+        assertThat(landSkill)
+                .containsIgnoringWhitespaces(
+                        "Disabled evidence tools do not block the completion move after a verified merge.")
+                .containsIgnoringWhitespaces("A failed enabled evidence write still blocks handoff.");
     }
 
     @Test
@@ -3533,6 +3602,8 @@ final class TrelloBoardSetupTest {
                 .content(StandardCharsets.UTF_8)
                 .contains("## Stale Blocker Recheck")
                 .contains("trello_update_blocker_recheck_status")
+                .containsIgnoringWhitespaces(
+                        "The recheck procedure applies only when trello_update_blocker_recheck_status is advertised.")
                 .containsIgnoringWhitespaces("newest ordinary comment")
                 .containsIgnoringWhitespaces("exact `Managed by Symphony` footer")
                 .containsIgnoringWhitespaces("a link to the qualifying blocker comment on the current card")
@@ -3553,9 +3624,9 @@ final class TrelloBoardSetupTest {
                 .containsIgnoringWhitespaces(
                         "Symphony's automatic pre-dispatch move may already have happened before Codex starts")
                 .containsIgnoringWhitespaces(
-                        "After the required initial `checking` call classifies the deep comment window, open or create the workpad")
+                        "When the recheck tool is advertised, complete its required initial `checking` call before pickup or implementation")
                 .containsIgnoringWhitespaces(
-                        "Call `checking` to classify stale blockers from the deep comment window; then update the workpad")
+                        "When the recheck tool is advertised, call `checking` to classify stale blockers from the deep comment window")
                 .containsIgnoringWhitespaces(
                         "The absence of an existing managed recheck comment is not a reason to skip this call")
                 .containsIgnoringWhitespaces("Do not scan past a newer ordinary human comment")

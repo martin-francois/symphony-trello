@@ -201,7 +201,7 @@ final class WorkflowConfigPromptTest {
                 .containsIgnoringWhitespaces(
                         "Symphony's automatic pre-dispatch move may already have happened before Codex starts")
                 .containsIgnoringWhitespaces(
-                        "After the required initial `checking` call classifies the deep comment window, open or create the workpad")
+                        "When the recheck tool is advertised, complete its required initial `checking` call before pickup or implementation")
                 .containsIgnoringWhitespaces(
                         "The comment qualifies only when its first non-blank line starts with `Blocked:` or `Blocked by ...`, matched without case sensitivity")
                 .containsIgnoringWhitespaces(

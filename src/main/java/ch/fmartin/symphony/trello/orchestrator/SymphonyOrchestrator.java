@@ -8,6 +8,7 @@ import ch.fmartin.symphony.trello.agent.AgentEvent;
 import ch.fmartin.symphony.trello.agent.AgentEventListener;
 import ch.fmartin.symphony.trello.agent.AgentRunResult;
 import ch.fmartin.symphony.trello.agent.AgentRunner;
+import ch.fmartin.symphony.trello.agent.CardHandoffMove;
 import ch.fmartin.symphony.trello.agent.CodexUsageWorkpadSection;
 import ch.fmartin.symphony.trello.agent.TrelloHandoffToolHandler;
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
@@ -56,6 +57,7 @@ import java.util.SplittableRandom;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -75,6 +77,8 @@ public class SymphonyOrchestrator {
     private static final long INITIAL_RETRY_BACKOFF_MILLIS = 10_000L;
     private static final int MAX_RETRY_BACKOFF_SHIFT = 16;
     private static final int RECENT_EVENT_LIMIT = 50;
+    private static final int HANDOFF_CLEANUP_BACKLOG_THRESHOLD = 128;
+    private static final Duration HANDOFF_COMPLETION_WINDOW = Duration.ofSeconds(60);
     private static final Duration IGNORED_WORKER_TTL = Duration.ofMinutes(30);
     private static final Duration CONTINUATION_DELAY = Duration.ofSeconds(1);
     private static final Duration USAGE_WORKPAD_CLEANUP_RETRY_DELAY = Duration.ofMinutes(1);
@@ -92,6 +96,7 @@ public class SymphonyOrchestrator {
     private final Optional<TrelloHandoffToolHandler> usageWorkpads;
     private final AdaptivePollInterval pollInterval;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private final ScheduledExecutorService handoffDeadlines;
     private final ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor();
 
     /// Serializes the long-running operations (start, stop, tick, worker exit, retry timers, agent
@@ -103,10 +108,13 @@ public class SymphonyOrchestrator {
     /// workflowPath are volatile and written under this lock only, because the lock-free
     /// local-status getters read each as one immutable reference and need no cross-field
     /// consistency; workflow and workflowLastModified are confined to lock holders and have no
-    /// lock-free readers.
+    /// lock-free readers. Handoff deadlines only mark their captured entry's cancellation flag under
+    /// the monitor; worker interruption then runs outside both locks. State removal and cleanup stay
+    /// serialized by this operation lock.
     private final ReentrantLock operationLock = new ReentrantLock();
 
     private final Map<RuntimeCardKey, RunningEntry> running = new LinkedHashMap<>();
+    private final Map<RuntimeCardKey, RunningEntry> pendingHandoffCleanup = new HashMap<>();
     private final Map<RuntimeCardKey, RetryEntry> retryAttempts = new LinkedHashMap<>();
     private final Set<RuntimeCardKey> claimed = new HashSet<>();
     private final Set<RuntimeCardKey> completed = new HashSet<>();
@@ -149,6 +157,8 @@ public class SymphonyOrchestrator {
     Runnable workerExitCompletionHookForTests = () -> {};
     Runnable workerLaunchHookForTests = () -> {};
     Runnable executorsStoppedHookForTests = () -> {};
+    Runnable handoffCancellationMarkedHookForTests = () -> {};
+    Runnable stallSelectionHookForTests = () -> {};
 
     @ConfigProperty(name = "symphony.workflow.path")
     volatile Path workflowPath;
@@ -206,6 +216,32 @@ public class SymphonyOrchestrator {
             Clock clock,
             Optional<TrelloHandoffToolHandler> usageWorkpads,
             RandomGenerator pollJitter) {
+        this(
+                workflowLoader,
+                configResolver,
+                tracker,
+                agentRunner,
+                prompts,
+                workspaces,
+                clock,
+                usageWorkpads,
+                pollJitter,
+                Optional.empty());
+    }
+
+    SymphonyOrchestrator(
+            WorkflowLoader workflowLoader,
+            ConfigResolver configResolver,
+            TrackerClient tracker,
+            AgentRunner agentRunner,
+            PromptRenderer prompts,
+            WorkspaceManager workspaces,
+            Clock clock,
+            Optional<TrelloHandoffToolHandler> usageWorkpads,
+            RandomGenerator pollJitter,
+            Optional<ScheduledExecutorService> handoffDeadlines) {
+        // Polling can block in tracker I/O; its scheduler cannot enforce a worker deadline.
+        this.handoffDeadlines = handoffDeadlines.orElseGet(Executors::newSingleThreadScheduledExecutor);
         this.workflowLoader = workflowLoader;
         this.configResolver = configResolver;
         this.tracker = tracker;
@@ -261,6 +297,7 @@ public class SymphonyOrchestrator {
                         ignoredWorkers.put(entry.workerIdentity, clock.instant().plus(IGNORED_WORKER_TTL)));
                 entries.forEach(this::addRuntime);
                 running.clear();
+                pendingHandoffCleanup.clear();
                 retryAttempts.clear();
                 claimed.clear();
                 trimIgnoredWorkers();
@@ -270,11 +307,12 @@ public class SymphonyOrchestrator {
             }
             retries.forEach(retry -> retry.timer().cancel(false));
             entries.forEach(entry -> {
-                agentRunner.cancel(entry.workerIdentity);
-                cancelWorkerTask(entry);
+                cancelHandoffTimer(entry);
+                cancelWorker(entry);
             });
             retryPendingUsageWorkpadCleanup(true);
             scheduler.shutdownNow();
+            handoffDeadlines.shutdownNow();
             workers.shutdownNow();
             executorsStoppedHookForTests.run();
             releaseWorkflowProcessLock();
@@ -410,6 +448,7 @@ public class SymphonyOrchestrator {
                 consumeRefreshRequest();
                 reloadIfChanged();
                 retryPendingUsageWorkpadCleanup(false);
+                reconcilePendingHandoffCleanup();
                 reconcileRunningCards();
                 dispatchCandidates();
             } catch (RuntimeException e) {
@@ -671,6 +710,12 @@ public class SymphonyOrchestrator {
     private void reconcileRunningCards() {
         removeExpiredIgnoredWorkers();
         reconcileStalls();
+        for (RunningEntry entry : List.copyOf(running.values())) {
+            if (entry.handoffCancellationRequested || handoffExpired(entry)) {
+                expireHandoff(entry);
+                finishExpiredHandoff(entry);
+            }
+        }
         if (running.isEmpty()) {
             return;
         }
@@ -701,6 +746,10 @@ public class SymphonyOrchestrator {
                     Card card = found.card();
                     if (isOutOfBoardScope(card, launchConfig)) {
                         terminateRunning(entryKey, false, true, "card moved out of board");
+                    } else if (protectsHandoff(entry, card)) {
+                        synchronized (this) {
+                            entry.card = card;
+                        }
                     } else if (TrelloClient.isTerminal(card, launchConfig)) {
                         terminateRunning(entryKey, true, true, "card terminal");
                     } else if (TrelloClient.isActive(card, launchConfig)) {
@@ -731,6 +780,7 @@ public class SymphonyOrchestrator {
                         > 0)
                 .map(SymphonyOrchestrator::runtimeKey)
                 .toList();
+        stallSelectionHookForTests.run();
         stalled.forEach(cardKey -> terminateRunning(cardKey, false, false, "stalled"));
     }
 
@@ -743,18 +793,26 @@ public class SymphonyOrchestrator {
             if (entry == null) {
                 return;
             }
+            cancelHandoffTimer(entry);
+            boolean retainHandoffCleanup = entry.handoffCancellationRequested && !cleanupWorkspace && !suppressRetry;
+            if (retainHandoffCleanup) {
+                pendingHandoffCleanup.put(cardKey, entry);
+                claimed.add(cardKey);
+            }
+            if (entry.handoffCancellationRequested) {
+                suppressRetry = true;
+            }
             usageProbe = isBoundUsageProbe(entry.launchTarget, entry.cardId, entry.workerIdentity);
             ignoredWorkers.put(entry.workerIdentity, clock.instant().plus(IGNORED_WORKER_TTL));
             trimIgnoredWorkers();
             addRuntime(entry);
-            if (suppressRetry) {
+            if (suppressRetry && !retainHandoffCleanup) {
                 claimed.remove(cardKey);
             }
         }
         if (usageProbe) {
             try {
-                agentRunner.cancel(entry.workerIdentity);
-                cancelWorkerTask(entry);
+                cancelWorker(entry);
                 if (cleanupWorkspace) {
                     workspaces.removeForIdentifierIfPresent(entry.identifier(), entry.launchConfig);
                 }
@@ -774,8 +832,7 @@ public class SymphonyOrchestrator {
                 }
             }
         } else {
-            agentRunner.cancel(entry.workerIdentity);
-            cancelWorkerTask(entry);
+            cancelWorker(entry);
             if (cleanupWorkspace) {
                 workspaces.removeForIdentifierIfPresent(entry.identifier(), entry.launchConfig);
             }
@@ -799,6 +856,12 @@ public class SymphonyOrchestrator {
     }
 
     private void dispatchCandidates() {
+        if (handoffCleanupBacklogFull()) {
+            LOG.warnf(
+                    "cannot dispatch new worker: expected fewer than %d pending handoff cleanups; pending=%d",
+                    HANDOFF_CLEANUP_BACKLOG_THRESHOLD, pendingHandoffCleanup.size());
+            return;
+        }
         if (isDispatchPaused()) {
             return;
         }
@@ -832,6 +895,9 @@ public class SymphonyOrchestrator {
     }
 
     private Optional<Card> dispatch(Card card, Integer attempt) {
+        if (handoffCleanupBacklogFull()) {
+            return Optional.empty();
+        }
         EffectiveConfig launchConfig = config;
         RuntimeCardKey launchKey = runtimeKey(launchConfig, card.id());
         reconcileStaleUsageWorkpad(card);
@@ -967,7 +1033,9 @@ public class SymphonyOrchestrator {
             currentRunningEntry(cardKey, workerIdentity).ifPresent(entry -> {
                 String reason =
                         blank(failure.getMessage()) ? "agent runner failed without a result" : failure.getMessage();
-                if (isBoundUsageProbe(entry.launchTarget, cardKey.cardId(), workerIdentity)) {
+                if (entry.handoffCancellationRequested) {
+                    finishExpiredHandoff(entry);
+                } else if (isBoundUsageProbe(entry.launchTarget, cardKey.cardId(), workerIdentity)) {
                     terminateRunning(cardKey, false, false, reason);
                 } else {
                     handleWorkerExit(cardKey, workerIdentity, AgentRunResult.fail(reason), entry);
@@ -980,9 +1048,18 @@ public class SymphonyOrchestrator {
 
     private void handleWorkerExit(
             RuntimeCardKey cardKey, String workerIdentity, AgentRunResult result, RunningEntry entry) {
+        boolean handoffCancelled;
         synchronized (this) {
-            running.remove(cardKey);
-            addRuntime(entry);
+            handoffCancelled = entry.handoffCancellationRequested;
+            if (!handoffCancelled) {
+                running.remove(cardKey);
+                cancelHandoffTimer(entry);
+                addRuntime(entry);
+            }
+        }
+        if (handoffCancelled) {
+            finishExpiredHandoff(entry);
+            return;
         }
         boolean currentTrackerTarget = isCurrentTrackerTarget(entry.launchTarget);
         boolean typedUsageLimit = result.failureCategory() == AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT;
@@ -1091,6 +1168,24 @@ public class SymphonyOrchestrator {
         releaseFromDispatch(entry.launchConfig, state.card(), entry.dispatchSource, reason);
     }
 
+    private void cancelWorker(RunningEntry entry) {
+        if (entry.handoffCancellationRequested) {
+            // Future.cancel is idempotent. A competing cleanup must establish interruption even
+            // when the deadline has marked ownership but has not reached its own cancellation call.
+            cancelWorkerTask(entry);
+            cancelHandoffRunnerOnce(entry);
+            return;
+        }
+        agentRunner.cancel(entry.workerIdentity);
+        cancelWorkerTask(entry);
+    }
+
+    private void cancelHandoffRunnerOnce(RunningEntry entry) {
+        if (entry.handoffRunnerCancellationStarted.compareAndSet(false, true)) {
+            agentRunner.cancel(entry.workerIdentity);
+        }
+    }
+
     private static void cancelWorkerTask(RunningEntry entry) {
         if (entry.workerTask != null) {
             entry.workerTask.cancel(true);
@@ -1115,10 +1210,219 @@ public class SymphonyOrchestrator {
             if (currentEntry.isEmpty()) {
                 return false;
             }
-            applyAgentEvent(cardKey, currentEntry.orElseThrow(), event);
+            RunningEntry entry = currentEntry.orElseThrow();
+            if (entry.handoffCancellationRequested) {
+                return false;
+            }
+            applyAgentEvent(cardKey, entry, event);
             return true;
         } finally {
             operationLock.unlock();
+        }
+    }
+
+    private boolean beforeHandoffMove(CardHandoffMove move) {
+        operationLock.lock();
+        try {
+            synchronized (this) {
+                for (RunningEntry entry : running.values()) {
+                    if (!ownsHandoff(entry, move)) {
+                        continue;
+                    }
+                    Instant now = clock.instant();
+                    if (entry.handoffDeadline == null) {
+                        entry.handoffDeadline = now.plus(HANDOFF_COMPLETION_WINDOW);
+                    }
+                    if (!now.isBefore(entry.handoffDeadline)) {
+                        return false;
+                    }
+                    entry.handoffMove = move;
+                    if (entry.handoffTimer == null) {
+                        entry.handoffTimer = handoffDeadlines.schedule(
+                                () -> expireHandoff(entry),
+                                Duration.between(now, entry.handoffDeadline).toMillis(),
+                                TimeUnit.MILLISECONDS);
+                    }
+                    return true;
+                }
+                return false;
+            }
+        } finally {
+            operationLock.unlock();
+        }
+    }
+
+    private boolean ownsHandoff(RunningEntry entry, CardHandoffMove move) {
+        return !entry.handoffCancellationRequested
+                && entry.workerIdentity.equals(move.workerIdentity())
+                && entry.cardId.equals(move.cardId())
+                && Objects.equals(entry.launchConfig.tracker().resolvedBoardId(), move.boardId())
+                && Objects.equals(entry.threadId, move.threadId())
+                && Objects.equals(entry.turnId, move.turnId());
+    }
+
+    private void afterHandoffMove(CardHandoffMove move, boolean succeeded) {
+        operationLock.lock();
+        try {
+            synchronized (this) {
+                for (RunningEntry entry : running.values()) {
+                    if (ownsHandoff(entry, move) && move.equals(entry.handoffMove)) {
+                        entry.handoffSucceeded |= succeeded;
+                        if (!succeeded) {
+                            entry.handoffMove = null;
+                            if (!entry.handoffSucceeded) {
+                                cancelHandoffTimer(entry);
+                            }
+                        }
+                        return;
+                    }
+                }
+            }
+        } finally {
+            operationLock.unlock();
+        }
+    }
+
+    private boolean protectsHandoff(RunningEntry entry, Card card) {
+        CardHandoffMove move = entry.handoffMove;
+        return move != null
+                && ownsHandoff(entry, move)
+                && !handoffExpired(entry)
+                && !card.closed()
+                && Boolean.FALSE.equals(card.boardClosed())
+                && Boolean.FALSE.equals(card.listClosed())
+                && move.boardId().equals(card.boardId())
+                && move.listId().equals(card.listId());
+    }
+
+    private boolean handoffExpired(RunningEntry entry) {
+        return (entry.handoffMove != null || entry.handoffSucceeded)
+                && !clock.instant().isBefore(entry.handoffDeadline);
+    }
+
+    private void expireHandoff(RunningEntry entry) {
+        synchronized (this) {
+            if (!entry.equals(running.get(runtimeKey(entry)))
+                    || entry.handoffCancellationRequested
+                    || (entry.handoffMove == null && !entry.handoffSucceeded)) {
+                return;
+            }
+            entry.handoffCancelledAt = clock.instant();
+            entry.handoffCancellationRequested = true;
+        }
+        handoffCancellationMarkedHookForTests.run();
+        // The worker Future is created by our executor. Interrupt it before any runner callback or
+        // tracker operation; a custom runner's cancel method must not hold up other deadlines.
+        cancelWorkerTask(entry);
+        try {
+            workers.execute(() -> {
+                try {
+                    cancelHandoffRunnerOnce(entry);
+                } finally {
+                    finishExpiredHandoffUnderLock(entry);
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            if (!workers.isShutdown()) {
+                throw e;
+            }
+            // stop() owns cleanup after it closes the executor; the captured worker is interrupted.
+        }
+    }
+
+    private void finishExpiredHandoffUnderLock(RunningEntry entry) {
+        operationLock.lock();
+        try {
+            finishExpiredHandoff(entry);
+        } finally {
+            operationLock.unlock();
+        }
+    }
+
+    private void finishExpiredHandoff(RunningEntry entry) {
+        if (!entry.equals(running.get(runtimeKey(entry))) || !entry.handoffCancellationRequested) {
+            return;
+        }
+        moveToPendingHandoffCleanup(entry);
+        WorkerExitState state = workerExitState(entry.cardId, entry.identifier(), handoffCleanupLookupConfig(entry));
+        if (!state.retry() || state.card() != null) {
+            completePendingHandoffCleanup(entry, state.cleanupWorkspace());
+        }
+    }
+
+    private EffectiveConfig handoffCleanupLookupConfig(RunningEntry entry) {
+        return isCurrentTrackerTarget(entry.launchTarget) ? config : entry.launchConfig;
+    }
+
+    private void moveToPendingHandoffCleanup(RunningEntry entry) {
+        RuntimeCardKey key = runtimeKey(entry);
+        try {
+            terminateRunning(key, false, true, "handoff completion deadline expired; cleanup pending");
+        } finally {
+            synchronized (this) {
+                pendingHandoffCleanup.put(key, entry);
+                claimed.add(key);
+            }
+        }
+    }
+
+    private void reconcilePendingHandoffCleanup() {
+        Map<EffectiveConfig, List<RunningEntry>> byLookupConfig = new HashMap<>();
+        for (RunningEntry entry : pendingHandoffCleanup.values()) {
+            byLookupConfig
+                    .computeIfAbsent(handoffCleanupLookupConfig(entry), ignored -> new ArrayList<>())
+                    .add(entry);
+        }
+        byLookupConfig.forEach(this::reconcilePendingHandoffCleanup);
+    }
+
+    private void reconcilePendingHandoffCleanup(EffectiveConfig lookupConfig, List<RunningEntry> entries) {
+        Map<String, CardLookupResult> refreshed;
+        try {
+            refreshed = tracker.fetchCardStatesByIds(
+                    lookupConfig, entries.stream().map(entry -> entry.cardId).toList());
+        } catch (RuntimeException e) {
+            LOG.warn("cannot refresh pending handoff cleanup: expected an available tracker");
+            return;
+        }
+        for (RunningEntry entry : entries) {
+            CardLookupResult lookup = refreshed.get(entry.cardId);
+            if (lookup instanceof CardLookupResult.Missing) {
+                completePendingHandoffCleanup(entry, true);
+            } else if (lookup instanceof CardLookupResult.Found found) {
+                completePendingHandoffCleanup(
+                        entry, workerExitState(found.card(), lookupConfig).cleanupWorkspace());
+            } else {
+                LOG.debugf(
+                        "cannot refresh pending handoff cleanup: expected a known card state; card_id=%s",
+                        entry.cardId);
+            }
+        }
+    }
+
+    private void completePendingHandoffCleanup(RunningEntry entry, boolean cleanupWorkspace) {
+        RuntimeCardKey key = runtimeKey(entry);
+        if (!entry.equals(pendingHandoffCleanup.get(key))) {
+            return;
+        }
+        if (cleanupWorkspace) {
+            workspaces.removeForIdentifierIfPresent(entry.identifier(), entry.launchConfig);
+        }
+        synchronized (this) {
+            pendingHandoffCleanup.remove(key);
+            claimed.remove(key);
+        }
+        LOG.infof("card_id=%s handoff_cleanup outcome=completed workspace_removed=%s", entry.cardId, cleanupWorkspace);
+    }
+
+    private boolean handoffCleanupBacklogFull() {
+        return pendingHandoffCleanup.size() >= HANDOFF_CLEANUP_BACKLOG_THRESHOLD;
+    }
+
+    private static void cancelHandoffTimer(RunningEntry entry) {
+        if (entry.handoffTimer != null) {
+            entry.handoffTimer.cancel(false);
+            entry.handoffTimer = null;
         }
     }
 
@@ -1132,6 +1436,16 @@ public class SymphonyOrchestrator {
             @Override
             public boolean onEventAndReportAccepted(AgentEvent event) {
                 return SymphonyOrchestrator.this.onAgentEventAndReportAccepted(event);
+            }
+
+            @Override
+            public boolean beforeHandoffMove(CardHandoffMove move) {
+                return SymphonyOrchestrator.this.beforeHandoffMove(move);
+            }
+
+            @Override
+            public void afterHandoffMove(CardHandoffMove move, boolean succeeded) {
+                SymphonyOrchestrator.this.afterHandoffMove(move, succeeded);
             }
         };
     }
@@ -1983,7 +2297,7 @@ public class SymphonyOrchestrator {
     }
 
     private boolean canDispatch(Card card, DispatchBudget budget) {
-        return shouldDispatchIgnoringSlots(card, false) && budget.hasSlotFor(card);
+        return !handoffCleanupBacklogFull() && shouldDispatchIgnoringSlots(card, false) && budget.hasSlotFor(card);
     }
 
     private boolean shouldDispatchIgnoringSlots(Card card, boolean ignoreClaim) {
@@ -2149,6 +2463,9 @@ public class SymphonyOrchestrator {
     }
 
     private int availableSlots() {
+        if (handoffCleanupBacklogFull()) {
+            return 0;
+        }
         return Math.max(config.agent().maxConcurrentAgents() - running.size(), 0);
     }
 
@@ -2332,7 +2649,12 @@ public class SymphonyOrchestrator {
     }
 
     private void addRuntime(RunningEntry entry) {
-        endedRuntimeMillis += Duration.between(entry.startedAt, clock.instant()).toMillis();
+        endedRuntimeMillis += runtimeMillis(entry, clock.instant());
+    }
+
+    private static long runtimeMillis(RunningEntry entry, Instant observedAt) {
+        Instant endedAt = Objects.requireNonNullElse(entry.handoffCancelledAt, observedAt);
+        return Duration.between(entry.startedAt, endedAt).toMillis();
     }
 
     private void addRecentEvent(RuntimeCardKey cardKey, CardDebugDetails.EventInfo event) {
@@ -2371,13 +2693,14 @@ public class SymphonyOrchestrator {
 
     public synchronized RuntimeSnapshot snapshot() {
         Instant now = clock.instant();
-        List<RuntimeSnapshot.RunningRow> runningRows =
-                running.values().stream().map(this::runningRow).toList();
+        List<RuntimeSnapshot.RunningRow> runningRows = running.values().stream()
+                .filter(entry -> !entry.handoffCancellationRequested)
+                .map(this::runningRow)
+                .toList();
         List<RuntimeSnapshot.RetryRow> retryRows =
                 retryAttempts.values().stream().map(this::retryRow).toList();
-        double activeSeconds = running.values().stream()
-                        .mapToLong(
-                                entry -> Duration.between(entry.startedAt, now).toMillis())
+        double unretiredSeconds = running.values().stream()
+                        .mapToLong(entry -> runtimeMillis(entry, now))
                         .sum()
                 / 1000.0;
         return new RuntimeSnapshot(
@@ -2387,7 +2710,10 @@ public class SymphonyOrchestrator {
                 runningRows,
                 retryRows,
                 new RuntimeSnapshot.TokenTotals(
-                        totalInputTokens, totalOutputTokens, totalTokens, endedRuntimeMillis / 1000.0 + activeSeconds),
+                        totalInputTokens,
+                        totalOutputTokens,
+                        totalTokens,
+                        endedRuntimeMillis / 1000.0 + unretiredSeconds),
                 dispatchPause == null
                                 || !Objects.equals(
                                         dispatchPause.command(), config.codex().command())
@@ -2411,6 +2737,7 @@ public class SymphonyOrchestrator {
     public synchronized Optional<CardDebugDetails> cardDetails(String cardIdentifier) {
         TrackerTarget currentTarget = config == null ? null : TrackerTarget.from(config);
         Optional<CardDetailsSelection> selection = running.entrySet().stream()
+                .filter(entry -> !entry.getValue().handoffCancellationRequested)
                 .filter(entry -> Objects.equals(entry.getKey().trackerTarget(), currentTarget))
                 .filter(entry -> entry.getValue().identifier().equals(cardIdentifier))
                 .findFirst()
@@ -2421,6 +2748,7 @@ public class SymphonyOrchestrator {
                         .findFirst()
                         .map(this::retryCardDetailsSelection))
                 .or(() -> running.entrySet().stream()
+                        .filter(entry -> !entry.getValue().handoffCancellationRequested)
                         .filter(entry -> entry.getValue().identifier().equals(cardIdentifier))
                         .findFirst()
                         .map(this::runningCardDetailsSelection))

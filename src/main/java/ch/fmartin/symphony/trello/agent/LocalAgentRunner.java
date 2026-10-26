@@ -16,6 +16,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 @ApplicationScoped
@@ -27,6 +28,7 @@ public class LocalAgentRunner implements AgentRunner {
     private final PromptRenderer prompts;
     private final CodexSkillInstaller codexSkills;
     private final RepositorySourceResolver repositorySources;
+    private final FinalResponseStore finalResponses = new FinalResponseStore();
     private final Map<String, Thread> active = new ConcurrentHashMap<>();
 
     public LocalAgentRunner(
@@ -71,7 +73,9 @@ public class LocalAgentRunner implements AgentRunner {
         Thread.currentThread().setName("symphony-worker-" + request.workerIdentity());
         active.put(request.workerIdentity(), Thread.currentThread());
         Workspace workspace = null;
+        Optional<FinalResponseRecording> recording = Optional.empty();
         try {
+            recording = finalResponses.begin(request);
             workspace = workspaceManager.createForCard(request.card().identifier(), request.config());
             hooks.runRequired(
                     "before_run",
@@ -83,17 +87,21 @@ public class LocalAgentRunner implements AgentRunner {
             if (installBundledSkills) {
                 codexSkills.installInto(workspace.path());
             }
-            return codex.runSession(
+            AgentEventListener listener =
+                    recording.map(output -> output.listener(request.listener())).orElseGet(request::listener);
+            AgentRunResult result = codex.runSession(
                     request.config(),
                     request.card(),
                     workspace.path(),
                     prompt,
                     request.workerIdentity(),
-                    request.listener(),
+                    listener,
                     turn -> continuationDecision(request, turn));
+            return recording.map(output -> output.finish(result)).orElse(result);
         } catch (RuntimeException e) {
             return AgentRunResult.fail(e.getMessage());
         } finally {
+            recording.ifPresent(FinalResponseRecording::close);
             if (workspace != null) {
                 hooks.runBestEffort(
                         "after_run",

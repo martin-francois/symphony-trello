@@ -1916,6 +1916,30 @@ Part B: Trello state refresh
   - If Trello state/list ID is still active: update the in-memory card snapshot.
   - If Trello state/list ID is neither active nor terminal: terminate worker without workspace
     cleanup and suppress retry.
+- Java implementation extension: an authorized current-card move to an inactive or terminal list
+  registers its worker, current turn, board and resolved list before the Trello request. Reconciliation
+  MAY let that existing turn finish while the open card remains at that exact destination. This
+  exception expires 60 seconds after the first registration and MUST NOT extend the existing turn
+  timeout or stall policy. Failed moves clear the exception; repeated moves and agent events MUST NOT
+  renew its deadline. A successful handoff MUST stop turn continuation even if the card becomes active
+  again. This bounded completion window preserves the current turn's existing permissions; it is not
+  a final-answer-only sandbox. Missing cards, archival, a different board or another inactive target
+  retain immediate cancellation. Deadline cancellation MUST run independently of tracker requests
+  and the reconciliation operation lock. It MUST interrupt only the captured current worker before
+  requesting any fresh tracker state. Terminal workspace cleanup waits for the ordinary serialized
+  worker-exit or reconciliation path after cancellation establishes the current cleanup decision.
+- If that cleanup lookup fails or omits the card, the Java implementation MUST remove the canceled
+  worker from running counts and runtime accrual while retaining its card claim in separate pending
+  cleanup bookkeeping. Ordinary ticks MUST retry the lookup without restarting that worker. A known
+  terminal or missing card permits workspace cleanup; a known active, inactive or out-of-scope card
+  releases the pending claim without removing its workspace. Lookup MUST use the current tracker
+  configuration when it names the same target, including equivalent endpoint spellings, while
+  workspace cleanup MUST use the attempt's original workspace configuration.
+- A pending handoff cleanup backlog of 128 MUST pause new dispatch until it falls below that
+  threshold. Already-running workers MAY finish and add pending cleanup, so the bound is the threshold
+  plus in-flight capacity. Unknown cleanup decisions MUST NOT be discarded to reduce the backlog.
+  Below the threshold, unrelated cards retain their normal concurrency capacity. The runtime MUST
+  log why dispatch is paused; this extension adds no configuration or status-API field.
 - If state refresh fails globally, keep workers running and try again on the next tick.
 - If state refresh partially fails for some cards, implementations MAY keep those workers running
   and retry them on the next tick, but MUST log which card IDs were not refreshed.
@@ -2343,13 +2367,15 @@ Optional client-side tool extension:
   blocker comment action. A repeated `checking` call for that same action is idempotent. A managed
   `resumed` state for the same blocker MUST NOT regress on a continuation or retry. A newer qualifying
   blocker action MUST re-enter `checking` on the same managed comment.
-- The rendered prompt's recent-comment window MUST NOT determine whether a stale blocker exists. The
-  workflow MUST always call `checking` before testing for a blocker or making another Codex-requested
+- The rendered prompt's recent-comment window MUST NOT determine whether a stale blocker exists. When
+  the recheck tool is advertised, the workflow MUST call `checking` before testing for a blocker or making another Codex-requested
   Trello write, so the tool can classify its deep current-card comment window. A no-blocker result
   MUST create no managed status. When a blocker qualifies, it is the comment being rechecked and MUST
   remain unchanged; `checking` creates or updates a separate Symphony-managed status. The absence of
   an existing managed recheck comment MUST NOT suppress that call. A configured automatic
   pre-dispatch move MAY occur before the Codex session starts.
+  When the tool is unavailable, its status-write prerequisite does not apply. This does not establish
+  that no blocker exists; preserve known blockers and use the configured tool-disabled handoff path.
 - If the initial `checking` call returns a tool failure, including a refresh failure or missing-card
   result, the workflow MUST stop that attempt without testing the blocker, calling `resumed`, or
   requesting another Trello write. It MUST report the failure in the final response and begin the next
@@ -4144,6 +4170,19 @@ network access, or external service permissions are unavailable.
   a branch-only board, a `No PR` card on a `create` board, the untracked proposed description file,
   rework, later pull request creation, and the branch merge from `Merging`, as listed in the live
   E2E guide.
+- The branch-only live profile also covers changed branch tips returning to review without merging,
+  a complete refreshed handoff, and merging only after renewed approval. With evidence writes
+  disabled and move destinations retained, it covers the complete final-response handoff, explicit
+  human-copy request, review transition with no active or retrying work, and later merge completion
+  from the copied card evidence. `docs/live-e2e.md` scenarios 12 and 13 own these live boundaries.
+  `TrelloBoardSetupTest.branchOnlyHandoffWithoutEvidenceToolsStillMovesToReviewAndEndsTheRun`
+  checks the generated instructions against actual runtime tool advertisement; the shipped-skill
+  checks preserve the same disabled-tool and enabled-write-failure rules. Those automated checks
+  do not replace the real-Codex evidence.
+- `SymphonyOrchestratorHandoffTest` forces reconciliation during an owned move and during the final
+  response. It covers completed protocol output, bounded expiry and external-state cancellation.
+  The live disabled-evidence case MUST preserve a complete final message and successful turn
+  completion, not only a transition to the review list.
 - A skipped real-integration test SHOULD be reported as skipped, not silently treated as passed.
 - If a real-integration profile is explicitly enabled in CI or release validation, failures SHOULD
   fail that job.
@@ -4964,8 +5003,37 @@ The checkout field uses `Task checkout:` so the informational path does not beco
 repository-source declaration. A user-authored `Checkout:` source keeps its existing selection semantics.
 When both handoff evidence tools are disabled, the final response MUST ask a person to copy the
 complete handoff onto the Trello card before moving it to merge approval. A later merge run reads
-Trello workpad or comment evidence, not a prior final response. Missing durable evidence blocks
-completion; this fallback does not enable disabled tools.
+Trello workpad or comment evidence, not a prior final response. The final-response fallback satisfies
+the general workpad and comment prerequisites for human review. Disabled evidence tools MUST NOT
+prevent an available review move or cause repeated implementation after the handoff is ready.
+After the review move, the run ends with the complete handoff and copy request. Missing durable input
+evidence blocks the later merge. After a verified merge, disabled evidence tools permit final-response
+completion evidence and an available completion move. Failed writes from enabled evidence tools
+still block handoff; neither fallback enables disabled tools.
+
+For branch-only handoffs with unavailable comment/workpad tools, the Java runner MUST also retain
+successful final output outside the task checkout so a person can retrieve it after worker exit,
+service restart or terminal workspace cleanup. The private local record lives under
+`<workspace.root>/.symphony+final-responses/<workflow-and-board-hash>/<card-id-hash>.json`.
+The endpoint part of this namespace MUST use the same endpoint identity as tracker dispatch.
+Equivalent endpoint spellings MUST share the current response record; distinct endpoints remain
+separate. A new attempt under an equivalent spelling MUST invalidate the previous current response.
+The record MUST identify the card, worker, thread and turn and contain the exact non-empty completed final
+message only when the matching turn succeeded. Starting another attempt MUST invalidate the previous
+current response even if that attempt no longer qualifies for local recording. Eligible attempts MUST
+replace the current record with a running state without the previous response; failed or interrupted
+attempts MUST NOT expose an older response as current. Partial messages and final messages from rejected worker events MUST NOT become
+completed records. This file is human-readable local evidence, not approval input for a later merge.
+
+Local final-response storage MUST use atomic replacement, private POSIX directories/files (0700/0600)
+where supported, and inherited permissions elsewhere. It MUST reject symlinks and unsafe ancestors,
+including POSIX ancestors owned by neither the process user nor system root. Group-writable or
+other-writable POSIX ancestors MUST have verified sticky protection; required owner or mode metadata
+that cannot be verified MUST fail storage. It MUST limit a response to 1 MiB and retain at most 128
+completed records per workflow/board namespace
+without evicting active attempts. Storage failures MUST fail the affected attempt visibly without
+logging response contents. This protection does not claim to defend against a concurrent writer
+running as the same operating-system user.
 
 Rework continues the same branch and checkout and may update the code and the proposed description
 file. When a later run uses `create` for a branch that went through a branch-only handoff, Codex

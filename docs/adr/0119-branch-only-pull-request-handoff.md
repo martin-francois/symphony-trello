@@ -137,6 +137,88 @@ comment contains all labeled fields, so the reply to feedback does not replace t
 Enabled workpad updates and disabled-tool behavior follow the same procedure.
 When both evidence tools are disabled, a person copies the complete final-response handoff onto the
 Trello card before merge approval. Subsequent runs cannot use that earlier final response as evidence.
+This final-response fallback satisfies the general workpad and comment prerequisites for human review.
+Codex uses an available review move and ends the run with the complete handoff and copy request,
+instead of waiting for disabled tools or repeating completed implementation. Durable card evidence
+remains a prerequisite to merging. After a verified merge, disabled evidence tools permit reporting
+the result in the final response and using the configured completion move. An enabled evidence write
+that fails still blocks handoff. This distinction keeps disabled permissions usable without treating
+an unsuccessful attempted write as delivered evidence.
+Disabling comment writes also withholds the blocker-recheck tool. Generated recheck prerequisites
+therefore apply only when that tool is advertised, matching the shipped handoff skill. A failed
+advertised call still stops the attempt before any later Trello write. An unavailable tool does not
+establish that no blocker exists or clear a known blocker.
+GitHub issue assignment follows the same availability condition before implementation. If assignment
+fails, record it in the workpad when available or in the final response otherwise. This preserves
+best-effort assignment without requiring unavailable Trello tools.
+
+An agent's own successful handoff move must not cancel its unfinished final response. The runtime
+registers an authorized move's worker, turn, board and resolved list before sending the Trello request.
+For that exact open destination, reconciliation allows the existing turn at most 60 seconds from the
+first registration. Neither another move nor continuing events renew this window. The normal turn
+timeout and stall policy remain in force. A failed move removes protection, and a successful handoff
+prevents another turn even when a person reactivates the card before completion. An independent
+deadline scheduler verifies the captured worker under the short state monitor and interrupts that
+worker before any tracker lookup. It does not wait for the reconciliation operation lock. Runner
+cancellation and cleanup continue outside the monitor; ordinary serialized worker exit or
+reconciliation decides cleanup after cancellation. This keeps slow tracker requests from extending
+agent execution without making concurrent cleanup decisions or canceling a replacement worker.
+
+Failed or absent cleanup lookups move the canceled attempt into separate pending cleanup bookkeeping
+and retain its card claim. Keeping it in `running` would misreport a live session, accrue runtime and
+occupy unrelated dispatch capacity. Ordinary ticks retry pending lookups without restarting the
+worker. Successful lookups establish whether to remove the original workspace or release only the
+claim. Equivalent current tracker targets supply refreshed credentials; the original workspace
+configuration still controls cleanup.
+
+The backlog pauses new dispatch at 128 entries. Workers already running may finish and add entries,
+so the maximum backlog is the threshold plus in-flight capacity. We retain unresolved cleanup rather
+than evicting obligations. Below the threshold, normal concurrency remains available to unrelated
+cards; a log message explains dispatch backpressure at the threshold. This bounded in-memory queue
+requires no new operator setting or status-API field.
+
+We reject a grace period for every inactive card because it delays externally requested stops.
+Registering only after the HTTP response also leaves a race when Trello applies the move before the
+response arrives. The chosen bounded window keeps the current turn's existing permissions; it does
+not create a final-answer-only execution mode. Missing or archived cards, board changes and different
+inactive destinations still stop the worker immediately. The tradeoff is up to 60 seconds of continued
+turn execution after an owned handoff so its final evidence can finish. Cleanup bookkeeping remains
+pending when a tracker request is blocked after cancellation. Deterministic protocol tests
+force both move-response and final-message races; the disabled-evidence live check requires the full
+completed message and successful turn completion.
+
+Completing the protocol turn alone does not deliver its evidence: the Codex thread is ephemeral,
+and ordinary card details no longer select a worker after it exits. For branch-only runs without
+comment/workpad tools, retain the completed final response in a private JSON record below
+`<workspace.root>/.symphony+final-responses/`, partitioned by hashes of the workflow/board and card.
+The record includes card, worker, thread and turn identity and survives service restart and task
+checkout cleanup. A new eligible attempt replaces the current record with a running state before
+work begins. Attempts that no longer qualify for recording still invalidate the prior response. Only
+an accepted non-empty completed final item and successful matching turn seal a completed response;
+duplicate start events for that same turn do not discard it. Failures and interruptions cannot expose
+the previous attempt as current.
+
+The output namespace and tracker dispatch share the existing endpoint fingerprint implementation.
+Equivalent URL spellings therefore identify the same current answer, including when the next attempt
+disables local recording. This prevents a spelling change from leaving a stale completed answer at
+the previously logged path. The extraction preserves the established tracker equality rules and
+keeps raw canonical URLs private; distinct endpoint identities remain separate.
+
+This local file gives the owner the exact text to copy onto Trello without adding a CLI command,
+dashboard feature or new configuration. It remains outside the merge evidence contract. Atomic
+replacement, POSIX private modes where supported, symlink and ancestor checks, a 1 MiB response limit
+and retention of at most 128 completed records per namespace bound storage and disclosure. Active
+attempts are not evicted. Persistence errors fail the attempt visibly without logging the response.
+These checks do not defend against concurrent hostile access by the same operating-system user.
+Private output permissions alone do not stop another user from replacing a writable ancestor.
+POSIX ancestry therefore requires ownership by the process user or system root and verified sticky
+protection for group-writable or other-writable directories. This accepts protected shared parents
+such as `/tmp` while rejecting replaceable paths. Public NIO named attributes supply Unix owner and
+mode metadata when needed; storage fails if the required metadata cannot be verified. Filesystems
+without POSIX permissions retain the documented inherited-permission policy.
+The retained local record introduces private data on disk; operators receive its location and cleanup
+instructions in the operations guide.
+
 The fetched card branch tip must match the handoff's recorded commit before either ancestry or merge
 decisions. Changed tips require a complete refreshed handoff and renewed approval. Both the ancestry
 check and merge use the recorded commit, so a later branch update cannot substitute unreviewed work.

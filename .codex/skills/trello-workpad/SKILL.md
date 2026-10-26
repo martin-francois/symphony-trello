@@ -71,6 +71,13 @@ Update the workpad:
 
 ## Stop Conditions
 
+For branch-only work with both evidence tools disabled, follow the complete handoff and manual-copy
+procedure in `trello-handoff`. Disabled evidence tools do not block the review transition.
+The final-response handoff satisfies the general workpad prerequisite for human review. End the run
+after the permitted review move. A person must copy the handoff onto the card before merge approval.
+After a verified branch-only merge, disabled evidence tools also permit final-response completion
+evidence and the configured completion move. Failed writes from enabled tools remain blockers.
+
 - `trello_upsert_workpad` is unavailable or disabled and the workflow requires a
-  durable workpad for safe handoff.
+  durable workpad for safe handoff without the branch-only fallback above.
 - The only way to explain progress would expose secrets or unrelated internals.

@@ -1870,6 +1870,16 @@ For a branch-only card, Codex:
 must not become part of the repository history. Codex adds it to the checkout's local Git exclude
 file and checks that it is never staged or committed.
 
+If comment and workpad writes are disabled, Codex puts the complete handoff in its final response
+and moves the card to review when that move is allowed. Symphony saves the completed answer in a
+private JSON file below the configured workspace root's `.symphony+final-responses` directory. The
+worker log reports `final_response outcome=completed path=...`; read that file's `response` field
+using the [local final-response instructions](docs/operations.md#local-final-responses). This file
+survives worker restart and task-workspace cleanup. Copy the complete handoff onto the card before
+moving it to `Merging`; the merge run needs that saved evidence. After a verified merge, Codex
+reports the result in its final response and uses the allowed completion move. The current local
+record then contains that completion answer. Disabled writes stay disabled.
+
 To ask for changes, comment on the card and move it back to `Ready for Codex`. Codex continues the
 same branch and updates the code and `PR.md`.
 

@@ -1350,6 +1350,10 @@ public final class TrelloBoardSetup {
 
                 ## Stale Blocker Recheck
 
+                The recheck procedure applies only when trello_update_blocker_recheck_status is advertised.
+                When it is unavailable, skip its status-write prerequisite. This does not establish that no
+                blocker exists; preserve known blockers and use the workflow's tool-disabled handoff path.
+
                 The rendered prompt contains only recent Trello comments, so do not use it to decide whether a stale
                 blocker exists. Before changing code, always call trello_update_blocker_recheck_status with status
                 `checking`. The tool inspects the deep current-card comment window and classifies the newest ordinary
@@ -1402,7 +1406,7 @@ public final class TrelloBoardSetup {
 
     private static String operatingPosturePrompt(boolean workpadToolEnabled) {
         String workpadText = workpadToolEnabled
-                ? "After the required initial `checking` call classifies the deep comment window, open or create the workpad, then keep it current as the single detailed progress record."
+                ? "When the recheck tool is advertised, complete its required initial `checking` call before pickup or implementation. When the workpad tool is advertised, open or create the workpad and keep it current as the single detailed progress record."
                 : "Keep progress notes in the final response because Trello workpad tools are disabled.";
         return """
                 ## Operating Posture
@@ -1476,7 +1480,7 @@ public final class TrelloBoardSetup {
                 ? "record a blocker in the final response"
                 : "move the card to " + quote(blockedDestination);
         String planningRecord = workpadToolEnabled
-                ? "Call `checking` to classify stale blockers from the deep comment window; then update the workpad with the plan, acceptance criteria, validation plan, and current-state signal."
+                ? "When the recheck tool is advertised, call `checking` to classify stale blockers from the deep comment window. Record the plan, acceptance criteria, validation plan, and current-state signal with the workpad tool when advertised, or in the final response otherwise."
                 : "Record the plan, acceptance criteria, validation plan, and current-state signal for the final response.";
         String progressRecord = workpadToolEnabled
                 ? "Keep the workpad checklist current when scope, risks, validation, or blockers change."
@@ -1521,9 +1525,15 @@ public final class TrelloBoardSetup {
 
     private static String githubIssueAssignmentPrompt(boolean workpadToolEnabled) {
         String timing = workpadToolEnabled
-                ? "After the initial `checking` call succeeds and no stale blocker stops this card, and before you implement the change"
+                ? """
+                When the recheck tool is advertised, first complete its initial `checking` call successfully.
+                When it is unavailable, issue assignment does not require that call.
+
+                Before you implement the change"""
                 : "Before you implement the change";
-        String skipRecord = workpadToolEnabled ? "the workpad" : "the final response";
+        String skipRecord = workpadToolEnabled
+                ? "the workpad when its tool is advertised, otherwise the final response"
+                : "the final response";
         return """
                 ## GitHub Issue Assignment
 
@@ -1548,7 +1558,7 @@ public final class TrelloBoardSetup {
 
                 Assignment is best effort. If GitHub CLI is not authenticated, the account lacks permission, the
                 issue cannot be resolved, a command fails, or the login is missing from the assignees afterwards,
-                continue the implementation and record in %s which issue was not assigned and why. Do not treat a
+                continue the implementation and record which issue was not assigned and why in %s. Do not treat a
                 failed assignment as a blocker.
                 """
                 .formatted(timing, skipRecord)
@@ -2181,6 +2191,8 @@ public final class TrelloBoardSetup {
                 - A pull request exists and is linked in %s for repository-changing work
                   unless the card explicitly requested local-only/no-push work or the %s
                   section selects a branch-only handoff, which needs the pushed branch and its handoff details instead.
+                  That section's disabled-evidence fallback also satisfies this completion bar's workpad and
+                  comment prerequisites for human review.
                 - PR feedback sweep is complete for any existing or newly created PR.
                 """
                             .formatted(linkEvidence, PullRequestHandoffPrompt.SECTION_TITLE);

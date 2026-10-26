@@ -777,8 +777,19 @@ request anyway, committing its proposed description file, or reaching `Done` wit
     validates the new tip, refreshes the complete handoff and returns the card to review. Move it to
     `Merging` again without further changes and verify that the newly approved commit merges.
 13. On a separate workflow with both comment and workpad writes disabled, complete branch-only work.
-    Verify that the final response asks a person to copy its complete handoff onto the Trello card
-    before merge approval. Copy that evidence, then verify that a subsequent merge run uses it.
+    Keep the review and completion move destinations enabled. Verify that Codex reaches review with
+    no running or retrying task and no evidence write. Read the completed private local response record after the worker drains, using the path in
+    `final_response outcome=completed`. Require its exact final text and matching card, worker,
+    thread and successful turn metadata. Restart the idle worker and verify that the same completed
+    record remains readable without a capture wrapper. An independent app-server capture MAY be
+    used as an oracle: the production record's response MUST equal the completed final message.
+    The running status summary is replaced by later events, and ephemeral sessions leave no
+    transcript; neither is the operator retrieval route.
+    Require every labeled handoff field and an explicit request to copy the complete handoff onto the
+    Trello card before merge approval. It must not request enabling disabled tools or repeat completed
+    implementation. Copy that evidence, then verify that a subsequent merge run uses it, reports the
+    verified merge in the final response and reaches the configured completion list without evidence
+    writes. Preserve a failed attempt before retrying on a repaired artifact.
 14. Delete the temporary branches, close any temporary pull requests, and archive the boards.
 
 ### Regression Scenario: In-Progress Pickup Visibility

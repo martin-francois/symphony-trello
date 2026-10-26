@@ -59,9 +59,13 @@ final class PullRequestHandoffPrompt {
                 recorded commit is already on the target; otherwise use the blocked merge path. When the recorded
                 commit is already on the target and any existing card branch matches it, skip the merge.
                 Push the target branch normally and never force-push it. Do not apply pull
-                request review-thread handling. After the merge, or when no merge was needed, say in the completion
-                comment which branch was merged into which target, or why no merge was needed, and move the card to
-                %s. If the merge or push is rejected, %s.
+                request review-thread handling. After the merge, or when no merge was needed, record which branch
+                was merged into which target, or why no merge was needed, with each enabled evidence tool.
+                If both evidence tools are disabled, report that result in the final response.
+                Disabled evidence tools do not block the completion move after a verified merge.
+                A failed enabled evidence write still blocks handoff. Move the card to %s only when the configured
+                move tool is available; otherwise ask a person to move it without claiming that it moved.
+                If the merge or push is rejected, %s.
 
                 When the effective mode is `create`, no pull request exists for the card branch, and the latest
                 handoff for the current work after any reopening pushed that branch, for example because a human
@@ -182,8 +186,13 @@ final class PullRequestHandoffPrompt {
                    are disabled, put the complete handoff in the final response and ask a person to copy the
                    complete handoff onto the Trello card before moving it to the merge approval list. A later
                    merge run reads the card's workpad or comments, not this final response.
+                   This fallback satisfies the general workpad and comment prerequisites for human review.
+                   Disabled evidence tools do not block the review transition. Do not wait for those tools to
+                   be enabled or repeat completed work. A failed enabled evidence write still blocks handoff.
                 8. Move the card to %s only when the configured move tool is available. Otherwise request
                    that transition from a person; do not claim that the card moved.
+                   For the disabled-evidence fallback:
+                   After the review move, end the run with the complete handoff and copy request.
 
                 On rework, continue the same branch and checkout, and update the code and the proposed description
                 file from the new Trello comments."""
