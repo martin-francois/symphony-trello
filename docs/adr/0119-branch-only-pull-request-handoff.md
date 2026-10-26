@@ -125,6 +125,9 @@ replace it with the documented `github` settings before upgrading.
 Branch-only merge routing requires the latest handoff for the current work after any reopening
 to record a pushed repository-changing branch, and checks linked and historical pull requests. This preserves the completed no-work path from ADR 0087 and
 prevents a closed, unmerged pull request from becoming a direct branch merge.
+Newer human feedback also stops a branch-only merge. Codex replies, refreshes the branch-only
+handoff and returns the card to review, then waits for renewed approval with no newer feedback
+before merging.
 
 ### Confirmation
 

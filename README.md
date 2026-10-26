@@ -643,7 +643,7 @@ to `Human Review` with the reason. If merging is blocked by an unresolved review
 failing check, auth problem, or repository rule, Codex should move the card to `Blocked` with the
 next human action.
 
-`Merging` is only for pull requests. If a reviewed card with nothing to merge lands in `Merging`
+`Merging` is for pull requests and branch-only work. If a reviewed card with nothing to merge lands in `Merging`
 anyway, Codex checks the latest review handoff for the current work after any reopening. If a human
 comment is newer than that handoff, Codex replies and returns the card to `Human Review`. With no
 new feedback, it records that no merge was needed and moves the card to `Done`. A card with no PR

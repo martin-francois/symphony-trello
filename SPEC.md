@@ -4975,6 +4975,11 @@ a strict branch-only board. Inspect linked and historical pull requests before s
 branch merging. A closed, unmerged pull request remains in the pull request flow and blocks merging
 until its state permits it; closing a pull request does not authorize a direct branch merge.
 
+Before a branch-only merge, a human comment newer than the latest branch-only handoff requires a
+reply and a return to the configured review handoff list without merging. Codex refreshes the
+branch-only handoff before that transition so renewed approval refers to the current work. The
+branch merge continues only after renewed approval with no newer feedback.
+
 When a human moves a branch-only card without a pull request to the merge approval list, Codex merges
 the card branch into the target branch named by the card, or into the repository default branch
 otherwise, pushes it without force, and moves the card to the configured done list. When the branch

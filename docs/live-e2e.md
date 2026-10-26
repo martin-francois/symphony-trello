@@ -740,8 +740,8 @@ request anyway, committing its proposed description file, or reaching `Done` wit
    describes the completed work and current checks, including after recovery from a resolved blocker.
 3. On the `create` board, add the label `No PR` to a repository-changing card. Verify the same result,
    with the card label named as the source.
-4. In both checkouts, verify that `git status --short` lists the proposed description file as
-   untracked or excluded, and that
+4. In both checkouts, verify that `git status --short --ignored` lists the proposed description file
+   as `??` for untracked or `!!` for excluded through `info/exclude`, and that
    `git log --name-only --format= origin/<default-branch>..HEAD` never lists it.
 5. Create a third card whose checkout already has an unrelated `PR.md`. Verify that Codex uses
    `PR-2.md` and says so.
@@ -755,7 +755,10 @@ request anyway, committing its proposed description file, or reaching `Done` wit
    Symphony to create a PR instead of removing the label.
 8. Move a different labelled card without a pull request to `Merging`. Verify that Codex merges the
    branch into the default branch, pushes it without force, and moves the card to `Done` with a
-   comment that names the merged branch.
+   comment that names the merged branch. On a separate card, add human feedback after branch-only
+   handoff and move it directly to `Merging`. Verify that Codex replies, refreshes the handoff and
+   returns it to `Human Review`, with the target branch unchanged. Move it to `Merging` again
+   without newer feedback and verify that the merge completes.
 9. Move a labelled card whose commits are already on the default branch to `Merging`. Verify that
    Codex skips the merge, says why, and moves the card to `Done`.
 10. On the branch-only board, add a comment that asks for a pull request and move the card back to

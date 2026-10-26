@@ -88,6 +88,12 @@ this section. Create the
 PR first with `push-pr` ("Creating A PR From A Proposed Description"), keep the
 card in the merge approval list, and then take the normal PR steps above.
 
+If a human comment is newer than the latest branch-only handoff, reply to it and
+return the card to the configured review handoff list without merging. Refresh
+the branch-only handoff before that review transition so renewed approval refers
+to the current work. Continue the branch merge only after renewed approval with
+no newer feedback.
+
 1. Pick the target branch: the branch the Trello card names, otherwise the
    repository default branch.
 2. Fetch the target branch. Skip the merge when the card's commits are

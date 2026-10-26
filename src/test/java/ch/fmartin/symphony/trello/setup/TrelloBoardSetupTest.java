@@ -3205,6 +3205,35 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
+    void branchOnlyMergeReturnsNewerHumanFeedbackToReviewBeforeMerging() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.merge-feedback.md");
+
+        // when
+        createRecommendedGithubBoard(workflow);
+        String content = Files.readString(workflow);
+        String mergeRules = content.substring(content.indexOf("Branch-only exception:"));
+        String landSkill = Files.readString(Path.of(".codex/skills/land/SKILL.md"));
+        String branchMerge =
+                landSkill.substring(landSkill.indexOf("## Branch-Only Merge"), landSkill.indexOf("## Blocked Merge"));
+
+        // then
+        assertThat(mergeRules)
+                .containsIgnoringWhitespaces("If a human comment is newer than the latest branch-only handoff")
+                .containsIgnoringWhitespaces("reply to it and return the card to \"Human Review\" without merging")
+                .containsIgnoringWhitespaces("Refresh the branch-only handoff before that review transition");
+        assertThat(PullRequestHandoffPrompt.mergeRules("Approval", "Review", "Finished", "block", "land"))
+                .containsIgnoringWhitespaces("reply to it and return the card to Review without merging");
+        assertThat(branchMerge)
+                .containsIgnoringWhitespaces("If a human comment is newer than the latest branch-only handoff")
+                .containsIgnoringWhitespaces(
+                        "reply to it and return the card to the configured review handoff list without merging")
+                .containsIgnoringWhitespaces("Refresh the branch-only handoff before that review transition");
+        assertThat(branchMerge.indexOf("If a human comment"))
+                .isLessThan(branchMerge.indexOf("1. Pick the target branch"));
+    }
+
+    @Test
     void laterPrCreationSeparatesProposalTitleAndBodyBeforeHandoff() throws IOException {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.create-later-evidence.md");
