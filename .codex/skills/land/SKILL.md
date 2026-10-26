@@ -90,9 +90,12 @@ card in the merge approval list, and then take the normal PR steps above.
 
 If a human comment is newer than the latest branch-only handoff, reply to it and
 return the card to the configured review handoff list without merging. Refresh
-the branch-only handoff before that review transition so renewed approval refers
-to the current work. Continue the branch merge only after renewed approval with
-no newer feedback.
+the branch-only handoff before that review transition using the complete
+Branch-Only Handoff procedure, including its workpad and disabled-tool rules.
+When the comment tool is available, post a fresh ordinary comment with every
+labeled handoff field before returning to review; a short answer alone is not
+the refreshed handoff. Continue the branch merge only after renewed approval
+with no newer feedback.
 
 1. Pick the target branch: the branch the Trello card names, otherwise the
    repository default branch.

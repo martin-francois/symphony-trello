@@ -3284,14 +3284,16 @@ final class TrelloBoardSetupTest {
         assertThat(mergeRules)
                 .containsIgnoringWhitespaces("If a human comment is newer than the latest branch-only handoff")
                 .containsIgnoringWhitespaces("reply to it and return the card to \"Human Review\" without merging")
-                .containsIgnoringWhitespaces("Refresh the branch-only handoff before that review transition");
+                .containsIgnoringWhitespaces("Refresh the branch-only handoff before that review transition")
+                .containsIgnoringWhitespaces("fresh ordinary comment with every labeled handoff field");
         assertThat(PullRequestHandoffPrompt.mergeRules("Approval", "Review", "Finished", "block", "land"))
                 .containsIgnoringWhitespaces("reply to it and return the card to Review without merging");
         assertThat(branchMerge)
                 .containsIgnoringWhitespaces("If a human comment is newer than the latest branch-only handoff")
                 .containsIgnoringWhitespaces(
                         "reply to it and return the card to the configured review handoff list without merging")
-                .containsIgnoringWhitespaces("Refresh the branch-only handoff before that review transition");
+                .containsIgnoringWhitespaces("Refresh the branch-only handoff before that review transition")
+                .containsIgnoringWhitespaces("fresh ordinary comment with every labeled handoff field");
         assertThat(branchMerge.indexOf("If a human comment"))
                 .isLessThan(branchMerge.indexOf("1. Pick the target branch"));
     }

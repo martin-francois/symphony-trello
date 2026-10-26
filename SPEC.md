@@ -4981,6 +4981,9 @@ Before a branch-only merge, a human comment newer than the latest branch-only ha
 reply and a return to the configured review handoff list without merging. Codex refreshes the
 branch-only handoff before that transition so renewed approval refers to the current work. The
 branch merge continues only after renewed approval with no newer feedback.
+This refresh follows the complete handoff procedure, including enabled workpad updates and a fresh
+ordinary comment containing all labeled handoff fields when the comment tool is available. Its
+disabled-tool and manual-transition rules still apply.
 
 When a human moves a branch-only card without a pull request to the merge approval list, Codex merges
 the card branch into the target branch named by the card, or into the repository default branch

@@ -42,8 +42,11 @@ final class PullRequestHandoffPrompt {
                 when its state prevents merging. A merged PR takes the already-merged completion path. Work without
                 a pushed branch keeps the no-work and newer-feedback decisions above, even on a branch-only board.
                 If a human comment is newer than the latest branch-only handoff, reply to it and return the card
-                to %s without merging. Refresh the branch-only handoff before that review transition so renewed
-                approval refers to the current work. Continue the branch merge only after renewed approval with no newer feedback.
+                to %s without merging. Refresh the branch-only handoff before that review transition using the
+                complete Branch-Only Handoff procedure, including its workpad and disabled-tool rules. When the
+                comment tool is available, post a fresh ordinary comment with every labeled handoff field before
+                returning to review; a short answer alone is not the refreshed handoff. Continue the branch merge
+                only after renewed approval with no newer feedback.
                 Follow the branch-only merge steps in `%s`. Merge into the target branch the card
                 names, or the repository default branch otherwise. If the branch commits are already on the target
                 branch, skip the merge. Push the target branch normally and never force-push it. Do not apply pull

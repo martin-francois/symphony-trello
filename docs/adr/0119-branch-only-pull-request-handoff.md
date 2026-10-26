@@ -131,6 +131,9 @@ prevents a closed, unmerged pull request from becoming a direct branch merge.
 Newer human feedback also stops a branch-only merge. Codex replies, refreshes the branch-only
 handoff and returns the card to review, then waits for renewed approval with no newer feedback
 before merging.
+The refresh uses the complete handoff procedure. With comment tools available, a fresh ordinary
+comment contains all labeled fields, so the reply to feedback does not replace the review evidence.
+Enabled workpad updates and disabled-tool behavior follow the same procedure.
 
 ### Confirmation
 

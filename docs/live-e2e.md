@@ -759,8 +759,10 @@ request anyway, committing its proposed description file, or reaching `Done` wit
    branch into the default branch, pushes it without force, and moves the card to `Done` with a
    comment that names the merged branch. On a separate card, add human feedback after branch-only
    handoff and move it directly to `Merging`. Verify that Codex replies, refreshes the handoff and
-   returns it to `Human Review`, with the target branch unchanged. Move it to `Merging` again
-   without newer feedback and verify that the merge completes.
+   returns it to `Human Review`, with the target branch unchanged. Verify that the refreshed workpad
+   and fresh ordinary handoff comment both contain the complete labeled fields, including both
+   absolute paths. A short answer to the feedback is not sufficient evidence. Move it to `Merging`
+   again without newer feedback and verify that the merge completes.
 9. Move a labelled card whose commits are already on the default branch to `Merging`. Verify that
    Codex skips the merge, says why, and moves the card to `Done`. Include re-entry after Done has
    removed the per-card checkout; the informational handoff path must not block remote verification.
