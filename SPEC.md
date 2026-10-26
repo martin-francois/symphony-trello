@@ -3868,6 +3868,11 @@ Validation profiles:
 Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bullets that begin with
 `If ... is implemented` are `Extension Conformance`.
 
+For the Java Repository Quality Profile in Section 19.5, the normal formatting and compiler gates
+exercise unnamed try-with-resources variables and named-local resources in
+`JavaSyntaxCompatibilityTest`; the test verifies resource closure. Formatter updates also verify
+that a second formatting pass leaves the source unchanged.
+
 ### 17.1 Workflow and Config Parsing
 
 - Workflow file path precedence:
@@ -4904,6 +4909,7 @@ runtime conformance requirements for other Symphony-for-Trello implementations.
 When this profile is used:
 
 - the repository targets Java 25 LTS
+- source formatting accepts unnamed try-with-resources variables and named-local resources
 - the Maven wrapper uses Maven 3
 - Quarkus manages the JUnit 6 test stack
 - Mockito uses the documented Java-agent startup pattern instead of dynamic self-attachment

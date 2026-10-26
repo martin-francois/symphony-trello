@@ -48,6 +48,19 @@
     {
       "customType": "regex",
       "managerFilePatterns": [
+        "/^pom\\.xml$/"
+      ],
+      "matchStrings": [
+        "<palantirJavaFormat>\\s*<version>(?<currentValue>[^<]+)</version>"
+      ],
+      "datasourceTemplate": "maven",
+      "depNameTemplate": "com.palantir.javaformat:palantir-java-format",
+      "versioningTemplate": "maven",
+      "description": "The formatter version is nested Spotless configuration, without the Maven coordinates required by the built-in Maven manager."
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
         "/^tessl\\.json$/"
       ],
       "matchStrings": [

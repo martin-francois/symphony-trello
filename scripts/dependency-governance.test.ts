@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { parse } from "yaml";
+import { applyRegexUpdate, extractRegexDependencies } from "./test-support/renovate-regex-manager.ts";
 
 const POM = readFileSync(new URL("../pom.xml", import.meta.url), "utf8");
 const CONFIDENCE_MAP = readFileSync(
@@ -17,6 +18,24 @@ const PROJECT_ARTIFACTS = new Set([
   "${quarkus.platform.artifact-id}",
   "symphony-trello",
 ]);
+
+test("Renovate updates the actual Palantir formatter pin without changing other POM content", () => {
+  // given
+  const formatterPins = extractRegexDependencies("pom.xml", POM).filter(
+    ({ depName }) => depName === "com.palantir.javaformat:palantir-java-format",
+  );
+  assert.equal(formatterPins.length, 1, "the configured formatter must have exactly one Renovate owner");
+  const [formatter] = formatterPins;
+  assert.ok(formatter, "the configured formatter version must be extracted");
+  assert.equal(formatter.datasource, "maven");
+
+  // when
+  const updated = applyRegexUpdate(POM, formatter, "99.0.0");
+
+  // then
+  assert.match(updated, /<palantirJavaFormat>\s*<version>99\.0\.0<\/version>/u);
+  assert.equal(updated.replace("99.0.0", formatter.currentValue), POM);
+});
 
 // A row documents its artifacts only when both evidence cells are filled; a name that appears in
 // prose, or beside an empty cell, proves nothing about the required check.

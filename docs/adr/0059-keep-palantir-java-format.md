@@ -55,6 +55,25 @@ When a chain is hard to read, prefer a normal code refactor such as a named inte
 helper method, or a clearer pipeline shape. Do not add another local formatter or parser only to
 force this style.
 
+For unnamed try-with-resources variables, use Palantir Java Format 2.74.0 or later. Version 2.72.0
+rejects `try (var _ = resource)` even though the Java 25 compiler accepts it.
+[Palantir release 2.74.0](https://github.com/palantir/palantir-java-format/releases/tag/2.74.0)
+includes the upstream unnamed-variable fix. Updating to that release keeps the established
+formatter and avoids a formatter migration or a project-owned syntax workaround. Select this
+first fixed release for the repair rather than combining it with later, unrelated formatter
+changes. Normal dependency maintenance remains separate.
+
+Renovate manages the nested Spotless formatter version through a regex manager with the Maven
+datasource. The built-in Maven manager requires coordinates beside the version and does not
+discover this configuration element. Keep the version in that element rather than adding an
+unused Maven dependency solely to make Renovate discover it. The dependency-governance script
+test extracts the real POM declaration and verifies that an update changes only its version.
+
+`JavaSyntaxCompatibilityTest` keeps both unnamed-resource and named-local resource syntax in real
+Java source. The normal Spotless and Java compiler gates therefore exercise those forms, and the
+test checks that each resource closes after its body. A string-only fixture or a test of a second
+formatter dependency would not exercise the configured source-formatting gate.
+
 ### Consequences
 
 * Good, because Java formatting stays owned by a maintained formatter.
@@ -73,6 +92,10 @@ Run:
 
 Confirm that `pom.xml` uses `palantirJavaFormat` for Java formatting and no custom native command
 formats Java method chains.
+
+For a formatter update, run `spotless:apply` twice and confirm that the second pass leaves the
+source unchanged. Run `JavaSyntaxCompatibilityTest` and inspect any formatting changes outside
+that fixture before accepting the update.
 
 ## Pros and Cons of the Options
 
@@ -155,3 +178,6 @@ specific stream or Optional pipeline easier to read.
 [GitHub issue #479](https://github.com/martin-francois/symphony-trello/issues/479) tracks the
 future idea of finding a maintained formatter or lint rule that can enforce the desired fluent-chain
 readability without custom repository code.
+
+[GitHub issue #1073](https://github.com/martin-francois/symphony-trello/issues/1073) records the
+unnamed-resource reproduction and the formatter compatibility regression.
