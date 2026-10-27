@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.orchestrator;
 import ch.fmartin.symphony.trello.agent.CardHandoffMove;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
+import ch.fmartin.symphony.trello.tracker.TrackerTarget;
 import java.time.Instant;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
