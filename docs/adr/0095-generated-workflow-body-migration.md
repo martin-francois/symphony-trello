@@ -106,13 +106,53 @@ rejects missing or unresolved root versions. Cleanup runs after success or failu
 clone removal fails, the installer reports that failure without hiding the original error or phase.
 Preflight rejects staged or unstaged tracked changes in the installed checkout because checkout
 retains compatible local edits, which would otherwise let the build use a different version from
-the checked commit. Untracked build output and the installer marker do not block updates. Both
-installers read the previous app version directly from its classes, so a moved or removed command
-wrapper does not bypass the major-version guard.
+the checked commit. Both installers also reject untracked files, including ignored files, in
+`src/`, `.mvn/`, `oss-fuzz/corpora/`, bundled `.codex/skills/*/SKILL.md`, root `.env` and `.env-*`,
+and `config/application*.properties`. These paths supply sources, resources, Maven configuration,
+or Quarkus build-time configuration. Wrapper distribution caches under `.mvn/wrapper/dists/`,
+`.mvn/wrapper/maven-wrapper.jar`, and generated `tessl__*` or `tessl:*` skills are exempt.
+Untracked build output under `target/`, the installer marker, and other non-input files do not
+block updates. Untracked link ancestors of nested inputs also stop preflight: `config`, `oss-fuzz`,
+`.codex`, `.codex/skills`, and direct non-Tessl skill directories. Git lists the link itself rather
+than paths inside it, while Maven and Quarkus follow it, so nested path filters alone miss these
+inputs. Unchanged tracked links remain part of the selected repository's input contract. No local
+file is removed by this check. Rejecting all untracked files would block
+normal generated output; silently cleaning them would delete operator data. The source build runs
+from the app checkout, so caller-directory `.env` and `config/` files do not affect it. PowerShell
+restores the caller's location even when the build fails.
+
+The guard inventories actual filesystem entries because Git's untracked-file inventory collapses
+nested repositories to their directory names and omits the selected inputs inside them. It does not
+follow links, and it prunes the wrapper caches before traversing directories. It checks ownership
+in bounded literal-path batches, avoiding a Git process for every source file. Enumeration and Git
+inspection failures stop preflight. Bash stores its NUL-delimited inventory in a temporary file
+outside the checkout and removes it on exit; PowerShell retains the inventory in memory.
+
+Filesystem lookup, rather than `core.ignorecase`, determines whether fixed input names such as
+`.env` and `config/application*.properties` have case aliases. The guard probes an alternate spelling
+of the actual `.git` entry without writing a file or changing Git settings. Explicit alternate
+entries are not mistaken for filesystem aliases. Maven's resource patterns still use exact names:
+only `SKILL.md` is selected, and only lowercase `tessl__*` and `tessl:*` prefixes are excluded.
+Selected inputs must match the index spelling exactly. An unrecorded case-only rename stops the
+update with instructions to restore that spelling, even when Git reports a clean checkout on a
+case-insensitive filesystem. Relaxing ownership to ignore case would accept changed Maven resource
+selection after a case-only rename. This check does not audit Maven-excluded files or make the build
+hermetic; unchanged tracked links and the process environment remain the operator's responsibility.
+
+Both installers read the previous app version directly from its classes, so a moved or removed
+command wrapper does not bypass the major-version guard. An existing installation whose version
+command fails, is unavailable, or does not report a supported complete version stops before worker
+shutdown or app replacement. Treating an unknown version as a fresh install would bypass the major
+check. The operator must repair Java or restore the existing runnable app classes and confirm that
+`--version` works before retrying. Fresh installs have no previous-version requirement. The shell
+checks accept the same version syntax and bounded core numbers as `SymphonyVersion`, including
+prerelease and build metadata.
 
 The migration capability check requires help for the migration subcommand. Picocli also exits
 successfully when an unknown command is followed by `--help`, but prints root help instead.
-That response means the installer prints its unsupported-version note and continues. PowerShell
+That successful response means the installer prints its unsupported-version note and continues.
+A failed help invocation stops the update and preserves its diagnostic output. Command failure is
+not evidence that migration is unsupported, so it must not allow setup or worker restart. PowerShell
 stages a source checkout beside the app when it will move the checkout into place, so a temporary
 directory on another volume does not prevent installation. Existing Git checkouts still use a
 temporary clone and fetch the checked commit from it.
@@ -170,7 +210,9 @@ This decision remains implemented when:
 * `TrelloBoardSetupMainTest` and `LocalSetupGithubConfigurationTest` prove that generated workflows
   are recorded and that a freshly generated workflow is reported as unchanged;
 * the POSIX and PowerShell installer tests show the `migrate-workflows` call on update, refuse an
-  older major release or source ref before the app is replaced, and let a same-major downgrade through; and
+  older major release or source ref before the app is replaced, reject unreadable versions and
+  untracked build inputs before worker shutdown, preserve non-input files, run the build from the
+  app directory, stop on help or migration failure, and let a same-major downgrade through; and
 * `SPEC.md` Section 19.4.1 describes the same contract.
 
 ## Pros and Cons of the Options

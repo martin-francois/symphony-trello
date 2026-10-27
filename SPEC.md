@@ -4140,7 +4140,10 @@ that a second formatting pass leaves the source unchanged.
   every classification for updates and supported downgrades, metadata and prefix/suffix
   preservation, LF and CRLF input, confirm, decline, batch, dry-run, and non-interactive runs,
   backup, atomic replacement, validation, rollback, permission preservation, link and path-set
-  limits, major-downgrade rejection, provenance recording by setup, and both installer integrations
+  limits, major-downgrade rejection, provenance recording by setup, and both installer integrations.
+  Installer process tests cover unreadable installed versions, tracked and untracked build inputs,
+  ignored configuration, retained non-input files, app-directory builds, failed help probes, and
+  rejected migrations before restart
 - If native Windows `setup-local` (Section 19.4) is implemented, it finds tools it starts by bare
   name through `PATH` and `PATHEXT`, starts a `.cmd` or `.bat` match such as the npm `codex.cmd`
   shim through `cmd.exe` with each argument and the exit status unchanged, and fails the launch
@@ -4942,7 +4945,9 @@ Installers:
   known, after the new command is installed and before setup or worker restart. Without a usable
   terminal, or with `--no-onboard`, they MUST pass `--non-interactive`. When the installed version
   does not provide the command, they MUST print a note and continue. A nonzero exit from the
-  command MUST stop the installer.
+  command MUST stop the installer. A failed capability-help invocation MUST also stop the installer
+  and retain its diagnostic output; only successful help without the subcommand establishes that
+  migration is unsupported.
 - Before replacing the app, both installers MUST reject a requested version whose major is older
   than the installed version. A source install MUST read the explicit root project version from
   the fetched ref's `pom.xml` before switching the installed checkout or replacing a release archive.
@@ -4950,6 +4955,22 @@ Installers:
   The installed source commit MUST be the commit checked during preflight.
   An existing source checkout with staged or unstaged tracked changes MUST stop the update before
   workers stop or files change, so local changes cannot override the checked source version.
+  Existing installations MUST also stop before worker shutdown or replacement when the installed
+  version cannot be read as a supported complete version. Fresh installs have no previous-version
+  requirement.
+  Source preflight MUST reject untracked and ignored build inputs in `src/`, `.mvn/`,
+  `oss-fuzz/corpora/`, bundled `.codex/skills/*/SKILL.md`, root `.env` and `.env-*`, and
+  `config/application*.properties`. Maven wrapper distribution caches, `maven-wrapper.jar`,
+  generated `tessl__*` and `tessl:*` skills, `target/` output, and the installer marker MUST remain
+  allowed. Untracked link ancestors at `config`, `oss-fuzz`, `.codex`, `.codex/skills`, and direct
+  non-Tessl skill directories MUST also stop preflight. Other non-input files MUST remain allowed.
+  This inventory MUST include nested Git repositories and filesystem aliases of fixed input paths.
+  Bundled skill include and Tessl exclusion patterns MUST remain case-sensitive, matching Maven.
+  Selected inputs MUST retain their exact index spelling; an unrecorded case-only rename MUST stop
+  preflight with instructions to restore the recorded spelling. Inventory and Git inspection errors
+  MUST stop preflight. Unchanged tracked links remain part of the selected repository's input
+  contract. Preflight MUST NOT remove local files. Source builds MUST run from the app checkout,
+  and PowerShell MUST restore the caller's location after the build.
 - Installer `--dry-run` MUST only say that the workflow check would run after an update. Only
   `migrate-workflows --dry-run` shows classifications and planned workflow changes; classifying
   against a target version requires that version to be installed.

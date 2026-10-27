@@ -789,15 +789,32 @@ function Get-InstalledAppVersion {
   return (Get-InstalledAppVersionFallback)
 }
 
+function Test-SymphonyVersion([string]$Value) {
+  $versionMatch = [regex]::Match($Value, '^([0-9]+)[.]([0-9]+)[.]([0-9]+)(-[A-Za-z0-9.-]+)?([+][A-Za-z0-9-]+([.][A-Za-z0-9-]+)*)?$')
+  if (-not $versionMatch.Success) {
+    return $false
+  }
+  foreach ($part in $versionMatch.Groups[1..3]) {
+    $number = 0
+    if (-not [int]::TryParse($part.Value, [ref]$number)) {
+      return $false
+    }
+  }
+  return $true
+}
+
+function Assert-PreviousAppVersion {
+  if ($UpdatingExistingApp -and -not (Test-SymphonyVersion $PreviousAppVersion)) {
+    throw 'cannot determine installed Symphony version "--version": repair Java or restore the existing runnable app classes so the command reports a supported version, then retry; workers and the app are unchanged'
+  }
+}
+
 function Assert-NoMajorDowngrade {
-  if (-not $PreviousAppVersion) {
+  if (-not $UpdatingExistingApp) {
     return
   }
   $previousMajor = ($PreviousAppVersion -split '\.')[0]
   $targetMajor = ($Version -split '\.')[0]
-  if ($previousMajor -notmatch '^[0-9]+$' -or $targetMajor -notmatch '^[0-9]+$') {
-    return
-  }
   if ([int]$previousMajor -gt [int]$targetMajor) {
     throw "Symphony $PreviousAppVersion is installed, and release $Version belongs to an older major version.`nDowngrading to an older major version is not supported. Install a $previousMajor.x release instead."
   }
@@ -810,8 +827,11 @@ function Invoke-GeneratedWorkflowCheck {
   Write-Host
   Write-Heading "Checking generated workflows..."
   $global:LASTEXITCODE = 0
-  $migrationHelp = (& "$BinDir\symphony-trello.ps1" migrate-workflows --help 2>$null) -join "`n"
-  if ($LASTEXITCODE -ne 0 -or $migrationHelp -notmatch '(?m)^Usage:.* migrate-workflows(\s|$)') {
+  $migrationHelp = (& "$BinDir\symphony-trello.ps1" migrate-workflows --help 2>&1) -join "`n"
+  if ($LASTEXITCODE -ne 0) {
+    throw "cannot check generated workflows `"migrate-workflows --help`": command failed; repair the installed command before restarting workers`n$migrationHelp"
+  }
+  if ($migrationHelp -notmatch '(?m)^Usage:.* migrate-workflows(\s|$)') {
     Write-Status "NOTE" "  This Symphony version cannot check generated workflow bodies."
     return
   }
@@ -1370,6 +1390,149 @@ function Assert-ExistingAppSafe {
   throw "Refusing to replace existing app directory without Symphony installer marker:`n  $Prefix`nUse a dedicated app install path or remove the directory manually after backing up anything important."
 }
 
+function Test-SourceName([string]$Name, [string]$Pattern, [bool]$IgnoreCase) {
+  if ($IgnoreCase) {
+    return $Name -like $Pattern
+  }
+  return $Name -clike $Pattern
+}
+
+function Test-CheckoutCaseFolding {
+  $gitEntries = @(Get-ChildItem -LiteralPath $Prefix -Force | Where-Object { $_.Name -ieq ".git" })
+  if ($gitEntries.Count -eq 0) {
+    throw 'cannot inspect source build inputs ".git": expected a readable checkout directory'
+  }
+  if ($gitEntries.Count -gt 1) {
+    return $false
+  }
+  $alternate = if ($gitEntries[0].Name -ceq ".GIT") { ".git" } else { ".GIT" }
+  return Test-Path -LiteralPath (Join-Path $Prefix $alternate)
+}
+
+function Test-SourceInputLink([IO.FileSystemInfo]$Item) {
+  return ($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0
+}
+
+function Get-RelativeSourceInput([string]$Path) {
+  return $Path.Substring($Prefix.Length).TrimStart([char[]]@('\', '/')).Replace([IO.Path]::DirectorySeparatorChar, [char]'/')
+}
+
+function Get-RecursiveSourceInputs([IO.FileSystemInfo]$Root, [bool]$IgnoreCase) {
+  $pending = [Collections.Generic.Stack[IO.FileSystemInfo]]::new()
+  $pending.Push($Root)
+  while ($pending.Count -gt 0) {
+    $entry = $pending.Pop()
+    $relative = Get-RelativeSourceInput $entry.FullName
+    if ((Test-SourceName $relative ".mvn/wrapper/dists" $IgnoreCase) -or
+        (Test-SourceName $relative ".mvn/wrapper/maven-wrapper.jar" $IgnoreCase)) {
+      continue
+    }
+    if ((Test-SourceInputLink $entry) -or -not $entry.PSIsContainer) {
+      $entry.FullName
+    } else {
+      foreach ($child in Get-ChildItem -LiteralPath $entry.FullName -Force) {
+        $pending.Push($child)
+      }
+    }
+  }
+}
+
+function Get-BundledSkillInputs([IO.FileSystemInfo]$Skills) {
+  if (Test-SourceInputLink $Skills) {
+    $Skills.FullName
+    return
+  }
+  if (-not $Skills.PSIsContainer) {
+    return
+  }
+  # Maven's resource patterns remain case-sensitive on a folding filesystem.
+  foreach ($skill in Get-ChildItem -LiteralPath $Skills.FullName -Directory -Force) {
+    if ($skill.Name -clike "tessl__*" -or $skill.Name -clike "tessl:*") {
+      continue
+    }
+    if (Test-SourceInputLink $skill) {
+      $skill.FullName
+      continue
+    }
+    foreach ($resource in Get-ChildItem -LiteralPath $skill.FullName -Force) {
+      if ($resource.Name -ceq "SKILL.md" -and ((Test-SourceInputLink $resource) -or -not $resource.PSIsContainer)) {
+        $resource.FullName
+      }
+    }
+  }
+}
+
+function Get-SourceBuildInputs([bool]$IgnoreCase) {
+  foreach ($entry in Get-ChildItem -LiteralPath $Prefix -Force) {
+    if ((Test-SourceName $entry.Name "src" $IgnoreCase) -or (Test-SourceName $entry.Name ".mvn" $IgnoreCase)) {
+      Get-RecursiveSourceInputs $entry $IgnoreCase
+    } elseif (Test-SourceName $entry.Name "oss-fuzz" $IgnoreCase) {
+      if (Test-SourceInputLink $entry) {
+        $entry.FullName
+      } elseif ($entry.PSIsContainer) {
+        foreach ($child in Get-ChildItem -LiteralPath $entry.FullName -Force) {
+          if (Test-SourceName $child.Name "corpora" $IgnoreCase) {
+            Get-RecursiveSourceInputs $child $IgnoreCase
+          }
+        }
+      }
+    } elseif (Test-SourceName $entry.Name ".codex" $IgnoreCase) {
+      if (Test-SourceInputLink $entry) {
+        $entry.FullName
+      } elseif ($entry.PSIsContainer) {
+        foreach ($child in Get-ChildItem -LiteralPath $entry.FullName -Force) {
+          if (Test-SourceName $child.Name "skills" $IgnoreCase) {
+            Get-BundledSkillInputs $child
+          }
+        }
+      }
+    } elseif (Test-SourceName $entry.Name "config" $IgnoreCase) {
+      if (Test-SourceInputLink $entry) {
+        $entry.FullName
+      } elseif ($entry.PSIsContainer) {
+        foreach ($child in Get-ChildItem -LiteralPath $entry.FullName -Force) {
+          if ((Test-SourceName $child.Name "application*.properties" $IgnoreCase) -and
+              ((Test-SourceInputLink $child) -or -not $child.PSIsContainer)) {
+            $child.FullName
+          }
+        }
+      }
+    } elseif ((Test-SourceName $entry.Name ".env" $IgnoreCase) -or (Test-SourceName $entry.Name ".env-*" $IgnoreCase)) {
+      if ((Test-SourceInputLink $entry) -or -not $entry.PSIsContainer) {
+        $entry.FullName
+      }
+    }
+  }
+}
+
+function Assert-SourceInputBatch([string[]]$Paths) {
+  & git --literal-pathspecs -C $Prefix ls-files --error-unmatch -- @Paths *> $null
+  if ($LASTEXITCODE -ne 0) {
+    throw 'cannot update source checkout "build inputs": source checkout has untracked build inputs or unrecorded case-only renames; move local additions outside the app checkout or restore recorded file casing before retrying; ignored files are included and no local files were removed'
+  }
+}
+
+function Assert-SourceBuildInputsTracked {
+  $ignoreCase = Test-CheckoutCaseFolding
+  $inputs = @(Get-SourceBuildInputs $ignoreCase)
+  $batch = [Collections.Generic.List[string]]::new()
+  $batchChars = 0
+  $maxBatchChars = 8192
+  foreach ($inputPath in $inputs) {
+    $relative = Get-RelativeSourceInput $inputPath
+    $batch.Add($relative)
+    $batchChars += $relative.Length + 1
+    if ($batchChars -ge $maxBatchChars) {
+      Assert-SourceInputBatch $batch.ToArray()
+      $batch.Clear()
+      $batchChars = 0
+    }
+  }
+  if ($batch.Count -gt 0) {
+    Assert-SourceInputBatch $batch.ToArray()
+  }
+}
+
 function Prepare-SourceCheckout {
   if (Test-Path -LiteralPath (Join-Path $Prefix ".git")) {
     Assert-ExistingCheckoutSafe
@@ -1380,6 +1543,7 @@ function Prepare-SourceCheckout {
     if ($localChanges.Count -gt 0) {
       throw "cannot update source checkout: source checkout has local changes. Commit tracked changes on a separate branch, or save a patch and restore the files, before rerunning the installer."
     }
+    Assert-SourceBuildInputsTracked
   } else {
     Assert-ExistingAppSafe
   }
@@ -1416,7 +1580,7 @@ function Prepare-SourceCheckout {
     $reader.Dispose()
   }
   $versions = $document.SelectNodes("/*[local-name()='project']/*[local-name()='version']")
-  if ($versions.Count -ne 1 -or $versions[0].InnerText.Trim() -notmatch '^[0-9]+[.][0-9]+[.][0-9]+(-[A-Za-z0-9.-]+)?([+][A-Za-z0-9-]+([.][A-Za-z0-9-]+)*)?$') {
+  if ($versions.Count -ne 1 -or -not (Test-SymphonyVersion $versions[0].InnerText.Trim())) {
     throw "cannot read source project/version: expected an explicit semantic version in the root pom.xml Choose a source ref with a resolved project version, then rerun the installer."
   }
   $script:Version = $versions[0].InnerText.Trim()
@@ -1762,6 +1926,7 @@ $PreviousAppVersion = $null
 if ($UpdatingExistingApp) {
   $PreviousAppVersion = Get-AppCommandVersion
 }
+Assert-PreviousAppVersion
 if ($InstallSource -eq "source-checkout") {
   Prepare-SourceCheckout
 }
@@ -1773,7 +1938,14 @@ if ($RestartManagedWorkers) {
 if ($InstallSource -eq "source-checkout") {
   Install-SourceCheckout
   Write-Status "OK" "  Source checked out"
-  Invoke-Step "$Prefix\mvnw.cmd -q -DskipTests clean package" { & "$Prefix\mvnw.cmd" -q -f "$Prefix\pom.xml" -DskipTests clean package }
+  Invoke-Step "$Prefix\mvnw.cmd -q -DskipTests clean package" {
+    Push-Location -LiteralPath $Prefix
+    try {
+      & "$Prefix\mvnw.cmd" -q -f "$Prefix\pom.xml" -DskipTests clean package
+    } finally {
+      Pop-Location
+    }
+  }
   Write-Status "OK" "  App built with Maven wrapper"
 } else {
   Install-ReleaseArchive

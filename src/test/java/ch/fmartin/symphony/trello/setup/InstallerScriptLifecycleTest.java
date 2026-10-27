@@ -232,7 +232,7 @@ final class InstallerScriptLifecycleTest {
                 .doesNotContain("\nHOME=", "\nUSER=", "SYMPHONY_TRELLO_INSTALLER_COMPLETION");
         assertThat(picocliHelpResults).allSatisfy(result -> {
             assertThat(result.exitCode()).as(result.output()).isZero();
-            assertThat(result.output()).containsAnyOf("Usage: symphony-trello", "symphony-trello test");
+            assertThat(result.output()).containsAnyOf("Usage: symphony-trello", "symphony-trello " + FAKE_APP_VERSION);
         });
         assertThat(directBoardSetup.exitCode()).as(directBoardSetup.output()).isZero();
         assertThat(unknownCommand.exitCode()).isEqualTo(SETUP_FAILURE);
@@ -262,7 +262,8 @@ final class InstallerScriptLifecycleTest {
         assertThat(update.output()).contains("Checking generated workflows...");
         assertThat(fakeLog)
                 .content()
-                .contains("TrelloBoardSetupMain migrate-workflows --from-version test --non-interactive");
+                .contains("TrelloBoardSetupMain migrate-workflows --from-version " + FAKE_APP_VERSION
+                        + " --non-interactive");
         assertThat(markerContentAfterUpdate).isEqualTo("updated\n");
         assertThat(statusWhileRunning.output())
                 .contains("running WORKFLOW.lifecycle-board.md pid=")
@@ -634,7 +635,7 @@ final class InstallerScriptLifecycleTest {
         assertThat(install.exitCode()).as(install.output()).isZero();
         assertThat(picocliHelpResults).allSatisfy(result -> {
             assertThat(result.exitCode()).as(result.output()).isZero();
-            assertThat(result.output()).containsAnyOf("Usage: symphony-trello", "symphony-trello test");
+            assertThat(result.output()).containsAnyOf("Usage: symphony-trello", "symphony-trello " + FAKE_APP_VERSION);
         });
         assertThat(directBoardSetup.exitCode()).as(directBoardSetup.output()).isZero();
         assertThat(cmdShimBoardSetup.exitCode()).as(cmdShimBoardSetup.output()).isZero();
@@ -652,7 +653,7 @@ final class InstallerScriptLifecycleTest {
         assertThat(update.output()).contains("Checking generated workflows...");
         String fakeLogContent = Files.readString(fakeLog);
         assertThat(eventArguments(setupCliEvent(fakeLogContent, "migrate-workflows", "--non-interactive")))
-                .contains("migrate-workflows --from-version test --non-interactive");
+                .contains("migrate-workflows --from-version " + FAKE_APP_VERSION + " --non-interactive");
         Map<String, Object> powerShellSetup = setupCliEvent(fakeLogContent, "new-board", "Wrapper Dispatch Board");
         assertThat(String.valueOf(powerShellSetup.get("cwd"))).contains("windows caller");
         assertThat(String.valueOf(powerShellSetup.get("dotenv"))).contains("home $value & (demo)\\config\\.env");

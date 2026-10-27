@@ -1011,6 +1011,25 @@ they read the root project version from the fetched ref's `pom.xml` and install 
 A missing or unresolved source project version stops the install before replacing the app.
 Source updates also stop when tracked files have local changes. Commit those changes on a separate
 branch, or save a patch and restore the files, before rerunning the installer.
+Updates also stop when the installed version cannot be read. Repair Java or restore the existing
+app's runnable classes, confirm that its `--version` command reports a supported version, then
+retry. The installer leaves workers and the app untouched when this preflight check fails.
+
+Source updates reject untracked files, including ignored files, in `src/`, `.mvn/`,
+`oss-fuzz/corpora/`, bundled `.codex/skills/*/SKILL.md`, root `.env` and `.env-*`, and
+`config/application*.properties`. Move local additions outside the app checkout before updating.
+Untracked links at `config`, `oss-fuzz`, `.codex`, `.codex/skills`, or a direct non-Tessl skill
+directory also block the update. The installer never deletes them. Build output under `target/`,
+the installer marker, Maven wrapper caches under `.mvn/wrapper/dists/`,
+`.mvn/wrapper/maven-wrapper.jar`, and generated `tessl__*` or `tessl:*` skills remain allowed.
+The check includes files inside nested Git repositories. On case-insensitive filesystems, it also
+checks configuration aliases such as `.ENV`. Bundled skill names still follow Maven's case-sensitive
+patterns: `SKILL.md` is an input, `skill.md` is not, and `TESSL__*` is not an exemption.
+Selected inputs must have their exact recorded Git spelling. Restore that spelling before retrying
+if a case-only rename was not recorded in Git. The build runs from the app directory, so
+configuration in the caller's directory no longer changes it. A failed migration help check now
+stops the update and shows the failure; only successful help that lacks the migration command
+permits the unsupported version note and continuation.
 
 ### Verify Release Downloads
 

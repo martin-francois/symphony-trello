@@ -261,6 +261,9 @@ report_failed_phase() {
       printf '%s\n' "$PHASE_RECOVERY"
     } >&2
   fi
+  if [[ -n "${SOURCE_INPUT_MANIFEST:-}" ]] && ! rm -f "$SOURCE_INPUT_MANIFEST"; then
+    printf 'cannot remove source input inventory "%s": remove it manually after the installer stops\n' "$SOURCE_INPUT_MANIFEST" >&2
+  fi
   if [[ -n "${SOURCE_CHECKOUT:-}" ]] && ! rm -rf "$SOURCE_CHECKOUT"; then
     printf 'cannot remove temporary source checkout "%s": remove it manually after the installer stops\n' "$SOURCE_CHECKOUT" >&2
   fi
@@ -435,12 +438,34 @@ installed_source_commit() {
   git -C "$APP_DIR" rev-parse --verify HEAD 2>/dev/null || true
 }
 
-reject_major_downgrade() {
-  local previous_major="${PREVIOUS_APP_VERSION%%.*}" target_major="${VERSION%%.*}"
-  if [[ ! "$previous_major" =~ ^[0-9]+$ || ! "$target_major" =~ ^[0-9]+$ ]]; then
-    return
+supported_symphony_version() {
+  local version="$1" number
+  # SymphonyVersion stores each core component as a signed Java int.
+  local max_component=2147483647
+  local -a numbers
+  [[ "$version" =~ ^[0-9]+[.][0-9]+[.][0-9]+(-[A-Za-z0-9.-]+)?([+][A-Za-z0-9-]+([.][A-Za-z0-9-]+)*)?$ ]] || return 1
+  IFS=. read -r -a numbers <<<"${version%%[-+]*}"
+  for number in "${numbers[@]}"; do
+    number="${number#"${number%%[!0]*}"}"
+    if ((${#number} > ${#max_component})) || { ((${#number} == ${#max_component})) && ((number > max_component)); }; then
+      return 1
+    fi
+  done
+}
+
+require_previous_app_version() {
+  if [[ "$UPDATING_EXISTING_APP" == true ]] && ! supported_symphony_version "$PREVIOUS_APP_VERSION"; then
+    echo 'cannot determine installed Symphony version "--version": repair Java or restore the existing runnable app classes so the command reports a supported version, then retry; workers and the app are unchanged' >&2
+    exit 2
   fi
-  if ((previous_major > target_major)); then
+}
+
+reject_major_downgrade() {
+  [[ "$UPDATING_EXISTING_APP" == true ]] || return 0
+  local previous_major="${PREVIOUS_APP_VERSION%%.*}" target_major="${VERSION%%.*}"
+  previous_major="${previous_major#"${previous_major%%[!0]*}"}"
+  target_major="${target_major#"${target_major%%[!0]*}"}"
+  if ((${previous_major:-0} > ${target_major:-0})); then
     echo "Symphony $PREVIOUS_APP_VERSION is installed, and release $VERSION belongs to an older major version." >&2
     echo "Downgrading to an older major version is not supported. Install a $previous_major.x release instead." >&2
     exit 2
@@ -455,8 +480,12 @@ check_generated_workflows() {
   fi
   echo
   print_heading "Checking generated workflows..."
-  if ! migration_help="$("$BIN_DIR/symphony-trello" migrate-workflows --help 2>/dev/null)" ||
-    ! grep -Eq '^Usage:.* migrate-workflows([[:space:]]|$)' <<<"$migration_help"; then
+  if ! migration_help="$("$BIN_DIR/symphony-trello" migrate-workflows --help 2>&1)"; then
+    printf '%s\n' "$migration_help" >&2
+    echo 'cannot check generated workflows "migrate-workflows --help": command failed; repair the installed command before restarting workers' >&2
+    exit 2
+  fi
+  if ! grep -Eq '^Usage:.* migrate-workflows([[:space:]]|$)' <<<"$migration_help"; then
     print_status NOTE "  This Symphony version cannot check generated workflow bodies."
     return
   fi
@@ -1465,6 +1494,160 @@ END {
   '
 }
 
+source_name_matches() (
+  # Match filesystem lookup rules without changing the caller's shell options.
+  shopt -u nocasematch
+  if [[ "$3" == true ]]; then
+    shopt -s nocasematch
+  fi
+  # The supplied selector is deliberately a glob, including application*.properties.
+  # shellcheck disable=SC2053
+  [[ "$1" == $2 ]]
+)
+
+checkout_case_folding() {
+  local entry alternate=.GIT
+  local -a names=()
+  for entry in "$APP_DIR"/.[gG][iI][tT]; do
+    [[ -e "$entry" || -L "$entry" ]] || continue
+    names+=("${entry##*/}")
+  done
+  ((${#names[@]} > 0)) || return 1
+  if ((${#names[@]} > 1)); then
+    printf 'false\n'
+    return
+  fi
+  if source_name_matches "${names[0]}" .GIT false; then
+    alternate=.git
+  fi
+  if [[ -e "$APP_DIR/$alternate" ]]; then
+    printf 'true\n'
+  else
+    printf 'false\n'
+  fi
+}
+
+collect_source_build_inputs() {
+  local ignore_case="$1" entry child name path_match=-path
+  # find interprets path predicates as globs, including the checkout prefix.
+  local checkout_pattern="${APP_DIR//\\/\\\\}"
+  checkout_pattern="${checkout_pattern//\*/\\*}"
+  checkout_pattern="${checkout_pattern//\?/\\?}"
+  checkout_pattern="${checkout_pattern//\[/\\[}"
+  if [[ "$ignore_case" == true ]]; then
+    path_match=-ipath
+  fi
+  for entry in "$APP_DIR/"* "$APP_DIR/".[!.]* "$APP_DIR/"..?*; do
+    [[ -e "$entry" || -L "$entry" ]] || continue
+    name="${entry##*/}"
+    if source_name_matches "$name" src "$ignore_case" || source_name_matches "$name" .mvn "$ignore_case"; then
+      find "$entry" \( "$path_match" "$checkout_pattern/.mvn/wrapper/dists" -o "$path_match" "$checkout_pattern/.mvn/wrapper/maven-wrapper.jar" \) -prune -o ! -type d -print0 || return 1
+    elif source_name_matches "$name" oss-fuzz "$ignore_case"; then
+      if [[ -L "$entry" ]]; then
+        printf '%s\0' "$entry"
+      elif [[ -d "$entry" ]]; then
+        [[ -r "$entry" && -x "$entry" ]] || return 1
+        for child in "$entry/"*; do
+          if source_name_matches "${child##*/}" corpora "$ignore_case" && [[ -e "$child" || -L "$child" ]]; then
+            find "$child" ! -type d -print0 || return 1
+          fi
+        done
+      fi
+    elif source_name_matches "$name" .codex "$ignore_case"; then
+      if [[ -L "$entry" ]]; then
+        printf '%s\0' "$entry"
+      elif [[ -d "$entry" ]]; then
+        [[ -r "$entry" && -x "$entry" ]] || return 1
+        for child in "$entry/"*; do
+          if source_name_matches "${child##*/}" skills "$ignore_case" && [[ -e "$child" || -L "$child" ]]; then
+            collect_bundled_skill_inputs "$child" || return 1
+          fi
+        done
+      fi
+    elif source_name_matches "$name" config "$ignore_case"; then
+      if [[ -L "$entry" ]]; then
+        printf '%s\0' "$entry"
+      elif [[ -d "$entry" ]]; then
+        [[ -r "$entry" && -x "$entry" ]] || return 1
+        for child in "$entry/"*; do
+          if source_name_matches "${child##*/}" 'application*.properties' "$ignore_case" && [[ -f "$child" || -L "$child" ]]; then
+            printf '%s\0' "$child"
+          fi
+        done
+      fi
+    elif source_name_matches "$name" .env "$ignore_case" || source_name_matches "$name" '.env-*' "$ignore_case"; then
+      if [[ -f "$entry" || -L "$entry" ]]; then
+        printf '%s\0' "$entry"
+      fi
+    fi
+  done
+}
+
+collect_bundled_skill_inputs() {
+  local skills="$1" skill resource
+  if [[ -L "$skills" ]]; then
+    printf '%s\0' "$skills"
+    return
+  fi
+  [[ -d "$skills" ]] || return 0
+  [[ -r "$skills" && -x "$skills" ]] || return 1
+  # Maven's resource patterns are case-sensitive, including on a folding filesystem.
+  for skill in "$skills/"* "$skills/".[!.]* "$skills/"..?*; do
+    [[ -d "$skill" ]] || continue
+    if source_name_matches "${skill##*/}" 'tessl__*' false || source_name_matches "${skill##*/}" 'tessl:*' false; then
+      continue
+    fi
+    if [[ -L "$skill" ]]; then
+      printf '%s\0' "$skill"
+      continue
+    fi
+    [[ -r "$skill" && -x "$skill" ]] || return 1
+    for resource in "$skill/"*; do
+      if source_name_matches "${resource##*/}" SKILL.md false && [[ -f "$resource" || -L "$resource" ]]; then
+        printf '%s\0' "$resource"
+      fi
+    done
+  done
+}
+
+assert_source_build_inputs_tracked() {
+  local ignore_case input relative batch_chars=0 untracked=false
+  local max_batch_chars=8192
+  local -a batch=()
+  if ! ignore_case="$(checkout_case_folding)"; then
+    echo 'cannot inspect source build inputs ".git": expected a readable checkout directory' >&2
+    exit 2
+  fi
+  SOURCE_INPUT_MANIFEST="$(mktemp)"
+  if ! collect_source_build_inputs "$ignore_case" >"$SOURCE_INPUT_MANIFEST"; then
+    echo 'cannot enumerate source build inputs "checkout": restore read access before rerunning the installer' >&2
+    exit 2
+  fi
+  while IFS= read -r -d '' input; do
+    relative="${input#"$APP_DIR/"}"
+    batch+=("$relative")
+    batch_chars=$((batch_chars + ${#relative} + 1))
+    if ((batch_chars >= max_batch_chars)); then
+      if ! git --literal-pathspecs -C "$APP_DIR" ls-files --error-unmatch -- "${batch[@]}" >/dev/null 2>&1; then
+        untracked=true
+        break
+      fi
+      batch=()
+      batch_chars=0
+    fi
+  done <"$SOURCE_INPUT_MANIFEST"
+  if [[ "$untracked" == false ]] && ((${#batch[@]} > 0)) &&
+    ! git --literal-pathspecs -C "$APP_DIR" ls-files --error-unmatch -- "${batch[@]}" >/dev/null 2>&1; then
+    untracked=true
+  fi
+  if [[ "$untracked" == true ]]; then
+    echo 'cannot update source checkout "build inputs": source checkout has untracked build inputs or unrecorded case-only renames; move local additions outside the app checkout or restore recorded file casing before retrying; ignored files are included and no local files were removed' >&2
+    exit 2
+  fi
+  rm -f "$SOURCE_INPUT_MANIFEST"
+  SOURCE_INPUT_MANIFEST=""
+}
+
 prepare_source_checkout() {
   if [[ -d "$APP_DIR/.git" ]]; then
     assert_existing_checkout_safe
@@ -1478,6 +1661,7 @@ prepare_source_checkout() {
       echo "Commit tracked changes on a separate branch, or save a patch and restore the files, before rerunning the installer." >&2
       exit 2
     fi
+    assert_source_build_inputs_tracked
   else
     assert_existing_app_safe
   fi
@@ -1490,7 +1674,7 @@ prepare_source_checkout() {
     revision="refs/remotes/origin/$REF"
   fi
   SOURCE_COMMIT="$(git -C "$SOURCE_CHECKOUT" rev-parse --verify "$revision^{commit}")"
-  if ! VERSION="$(git -C "$SOURCE_CHECKOUT" show "$SOURCE_COMMIT:pom.xml" | source_project_version)"; then
+  if ! VERSION="$(git -C "$SOURCE_CHECKOUT" show "$SOURCE_COMMIT:pom.xml" | source_project_version)" || ! supported_symphony_version "$VERSION"; then
     echo "cannot read source project/version: expected an explicit semantic version in the root pom.xml" >&2
     echo "Choose a source ref with a resolved project version, then rerun the installer." >&2
     exit 2
@@ -3021,6 +3205,7 @@ PREVIOUS_APP_VERSION=""
 if [[ "$UPDATING_EXISTING_APP" == true ]]; then
   PREVIOUS_APP_VERSION="$(command_app_version || true)"
 fi
+require_previous_app_version
 if [[ "$INSTALL_SOURCE" == "source-checkout" ]]; then
   prepare_source_checkout
 fi
@@ -3040,7 +3225,7 @@ fi
 if [[ "$INSTALL_SOURCE" == "source-checkout" ]]; then
   install_or_update_checkout
   print_status OK "  Source checked out"
-  run "$APP_DIR/mvnw" -q -f "$APP_DIR/pom.xml" -DskipTests clean package
+  (cd "$APP_DIR" && run "$APP_DIR/mvnw" -q -f "$APP_DIR/pom.xml" -DskipTests clean package)
   print_status OK "  App built with Maven wrapper"
 else
   install_release_archive

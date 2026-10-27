@@ -45,6 +45,7 @@ import java.util.zip.ZipOutputStream;
 import picocli.CommandLine;
 
 final class InstallerScriptFixture {
+    static final String FAKE_APP_VERSION = "1.0.0";
     static final String TRELLO_KEY_PROMPT = "Trello API key: ";
     static final String TRELLO_TOKEN_PROMPT = "Trello API token: ";
     static final String TRELLO_BOARD_PROMPT = "Trello board name: ";
@@ -751,6 +752,7 @@ final class InstallerScriptFixture {
                 #!/usr/bin/env bash
                 set -euo pipefail
                 echo "mvnw $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                echo "build-cwd=$PWD" >> "${SYMPHONY_FAKE_LOG:?}"
                 app_home="$(cd "$(dirname "$0")" && pwd -P)"
                 mkdir -p "$app_home/target/quarkus-app/app" "$app_home/target/quarkus-app/lib/main" "$app_home/target/quarkus-app/quarkus"
                 : > "$app_home/target/quarkus-app/quarkus-run.jar"
@@ -770,6 +772,7 @@ final class InstallerScriptFixture {
                 """
                 @echo off
                 echo mvnw.cmd %* >> "%SYMPHONY_FAKE_LOG%"
+                echo build-cwd=%CD%>> "%SYMPHONY_FAKE_LOG%"
                 mkdir target\\quarkus-app\\app 2>nul
                 mkdir target\\quarkus-app\\lib\\main 2>nul
                 mkdir target\\quarkus-app\\quarkus 2>nul
@@ -1059,6 +1062,10 @@ final class InstallerScriptFixture {
                   fi
                   if [[ "$*" == *"--help"* || "$*" == *" -h"* ]]; then
                     if [[ "${raw_cli_args[0]:-}" == "migrate-workflows" ]]; then
+                      if [[ -n "${SYMPHONY_FAKE_MIGRATION_HELP_FAILURE:-}" ]]; then
+                        echo "simulated migration help failure" >&2
+                        exit 23
+                      fi
                       if [[ -n "${SYMPHONY_FAKE_MIGRATION_HELP:-}" ]]; then
                         printf '%s\\n' "$SYMPHONY_FAKE_MIGRATION_HELP"
                       elif [[ -n "${SYMPHONY_FAKE_WITHOUT_WORKFLOW_MIGRATION:-}" ]]; then
@@ -1091,11 +1098,11 @@ final class InstallerScriptFixture {
                         ;;
                       multiline)
                         echo "diagnostic preface"
-                        echo "symphony-trello test"
+                        echo "symphony-trello @FAKE_APP_VERSION@"
                         exit 0
                         ;;
                       *)
-                        echo "symphony-trello ${SYMPHONY_FAKE_VERSION:-test}"
+                        echo "symphony-trello ${SYMPHONY_FAKE_VERSION:-@FAKE_APP_VERSION@}"
                         exit 0
                         ;;
                     esac
@@ -1289,6 +1296,8 @@ final class InstallerScriptFixture {
                         .transform(script -> withPlaceholders(
                                 script,
                                 Map.of(
+                                        "@FAKE_APP_VERSION@",
+                                        FAKE_APP_VERSION,
                                         "@TRELLO_KEY_PROMPT@",
                                         TRELLO_KEY_PROMPT,
                                         "@TRELLO_TOKEN_PROMPT@",
@@ -1326,6 +1335,7 @@ final class InstallerScriptFixture {
                 #!/usr/bin/env bash
                 set -euo pipefail
                 echo "mvnw.cmd $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                echo "build-cwd=$PWD" >> "${SYMPHONY_FAKE_LOG:?}"
                 app_home="$(cd "$(dirname "$0")" && pwd -P)"
                 mkdir -p "$app_home/target/quarkus-app/app" "$app_home/target/quarkus-app/lib/main" "$app_home/target/quarkus-app/quarkus"
                 : > "$app_home/target/quarkus-app/quarkus-run.jar"
@@ -1523,6 +1533,10 @@ final class InstallerScriptFixture {
                   }
                   if (($args -join " ") -like "*--help*" -or ($args -join " ") -like "* -h*") {
                     if ($args -contains "migrate-workflows") {
+                      if ($env:SYMPHONY_FAKE_MIGRATION_HELP_FAILURE) {
+                        [Console]::Error.WriteLine("simulated migration help failure")
+                        exit 23
+                      }
                       if ($env:SYMPHONY_FAKE_MIGRATION_HELP) { Write-Output $env:SYMPHONY_FAKE_MIGRATION_HELP }
                       elseif ($env:SYMPHONY_FAKE_WITHOUT_WORKFLOW_MIGRATION) { Write-Output "Usage: symphony-trello" }
                       else { Write-Output "Usage: symphony-trello migrate-workflows" }
@@ -1531,6 +1545,10 @@ final class InstallerScriptFixture {
                   }
                   if ($env:SYMPHONY_FAKE_WITHOUT_WORKFLOW_MIGRATION -and $args -contains "migrate-workflows") {
                     [Console]::Error.WriteLine("setup_failed code=setup_invalid_arguments message=Unmatched argument: 'migrate-workflows'")
+                    exit 2
+                  }
+                  if ($env:SYMPHONY_FAKE_WORKFLOW_MIGRATION_FAILURE -and $args -contains "migrate-workflows") {
+                    Write-Output "  REJECTED  simulated workflow migration rejection"
                     exit 2
                   }
                   if (($args -join " ") -like "*--version*") {
@@ -1544,10 +1562,10 @@ final class InstallerScriptFixture {
                     }
                     if ($env:SYMPHONY_FAKE_VERSION_MODE -eq "multiline") {
                       Write-Output "diagnostic preface"
-                      Write-Output "symphony-trello test"
+                      Write-Output "symphony-trello @FAKE_APP_VERSION@"
                       exit 0
                     }
-                    Write-Output "symphony-trello $(if ($env:SYMPHONY_FAKE_VERSION) { $env:SYMPHONY_FAKE_VERSION } else { 'test' })"
+                    Write-Output "symphony-trello $(if ($env:SYMPHONY_FAKE_VERSION) { $env:SYMPHONY_FAKE_VERSION } else { '@FAKE_APP_VERSION@' })"
                     exit 0
                   }
 	                  if (($args -join " ") -like "*TrelloBoardSetupMain start*" -or
@@ -1594,7 +1612,8 @@ final class InstallerScriptFixture {
 	                }
                 "java $($args -join ' ')" | Add-Content -Path $env:SYMPHONY_FAKE_LOG
                 exit 0
-                """);
+                """
+                        .replace("@FAKE_APP_VERSION@", FAKE_APP_VERSION));
         return fakeBin;
     }
 

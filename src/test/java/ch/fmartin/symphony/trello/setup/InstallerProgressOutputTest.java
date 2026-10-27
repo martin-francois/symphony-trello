@@ -120,7 +120,7 @@ final class InstallerProgressOutputTest {
                             "OK  Managed workers stopped for the update",
                             "OK  Command installed",
                             "Checking generated workflows",
-                            RUN_LINE + installedCommand + " migrate-workflows --from-version test",
+                            RUN_LINE + installedCommand + " migrate-workflows --from-version " + FAKE_APP_VERSION,
                             "[3/4] Running setup",
                             RUN_LINE + installedCommand + " setup-local",
                             "OK  Setup complete",
@@ -138,7 +138,7 @@ final class InstallerProgressOutputTest {
             assertThat(update.transcript().lines())
                     .filteredOn(line -> line.startsWith(RUN_LINE))
                     .containsExactly(
-                            RUN_LINE + installedCommand + " migrate-workflows --from-version test",
+                            RUN_LINE + installedCommand + " migrate-workflows --from-version " + FAKE_APP_VERSION,
                             RUN_LINE + installedCommand + " setup-local",
                             RUN_LINE + installedCommand + " tutorial --offer");
             assertThat(update.transcript().stripTrailing()).endsWith("symphony-trello tutorial");

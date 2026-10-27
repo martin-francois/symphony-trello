@@ -4364,7 +4364,10 @@ final class InstallerScriptTest {
         result.assertSuccess();
         assertThat(symphonyHome.resolve("state/install-context.properties"))
                 .content(StandardCharsets.UTF_8)
-                .contains("install_source=source-checkout", "app_version=test", "source_commit=" + expectedCommit)
+                .contains(
+                        "install_source=source-checkout",
+                        "app_version=" + FAKE_APP_VERSION,
+                        "source_commit=" + expectedCommit)
                 .doesNotContain(
                         "app_version=" + installerDefaultRef().substring(1), "release_tag=", "release_base_url=");
     }
@@ -8171,12 +8174,12 @@ final class InstallerScriptTest {
             assertThat(fakeLog)
                     .content(StandardCharsets.UTF_8)
                     .contains("mvnw -q -f " + symphonyHome.resolve("app/pom.xml") + " -DskipTests clean package")
-                    .contains("TrelloBoardSetupMain migrate-workflows --from-version test dotenv=")
-                    .doesNotContain("migrate-workflows --from-version test --non-interactive")
+                    .contains("TrelloBoardSetupMain migrate-workflows --from-version " + FAKE_APP_VERSION + " dotenv=")
+                    .doesNotContain("migrate-workflows --from-version " + FAKE_APP_VERSION + " --non-interactive")
                     .containsSubsequence(
                             "TrelloBoardSetupMain stop",
                             "mvnw -q -f " + symphonyHome.resolve("app/pom.xml") + " -DskipTests clean package",
-                            "TrelloBoardSetupMain migrate-workflows --from-version test",
+                            "TrelloBoardSetupMain migrate-workflows --from-version " + FAKE_APP_VERSION,
                             "TrelloBoardSetupMain setup-local",
                             "TrelloBoardSetupMain start",
                             "--all");
@@ -8258,7 +8261,8 @@ final class InstallerScriptTest {
                     .content(StandardCharsets.UTF_8)
                     .containsSubsequence(
                             "TrelloBoardSetupMain stop",
-                            "TrelloBoardSetupMain migrate-workflows --from-version test --non-interactive",
+                            "TrelloBoardSetupMain migrate-workflows --from-version " + FAKE_APP_VERSION
+                                    + " --non-interactive",
                             "TrelloBoardSetupMain start",
                             "--all");
             assertThat(updateWithoutMigrationCommand.exitCode())
@@ -8276,6 +8280,349 @@ final class InstallerScriptTest {
                 run(environment, binDirectory.resolve("symphony-trello").toString(), "stop");
             }
         }
+    }
+
+    @CsvSource({
+        "false, false, fail", "true, false, fail",
+        "false, true, fail", "true, true, fail",
+        "false, false, malformed", "true, false, malformed",
+        "false, true, malformed", "true, true, malformed",
+        "false, false, multiline", "true, false, multiline",
+        "false, true, multiline", "true, true, multiline"
+    })
+    @ParameterizedTest
+    void installersRejectAnUnprovenInstalledVersion(boolean powershell, boolean fromSource, String mode)
+            throws Exception {
+        // given
+        List<String> launcher = installerLauncher(powershell);
+        SourceDowngrade source = sourceDowngrade(false);
+        source.recordWorkerStopRequests();
+        source.installed().environment().put("SYMPHONY_FAKE_VERSION_MODE", mode);
+
+        // when
+        ProcessResult result = fromSource
+                ? source.run(launcher)
+                : powershell
+                        ? source.installed().runPowerShell(powershellCommand())
+                        : source.installed().runPosix();
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isNotZero();
+        assertThat(normalizedWhitespace(result.output()))
+                .contains("cannot determine installed Symphony version", "repair Java")
+                .doesNotContain("Checking generated workflows", "Symphony for Trello updated.");
+        source.assertAppUntouched();
+    }
+
+    @CsvSource({
+        "false, unknown", "true, unknown",
+        "false, 99.bad.0", "true, 99.bad.0",
+        "false, 2147483648.0.0", "true, 2147483648.0.0"
+    })
+    @ParameterizedTest
+    void installersRejectAnInvalidInstalledVersion(boolean powershell, String version) throws Exception {
+        // given
+        List<String> launcher = installerLauncher(powershell);
+        SourceDowngrade source = sourceDowngrade(false);
+        source.recordWorkerStopRequests();
+        source.installed().environment().put("SYMPHONY_FAKE_VERSION", version);
+
+        // when
+        ProcessResult result = source.run(launcher);
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isNotZero();
+        assertThat(normalizedWhitespace(result.output())).contains("cannot determine installed Symphony version");
+        source.assertAppUntouched();
+    }
+
+    @CsvSource({
+        "false, src/main/java/Local.java, false", "true, src/main/java/Local.java, false",
+        "false, src/main/resources/local.properties, true", "true, src/main/resources/local.properties, true",
+        "false, .mvn/jvm.config, true", "true, .mvn/jvm.config, true",
+        "false, .mvn/maven.config, false", "true, .mvn/maven.config, false",
+        "false, .codex/skills/local/SKILL.md, true", "true, .codex/skills/local/SKILL.md, true",
+        "false, .codex/skills/TESSL__local/SKILL.md, false", "true, .codex/skills/TESSL__local/SKILL.md, false",
+        "false, .env, true", "true, .env, true",
+        "false, config/application.properties, false", "true, config/application.properties, false",
+        "false, oss-fuzz/corpora/RepositorySourceFuzzer/local, true",
+                "true, oss-fuzz/corpora/RepositorySourceFuzzer/local, true"
+    })
+    @ParameterizedTest
+    void installersRejectUntrackedBuildInputsBeforeUpdating(boolean powershell, String relativePath, boolean ignored)
+            throws Exception {
+        // given
+        List<String> launcher = installerLauncher(powershell);
+        SourceDowngrade source = sourceDowngrade(true);
+        source.recordWorkerStopRequests();
+        source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
+        Path app = source.installed().appHome();
+        Path localInput = app.resolve(relativePath);
+        Files.createDirectories(localInput.getParent());
+        Files.writeString(localInput, "local build input");
+        if (ignored) {
+            Files.writeString(app.resolve(".git/info/exclude"), relativePath + "\n");
+        }
+
+        // when
+        ProcessResult result = source.run(launcher);
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isNotZero();
+        assertThat(normalizedWhitespace(result.output())).contains("source checkout has untracked build inputs");
+        assertThat(localInput).hasContent("local build input");
+        source.assertAppUntouched();
+    }
+
+    @CsvSource({
+        "false, .codex/skills/extra, SKILL.md",
+        "true, .codex/skills/extra, SKILL.md",
+        "false, .codex/skills/.hidden, SKILL.md",
+        "true, .codex/skills/.hidden, SKILL.md",
+        "false, config, application.properties",
+        "true, config, application.properties",
+        "false, .codex, skills/extra/SKILL.md",
+        "true, .codex, skills/extra/SKILL.md",
+        "false, .codex/skills, extra/SKILL.md",
+        "true, .codex/skills, extra/SKILL.md",
+        "false, oss-fuzz, corpora/RepositorySourceFuzzer/local",
+        "true, oss-fuzz, corpora/RepositorySourceFuzzer/local"
+    })
+    @ParameterizedTest
+    void installersRejectUntrackedBuildInputLinks(boolean powershell, String relativeLink, String relativeInput)
+            throws Exception {
+        // given
+        assumeFalse(isWindows());
+        List<String> launcher = installerLauncher(powershell);
+        SourceDowngrade source = sourceDowngrade(true);
+        source.recordWorkerStopRequests();
+        source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
+        Path external = temporaryDirectory.resolve("external-input");
+        Path input = external.resolve(relativeInput);
+        Files.createDirectories(input.getParent());
+        Files.writeString(input, "external build input");
+        Path link = source.installed().appHome().resolve(relativeLink);
+        Files.createDirectories(link.getParent());
+        Files.createSymbolicLink(link, external);
+
+        // when
+        ProcessResult result = source.run(launcher);
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isNotZero();
+        assertThat(normalizedWhitespace(result.output())).contains("source checkout has untracked build inputs");
+        assertThat(link).isSymbolicLink();
+        assertThat(input).hasContent("external build input");
+        source.assertAppUntouched();
+    }
+
+    @CsvSource({
+        "false, .codex/skills/local, SKILL.md", "true, .codex/skills/local, SKILL.md",
+        "false, .codex, skills/local/SKILL.md", "true, .codex, skills/local/SKILL.md",
+        "false, config, application.properties", "true, config, application.properties",
+        "false, oss-fuzz, corpora/RepositorySourceFuzzer/local", "true, oss-fuzz, corpora/RepositorySourceFuzzer/local"
+    })
+    @ParameterizedTest
+    void installersRejectNestedBuildInputRepositories(
+            boolean powershell, String relativeRepository, String relativeInput) throws Exception {
+        // given
+        List<String> launcher = installerLauncher(powershell);
+        SourceDowngrade source = sourceDowngrade(true);
+        source.recordWorkerStopRequests();
+        source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
+        Path repository = source.installed().appHome().resolve(relativeRepository);
+        Files.createDirectories(repository);
+        run(Map.of(), "git", "init", "-q", repository.toString()).assertSuccess();
+        Path input = repository.resolve(relativeInput);
+        Files.createDirectories(input.getParent());
+        Files.writeString(input, "nested build input");
+
+        // when
+        ProcessResult result = source.run(launcher);
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isNotZero();
+        assertThat(normalizedWhitespace(result.output())).contains("source checkout has untracked build inputs");
+        assertThat(input).hasContent("nested build input");
+        source.assertAppUntouched();
+    }
+
+    @CsvSource({".ENV, .git", "Config/Application.PROPERTIES, .Git", ".ENV, .GIT"})
+    @ParameterizedTest
+    @Tag(NATIVE_WINDOWS)
+    void powershellSourceUpdateRejectsCaseAliasedConfigurationOnNativeWindows(String relativeInput, String gitDirectory)
+            throws Exception {
+        // given
+        assumeTrue(isWindows());
+        List<String> launcher = installerLauncher(true);
+        SourceDowngrade source = sourceDowngrade(true);
+        source.recordWorkerStopRequests();
+        source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
+        Path app = source.installed().appHome();
+        assertThat(app.resolve(".GIT"))
+                .as("the native fixture uses a case-folding filesystem")
+                .exists();
+        Path intermediateGit = app.resolve("git-case-change");
+        Files.move(app.resolve(".git"), intermediateGit);
+        Files.move(intermediateGit, app.resolve(gitDirectory));
+        run(Map.of(), "git", "-C", app.toString(), "config", "core.ignorecase", "false")
+                .assertSuccess();
+        Path input = app.resolve(relativeInput);
+        Files.createDirectories(input.getParent());
+        Files.writeString(input, "synthetic.configuration=local");
+
+        // when
+        ProcessResult result = source.run(launcher);
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isNotZero();
+        assertThat(normalizedWhitespace(result.output())).contains("source checkout has untracked build inputs");
+        assertThat(input).hasContent("synthetic.configuration=local");
+        source.assertAppUntouched();
+    }
+
+    @Tag(NATIVE_WINDOWS)
+    @Test
+    void powershellSourceUpdateRejectsUnrecordedInputCasingOnNativeWindows() throws Exception {
+        // given
+        assumeTrue(isWindows());
+        List<String> launcher = installerLauncher(true);
+        SourceDowngrade initial = sourceDowngrade(true);
+        initial.recordWorkerStopRequests();
+        initial.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
+        Files.createDirectories(initial.source().resolve("src"));
+        addSourceRepositoryCommit(initial.source(), "src/Tracked.java", "record Tracked() {}\n");
+        Path app = initial.installed().appHome();
+        run(Map.of(), "git", "-C", app.toString(), "fetch", initial.source().toString(), "main")
+                .assertSuccess();
+        run(Map.of(), "git", "-C", app.toString(), "checkout", "--detach", "FETCH_HEAD")
+                .assertSuccess();
+        String head = run(Map.of(), "git", "-C", app.toString(), "rev-parse", "HEAD")
+                .output()
+                .strip();
+        var source = new SourceDowngrade(initial.installed(), initial.source(), initial.sentinel(), head);
+        run(Map.of(), "git", "-C", app.toString(), "config", "core.ignorecase", "true")
+                .assertSuccess();
+        Path intermediateSource = app.resolve("source-case-change");
+        Files.move(app.resolve("src"), intermediateSource);
+        Files.move(intermediateSource, app.resolve("SRC"));
+        assertThat(run(Map.of(), "git", "-C", app.toString(), "status", "--porcelain", "--untracked-files=no")
+                        .output())
+                .isEmpty();
+
+        // when
+        ProcessResult result = source.run(launcher);
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isNotZero();
+        assertThat(normalizedWhitespace(result.output())).contains("unrecorded case-only renames");
+        assertThat(app.resolve("SRC/Tracked.java")).hasContent("record Tracked() {}\n");
+        source.assertAppUntouched();
+    }
+
+    @CsvSource({"false, true", "true, true", "false, false", "true, false"})
+    @ParameterizedTest
+    void installersStopWhenWorkflowMigrationFails(boolean powershell, boolean helpProbe) throws Exception {
+        // given
+        List<String> launcher = installerLauncher(powershell);
+        SourceDowngrade source = sourceDowngrade(false);
+        source.recordWorkerStopRequests();
+        source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
+        source.installed()
+                .environment()
+                .put(
+                        helpProbe ? "SYMPHONY_FAKE_MIGRATION_HELP_FAILURE" : "SYMPHONY_FAKE_WORKFLOW_MIGRATION_FAILURE",
+                        "true");
+
+        // when
+        ProcessResult result = source.run(launcher);
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isNotZero();
+        assertThat(source.installed()
+                        .binDirectory()
+                        .resolve(powershell ? "symphony-trello.ps1.stop" : "symphony-trello.stop"))
+                .exists();
+        assertThat(Path.of(source.installed().environment().get("SYMPHONY_FAKE_LOG")))
+                .content(StandardCharsets.UTF_8)
+                .doesNotContain("TrelloBoardSetupMain start", "\"start\"");
+        assertThat(normalizedWhitespace(result.output()))
+                .contains(
+                        helpProbe
+                                ? "simulated migration help failure"
+                                : "REJECTED simulated workflow migration rejection")
+                .doesNotContain(
+                        "cannot check generated workflow bodies",
+                        "Symphony for Trello updated.",
+                        "Restarting managed workers");
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void installersBuildFromTheCheckoutAndPreserveNonInputFiles(boolean powershell) throws Exception {
+        // given
+        List<String> launcher = installerLauncher(powershell);
+        SourceDowngrade source = powershell ? sourceDowngrade(true) : sourceDowngrade(true, "source-downgrade[local]");
+        source.installed().environment().put("SYMPHONY_FAKE_VERSION", "1.0.0-rc.1+build.2");
+        Path app = source.installed().appHome();
+        List<String> retainedPaths = new ArrayList<>(List.of(
+                ".mvn/wrapper/dists/local/archive.zip",
+                ".mvn/wrapper/maven-wrapper.jar",
+                ".codex/skills/tessl__local/SKILL.md",
+                ".tessl/local",
+                "docs/local-note.md",
+                ".codex/skills/extra/README.md",
+                "config/local-note.txt",
+                ".codex/skills/lower/skill.md"));
+        if (!Files.exists(app.resolve(".GIT"))) {
+            run(Map.of(), "git", "-C", app.toString(), "config", "core.ignorecase", "true")
+                    .assertSuccess();
+            retainedPaths.addAll(List.of(".ENV", "config/Application.PROPERTIES"));
+        }
+        if (!isWindows()) {
+            retainedPaths.add(".codex/skills/tessl:local/SKILL.md");
+        }
+        for (String path : retainedPaths) {
+            Path local = app.resolve(path);
+            Files.createDirectories(local.getParent());
+            Files.writeString(local, "retained local output");
+        }
+        if (!isWindows()) {
+            Path generated = temporaryDirectory.resolve("generated-skill");
+            Files.createDirectories(generated);
+            Files.writeString(generated.resolve("SKILL.md"), "generated skill");
+            Files.createSymbolicLink(app.resolve(".codex/skills/tessl__linked"), generated);
+            Files.createSymbolicLink(app.resolve(".codex/skills/local-note"), generated.resolve("SKILL.md"));
+        }
+        Files.createDirectories(app.resolve("target"));
+        Files.writeString(app.resolve("target/local-output"), "old build output");
+
+        // when
+        ProcessResult result = source.run(launcher);
+
+        // then
+        result.assertSuccess();
+        assertThat(Path.of(source.installed().environment().get("SYMPHONY_FAKE_LOG")))
+                .content(StandardCharsets.UTF_8)
+                .contains("build-cwd=" + app.toRealPath());
+        assertThat(retainedPaths)
+                .allSatisfy(path -> assertThat(app.resolve(path)).hasContent("retained local output"));
+        assertThat(source.sentinel()).hasContent("original app");
+        if (!isWindows()) {
+            assertThat(app.resolve(".codex/skills/tessl__linked")).isSymbolicLink();
+            assertThat(app.resolve(".codex/skills/local-note")).isSymbolicLink();
+        }
+    }
+
+    private static List<String> installerLauncher(boolean powershell) {
+        assumeTrue(commandExists("git"));
+        if (powershell) {
+            List<String> pwsh = powershellCommand();
+            assumeFalse(pwsh.isEmpty());
+            return command(pwsh, "-NoProfile", "-File", "./install.ps1");
+        }
+        assumeTrue(commandExists("bash"));
+        return List.of("bash", "./install.sh");
     }
 
     @Test
@@ -8631,7 +8978,11 @@ final class InstallerScriptTest {
     record SourcePom(String xml, String expectedMessage) {}
 
     private SourceDowngrade sourceDowngrade(boolean existingCheckout) throws Exception {
-        ReleaseArchiveUpdate installed = releaseArchiveUpdate("source-downgrade", "99.0.0");
+        return sourceDowngrade(existingCheckout, "source-downgrade");
+    }
+
+    private SourceDowngrade sourceDowngrade(boolean existingCheckout, String name) throws Exception {
+        ReleaseArchiveUpdate installed = releaseArchiveUpdate(name, "99.0.0");
         Path source = createPowerShellSourceRepository(temporaryDirectory);
         if (existingCheckout) {
             Files.delete(installed.appHome().resolve(".symphony-trello-install"));
@@ -8650,6 +9001,23 @@ final class InstallerScriptTest {
     }
 
     private record SourceDowngrade(ReleaseArchiveUpdate installed, Path source, Path sentinel, String originalHead) {
+        void recordWorkerStopRequests() throws IOException {
+            Path state = installed.appHome().resolveSibling("state");
+            Files.createDirectories(state);
+            Files.writeString(state.resolve("WORKFLOW.preflight.pid"), "999999\n");
+            writeExecutable(
+                    installed.binDirectory().resolve("symphony-trello"),
+                    """
+                    #!/usr/bin/env bash
+                    if [[ "${1:-}" == stop ]]; then : > "$0.stop"; fi
+                    """);
+            Files.writeString(
+                    installed.binDirectory().resolve("symphony-trello.ps1"),
+                    """
+                    if ($args[0] -eq 'stop') { Set-Content -LiteralPath "$PSCommandPath.stop" -Value 'stop requested' }
+                    """);
+        }
+
         ProcessResult run(List<String> launcher) throws Exception {
             return InstallerScriptFixture.run(
                     installed.environment(),
@@ -8670,6 +9038,9 @@ final class InstallerScriptTest {
 
         void assertAppUntouched() throws Exception {
             assertThat(sentinel).hasContent("original app");
+            assertThat(installed.binDirectory().resolve("symphony-trello.stop")).doesNotExist();
+            assertThat(installed.binDirectory().resolve("symphony-trello.ps1.stop"))
+                    .doesNotExist();
             installed.assertAppUntouched();
             if (!originalHead.isEmpty()) {
                 assertThat(InstallerScriptFixture.run(
@@ -9308,7 +9679,10 @@ final class InstallerScriptTest {
         result.assertSuccess();
         assertThat(symphonyHome.resolve("state/install-context.properties"))
                 .content(StandardCharsets.UTF_8)
-                .contains("install_source=source-checkout", "app_version=test", "source_commit=" + expectedCommit)
+                .contains(
+                        "install_source=source-checkout",
+                        "app_version=" + FAKE_APP_VERSION,
+                        "source_commit=" + expectedCommit)
                 .doesNotContain(
                         "app_version=" + installerDefaultRef().substring(1), "release_tag=", "release_base_url=");
     }
@@ -9346,7 +9720,8 @@ final class InstallerScriptTest {
         if (migrationSupported) {
             assertThat(fakeLog)
                     .content(StandardCharsets.UTF_8)
-                    .contains("TrelloBoardSetupMain migrate-workflows --from-version test --non-interactive");
+                    .contains("TrelloBoardSetupMain migrate-workflows --from-version " + FAKE_APP_VERSION
+                            + " --non-interactive");
         } else {
             assertThat(update.output()).contains("NOTE  This Symphony version cannot check generated workflow bodies.");
             assertThat(fakeLog).content(StandardCharsets.UTF_8).doesNotContain("migrate-workflows --from-version");
