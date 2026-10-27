@@ -3602,7 +3602,7 @@ final class TrelloBoardSetupTest {
                 .content(StandardCharsets.UTF_8)
                 .contains("## Comment Attribution")
                 .containsIgnoringWhitespaces(
-                        "Every Trello comment Symphony writes ends with a `Managed by Symphony` footer")
+                        "Every Trello comment Symphony writes ends with a `Written by Symphony` footer")
                 .containsIgnoringWhitespaces("Do not type the footer yourself")
                 .containsIgnoringWhitespaces(
                         "A blocker handoff added through trello_add_comment ends with the plain footer and still counts as an ordinary comment for this check")
@@ -3611,7 +3611,7 @@ final class TrelloBoardSetupTest {
                 .containsIgnoringWhitespaces(
                         "The recheck procedure applies only when trello_update_blocker_recheck_status is advertised.")
                 .containsIgnoringWhitespaces("newest ordinary comment")
-                .containsIgnoringWhitespaces("exact `Managed by Symphony` footer")
+                .containsIgnoringWhitespaces("exact `Written by Symphony` footer")
                 .containsIgnoringWhitespaces("a link to the qualifying blocker comment on the current card")
                 .containsIgnoringWhitespaces(
                         "The newest ordinary `Blocked:` or `Blocked by ...` comment is the comment being rechecked; leave it unchanged")

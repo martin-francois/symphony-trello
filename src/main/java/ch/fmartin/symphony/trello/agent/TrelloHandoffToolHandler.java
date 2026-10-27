@@ -168,7 +168,7 @@ public class TrelloHandoffToolHandler {
                                 Map.of(
                                         "text",
                                         stringSchema(
-                                                "Full Markdown workpad body. Symphony ensures it starts with ## Codex Workpad and ends with its Managed by Symphony footer. Do not include Symphony's managed Codex usage-section markers.")),
+                                                "Full Markdown workpad body. Symphony ensures it starts with ## Codex Workpad and ends with its Written by Symphony footer. Do not include Symphony's managed Codex usage-section markers.")),
                                 List.of("text"))),
                 toolDefinition(
                         UPDATE_BLOCKER_RECHECK_STATUS,
@@ -465,7 +465,8 @@ public class TrelloHandoffToolHandler {
         String authoritativeText = duplicatesFound > 0 && !destructiveAllowed
                 ? blockerRecheckTextWithManualCleanup(text, duplicatesFound)
                 : text;
-        if (!authoritativeText.equals(primary.text())) {
+        // Ignore the attribution spelling, but retain the blocker link when comparing identity.
+        if (!SymphonyCommentFooter.parse(authoritativeText).equals(SymphonyCommentFooter.parse(primary.text()))) {
             trello.updateComment(config, primary.id(), authoritativeText);
         }
         DuplicateCleanup cleanup = destructiveAllowed

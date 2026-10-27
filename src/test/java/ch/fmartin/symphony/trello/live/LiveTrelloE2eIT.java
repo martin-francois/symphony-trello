@@ -635,7 +635,7 @@ final class LiveTrelloE2eIT {
                 .as("human comments stay unchanged")
                 .containsAll(humanComments)
                 .filteredOn(text -> !humanComments.contains(text))
-                .as("Symphony comments end with exactly one Managed by Symphony footer")
+                .as("Symphony comments end with exactly one Written by Symphony footer")
                 .isNotEmpty()
                 .allSatisfy(text -> {
                     assertThat(text).containsOnlyOnce(SymphonyCommentFooter.ATTRIBUTION);

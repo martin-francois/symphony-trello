@@ -74,7 +74,7 @@ final class TrelloHandoffToolHandlerTest {
     private static final String NUL_IN_USAGE_MESSAGE = "\u0000";
     private static final String ROCKET_EMOJI = "\uD83D\uDE80";
     private static final String MIDDLE_DOT = "\u00B7";
-    private static final String FOOTER = "\n\n_Managed by Symphony_";
+    private static final String FOOTER = "\n\n_Written by Symphony_";
     private static final JsonNode SUCCESS_NODE = JsonNodeFactory.instance.booleanNode(true);
     private static final JsonNode FAILURE_NODE = JsonNodeFactory.instance.booleanNode(false);
     private static final Duration CONCURRENT_VALIDATION_TIMEOUT = Duration.ofSeconds(30);
@@ -719,7 +719,7 @@ final class TrelloHandoffToolHandlerTest {
         assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(commentText.get())
                 .startsWith("Checking whether this card is still blocked...")
-                .contains("_Managed by Symphony · [View the comment explaining why this card was previously blocked](")
+                .contains("_Written by Symphony · [View the comment explaining why this card was previously blocked](")
                 .contains("https://trello.com/c/SYNTH101#comment-" + BLOCKER_ACTION_ID)
                 .doesNotContain("<!--");
         assertThat(updatedCommentText.get()).isNull();
@@ -978,11 +978,14 @@ final class TrelloHandoffToolHandlerTest {
 
     @MethodSource("blockerHandoffsWithAndWithoutFooter")
     @ParameterizedTest(name = "{0}")
-    void managedCheckingStatusMakesCrashRetryIdempotent(String scenario, String blockerText) {
+    void managedCheckingStatusMakesCrashRetryIdempotent(String scenario, String blockerText, String attribution) {
         // given
         TrelloHandoffToolHandler handler = handler();
         cardResponse.set(cardJson(actionsJson(
-                managedRecheckAction(BLOCKER_RECHECK_ACTION_ID, CHECKING_STATUS, BLOCKER_ACTION_ID),
+                commentAction(
+                        BLOCKER_RECHECK_ACTION_ID,
+                        managedRecheckText(CHECKING_STATUS, BLOCKER_ACTION_ID)
+                                .replace("Written by Symphony", attribution)),
                 commentAction(BLOCKER_ACTION_ID, blockerText))));
 
         // when
@@ -997,24 +1000,50 @@ final class TrelloHandoffToolHandlerTest {
                 .contains("blocker_recheck_already_started");
         assertThat(commentText.get()).isNull();
         assertThat(updatedCommentText.get()).isNull();
+        assertThat(deletedActionIds).isEmpty();
     }
 
     private static Stream<Arguments> blockerHandoffsWithAndWithoutFooter() {
         String blocker = "Blocked: transient repository mismatch";
         return Stream.of(
-                Arguments.of("blocker handoff written before the footer", blocker),
-                Arguments.of("blocker handoff with the plain footer", withFooter(blocker)));
+                Arguments.of("legacy blocker, current status footer", blocker, "Written by Symphony"),
+                Arguments.of("legacy blocker, previous status footer", blocker, "Managed by Symphony"),
+                Arguments.of("attributed blocker, current status footer", withFooter(blocker), "Written by Symphony"),
+                Arguments.of("attributed blocker, previous status footer", withFooter(blocker), "Managed by Symphony"));
     }
 
-    @Test
-    void priorResumedStatusDoesNotRegressToCheckingForTheSameBlocker() {
+    @ParameterizedTest
+    @ValueSource(strings = {"Written by Symphony", "Managed by Symphony"})
+    void resumesTheExistingBlockerStatusWithCurrentWording(String attribution) {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        String existing =
+                managedRecheckText(CHECKING_STATUS, BLOCKER_ACTION_ID).replace("Written by Symphony", attribution);
+        cardResponse.set(cardJson(actionsJson(
+                commentAction(BLOCKER_RECHECK_ACTION_ID, existing),
+                commentAction(BLOCKER_ACTION_ID, "Blocked: repository mismatch"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "resumed");
+
+        // then
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
+        assertThat(updatedCommentText.get())
+                .contains("No longer blocked", "_Written by Symphony", "#comment-" + BLOCKER_ACTION_ID)
+                .doesNotContain("Managed by Symphony");
+        assertThat(commentText.get()).isNull();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"Written by Symphony", "Managed by Symphony"})
+    void priorResumedStatusDoesNotRegressToCheckingForTheSameBlocker(String attribution) {
         // given
         TrelloHandoffToolHandler handler = handler();
         cardResponse.set(cardJson(actionsJson(
-                managedRecheckAction(
+                commentAction(
                         BLOCKER_RECHECK_ACTION_ID,
-                        "No longer blocked; working on Implement feature.",
-                        BLOCKER_ACTION_ID),
+                        managedRecheckText("No longer blocked; working on Implement feature.", BLOCKER_ACTION_ID)
+                                .replace("Written by Symphony", attribution)),
                 commentAction(BLOCKER_ACTION_ID, "Blocked: transient repository mismatch"))));
 
         // when
@@ -1028,6 +1057,29 @@ final class TrelloHandoffToolHandlerTest {
                 .contains("resumed_work_already_confirmed");
         assertThat(commentText.get()).isNull();
         assertThat(updatedCommentText.get()).isNull();
+        assertThat(deletedActionIds).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"Written by Symphony", "Managed by Symphony"})
+    void newerBlockerUpdatesTheLinkEvenWhenCheckingBodyIsUnchanged(String attribution) {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        String existing =
+                managedRecheckText(CHECKING_STATUS, BLOCKER_ACTION_ID).replace("Written by Symphony", attribution);
+        cardResponse.set(cardJson(actionsJson(
+                commentAction("action-blocker-new", "Blocked by a new missing permission"),
+                commentAction(BLOCKER_RECHECK_ACTION_ID, existing),
+                commentAction(BLOCKER_ACTION_ID, "Blocked: old repository mismatch"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
+        assertThat(updatedCommentText.get()).isEqualTo(managedRecheckText(CHECKING_STATUS, "action-blocker-new"));
+        assertThat(commentText.get()).isNull();
+        assertThat(deletedActionIds).isEmpty();
     }
 
     @Test
@@ -2619,7 +2671,7 @@ final class TrelloHandoffToolHandlerTest {
     void addCommentKeepsCopiedFooterTextInsideTheBodyAndStillEndsWithTheCanonicalFooter() {
         // given
         TrelloHandoffToolHandler handler = handler();
-        String quoted = "A person wrote:\n\n> _Managed by Symphony_\n\nManaged by Symphony";
+        String quoted = "A person wrote:\n\n> _Written by Symphony_\n\nWritten by Symphony";
 
         // when
         JsonNode result = addComment(handler, quoted);
@@ -2635,7 +2687,7 @@ final class TrelloHandoffToolHandlerTest {
         TrelloHandoffToolHandler handler = handler();
 
         // when
-        JsonNode result = upsertWorkpad(handler, "_Managed by Symphony_\n");
+        JsonNode result = upsertWorkpad(handler, "_Written by Symphony_\n");
 
         // then
         assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
@@ -2650,7 +2702,7 @@ final class TrelloHandoffToolHandlerTest {
         TrelloHandoffToolHandler handler = handler();
 
         // when
-        JsonNode result = addComment(handler, "_Managed by Symphony_");
+        JsonNode result = addComment(handler, "_Written by Symphony_");
 
         // then
         assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
@@ -3306,9 +3358,9 @@ final class TrelloHandoffToolHandlerTest {
     }
 
     private static String managedRecheckText(String visibleStatus, String blockerActionId, String cardShortLink) {
-        // Spelled out byte for byte so recheck statuses written before the shared footer stay managed.
+        // An independent fixture pins the visible link format used by the recheck protocol.
         return visibleStatus
-                + "\n\n_Managed by Symphony "
+                + "\n\n_Written by Symphony "
                 + MIDDLE_DOT
                 + " [View the comment explaining why this card was previously blocked](https://trello.com/c/"
                 + cardShortLink

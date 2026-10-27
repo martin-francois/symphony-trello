@@ -33,6 +33,7 @@ final class GuidedTutorialTest {
     private static final Pacing FAST_POLLING = new Pacing(Duration.ofMillis(20), 250);
     private static final Pacing SHORT_WINDOW = new Pacing(Duration.ofMillis(10), 3);
     private static final String CLI = "symphony-trello";
+    private static final String ATTRIBUTION_FOOTER = "\n\n_Written by Symphony_";
     private static final String USER_BOARD = "Existing Queue";
     private static final String USER_CHANGE_REQUEST = "Please also print the date";
     private static final String EARLIER_CHANGE_REQUEST = "Please use a friendlier greeting";
@@ -56,9 +57,10 @@ final class GuidedTutorialTest {
     @Test
     void walksThroughTheTrelloOnlyFlowAndArchivesOnlyTheTutorialBoard() throws IOException {
         // given
+        var pickupWorkpad = new AtomicReference<String>();
         var terminal = new ScriptedTerminal(
                 user(() -> move(TrelloBoardSetup.RECOMMENDED_ACTIVE_STATE), ""),
-                answer(""),
+                user(() -> pickupWorkpad.set(workpad()), ""),
                 answer(""),
                 user(this::requestChange, ""),
                 answer(""),
@@ -97,13 +99,19 @@ final class GuidedTutorialTest {
         String cardId = trello.onlyCardId(tutorialBoardId);
         assertThat(trello.cardName(cardId)).isEqualTo(GuidedTutorial.CARD_NAME);
         assertThat(trello.listOf(cardId)).isEqualTo(TrelloBoardSetup.RECOMMENDED_DONE_STATE);
+        assertThat(pickupWorkpad.get())
+                .contains("Status: In progress")
+                .endsWith(ATTRIBUTION_FOOTER)
+                .containsOnlyOnce(ATTRIBUTION_FOOTER);
         assertThat(trello.commentTexts(cardId))
                 .satisfiesExactly(
                         workpad -> assertThat(workpad)
                                 .startsWith("## Codex Workpad")
                                 .contains(
                                         "No Codex work ran.",
-                                        "Rework input: your Trello comment \"" + USER_CHANGE_REQUEST + "\""),
+                                        "Rework input: your Trello comment \"" + USER_CHANGE_REQUEST + "\"")
+                                .endsWith(ATTRIBUTION_FOOTER)
+                                .containsOnlyOnce(ATTRIBUTION_FOOTER),
                         comment -> assertThat(comment).isEqualTo(USER_CHANGE_REQUEST));
         assertThat(trello.archived(tutorialBoardId))
                 .as("the tutorial archives its own board")
@@ -175,12 +183,18 @@ final class GuidedTutorialTest {
                         GuidedTutorial.CONCURRENCY_NOTE,
                         "OK  Archived the temporary tutorial board")
                 .doesNotContain("What GitHub pull request integration adds");
-        assertThat(handoffWorkpad.get()).contains("Pull request: demo only, no pull request was created.");
+        assertThat(handoffWorkpad.get())
+                .contains("Pull request: demo only, no pull request was created.")
+                .endsWith(ATTRIBUTION_FOOTER)
+                .containsOnlyOnce(ATTRIBUTION_FOOTER);
         String tutorialBoardId = trello.boardIdNamed(GuidedTutorial.BOARD_NAME);
         assertThat(trello.listNames(tutorialBoardId)).containsExactlyElementsOf(TrelloBoardSetup.RECOMMENDED_LISTS);
         assertThat(trello.listOf(trello.onlyCardId(tutorialBoardId)))
                 .isEqualTo(TrelloBoardSetup.RECOMMENDED_DONE_STATE);
-        assertThat(workpad()).contains("Status: Merged", "nothing was merged");
+        assertThat(workpad())
+                .contains("Status: Merged", "nothing was merged")
+                .endsWith(ATTRIBUTION_FOOTER)
+                .containsOnlyOnce(ATTRIBUTION_FOOTER);
     }
 
     @Test
@@ -343,7 +357,11 @@ final class GuidedTutorialTest {
                         "OK  The tutorial moved the card to \"Done\" for you",
                         "OK  Archived the temporary tutorial board");
         assertThat(workpad())
-                .contains("Rework input: your Trello comment \"" + GuidedTutorial.SAMPLE_CHANGE_REQUEST + "\"");
+                .contains("Rework input: your Trello comment \"" + GuidedTutorial.SAMPLE_CHANGE_REQUEST
+                        + " _Written by Symphony_\"")
+                .endsWith(ATTRIBUTION_FOOTER)
+                .containsOnlyOnce(ATTRIBUTION_FOOTER);
+        assertThat(trello.commentTexts(cardId())).contains(GuidedTutorial.SAMPLE_CHANGE_REQUEST + ATTRIBUTION_FOOTER);
         assertThat(trello.listOf(cardId())).isEqualTo(TrelloBoardSetup.RECOMMENDED_DONE_STATE);
     }
 

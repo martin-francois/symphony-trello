@@ -26,13 +26,13 @@ final class FollowUpsWorkpadSection {
         return previous.lines()
                 .filter(line -> !line.startsWith(CREATED_PREFIX))
                 .filter(cardUrl.asPredicate())
-                .anyMatch(line -> !line.equals(expectedFooter));
+                .anyMatch(line -> !matchesFooter(line, expectedFooter));
     }
 
     static String add(String workpad, String url, String title, FollowUpRelationship relationship) {
         String previous = SECTION.managedSection(workpad);
         String footer = footer(url, relationship);
-        if (previous != null && previous.lines().anyMatch(footer::equals)) {
+        if (previous != null && previous.lines().anyMatch(line -> matchesFooter(line, footer))) {
             return workpad;
         }
         String content = previous == null
@@ -44,6 +44,10 @@ final class FollowUpsWorkpadSection {
 
     private static String link(String url) {
         return "[the follow-up card](" + url + ")";
+    }
+
+    private static boolean matchesFooter(String line, String expectedFooter) {
+        return SymphonyCommentFooter.parse(line).equals(SymphonyCommentFooter.parse(expectedFooter));
     }
 
     private static String footer(String url, FollowUpRelationship relationship) {

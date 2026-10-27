@@ -448,11 +448,12 @@ look while a card is running: it should say what Codex is doing, what it has lea
 and whether it is blocked. Symphony updates that same comment instead of creating a long stream of
 progress comments.
 
-Every comment Symphony writes on a card ends with a small italic `Managed by Symphony` line. That
+Every comment Symphony writes on a card ends with a small italic `Written by Symphony` line. That
 includes the workpad, handoff and blocker comments from Codex, the blocker-recheck status, and the
 prerequisite waiting comment. Comments you write yourself never get that line, so you can tell them
 apart even when Symphony posts through your Trello account. Older Symphony comments get the line the
-next time Symphony changes them.
+next time Symphony changes them. Existing `Managed by Symphony` footers remain recognized; their
+wording changes on the next content update without a bulk rewrite.
 
 Use normal Trello checklists when one card must wait for another. Add a checklist such as
 `Must finish first`; the checklist name is only for people. Put one bare Trello card reference in
@@ -1826,9 +1827,9 @@ rest:
   relationship, for example `current_waits_for_follow_up: Must finish first`.
 - It attaches each card to the other, so both cards show a visible link.
 - It writes a managed `Follow-ups` section in the current card's workpad, with the new card's title
-  and a reciprocal `Managed by Symphony` relationship footer. Later workpad and usage updates
+  and a reciprocal `Written by Symphony` relationship footer. Later workpad and usage updates
   preserve that section.
-- It ends the new card's description with a `Managed by Symphony` line that names the source card
+- It ends the new card's description with a `Written by Symphony` line that names the source card
   and the relationship. Symphony reads relationships only from that exact line. A card link you
   paste or attach yourself stays a plain link.
 
@@ -1836,7 +1837,7 @@ Codex picks one of three relationships:
 
 | Relationship | Meaning | What Symphony adds |
 | --- | --- | --- |
-| `related` | No required order. | Links and the `Managed by Symphony` line. |
+| `related` | No required order. | Links and the `Written by Symphony` line. |
 | `follow_up_waits_for_current` | The new card starts after the current card is done. | A `Must finish first` checklist on the new card. |
 | `current_waits_for_follow_up` | The current card cannot finish until the new card is done. | A `Must finish first` checklist on the current card. |
 

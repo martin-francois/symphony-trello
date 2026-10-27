@@ -41,11 +41,11 @@ import org.jspecify.annotations.Nullable;
 public final class TrelloHandoffToolFuzzInvariants {
     static final String CURRENT_CARD_ID = "card-current";
     static final String MIDDLE_DOT = "\u00B7";
-    private static final String RECHECK_FOOTER_PREFIX = "_Managed by Symphony " + MIDDLE_DOT
-            + " [View the comment explaining why this card was previously blocked](";
+    private static final String RECHECK_FOOTER_DETAIL =
+            " " + MIDDLE_DOT + " [View the comment explaining why this card was previously blocked](";
     private static final String RECHECK_FOOTER_SUFFIX = ")_";
     private static final Pattern FOOTER_LINE =
-            Pattern.compile("_Managed by Symphony(?: " + MIDDLE_DOT + " ([^\\r\\n]+))?_");
+            Pattern.compile("_(?:Written|Managed) by Symphony(?: " + MIDDLE_DOT + " ([^\\r\\n]+))?_");
     private static final String OTHER_CARD_ID = "card-other";
     private static final String MISSING_CARD_ID = "card-missing";
     private static final String BOARD_ID = "board-1";
@@ -497,11 +497,17 @@ public final class TrelloHandoffToolFuzzInvariants {
             return text.startsWith(TrelloHandoffToolHandler.WORKPAD_MARKER);
         }
         return text.endsWith(RECHECK_FOOTER_SUFFIX)
-                && text.contains("\n\n" + recheckFooterLink(execution.currentShortLink()));
+                && (text.contains("\n\n" + recheckFooterLink(execution.currentShortLink()))
+                        || text.contains("\n\n" + recheckFooterLink("Managed", execution.currentShortLink())));
     }
 
     private static String recheckFooterLink(String shortLink) {
-        return RECHECK_FOOTER_PREFIX + InMemoryTrelloBoard.CARD_URL_PREFIX + shortLink + COMMENT_LINK_FRAGMENT;
+        return recheckFooterLink("Written", shortLink);
+    }
+
+    private static String recheckFooterLink(String attribution, String shortLink) {
+        return "_" + attribution + " by Symphony" + RECHECK_FOOTER_DETAIL + InMemoryTrelloBoard.CARD_URL_PREFIX
+                + shortLink + COMMENT_LINK_FRAGMENT;
     }
 
     /// The URL rule from SPEC.md Section 17.8, checked independently of the handler.

@@ -31,14 +31,15 @@ comments, and without rewriting old comments in bulk?
 * Attribution must not depend on the Trello author account.
 * One format and one formatter/parser, so new comment families do not invent their own label.
 * Visible attribution must not grant edit or delete rights. Anyone can type the same text.
-* Existing blocker-recheck comments must stay recognized byte for byte.
+* Existing blocker-recheck comments must stay recognized without a bulk rewrite.
 * No bulk migration of historical comments.
 * [GitHub issue #666](https://github.com/martin-francois/symphony-trello/issues/666) may reuse the
   same contract later.
 
 ## Considered Options
 
-* One shared readable footer for attribution, with ownership kept per family.
+* One shared readable `Written by Symphony` footer, with ownership kept per family.
+* Keep `Managed by Symphony` as the visible wording.
 * Use the shared footer as the ownership marker for every family.
 * Append the footer inside the `TrelloClient` comment write methods.
 * Hidden HTML comment markers or opaque identifiers.
@@ -47,14 +48,20 @@ comments, and without rewriting old comments in bulk?
 
 ## Decision Outcome
 
-Chosen option: "One shared readable footer for attribution, with ownership kept per family",
+Chosen option: "One shared readable Written by Symphony footer, with ownership kept per family",
 because it shows authorship on every Symphony comment while each mutation path keeps its existing,
 narrower proof of ownership.
 
 `SymphonyCommentFooter` in the tracker package is the only formatter and parser. The footer is the
-last Markdown paragraph of the comment and is exactly `_Managed by Symphony_`. A family that needs
-one line of extra visible identity uses `_Managed by Symphony · <detail>_`. The blocker-recheck
-status keeps its existing link to the blocker comment as that detail, so its text did not change.
+last Markdown paragraph of the comment and is exactly `_Written by Symphony_`. A family that needs
+one line of extra visible identity uses `_Written by Symphony · <detail>_`. The blocker-recheck
+status keeps its existing link to the blocker comment as that detail.
+
+The owner selected `Written by Symphony` because the footer identifies authorship. `Managed by
+Symphony` emphasizes maintenance instead. New comment and follow-up relationship footers use the
+selected wording. Exact old footers remain a permanent supported read format, including their
+blocker links and follow-up relationships. Both spellings use the same ownership and validation
+rules. Unchanged comments are not rewritten, and an ordinary content update emits the new wording.
 
 Every write path appends exactly one footer. Tools remove footers that the agent echoed at the end of
 its text before appending the canonical one, so retries and copied workpads never stack footers.
@@ -85,8 +92,12 @@ byte for byte the same.
 
 This decision is still implemented when:
 
-* every production call to `TrelloClient.addComment` or `TrelloClient.updateComment` passes text
-  built with `SymphonyCommentFooter.append`, or restores the exact text that was read earlier;
+* every production call to `TrelloClient.addComment`, `TrelloClient.updateComment`,
+  `TutorialTrello.addComment`, or `TutorialTrello.updateComment` passes text built with
+  `SymphonyCommentFooter.append`, or restores the exact text that was read earlier;
+* `TrelloFollowUpCardToolTest` covers the blocked handoff when the source card must wait for its
+  follow-up, and `GuidedTutorialTest` covers generated tutorial workpads and sample comments while
+  preserving actual human comments;
 * `SymphonyCommentFooterTest` covers malformed, misplaced, duplicated, and lookalike footers;
 * `TrelloHandoffToolHandlerTest` and `TrelloClientTest` cover each family with footer creation,
   echoed footers, legacy comments, and comments from other families that must stay unchanged;
@@ -98,7 +109,7 @@ This decision is still implemented when:
 
 ### One Shared Readable Footer, Ownership Per Family
 
-Every Symphony comment ends with `_Managed by Symphony_` or `_Managed by Symphony · <detail>_`.
+Every Symphony comment ends with `_Written by Symphony_` or `_Written by Symphony · <detail>_`.
 Mutation paths keep their own family check and treat the footer as display text only.
 
 * Good, because the attribution is readable in Trello and in the API text.
@@ -106,6 +117,13 @@ Mutation paths keep their own family check and treat the footer as display text 
   [ADR 0065](0065-managed-stale-blocker-recheck-status.md) do not change.
 * Good, because the detail slot keeps the blocker-recheck link without a second format.
 * Bad, because two layers, attribution and ownership, must be explained to contributors.
+
+### Keep Managed by Symphony
+
+Keep the existing visible label for every comment.
+
+* Good, because the visible wording stays unchanged.
+* Bad, because it describes maintenance rather than directly answering who wrote the comment.
 
 ### Use the Shared Footer as the Ownership Marker
 
@@ -161,6 +179,6 @@ poll.
 
 ## More Information
 
-This is a compatible change. No configuration key changes. The blocker-recheck footer is unchanged
-byte for byte. A machine reader that compared whole comment texts now sees one extra final
-paragraph on new and updated comments.
+This is a compatible change. No configuration key changes. Existing blocker-recheck and follow-up
+footers remain recognized. New and updated text uses the chosen attribution. Relationship retries
+compare the parsed footer identity, so an older spelling cannot create duplicate cards or entries.

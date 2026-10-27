@@ -50,7 +50,7 @@ The harness covers:
 6. `max_concurrent_agents: 2` on one board.
 7. Two Symphony processes watching two boards at the same time.
 8. Fake app-server Trello comments and handoff moves. Every comment Symphony writes on a handed-off
-   card must end with exactly one `Managed by Symphony` footer, and a comment the harness writes
+   card must end with exactly one `Written by Symphony` footer, and a comment the harness writes
    before pickup must come back byte for byte without one.
 9. A long-running external-project card with Docker fixture files, proving Trello shows
    `In Progress` while work is underway and `Human Review` after handoff.
@@ -175,7 +175,7 @@ Use a unique run id such as `live-e2e-YYYYMMDD-HHMMSS`.
    `trello_move_current_card`.
 7. Processed cards have one workpad comment, a handoff comment, and end in `Human Review` on
    recommended boards.
-8. Every comment Symphony wrote ends with the readable `Managed by Symphony` footer as its last
+8. Every comment Symphony wrote ends with the readable `Written by Symphony` footer as its last
    paragraph, exactly once. Open the card in Trello and confirm the footer renders as one italic
    line with no raw HTML or marker text. A comment you added by hand before pickup keeps its exact
    text and shows no footer.
@@ -872,7 +872,7 @@ GitHub and must not use a normal project board or repository.
    managed comment remains at `Checking whether this card is still blocked...` The card must never
    show `No longer blocked; working on ...` while the mismatch remains.
 5. Trigger a safe pickup retry for each variant. Fetch up to 1000 `commentCard` actions from the
-   Trello API and assert exactly one action ends with the `Managed by Symphony` footer whose detail
+   Trello API and assert exactly one action ends with the `Written by Symphony` footer whose detail
    is a current-card `#comment-ACTION_ID` link. Other Symphony comments end with the plain footer.
    Verify repeated `checking` or `resumed` calls update that action rather than creating another
    comment.

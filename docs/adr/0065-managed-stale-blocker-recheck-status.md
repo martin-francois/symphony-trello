@@ -152,6 +152,6 @@ Have the tracker or orchestrator create and complete the status as part of card 
 repository-mismatch example and compatibility decision. This is a compatible additive change; it
 does not change existing configuration keys or require migration.
 
-[ADR 0084](0084-shared-symphony-comment-attribution-footer.md) later made the `Managed by Symphony`
-footer the shared attribution for every Symphony comment. The recheck footer is that shared footer
-with the blocker link as its detail, and its text did not change.
+[ADR 0084](0084-shared-symphony-comment-attribution-footer.md) later chose `Written by Symphony`
+as the shared attribution for new comments. Existing `Managed by Symphony` recheck comments remain
+recognized with the same blocker-link checks. They receive the new wording on their next content update.

@@ -111,7 +111,10 @@ Codex supplies only a title, a description, acceptance criteria, and one of thre
   repair; the follow-up tool never deletes
   a comment to resolve them.
 * The last paragraph of the follow-up description is
-  `_Managed by Symphony · Follow-up of [the source card](https://trello.com/c/<shortLink>) · <relationship text>_`.
+  `_Written by Symphony · Follow-up of [the source card](https://trello.com/c/<shortLink>) · <relationship text>_`.
+  [ADR 0084](0084-shared-symphony-comment-attribution-footer.md) chooses this authorship wording.
+  Existing exact `Managed by Symphony` relationship footers remain recognized with the same link
+  and relationship checks, including retry and per-source-limit handling.
   This exact line is the accepted relationship convention. Any other link stays a plain reference.
 * `follow_up_waits_for_current` adds the source card to a `Must finish first` checklist on the new
   card. `current_waits_for_follow_up` adds the new card to a `Must finish first` checklist on the
@@ -203,10 +206,10 @@ cards.
 ### A Symphony metadata footer at the end of the follow-up card description
 
 The last description paragraph names the source card and the relationship in plain words with the
-`Managed by Symphony` attribution.
+`Written by Symphony` attribution.
 
 * Good, because board users can read it and it works on Trello Free.
-* Good, because it has the same shape as the other `Managed by Symphony` lines.
+* Good, because it has the same shape as the other `Written by Symphony` lines.
 * Bad, because anyone who can edit the card can change it; a changed footer then means "no
   relationship", which is the safe reading.
 

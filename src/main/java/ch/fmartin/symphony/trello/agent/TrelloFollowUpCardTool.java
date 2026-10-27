@@ -6,6 +6,7 @@ import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.FollowUpRelationship;
 import ch.fmartin.symphony.trello.config.StateNames;
 import ch.fmartin.symphony.trello.domain.Card;
+import ch.fmartin.symphony.trello.tracker.SymphonyCommentFooter;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Clock;
@@ -254,7 +255,7 @@ final class TrelloFollowUpCardTool {
         Optional<TrelloClient.BoardList> moveTarget =
                 plan.blockedTarget().filter(blocked -> item.status() == TrelloClient.ChecklistItemWrite.Status.CREATED);
         moveTarget.ifPresent(blocked -> {
-            trello.addComment(config, cardId, blockedHandoffText(followUpUrl));
+            trello.addComment(config, cardId, SymphonyCommentFooter.append(blockedHandoffText(followUpUrl)));
             trello.moveCardToList(config, cardId, blocked.id());
         });
         return moveTarget;
@@ -482,8 +483,8 @@ final class TrelloFollowUpCardTool {
                                     codePoint != '\n' && codePoint != '\t' && lineBreakOrControl(codePoint)),
                     "description must not contain control characters");
             checkArgument(
-                    description.lines().noneMatch(line -> line.strip().startsWith(FollowUpCardMetadata.FOOTER_PREFIX)),
-                    "description must not contain the Managed by Symphony footer; Symphony writes it");
+                    description.lines().map(String::strip).noneMatch(SymphonyCommentFooter::hasAttributionPrefix),
+                    "cannot accept description: omit the attribution footer; Symphony writes it");
             List<String> criteria = acceptanceCriteria(arguments);
             FollowUpRelationship relationship = relationship(arguments);
             var body = new StringBuilder(description.strip());

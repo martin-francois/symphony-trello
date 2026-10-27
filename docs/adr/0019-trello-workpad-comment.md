@@ -96,5 +96,5 @@ Codex stores structured progress in Trello checklists.
 `trello_tools.allow_comments`.
 
 Since [ADR 0084](0084-shared-symphony-comment-attribution-footer.md), the workpad ends with the
-shared `Managed by Symphony` footer. The `## Codex Workpad` heading remains the only workpad
+shared `Written by Symphony` footer. The `## Codex Workpad` heading remains the only workpad
 identity.

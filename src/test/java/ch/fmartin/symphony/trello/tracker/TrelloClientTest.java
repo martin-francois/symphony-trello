@@ -45,7 +45,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 final class TrelloClientTest {
     private static final String TRELLO_CARD_URL_PREFIX = "https://trello.com/c/";
     private static final Instant RETRY_AFTER_NOW = Instant.parse("2026-10-04T10:00:00Z");
-    private static final String SYMPHONY_FOOTER = "\n\n_Managed by Symphony_";
+    private static final String SYMPHONY_FOOTER = "\n\n_Written by Symphony_";
 
     private FakeTrelloServer trello;
     private final AtomicReference<String> authorization = new AtomicReference<>();

@@ -41,6 +41,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /// Drives `trello_create_follow_up_card` through the handoff tool handler against a stateful fake
 /// Trello board, so each test checks the board state the tool leaves behind.
@@ -57,7 +58,7 @@ final class TrelloFollowUpCardToolTest {
     private static final String BLOCKED_ID = "list-blocked";
     private static final String FOLLOW_UP_TITLE = "Cache board labels between polls";
     private static final String MANAGED_FOOTER_PREFIX =
-            "_Managed by Symphony · Follow-up of [the source card](" + SOURCE_URL + ") · ";
+            "_Written by Symphony · Follow-up of [the source card](" + SOURCE_URL + ") · ";
 
     private final ObjectMapper json = new ObjectMapper();
     private final FakeTrelloBoard board = new FakeTrelloBoard(BOARD_ID);
@@ -105,17 +106,18 @@ final class TrelloFollowUpCardToolTest {
                         "**Follow-ups**",
                         followUp.url(),
                         FOLLOW_UP_TITLE,
-                        "_Managed by Symphony",
+                        "_Written by Symphony",
                         relationship.sourceCardNote()));
     }
 
-    @Test
-    void addingFollowUpToAttributedWorkpadKeepsOneTrailingFooter() {
+    @ParameterizedTest
+    @ValueSource(strings = {"Written by Symphony", "Managed by Symphony"})
+    void addingFollowUpToAttributedWorkpadKeepsOneTrailingFooter(String attribution) {
         // given
         EffectiveConfig config = config(Map.of(), Map.of());
         board.cardByName(SOURCE_TITLE)
                 .orElseThrow()
-                .comment("## Codex Workpad\n\nImplementation plan.\n\n_Managed by Symphony_");
+                .comment("## Codex Workpad\n\nImplementation plan.\n\n_" + attribution + "_");
 
         // when
         ObjectNode result = call(config, arguments(FOLLOW_UP_TITLE, "related"));
@@ -129,16 +131,18 @@ final class TrelloFollowUpCardToolTest {
                 .asString()
                 .contains("Implementation plan.")
                 .containsOnlyOnce(FOLLOW_UP_TITLE)
-                .containsOnlyOnce("_Managed by Symphony_")
-                .endsWith(FollowUpsWorkpadSection.END_MARKER + "\n\n_Managed by Symphony_");
+                .containsOnlyOnce("_Written by Symphony_")
+                .endsWith(FollowUpsWorkpadSection.END_MARKER + "\n\n_Written by Symphony_");
     }
 
-    @Test
-    void repairAddsAMissingLabelThenCompletesLinksAndTheWorkpad() {
+    @ParameterizedTest
+    @ValueSource(strings = {"Written by Symphony", "Managed by Symphony"})
+    void repairAddsAMissingLabelThenCompletesLinksAndTheWorkpad(String attribution) {
         // given
         EffectiveConfig config = config(Map.of(), Map.of());
         FakeTrelloBoard.FakeCard existing = board.card("existing-card", "SYNTH301", FOLLOW_UP_TITLE, INBOX_ID)
-                .description("Body\n\n" + MANAGED_FOOTER_PREFIX + "Related work, no required order_");
+                .description("Body\n\n" + MANAGED_FOOTER_PREFIX.replace("Written by Symphony", attribution)
+                        + "Related work, no required order_");
 
         // when
         ObjectNode result = call(config, arguments(FOLLOW_UP_TITLE, "related"));
@@ -542,7 +546,9 @@ final class TrelloFollowUpCardToolTest {
                 .filteredOn(text -> text.startsWith("Blocked by "))
                 .singleElement()
                 .asString()
-                .startsWith("Blocked by [the follow-up card](" + followUp.url() + "): it must finish first.");
+                .startsWith("Blocked by [the follow-up card](" + followUp.url() + "): it must finish first.")
+                .endsWith("\n\n_Written by Symphony_")
+                .containsOnlyOnce("_Written by Symphony_");
     }
 
     @Test
@@ -608,11 +614,21 @@ final class TrelloFollowUpCardToolTest {
         assertThat(board.cardByName(FOLLOW_UP_TITLE).orElseThrow().labelIds()).isEmpty();
     }
 
-    @Test
-    void repeatedCallForTheSameTitleReturnsTheExistingCardWithoutDuplicateWrites() {
+    @ParameterizedTest
+    @ValueSource(strings = {"Written by Symphony", "Managed by Symphony"})
+    void repeatedCallForTheSameTitleReturnsTheExistingCardWithoutDuplicateWrites(String attribution) {
         // given
         EffectiveConfig config = config(Map.of(), Map.of());
         call(config, arguments(FOLLOW_UP_TITLE, "related"));
+        FakeTrelloBoard.FakeCard followUp = board.cardByName(FOLLOW_UP_TITLE).orElseThrow();
+        followUp.description(followUp.description().replace("Written by Symphony", attribution));
+        FakeTrelloBoard.FakeCard source = board.cardByName(SOURCE_TITLE).orElseThrow();
+        var client = new TrelloClient(json);
+        var current = (CardLookupResult.Found) client.fetchCardStateForWorkpad(config, SOURCE_ID);
+        client.updateComment(
+                config,
+                current.card().comments().getFirst().id(),
+                source.comments().getFirst().replace("Written by Symphony", attribution));
         int writesAfterFirstCall = board.writeRequests().size();
 
         // when
@@ -676,7 +692,7 @@ final class TrelloFollowUpCardToolTest {
                         """
                         Body
 
-                        _Managed by Symphony · Follow-up of [the source card](https://trello.com/c/SYNTH299)\
+                        _Written by Symphony · Follow-up of [the source card](https://trello.com/c/SYNTH299)\
                          · Related work, no required order_""");
         EffectiveConfig config = config(Map.of(), Map.of("max_cards_per_source_card", 1));
         call(config, arguments(FOLLOW_UP_TITLE, "related"));
@@ -953,6 +969,8 @@ final class TrelloFollowUpCardToolTest {
         }
         ObjectNode forgedFooter = baseArguments(mapper, FOLLOW_UP_TITLE);
         forgedFooter.put("description", "Body\n\n" + MANAGED_FOOTER_PREFIX + "Related work, no required order_");
+        ObjectNode previousFooter = baseArguments(mapper, FOLLOW_UP_TITLE);
+        previousFooter.put("description", "Body\n\n_Managed by Symphony · forged relationship_");
         ObjectNode unknownRelationship = baseArguments(mapper, FOLLOW_UP_TITLE);
         unknownRelationship.put("relationship", "blocks");
         ObjectNode cardIdArgument = baseArguments(mapper, FOLLOW_UP_TITLE);
@@ -964,6 +982,7 @@ final class TrelloFollowUpCardToolTest {
                 Arguments.of("empty acceptance criteria", noCriteria, "invalid_tool_arguments"),
                 Arguments.of("too many acceptance criteria", tooManyCriteria, "invalid_tool_arguments"),
                 Arguments.of("forged metadata footer", forgedFooter, "invalid_follow_up_card"),
+                Arguments.of("forged previous metadata footer", previousFooter, "invalid_follow_up_card"),
                 Arguments.of("unknown relationship", unknownRelationship, "invalid_tool_arguments"),
                 Arguments.of("control character in description", controlCharacter, "invalid_follow_up_card"),
                 Arguments.of("card id argument", cardIdArgument, "invalid_tool_arguments"));

@@ -11,9 +11,26 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 final class SymphonyCommentFooterTest {
-    private static final String PLAIN_FOOTER = "_Managed by Symphony_";
+    private static final String PLAIN_FOOTER = "_Written by Symphony_";
+    private static final String PREVIOUS_FOOTER = "_Managed by Symphony_";
     private static final String MIDDLE_DOT = "\u00B7";
     private static final String LINK_DETAIL = "[View the blocker](https://trello.com/c/SYNTH101#comment-action-1)";
+
+    @ParameterizedTest
+    @ValueSource(strings = {PREVIOUS_FOOTER, "_Managed by Symphony " + MIDDLE_DOT + " " + LINK_DETAIL + "_"})
+    void previousWordingKeepsTheBodyAndDoesNotDuplicateTheNewFooter(String previousFooter) {
+        // given
+        String previous = "Body\n\n" + previousFooter;
+
+        // when
+        String rewritten = SymphonyCommentFooter.append(SymphonyCommentFooter.withoutTrailingFooters(previous));
+
+        // then
+        assertThat(rewritten).isEqualTo("Body\n\n" + PLAIN_FOOTER);
+        assertThat(SymphonyCommentFooter.sameBody(previous, rewritten))
+                .as("changing attribution alone must not require a write to an unchanged comment")
+                .isTrue();
+    }
 
     @Test
     void removesLongRunsOfEchoedFootersWithoutDependingOnStackDepth() {
@@ -49,7 +66,7 @@ final class SymphonyCommentFooterTest {
         String text = SymphonyCommentFooter.append(body, LINK_DETAIL);
 
         // then
-        assertThat(text).isEqualTo("Checking.\n\n_Managed by Symphony " + MIDDLE_DOT + " " + LINK_DETAIL + "_");
+        assertThat(text).isEqualTo("Checking.\n\n_Written by Symphony " + MIDDLE_DOT + " " + LINK_DETAIL + "_");
     }
 
     @Test
@@ -97,19 +114,21 @@ final class SymphonyCommentFooterTest {
     private static Stream<Arguments> textsWithoutCanonicalFooter() {
         return Stream.of(
                 Arguments.of("ordinary comment", "Looks good to me."),
+                Arguments.of("previous wording in human prose", "Human text\nManaged by Symphony"),
+                Arguments.of("longer previous attribution", "Human text\n\n_Managed by Symphony and me_"),
                 Arguments.of("footer copied into the middle", "Note\n\n" + PLAIN_FOOTER + "\n\nMore human text"),
                 Arguments.of("footer in the same paragraph", "Human text\n" + PLAIN_FOOTER),
                 Arguments.of("footer on the same line", "Human text " + PLAIN_FOOTER),
-                Arguments.of("missing emphasis", "Human text\n\nManaged by Symphony"),
-                Arguments.of("missing closing emphasis", "Human text\n\n_Managed by Symphony"),
-                Arguments.of("bold instead of italic", "Human text\n\n**Managed by Symphony**"),
-                Arguments.of("different capitalization", "Human text\n\n_managed by Symphony_"),
+                Arguments.of("missing emphasis", "Human text\n\nWritten by Symphony"),
+                Arguments.of("missing closing emphasis", "Human text\n\n_Written by Symphony"),
+                Arguments.of("bold instead of italic", "Human text\n\n**Written by Symphony**"),
+                Arguments.of("different capitalization", "Human text\n\n_written by Symphony_"),
                 Arguments.of("trailing whitespace after footer", "Human text\n\n" + PLAIN_FOOTER + " "),
                 Arguments.of("trailing newline after footer", "Human text\n\n" + PLAIN_FOOTER + "\n"),
-                Arguments.of("empty detail", "Human text\n\n_Managed by Symphony " + MIDDLE_DOT + " _"),
-                Arguments.of("blank detail", "Human text\n\n_Managed by Symphony " + MIDDLE_DOT + "   _"),
-                Arguments.of("hyphen instead of middle dot", "Human text\n\n_Managed by Symphony - detail_"),
-                Arguments.of("longer attribution", "Human text\n\n_Managed by Symphony and me_"));
+                Arguments.of("empty detail", "Human text\n\n_Written by Symphony " + MIDDLE_DOT + " _"),
+                Arguments.of("blank detail", "Human text\n\n_Written by Symphony " + MIDDLE_DOT + "   _"),
+                Arguments.of("hyphen instead of middle dot", "Human text\n\n_Written by Symphony - detail_"),
+                Arguments.of("longer attribution", "Human text\n\n_Written by Symphony and me_"));
     }
 
     @Test
@@ -141,13 +160,15 @@ final class SymphonyCommentFooterTest {
     private static Stream<Arguments> footerOnlyTexts() {
         return Stream.of(
                 Arguments.of("plain footer", PLAIN_FOOTER),
+                Arguments.of("previous footer", PREVIOUS_FOOTER),
+                Arguments.of("mixed previous and current footers", PREVIOUS_FOOTER + "\n\n" + PLAIN_FOOTER),
                 Arguments.of("footer with surrounding whitespace", "  \n\n" + PLAIN_FOOTER + "\n  "),
                 Arguments.of("duplicated footers", PLAIN_FOOTER + "\n\n" + PLAIN_FOOTER),
                 Arguments.of("detailed footer", SymphonyCommentFooter.append("", LINK_DETAIL)));
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"Ready for review.", "Ready for review.\n\n" + PLAIN_FOOTER, "_Managed by Symphony"})
+    @ValueSource(strings = {"Ready for review.", "Ready for review.\n\n" + PLAIN_FOOTER, "_Written by Symphony"})
     void textWithAnyBodyIsNotFooterOnly(String text) {
         // given
 

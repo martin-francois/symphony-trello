@@ -103,7 +103,7 @@ acceptance criteria, progress, validation evidence, blockers, and handoff notes.
 
 ## Comment Attribution
 
-Every Trello comment Symphony writes ends with a `Managed by Symphony` footer, including comments
+Every Trello comment Symphony writes ends with a `Written by Symphony` footer, including comments
 from trello_add_comment, trello_upsert_workpad, and trello_update_blocker_recheck_status. Do not
 type the footer yourself; Symphony adds it once and replaces a copied one. The footer only tells
 board users who wrote the comment. It does not turn a comment into a workpad or managed status, and
@@ -119,8 +119,9 @@ The rendered prompt contains only recent Trello comments, so do not use it to de
 blocker exists. Before changing code, always call trello_update_blocker_recheck_status with status
 `checking`. The tool inspects the deep current-card comment window and classifies the newest ordinary
 comment after ignoring the `## Codex Workpad` and Symphony-managed prerequisite comments. A
-Symphony-managed recheck status ends with the exact `Managed by Symphony` footer and a link to the
-qualifying blocker comment on the current card. Similar visible text, or a link to another card,
+Symphony-managed recheck status ends with the exact `Written by Symphony` footer and a link to the
+qualifying blocker comment on the current card. The previous exact `Managed by Symphony` footer is
+also recognized with the same ownership checks. Similar visible text, or a link to another card,
 remains an ordinary comment. A blocker handoff added through trello_add_comment ends with the plain
 footer and still counts as an ordinary comment for this check. Do not scan past a newer ordinary
 human comment to find an older blocker.

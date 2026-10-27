@@ -102,7 +102,7 @@ The tools are advertised only when `trello_tools.enabled=true` and
 `trello_tools.allow_writes=true`. Comment writes also require
 `trello_tools.allow_comments=true`. Since
 [ADR 0084](0084-shared-symphony-comment-attribution-footer.md), comments from these tools end with the
-shared `Managed by Symphony` footer. Card moves require configured allowed destination Trello list ids
+shared `Written by Symphony` footer. Card moves require configured allowed destination Trello list ids
 or list names, and the destination must resolve to an open list on the configured board.
 
 [ADR 0123](0123-trello-follow-up-card-tool.md) adds the opt-in `trello_create_follow_up_card` tool.

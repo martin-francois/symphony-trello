@@ -14,6 +14,7 @@ import ch.fmartin.symphony.trello.setup.TutorialInput.Answer;
 import ch.fmartin.symphony.trello.setup.TutorialTrello.Board;
 import ch.fmartin.symphony.trello.setup.TutorialTrello.CardSnapshot;
 import ch.fmartin.symphony.trello.setup.TutorialTrello.Comment;
+import ch.fmartin.symphony.trello.tracker.SymphonyCommentFooter;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -542,7 +543,8 @@ final class GuidedTutorial {
     }
 
     private static String workpad(String status, String details) {
-        return TrelloClient.WORKPAD_MARKER + "\n\n" + DEMO_NOTICE + "\n\nStatus: " + status + "\n" + details;
+        return SymphonyCommentFooter.append(
+                TrelloClient.WORKPAD_MARKER + "\n\n" + DEMO_NOTICE + "\n\nStatus: " + status + "\n" + details);
     }
 
     private static String oneLine(String text) {
@@ -772,7 +774,7 @@ final class GuidedTutorial {
 
         @Override
         public String doForUser() {
-            trello.addComment(session.cardId, SAMPLE_CHANGE_REQUEST);
+            trello.addComment(session.cardId, SymphonyCommentFooter.append(SAMPLE_CHANGE_REQUEST));
             trello.moveCard(session.cardId, session.listId(RECOMMENDED_ACTIVE_STATE));
             return "The tutorial added the comment " + DisplayNames.quotedName(SAMPLE_CHANGE_REQUEST)
                     + " and moved the card to " + quoted(RECOMMENDED_ACTIVE_STATE) + " for you";

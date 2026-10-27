@@ -2381,8 +2381,11 @@ Optional client-side tool extension:
   updated workpad text SHOULD make the required manual cleanup visible on the card.
 - Java implementation extension: every Trello comment that Symphony creates or updates ends with one
   human-readable attribution footer. The footer is the comment's final Markdown paragraph and is
-  exactly `_Managed by Symphony_`, or `_Managed by Symphony · <detail>_` when a managed-comment family
-  needs one line of extra visible identity. This applies to `trello_add_comment` handoff comments, the
+  exactly `_Written by Symphony_`, or `_Written by Symphony · <detail>_` when a managed-comment family
+  needs one line of extra visible identity. Exact `Managed by Symphony` footers remain a supported
+  read format for existing comments and follow-up relationships. New writes use `Written by Symphony`;
+  unchanged historical content is not rewritten solely to change the label. This applies to
+  `trello_add_comment` handoff comments, the
   Codex workpad, the blocker-recheck status, and the prerequisite status comment. Comment-writing tools
   MUST remove footers that the agent supplied at the end of its text and append exactly one canonical
   footer. Text without a body besides the footer MUST be rejected before mutation. The footer MUST
@@ -2401,7 +2404,7 @@ Optional client-side tool extension:
   stale-blocker recheck. Its `status` is `checking` or `resumed`. The tool reads a deep current-card
   comment window and classifies only the newest ordinary comment after excluding the Codex workpad,
   Symphony-managed prerequisite comments, and exact canonical blocker-recheck comments. A canonical
-  blocker-recheck comment ends with the exact human-readable `Managed by Symphony` Markdown footer
+  blocker-recheck comment ends with the exact human-readable `Written by Symphony` Markdown footer
   whose detail is a link to the qualifying comment action on the current Trello card. Similar
   visible text, a malformed link, or a link to another card remains ordinary. A blocker handoff
   added through `trello_add_comment` carries the plain footer and remains an ordinary comment for
@@ -2708,7 +2711,7 @@ When a skipped Trello card has unresolved, missing, inaccessible, unsupported cr
 or sync-failed prerequisites, Symphony MUST update one managed Trello-visible status/workpad comment
 or equivalent card-visible surface. Board users MUST NOT need host logs to understand why a Trello
 card has not left an active list. In the Java implementation, that status comment starts
-with `## Symphony Prerequisite Status` and ends with the `Managed by Symphony` attribution footer
+with `## Symphony Prerequisite Status` and ends with the `Written by Symphony` attribution footer
 from Section 10.5.
 
 ### 11.5 Error Handling Contract
@@ -2774,7 +2777,7 @@ Trello Workflow Conformance:
   blocker-recheck status when an exact stale blocker handoff qualifies, and moving the current card
   to an allowed board-local list.
 - Java implementation extension: every Trello comment Symphony writes ends with the
-  `Managed by Symphony` attribution footer described in Section 10.5, and the generated workflow and
+  `Written by Symphony` attribution footer described in Section 10.5, and the generated workflow and
   shipped Trello skills tell the agent not to write the footer itself.
 - Java implementation extension: Trello-facing markdown written by `trello_add_comment` and
   `trello_upsert_workpad` escapes a GitHub issue reference such as `#2076` when it would be the
@@ -2853,7 +2856,8 @@ Tool contract:
   the optional `relationship`, default `related`. The input schema and the tool MUST reject other
   arguments, so the agent cannot name a card ID, list ID, board, or label.
 - Invalid arguments, including control characters, a multi-line title, or a description line that
-  starts with `_Managed by Symphony`, MUST fail with a structured error before any Trello request.
+  starts with `_Written by Symphony` or `_Managed by Symphony`, MUST fail with a structured error
+  before any Trello request.
 - The source card is the current worker session's card. All reads and writes MUST stay on the
   configured board.
 - The tool requires `trello_tools.allow_url_attachments` and `trello_tools.allow_comments`. The two prerequisite relationships also
@@ -2880,7 +2884,7 @@ Relationship convention:
 
 - The metadata footer is the accepted explicit convention for follow-up relationships. It is the
   exact last paragraph of the follow-up card description:
-  `_Managed by Symphony · Follow-up of [the source card](https://trello.com/c/<shortLink>) · <relationship text>_`.
+  `_Written by Symphony · Follow-up of [the source card](https://trello.com/c/<shortLink>) · <relationship text>_`.
 - `<relationship text>` is exactly one of `Related work, no required order` (`related`),
   `This card must wait for the source card to finish first` (`follow_up_waits_for_current`), or
   `The source card must wait for this card to finish first` (`current_waits_for_follow_up`).
@@ -2890,7 +2894,7 @@ Relationship convention:
   bidirectional.
 - The source card's Symphony-managed `Follow-ups` workpad section records every created follow-up
   with its title and the reciprocal footer
-  `_Managed by Symphony · Follow-up [the follow-up card](https://trello.com/c/<shortLink>) · <source-side relationship text>_`.
+  `_Written by Symphony · Follow-up [the follow-up card](https://trello.com/c/<shortLink>) · <source-side relationship text>_`.
   The source-side text is `Related work, no required order.`,
   `The follow-up card must wait for this card to finish first.`, or
   `This card must wait for the follow-up card to finish first.` respectively. Both cards therefore

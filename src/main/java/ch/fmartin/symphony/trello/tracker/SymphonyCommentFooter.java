@@ -8,7 +8,7 @@ import org.jspecify.annotations.Nullable;
 
 /// Formats and parses the readable attribution footer that ends every Trello comment Symphony writes.
 ///
-/// The footer is the last Markdown paragraph of the comment: `_Managed by Symphony_`, or
+/// The footer is the last Markdown paragraph of the comment: `_Written by Symphony_`, or
 /// the attribution followed by a middle dot and `<detail>` inside the emphasis when a comment family
 /// needs extra visible identity such as the stale-blocker link. It tells a board user who wrote the
 /// comment. It does not grant ownership:
@@ -16,7 +16,9 @@ import org.jspecify.annotations.Nullable;
 /// belongs to its own family before it changes it.
 public final class SymphonyCommentFooter {
     /// Attribution emitted by new writes.
-    public static final String ATTRIBUTION = "Managed by Symphony";
+    public static final String ATTRIBUTION = "Written by Symphony";
+    /// Exact attribution accepted when reading existing content.
+    public static final String PREVIOUS_ATTRIBUTION = "Managed by Symphony";
     private static final char MIDDLE_DOT = '\u00B7';
     private static final String EMPHASIS = "_";
     /// Delimiter between attribution and its visible detail.
@@ -24,6 +26,7 @@ public final class SymphonyCommentFooter {
     private static final String PARAGRAPH_BREAK = "\n\n";
     private static final String PLAIN_LINE = EMPHASIS + ATTRIBUTION + EMPHASIS;
     private static final String DETAIL_LINE_PREFIX = EMPHASIS + ATTRIBUTION + DETAIL_SEPARATOR;
+    private static final String PREVIOUS_LINE_PREFIX = EMPHASIS + PREVIOUS_ATTRIBUTION;
 
     private SymphonyCommentFooter() {}
 
@@ -45,7 +48,7 @@ public final class SymphonyCommentFooter {
         return withFooterLine(body, DETAIL_LINE_PREFIX + detail + EMPHASIS);
     }
 
-    /// Parses the canonical footer at the very end of `text`. A footer that is not the last
+    /// Parses the current or previous footer at the very end of `text`. A footer that is not the last
     /// paragraph, shares a paragraph with other text, or differs in spelling is not a footer.
     ///
     /// @param text complete comment text, or `null` when absent
@@ -56,6 +59,9 @@ public final class SymphonyCommentFooter {
         }
         int lineStart = text.lastIndexOf('\n') + 1;
         String line = text.substring(lineStart);
+        if (line.startsWith(PREVIOUS_LINE_PREFIX)) {
+            line = EMPHASIS + ATTRIBUTION + line.substring(PREVIOUS_LINE_PREFIX.length());
+        }
         String detail;
         if (line.equals(PLAIN_LINE)) {
             detail = null;
@@ -74,6 +80,14 @@ public final class SymphonyCommentFooter {
             return Optional.empty();
         }
         return Optional.of(new Footer(before.stripTrailing(), detail));
+    }
+
+    /// Recognizes reserved attribution prefixes before accepting caller-supplied description text.
+    ///
+    /// @param text description line to inspect
+    /// @return whether the line starts with a reserved attribution prefix
+    public static boolean hasAttributionPrefix(String text) {
+        return text.startsWith(EMPHASIS + ATTRIBUTION) || text.startsWith(PREVIOUS_LINE_PREFIX);
     }
 
     /// Removes every canonical footer from the end of `text`, for example when an agent echoes an
