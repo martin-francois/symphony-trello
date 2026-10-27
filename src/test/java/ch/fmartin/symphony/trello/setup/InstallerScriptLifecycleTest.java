@@ -521,6 +521,8 @@ final class InstallerScriptLifecycleTest {
                 sourceRepository.toUri().toString(),
                 "--ref",
                 "main");
+        install.assertSuccess();
+        Path canonicalInstallPrefix = installPrefix.toRealPath();
         Path installedScript = binDirectory.resolve("symphony-trello.ps1");
         Path installedCmdShim = binDirectory.resolve("symphony-trello.cmd");
         Path callerDirectory = temporaryDirectory.resolve("windows caller");
@@ -632,7 +634,6 @@ final class InstallerScriptLifecycleTest {
                 binDirectory.toString());
 
         // then
-        assertThat(install.exitCode()).as(install.output()).isZero();
         assertThat(picocliHelpResults).allSatisfy(result -> {
             assertThat(result.exitCode()).as(result.output()).isZero();
             assertThat(result.output()).containsAnyOf("Usage: symphony-trello", "symphony-trello " + FAKE_APP_VERSION);
@@ -708,7 +709,7 @@ final class InstallerScriptLifecycleTest {
         assertThat(eventArguments(setupCliEvent(fakeLogContent, "start", "--env")))
                 .contains(".env $value & (demo)", "--workflow", "WORKFLOW $value & (demo).md");
         assertThat(fakeLogContent)
-                .contains("mvnw.cmd -q -f", "-DskipTests clean package", "build-cwd=" + installPrefix);
+                .contains("mvnw.cmd -q -f", "-DskipTests clean package", "build-cwd=" + canonicalInstallPrefix);
     }
 
     private static Map<String, Object> setupCliEvent(String log, String... requiredFragments) throws IOException {

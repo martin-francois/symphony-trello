@@ -8954,6 +8954,72 @@ final class InstallerScriptTest {
         update.assertAppUntouched();
     }
 
+    @CsvSource({"437, valid", "1252, valid", "65001, valid", "437, invalid", "1252, git-failure", "1252, mojibake"})
+    @ParameterizedTest
+    void powershellSourcePreflightReadsUtf8PomWithScopedConsoleEncodingWhenAvailable(int codePage, String scenario)
+            throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        assumeTrue(commandExists("git"));
+        SourceDowngrade source = sourceDowngrade(false);
+        source.recordWorkerStopRequests();
+        String pom =
+                switch (scenario) {
+                    case "invalid" -> "<project />";
+                    case "mojibake" -> "\u00EF\u00BB\u00BF<project><version>1.5.0</version></project>";
+                    default ->
+                        "\uFEFF<?xml version=\"1.0\" encoding=\"UTF-8\"?><project><version>1.5.0</version></project>";
+                };
+        addSourceRepositoryCommit(source.source(), "pom.xml", pom);
+        Path encodingRecord = temporaryDirectory.resolve("console-encoding.txt");
+        Path launcher = temporaryDirectory.resolve("encoded-console-install.ps1");
+        String gitFailure = scenario.equals("git-failure")
+                ? """
+                  $nativeGit = @(Get-Command git -CommandType Application)[0].Source
+                  function git {
+                    if ($args.Count -ge 3 -and $args[2] -eq 'show') {
+                      & $nativeGit -C $args[1] show 'synthetic-missing-ref:pom.xml'
+                      return
+                    }
+                    & $nativeGit @args
+                  }
+                  """
+                : "";
+        Files.writeString(
+                launcher,
+                """
+                [Console]::OutputEncoding = [Text.Encoding]::GetEncoding(%s)
+                %s
+                & %s @args
+                $installerExit = $LASTEXITCODE
+                [IO.File]::WriteAllText(%s, [Console]::OutputEncoding.CodePage.ToString())
+                exit $installerExit
+                """
+                        .formatted(
+                                codePage,
+                                gitFailure,
+                                powerShellLiteral(
+                                        Path.of("install.ps1").toAbsolutePath().toString()),
+                                powerShellLiteral(encodingRecord.toString())));
+
+        // when
+        ProcessResult result = source.run(command(pwsh, "-NoProfile", "-File", launcher.toString()));
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isOne();
+        String expectedMessage =
+                switch (scenario) {
+                    case "invalid" -> "cannot read source project/version";
+                    case "git-failure" -> "cannot read source pom.xml";
+                    case "mojibake" -> "Data at the root level is invalid";
+                    default -> "release 1.5.0 belongs to an older major version";
+                };
+        assertThat(normalizedWhitespace(result.output())).contains(expectedMessage);
+        assertThat(encodingRecord).hasContent(Integer.toString(codePage));
+        source.assertAppUntouched();
+    }
+
     @Test
     void posixSourcePreflightKeepsTheFailureWhenTemporaryCheckoutCleanupFails() throws Exception {
         // given

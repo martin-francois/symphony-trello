@@ -103,7 +103,13 @@ change the checked version. PowerShell uses its XML reader with DTD processing p
 POSIX installer uses a narrow root-project version extractor because XML command-line tools are
 not prerequisites. It ignores comments and nested parent, dependency, and plugin versions, and
 rejects missing or unresolved root versions. Both readers discard a single leading UTF-8 BOM,
-which Maven accepts, before parsing the root version. Cleanup runs after success or failure.
+which Maven accepts, before parsing the root version. PowerShell decodes native output according
+to `[Console]::OutputEncoding`, independently of `$OutputEncoding`. A non-UTF-8 Windows console
+turns the BOM bytes into other characters before the XML reader sees them. The Git POM read
+therefore uses UTF-8 within a try/finally scope, captures the native exit code, and restores the
+caller's console encoding. Accepting mojibake prefixes would conceal invalid XML. A scoped encoding
+change also avoids a new process-launch API requirement incompatible with Windows PowerShell 5.1.
+Cleanup runs after success or failure.
 If temporary clone removal fails, the installer reports that failure without hiding the original
 error or phase.
 Preflight rejects staged or unstaged tracked changes in the installed checkout because checkout

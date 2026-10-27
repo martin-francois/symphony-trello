@@ -1571,8 +1571,16 @@ function Prepare-SourceCheckout {
   if ($LASTEXITCODE -ne 0) {
     throw "cannot resolve source ref: choose a branch, tag, or commit and rerun the installer"
   }
-  $pom = & git -C $SourceCheckout show "${SourceCommit}:pom.xml"
-  if ($LASTEXITCODE -ne 0) {
+  # PowerShell decodes native Git stdout with Console.OutputEncoding, not $OutputEncoding.
+  $previousConsoleEncoding = [Console]::OutputEncoding
+  try {
+    [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+    $pom = & git -C $SourceCheckout show "${SourceCommit}:pom.xml"
+    $pomExitCode = $LASTEXITCODE
+  } finally {
+    [Console]::OutputEncoding = $previousConsoleEncoding
+  }
+  if ($pomExitCode -ne 0) {
     throw "cannot read source pom.xml: choose a Symphony source ref and rerun the installer"
   }
   # Read only the root project version. Dependencies and parents identify other artifacts.

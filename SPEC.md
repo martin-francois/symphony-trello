@@ -4145,6 +4145,8 @@ that a second formatting pass leaves the source unchanged.
   ignored configuration, retained non-input files, app-directory builds, failed help probes, and
   rejected migrations before restart. They also cover BOM-prefixed root POMs, clean and modified
   index-flagged paths, failed index inspection, and sibling staging for archive replacement.
+  PowerShell POM tests use real Git output under non-UTF-8 console encodings and verify encoding
+  restoration after successful and failed reads. Literal mojibake prefixes remain invalid XML.
   The native Windows wrapper lifecycle checks the exact build directory under a path containing
   command metacharacters
 - If native Windows `setup-local` (Section 19.4) is implemented, it finds tools it starts by bare
@@ -4956,6 +4958,8 @@ Installers:
   the fetched ref's `pom.xml` before switching the installed checkout or replacing a release archive.
   Missing or unresolved root project versions MUST stop the source install before replacement.
   A leading UTF-8 BOM MUST NOT prevent reading an otherwise valid root project version.
+  Reading a UTF-8 POM MUST NOT depend on the console code page. Temporary encoding changes MUST
+  be restored after the read, including when the native command fails.
   The installed source commit MUST be the commit checked during preflight. When replacing an
   archive or installing a new source checkout, the fetched checkout MUST be staged beside its
   destination so the final move stays on the destination filesystem.
