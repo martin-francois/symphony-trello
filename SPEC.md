@@ -4143,7 +4143,10 @@ that a second formatting pass leaves the source unchanged.
   limits, major-downgrade rejection, provenance recording by setup, and both installer integrations.
   Installer process tests cover unreadable installed versions, tracked and untracked build inputs,
   ignored configuration, retained non-input files, app-directory builds, failed help probes, and
-  rejected migrations before restart
+  rejected migrations before restart. They also cover BOM-prefixed root POMs, clean and modified
+  index-flagged paths, failed index inspection, and sibling staging for archive replacement.
+  The native Windows wrapper lifecycle checks the exact build directory under a path containing
+  command metacharacters
 - If native Windows `setup-local` (Section 19.4) is implemented, it finds tools it starts by bare
   name through `PATH` and `PATHEXT`, starts a `.cmd` or `.bat` match such as the npm `codex.cmd`
   shim through `cmd.exe` with each argument and the exit status unchanged, and fails the launch
@@ -4952,9 +4955,15 @@ Installers:
   than the installed version. A source install MUST read the explicit root project version from
   the fetched ref's `pom.xml` before switching the installed checkout or replacing a release archive.
   Missing or unresolved root project versions MUST stop the source install before replacement.
-  The installed source commit MUST be the commit checked during preflight.
+  A leading UTF-8 BOM MUST NOT prevent reading an otherwise valid root project version.
+  The installed source commit MUST be the commit checked during preflight. When replacing an
+  archive or installing a new source checkout, the fetched checkout MUST be staged beside its
+  destination so the final move stays on the destination filesystem.
   An existing source checkout with staged or unstaged tracked changes MUST stop the update before
   workers stop or files change, so local changes cannot override the checked source version.
+  Any tracked path marked `assume-unchanged` or `skip-worktree` MUST also stop preflight, even when
+  unchanged. Sparse source checkouts are unsupported. Index-flag inspection failures MUST stop
+  preflight, and the installer MUST NOT change those flags automatically.
   Existing installations MUST also stop before worker shutdown or replacement when the installed
   version cannot be read as a supported complete version. Fresh installs have no previous-version
   requirement.

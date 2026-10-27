@@ -707,7 +707,8 @@ final class InstallerScriptLifecycleTest {
         assertThat(stateHome).doesNotExist();
         assertThat(eventArguments(setupCliEvent(fakeLogContent, "start", "--env")))
                 .contains(".env $value & (demo)", "--workflow", "WORKFLOW $value & (demo).md");
-        assertThat(fakeLogContent).contains("mvnw.cmd -q -f", "-DskipTests clean package");
+        assertThat(fakeLogContent)
+                .contains("mvnw.cmd -q -f", "-DskipTests clean package", "build-cwd=" + installPrefix);
     }
 
     private static Map<String, Object> setupCliEvent(String log, String... requiredFragments) throws IOException {

@@ -1451,6 +1451,7 @@ source_project_version() {
   # Only the root project's explicit version identifies the fetched application.
   # Parent, plugin, and dependency versions must never authorize a downgrade.
   awk '
+NR == 1 { sub(/^\357\273\277/, "") }
 { xml = xml $0 "\n" }
 END {
   while ((start = index(xml, "<!--")) > 0) {
@@ -1651,7 +1652,16 @@ assert_source_build_inputs_tracked() {
 prepare_source_checkout() {
   if [[ -d "$APP_DIR/.git" ]]; then
     assert_existing_checkout_safe
-    local local_changes
+    local local_changes index_flags
+    if ! index_flags="$(git -C "$APP_DIR" ls-files -v)"; then
+      echo "cannot inspect source checkout index flags: check the repository before rerunning the installer" >&2
+      exit 2
+    fi
+    if LC_ALL=C grep -Eq '^[a-zS] ' <<<"$index_flags"; then
+      echo "cannot update source checkout: tracked files use assume-unchanged or skip-worktree" >&2
+      echo "Clear those index flags, disable sparse checkout if enabled, then save or restore local edits before rerunning the installer." >&2
+      exit 2
+    fi
     if ! local_changes="$(git -C "$APP_DIR" status --porcelain --untracked-files=no)"; then
       echo "cannot inspect source checkout: check the repository before rerunning the installer" >&2
       exit 2
@@ -1662,10 +1672,12 @@ prepare_source_checkout() {
       exit 2
     fi
     assert_source_build_inputs_tracked
+    SOURCE_CHECKOUT="$(mktemp -d)"
   else
     assert_existing_app_safe
+    run mkdir -p "$(dirname "$APP_DIR")"
+    SOURCE_CHECKOUT="$(mktemp -d "$(dirname "$APP_DIR")/.symphony-source.XXXXXX")"
   fi
-  SOURCE_CHECKOUT="$(mktemp -d)"
   run_with_label "git clone -q --no-checkout $(display_repo_source "$REPO_URL") $SOURCE_CHECKOUT" git clone -q --no-checkout "$REPO_URL" "$SOURCE_CHECKOUT"
   SOURCE_BRANCH=false
   local revision="$REF"

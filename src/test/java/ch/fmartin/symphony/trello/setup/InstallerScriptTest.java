@@ -8813,6 +8813,90 @@ final class InstallerScriptTest {
                 .hasContent("<project><version>1.0.0</version></project>\n");
     }
 
+    @CsvSource({
+        "false, assume-unchanged, pom.xml, true", "true, assume-unchanged, pom.xml, true",
+        "false, assume-unchanged, pom.xml, false", "true, assume-unchanged, pom.xml, false",
+        "false, skip-worktree, pom.xml, true", "true, skip-worktree, pom.xml, true",
+        "false, skip-worktree, pom.xml, false", "true, skip-worktree, pom.xml, false",
+        "false, both, pom.xml, true", "true, both, pom.xml, true",
+        "false, both, pom.xml, false", "true, both, pom.xml, false",
+        "false, assume-unchanged, WORKFLOW.example.md, true", "true, assume-unchanged, WORKFLOW.example.md, true",
+        "false, skip-worktree, WORKFLOW.example.md, true", "true, skip-worktree, WORKFLOW.example.md, true"
+    })
+    @ParameterizedTest
+    void installersRejectTrackedChangesHiddenByIndexFlags(
+            boolean powershell, String flag, String relativePath, boolean modified) throws Exception {
+        // given
+        List<String> launcher = installerLauncher(powershell);
+        SourceDowngrade source = sourceDowngrade(true);
+        source.recordWorkerStopRequests();
+        source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
+        addSourceRepositoryCommit(source.source(), "pom.xml", "<project><version>1.0.0</version></project>\n");
+        Path app = source.installed().appHome();
+        String firstFlag = flag.equals("both") ? "assume-unchanged" : flag;
+        run(Map.of(), "git", "-C", app.toString(), "update-index", "--" + firstFlag, "--", relativePath)
+                .assertSuccess();
+        if (flag.equals("both")) {
+            run(Map.of(), "git", "-C", app.toString(), "update-index", "--skip-worktree", "--", relativePath)
+                    .assertSuccess();
+        }
+        Path localFile = app.resolve(relativePath);
+        String localContent = modified ? "<project><version>88.0.0</version></project>\n" : Files.readString(localFile);
+        Files.writeString(localFile, localContent);
+        ProcessResult status =
+                run(Map.of(), "git", "-C", app.toString(), "status", "--porcelain", "--untracked-files=no");
+        status.assertSuccess();
+        assertThat(status.output()).isEmpty();
+
+        // when
+        ProcessResult result = source.run(launcher);
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isNotZero();
+        assertThat(normalizedWhitespace(result.output()))
+                .contains("tracked files use assume-unchanged or skip-worktree", "Clear those index flags");
+        assertThat(localFile).hasContent(localContent);
+        source.assertAppUntouched();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void installersStopWhenIndexFlagsCannotBeInspected(boolean powershell) throws Exception {
+        // given
+        assumeFalse(isWindows());
+        List<String> launcher = installerLauncher(powershell);
+        SourceDowngrade source = sourceDowngrade(true);
+        source.recordWorkerStopRequests();
+        source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
+        ProcessResult gitLocation = run(Map.of(), "bash", "-c", "command -v git");
+        gitLocation.assertSuccess();
+        Path fakeBin = temporaryDirectory.resolve("index-inspection-bin");
+        Files.createDirectories(fakeBin);
+        writeExecutable(
+                fakeBin.resolve("git"),
+                """
+                #!/usr/bin/env bash
+                if [[ "${3:-}" == ls-files && "${4:-}" == -v ]]; then exit 37; fi
+                exec %s "$@"
+                """
+                        .formatted(shellQuote(gitLocation.output().strip())));
+        source.installed()
+                .environment()
+                .put(
+                        "PATH",
+                        fakeBin
+                                + File.pathSeparator
+                                + source.installed().environment().get("PATH"));
+
+        // when
+        ProcessResult result = source.run(launcher);
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isNotZero();
+        assertThat(normalizedWhitespace(result.output())).contains("cannot inspect source checkout index flags");
+        source.assertAppUntouched();
+    }
+
     private SourceDowngrade dirtySourceDowngrade(boolean staged) throws Exception {
         SourceDowngrade update = sourceDowngrade(true);
         addSourceRepositoryCommit(update.source(), "pom.xml", "<project><version>99.0.0</version></project>\n");
@@ -8938,6 +9022,9 @@ final class InstallerScriptTest {
 
     private static List<SourcePom> sourcePomVersions() {
         return List.of(
+                new SourcePom(
+                        "\uFEFF<?xml version=\"1.0\" encoding=\"UTF-8\"?><project><version>1.5.0</version></project>",
+                        "release 1.5.0 belongs to an older major version"),
                 new SourcePom(
                         "<project><version>1.5.0-rc.10+build.2</version></project>",
                         "release 1.5.0-rc.10+build.2 belongs to an older major version"),
@@ -9401,11 +9488,29 @@ final class InstallerScriptTest {
                 "SYMPHONY_HOME", symphonyHome.toString(),
                 "SYMPHONY_FAKE_LOG", fakeLog.toString());
 
+        Path installer = temporaryDirectory.resolve("same-volume-install.sh");
+        Files.writeString(
+                installer,
+                Files.readString(Path.of("install.sh"))
+                        .replaceFirst(
+                                Pattern.quote("set -euo pipefail"),
+                                Matcher.quoteReplacement(
+                                        """
+                                        set -euo pipefail
+                                        mv() {
+                                          if [[ -d "$1/.git" && "$(dirname "$1")" != "$(dirname "$2")" ]]; then
+                                            echo 'source checkout must be staged beside its destination' >&2
+                                            return 66
+                                          fi
+                                          command mv "$@"
+                                        }
+                                        """)));
+
         // when
         ProcessResult result = run(
                 environment,
                 "bash",
-                "install.sh",
+                installer.toString(),
                 "--no-onboard",
                 "--from-source",
                 "--repo",

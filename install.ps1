@@ -1536,6 +1536,13 @@ function Assert-SourceBuildInputsTracked {
 function Prepare-SourceCheckout {
   if (Test-Path -LiteralPath (Join-Path $Prefix ".git")) {
     Assert-ExistingCheckoutSafe
+    $indexFlags = @(& git -C $Prefix ls-files -v)
+    if ($LASTEXITCODE -ne 0) {
+      throw "cannot inspect source checkout index flags: check the repository before rerunning the installer"
+    }
+    if ($indexFlags -cmatch '^[a-zS] ') {
+      throw "cannot update source checkout: tracked files use assume-unchanged or skip-worktree. Clear those index flags, disable sparse checkout if enabled, then save or restore local edits before rerunning the installer."
+    }
     $localChanges = @(& git -C $Prefix status --porcelain --untracked-files=no)
     if ($LASTEXITCODE -ne 0) {
       throw "cannot inspect source checkout: check the repository before rerunning the installer"
@@ -1571,7 +1578,11 @@ function Prepare-SourceCheckout {
   # Read only the root project version. Dependencies and parents identify other artifacts.
   $settings = [System.Xml.XmlReaderSettings]::new()
   $settings.DtdProcessing = [System.Xml.DtdProcessing]::Prohibit
-  $reader = [System.Xml.XmlReader]::Create([IO.StringReader]::new(($pom -join "`n")), $settings)
+  $pomText = $pom -join "`n"
+  if ($pomText.Length -gt 0 -and $pomText[0] -eq [char]0xFEFF) {
+    $pomText = $pomText.Substring(1)
+  }
+  $reader = [System.Xml.XmlReader]::Create([IO.StringReader]::new($pomText), $settings)
   try {
     $document = [System.Xml.XmlDocument]::new()
     $document.XmlResolver = $null

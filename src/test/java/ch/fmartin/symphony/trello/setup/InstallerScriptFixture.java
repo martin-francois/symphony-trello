@@ -771,8 +771,11 @@ final class InstallerScriptFixture {
                 repository.resolve("mvnw.cmd"),
                 """
                 @echo off
+                setlocal DisableDelayedExpansion
                 echo mvnw.cmd %* >> "%SYMPHONY_FAKE_LOG%"
-                echo build-cwd=%CD%>> "%SYMPHONY_FAKE_LOG%"
+                rem SET prints the path without parsing its metacharacters as commands.
+                set "build-cwd=%CD%"
+                set build-cwd>> "%SYMPHONY_FAKE_LOG%"
                 mkdir target\\quarkus-app\\app 2>nul
                 mkdir target\\quarkus-app\\lib\\main 2>nul
                 mkdir target\\quarkus-app\\quarkus 2>nul

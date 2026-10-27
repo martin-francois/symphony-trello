@@ -102,12 +102,24 @@ installed checkout or stopping workers, then installs the same commit so a movin
 change the checked version. PowerShell uses its XML reader with DTD processing prohibited. The
 POSIX installer uses a narrow root-project version extractor because XML command-line tools are
 not prerequisites. It ignores comments and nested parent, dependency, and plugin versions, and
-rejects missing or unresolved root versions. Cleanup runs after success or failure. If temporary
-clone removal fails, the installer reports that failure without hiding the original error or phase.
+rejects missing or unresolved root versions. Both readers discard a single leading UTF-8 BOM,
+which Maven accepts, before parsing the root version. Cleanup runs after success or failure.
+If temporary clone removal fails, the installer reports that failure without hiding the original
+error or phase.
 Preflight rejects staged or unstaged tracked changes in the installed checkout because checkout
 retains compatible local edits, which would otherwise let the build use a different version from
-the checked commit. Both installers also reject untracked files, including ignored files, in
-`src/`, `.mvn/`, `oss-fuzz/corpora/`, bundled `.codex/skills/*/SKILL.md`, root `.env` and `.env-*`,
+the checked commit. Both installers also refuse any tracked path with `assume-unchanged` or
+`skip-worktree`, including an unchanged path or a sparse-checkout entry. These flags suppress Git's
+tracked-change reporting; index membership does not prove that the worktree matches the index.
+The refusal applies to all tracked paths because the tracked-edit policy does too. Checking only
+build inputs would leave that policy unenforced for other tracked files. Clearing flags automatically
+would change operator state; independently hashing every worktree path would duplicate Git's
+comparison rules. Operators must back up edits, clear the flags, disable sparse checkout when
+applicable, then review and save or restore the changes. This is a breaking refusal of previously
+accepted flagged checkouts, not evidence that every flagged file contains an edit. A failed flag
+inspection also stops preflight before workers stop. Both installers also reject untracked files,
+including ignored files, in `src/`, `.mvn/`, `oss-fuzz/corpora/`, bundled `.codex/skills/*/SKILL.md`,
+root `.env` and `.env-*`,
 and `config/application*.properties`. These paths supply sources, resources, Maven configuration,
 or Quarkus build-time configuration. Wrapper distribution caches under `.mvn/wrapper/dists/`,
 `.mvn/wrapper/maven-wrapper.jar`, and generated `tessl__*` or `tessl:*` skills are exempt.
@@ -152,10 +164,12 @@ The migration capability check requires help for the migration subcommand. Picoc
 successfully when an unknown command is followed by `--help`, but prints root help instead.
 That successful response means the installer prints its unsupported-version note and continues.
 A failed help invocation stops the update and preserves its diagnostic output. Command failure is
-not evidence that migration is unsupported, so it must not allow setup or worker restart. PowerShell
-stages a source checkout beside the app when it will move the checkout into place, so a temporary
-directory on another volume does not prevent installation. Existing Git checkouts still use a
-temporary clone and fetch the checked commit from it.
+not evidence that migration is unsupported, so it must not allow setup or worker restart. Both
+installers stage a source checkout beside the app when they will move the checkout into place.
+A default temporary directory on another filesystem would make POSIX `mv` copy after the old app
+was removed, or make PowerShell's move fail across volumes. Sibling staging keeps that move on the
+destination filesystem without adding a backup-and-rollback protocol. Existing Git checkouts still
+use a temporary clone and fetch the checked commit from it.
 
 Line endings. Classification compares bodies after turning CRLF into LF, so the line-ending style
 alone never counts as a customization. A migration writes the target body in the style of the
@@ -211,8 +225,9 @@ This decision remains implemented when:
   are recorded and that a freshly generated workflow is reported as unchanged;
 * the POSIX and PowerShell installer tests show the `migrate-workflows` call on update, refuse an
   older major release or source ref before the app is replaced, reject unreadable versions and
-  untracked build inputs before worker shutdown, preserve non-input files, run the build from the
-  app directory, stop on help or migration failure, and let a same-major downgrade through; and
+  untracked build inputs and index-flagged tracked paths before worker shutdown, accept a BOM in
+  the root POM, stage replacement checkouts beside the app, preserve non-input files, run the build
+  from the app directory, stop on help or migration failure, and let a same-major downgrade through; and
 * `SPEC.md` Section 19.4.1 describes the same contract.
 
 ## Pros and Cons of the Options

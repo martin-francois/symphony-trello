@@ -1011,6 +1011,13 @@ they read the root project version from the fetched ref's `pom.xml` and install 
 A missing or unresolved source project version stops the install before replacing the app.
 Source updates also stop when tracked files have local changes. Commit those changes on a separate
 branch, or save a patch and restore the files, before rerunning the installer.
+Tracked files marked `assume-unchanged` or `skip-worktree` also block updates, even without edits,
+because those flags hide changes from Git status. Sparse source checkouts are unsupported.
+Back up local edits first. For each flagged path, clear the flags with
+`git update-index --no-assume-unchanged -- path/to/file` and
+`git update-index --no-skip-worktree -- path/to/file`. If sparse checkout is enabled, run
+`git sparse-checkout disable`. Review `git diff` and `git diff --cached`, then save or restore the
+changes before retrying. The installer never changes these index flags for you.
 Updates also stop when the installed version cannot be read. Repair Java or restore the existing
 app's runnable classes, confirm that its `--version` command reports a supported version, then
 retry. The installer leaves workers and the app untouched when this preflight check fails.
