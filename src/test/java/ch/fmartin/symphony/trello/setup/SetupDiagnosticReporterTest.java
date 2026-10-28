@@ -3369,7 +3369,11 @@ final class SetupDiagnosticReporterTest {
         var store = new ManagedProcessStore(stateHome);
         Files.writeString(store.files(manifestWorkflow).stdoutLog(), "manifest workflow log\n");
         Files.writeString(store.files(requestedWorkflow).stdoutLog(), "requested workflow log\n");
-        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+        var reporter = new SetupDiagnosticReporter(
+                Map.of(),
+                new FakeCommandRunner(),
+                Files::list,
+                Clock.fixed(Instant.parse("2026-10-28T09:44:51.128191861Z"), ZoneOffset.UTC));
 
         // when
         String report = renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, requestedWorkflow);
@@ -3388,7 +3392,9 @@ final class SetupDiagnosticReporterTest {
                         "manifest-board-id",
                         "SYNTH201",
                         "https://trello.com/b/SYNTH201/manifest-board",
-                        "19186",
+                        "| 19186 |",
+                        "127.0.0.1:19186/api/v1/local-status",
+                        "127.0.0.1:19186/api/v1/state",
                         "manifest workflow log",
                         tempDir.toString());
     }
