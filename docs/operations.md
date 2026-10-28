@@ -309,8 +309,10 @@ the slowdown shows up often, raise `polling.interval_ms` instead of relying on i
 The first poll after a start reads comments for active candidate cards with comments in a Trello
 list named in `tracker.blocker_enforced_states`, to check their prerequisite status. Later polls
 reuse that lookup until the card's comment count or last activity changes, its tracker target
-changes, or Symphony invalidates the lookup before a status write. More requests right after a
-restart are expected.
+changes, or Symphony invalidates the lookup before a status write attempt or during a lookup with
+incomplete activity. A missing or blank last-activity timestamp prevents reuse. Active candidate
+cards in those lists that are waiting on prerequisites and have no comments are read on every poll
+while they remain commentless. More requests right after a restart are expected.
 
 ## Common States
 

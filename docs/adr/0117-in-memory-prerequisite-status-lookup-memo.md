@@ -57,16 +57,22 @@ users see.
 `PrerequisiteStatusCommentMemo` remembers the managed status comment that the last lookup found on
 each candidate card within its canonical tracker endpoint and resolved board namespace. Within
 that namespace, the key is the comment badge count and `dateLastActivity` from the card list that
-the candidate poll already reads. When both values are unchanged, the poll reuses the
+the candidate poll already reads. When both values are complete and unchanged, the poll reuses the
 remembered comment. The sync then compares the remembered text with the status it needs, as before:
 
 * If the text already matches, no request is sent.
 * If the text differs, Symphony updates the remembered comment in place. This is how a waiting
   status is cleared after someone removes the prerequisite checklist items.
 
-Symphony forgets the remembered lookup before each of its own status writes, so the next poll reads
-the comment again and confirms the write. Adding or deleting a comment changes the comment count, so
-a status comment written by another run, or a deleted status comment, is found on the next poll.
+An absent activity or a null/blank timestamp cannot establish that the comments are unchanged.
+Such a lookup removes the previous entry before reading and does not remember its result. Removal
+also prevents an older in-flight lookup from restoring that entry through conditional replacement.
+The next complete observation reads again even if its activity matches the earlier cached value.
+
+Symphony forgets the remembered lookup before each of its own status write attempts, so the next poll
+reads the comment again even if the write fails with HTTP 429. Adding or deleting a comment changes
+the comment count, so a status comment written by another run, or a deleted status comment, is found
+on the next poll.
 The memo keeps entries only for the current active candidates. A restart starts with an empty memo.
 
 The memo shares `TrackerTarget` with orchestration, so endpoint spelling normalization and board
@@ -77,8 +83,8 @@ endpoint's lookup result. The cache uses the normalized card payload's resolved 
 write invalidation and candidate pruning use the complete target-and-card key.
 
 Only the candidate poll uses the memo. The dispatch-time refresh reads only the 20 newest comments
-and has no complete comment count, so it always looks up the status comment. It still forgets the
-remembered lookup when it writes.
+and has no complete comment count, so it always looks up the status comment and invalidates any
+remembered candidate lookup.
 
 The same change stops the clearing lookup on cards without comments. Such a card cannot carry a
 managed status comment. Before, any card with a checklist was looked up even without comments. A
@@ -90,7 +96,8 @@ requests and no lookups, and takes about 60 milliseconds against the local fake.
 
 ### Consequences
 
-* Good, because a poll of an unchanged board reads no comment actions for the status comment.
+* Good, because a warm poll of an unchanged board with complete activity and no invalidated lookups
+  reads no comment actions for the status comment.
 * Good, because a stale waiting status is still cleared on the first poll after the prerequisite
   items are removed, and no extra lookup is needed for that.
 * Good, because nothing is persisted and the memo is bounded by the active candidates.

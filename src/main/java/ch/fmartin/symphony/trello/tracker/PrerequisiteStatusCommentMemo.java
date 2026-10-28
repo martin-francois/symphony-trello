@@ -11,9 +11,9 @@ import org.jspecify.annotations.Nullable;
 /// Remembers the managed prerequisite status comment that the last lookup found on each candidate
 /// card within its tracker endpoint and board namespace, keyed by the card's comment activity.
 /// Adding or deleting a comment changes the count. Symphony forgets the answer before its own
-/// status writes. While Trello reports the same comment count and last-activity time, the poll reuses the remembered
-/// answer instead of reading up to [TrelloClient#WORKPAD_COMMENT_ACTION_LIMIT] comment actions again
-/// on every tick.
+/// status writes. While Trello reports the same complete comment count and last-activity time,
+/// the poll reuses the remembered answer instead of reading up to
+/// [TrelloClient#WORKPAD_COMMENT_ACTION_LIMIT] comment actions again on every tick.
 ///
 /// The memo lives only in memory. A restart starts empty and pays one lookup per card. See
 /// `docs/adr/0117-in-memory-prerequisite-status-lookup-memo.md`.
@@ -25,15 +25,21 @@ final class PrerequisiteStatusCommentMemo {
     record CardKey(TrackerTarget target, String cardId) {}
 
     /// Comment activity of one card as the candidate poll's card list reports it.
-    record CommentActivity(int commentCount, @Nullable String lastActivity) {}
+    record CommentActivity(int commentCount, @Nullable String lastActivity) {
+        boolean isComplete() {
+            return lastActivity != null && !lastActivity.isBlank();
+        }
+    }
 
     /// Returns the card's managed status comment. Uses the remembered answer when `activity`
     /// matches the activity of the remembered lookup, otherwise runs `lookup` and remembers its
-    /// answer. A `null` activity means the caller has no complete comment count, so the lookup
-    /// always runs and nothing is remembered.
+    /// answer. Missing activity or a null/blank timestamp invalidates the previous answer and
+    /// always runs the lookup without remembering its result.
     Optional<Card.Comment> find(
             CardKey card, @Nullable CommentActivity activity, Supplier<Optional<Card.Comment>> lookup) {
-        if (activity == null) {
+        if (activity == null || !activity.isComplete()) {
+            // An incomplete observation also invalidates any lookup already in flight.
+            entries.remove(card);
             return lookup.get();
         }
         Entry before = entries.computeIfAbsent(card, id -> Entry.unknown());
@@ -48,8 +54,8 @@ final class PrerequisiteStatusCommentMemo {
         return found;
     }
 
-    /// Drops the remembered answer after Symphony writes the card's status comment, so the next
-    /// poll reads the comment again.
+    /// Drops the remembered answer before Symphony attempts a status write, so the next poll
+    /// reads the comment again even if the write fails.
     void forget(CardKey card) {
         entries.put(card, Entry.unknown());
     }

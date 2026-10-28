@@ -10,7 +10,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 final class PrerequisiteStatusCommentMemoTest {
     private static final String ENDPOINT = "https://api.example.test/1";
@@ -49,16 +52,71 @@ final class PrerequisiteStatusCommentMemoTest {
         assertThat(lookups).as("lookups after a comment was added").hasValue(2);
     }
 
-    @Test
-    void alwaysLooksUpWithoutCommentActivity() {
+    @MethodSource("incompleteActivities")
+    @ParameterizedTest
+    void alwaysLooksUpWithoutCompleteCommentActivity(@Nullable CommentActivity activity) {
         // given
-        memo.find(CARD, null, this::countedLookup);
+        memo.find(CARD, ACTIVITY, this::countedLookup);
+        memo.find(CARD, activity, this::countedLookup);
 
         // when
-        memo.find(CARD, null, this::countedLookup);
+        memo.find(CARD, activity, this::countedLookup);
 
         // then
-        assertThat(lookups).as("lookups without a complete comment count").hasValue(2);
+        assertThat(lookups)
+                .as("priming lookup and both incomplete-activity lookups")
+                .hasValue(3);
+    }
+
+    @MethodSource("incompleteActivities")
+    @ParameterizedTest
+    void incompleteActivityInvalidatesTheRememberedAnswer(@Nullable CommentActivity activity) {
+        // given
+        memo.find(CARD, ACTIVITY, Optional::empty);
+        memo.find(CARD, activity, this::countedLookup);
+
+        // when
+        Optional<Card.Comment> found = memo.find(CARD, ACTIVITY, this::countedLookup);
+
+        // then
+        assertThat(found)
+                .as("old activity must not revive the stale empty answer")
+                .isEqualTo(STATUS_COMMENT);
+        assertThat(lookups)
+                .as("incomplete activity and the next complete activity both refresh")
+                .hasValue(2);
+    }
+
+    @MethodSource("incompleteActivities")
+    @ParameterizedTest
+    void incompleteActivityInvalidatesAnInFlightLookup(@Nullable CommentActivity activity) {
+        // given
+        memo.find(CARD, ACTIVITY, () -> lookupOverlappingIncompleteActivity(activity));
+
+        // when
+        Optional<Card.Comment> found = memo.find(CARD, ACTIVITY, this::countedLookup);
+
+        // then
+        assertThat(found)
+                .as("the in-flight empty answer must not survive incomplete activity")
+                .isEqualTo(STATUS_COMMENT);
+        assertThat(lookups).hasValue(2);
+    }
+
+    static @Nullable CommentActivity[] incompleteActivities() {
+        return new CommentActivity[] {
+            null,
+            new CommentActivity(ACTIVITY.commentCount(), null),
+            new CommentActivity(ACTIVITY.commentCount(), ""),
+            new CommentActivity(ACTIVITY.commentCount(), " "),
+            new CommentActivity(ACTIVITY.commentCount(), "\t")
+        };
+    }
+
+    private Optional<Card.Comment> lookupOverlappingIncompleteActivity(@Nullable CommentActivity activity) {
+        // The incomplete-activity lookup observes a new comment before the older lookup returns.
+        memo.find(CARD, activity, this::countedLookup);
+        return Optional.empty();
     }
 
     @Test
