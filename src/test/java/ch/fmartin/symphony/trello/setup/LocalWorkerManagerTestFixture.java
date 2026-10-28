@@ -337,9 +337,7 @@ final class LocalWorkerManagerTestFixture {
     ConnectedBoard connectedBoard(String boardId, String boardName, String workflowSlug) throws Exception {
         Path workflow = paths.configDir().resolve("WORKFLOW." + workflowSlug + ".md");
         Files.createDirectories(paths.configDir());
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -348,8 +346,7 @@ final class LocalWorkerManagerTestFixture {
                   port: %d
                 ---
                 # %s
-                """
-                        .formatted(boardId, ConfigDefaults.DEFAULT_SERVER_PORT, boardName));
+                """.formatted(boardId, ConfigDefaults.DEFAULT_SERVER_PORT, boardName));
         writeEnv(paths.defaultEnvPath());
         return ConnectedBoardBuilder.connectedBoard(workflow.toAbsolutePath().normalize())
                 .withBoardId(boardId)

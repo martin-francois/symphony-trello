@@ -75,13 +75,12 @@ final class SetupFailureCauses {
     /// content, which can hold credentials or board names, so they are dropped. A front matter rule
     /// violation names only a key path or an alias and how to fix it, never a value, so it is kept.
     private static Optional<String> detail(Throwable throwable) {
-        String detail =
-                switch (throwable) {
-                    case FileSystemException fileSystemFailure -> fileSystemFailure.getReason();
-                    case WorkflowFrontMatterYaml.RuleViolation violation -> violation.getOriginalMessage();
-                    case JsonProcessingException _ -> null;
-                    default -> throwable.getMessage();
-                };
+        String detail = switch (throwable) {
+            case FileSystemException fileSystemFailure -> fileSystemFailure.getReason();
+            case WorkflowFrontMatterYaml.RuleViolation violation -> violation.getOriginalMessage();
+            case JsonProcessingException _ -> null;
+            default -> throwable.getMessage();
+        };
         return Optional.ofNullable(detail).filter(not(String::isBlank));
     }
 }

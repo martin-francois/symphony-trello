@@ -9,8 +9,7 @@ import ch.fmartin.symphony.trello.config.PullRequestHandoffField;
 final class PullRequestHandoffPrompt {
     static final String SECTION_TITLE = "Pull Request Handoff Mode";
 
-    static final String REWORK_NOTE =
-            """
+    static final String REWORK_NOTE = """
             For a branch-only handoff without a pull request, continue the same branch and checkout, update the
             proposed description file when the instructions change, and keep that file uncommitted.""";
 
@@ -72,8 +71,7 @@ final class PullRequestHandoffPrompt {
                 removed the label and moved the
                 card straight to %s, do not merge the branch directly. Create the pull request first as described
                 in %s, but keep the card in %s instead of moving it to %s. Then follow the PR
-                merge steps above for the new pull request."""
-                .formatted(
+                merge steps above for the new pull request.""".formatted(
                         SECTION_TITLE,
                         reviewHandoff,
                         landSkill,
@@ -96,8 +94,7 @@ final class PullRequestHandoffPrompt {
                 - Effective mode for this run: `{{ %s }}`, selected by
                   `{{ %s }}`.
                 - Workflow default from `%s`: `{{ %s }}`.
-                - Card label from `%s`: {%% if %s %%}`{{ %s }}`. This card has it: {%% if %s %%}yes{%% else %%}no{%% endif %%}{%% else %%}turned off in this workflow{%% endif %%}."""
-                .formatted(
+                - Card label from `%s`: {%% if %s %%}`{{ %s }}`. This card has it: {%% if %s %%}yes{%% else %%}no{%% endif %%}{%% else %%}turned off in this workflow{%% endif %%}.""".formatted(
                         SECTION_TITLE,
                         EffectiveConfig.GitHubConfig.SECTION_KEY,
                         PullRequestHandoffField.MODE.reference(),
@@ -125,8 +122,7 @@ final class PullRequestHandoffPrompt {
                 4. Without these signals, use the pull request publication flow above.
 
                 Once a pull request exists for the card branch, keep using the pull request flow for rework and
-                merging, even when the label is still on the card."""
-                .formatted(WORKFLOW_MODE_KEY);
+                merging, even when the label is still on the card.""".formatted(WORKFLOW_MODE_KEY);
     }
 
     private static String branchOnlyHandoff(String reviewHandoff, String handoffEvidence, String pushPrSkill) {
@@ -195,8 +191,7 @@ final class PullRequestHandoffPrompt {
                    After the review move, end the run with the complete handoff and copy request.
 
                 On rework, continue the same branch and checkout, and update the code and the proposed description
-                file from the new Trello comments."""
-                .formatted(pushPrSkill, handoffEvidence, reviewHandoff);
+                file from the new Trello comments.""".formatted(pushPrSkill, handoffEvidence, reviewHandoff);
     }
 
     private static String createLater(String reviewHandoff, String pushPrSkill) {
@@ -212,7 +207,6 @@ final class PullRequestHandoffPrompt {
                 Keep the proposal file uncommitted. After creation, use `gh pr view --json title,body` to compare
                 the published title and body with the intended title and reconciled description. Correct any
                 metadata mismatch before recording the PR link or moving the card to %s. Remove the temporary
-                body file after successful verification."""
-                .formatted(CREATE_LATER_TITLE, pushPrSkill, reviewHandoff);
+                body file after successful verification.""".formatted(CREATE_LATER_TITLE, pushPrSkill, reviewHandoff);
     }
 }

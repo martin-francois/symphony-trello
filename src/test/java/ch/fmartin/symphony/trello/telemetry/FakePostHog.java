@@ -373,11 +373,13 @@ final class FakePostHog implements AutoCloseable {
                     .filter(person -> !person.deleted && !person.hiddenInTable && ids.contains(person.uuid))
                     .forEach(person -> results.addArray().add(person.uuid));
         } else {
-            events.stream().filter(event -> ids.contains(event.distinctId())).forEach(event -> results.addArray()
-                    .add(event.distinctId())
-                    .add(event.uuid())
-                    .add(event.personUuid())
-                    .add(event.timestamp()));
+            events.stream()
+                    .filter(event -> ids.contains(event.distinctId()))
+                    .forEach(event -> results.addArray()
+                            .add(event.distinctId())
+                            .add(event.uuid())
+                            .add(event.personUuid())
+                            .add(event.timestamp()));
         }
         TestHttpExchange.respond(exchange, HTTP_OK, response.toString());
     }

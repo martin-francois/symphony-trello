@@ -93,14 +93,11 @@ final class TrelloSetupApi {
                     .timeout(REQUEST_TIMEOUT)
                     .header("Accept", "application/json")
                     .header("Authorization", TrelloClient.authorization(credentials.apiKey(), credentials.apiToken()));
-            HttpRequest request =
-                    switch (requestKind) {
-                        case READ -> builder.GET().build();
-                        case CREATE ->
-                            builder.POST(HttpRequest.BodyPublishers.noBody()).build();
-                        case UPDATE ->
-                            builder.PUT(HttpRequest.BodyPublishers.noBody()).build();
-                    };
+            HttpRequest request = switch (requestKind) {
+                case READ -> builder.GET().build();
+                case CREATE -> builder.POST(HttpRequest.BodyPublishers.noBody()).build();
+                case UPDATE -> builder.PUT(HttpRequest.BodyPublishers.noBody()).build();
+            };
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (isSuccessfulStatus(response.statusCode())) {
                 try {

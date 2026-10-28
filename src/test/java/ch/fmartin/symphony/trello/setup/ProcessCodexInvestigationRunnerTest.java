@@ -36,8 +36,7 @@ final class ProcessCodexInvestigationRunnerTest {
     private static final Duration SHUTDOWN_CHILD_LIFETIME = Duration.ofMinutes(5);
     private static final Duration PROBE_TIMEOUT = Duration.ofSeconds(10);
     private static final int SUCCESS_EXIT_CODE = 0;
-    private static final String VALID_ANSWER =
-            """
+    private static final String VALID_ANSWER = """
             {"classification":"symphony_bug","diagnosis":"Missing parent directory.","fix_applied":true,\
             "fix_summary":"Create the parent directory.","changed_files":["WORKFLOW.md"],\
             "validation":[{"command":"symphony-trello setup-local check","passed":true}],"next_step":""}""";
@@ -50,15 +49,13 @@ final class ProcessCodexInvestigationRunnerTest {
         // given
         Path workingRoot = Files.createDirectories(tempDir.resolve("config"));
         Path sourceCheckout = Files.createDirectories(tempDir.resolve("app"));
-        Path codex = fakeCodex(
-                """
+        Path codex = fakeCodex("""
                 printf '%%s\\n' "$@" > "%1$s/args.txt"
                 cat > "%1$s/prompt.txt"
                 printf '%%s' "${SYMPHONY_TRELLO_CODEX_INVESTIGATION:-}" > "%1$s/marker.txt"
                 cp "$(argument --output-schema "$@")" "%1$s/schema.json"
                 printf '%%s' '%2$s' > "$(argument --output-last-message "$@")"
-                """
-                        .formatted(tempDir, VALID_ANSWER));
+                """.formatted(tempDir, VALID_ANSWER));
 
         // when
         Outcome outcome = new ProcessCodexInvestigationRunner()
@@ -97,11 +94,7 @@ final class ProcessCodexInvestigationRunnerTest {
                 .containsExactlyInAnyOrderElementsOf(propertyNames(schema));
     }
 
-    @CsvSource(
-            delimiter = '|',
-            quoteCharacter = '~',
-            textBlock =
-                    """
+    @CsvSource(delimiter = '|', quoteCharacter = '~', textBlock = """
                     exits non-zero                 | exit 3                                                             | Codex exited with code 3
                     writes no answer               | exit 0                                                             | Codex finished without an answer
                     writes malformed JSON          | printf 'not json' > "$(argument --output-last-message "$@")"       | Codex returned an answer in an unexpected format
@@ -154,14 +147,12 @@ final class ProcessCodexInvestigationRunnerTest {
         Path codexPid = tempDir.resolve("codex.pid");
         Path childPid = tempDir.resolve("shutdown-child.pid");
         Path ready = tempDir.resolve("shutdown-ready");
-        Path codex = fakeCodex(
-                """
+        Path codex = fakeCodex("""
                 printf '%%s' "$$" > "%s"
                 sleep %d &
                 printf '%%s' "$!" > "%s"
                 wait
-                """
-                        .formatted(codexPid, SHUTDOWN_CHILD_LIFETIME.toSeconds(), childPid));
+                """.formatted(codexPid, SHUTDOWN_CHILD_LIFETIME.toSeconds(), childPid));
         Process helper = new ProcessBuilder(
                         Path.of(System.getProperty("java.home"), "bin", "java").toString(),
                         "-Djava.io.tmpdir=" + tempDir,
@@ -290,9 +281,7 @@ final class ProcessCodexInvestigationRunnerTest {
     /// Writes a fake `codex` script. `argument NAME "$@"` prints the value after option `NAME`.
     private Path fakeCodex(String body) throws IOException {
         Path script = Files.createTempFile(tempDir, "codex-", ".sh");
-        Files.writeString(
-                script,
-                """
+        Files.writeString(script, """
                 #!/usr/bin/env bash
                 set -eu
                 argument() {
@@ -307,8 +296,7 @@ final class ProcessCodexInvestigationRunnerTest {
                   done
                 }
                 %s
-                """
-                        .formatted(body));
+                """.formatted(body));
         assertThat(script.toFile().setExecutable(true))
                 .as("the fake codex script must be executable")
                 .isTrue();

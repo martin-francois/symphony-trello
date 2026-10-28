@@ -21,8 +21,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 final class CodexModelAppServerFixtureTest {
     private static final Duration WAIT = Duration.ofSeconds(5);
-    private static final String STUCK_PROBE =
-            """
+    private static final String STUCK_PROBE = """
             echo $$ > "${0}.pid.tmp"
             mv "${0}.pid.tmp" "${0}.pid"
             exec sleep 30

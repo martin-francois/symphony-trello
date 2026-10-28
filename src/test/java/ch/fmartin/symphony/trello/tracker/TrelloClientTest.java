@@ -78,9 +78,7 @@ final class TrelloClientTest {
         trello.on("/1/boards/board-1/cards/open", exchange -> {
             authorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     [
                       {"id":"000000000000000000000101","name":"A","desc":"","idList":"list-todo","idBoard":"board-1","closed":false,"idShort":7,"shortLink":"abc","shortUrl":"u","url":"u","labels":[{"id":"l1","name":"P1"}],"dateLastActivity":"2026-02-24T20:10:12.000Z","pos":2},
                       {"id":"000000000000000000000102","name":"B","desc":"","idList":"list-done","idBoard":"board-1","closed":false,"shortLink":"def","labels":[],"pos":1}
@@ -89,9 +87,7 @@ final class TrelloClientTest {
         });
         trello.on("/1/cards/000000000000000000000101", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     {"id":"000000000000000000000101","name":"A","desc":"","idList":"list-todo","idBoard":"board-1","closed":false,"idShort":7,"shortLink":"abc","shortUrl":"u","url":"u","labels":[{"id":"l1","name":"P1"}],"actions":[{"id":"comment-1","date":"2026-02-24T20:11:12.000Z","data":{"text":"Please rework the edge case."},"memberCreator":{"fullName":"Reviewer"}}],"dateLastActivity":"2026-02-24T20:10:12.000Z","pos":2}
                     """);
         });
@@ -105,22 +101,14 @@ final class TrelloClientTest {
                                 trelloList("terminal-todo", "Todo", 1),
                                 trelloList("terminal-done", "Done", 2),
                                 trelloList("terminal-archived", "Later", true, 3))));
-        trello.on(
-                "/1/boards/terminal-board/cards/all",
-                exchange -> respond(
-                        exchange,
-                        """
+        trello.on("/1/boards/terminal-board/cards/all", exchange -> respond(exchange, """
                         [
                           {"id":"000000000000000000000103","name":"Done","idList":"terminal-done","idBoard":"terminal-board","closed":false,"shortLink":"done","labels":[],"pos":1},
                           {"id":"000000000000000000000104","name":"Archived card","idList":"terminal-todo","idBoard":"terminal-board","closed":true,"shortLink":"archived","labels":[],"pos":2},
                           {"id":"000000000000000000000105","name":"Archived list duplicate","idList":"terminal-archived","idBoard":"terminal-board","closed":false,"shortLink":"dup","labels":[],"pos":3}
                         ]
                         """));
-        trello.on(
-                "/1/lists/terminal-archived/cards",
-                exchange -> respond(
-                        exchange,
-                        """
+        trello.on("/1/lists/terminal-archived/cards", exchange -> respond(exchange, """
                         [
                           {"id":"000000000000000000000105","name":"Archived list duplicate","idList":"terminal-archived","idBoard":"terminal-board","closed":false,"shortLink":"dup","labels":[],"pos":3},
                           {"id":"000000000000000000000106","name":"Archived list only","idList":"terminal-archived","idBoard":"terminal-board","closed":false,"shortLink":"list-only","labels":[],"pos":4}
@@ -129,11 +117,7 @@ final class TrelloClientTest {
         trello.on(
                 "/1/boards/lookup-input",
                 exchange -> respond(exchange, "{\"id\":\"lookup-board\",\"name\":\"Board\",\"closed\":false}"));
-        trello.on(
-                "/1/boards/lookup-board/lists",
-                exchange -> respond(
-                        exchange,
-                        """
+        trello.on("/1/boards/lookup-board/lists", exchange -> respond(exchange, """
                         [
                           {"id":"lookup-todo","name":"Todo","closed":false,"pos":1},
                           {"id":"lookup-review","name":"Review","closed":false,"pos":2}
@@ -193,9 +177,7 @@ final class TrelloClientTest {
         });
         trello.on("/1/cards/000000000000000000000107", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     {"id":"000000000000000000000107","name":"Picked up","desc":"","idList":"list-progress","idBoard":"board-1","closed":false,"idShort":8,"shortLink":"pickup","shortUrl":"u","url":"u","labels":[],"actions":[],"dateLastActivity":"2026-02-24T20:10:12.000Z","pos":1}
                     """);
         });
@@ -262,9 +244,11 @@ final class TrelloClientTest {
             // then
             assertThat(thrown)
                     .as("a redirect is an error, not a request to the other host")
-                    .isInstanceOfSatisfying(TrelloException.class, exception -> assertThat(exception)
-                            .returns("trello_api_status", TrelloException::code)
-                            .hasMessage("Trello returned HTTP 302"));
+                    .isInstanceOfSatisfying(
+                            TrelloException.class,
+                            exception -> assertThat(exception)
+                                    .returns("trello_api_status", TrelloException::code)
+                                    .hasMessage("Trello returned HTTP 302"));
             assertThat(forwardedRequests)
                     .as("the key and token must not follow a redirect to another host")
                     .hasValue(0);
@@ -366,8 +350,9 @@ final class TrelloClientTest {
         // then
         assertThat(results.keySet()).containsExactly("card-found", "card-missing", "card-failed", "card-malformed");
         assertThat(results.get("card-found"))
-                .isInstanceOfSatisfying(CardLookupResult.Found.class, found -> assertThat(found.card())
-                        .satisfies(card -> {
+                .isInstanceOfSatisfying(
+                        CardLookupResult.Found.class,
+                        found -> assertThat(found.card()).satisfies(card -> {
                             assertThat(card.state()).isEqualTo("Review");
                             assertThat(card.comments()).singleElement().satisfies(comment -> {
                                 assertThat(comment.text()).isEqualTo("Follow-up review note.");
@@ -376,15 +361,18 @@ final class TrelloClientTest {
                         }));
         assertThat(results.get("card-missing")).isInstanceOf(CardLookupResult.Missing.class);
         assertThat(results.get("card-failed"))
-                .isInstanceOfSatisfying(CardLookupResult.Failed.class, failed -> assertThat(failed.code())
-                        .isEqualTo("trello_api_status"));
+                .isInstanceOfSatisfying(
+                        CardLookupResult.Failed.class,
+                        failed -> assertThat(failed.code()).isEqualTo("trello_api_status"));
         assertThat(results.get("card-malformed"))
-                .isInstanceOfSatisfying(CardLookupResult.Failed.class, failed -> assertThat(failed.code())
-                        .isEqualTo("trello_unknown_payload"));
-        assertThat(readRequests).anySatisfy(request -> assertThat(request)
-                .startsWith("GET /1/cards/card-found?")
-                .contains("actions_limit=20")
-                .contains("action_fields=data%2Cdate%2CmemberCreator"));
+                .isInstanceOfSatisfying(
+                        CardLookupResult.Failed.class,
+                        failed -> assertThat(failed.code()).isEqualTo("trello_unknown_payload"));
+        assertThat(readRequests)
+                .anySatisfy(request -> assertThat(request)
+                        .startsWith("GET /1/cards/card-found?")
+                        .contains("actions_limit=20")
+                        .contains("action_fields=data%2Cdate%2CmemberCreator"));
     }
 
     @MethodSource("idShortScenarios")
@@ -401,14 +389,17 @@ final class TrelloClientTest {
 
         // then
         if (expectedIdShort != null) {
-            assertThat(result).as(description).isInstanceOfSatisfying(CardLookupResult.Found.class, found -> assertThat(
-                            found.card().idShort())
-                    .isEqualTo(expectedIdShort));
+            assertThat(result)
+                    .as(description)
+                    .isInstanceOfSatisfying(
+                            CardLookupResult.Found.class,
+                            found -> assertThat(found.card().idShort()).isEqualTo(expectedIdShort));
         } else {
             assertThat(result)
                     .as(description)
-                    .isInstanceOfSatisfying(CardLookupResult.Failed.class, failed -> assertThat(failed.code())
-                            .isEqualTo("trello_unknown_payload"));
+                    .isInstanceOfSatisfying(
+                            CardLookupResult.Failed.class,
+                            failed -> assertThat(failed.code()).isEqualTo("trello_unknown_payload"));
         }
     }
 
@@ -432,8 +423,9 @@ final class TrelloClientTest {
 
         // then
         assertThat(results.get("null-body"))
-                .isInstanceOfSatisfying(CardLookupResult.Failed.class, failed -> assertThat(failed.code())
-                        .isEqualTo("trello_unknown_payload"));
+                .isInstanceOfSatisfying(
+                        CardLookupResult.Failed.class,
+                        failed -> assertThat(failed.code()).isEqualTo("trello_unknown_payload"));
         assertThat(results.get("card-found")).isInstanceOf(CardLookupResult.Found.class);
     }
 
@@ -447,8 +439,10 @@ final class TrelloClientTest {
         var result = client.fetchCardStateForWorkpad(config("lookup-input", Map.of()), "null-body");
 
         // then
-        assertThat(result).isInstanceOfSatisfying(CardLookupResult.Failed.class, failed -> assertThat(failed.code())
-                .isEqualTo("trello_unknown_payload"));
+        assertThat(result)
+                .isInstanceOfSatisfying(
+                        CardLookupResult.Failed.class,
+                        failed -> assertThat(failed.code()).isEqualTo("trello_unknown_payload"));
     }
 
     @MethodSource("nullResponsePayloads")
@@ -463,8 +457,10 @@ final class TrelloClientTest {
         Throwable failure = catchThrowable(() -> client.fetchCandidateCards(config("input", Map.of())));
 
         // then
-        assertThat(failure).isInstanceOfSatisfying(TrelloException.class, exception -> assertThat(exception.code())
-                .isEqualTo("trello_unknown_payload"));
+        assertThat(failure)
+                .isInstanceOfSatisfying(
+                        TrelloException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("trello_unknown_payload"));
     }
 
     private static Arguments[] nullResponsePayloads() {
@@ -494,8 +490,9 @@ final class TrelloClientTest {
 
         // then
         assertThat(results.get(malformedCardId))
-                .isInstanceOfSatisfying(CardLookupResult.Failed.class, failed -> assertThat(failed.code())
-                        .isEqualTo("trello_unknown_payload"));
+                .isInstanceOfSatisfying(
+                        CardLookupResult.Failed.class,
+                        failed -> assertThat(failed.code()).isEqualTo("trello_unknown_payload"));
         assertThat(results.get("card-found")).isInstanceOf(CardLookupResult.Found.class);
     }
 
@@ -510,8 +507,10 @@ final class TrelloClientTest {
         var result = client.fetchCardStateForWorkpad(config, field.cardId());
 
         // then
-        assertThat(result).isInstanceOfSatisfying(CardLookupResult.Failed.class, failed -> assertThat(failed.code())
-                .isEqualTo("trello_unknown_payload"));
+        assertThat(result)
+                .isInstanceOfSatisfying(
+                        CardLookupResult.Failed.class,
+                        failed -> assertThat(failed.code()).isEqualTo("trello_unknown_payload"));
     }
 
     @Test
@@ -524,14 +523,19 @@ final class TrelloClientTest {
         var result = client.fetchCardStateForWorkpad(config, "card-found");
 
         // then
-        assertThat(result).isInstanceOfSatisfying(CardLookupResult.Found.class, found -> assertThat(found.card())
-                .satisfies(card -> assertThat(card.comments())
-                        .singleElement()
-                        .satisfies(comment -> assertThat(comment.id()).isEqualTo("comment-2"))));
-        assertThat(readRequests).anySatisfy(request -> assertThat(request)
-                .startsWith("GET /1/cards/card-found?")
-                .contains("actions_limit=1000")
-                .contains("action_fields=id%2Cdata%2Cdate%2CmemberCreator"));
+        assertThat(result)
+                .isInstanceOfSatisfying(
+                        CardLookupResult.Found.class,
+                        found -> assertThat(found.card())
+                                .satisfies(card -> assertThat(card.comments())
+                                        .singleElement()
+                                        .satisfies(comment ->
+                                                assertThat(comment.id()).isEqualTo("comment-2"))));
+        assertThat(readRequests)
+                .anySatisfy(request -> assertThat(request)
+                        .startsWith("GET /1/cards/card-found?")
+                        .contains("actions_limit=1000")
+                        .contains("action_fields=id%2Cdata%2Cdate%2CmemberCreator"));
     }
 
     @Test
@@ -545,12 +549,13 @@ final class TrelloClientTest {
 
         // then
         assertThat(results.get("card-workpad-old"))
-                .isInstanceOfSatisfying(CardLookupResult.Found.class, found -> assertThat(
-                                found.card().comments())
-                        .hasSize(20)
-                        .extracting(Card.Comment::text)
-                        .doesNotContain(TrelloClient.WORKPAD_MARKER + "\n\nOlder plan")
-                        .contains("Regular comment 19"));
+                .isInstanceOfSatisfying(
+                        CardLookupResult.Found.class,
+                        found -> assertThat(found.card().comments())
+                                .hasSize(20)
+                                .extracting(Card.Comment::text)
+                                .doesNotContain(TrelloClient.WORKPAD_MARKER + "\n\nOlder plan")
+                                .contains("Regular comment 19"));
         assertThat(readRequests)
                 .filteredOn(request -> request.startsWith("GET /1/cards/card-workpad-old?"))
                 .singleElement()
@@ -568,12 +573,13 @@ final class TrelloClientTest {
 
         // then
         assertThat(results.get("card-workpad-old"))
-                .isInstanceOfSatisfying(CardLookupResult.Found.class, found -> assertThat(
-                                found.card().comments())
-                        .hasSize(21)
-                        .extracting(Card.Comment::text)
-                        .startsWith(TrelloClient.WORKPAD_MARKER + "\n\nOlder plan")
-                        .contains("Regular comment 19"));
+                .isInstanceOfSatisfying(
+                        CardLookupResult.Found.class,
+                        found -> assertThat(found.card().comments())
+                                .hasSize(21)
+                                .extracting(Card.Comment::text)
+                                .startsWith(TrelloClient.WORKPAD_MARKER + "\n\nOlder plan")
+                                .contains("Regular comment 19"));
         assertThat(readRequests)
                 .filteredOn(request -> request.startsWith("GET /1/cards/card-workpad-old?"))
                 .satisfiesExactly(
@@ -595,12 +601,13 @@ final class TrelloClientTest {
 
         // then
         assertThat(results.get("card-workpad-deep-failed"))
-                .isInstanceOfSatisfying(CardLookupResult.Found.class, found -> assertThat(
-                                found.card().comments())
-                        .hasSize(20)
-                        .extracting(Card.Comment::text)
-                        .contains("Regular comment 19")
-                        .doesNotContain(TrelloClient.WORKPAD_MARKER + "\n\nOlder plan"));
+                .isInstanceOfSatisfying(
+                        CardLookupResult.Found.class,
+                        found -> assertThat(found.card().comments())
+                                .hasSize(20)
+                                .extracting(Card.Comment::text)
+                                .contains("Regular comment 19")
+                                .doesNotContain(TrelloClient.WORKPAD_MARKER + "\n\nOlder plan"));
         assertThat(readRequests)
                 .filteredOn(request -> request.startsWith("GET /1/cards/card-workpad-deep-failed?"))
                 .satisfiesExactly(
@@ -613,30 +620,21 @@ final class TrelloClientTest {
         // given
         trello.on("/1/cards/card-context", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     {"id":"card-context","name":"Context","desc":"Read the related material.","idList":"lookup-review","idBoard":"lookup-board","closed":false,"shortLink":"context","labels":[],"actions":[{"id":"comment-context","date":"2026-02-25T20:11:12.000Z","data":{"text":"No prerequisite in this comment."},"memberCreator":{"username":"reviewer"}}],"checklists":[{"id":"checklist-context","name":"Related","checkItems":[{"id":"item-context","name":"related to [the card](%s)","state":"incomplete"}]}],"attachments":[{"id":"attachment-context","name":"Design card","url":"%s"}]}
-                    """
-                            .formatted(cardUrl("CTXMARK1"), cardUrl("CTXATT1")));
+                    """.formatted(cardUrl("CTXMARK1"), cardUrl("CTXATT1")));
         });
         trello.on("/1/cards/CTXMARK1", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     {"id":"mark-card","name":"Markdown reference","desc":"","idList":"lookup-review","idBoard":"lookup-board","closed":false,"shortLink":"CTXMARK1","shortUrl":"%s","url":"%s","labels":[],"actions":[],"badges":{"checkItems":0},"pos":2}
-                    """
-                            .formatted(cardUrl("CTXMARK1"), cardUrl("CTXMARK1")));
+                    """.formatted(cardUrl("CTXMARK1"), cardUrl("CTXMARK1")));
         });
         trello.on("/1/cards/CTXATT1", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     {"id":"attachment-card","name":"Attachment reference","desc":"","idList":"lookup-review","idBoard":"lookup-board","closed":false,"shortLink":"CTXATT1","shortUrl":"%s","url":"%s","labels":[],"actions":[],"badges":{"checkItems":0},"pos":3}
-                    """
-                            .formatted(cardUrl("CTXATT1"), cardUrl("CTXATT1")));
+                    """.formatted(cardUrl("CTXATT1"), cardUrl("CTXATT1")));
         });
         var client = new TrelloClient(new ObjectMapper());
         var config = config("lookup-input", Map.of("blocker_enforced_states", List.of()));
@@ -646,14 +644,17 @@ final class TrelloClientTest {
 
         // then
         assertThat(results.get("card-context"))
-                .isInstanceOfSatisfying(CardLookupResult.Found.class, found -> assertThat(found.card())
-                        .satisfies(card -> {
-                            assertThat(card.checklists()).singleElement().satisfies(checklist -> assertThat(
-                                            checklist.name())
-                                    .isEqualTo("Related"));
-                            assertThat(card.attachments()).singleElement().satisfies(attachment -> assertThat(
-                                            attachment.url())
-                                    .isEqualTo(cardUrl("CTXATT1")));
+                .isInstanceOfSatisfying(
+                        CardLookupResult.Found.class,
+                        found -> assertThat(found.card()).satisfies(card -> {
+                            assertThat(card.checklists())
+                                    .singleElement()
+                                    .satisfies(checklist ->
+                                            assertThat(checklist.name()).isEqualTo("Related"));
+                            assertThat(card.attachments())
+                                    .singleElement()
+                                    .satisfies(attachment ->
+                                            assertThat(attachment.url()).isEqualTo(cardUrl("CTXATT1")));
                             assertThat(card.trelloReferences())
                                     .extracting(Card.TrelloReference::source)
                                     .containsExactly("checklist:Related", "attachment");
@@ -677,30 +678,21 @@ final class TrelloClientTest {
         // given
         trello.on("/1/cards/card-context-a", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     {"id":"card-context-a","name":"Context A","desc":"See %s","idList":"lookup-review","idBoard":"lookup-board","closed":false,"shortLink":"contexta","labels":[],"actions":[],"badges":{"checkItems":0},"pos":1}
-                    """
-                            .formatted(cardUrl("CTXSHARED")));
+                    """.formatted(cardUrl("CTXSHARED")));
         });
         trello.on("/1/cards/card-context-b", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     {"id":"card-context-b","name":"Context B","desc":"Also see %s","idList":"lookup-review","idBoard":"lookup-board","closed":false,"shortLink":"contextb","labels":[],"actions":[],"badges":{"checkItems":0},"pos":2}
-                    """
-                            .formatted(cardUrl("CTXSHARED")));
+                    """.formatted(cardUrl("CTXSHARED")));
         });
         trello.on("/1/cards/CTXSHARED", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     {"id":"shared-card","name":"Shared context","desc":"","idList":"lookup-review","idBoard":"lookup-board","closed":false,"shortLink":"CTXSHARED","shortUrl":"%s","url":"%s","labels":[],"actions":[],"badges":{"checkItems":0},"pos":3}
-                    """
-                            .formatted(cardUrl("CTXSHARED"), cardUrl("CTXSHARED")));
+                    """.formatted(cardUrl("CTXSHARED"), cardUrl("CTXSHARED")));
         });
         var client = new TrelloClient(new ObjectMapper());
         var config = config("lookup-input", Map.of("blocker_enforced_states", List.of()));
@@ -741,10 +733,12 @@ final class TrelloClientTest {
         var result = client.fetchCardStatesForPromptByIds(config, List.of("card-lines"));
 
         // then
-        assertThat(result.get("card-lines")).isInstanceOfSatisfying(CardLookupResult.Found.class, found -> assertThat(
-                        found.card().trelloReferences())
-                .extracting(Card.TrelloReference::lookupId, Card.TrelloReference::text)
-                .containsExactly(tuple("SYNTH101", firstLine), tuple("SYNTH102", secondLine)));
+        assertThat(result.get("card-lines"))
+                .isInstanceOfSatisfying(
+                        CardLookupResult.Found.class,
+                        found -> assertThat(found.card().trelloReferences())
+                                .extracting(Card.TrelloReference::lookupId, Card.TrelloReference::text)
+                                .containsExactly(tuple("SYNTH101", firstLine), tuple("SYNTH102", secondLine)));
         assertThat(writeRequests).isEmpty();
     }
 
@@ -765,10 +759,15 @@ final class TrelloClientTest {
         var result = client.fetchCardStatesForPromptByIds(config, List.of("card-lines"));
 
         // then
-        assertThat(result.get("card-lines")).isInstanceOfSatisfying(CardLookupResult.Found.class, found -> assertThat(
-                        found.card().trelloReferences())
-                .extracting(Card.TrelloReference::source, Card.TrelloReference::lookupId, Card.TrelloReference::text)
-                .containsExactly(tuple("checklist:Notes", "SYNTH101", line)));
+        assertThat(result.get("card-lines"))
+                .isInstanceOfSatisfying(
+                        CardLookupResult.Found.class,
+                        found -> assertThat(found.card().trelloReferences())
+                                .extracting(
+                                        Card.TrelloReference::source,
+                                        Card.TrelloReference::lookupId,
+                                        Card.TrelloReference::text)
+                                .containsExactly(tuple("checklist:Notes", "SYNTH101", line)));
         assertThat(writeRequests).isEmpty();
     }
 
@@ -841,15 +840,16 @@ final class TrelloClientTest {
                         "POST /1/checklists/write-checklist/checkItems?name=Publish+release&checked=true",
                         "POST /1/cards/write-card/attachments?url=https%3A%2F%2Fgithub.com%2Fexample%2Fproject%2Fpull%2F12&name=Pull+request",
                         "POST /1/cards/rate-limited-card/actions/comments?text=Retry+me");
-        assertThat(thrown).isInstanceOfSatisfying(TrelloException.class, exception -> assertThat(exception.code())
-                .isEqualTo("trello_api_rate_limited"));
+        assertThat(thrown)
+                .isInstanceOfSatisfying(
+                        TrelloException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("trello_api_rate_limited"));
     }
 
     @Test
     void upsertChecklistItemRejectsDuplicateChecklistsWithoutMutation() {
         // given
-        configureWriteCardChecklists(
-                """
+        configureWriteCardChecklists("""
                 [
                   {"id":"checklist-1","name":"Release tasks","checkItems":[]},
                   {"id":"checklist-2","name":"Release tasks","checkItems":[]}
@@ -863,8 +863,10 @@ final class TrelloClientTest {
                 () -> client.upsertChecklistItem(config, "write-card", "Release tasks", "Publish release", true));
 
         // then
-        assertThat(thrown).isInstanceOfSatisfying(TrelloException.class, exception -> assertThat(exception.code())
-                .isEqualTo("trello_checklist_ambiguous"));
+        assertThat(thrown)
+                .isInstanceOfSatisfying(
+                        TrelloException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("trello_checklist_ambiguous"));
         assertWriteCardChecklistsRead();
         assertThat(writeRequests).isEmpty();
     }
@@ -872,8 +874,7 @@ final class TrelloClientTest {
     @Test
     void upsertChecklistItemRejectsDuplicateCheckItemsWithoutMutation() {
         // given
-        configureWriteCardChecklists(
-                """
+        configureWriteCardChecklists("""
                 [
                   {
                     "id":"checklist-1",
@@ -893,8 +894,10 @@ final class TrelloClientTest {
                 () -> client.upsertChecklistItem(config, "write-card", "Release tasks", "Publish release", true));
 
         // then
-        assertThat(thrown).isInstanceOfSatisfying(TrelloException.class, exception -> assertThat(exception.code())
-                .isEqualTo("trello_check_item_ambiguous"));
+        assertThat(thrown)
+                .isInstanceOfSatisfying(
+                        TrelloException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("trello_check_item_ambiguous"));
         assertWriteCardChecklistsRead();
         assertThat(writeRequests).isEmpty();
     }
@@ -912,8 +915,10 @@ final class TrelloClientTest {
                 client.addUrlAttachment(config, "write-card", "https://github.com/example/project/pull/12", null));
 
         // then
-        assertThat(thrown).isInstanceOfSatisfying(TrelloException.class, exception -> assertThat(exception.code())
-                .isEqualTo("trello_unknown_payload"));
+        assertThat(thrown)
+                .isInstanceOfSatisfying(
+                        TrelloException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("trello_unknown_payload"));
         assertThat(writeRequests)
                 .containsExactly(
                         "POST /1/cards/write-card/attachments?url=https%3A%2F%2Fgithub.com%2Fexample%2Fproject%2Fpull%2F12");
@@ -1133,10 +1138,12 @@ final class TrelloClientTest {
         assertThat(readRequests)
                 .filteredOn(request -> request.startsWith("GET /1/cards/PREREQ01?"))
                 .hasSize(1);
-        assertThat(writeRequests).singleElement().satisfies(request -> assertThat(request)
-                .startsWith("POST /1/cards/waiting-card/actions/comments?")
-                .contains("Symphony+Prerequisite+Status")
-                .contains("Status%3A+waiting+for+prerequisites"));
+        assertThat(writeRequests)
+                .singleElement()
+                .satisfies(request -> assertThat(request)
+                        .startsWith("POST /1/cards/waiting-card/actions/comments?")
+                        .contains("Symphony+Prerequisite+Status")
+                        .contains("Status%3A+waiting+for+prerequisites"));
         assertThat(queryValue(writeRequests.getFirst(), "text"))
                 .isEqualTo(withFooter(waitingTextForPrerequisite("TRELLO-PREREQ01", "Todo")));
     }
@@ -1187,9 +1194,11 @@ final class TrelloClientTest {
 
         // then
         assertWaitingBlockedWithoutProblems(cards);
-        assertThat(writeRequests).singleElement().satisfies(request -> assertThat(request)
-                .as("a separate managed status is created and the other comment stays unchanged")
-                .startsWith("POST /1/cards/waiting-card/actions/comments?"));
+        assertThat(writeRequests)
+                .singleElement()
+                .satisfies(request -> assertThat(request)
+                        .as("a separate managed status is created and the other comment stays unchanged")
+                        .startsWith("POST /1/cards/waiting-card/actions/comments?"));
     }
 
     @Test
@@ -1198,9 +1207,7 @@ final class TrelloClientTest {
         trello.remove("/1/boards/board-1/cards/open");
         trello.on("/1/boards/board-1/cards/open", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     [
                       {"id":"inactive-card","name":"Inactive","desc":"","idList":"list-progress","idBoard":"board-1","closed":false,"shortLink":"inactive","shortUrl":"u","url":"u","labels":[],"badges":{"checkItems":1},"pos":1},
                       {"id":"active-card","name":"Active","desc":"","idList":"list-todo","idBoard":"board-1","closed":false,"shortLink":"active","shortUrl":"u","url":"u","labels":[],"badges":{"checkItems":0},"pos":2}
@@ -1218,8 +1225,9 @@ final class TrelloClientTest {
         List<Card> cards = client.fetchCandidateCards(config);
 
         // then
-        assertThat(cards).singleElement().satisfies(card -> assertThat(card.id())
-                .isEqualTo("active-card"));
+        assertThat(cards)
+                .singleElement()
+                .satisfies(card -> assertThat(card.id()).isEqualTo("active-card"));
         assertThat(readRequests).noneMatch(request -> request.startsWith("GET /1/cards/inactive-card/checklists"));
     }
 
@@ -1229,9 +1237,7 @@ final class TrelloClientTest {
         trello.remove("/1/boards/board-1/cards/open");
         trello.on("/1/boards/board-1/cards/open", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     [
                       {"id":"no-prereq-card","name":"Ready","desc":"","idList":"list-todo","idBoard":"board-1","closed":false,"shortLink":"ready","shortUrl":"u","url":"u","labels":[],"badges":{"checkItems":0,"comments":1},"pos":1}
                     ]
@@ -1239,12 +1245,9 @@ final class TrelloClientTest {
         });
         trello.on("/1/cards/no-prereq-card", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     {"id":"no-prereq-card","name":"Ready","desc":"","idList":"list-todo","idBoard":"board-1","closed":false,"shortLink":"ready","labels":[],"actions":[{"id":"waiting-comment","date":"2026-02-25T20:11:12.000Z","data":{"text":"%s\\n\\nOld waiting text"},"memberCreator":{"username":"codex"}}],"badges":{"checkItems":0,"comments":1},"pos":1}
-                    """
-                            .formatted(TrelloClient.WAITING_COMMENT_MARKER));
+                    """.formatted(TrelloClient.WAITING_COMMENT_MARKER));
         });
         trello.on("/1/actions/waiting-comment/text", exchange -> {
             writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
@@ -1262,11 +1265,13 @@ final class TrelloClientTest {
             assertThat(card.blockedBy()).isEmpty();
             assertThat(card.prerequisiteProblems()).isEmpty();
         });
-        assertThat(readRequests).anySatisfy(request -> assertThat(request)
-                .startsWith("GET /1/cards/no-prereq-card?")
-                .contains("actions_limit=1000"));
-        assertThat(writeRequests).singleElement().satisfies(request -> assertThat(request)
-                .startsWith("PUT /1/actions/waiting-comment/text?"));
+        assertThat(readRequests)
+                .anySatisfy(request -> assertThat(request)
+                        .startsWith("GET /1/cards/no-prereq-card?")
+                        .contains("actions_limit=1000"));
+        assertThat(writeRequests)
+                .singleElement()
+                .satisfies(request -> assertThat(request).startsWith("PUT /1/actions/waiting-comment/text?"));
         assertThat(queryValue(writeRequests.getFirst(), "value"))
                 .contains("Status: prerequisites resolved")
                 .doesNotStartWith(TrelloClient.WAITING_COMMENT_MARKER)
@@ -1281,9 +1286,7 @@ final class TrelloClientTest {
         trello.remove("/1/boards/board-1/cards/open");
         trello.on("/1/boards/board-1/cards/open", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     [
                       {"id":"no-prereq-card","name":"Ready","desc":"","idList":"list-todo","idBoard":"board-1","closed":false,"shortLink":"ready","shortUrl":"u","url":"u","labels":[],"badges":{"checkItems":0,"comments":2},"pos":1}
                     ]
@@ -1291,17 +1294,13 @@ final class TrelloClientTest {
         });
         trello.on("/1/cards/no-prereq-card", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     {"id":"no-prereq-card","name":"Ready","desc":"","idList":"list-todo","idBoard":"board-1","closed":false,"shortLink":"ready","labels":[],"actions":[
                       {"id":"waiting-comment-newest","date":"2026-02-25T20:12:12.000Z","data":{"text":"%s\\n\\nNewest waiting text"},"memberCreator":{"username":"codex"}},
                       {"id":"waiting-comment-older","date":"2026-02-25T20:11:12.000Z","data":{"text":"%s\\n\\nOlder waiting text"},"memberCreator":{"username":"codex"}}
                     ],"badges":{"checkItems":0,"comments":2},"pos":1}
-                    """
-                            .formatted(
-                                    TrelloClient.WAITING_COMMENT_MARKER,
-                                    TrelloClient.PREREQUISITE_STATUS_COMMENT_MARKER));
+                    """.formatted(
+                            TrelloClient.WAITING_COMMENT_MARKER, TrelloClient.PREREQUISITE_STATUS_COMMENT_MARKER));
         });
         trello.on("/1/actions/waiting-comment-newest/text", exchange -> {
             writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
@@ -1323,8 +1322,9 @@ final class TrelloClientTest {
             assertThat(card.blockedBy()).isEmpty();
             assertThat(card.prerequisiteProblems()).isEmpty();
         });
-        assertThat(writeRequests).singleElement().satisfies(request -> assertThat(request)
-                .startsWith("PUT /1/actions/waiting-comment-newest/text?"));
+        assertThat(writeRequests)
+                .singleElement()
+                .satisfies(request -> assertThat(request).startsWith("PUT /1/actions/waiting-comment-newest/text?"));
         assertThat(writeRequests).noneMatch(request -> request.startsWith("PUT /1/actions/waiting-comment-older/text"));
     }
 
@@ -1350,8 +1350,9 @@ final class TrelloClientTest {
 
         // then
         assertWaitingBlockedWithoutProblems(cards);
-        assertThat(writeRequests).singleElement().satisfies(request -> assertThat(request)
-                .startsWith("PUT /1/actions/waiting-comment/text?"));
+        assertThat(writeRequests)
+                .singleElement()
+                .satisfies(request -> assertThat(request).startsWith("PUT /1/actions/waiting-comment/text?"));
         assertThat(queryValue(writeRequests.getFirst(), "value"))
                 .as("a legacy status gains the footer when its owning sync changes it")
                 .isEqualTo(withFooter(waitingTextForPrerequisite("TRELLO-PREREQ01", "Todo")));
@@ -1365,17 +1366,14 @@ final class TrelloClientTest {
         trello.remove("/1/cards/waiting-card/checklists");
         trello.on("/1/cards/waiting-card/checklists", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     [
                       {"id":"checklist-1","name":"Must finish first","checkItems":[
                         {"id":"item-1","name":"%s","state":"incomplete"},
                         {"id":"item-2","name":"PREREQ01","state":"incomplete"}
                       ]}
                     ]
-                    """
-                            .formatted(cardUrl("PREREQ01")));
+                    """.formatted(cardUrl("PREREQ01")));
         });
         var client = new TrelloClient(new ObjectMapper());
         var config = config("dependency-input", Map.of("blocker_enforced_states", List.of("Todo")))
@@ -1385,9 +1383,11 @@ final class TrelloClientTest {
         List<Card> cards = client.fetchCandidateCards(config);
 
         // then
-        assertThat(cards).singleElement().satisfies(card -> assertThat(card.blockedBy())
+        assertThat(cards)
                 .singleElement()
-                .satisfies(blocker -> assertThat(blocker.identifier()).isEqualTo("TRELLO-PREREQ01")));
+                .satisfies(card -> assertThat(card.blockedBy())
+                        .singleElement()
+                        .satisfies(blocker -> assertThat(blocker.identifier()).isEqualTo("TRELLO-PREREQ01")));
         assertThat(readRequests)
                 .filteredOn(request -> request.startsWith("GET /1/cards/PREREQ01?"))
                 .hasSize(1);
@@ -1411,10 +1411,12 @@ final class TrelloClientTest {
 
         // then
         assertThat(cards).singleElement().satisfies(card -> {
-            assertThat(card.blockedBy()).singleElement().satisfies(blocker -> assertThat(blocker.identifier())
-                    .isEqualTo("Missing prerequisite"));
-            assertThat(card.prerequisiteProblems()).singleElement().satisfies(problem -> assertThat(problem.code())
-                    .isEqualTo("trello_prerequisite_missing"));
+            assertThat(card.blockedBy())
+                    .singleElement()
+                    .satisfies(blocker -> assertThat(blocker.identifier()).isEqualTo("Missing prerequisite"));
+            assertThat(card.prerequisiteProblems())
+                    .singleElement()
+                    .satisfies(problem -> assertThat(problem.code()).isEqualTo("trello_prerequisite_missing"));
         });
         assertThat(writeRequests)
                 .anySatisfy(request ->
@@ -1431,23 +1433,17 @@ final class TrelloClientTest {
         trello.remove("/1/cards/waiting-card/checklists");
         trello.on("/1/cards/waiting-card/checklists", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     [
                       {"id":"checklist-1","name":"Must finish first","checkItems":[{"id":"item-1","name":"%s","state":"incomplete"}]}
                     ]
-                    """
-                            .formatted(cardUrl("WAITING1")));
+                    """.formatted(cardUrl("WAITING1")));
         });
         trello.on("/1/cards/WAITING1", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     {"id":"waiting-card","name":"Waiting","desc":"","idList":"dep-todo","idBoard":"dependency-board","closed":false,"shortLink":"WAITING1","shortUrl":"%s","url":"%s","labels":[],"actions":[],"badges":{"checkItems":1},"pos":1}
-                    """
-                            .formatted(cardUrl("WAITING1"), cardUrl("WAITING1")));
+                    """.formatted(cardUrl("WAITING1"), cardUrl("WAITING1")));
         });
         var client = new TrelloClient(new ObjectMapper());
         var config = config("dependency-input", Map.of("blocker_enforced_states", List.of("Todo")))
@@ -1458,14 +1454,18 @@ final class TrelloClientTest {
 
         // then
         assertThat(cards).singleElement().satisfies(card -> {
-            assertThat(card.blockedBy()).singleElement().satisfies(blocker -> assertThat(blocker.identifier())
-                    .isEqualTo("Self prerequisite"));
-            assertThat(card.prerequisiteProblems()).singleElement().satisfies(problem -> assertThat(problem.code())
-                    .isEqualTo("trello_prerequisite_self_reference"));
+            assertThat(card.blockedBy())
+                    .singleElement()
+                    .satisfies(blocker -> assertThat(blocker.identifier()).isEqualTo("Self prerequisite"));
+            assertThat(card.prerequisiteProblems())
+                    .singleElement()
+                    .satisfies(problem -> assertThat(problem.code()).isEqualTo("trello_prerequisite_self_reference"));
         });
-        assertThat(writeRequests).singleElement().satisfies(request -> assertThat(request)
-                .startsWith("POST /1/cards/waiting-card/actions/comments?")
-                .contains("cannot+use+itself+as+a+prerequisite"));
+        assertThat(writeRequests)
+                .singleElement()
+                .satisfies(request -> assertThat(request)
+                        .startsWith("POST /1/cards/waiting-card/actions/comments?")
+                        .contains("cannot+use+itself+as+a+prerequisite"));
     }
 
     @Test
@@ -1481,8 +1481,10 @@ final class TrelloClientTest {
 
         // then
         assertDonePrerequisiteWithoutProblems(cards);
-        assertThat(writeRequests).singleElement().satisfies(request -> assertThat(request)
-                .isEqualTo("PUT /1/cards/waiting-card/checkItem/item-1?state=complete"));
+        assertThat(writeRequests)
+                .singleElement()
+                .satisfies(request ->
+                        assertThat(request).isEqualTo("PUT /1/cards/waiting-card/checkItem/item-1?state=complete"));
     }
 
     @Test
@@ -1498,27 +1500,30 @@ final class TrelloClientTest {
 
         // then
         assertThat(cards).singleElement().satisfies(card -> {
-            assertThat(card.blockedBy()).singleElement().satisfies(blocker -> assertThat(blocker.identifier())
-                    .isEqualTo("Ambiguous prerequisite checklist"));
-            assertThat(card.prerequisiteProblems()).singleElement().satisfies(problem -> assertThat(problem.code())
-                    .isEqualTo(TrelloChecklistClassifier.AMBIGUOUS_PREREQUISITE_CODE));
+            assertThat(card.blockedBy())
+                    .singleElement()
+                    .satisfies(
+                            blocker -> assertThat(blocker.identifier()).isEqualTo("Ambiguous prerequisite checklist"));
+            assertThat(card.prerequisiteProblems())
+                    .singleElement()
+                    .satisfies(problem -> assertThat(problem.code())
+                            .isEqualTo(TrelloChecklistClassifier.AMBIGUOUS_PREREQUISITE_CODE));
         });
         assertThat(readRequests).noneMatch(request -> request.startsWith("GET /1/cards/AMBIG001?"));
-        assertThat(writeRequests).singleElement().satisfies(request -> assertThat(request)
-                .startsWith("POST /1/cards/ambiguous-card/actions/comments?")
-                .contains("Checklist+contains+a+Trello+card+reference")
-                .contains("Markdown+links"));
+        assertThat(writeRequests)
+                .singleElement()
+                .satisfies(request -> assertThat(request)
+                        .startsWith("POST /1/cards/ambiguous-card/actions/comments?")
+                        .contains("Checklist+contains+a+Trello+card+reference")
+                        .contains("Markdown+links"));
     }
 
     @Test
     void mixedExactAndProseChecklistBlocksWithoutResolvingOrSyncingExactItem() {
         // given
-        configureMixedPrerequisiteBoard(List.of(
-                """
+        configureMixedPrerequisiteBoard(List.of("""
                 {"id":"item-exact","name":"%s","state":"incomplete"}
-                """
-                        .formatted(cardUrl("MIXED01")),
-                """
+                """.formatted(cardUrl("MIXED01")), """
                 {"id":"item-note","name":"Update docs","state":"incomplete"}
                 """));
         var client = new TrelloClient(new ObjectMapper());
@@ -1535,15 +1540,11 @@ final class TrelloClientTest {
     @Test
     void mixedExactAndMarkdownChecklistBlocksWithoutResolvingOrSyncingExactItem() {
         // given
-        configureMixedPrerequisiteBoard(List.of(
-                """
+        configureMixedPrerequisiteBoard(List.of("""
                 {"id":"item-exact","name":"%s","state":"incomplete"}
-                """
-                        .formatted(cardUrl("MIXED02")),
-                """
+                """.formatted(cardUrl("MIXED02")), """
                 {"id":"item-markdown","name":"related to [the card](%s)","state":"incomplete"}
-                """
-                        .formatted(cardUrl("CTXMARK2"))));
+                """.formatted(cardUrl("CTXMARK2"))));
         var client = new TrelloClient(new ObjectMapper());
         var config = config("mixed-input", Map.of("blocker_enforced_states", List.of("Todo")))
                 .withResolvedBoardId("mixed-board");
@@ -1574,10 +1575,13 @@ final class TrelloClientTest {
 
         // then
         assertThat(cards).singleElement().satisfies(card -> {
-            assertThat(card.blockedBy()).singleElement().satisfies(blocker -> assertThat(blocker.state())
-                    .isEqualTo("Done"));
-            assertThat(card.prerequisiteProblems()).singleElement().satisfies(problem -> assertThat(problem.code())
-                    .isEqualTo("trello_prerequisite_checklist_sync_failed"));
+            assertThat(card.blockedBy())
+                    .singleElement()
+                    .satisfies(blocker -> assertThat(blocker.state()).isEqualTo("Done"));
+            assertThat(card.prerequisiteProblems())
+                    .singleElement()
+                    .satisfies(problem ->
+                            assertThat(problem.code()).isEqualTo("trello_prerequisite_checklist_sync_failed"));
         });
         assertThat(writeRequests)
                 .anySatisfy(request ->
@@ -1597,8 +1601,10 @@ final class TrelloClientTest {
         Throwable thrown = catchThrowable(() -> client.resolveBoardId(config));
 
         // then
-        assertThat(thrown).isInstanceOfSatisfying(TrelloException.class, exception -> assertThat(exception.code())
-                .isEqualTo("trello_board_closed"));
+        assertThat(thrown)
+                .isInstanceOfSatisfying(
+                        TrelloException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("trello_board_closed"));
     }
 
     @Test
@@ -1744,43 +1750,31 @@ final class TrelloClientTest {
                         exchange, listsJson(trelloList("dep-todo", "Todo", 1), trelloList("dep-done", "Done", 2))));
         trello.on("/1/boards/dependency-board/cards/open", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     [
                       {"id":"waiting-card","name":"Waiting","desc":"","idList":"dep-todo","idBoard":"dependency-board","closed":false,"shortLink":"WAITING1","shortUrl":"%s","url":"%s","labels":[],"badges":{"checkItems":1},"pos":1}
                     ]
-                    """
-                            .formatted(cardUrl("WAITING1"), cardUrl("WAITING1")));
+                    """.formatted(cardUrl("WAITING1"), cardUrl("WAITING1")));
         });
         trello.on("/1/cards/waiting-card/checklists", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     [
                       {"id":"checklist-1","name":"Must finish first","checkItems":[{"id":"item-1","name":"%s","state":"%s"}]}
                     ]
-                    """
-                            .formatted(cardUrl("PREREQ01"), checkItemState));
+                    """.formatted(cardUrl("PREREQ01"), checkItemState));
         });
         trello.on("/1/cards/PREREQ01", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     {"id":"prereq-card","name":"Prerequisite","desc":"","idList":"%s","idBoard":"dependency-board","closed":false,"shortLink":"PREREQ01","shortUrl":"%s","url":"%s","labels":[],"actions":[],"badges":{"checkItems":0},"pos":2}
-                    """
-                            .formatted(prerequisiteList, cardUrl("PREREQ01"), cardUrl("PREREQ01")));
+                    """.formatted(prerequisiteList, cardUrl("PREREQ01"), cardUrl("PREREQ01")));
         });
         trello.on("/1/cards/waiting-card", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     {"id":"waiting-card","name":"Waiting","desc":"","idList":"dep-todo","idBoard":"dependency-board","closed":false,"shortLink":"WAITING1","shortUrl":"%s","url":"%s","labels":[],"actions":[],"badges":{"checkItems":1},"pos":1}
-                    """
-                            .formatted(cardUrl("WAITING1"), cardUrl("WAITING1")));
+                    """.formatted(cardUrl("WAITING1"), cardUrl("WAITING1")));
         });
         trello.on("/1/cards/waiting-card/actions/comments", exchange -> {
             writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
@@ -1803,34 +1797,25 @@ final class TrelloClientTest {
                         listsJson(trelloList("ambiguous-todo", "Todo", 1), trelloList("ambiguous-done", "Done", 2))));
         trello.on("/1/boards/ambiguous-board/cards/open", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     [
                       {"id":"ambiguous-card","name":"Ambiguous","desc":"","idList":"ambiguous-todo","idBoard":"ambiguous-board","closed":false,"shortLink":"AMBIGWAIT","shortUrl":"%s","url":"%s","labels":[],"badges":{"checkItems":1},"pos":1}
                     ]
-                    """
-                            .formatted(cardUrl("AMBIGWAIT"), cardUrl("AMBIGWAIT")));
+                    """.formatted(cardUrl("AMBIGWAIT"), cardUrl("AMBIGWAIT")));
         });
         trello.on("/1/cards/ambiguous-card/checklists", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     [
                       {"id":"ambiguous-checklist","name":"Must finish first","checkItems":[{"id":"ambiguous-item","name":"Wait for %s","state":"incomplete"}]}
                     ]
-                    """
-                            .formatted(cardUrl("AMBIG001")));
+                    """.formatted(cardUrl("AMBIG001")));
         });
         trello.on("/1/cards/ambiguous-card", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     {"id":"ambiguous-card","name":"Ambiguous","desc":"","idList":"ambiguous-todo","idBoard":"ambiguous-board","closed":false,"shortLink":"AMBIGWAIT","shortUrl":"%s","url":"%s","labels":[],"actions":[],"badges":{"checkItems":1},"pos":1}
-                    """
-                            .formatted(cardUrl("AMBIGWAIT"), cardUrl("AMBIGWAIT")));
+                    """.formatted(cardUrl("AMBIGWAIT"), cardUrl("AMBIGWAIT")));
         });
         trello.on("/1/cards/ambiguous-card/actions/comments", exchange -> {
             writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
@@ -1847,25 +1832,19 @@ final class TrelloClientTest {
                         exchange, listsJson(trelloList("mixed-todo", "Todo", 1), trelloList("mixed-done", "Done", 2))));
         trello.on("/1/boards/mixed-board/cards/open", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     [
                       {"id":"mixed-card","name":"Mixed","desc":"","idList":"mixed-todo","idBoard":"mixed-board","closed":false,"shortLink":"MIXWAIT","shortUrl":"%s","url":"%s","labels":[],"badges":{"checkItems":2},"pos":1}
                     ]
-                    """
-                            .formatted(cardUrl("MIXWAIT"), cardUrl("MIXWAIT")));
+                    """.formatted(cardUrl("MIXWAIT"), cardUrl("MIXWAIT")));
         });
         trello.on("/1/cards/mixed-card/checklists", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     [
                       {"id":"mixed-checklist","name":"Must finish first","checkItems":[%s]}
                     ]
-                    """
-                            .formatted(String.join(",", checkItems)));
+                    """.formatted(String.join(",", checkItems)));
         });
         trello.on("/1/cards/MIXED01", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
@@ -1881,12 +1860,9 @@ final class TrelloClientTest {
         });
         trello.on("/1/cards/mixed-card", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     {"id":"mixed-card","name":"Mixed","desc":"","idList":"mixed-todo","idBoard":"mixed-board","closed":false,"shortLink":"MIXWAIT","shortUrl":"%s","url":"%s","labels":[],"actions":[],"badges":{"checkItems":2},"pos":1}
-                    """
-                            .formatted(cardUrl("MIXWAIT"), cardUrl("MIXWAIT")));
+                    """.formatted(cardUrl("MIXWAIT"), cardUrl("MIXWAIT")));
         });
         trello.on("/1/cards/mixed-card/actions/comments", exchange -> {
             writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
@@ -1900,8 +1876,9 @@ final class TrelloClientTest {
 
     private static void assertDonePrerequisiteWithoutProblems(List<Card> cards) {
         assertThat(cards).singleElement().satisfies(card -> {
-            assertThat(card.blockedBy()).singleElement().satisfies(blocker -> assertThat(blocker.state())
-                    .isEqualTo("Done"));
+            assertThat(card.blockedBy())
+                    .singleElement()
+                    .satisfies(blocker -> assertThat(blocker.state()).isEqualTo("Done"));
             assertThat(card.prerequisiteProblems()).isEmpty();
         });
     }
@@ -1925,12 +1902,9 @@ final class TrelloClientTest {
         trello.remove("/1/cards/waiting-card");
         trello.on("/1/cards/waiting-card", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     {"id":"waiting-card","name":"Waiting","desc":"","idList":"dep-todo","idBoard":"dependency-board","closed":false,"shortLink":"WAITING1","shortUrl":"%s","url":"%s","labels":[],"actions":[{"id":"waiting-comment","date":"2026-02-25T20:11:12.000Z","data":{"text":%s},"memberCreator":{"username":"codex"}}],"badges":{"checkItems":1},"pos":1}
-                    """
-                            .formatted(cardUrl("WAITING1"), cardUrl("WAITING1"), textJson));
+                    """.formatted(cardUrl("WAITING1"), cardUrl("WAITING1"), textJson));
         });
     }
 
@@ -1944,31 +1918,40 @@ final class TrelloClientTest {
     }
 
     private void assertWriteCardChecklistsRead() {
-        assertThat(readRequests).singleElement().satisfies(request -> assertThat(request)
-                .startsWith("GET /1/cards/write-card/checklists?")
-                .contains("fields=id%2Cname")
-                .contains("checkItem_fields=id%2Cname%2Cstate"));
+        assertThat(readRequests)
+                .singleElement()
+                .satisfies(request -> assertThat(request)
+                        .startsWith("GET /1/cards/write-card/checklists?")
+                        .contains("fields=id%2Cname")
+                        .contains("checkItem_fields=id%2Cname%2Cstate"));
     }
 
     private static void assertWaitingBlockedWithoutProblems(List<Card> cards) {
         assertThat(cards).singleElement().satisfies(card -> {
-            assertThat(card.blockedBy()).singleElement().satisfies(blocker -> assertThat(blocker.identifier())
-                    .isEqualTo("TRELLO-PREREQ01"));
+            assertThat(card.blockedBy())
+                    .singleElement()
+                    .satisfies(blocker -> assertThat(blocker.identifier()).isEqualTo("TRELLO-PREREQ01"));
             assertThat(card.prerequisiteProblems()).isEmpty();
         });
     }
 
     private void assertMixedChecklistBlocksWithoutSchedulerLookupOrSync(List<Card> cards, String exactLookupId) {
         assertThat(cards).singleElement().satisfies(card -> {
-            assertThat(card.blockedBy()).singleElement().satisfies(blocker -> assertThat(blocker.identifier())
-                    .isEqualTo("Ambiguous prerequisite checklist"));
-            assertThat(card.prerequisiteProblems()).singleElement().satisfies(problem -> assertThat(problem.code())
-                    .isEqualTo(TrelloChecklistClassifier.MIXED_PREREQUISITE_CODE));
+            assertThat(card.blockedBy())
+                    .singleElement()
+                    .satisfies(
+                            blocker -> assertThat(blocker.identifier()).isEqualTo("Ambiguous prerequisite checklist"));
+            assertThat(card.prerequisiteProblems())
+                    .singleElement()
+                    .satisfies(problem ->
+                            assertThat(problem.code()).isEqualTo(TrelloChecklistClassifier.MIXED_PREREQUISITE_CODE));
         });
         assertThat(readRequests).noneMatch(request -> request.startsWith("GET /1/cards/" + exactLookupId + "?"));
-        assertThat(writeRequests).singleElement().satisfies(request -> assertThat(request)
-                .startsWith("POST /1/cards/mixed-card/actions/comments?")
-                .contains("Checklist+mixes+prerequisite+references"));
+        assertThat(writeRequests)
+                .singleElement()
+                .satisfies(request -> assertThat(request)
+                        .startsWith("POST /1/cards/mixed-card/actions/comments?")
+                        .contains("Checklist+mixes+prerequisite+references"));
         assertThat(writeRequests).noneMatch(request -> request.startsWith("PUT /1/cards/mixed-card/checkItem/"));
     }
 
@@ -2137,15 +2120,13 @@ final class TrelloClientTest {
     private static String cardWithActions(String cardId, String actionsJson) {
         return """
                 {"id":"%s","name":"Found","idList":"lookup-review","idBoard":"lookup-board","closed":false,"shortLink":"found","labels":[],"actions":%s}
-                """
-                .formatted(cardId, actionsJson);
+                """.formatted(cardId, actionsJson);
     }
 
     private static String cardWithIdShort(String cardId, String idShortToken) {
         return """
                 {"id":"%s","name":"Found","idList":"lookup-review","idBoard":"lookup-board","closed":false,"shortLink":"found","idShort":%s,"labels":[],"actions":[]}
-                """
-                .formatted(cardId, idShortToken);
+                """.formatted(cardId, idShortToken);
     }
 
     // Trello sets these fields, so a malformed value means Trello sent a payload this client does not
@@ -2176,8 +2157,7 @@ final class TrelloClientTest {
             MalformedCardField field = valueOf(cardId.substring(CARD_ID_PREFIX.length()));
             return """
                     {"id":"%s","name":"Found","idList":"lookup-review","idBoard":"lookup-board","closed":false,"shortLink":"found","labels":[],%s}
-                    """
-                    .formatted(cardId, field.jsonField);
+                    """.formatted(cardId, field.jsonField);
         }
     }
 
@@ -2206,11 +2186,9 @@ final class TrelloClientTest {
 
     private static String regularActions(int count) {
         return IntStream.range(0, count)
-                .mapToObj(index ->
-                        """
+                .mapToObj(index -> """
                         {"id":"regular-%d","date":"2026-02-25T20:11:12.000Z","data":{"text":"Regular comment %d"},"memberCreator":{"username":"reviewer"}}
-                        """
-                                .formatted(index, index))
+                        """.formatted(index, index))
                 .collect(Collectors.joining(",", "[", "]"));
     }
 }

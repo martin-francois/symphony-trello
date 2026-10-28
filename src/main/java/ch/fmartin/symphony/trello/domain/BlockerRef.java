@@ -5,4 +5,7 @@ import org.jspecify.annotations.Nullable;
 
 @NullMarked
 public record BlockerRef(
-        @Nullable String id, @Nullable String identifier, @Nullable String state, @Nullable String url) {}
+        @Nullable String id,
+        @Nullable String identifier,
+        @Nullable String state,
+        @Nullable String url) {}

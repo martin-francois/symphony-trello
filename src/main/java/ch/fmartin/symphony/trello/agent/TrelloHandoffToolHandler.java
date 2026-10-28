@@ -724,9 +724,11 @@ public class TrelloHandoffToolHandler {
     }
 
     private ObjectNode createFollowUpCard(EffectiveConfig config, Card card, JsonNode arguments) {
-        TrelloFollowUpCardTool.Outcome outcome = followUpCards.handle(config, card, arguments, listName -> cardWrites
-                .resolveMoveTarget(config, null, listName)
-                .allowedList());
+        TrelloFollowUpCardTool.Outcome outcome = followUpCards.handle(
+                config,
+                card,
+                arguments,
+                listName -> cardWrites.resolveMoveTarget(config, null, listName).allowedList());
         return switch (outcome) {
             case TrelloFollowUpCardTool.Outcome.Success success ->
                 recordFollowUpWorkpad(config, card, success.payload());

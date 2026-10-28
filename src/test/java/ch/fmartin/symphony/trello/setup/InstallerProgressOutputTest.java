@@ -421,9 +421,7 @@ final class InstallerProgressOutputTest {
         environment.put("SYMPHONY_TRELLO_RELEASE_BASE_URL", "https://example.com/releases");
         environment.put("SYMPHONY_TRELLO_INSTALL_SOURCE", "release-archive");
         Path driver = temporaryDirectory.resolve("failed-download.ps1");
-        Files.writeString(
-                driver,
-                """
+        Files.writeString(driver, """
                 param([string]$Installer, [string]$BinDirectory)
                 function Invoke-WebRequest {
                   param([switch]$UseBasicParsing, [string]$Uri, [string]$OutFile)
@@ -513,19 +511,16 @@ final class InstallerProgressOutputTest {
         Path checksumBin = temporaryDirectory.resolve("checksum-java-bin");
         Files.createDirectories(checksumBin);
         // The shared fake java only records calls; the installer's SHA3 helper needs a real source launch.
-        writeExecutable(
-                checksumBin.resolve("java"),
-                """
+        writeExecutable(checksumBin.resolve("java"), """
                 #!/usr/bin/env bash
                 if [[ "${1:-}" == *.java ]]; then
                   exec %s "$@"
                 fi
                 exec %s "$@"
-                """
-                        .formatted(
-                                shellQuote(Path.of(System.getProperty("java.home"), "bin", "java")
-                                        .toString()),
-                                shellQuote(fakeBin.resolve("java").toString())));
+                """.formatted(
+                        shellQuote(Path.of(System.getProperty("java.home"), "bin", "java")
+                                .toString()),
+                        shellQuote(fakeBin.resolve("java").toString())));
         Path home = temporaryDirectory.resolve(releaseAssets.getFileName() + "-user-home");
         Files.createDirectories(home);
         return Map.of(

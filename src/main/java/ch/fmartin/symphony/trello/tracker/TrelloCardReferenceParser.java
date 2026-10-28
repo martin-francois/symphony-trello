@@ -84,8 +84,9 @@ final class TrelloCardReferenceParser {
         if (markdownRanges.isEmpty()) {
             return false;
         }
-        return cardUrlRanges(text).stream().map(ReferencedRange::range).allMatch(url -> markdownRanges.stream()
-                .anyMatch(range -> range.contains(url)));
+        return cardUrlRanges(text).stream()
+                .map(ReferencedRange::range)
+                .allMatch(url -> markdownRanges.stream().anyMatch(range -> range.contains(url)));
     }
 
     private static Optional<TrelloCardReference> exactCardUrl(String text) {

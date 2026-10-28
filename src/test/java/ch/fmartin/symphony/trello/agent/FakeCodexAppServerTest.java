@@ -82,11 +82,9 @@ final class FakeCodexAppServerTest {
     }
 
     private static String turnInput(int id, String thread, boolean scripted) {
-        var input = new StringBuilder(
-                """
+        var input = new StringBuilder("""
                 {"id":%d,"method":"turn/start","params":{"threadId":"%s","input":[{"text":"protocol"}]}}
-                """
-                        .formatted(id, thread));
+                """.formatted(id, thread));
         if (scripted) {
             input.append(success(20_000));
         }

@@ -12,9 +12,7 @@ final class CodexInvestigationFindingTest {
     @ValueSource(booleans = {false, true})
     void blankValidationCommandsNeverVerifyAFix(boolean reportedPassed) throws IOException {
         // given
-        var answer = new ObjectMapper()
-                .readTree(
-                        """
+        var answer = new ObjectMapper().readTree("""
                 {
                   "classification":"symphony_bug",
                   "fix_applied":true,
@@ -24,15 +22,15 @@ final class CodexInvestigationFindingTest {
                     {"command":"  ","passed":%s}
                   ]
                 }
-                """
-                                .formatted(reportedPassed));
+                """.formatted(reportedPassed));
 
         // when
         var finding = CodexInvestigationFinding.parse(answer);
 
         // then
-        assertThat(finding).hasValueSatisfying(value -> assertThat(value.verifiedFix())
-                .as("every reported validation must have a command and pass before a fix is verified")
-                .isFalse());
+        assertThat(finding)
+                .hasValueSatisfying(value -> assertThat(value.verifiedFix())
+                        .as("every reported validation must have a command and pass before a fix is verified")
+                        .isFalse());
     }
 }
