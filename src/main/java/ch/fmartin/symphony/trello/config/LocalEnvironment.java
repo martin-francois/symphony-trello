@@ -63,8 +63,7 @@ public final class LocalEnvironment {
             Map<String, String> values = new LinkedHashMap<>();
             List<String> lines = Files.readAllLines(dotenv);
             for (int index = 0; index < lines.size(); index++) {
-                String rawLine = index == 0 ? stripLeadingByteOrderMark(lines.get(index)) : lines.get(index);
-                parseLine(rawLine).ifPresent(entry -> values.put(entry.key(), entry.value()));
+                parseLine(lineAt(lines, index)).ifPresent(entry -> values.put(entry.key(), entry.value()));
             }
             return Map.copyOf(values);
         } catch (IOException ignored) {
@@ -72,11 +71,17 @@ public final class LocalEnvironment {
         }
     }
 
-    /// Applies the same line parsing rules used by {@link #load(Path)} when checking whether a
-    /// dotenv line defines a key. The byte order mark is ignored only for the first line.
-    public static boolean definesKeyOnLine(String rawLine, String expectedKey, boolean firstLine) {
-        String line = firstLine ? stripLeadingByteOrderMark(rawLine) : rawLine;
-        return parseLine(line).map(entry -> entry.key().equals(expectedKey)).orElse(false);
+    /// Tells whether line `index` of a dotenv file defines `key`, by the same rules as [#load(Path)],
+    /// so a writer replaces exactly the line the reader would use.
+    public static boolean definesKey(List<String> lines, int index, String key) {
+        return parseLine(lineAt(lines, index))
+                .map(entry -> entry.key().equals(key))
+                .orElse(false);
+    }
+
+    private static String lineAt(List<String> lines, int index) {
+        String line = lines.get(index);
+        return index == 0 ? stripLeadingByteOrderMark(line) : line;
     }
 
     /// UTF-8 editors, notably on Windows, commonly write a byte order mark at the start of the

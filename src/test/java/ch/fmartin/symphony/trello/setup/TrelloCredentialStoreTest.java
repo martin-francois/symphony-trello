@@ -124,7 +124,7 @@ final class TrelloCredentialStoreTest {
     }
 
     @Test
-    void upsertEnvReplacesFirstKeyBehindByteOrderMarkAndPreservesOtherKeys() throws Exception {
+    void writeReplacesFirstKeyBehindByteOrderMarkAndPreservesOtherKeys() throws Exception {
         // given
         Path env = tempDir.resolve(".env");
         Files.writeString(
@@ -141,12 +141,12 @@ final class TrelloCredentialStoreTest {
         // then
         assertThat(Files.readAllLines(env))
                 .containsExactly(
-                        "TRELLO_API_KEY=new-example-key", "TRELLO_API_TOKEN=stored-example-token", "OTHER=keep-me")
-                .doesNotContain("TRELLO_API_KEY=old-example-key");
+                        "TRELLO_API_KEY=new-example-key", "TRELLO_API_TOKEN=stored-example-token", "OTHER=keep-me");
         assertThat(LocalEnvironment.load(env))
-                .containsEntry("TRELLO_API_KEY", "new-example-key")
-                .containsEntry("TRELLO_API_TOKEN", "stored-example-token")
-                .containsEntry("OTHER", "keep-me");
+                .containsOnly(
+                        Map.entry("TRELLO_API_KEY", "new-example-key"),
+                        Map.entry("TRELLO_API_TOKEN", "stored-example-token"),
+                        Map.entry("OTHER", "keep-me"));
     }
 
     @Test

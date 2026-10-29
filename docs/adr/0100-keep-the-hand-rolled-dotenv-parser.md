@@ -206,8 +206,10 @@ Move the line and value parsing into a package-private class and keep `get`, `fi
 * Good, because each class would have one job.
 * Bad, because it moves code without removing any. The parser already has one entry point,
   `load(Path)`, and its tests already use it directly.
-* Bad, because it does not touch the real duplication: `TrelloCredentialStore.definesEnvKey` matches
-  keys with its own code in the setup package.
+* Bad, because it does not touch the real duplication: `TrelloCredentialStore.definesEnvKey` matched
+  keys with its own code in the setup package. The fix for
+  [GitHub issue #806](https://github.com/martin-francois/symphony-trello/issues/806) removed it, and
+  the setup writer now asks `LocalEnvironment.definesKey`, which applies the reader's rules.
 
 ## More Information
 
@@ -224,12 +226,12 @@ environment, the `export` prefix, double-quote escapes, literal single quotes, a
 rule. Then rerun the spike against `LocalEnvironmentTest` and the writer round trip.
 
 Besides the `KEY= # comment` reading that the fix for issue #807 changed, the spike found one
-current behavior that is probably not intended. It is a separate issue and this decision does not
-change it:
+behavior that was not intended. It was a separate issue, and this decision did not change it:
 
 * [GitHub issue #806](https://github.com/martin-francois/symphony-trello/issues/806):
-  the setup writer does not recognize a key on a first line that starts with a byte order mark, so
-  saving a new credential leaves the old line in the file.
+  the setup writer did not recognize a key on a first line that starts with a byte order mark, so
+  saving a new credential left the old line in the file. The writer now matches keys through
+  `LocalEnvironment.definesKey` and replaces that line in place.
 
 [GitHub issue #386](https://github.com/martin-francois/symphony-trello/issues/386) evaluates the
 `CredentialValue` resolution, which reads credential files through `LocalEnvironment.load`.

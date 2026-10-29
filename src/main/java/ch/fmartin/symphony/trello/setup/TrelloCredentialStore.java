@@ -249,7 +249,7 @@ final class TrelloCredentialStore {
         boolean replaced = false;
         for (int index = 0; index < lines.size(); index++) {
             String line = lines.get(index);
-            if (LocalEnvironment.definesKeyOnLine(line, key, index == 0)) {
+            if (LocalEnvironment.definesKey(lines, index, key)) {
                 updated.add(key + "=" + dotenvValue(value));
                 replaced = true;
             } else {
