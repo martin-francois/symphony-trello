@@ -61,7 +61,6 @@ import java.util.random.RandomGenerator;
 
 final class SymphonyOrchestratorTestSupport {
     static final Instant COMMENT_TIME = Instant.parse("2026-01-01T00:00:00Z");
-    static final Duration POLL_INTERVAL = Duration.ofMillis(25);
     /// Bound for every wait on a condition, pause or release; correct code finishes far sooner.
     static final Duration WAIT_TIMEOUT = Duration.ofSeconds(5);
     /// How long a fake agent run blocks before it gives up waiting for cancellation.
@@ -740,10 +739,6 @@ final class SymphonyOrchestratorTestSupport {
 
     static boolean containsRetryingCard(RuntimeSnapshot snapshot, String cardIdentifier) {
         return snapshot.retrying().stream().anyMatch(row -> row.cardIdentifier().equals(cardIdentifier));
-    }
-
-    static void pollDelayForBoundedConditionWait() throws InterruptedException {
-        Thread.sleep(POLL_INTERVAL);
     }
 
     static void blockUntilInterruptedOrTimedOut(Duration timeout) throws InterruptedException {
