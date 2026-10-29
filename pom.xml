@@ -81,7 +81,7 @@
     <rewrite-testing-frameworks.version>3.44.0</rewrite-testing-frameworks.version>
     <spotbugs-maven-plugin.version>4.10.5.0</spotbugs-maven-plugin.version>
     <spotless.version>3.10.4</spotless.version>
-    <surefire.version>3.6.0</surefire.version>
+    <surefire.version>3.6.1</surefire.version>
     <symphony.snapshots.update>false</symphony.snapshots.update>
     <test.jvm.instrumentation.args>-XX:+EnableDynamicAgentLoading --enable-native-access=ALL-UNNAMED</test.jvm.instrumentation.args>
   </properties>
