@@ -24,6 +24,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
@@ -1035,6 +1036,7 @@ final class SetupDiagnosticReporterTest {
     @Test
     void selectedWorkflowDiagnosticsKeepPartialManifestRowFieldsPrivate() throws Exception {
         // given
+        int privateRowPort = 18199;
         Path configDir = tempDir.resolve("partial-row-config");
         Path workspaceRoot = tempDir.resolve("partial-row-workspaces");
         Path stateHome = tempDir.resolve("partial-row-state");
@@ -1045,9 +1047,11 @@ final class SetupDiagnosticReporterTest {
         Files.writeString(
                 configDir.resolve(ConnectedBoardManifest.FILE_NAME),
                 """
-                {"boards":[{"boardName":"Private Board","boardId":"abc","boardKey":"def","serverPort":18199}]}
-                """);
-        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+                {"boards":[{"boardName":"Private Board","boardId":"abc","boardKey":"def","serverPort":%d}]}
+                """
+                        .formatted(privateRowPort));
+        var reporter = new SetupDiagnosticReporter(
+                Map.of(), new FakeCommandRunner(), Files::list, clockWithPortInTimeUtc(privateRowPort));
 
         // when
         String report = renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, workflow);
@@ -1055,7 +1059,8 @@ final class SetupDiagnosticReporterTest {
         // then
         assertThat(report)
                 .contains("selector:** workflow", "selected_workflow_in_manifest:** false")
-                .doesNotContain("Cannot invoke", "NullPointerException", "Private Board", "18199", tempDir.toString());
+                .doesNotContain("Cannot invoke", "NullPointerException", "Private Board", tempDir.toString())
+                .doesNotContain(renderedPortForms(privateRowPort));
     }
 
     @ParameterizedTest
@@ -1445,6 +1450,7 @@ final class SetupDiagnosticReporterTest {
     @Test
     void rendersSanitizedDiagnosticsForSelectedBoardWithoutAuthProbe() throws Exception {
         // given
+        int otherBoardPort = 19182;
         Path configDir = tempDir.resolve("config");
         Path workspaceRoot = tempDir.resolve("workspaces");
         Path stateHome = tempDir.resolve("state");
@@ -1454,7 +1460,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Files.writeString(privateWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19181));
-        Files.writeString(otherWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19182));
+        Files.writeString(otherWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(otherBoardPort));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
@@ -1477,7 +1483,7 @@ final class SetupDiagnosticReporterTest {
                                 otherWorkflow,
                                 env,
                                 workspaceRoot,
-                                19182,
+                                otherBoardPort,
                                 false,
                                 List.of(),
                                 false))));
@@ -1509,7 +1515,9 @@ final class SetupDiagnosticReporterTest {
                         "SYMPHONY_TRELLO_COMMAND",
                                 tempDir.resolve("bin/symphony-trello").toString(),
                         "SHELL", "/bin/zsh"),
-                commands);
+                commands,
+                Files::list,
+                clockWithPortInTimeUtc(otherBoardPort));
 
         // when
         String report = renderBoardDiagnostics(
@@ -1540,18 +1548,19 @@ final class SetupDiagnosticReporterTest {
                         "https://trello.com/b/SYNTH901/sensitive-board",
                         "Other Board",
                         "other-board-id",
-                        "19182",
                         "other-board-secret",
                         "other-tail-line",
                         "/Users/Jane Doe",
                         "Jane Doe",
                         "private-repo",
-                        tempDir.toString());
+                        tempDir.toString())
+                .doesNotContain(renderedPortForms(otherBoardPort));
     }
 
     @Test
     void rendersDiagnosticsForSelectedBoardShortLinkFromBoardUrlWhenBoardKeyIsFullBoardId() throws Exception {
         // given
+        int otherBoardPort = 19192;
         Path configDir = tempDir.resolve("url-short-link-config");
         Path workspaceRoot = tempDir.resolve("url-short-link-workspaces");
         Path stateHome = tempDir.resolve("url-short-link-state");
@@ -1560,7 +1569,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Files.writeString(selectedWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19191));
-        Files.writeString(otherWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19192));
+        Files.writeString(otherWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(otherBoardPort));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
@@ -1583,11 +1592,12 @@ final class SetupDiagnosticReporterTest {
                                 otherWorkflow,
                                 configDir.resolve(".env"),
                                 workspaceRoot,
-                                19192,
+                                otherBoardPort,
                                 false,
                                 List.of(),
                                 false))));
-        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+        var reporter = new SetupDiagnosticReporter(
+                Map.of(), new FakeCommandRunner(), Files::list, clockWithPortInTimeUtc(otherBoardPort));
 
         // when
         String report = renderBoardDiagnostics(reporter, "SYNTH003", configDir, workspaceRoot, stateHome);
@@ -1608,8 +1618,8 @@ final class SetupDiagnosticReporterTest {
                         "Other Private Board",
                         "other-board-id",
                         "other-key",
-                        "19192",
-                        tempDir.toString());
+                        tempDir.toString())
+                .doesNotContain(renderedPortForms(otherBoardPort));
     }
 
     @Test
@@ -3222,6 +3232,7 @@ final class SetupDiagnosticReporterTest {
     @Test
     void diagnosticsSelectsManifestBoardForRelativeWorkflowFromConfigDirectory() throws Exception {
         // given
+        int otherBoardPort = 19185;
         Path configDir = tempDir.resolve("relative-config");
         Path workspaceRoot = tempDir.resolve("relative-workspaces");
         Path stateHome = tempDir.resolve("relative-state");
@@ -3230,7 +3241,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19184));
-        Files.writeString(otherWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19185));
+        Files.writeString(otherWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(otherBoardPort));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
@@ -3253,14 +3264,15 @@ final class SetupDiagnosticReporterTest {
                                 otherWorkflow,
                                 configDir.resolve(".env"),
                                 workspaceRoot,
-                                19185,
+                                otherBoardPort,
                                 false,
                                 List.of(),
                                 false))));
         var store = new ManagedProcessStore(stateHome);
         Files.writeString(store.files(workflow).stdoutLog(), "selected workflow log\n");
         Files.writeString(store.files(otherWorkflow).stdoutLog(), "other workflow log\n");
-        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+        var reporter = new SetupDiagnosticReporter(
+                Map.of(), new FakeCommandRunner(), Files::list, clockWithPortInTimeUtc(otherBoardPort));
 
         // when
         String report = renderWorkflowDiagnostics(
@@ -3284,9 +3296,9 @@ final class SetupDiagnosticReporterTest {
                         "other-board-id",
                         "SYNTH102",
                         "https://trello.com/b/SYNTH102/other-relative-board",
-                        "19185",
                         "other workflow log",
-                        tempDir.toString());
+                        tempDir.toString())
+                .doesNotContain(renderedPortForms(otherBoardPort));
     }
 
     /// The manifest is hand-editable, so a board row may miss envPath; diagnostics load leniently
@@ -3343,6 +3355,7 @@ final class SetupDiagnosticReporterTest {
     @Test
     void diagnosticsIncludesWorkflowOutsideManifestWithoutUnrelatedBoardContext() throws Exception {
         // given
+        int manifestBoardPort = 19186;
         Path configDir = tempDir.resolve("external-workflow-config");
         Path workspaceRoot = tempDir.resolve("external-workspaces");
         Path stateHome = tempDir.resolve("external-state");
@@ -3351,7 +3364,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(requestedWorkflow.getParent());
         Files.createDirectories(stateHome);
-        Files.writeString(manifestWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19186));
+        Files.writeString(manifestWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(manifestBoardPort));
         Files.writeString(requestedWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19187));
         new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
@@ -3362,7 +3375,7 @@ final class SetupDiagnosticReporterTest {
                         manifestWorkflow,
                         configDir.resolve(".env"),
                         workspaceRoot,
-                        19186,
+                        manifestBoardPort,
                         false,
                         List.of(),
                         false))));
@@ -3370,10 +3383,7 @@ final class SetupDiagnosticReporterTest {
         Files.writeString(store.files(manifestWorkflow).stdoutLog(), "manifest workflow log\n");
         Files.writeString(store.files(requestedWorkflow).stdoutLog(), "requested workflow log\n");
         var reporter = new SetupDiagnosticReporter(
-                Map.of(),
-                new FakeCommandRunner(),
-                Files::list,
-                Clock.fixed(Instant.parse("2026-10-28T09:44:51.128191861Z"), ZoneOffset.UTC));
+                Map.of(), new FakeCommandRunner(), Files::list, clockWithPortInTimeUtc(manifestBoardPort));
 
         // when
         String report = renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, requestedWorkflow);
@@ -3392,11 +3402,9 @@ final class SetupDiagnosticReporterTest {
                         "manifest-board-id",
                         "SYNTH201",
                         "https://trello.com/b/SYNTH201/manifest-board",
-                        "| 19186 |",
-                        "127.0.0.1:19186/api/v1/local-status",
-                        "127.0.0.1:19186/api/v1/state",
                         "manifest workflow log",
-                        tempDir.toString());
+                        tempDir.toString())
+                .doesNotContain(renderedPortForms(manifestBoardPort));
     }
 
     @Test
@@ -4219,6 +4227,7 @@ final class SetupDiagnosticReporterTest {
     @Test
     void healthProbesIgnoreUnrelatedMarkdownWithServerPort() throws Exception {
         // given
+        int notesPort = 19091;
         Path configDir = tempDir.resolve("markdown-config");
         Path workspaceRoot = tempDir.resolve("workspaces");
         Path workflow = configDir.resolve("WORKFLOW.missing.md");
@@ -4229,11 +4238,13 @@ final class SetupDiagnosticReporterTest {
                 """
                 ---
                 server:
-                  port: 19091
+                  port: %d
                 ---
                 Notes, not a Symphony workflow.
-                """);
-        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+                """
+                        .formatted(notesPort));
+        var reporter = new SetupDiagnosticReporter(
+                Map.of(), new FakeCommandRunner(), Files::list, clockWithPortInTimeUtc(notesPort));
         var terminal = new RecordingTerminal();
 
         // when
@@ -4246,7 +4257,7 @@ final class SetupDiagnosticReporterTest {
         assertThat(report).hasValueSatisfying(path -> assertThat(path)
                 .content(StandardCharsets.UTF_8)
                 .contains("No configured local ports found.")
-                .doesNotContain("19091"));
+                .doesNotContain(renderedPortForms(notesPort)));
     }
 
     @ParameterizedTest
@@ -4420,6 +4431,20 @@ final class SetupDiagnosticReporterTest {
                         "<path:",
                         " | 20722 |  | invalid | invalid | false | false |")
                 .doesNotContain(tempDir.toString(), "Ready for Codex");
+    }
+
+    /// Fixes `time_utc` to an instant whose fraction of a second contains the port digits. A check
+    /// that looks for the bare port number then fails on every run, not only on the rare run where
+    /// the live clock happens to contain those digits.
+    private static Clock clockWithPortInTimeUtc(int port) {
+        return Clock.fixed(Instant.parse("2026-10-29T00:00:00Z").plus(port, ChronoUnit.MICROS), ZoneOffset.UTC);
+    }
+
+    /// Returns the forms in which the report shows a board's port: a table cell and the health-probe
+    /// URL. A privacy check looks for these forms, because the bare number can also appear inside
+    /// the `time_utc` value or a random hashed token.
+    private static String[] renderedPortForms(int port) {
+        return new String[] {"| " + port + " |", LocalHealthChecker.localServerUrl(port)};
     }
 
     private static String renderGlobalDiagnostics(SetupDiagnosticReporter reporter, Path configDir, Path stateHome)
