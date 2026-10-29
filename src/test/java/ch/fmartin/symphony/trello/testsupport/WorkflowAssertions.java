@@ -66,15 +66,13 @@ public final class WorkflowAssertions {
         return this;
     }
 
+    public WorkflowAssertions hasWorkspaceRoot(Path root) {
+        assertThat(frontMatterSection("workspace").get("root")).isEqualTo(root.toString());
+        return this;
+    }
+
     private List<?> additionalWritableRoots() {
-        Object codex = new WorkflowLoader().load(workflow).config().get("codex");
-        if (codex == null) {
-            return List.of();
-        }
-        if (!(codex instanceof Map<?, ?> settings)) {
-            throw new AssertionError("Workflow codex configuration must be a YAML map: " + workflow);
-        }
-        Object roots = settings.get("additional_writable_roots");
+        Object roots = frontMatterSection("codex").get("additional_writable_roots");
         if (roots == null) {
             return List.of();
         }
@@ -82,6 +80,19 @@ public final class WorkflowAssertions {
             return values;
         }
         throw new AssertionError("Workflow codex.additional_writable_roots must be a YAML list: " + workflow);
+    }
+
+    /// Reads the raw front matter through WorkflowLoader rather than the resolved runtime config,
+    /// which would expand `$VAR` values and read the process environment.
+    private Map<?, ?> frontMatterSection(String key) {
+        Object section = new WorkflowLoader().load(workflow).config().get(key);
+        if (section == null) {
+            return Map.of();
+        }
+        if (section instanceof Map<?, ?> settings) {
+            return settings;
+        }
+        throw new AssertionError("Workflow " + key + " configuration must be a YAML map: " + workflow);
     }
 
     public WorkflowAssertions hasDangerFullAccess() {

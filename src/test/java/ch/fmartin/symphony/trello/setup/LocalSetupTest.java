@@ -3757,7 +3757,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // then
         result.assertSuccess();
-        assertThat(workflow).content(StandardCharsets.UTF_8).contains(workspaceRoot.toString());
+        assertThatWorkflow(workflow).hasWorkspaceRoot(workspaceRoot);
         assertThat(tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME))
                 .content(StandardCharsets.UTF_8)
                 .contains(workspaceRoot.toString());

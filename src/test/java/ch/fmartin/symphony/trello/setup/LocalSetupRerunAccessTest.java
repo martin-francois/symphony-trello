@@ -440,7 +440,7 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
                         "setup_failed code=setup_worker_state_unreadable",
                         "Could not inspect managed worker state for \"Access Update\" (AccessDeniedException)")
                 .stderrDoesNotContain(pidFile.toString());
-        assertThatWorkflow(workflow).doesNotContain(allowedPath.toString());
+        assertThatWorkflow(workflow).hasNoAdditionalWritableRoot(allowedPath);
         assertThat(commands.startedWorkflows).isEmpty();
         assertThat(commands.stoppedWorkflows).isEmpty();
     }
