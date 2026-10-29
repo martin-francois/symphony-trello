@@ -55,27 +55,23 @@ final class GuidedTutorial {
     static final String CHECK_PROMPT = "Press Enter to check now, s to let the tutorial do it, or q to stop: ";
     static final String CONTINUE_PROMPT = "Press Enter to continue, or q to stop: ";
 
-    private static final String CARD_DESCRIPTION =
-            """
+    private static final String CARD_DESCRIPTION = """
             This card belongs to the Symphony for Trello guided tutorial. The board is not connected to a \
             Symphony worker, so no Codex work runs. Follow the steps in your terminal.""";
     private static final String DEMO_NOTICE =
             "Tutorial demo: the guided tutorial wrote this comment to show what Symphony and Codex write"
                     + " during a real run. No Codex work ran.";
-    private static final String PICKUP_PLAN =
-            """
+    private static final String PICKUP_PLAN = """
             Plan:
             - Read the card and find the README
             - Add a short hello message
             - Check the Markdown formatting""";
-    private static final String HANDOFF_SUMMARY =
-            """
+    private static final String HANDOFF_SUMMARY = """
             Summary: Added a short hello message to the README.
             Validation: Checked the Markdown formatting.""";
     private static final String DEMO_PULL_REQUEST_LINE =
             "Pull request: demo only, no pull request was created. In a real run, the pull request URL is on this line.";
-    private static final String MERGE_NOTES =
-            """
+    private static final String MERGE_NOTES = """
             Final checks: passed. Resolved addressed review threads. Merged the pull request because checks and \
             repository policy allowed it.
             Demo only: no pull request exists, so nothing was merged.""";

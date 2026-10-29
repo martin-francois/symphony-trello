@@ -121,9 +121,7 @@ final class LocalWorkerManagerTest {
         fixture.save(board);
         Path relativeEnv = Path.of(".env.relative");
         Path expectedEnv = relativeEnv.toAbsolutePath().normalize();
-        Files.writeString(
-                board.workflowPath(),
-                """
+        Files.writeString(board.workflowPath(), """
                 ---
                 tracker:
                   kind: trello
@@ -275,9 +273,7 @@ final class LocalWorkerManagerTest {
         Files.createDirectories(secrets);
         Files.writeString(secrets.resolve("trello-api-key"), "key-from-file\n");
         Files.writeString(secrets.resolve("trello-api-token"), "token-from-file\n");
-        Files.writeString(
-                board.workflowPath(),
-                """
+        Files.writeString(board.workflowPath(), """
                 ---
                 tracker:
                   kind: trello
@@ -306,9 +302,7 @@ final class LocalWorkerManagerTest {
         // given
         var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
-        Files.writeString(
-                board.workflowPath(),
-                """
+        Files.writeString(board.workflowPath(), """
                 ---
                 tracker:
                   kind: trello
@@ -341,9 +335,7 @@ final class LocalWorkerManagerTest {
         // given
         var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
-        Files.writeString(
-                board.workflowPath(),
-                """
+        Files.writeString(board.workflowPath(), """
                 ---
                 tracker:
                   kind: trello
@@ -375,9 +367,7 @@ final class LocalWorkerManagerTest {
         // given
         var fixture = new LocalWorkerManagerTestFixture(tempDir, Map.of("SYMPHONY_TEST_PORT", "70000"));
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
-        Files.writeString(
-                board.workflowPath(),
-                """
+        Files.writeString(board.workflowPath(), """
                 ---
                 tracker:
                   kind: trello
@@ -432,9 +422,7 @@ final class LocalWorkerManagerTest {
         // given
         var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
-        Files.writeString(
-                board.workflowPath(),
-                """
+        Files.writeString(board.workflowPath(), """
                 ---
                 tracker:
                   kind: trello
@@ -466,9 +454,7 @@ final class LocalWorkerManagerTest {
         // given
         var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
-        Files.writeString(
-                board.workflowPath(),
-                """
+        Files.writeString(board.workflowPath(), """
                 ---
                 tracker:
                   kind: linear
@@ -830,25 +816,20 @@ final class LocalWorkerManagerTest {
 
     static Stream<Arguments> invalidWorkflowConfigurations() {
         return Stream.of(
-                Arguments.of(
-                        """
+                Arguments.of("""
                         ---
                         tracker: [
                         ---
                         Body
-                        """,
-                        "invalid YAML"),
-                Arguments.of(
-                        """
+                        """, "invalid YAML"),
+                Arguments.of("""
                         ---
                         server:
                           port: 18080
                         ---
                         Body
-                        """,
-                        "tracker.kind must be trello"),
-                Arguments.of(
-                        """
+                        """, "tracker.kind must be trello"),
+                Arguments.of("""
                         ---
                         tracker:
                           kind: trello
@@ -858,10 +839,8 @@ final class LocalWorkerManagerTest {
                           port: 18080
                         ---
                         Body
-                        """,
-                        "tracker.endpoint must be an absolute http(s) URL"),
-                Arguments.of(
-                        """
+                        """, "tracker.endpoint must be an absolute http(s) URL"),
+                Arguments.of("""
                         ---
                         tracker:
                           kind: trello
@@ -872,10 +851,8 @@ final class LocalWorkerManagerTest {
                           port: 18080
                         ---
                         Body
-                        """,
-                        "max_concurrent_agents must be positive"),
-                Arguments.of(
-                        """
+                        """, "max_concurrent_agents must be positive"),
+                Arguments.of("""
                         ---
                         tracker:
                           kind: trello
@@ -886,10 +863,8 @@ final class LocalWorkerManagerTest {
                           port: 18080
                         ---
                         Body
-                        """,
-                        "interval_ms must be non-negative"),
-                Arguments.of(
-                        """
+                        """, "interval_ms must be non-negative"),
+                Arguments.of("""
                         ---
                         tracker:
                           kind: trello
@@ -900,8 +875,7 @@ final class LocalWorkerManagerTest {
                           port: 18080
                         ---
                         Body
-                        """,
-                        "codex.command is required"));
+                        """, "codex.command is required"));
     }
 
     @Test
@@ -1292,9 +1266,7 @@ final class LocalWorkerManagerTest {
         fixture.save(board);
         fixture.stubManagedPid(board, 4242L);
         Path staleWorkflow = fixture.paths.configDir().resolve("WORKFLOW.stale-copy.md");
-        Files.writeString(
-                staleWorkflow,
-                """
+        Files.writeString(staleWorkflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1324,9 +1296,7 @@ final class LocalWorkerManagerTest {
         var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Path rowWorkflow = fixture.paths.configDir().resolve("WORKFLOW.shortlink-row.md");
         Files.createDirectories(fixture.paths.configDir());
-        Files.writeString(
-                rowWorkflow,
-                """
+        Files.writeString(rowWorkflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1335,8 +1305,7 @@ final class LocalWorkerManagerTest {
                   port: %d
                 ---
                 # Shortlink Queue
-                """
-                        .formatted(ConfigDefaults.DEFAULT_SERVER_PORT));
+                """.formatted(ConfigDefaults.DEFAULT_SERVER_PORT));
         fixture.writeEnv(fixture.paths.defaultEnvPath());
         ConnectedBoard row = ConnectedBoardBuilder.connectedBoard(
                         rowWorkflow.toAbsolutePath().normalize())
@@ -1350,9 +1319,7 @@ final class LocalWorkerManagerTest {
         fixture.save(row);
         fixture.stubManagedPid(row, 4242L);
         Path staleWorkflow = fixture.paths.configDir().resolve("WORKFLOW.shortlink-stale.md");
-        Files.writeString(
-                staleWorkflow,
-                """
+        Files.writeString(staleWorkflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1445,9 +1412,7 @@ final class LocalWorkerManagerTest {
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         Path staleWorkflow = fixture.paths.configDir().resolve("WORKFLOW.stale-copy.md");
-        Files.writeString(
-                staleWorkflow,
-                """
+        Files.writeString(staleWorkflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1688,9 +1653,7 @@ final class LocalWorkerManagerTest {
         var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        Files.writeString(
-                board.workflowPath(),
-                """
+        Files.writeString(board.workflowPath(), """
                 ---
                 tracker:
                   kind: trello
@@ -1766,8 +1729,10 @@ final class LocalWorkerManagerTest {
         WorkerRunResult stop = fixture.stop(fixture.stopRequest("Queue"));
 
         // then
-        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> assertThat(failure.code())
-                .isEqualTo("trello_board_closed"));
+        assertThat(thrown)
+                .isInstanceOfSatisfying(
+                        TrelloBoardSetupException.class,
+                        failure -> assertThat(failure.code()).isEqualTo("trello_board_closed"));
         assertThat(pidFiles(fixture.paths.stateHome()))
                 .as("failed start leaves no managed pid state")
                 .isEmpty();
@@ -1851,10 +1816,7 @@ final class LocalWorkerManagerTest {
         var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        fixture.stubStoppedStartedWorkerWithStartupLog(
-                board,
-                42,
-                """
+        fixture.stubStoppedStartedWorkerWithStartupLog(board, 42, """
                 Caused by: ch.fmartin.symphony.trello.tracker.TrelloException: Trello authentication failed
                 \tat ch.fmartin.symphony.trello.tracker.TrelloClient.statusException(TrelloClient.java:600)
                 """);
@@ -1900,9 +1862,7 @@ final class LocalWorkerManagerTest {
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         ManagedProcessStore.ManagedProcessFiles files = fixture.managedFiles(board);
-        Files.writeString(
-                files.stdoutLog(),
-                """
+        Files.writeString(files.stdoutLog(), """
                 Caused by: ch.fmartin.symphony.trello.tracker.TrelloException: Trello authentication failed
                 """);
         fixture.stubStoppedStartedWorker(board, 42);
@@ -1937,9 +1897,7 @@ final class LocalWorkerManagerTest {
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         ManagedProcessStore.ManagedProcessFiles files = fixture.managedFiles(board);
-        Files.writeString(
-                files.stdoutLog(),
-                """
+        Files.writeString(files.stdoutLog(), """
                 Stale startup log content that is longer than the next worker startup failure.
                 This simulates redirect targets left behind by an earlier managed process start.
                 """);
@@ -1969,11 +1927,7 @@ final class LocalWorkerManagerTest {
         fixture.save(board);
         ManagedProcessStore.ManagedProcessFiles files = fixture.managedFiles(board);
         Files.writeString(files.stdoutLog(), "stale log\n");
-        stubStartupLogRewrite(
-                fixture,
-                board,
-                files,
-                """
+        stubStartupLogRewrite(fixture, board, files, """
                 Trello authentication failed
                 Additional startup details that make this rewritten log longer than the previous file.
                 """);
@@ -2229,9 +2183,7 @@ final class LocalWorkerManagerTest {
         // given
         var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue").withServerPort(19091);
-        Files.writeString(
-                board.workflowPath(),
-                """
+        Files.writeString(board.workflowPath(), """
                 ---
                 tracker:
                   kind: trello
@@ -2241,9 +2193,7 @@ final class LocalWorkerManagerTest {
                 ---
                 # Queue
                 """);
-        Files.writeString(
-                board.envPath(),
-                """
+        Files.writeString(board.envPath(), """
                 TRELLO_API_KEY=test-key
                 TRELLO_API_TOKEN=test-token
                 SYMPHONY_TEST_PORT=19091
@@ -2371,9 +2321,7 @@ final class LocalWorkerManagerTest {
         // given
         var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
-        Files.writeString(
-                board.workflowPath(),
-                """
+        Files.writeString(board.workflowPath(), """
                 ---
                 tracker:
                   kind: trello
@@ -2403,9 +2351,7 @@ final class LocalWorkerManagerTest {
         // given
         var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
-        Files.writeString(
-                board.workflowPath(),
-                """
+        Files.writeString(board.workflowPath(), """
                 ---
                 tracker:
                   kind: trello
@@ -3098,9 +3044,7 @@ final class LocalWorkerManagerTest {
         Path workflow = workflowDir.resolve("WORKFLOW.secret-missing.md");
         String secretFileToken = PrivateContextTokens.pathToken(fixture.paths.configDir(), secretPath);
         Files.createDirectories(workflowDir);
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -3111,8 +3055,7 @@ final class LocalWorkerManagerTest {
                   port: 18080
                 ---
                 Body
-                """
-                        .formatted(secretPath));
+                """.formatted(secretPath));
         ConnectedBoard board = ConnectedBoardBuilder.connectedBoard(
                         workflow.toAbsolutePath().normalize())
                 .withBoardId("board-1")
@@ -3180,9 +3123,7 @@ final class LocalWorkerManagerTest {
         String secretFileToken = PrivateContextTokens.pathToken(fixture.paths.configDir(), secretPath);
         Files.createDirectories(privateDir);
         Files.writeString(secretPath, "x".repeat(70_000));
-        Files.writeString(
-                board.workflowPath(),
-                """
+        Files.writeString(board.workflowPath(), """
                 ---
                 tracker:
                   kind: trello
@@ -3193,8 +3134,7 @@ final class LocalWorkerManagerTest {
                   port: 18080
                 ---
                 Body
-                """
-                        .formatted(secretPath));
+                """.formatted(secretPath));
         fixture.save(board);
 
         // when
@@ -3224,9 +3164,7 @@ final class LocalWorkerManagerTest {
         Path env = fixture.paths.defaultEnvPath();
         Files.createDirectories(fixture.paths.configDir());
         fixture.writeEnv(env);
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -3270,16 +3208,12 @@ final class LocalWorkerManagerTest {
         Path workflow = fixture.paths.configDir().resolve("WORKFLOW.direct-env-board.md");
         Path env = fixture.paths.defaultEnvPath();
         Files.createDirectories(fixture.paths.configDir());
-        Files.writeString(
-                env,
-                """
+        Files.writeString(env, """
                 TRELLO_API_KEY=test-key
                 TRELLO_API_TOKEN=test-token
                 DIRECT_BOARD_ID=resolved-direct-board
                 """);
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -3324,16 +3258,12 @@ final class LocalWorkerManagerTest {
         ConnectedBoard board = fixture.connectedBoard("board-override", "Override");
         fixture.save(board);
         Path overrideEnv = fixture.paths.configDir().resolve("override.env");
-        Files.writeString(
-                overrideEnv,
-                """
+        Files.writeString(overrideEnv, """
                 TRELLO_API_KEY=test-key
                 TRELLO_API_TOKEN=test-token
                 WORKER_PORT=19093
                 """);
-        Files.writeString(
-                board.workflowPath(),
-                """
+        Files.writeString(board.workflowPath(), """
                 ---
                 tracker:
                   kind: trello
@@ -3394,9 +3324,7 @@ final class LocalWorkerManagerTest {
         var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Path workflow = fixture.paths.configDir().resolve("WORKFLOW.direct-status.md");
         Files.createDirectories(fixture.paths.configDir());
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   board_id: direct-status-board
@@ -3421,15 +3349,11 @@ final class LocalWorkerManagerTest {
         var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Path workflow = fixture.paths.configDir().resolve("WORKFLOW.direct-status-env.md");
         Files.createDirectories(fixture.paths.configDir());
-        Files.writeString(
-                fixture.paths.defaultEnvPath(),
-                """
+        Files.writeString(fixture.paths.defaultEnvPath(), """
                 DIRECT_STATUS_BOARD_ID=resolved-status-board
                 DIRECT_STATUS_PORT=19093
                 """);
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   board_id: $DIRECT_STATUS_BOARD_ID
@@ -3455,15 +3379,11 @@ final class LocalWorkerManagerTest {
         var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Path workflow = fixture.paths.configDir().resolve("WORKFLOW.direct-stop-env.md");
         Files.createDirectories(fixture.paths.configDir());
-        Files.writeString(
-                fixture.paths.defaultEnvPath(),
-                """
+        Files.writeString(fixture.paths.defaultEnvPath(), """
                 DIRECT_STOP_BOARD_ID=resolved-stop-board
                 DIRECT_STOP_PORT=19094
                 """);
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   board_id: $DIRECT_STOP_BOARD_ID
@@ -3966,9 +3886,7 @@ final class LocalWorkerManagerTest {
     private static void writeWorkflowWithMissingFileSecret(ConnectedBoard board, Path missingSecret)
             throws IOException {
         assertThat(missingSecret).doesNotExist();
-        Files.writeString(
-                board.workflowPath(),
-                """
+        Files.writeString(board.workflowPath(), """
                 ---
                 tracker:
                   kind: trello
@@ -3979,8 +3897,7 @@ final class LocalWorkerManagerTest {
                   port: %d
                 ---
                 # Queue
-                """
-                        .formatted(missingSecret, board.boardId(), board.serverPort()));
+                """.formatted(missingSecret, board.boardId(), board.serverPort()));
     }
 
     private static List<Throwable> lifecycleCommandFailures(LocalWorkerManagerTestFixture fixture) {
@@ -4106,9 +4023,7 @@ final class LocalWorkerManagerTest {
     private static ConnectedBoard unresolvedServerPortBoardWithHttpOverride(LocalWorkerManagerTestFixture fixture)
             throws Exception {
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue").withServerPort(19094);
-        Files.writeString(
-                board.workflowPath(),
-                """
+        Files.writeString(board.workflowPath(), """
                 ---
                 tracker:
                   kind: trello
@@ -4120,9 +4035,7 @@ final class LocalWorkerManagerTest {
                 ---
                 # Queue
                 """);
-        Files.writeString(
-                board.envPath(),
-                """
+        Files.writeString(board.envPath(), """
                 TRELLO_API_KEY=test-key
                 TRELLO_API_TOKEN=test-token
                 SYMPHONY_HTTP_PORT=19094
@@ -4152,9 +4065,7 @@ final class LocalWorkerManagerTest {
 
     private static void writeExistingGithubWorkflowWithoutSandboxPolicy(
             ConnectedBoard board, String trackerFields, String codexFields) throws IOException {
-        Files.writeString(
-                board.workflowPath(),
-                """
+        Files.writeString(board.workflowPath(), """
                 ---
                 tracker:
                   kind: trello
@@ -4174,8 +4085,7 @@ final class LocalWorkerManagerTest {
                 ## Trello List Routing
 
                 Card URL: {{ card.url }}
-                """
-                        .formatted(trackerFields, board.serverPort(), codexFields));
+                """.formatted(trackerFields, board.serverPort(), codexFields));
     }
 
     private static void stubStartupLogRewrite(
@@ -4193,9 +4103,7 @@ final class LocalWorkerManagerTest {
     }
 
     private static void writeWorkflowWithInvalidSandboxPolicy(Path workflowPath) throws IOException {
-        Files.writeString(
-                workflowPath,
-                """
+        Files.writeString(workflowPath, """
                 ---
                 tracker:
                   kind: trello

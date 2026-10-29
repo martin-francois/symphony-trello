@@ -254,9 +254,10 @@ final class SetupFailureFollowUpTest {
         Optional<Path> report = scenario.failUnexpectedly();
 
         // then
-        assertThat(scenario.codex().requests()).singleElement().satisfies(request -> assertThat(
-                        request.additionalWritableRoots())
-                .containsExactly(scenario.appHome()));
+        assertThat(scenario.codex().requests())
+                .singleElement()
+                .satisfies(
+                        request -> assertThat(request.additionalWritableRoots()).containsExactly(scenario.appHome()));
         assertThat(scenario.terminal().stderr())
                 .contains(
                         "and the Symphony source checkout",
@@ -578,9 +579,11 @@ final class SetupFailureFollowUpTest {
 
         // then
         String[] privateValues = {TRELLO_API_KEY, TRELLO_API_TOKEN, BOARD_NAME, TRELLO_BOARD_URL, tempDir.toString()};
-        assertThat(scenario.codex().requests()).singleElement().satisfies(request -> assertThat(request.prompt())
-                .contains("- error_code: " + UNEXPECTED_CODE)
-                .doesNotContain(privateValues));
+        assertThat(scenario.codex().requests())
+                .singleElement()
+                .satisfies(request -> assertThat(request.prompt())
+                        .contains("- error_code: " + UNEXPECTED_CODE)
+                        .doesNotContain(privateValues));
         assertThat(issueDraft(report))
                 .content(StandardCharsets.UTF_8)
                 .contains("## Local Codex Investigation", "<redacted>", "<path:")

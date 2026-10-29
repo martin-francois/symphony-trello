@@ -480,13 +480,12 @@ final class SetupLocalCommandFactory {
         }
 
         private void rejectUnsupportedOptions(Action action) {
-            List<String> unsupported =
-                    switch (action) {
-                        case SETUP -> List.of();
-                        case CHECK -> unsupportedForCheck();
-                        case REPAIR_PORT -> unsupportedForRepairPort();
-                        case CONFIGURE_GITHUB -> unsupportedForConfigureGithub();
-                    };
+            List<String> unsupported = switch (action) {
+                case SETUP -> List.of();
+                case CHECK -> unsupportedForCheck();
+                case REPAIR_PORT -> unsupportedForRepairPort();
+                case CONFIGURE_GITHUB -> unsupportedForConfigureGithub();
+            };
             if (!unsupported.isEmpty()) {
                 throw new TrelloBoardSetupException(
                         "setup_invalid_arguments",

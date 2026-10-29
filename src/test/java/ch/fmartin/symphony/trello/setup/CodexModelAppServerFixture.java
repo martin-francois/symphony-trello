@@ -8,9 +8,7 @@ final class CodexModelAppServerFixture {
     private CodexModelAppServerFixture() {}
 
     static Path createPaginated(Path directory, String firstPageData, String secondPageData) throws IOException {
-        return create(
-                directory,
-                """
+        return create(directory, """
                 while IFS= read -r line; do
                   case "$line" in
                     *'"method":"initialize"'*)
@@ -24,9 +22,8 @@ final class CodexModelAppServerFixture {
                       ;;
                   esac
                 done
-                """
-                        .replace("__FIRST_PAGE_DATA__", firstPageData.strip())
-                        .replace("__SECOND_PAGE_DATA__", secondPageData.strip()));
+                """.replace("__FIRST_PAGE_DATA__", firstPageData.strip())
+                .replace("__SECOND_PAGE_DATA__", secondPageData.strip()));
     }
 
     static Path create(Path directory, String body) throws IOException {

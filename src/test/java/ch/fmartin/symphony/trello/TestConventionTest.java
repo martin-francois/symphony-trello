@@ -156,9 +156,7 @@ final class TestConventionTest {
     void compilerPositionsIgnoreJavaLexicalBraces(@TempDir Path tempDir) throws IOException {
         // given
         Path source = tempDir.resolve("LexicalBracesTest.java");
-        Files.writeString(
-                source,
-                """
+        Files.writeString(source, """
                 final class LexicalBracesTest {
                     @Test
                     void conventionalTest() {
@@ -186,8 +184,7 @@ final class TestConventionTest {
                         assertThat(1).isEqualTo(1);
                     }
                 }
-                """
-                        .formatted("given", "when", "then"));
+                """.formatted("given", "when", "then"));
 
         // when
         List<String> violations = testSectionViolations(source);
@@ -200,9 +197,7 @@ final class TestConventionTest {
     void sectionsIgnoreMarkersInsideTextBlocksAndBlockComments(@TempDir Path tempDir) throws IOException {
         // given
         Path source = tempDir.resolve("FakeSectionMarkersTest.java");
-        Files.writeString(
-                source,
-                """
+        Files.writeString(source, """
                 final class FakeSectionMarkersTest {
                     @Test
                     void fakeSections() {
@@ -219,8 +214,7 @@ final class TestConventionTest {
                         assertThat(text).isNotBlank();
                     }
                 }
-                """
-                        .formatted("given", "when", "then", "given", "when", "then"));
+                """.formatted("given", "when", "then", "given", "when", "then"));
 
         // when
         List<String> violations = testSectionViolations(source);
@@ -233,9 +227,7 @@ final class TestConventionTest {
     void compilerPositionsPreserveBlankLineViolationNumbers(@TempDir Path tempDir) throws IOException {
         // given
         Path source = tempDir.resolve("BlankLineTest.java");
-        Files.writeString(
-                source,
-                """
+        Files.writeString(source, """
                 final class BlankLineTest {
                     @Test
                     void missingBlankLine() {
@@ -248,8 +240,7 @@ final class TestConventionTest {
                         assertThat(value).isEqualTo(2);
                     }
                 }
-                """
-                        .formatted("given", "when", "then"));
+                """.formatted("given", "when", "then"));
 
         // when
         List<String> violations = testSectionViolations(source);
@@ -262,9 +253,7 @@ final class TestConventionTest {
     void compilerParseErrorsIncludeTheFixtureAndDiagnosticLine(@TempDir Path tempDir) throws IOException {
         // given
         Path source = tempDir.resolve("BrokenTest.java");
-        Files.writeString(
-                source,
-                """
+        Files.writeString(source, """
                 final class BrokenTest {
                     @Test
                     void broken() {
@@ -287,9 +276,7 @@ final class TestConventionTest {
     void directAssertJBooleanAssertionsAreRejectedWithCompilerPositions(@TempDir Path tempDir) throws IOException {
         // given
         Path source = tempDir.resolve("RawBooleanAssertionsTest.java");
-        Files.writeString(
-                source,
-                """
+        Files.writeString(source, """
                 import static org.assertj.core.api.Assertions.assertThat;
 
                 final class RawBooleanAssertionsTest {
@@ -321,9 +308,7 @@ final class TestConventionTest {
     void describedDirectAssertJBooleanAssertionsAreAccepted(@TempDir Path tempDir) throws IOException {
         // given
         Path source = tempDir.resolve("DescribedBooleanAssertionsTest.java");
-        Files.writeString(
-                source,
-                """
+        Files.writeString(source, """
                 import static org.assertj.core.api.Assertions.assertThat;
 
                 final class DescribedBooleanAssertionsTest {
@@ -347,9 +332,7 @@ final class TestConventionTest {
     void qualifiedAssertJBooleanAssertionsAreRejected(@TempDir Path tempDir) throws IOException {
         // given
         Path source = tempDir.resolve("QualifiedBooleanAssertionsTest.java");
-        Files.writeString(
-                source,
-                """
+        Files.writeString(source, """
                 import org.assertj.core.api.Assertions;
                 import org.assertj.core.api.AssertionsForClassTypes;
 
@@ -380,9 +363,7 @@ final class TestConventionTest {
     void alternativeAssertJBooleanEntryPointsAreRejected(@TempDir Path tempDir) throws IOException {
         // given
         Path source = tempDir.resolve("AlternativeBooleanAssertionsTest.java");
-        Files.writeString(
-                source,
-                """
+        Files.writeString(source, """
                 import static org.assertj.core.api.BDDAssertions.then;
 
                 import java.util.concurrent.atomic.AtomicBoolean;
@@ -438,9 +419,7 @@ final class TestConventionTest {
     void customAssertThatRootsAreIgnored(@TempDir Path tempDir) throws IOException {
         // given
         Path source = tempDir.resolve("CustomBooleanAssertionsTest.java");
-        Files.writeString(
-                source,
-                """
+        Files.writeString(source, """
                 import static org.assertj.core.api.Assertions.assertThat;
                 import static org.assertj.core.api.BDDAssertions.then;
 
@@ -500,9 +479,7 @@ final class TestConventionTest {
             throws IOException {
         // given
         Path source = tempDir.resolve("BlankBooleanDescriptionsTest.java");
-        Files.writeString(
-                source,
-                """
+        Files.writeString(source, """
                 import static org.assertj.core.api.Assertions.assertThat;
 
                 final class BlankBooleanDescriptionsTest {
@@ -546,9 +523,7 @@ final class TestConventionTest {
             throws IOException {
         // given
         Path source = tempDir.resolve("OtherAssertionsTest.java");
-        Files.writeString(
-                source,
-                """
+        Files.writeString(source, """
                 import static org.assertj.core.api.Assertions.assertThat;
 
                 import java.nio.file.Path;
@@ -635,16 +610,13 @@ final class TestConventionTest {
         String pom = Files.readString(Path.of("pom.xml"));
 
         // when
-        String dependency =
-                """
+        String dependency = """
                 <dependency>
                       <groupId>org.jspecify</groupId>
                       <artifactId>jspecify</artifactId>
                       <version>${jspecify.version}</version>
                     </dependency>
-                """
-                        .stripIndent()
-                        .trim();
+                """.stripIndent().trim();
 
         // then
         assertThat(pom).contains("<jspecify.version>1.0.1</jspecify.version>");
@@ -709,13 +681,15 @@ final class TestConventionTest {
         String codexSandboxPolicySource = Files.readString(codexSandboxPolicy);
 
         // then
-        assertThat(sources).allSatisfy((boundary, source) -> assertThat(source)
-                .as("%s should document reviewed nullness defaults".formatted(boundary))
-                .contains("org.jspecify.annotations.NullMarked", "@NullMarked"));
+        assertThat(sources)
+                .allSatisfy((boundary, source) -> assertThat(source)
+                        .as("%s should document reviewed nullness defaults".formatted(boundary))
+                        .contains("org.jspecify.annotations.NullMarked", "@NullMarked"));
         assertThat(sources.get(Path.of("src/main/java/ch/fmartin/symphony/trello/repository/RepositorySource.java")))
                 .contains("@Nullable RepositoryIdentity identity", "@Nullable Path path");
         assertThat(sources.get(Path.of("src/main/java/ch/fmartin/symphony/trello/config/EffectiveConfig.java")))
-                .contains("record RepositoryConfig(@Nullable String defaultUrl, @Nullable Path defaultPath)");
+                .containsPattern("record\\s+RepositoryConfig\\s*\\(\\s*@Nullable\\s+String\\s+defaultUrl\\s*,"
+                        + "\\s*@Nullable\\s+Path\\s+defaultPath\\s*\\)");
         assertThat(codexSandboxPolicySource)
                 .as("%s should document intentional nullable public contracts", codexSandboxPolicy)
                 .contains(

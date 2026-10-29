@@ -160,12 +160,9 @@ final class TrelloBoardSetupTest {
         trello.remove("/1/boards/");
         trello.on("/1/boards/", exchange -> {
             Map<String, String> query = query(exchange);
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                     {"id":"000000000000000000000001","name":"%s","url":"https://trello.com/b/SYNTH777/synthetic-board"}
-                    """
-                            .formatted(query.get("name")));
+                    """.formatted(query.get("name")));
         });
         trello.remove("/1/lists");
         trello.on("/1/lists", exchange -> {
@@ -351,8 +348,10 @@ final class TrelloBoardSetupTest {
                 false)));
 
         // then
-        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> assertThat(failure.code())
-                .isEqualTo("trello_auth_failed"));
+        assertThat(thrown)
+                .isInstanceOfSatisfying(
+                        TrelloBoardSetupException.class,
+                        failure -> assertThat(failure.code()).isEqualTo("trello_auth_failed"));
     }
 
     @Test
@@ -835,8 +834,7 @@ final class TrelloBoardSetupTest {
     @Test
     void importExistingBoardRejectsCaseVariantRecommendedListNames() {
         // given
-        boardListsResponse.set(
-                """
+        boardListsResponse.set("""
                 [
                   {"id":"list-ready-lower","name":"ready for codex","closed":false,"pos":1},
                   {"id":"list-ready-title","name":"Ready for Codex","closed":false,"pos":2},
@@ -1403,8 +1401,7 @@ final class TrelloBoardSetupTest {
     @Test
     void importUsesReviewFallbackForRepositoryBlockerWhenNoBlockedListIsConfigured() {
         // given
-        boardListsResponse.set(
-                """
+        boardListsResponse.set("""
                 [
                   {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
                   {"id":"list-review","name":"Human Review","closed":false,"pos":2},
@@ -1446,8 +1443,7 @@ final class TrelloBoardSetupTest {
     @Test
     void importRecordsRepositoryBlockerGuidanceWhenNoMoveDestinationExists() {
         // given
-        boardListsResponse.set(
-                """
+        boardListsResponse.set("""
                 [
                   {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
                   {"id":"list-done","name":"Done","closed":false,"pos":2}
@@ -1622,9 +1618,7 @@ final class TrelloBoardSetupTest {
     void preservesExistingWorkflowModelAndReasoningWhenForceRegeneratingWorkflow() throws Exception {
         // given
         Path workflow = tempDir.resolve("existing-codex-model.md");
-        writeExistingWorkflow(
-                workflow,
-                """
+        writeExistingWorkflow(workflow, """
                   model: "gpt-hand-edited"
                   reasoning_effort: "high"
                 """);
@@ -1709,9 +1703,7 @@ final class TrelloBoardSetupTest {
     void modelOnlyOverridePreservesExistingReasoningWhenCatalogHasSelectedModelDefault() throws Exception {
         // given
         Path workflow = tempDir.resolve("existing-codex-reasoning-model-override.md");
-        writeExistingWorkflow(
-                workflow,
-                """
+        writeExistingWorkflow(workflow, """
                   model: "gpt-existing"
                   reasoning_effort: "low"
                 """);
@@ -1772,9 +1764,7 @@ final class TrelloBoardSetupTest {
     void resolvesDefaultCodexCommandWhenWorkflowOmitsCommand() throws IOException {
         // given
         Path workflow = tempDir.resolve("workflow-without-codex-command.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1842,8 +1832,7 @@ final class TrelloBoardSetupTest {
     @Test
     void importsExistingBoardWithExplicitNonDefaultLists() {
         // given
-        boardListsResponse.set(
-                """
+        boardListsResponse.set("""
                 [
                   {"id":"list-intake","name":"Intake","closed":false,"pos":1},
                   {"id":"list-queue","name":"Queue for Codex","closed":false,"pos":2},
@@ -1924,8 +1913,7 @@ final class TrelloBoardSetupTest {
     @Test
     void importUsesConfiguredReviewAndTerminalListsForLandingWhenMergingExists() {
         // given
-        boardListsResponse.set(
-                """
+        boardListsResponse.set("""
                 [
                   {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
                   {"id":"list-review","name":"Review","closed":false,"pos":2},
@@ -1971,8 +1959,7 @@ final class TrelloBoardSetupTest {
     @Test
     void importUsesBlockedDestinationForLandingFixupsWhenNoReviewListExists() {
         // given
-        boardListsResponse.set(
-                """
+        boardListsResponse.set("""
                 [
                   {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
                   {"id":"list-merging","name":"Merging","closed":false,"pos":2},
@@ -2013,8 +2000,7 @@ final class TrelloBoardSetupTest {
     @Test
     void importDoesNotActivateLandingWhenMergingExistsWithoutTerminalList() {
         // given
-        boardListsResponse.set(
-                """
+        boardListsResponse.set("""
                 [
                   {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
                   {"id":"list-in-progress","name":"In Progress","closed":false,"pos":2},
@@ -2053,8 +2039,7 @@ final class TrelloBoardSetupTest {
     @Test
     void importDoesNotCreateMergingWhenThereIsNoLandingDestination() {
         // given
-        boardListsResponse.set(
-                """
+        boardListsResponse.set("""
                 [
                   {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
                   {"id":"list-in-progress","name":"In Progress","closed":false,"pos":2},
@@ -2090,8 +2075,7 @@ final class TrelloBoardSetupTest {
     @Test
     void importPrefersHumanReviewWhenPlainReviewListAlsoExists() {
         // given
-        boardListsResponse.set(
-                """
+        boardListsResponse.set("""
                 [
                   {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
                   {"id":"list-plain-review","name":"Review","closed":false,"pos":2},
@@ -2127,8 +2111,7 @@ final class TrelloBoardSetupTest {
     @Test
     void importEnablesDoneHandoffMovesWhenNoReviewListExists() {
         // given
-        boardListsResponse.set(
-                """
+        boardListsResponse.set("""
                 [
                   {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
                   {"id":"list-done","name":"Done","closed":false,"pos":2}
@@ -2173,8 +2156,7 @@ final class TrelloBoardSetupTest {
     @Test
     void importMovesBlockedCardsToReviewWhenNoBlockedListExists() {
         // given
-        boardListsResponse.set(
-                """
+        boardListsResponse.set("""
                 [
                   {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
                   {"id":"list-review","name":"Review","closed":false,"pos":2},
@@ -2235,8 +2217,7 @@ final class TrelloBoardSetupTest {
     @Test
     void importRefusesToOverwriteExistingWorkflowUnlessForced() throws IOException {
         // given
-        boardListsResponse.set(
-                """
+        boardListsResponse.set("""
                 [
                   {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
                   {"id":"list-review","name":"Human Review","closed":false,"pos":2},
@@ -2396,9 +2377,7 @@ final class TrelloBoardSetupTest {
         // reserve a truncated or shifted value.
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Path siblingWorkflow = tempDir.resolve("WORKFLOW.whole-float.md");
-        Files.writeString(
-                siblingWorkflow,
-                """
+        Files.writeString(siblingWorkflow, """
                 ---
                 tracker:
                   kind: trello
@@ -2432,9 +2411,7 @@ final class TrelloBoardSetupTest {
         // rejected the same way instead of silently reserving the truncated value.
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Path siblingWorkflow = tempDir.resolve("WORKFLOW.fractional.md");
-        Files.writeString(
-                siblingWorkflow,
-                """
+        Files.writeString(siblingWorkflow, """
                 ---
                 tracker:
                   kind: trello
@@ -2498,9 +2475,7 @@ final class TrelloBoardSetupTest {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Path siblingWorkflow = tempDir.resolve("WORKFLOW.env-port.md");
-        Files.writeString(
-                siblingWorkflow,
-                """
+        Files.writeString(siblingWorkflow, """
                 ---
                 tracker:
                   kind: trello
@@ -2564,8 +2539,7 @@ final class TrelloBoardSetupTest {
         // escape them physically while parsing back to the original names.
         String dirtyActive = "Ready\nfor \"Codex\"";
         String dirtyTerminal = "Done\tList";
-        boardListsResponse.set(
-                """
+        boardListsResponse.set("""
                 [
                   {"id":"list-1","name":"Ready\\nfor \\"Codex\\"","closed":false,"pos":1},
                   {"id":"list-2","name":"Done\\tList","closed":false,"pos":2}
@@ -2611,8 +2585,7 @@ final class TrelloBoardSetupTest {
         // values still round-trip the actual Trello list names.
         String dirtyInProgress = "Codex \"Live\"\tNow";
         String dirtyBlocked = "Hold\n\"Up\"";
-        boardListsResponse.set(
-                """
+        boardListsResponse.set("""
                 [
                   {"id":"list-1","name":"Ready for Codex","closed":false,"pos":1},
                   {"id":"list-2","name":"Codex \\"Live\\"\\tNow","closed":false,"pos":2},
@@ -2665,8 +2638,7 @@ final class TrelloBoardSetupTest {
         // ambiguous-selector error must display-escape quotes and control characters instead of
         // letting them forge or split the message.
         String dirtySelector = "Plan \"B\"\nQueue";
-        boardListsResponse.set(
-                """
+        boardListsResponse.set("""
                 [
                   {"id":"list-1","name":"Plan \\"B\\"\\nQueue","closed":false,"pos":1},
                   {"id":"list-2","name":"PLAN \\"B\\"\\nQUEUE","closed":false,"pos":2},
@@ -2794,9 +2766,7 @@ final class TrelloBoardSetupTest {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         int existingPort = ConfigDefaults.DEFAULT_SERVER_PORT;
         int expectedPort = firstAvailableManagedPort(existingPort);
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -2807,8 +2777,7 @@ final class TrelloBoardSetupTest {
                   port: %d
                 ---
                 # Existing
-                """
-                        .formatted(existingPort));
+                """.formatted(existingPort));
 
         // when
         var result = setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
@@ -2887,9 +2856,7 @@ final class TrelloBoardSetupTest {
     void newBoardRejectsRequestedServerPortReservedByExistingWorkflow() throws IOException {
         // given
         Path existingWorkflow = tempDir.resolve("project-a.WORKFLOW.md");
-        Files.writeString(
-                existingWorkflow,
-                """
+        Files.writeString(existingWorkflow, """
                 ---
                 tracker:
                   kind: trello
@@ -2926,9 +2893,7 @@ final class TrelloBoardSetupTest {
     void newBoardIgnoresEphemeralServerPortReservedByExistingWorkflow() throws IOException {
         // given
         Path existingWorkflow = tempDir.resolve("ephemeral.WORKFLOW.md");
-        Files.writeString(
-                existingWorkflow,
-                """
+        Files.writeString(existingWorkflow, """
                 ---
                 tracker:
                   kind: trello
@@ -2965,9 +2930,7 @@ final class TrelloBoardSetupTest {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         int expectedPort = firstAvailableManagedPort();
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -2976,8 +2939,7 @@ final class TrelloBoardSetupTest {
                   port: %d
                 ---
                 # Existing
-                """
-                        .formatted(expectedPort));
+                """.formatted(expectedPort));
 
         // when
         var result = setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
@@ -3004,9 +2966,7 @@ final class TrelloBoardSetupTest {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         HttpServer listeningServer = startLoopbackServer();
         int listeningPort = listeningServer.getAddress().getPort();
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -3015,8 +2975,7 @@ final class TrelloBoardSetupTest {
                   port: %d
                 ---
                 # Existing
-                """
-                        .formatted(listeningPort));
+                """.formatted(listeningPort));
 
         // when
         TrelloBoardSetup.NewBoardResult result;
@@ -3048,9 +3007,7 @@ final class TrelloBoardSetupTest {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         int siblingPort = firstAvailableManagedPort();
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -3059,13 +3016,10 @@ final class TrelloBoardSetupTest {
                   port: %d
                 ---
                 # Existing
-                """
-                        .formatted(siblingPort));
+                """.formatted(siblingPort));
         Path siblingWorkflow = tempDir.resolve("project-a.WORKFLOW.md");
         int expectedPort = firstAvailableManagedPort(siblingPort);
-        Files.writeString(
-                siblingWorkflow,
-                """
+        Files.writeString(siblingWorkflow, """
                 ---
                 tracker:
                   kind: trello
@@ -3074,8 +3028,7 @@ final class TrelloBoardSetupTest {
                   port: %d
                 ---
                 # Sibling
-                """
-                        .formatted(siblingPort));
+                """.formatted(siblingPort));
 
         // when
         var result = setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
@@ -3099,9 +3052,7 @@ final class TrelloBoardSetupTest {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         int expectedPort = ConfigDefaults.DEFAULT_SERVER_PORT;
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -3249,8 +3200,7 @@ final class TrelloBoardSetupTest {
                         "When the recorded commit is already on the target and any existing card branch matches it, skip the merge.")
                 .contains("Do not apply pull\nrequest review-thread handling.")
                 .as("a create-mode card that went through a branch-only handoff gets its pull request before merging")
-                .contains(
-                        """
+                .contains("""
                         card straight to "Merging", do not merge the branch directly. Create the pull request first as described
                         in Creating The Pull Request Later, but keep the card in "Merging" instead of moving it to "Human Review".""");
         assertThat(resolve(workflow).github())
@@ -3651,9 +3601,7 @@ final class TrelloBoardSetupTest {
     }
 
     private static void writeExistingWorkflow(Path workflow, String codexFields) throws IOException {
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -3664,8 +3612,7 @@ final class TrelloBoardSetupTest {
                   command: %s
                 %s---
                 # Existing workflow
-                """
-                        .formatted(ConfigDefaults.DEFAULT_CODEX_COMMAND, codexFields));
+                """.formatted(ConfigDefaults.DEFAULT_CODEX_COMMAND, codexFields));
     }
 
     private static HttpServer startLoopbackServer() throws IOException {

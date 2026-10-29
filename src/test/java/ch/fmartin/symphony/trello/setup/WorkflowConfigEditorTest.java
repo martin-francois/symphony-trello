@@ -35,9 +35,7 @@ final class WorkflowConfigEditorTest {
     void readsAndUpdatesCrLfWorkflowFrontMatter() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.crlf.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---\r
                 tracker:\r
                   kind: trello\r
@@ -69,9 +67,7 @@ final class WorkflowConfigEditorTest {
     void updatesOneCharacterWorkflowFileName() throws Exception {
         // given
         Path workflow = tempDir.resolve("x");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -168,9 +164,7 @@ final class WorkflowConfigEditorTest {
             String name, String portLine, WorkflowServerPortClassification.Kind expected) throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.classify.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -178,8 +172,7 @@ final class WorkflowConfigEditorTest {
                 %s
                 ---
                 Body
-                """
-                        .formatted(portLine));
+                """.formatted(portLine));
         var editor = new WorkflowConfigEditor();
 
         // when
@@ -231,9 +224,7 @@ final class WorkflowConfigEditorTest {
             String caseName, String resolvedValue, WorkflowServerPortClassification.Kind expected) throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.env-classify.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -290,9 +281,7 @@ final class WorkflowConfigEditorTest {
     void treatsNullYamlFrontMatterAsMissingMaxAgents() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.null.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 null
                 ---
@@ -313,9 +302,7 @@ final class WorkflowConfigEditorTest {
     void reportsOverlappingListRolesAsInvalidWorkflowConfiguration() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.overlap.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -346,9 +333,7 @@ final class WorkflowConfigEditorTest {
     void validateReportsOverlappingListRolesForConnectedBoard() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.connected-overlap.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -387,9 +372,7 @@ final class WorkflowConfigEditorTest {
     void permitsOverlappingListNamesWhenListIdsAreAuthoritative() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.list-ids.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -423,9 +406,7 @@ final class WorkflowConfigEditorTest {
     void reportsOverlappingListIdsAsInvalidWorkflowConfiguration() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.list-id-overlap.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -460,14 +441,12 @@ final class WorkflowConfigEditorTest {
         Path privateRoot = tempDir.resolve("Jane Doe");
         Path workflow = privateRoot.resolve("WORKFLOW.read-only.md");
         Files.createDirectories(privateRoot);
-        String original = workflowWithCodex(
-                """
+        String original = workflowWithCodex("""
                 codex:
                   command: codex app-server
                   turn_sandbox_policy:
                     type: readOnly
-                """,
-                currentWorkflowBody());
+                """, currentWorkflowBody());
         Files.writeString(workflow, original);
         var editor = new WorkflowConfigEditor();
 
@@ -492,13 +471,11 @@ final class WorkflowConfigEditorTest {
     void rejectsCurrentWorkflowWithNullSandboxPolicyWithoutRewriting() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.null-policy.md");
-        String original = workflowWithCodex(
-                """
+        String original = workflowWithCodex("""
                 codex:
                   command: codex app-server
                   turn_sandbox_policy:
-                """,
-                currentWorkflowBody());
+                """, currentWorkflowBody());
         Files.writeString(workflow, original);
         var editor = new WorkflowConfigEditor();
 
@@ -518,8 +495,7 @@ final class WorkflowConfigEditorTest {
     void launchHonorsForcedDangerFullAccessBeforeConfiguredSandboxPolicyValidation() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.force-danger-invalid-sandbox.md");
-        String original =
-                """
+        String original = """
                 ---
                 tracker:
                   kind: trello
@@ -535,8 +511,7 @@ final class WorkflowConfigEditorTest {
                   turn_sandbox_policy: []
                 ---
                 %s
-                """
-                        .formatted(currentWorkflowBody());
+                """.formatted(currentWorkflowBody());
         Files.writeString(workflow, original);
         var editor = new WorkflowConfigEditor();
 
@@ -557,8 +532,7 @@ final class WorkflowConfigEditorTest {
     void launchPreparationDoesNotRewriteExistingWorkflowContent() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.current-unmarked.md");
-        String original =
-                """
+        String original = """
                 ---
                 tracker:
                   kind: trello
@@ -655,8 +629,7 @@ final class WorkflowConfigEditorTest {
     void launchValidationDoesNotRewriteCurrentWorkflowWhenTrackerStructureIsInvalid() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.invalid-tracker.md");
-        String original =
-                """
+        String original = """
                 ---
                 tracker: []
                 server:
@@ -684,8 +657,7 @@ final class WorkflowConfigEditorTest {
     void launchValidationDoesNotRewriteCurrentWorkflowWhenEnvironmentReferenceIsUnresolved() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.unresolved-env.md");
-        String original =
-                """
+        String original = """
                 ---
                 tracker:
                   kind: trello
@@ -719,9 +691,7 @@ final class WorkflowConfigEditorTest {
     void launchValidationNamesPathSettingThatReferencesMissingEnvironmentVariable() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.unresolved-path-env.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -756,9 +726,7 @@ final class WorkflowConfigEditorTest {
     void permitsDuplicateValuesWithinOneListRole() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.duplicate-role-values.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -786,8 +754,7 @@ final class WorkflowConfigEditorTest {
     }
 
     private static String workflowWithBody(String body) {
-        return workflowWithCodex(
-                """
+        return workflowWithCodex("""
                 codex:
                   command: codex app-server
                 """, body);
@@ -808,8 +775,7 @@ final class WorkflowConfigEditorTest {
                 %s
                 ---
                 %s
-                """
-                .formatted(codexYaml.stripTrailing(), body);
+                """.formatted(codexYaml.stripTrailing(), body);
     }
 
     private static Function<String, Optional<String>> trelloCredentials() {

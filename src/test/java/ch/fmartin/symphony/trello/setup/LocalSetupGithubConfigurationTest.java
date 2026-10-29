@@ -275,20 +275,18 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
         Path allowedPath = tempDir.resolve("selected github access path");
         writeWorkflow(githubWorkflow, "github-board", 18141);
         writeWorkflow(localWorkflow, "local-board", 18142);
-        writeManifest(
-                """
+        writeManifest("""
                 {"boards":[
                   {"boardId":"github-board","boardKey":"gh","boardName":"GitHub Queue","boardUrl":"https://trello.example/gh","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":18141,"githubEnabled":true,"additionalWritableRoots":[],"dangerFullAccess":false},
                   {"boardId":"local-board","boardKey":"local","boardName":"Local Queue","boardUrl":"https://trello.example/local","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":18142,"githubEnabled":false,"additionalWritableRoots":[],"dangerFullAccess":false}
                 ]}
-                """
-                        .formatted(
-                                json(githubWorkflow),
-                                json(tempDir.resolve(".env.github-selected-access")),
-                                json(tempDir.resolve("workspaces-gh")),
-                                json(localWorkflow),
-                                json(tempDir.resolve(".env.local-selected-access")),
-                                json(tempDir.resolve("workspaces-local"))));
+                """.formatted(
+                        json(githubWorkflow),
+                        json(tempDir.resolve(".env.github-selected-access")),
+                        json(tempDir.resolve("workspaces-gh")),
+                        json(localWorkflow),
+                        json(tempDir.resolve(".env.local-selected-access")),
+                        json(tempDir.resolve("workspaces-local"))));
         commands.githubAuthenticated = true;
 
         // when
@@ -317,20 +315,18 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
         Path allowedPath = tempDir.resolve("selected github flag access path");
         writeWorkflow(githubWorkflow, "github-board", 18143);
         writeWorkflow(localWorkflow, "local-board", 18144);
-        writeManifest(
-                """
+        writeManifest("""
                 {"boards":[
                   {"boardId":"github-board","boardKey":"gh","boardName":"GitHub Flag Queue","boardUrl":"https://trello.example/gh","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":18143,"githubEnabled":true,"additionalWritableRoots":[],"dangerFullAccess":false},
                   {"boardId":"local-board","boardKey":"local","boardName":"Local Flag Queue","boardUrl":"https://trello.example/local","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":18144,"githubEnabled":false,"additionalWritableRoots":[],"dangerFullAccess":false}
                 ]}
-                """
-                        .formatted(
-                                json(githubWorkflow),
-                                json(tempDir.resolve(".env.github-selected-flag-access")),
-                                json(tempDir.resolve("workspaces-gh")),
-                                json(localWorkflow),
-                                json(tempDir.resolve(".env.local-selected-flag-access")),
-                                json(tempDir.resolve("workspaces-local"))));
+                """.formatted(
+                        json(githubWorkflow),
+                        json(tempDir.resolve(".env.github-selected-flag-access")),
+                        json(tempDir.resolve("workspaces-gh")),
+                        json(localWorkflow),
+                        json(tempDir.resolve(".env.local-selected-flag-access")),
+                        json(tempDir.resolve("workspaces-local"))));
         commands.githubAuthenticated = true;
 
         // when
@@ -355,9 +351,7 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
         Path manifest = config.resolve(ConnectedBoardManifest.FILE_NAME);
         int port = availablePort();
         Files.writeString(env, TestEnv.trelloCredentials());
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -380,11 +374,8 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
                 # Custom workflow
 
                 - "Custom Blocked": blocked work. Symphony does not dispatch it while this list is not configured as active.
-                """
-                        .formatted(tempDir.resolve("workspaces"), port));
-        Files.writeString(
-                manifest,
-                """
+                """.formatted(tempDir.resolve("workspaces"), port));
+        Files.writeString(manifest, """
                 {
                   "boards": [
                     {
@@ -402,10 +393,8 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
                     }
                   ]
                 }
-                """
-                        .formatted(workflow, env, tempDir.resolve("workspaces"), port));
-        trello.givenRawBoardListsJson(
-                """
+                """.formatted(workflow, env, tempDir.resolve("workspaces"), port));
+        trello.givenRawBoardListsJson("""
                 [
                   {"id":"list-1","name":"Custom Ready","closed":false,"pos":1},
                   {"id":"list-2","name":"Custom Doing","closed":false,"pos":2},
@@ -446,9 +435,7 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
         Path manifest = config.resolve(ConnectedBoardManifest.FILE_NAME);
         int port = availablePort();
         Files.writeString(env, TestEnv.trelloCredentials());
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -467,11 +454,8 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
                   max_concurrent_agents: 2
                 ---
                 # Workflow without in-progress routing
-                """
-                        .formatted(tempDir.resolve("workspaces"), port));
-        Files.writeString(
-                manifest,
-                """
+                """.formatted(tempDir.resolve("workspaces"), port));
+        Files.writeString(manifest, """
                 {
                   "boards": [
                     {
@@ -489,10 +473,8 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
                     }
                   ]
                 }
-                """
-                        .formatted(workflow, env, tempDir.resolve("workspaces"), port));
-        trello.givenRawBoardListsJson(
-                """
+                """.formatted(workflow, env, tempDir.resolve("workspaces"), port));
+        trello.givenRawBoardListsJson("""
                 [
                   {"id":"list-1","name":"Ready for Codex","closed":false,"pos":1},
                   {"id":"list-2","name":"In Progress","closed":false,"pos":2},

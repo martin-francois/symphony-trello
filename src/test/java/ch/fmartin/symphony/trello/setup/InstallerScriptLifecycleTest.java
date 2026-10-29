@@ -107,14 +107,10 @@ final class InstallerScriptLifecycleTest {
         Path isolatedCallerDirectory = temporaryDirectory.resolve("isolated caller");
         Files.createDirectories(isolatedConfigDirectory);
         Files.createDirectories(isolatedCallerDirectory);
-        Files.writeString(
-                isolatedConfigDirectory.resolve(ConnectedBoardManifest.FILE_NAME),
-                """
+        Files.writeString(isolatedConfigDirectory.resolve(ConnectedBoardManifest.FILE_NAME), """
                 {"boards":[{"boardId":"isolated-board","boardName":"Isolated Board","workflowPath":"%s","envPath":"%s"}]}
-                """
-                        .formatted(
-                                configDirectory.resolve("WORKFLOW.lifecycle-board.md"),
-                                configDirectory.resolve(".env")));
+                """.formatted(
+                        configDirectory.resolve("WORKFLOW.lifecycle-board.md"), configDirectory.resolve(".env")));
         Path isolatedConfigArgument = isolatedConfigDirectory.resolve(".");
         ProcessResult isolatedSetupLocalHelp = run(
                 environment,
@@ -349,9 +345,12 @@ final class InstallerScriptLifecycleTest {
                 .filter(line -> line.contains("TrelloBoardSetupMain start"))
                 .filter(line -> line.contains(" --workflow ") || line.contains(" --all "))
                 .toList();
-        assertThat(managedStartInvocations).isNotEmpty().allSatisfy(line -> assertThat(line)
-                .contains("completion_mode=")
-                .doesNotContain("completion_mode=preexisting", "completion_mode=defer", "completion_mode=print"));
+        assertThat(managedStartInvocations)
+                .isNotEmpty()
+                .allSatisfy(line -> assertThat(line)
+                        .contains("completion_mode=")
+                        .doesNotContain(
+                                "completion_mode=preexisting", "completion_mode=defer", "completion_mode=print"));
         List<String> isolatedInvocations = Files.readString(fakeLog)
                 .lines()
                 .filter(line -> line.startsWith("setup-cli "))
@@ -378,12 +377,14 @@ final class InstallerScriptLifecycleTest {
                 .filter(line -> line.contains("--config-dir " + isolatedConfigArgument))
                 .filter(line -> line.contains("--help"))
                 .toList();
-        assertThat(isolatedSetupLocalInvocations).singleElement().satisfies(line -> assertThat(line)
-                .contains("--workspace-root " + isolatedConfigDirectory.resolve("workspaces"))
-                .doesNotContain(
-                        "--workspace-root " + isolatedConfigArgument.resolve("workspaces"),
-                        "state_env=" + isolatedConfigDirectory.resolveSibling("state"),
-                        "--workspace-root " + workspaceRoot));
+        assertThat(isolatedSetupLocalInvocations)
+                .singleElement()
+                .satisfies(line -> assertThat(line)
+                        .contains("--workspace-root " + isolatedConfigDirectory.resolve("workspaces"))
+                        .doesNotContain(
+                                "--workspace-root " + isolatedConfigArgument.resolve("workspaces"),
+                                "state_env=" + isolatedConfigDirectory.resolveSibling("state"),
+                                "--workspace-root " + workspaceRoot));
         List<String> isolatedSetupLocalCheckInvocations = Files.readString(fakeLog)
                 .lines()
                 .filter(line -> line.startsWith("setup-cli "))
@@ -391,11 +392,13 @@ final class InstallerScriptLifecycleTest {
                 .filter(line -> line.contains("check"))
                 .filter(line -> line.contains("--config-dir " + isolatedConfigArgument))
                 .toList();
-        assertThat(isolatedSetupLocalCheckInvocations).singleElement().satisfies(line -> assertThat(line)
-                .doesNotContain(
-                        "--workspace-root " + isolatedConfigDirectory.resolve("workspaces"),
-                        "--workspace-root " + isolatedConfigArgument.resolve("workspaces"),
-                        "--workspace-root " + workspaceRoot));
+        assertThat(isolatedSetupLocalCheckInvocations)
+                .singleElement()
+                .satisfies(line -> assertThat(line)
+                        .doesNotContain(
+                                "--workspace-root " + isolatedConfigDirectory.resolve("workspaces"),
+                                "--workspace-root " + isolatedConfigArgument.resolve("workspaces"),
+                                "--workspace-root " + workspaceRoot));
         List<String> environmentRootInvocations = Files.readString(fakeLog)
                 .lines()
                 .filter(line -> line.startsWith("setup-cli "))
@@ -403,13 +406,15 @@ final class InstallerScriptLifecycleTest {
                 .filter(line -> line.contains("--config-dir " + isolatedConfigArgument))
                 .filter(line -> line.contains("--workspace-root " + environmentWorkspaceRoot))
                 .toList();
-        assertThat(environmentRootInvocations).singleElement().satisfies(line -> assertThat(line)
-                .contains("--state-home " + environmentStateHome)
-                .doesNotContain(
-                        "--workspace-root " + isolatedConfigDirectory.resolve("workspaces"),
-                        "--state-home " + isolatedConfigDirectory.resolveSibling("state"),
-                        "--workspace-root " + workspaceRoot,
-                        "--state-home " + stateHome));
+        assertThat(environmentRootInvocations)
+                .singleElement()
+                .satisfies(line -> assertThat(line)
+                        .contains("--state-home " + environmentStateHome)
+                        .doesNotContain(
+                                "--workspace-root " + isolatedConfigDirectory.resolve("workspaces"),
+                                "--state-home " + isolatedConfigDirectory.resolveSibling("state"),
+                                "--workspace-root " + workspaceRoot,
+                                "--state-home " + stateHome));
     }
 
     @Test

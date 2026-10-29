@@ -44,9 +44,7 @@ final class UsageLimitPauseIntegrationTest {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Path fakeAppServer = writeUsageLimitAppServer();
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -70,8 +68,7 @@ final class UsageLimitPauseIntegrationTest {
                   enabled: false
                 ---
                 {{ card.identifier }}
-                """
-                        .formatted(fakeAppServer));
+                """.formatted(fakeAppServer));
         Card first = TestCards.cardWithLabels("card-1", FIRST_CARD, "Ready for Codex", List.of("p1"));
         Card second = TestCards.cardWithLabels("card-2", SECOND_CARD, "Ready for Codex", List.of("p2"));
         var tracker = new LocalTracker(List.of(first, second));
@@ -116,9 +113,7 @@ final class UsageLimitPauseIntegrationTest {
 
     private Path writeUsageLimitAppServer() throws Exception {
         Path script = tempDir.resolve("usage-limit-app-server.sh");
-        Files.writeString(
-                script,
-                """
+        Files.writeString(script, """
                 #!/usr/bin/env bash
                 while IFS= read -r line; do
                   case "$line" in

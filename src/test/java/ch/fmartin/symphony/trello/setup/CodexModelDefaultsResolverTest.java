@@ -39,8 +39,7 @@ final class CodexModelDefaultsResolverTest {
     @Test
     void resolvesDefaultModelAndReasoningEffortFromCodexAppServer() throws Exception {
         // given
-        Path appServer = appServerScript(
-                """
+        Path appServer = appServerScript("""
                 while IFS= read -r line; do
                   case "$line" in
                     *'"method":"initialize"'*)
@@ -64,8 +63,7 @@ final class CodexModelDefaultsResolverTest {
     @Test
     void keepsModelSpecificReasoningEffortsFromCodexAppServer() throws Exception {
         // given
-        Path appServer = appServerScript(
-                """
+        Path appServer = appServerScript("""
                 while IFS= read -r line; do
                   case "$line" in
                     *'"method":"initialize"'*)
@@ -99,8 +97,7 @@ final class CodexModelDefaultsResolverTest {
     @Test
     void normalizesAndDeduplicatesSupportedReasoningEffortsInCatalogOrder() throws Exception {
         // given
-        Path appServer = appServerScript(
-                """
+        Path appServer = appServerScript("""
                 while IFS= read -r line; do
                   case "$line" in
                     *'"method":"initialize"'*)
@@ -204,8 +201,7 @@ final class CodexModelDefaultsResolverTest {
     @Test
     void keepsHiddenModelReasoningEffortsWithoutSelectingHiddenDefault() throws Exception {
         // given
-        Path appServer = appServerScript(
-                """
+        Path appServer = appServerScript("""
                 while IFS= read -r line; do
                   case "$line" in
                     *'"method":"initialize"'*)
@@ -232,8 +228,7 @@ final class CodexModelDefaultsResolverTest {
     @Test
     void usesFirstVisibleUsableModelWithoutSpecialSolFallback() throws Exception {
         // given
-        Path appServer = appServerScript(
-                """
+        Path appServer = appServerScript("""
                 while IFS= read -r line; do
                   case "$line" in
                     *'"method":"initialize"'*)
@@ -256,12 +251,9 @@ final class CodexModelDefaultsResolverTest {
     @Test
     void listsVisibleCatalogModelsForThePickerFromTheFirstUsableEntryOfEachModel() throws Exception {
         // given
-        Path appServer = CodexModelAppServerFixture.createPaginated(
-                tempDir,
-                """
+        Path appServer = CodexModelAppServerFixture.createPaginated(tempDir, """
                 [{"model":"gpt-6.1-sol","displayName":"GPT-6.1-Sol","isDefault":true,"defaultReasoningEffort":"low"},{"model":"gpt-reserve","displayName":"GPT-Reserve","hidden":true},{"model":" "},{"displayName":"No model id"},"not-an-object",{"model":"gpt-5.5","displayName":" "}]
-                """,
-                """
+                """, """
                 [{"model":"gpt-5.6-terra","displayName":"GPT-5.6-Terra","defaultReasoningEffort":"medium"},{"model":"gpt-6.1-sol","displayName":"Duplicate Sol","defaultReasoningEffort":"ultra","supportedReasoningEfforts":[{"reasoningEffort":"ultra"}]}]
                 """);
 
@@ -302,12 +294,9 @@ final class CodexModelDefaultsResolverTest {
     @Test
     void recommendsTheFirstVisibleCatalogDefaultWhenSeveralEntriesAreMarkedDefault() throws Exception {
         // given
-        Path appServer = CodexModelAppServerFixture.createPaginated(
-                tempDir,
-                """
+        Path appServer = CodexModelAppServerFixture.createPaginated(tempDir, """
                 [{"model":"gpt-first-visible"},{"model":"gpt-first-default","isDefault":true},{"model":"gpt-later-default","isDefault":true}]
-                """,
-                "[]");
+                """, "[]");
 
         // when
         CodexModelSelectionDefaults defaults =
@@ -326,12 +315,9 @@ final class CodexModelDefaultsResolverTest {
     @Test
     void prefersTerraRecommendationFromLaterModelListPageOverCatalogDefault() throws Exception {
         // given
-        Path appServer = CodexModelAppServerFixture.createPaginated(
-                tempDir,
-                """
+        Path appServer = CodexModelAppServerFixture.createPaginated(tempDir, """
                 [{"model":"gpt-5.5","defaultReasoningEffort":"medium","isDefault":true}]
-                """,
-                """
+                """, """
                 [{"model":"gpt-5.6-terra","defaultReasoningEffort":"high","isDefault":false,"supportedReasoningEfforts":[{"reasoningEffort":"high","description":"Terra recommendation from Codex"},{"reasoningEffort":"max","description":"Deeper Terra reasoning"}]}]
                 """);
 
@@ -350,8 +336,7 @@ final class CodexModelDefaultsResolverTest {
     @Test
     void prefersVisibleTerraWithoutInventingReasoningRecommendation() throws Exception {
         // given
-        Path appServer = appServerScript(
-                """
+        Path appServer = appServerScript("""
                 while IFS= read -r line; do
                   case "$line" in
                     *'"method":"initialize"'*)
@@ -377,8 +362,7 @@ final class CodexModelDefaultsResolverTest {
     @Test
     void selectsCatalogDefaultModelWithoutInventingReasoningRecommendation() throws Exception {
         // given
-        Path appServer = appServerScript(
-                """
+        Path appServer = appServerScript("""
                 while IFS= read -r line; do
                   case "$line" in
                     *'"method":"initialize"'*)
@@ -417,8 +401,7 @@ final class CodexModelDefaultsResolverTest {
     @Test
     void treatsModelListErrorsAsUnsupportedFirstClassFields() throws Exception {
         // given
-        Path appServer = appServerScript(
-                """
+        Path appServer = appServerScript("""
                 while IFS= read -r line; do
                   case "$line" in
                     *'"method":"initialize"'*)
@@ -441,8 +424,7 @@ final class CodexModelDefaultsResolverTest {
     @Test
     void treatsNotificationOnlyModelListAsUnsupportedFirstClassFields() throws Exception {
         // given
-        Path appServer = appServerScript(
-                """
+        Path appServer = appServerScript("""
                 while IFS= read -r line; do
                   case "$line" in
                     *'"method":"initialize"'*)
@@ -470,8 +452,7 @@ final class CodexModelDefaultsResolverTest {
     @Test
     void fallsBackWhenCodexAppServerStallsWithOpenStdout() throws Exception {
         // given
-        Path appServer = appServerScript(
-                """
+        Path appServer = appServerScript("""
                 while IFS= read -r line; do
                   case "$line" in
                     *'"method":"initialize"'*)
@@ -485,8 +466,9 @@ final class CodexModelDefaultsResolverTest {
                 """);
 
         // when
-        CodexModelDefaults defaults =
-                assertTimeoutPreemptively(Duration.ofSeconds(2), () -> new CodexModelDefaultsResolver(
+        CodexModelDefaults defaults = assertTimeoutPreemptively(
+                Duration.ofSeconds(2),
+                () -> new CodexModelDefaultsResolver(
                                 json, List.of(appServer.toString()), Map.of(), Duration.ofMillis(100))
                         .resolve());
 
@@ -501,9 +483,7 @@ final class CodexModelDefaultsResolverTest {
         Path codexShim = Files.writeString(npmPrefix.resolve("codex.CMD"), "");
         Path interpreterArguments = tempDir.resolve("interpreter-arguments.txt");
         Path commandInterpreter = tempDir.resolve("cmd.exe");
-        Files.writeString(
-                commandInterpreter,
-                """
+        Files.writeString(commandInterpreter, """
                 #!/bin/bash
                 printf '%s\n' "$@" > "$CAPTURE"
                 while IFS= read -r line; do
@@ -547,8 +527,7 @@ final class CodexModelDefaultsResolverTest {
     void doesNotExposeTrelloCredentialsToCodexAppServerProcess() throws Exception {
         // given
         Path environmentCapture = tempDir.resolve("codex-env.txt");
-        Path appServer = appServerScript(
-                """
+        Path appServer = appServerScript("""
                 printf 'key=%s token=%s\\n' "${TRELLO_API_KEY-unset}" "${TRELLO_API_TOKEN-unset}" > "$CAPTURE"
                 while IFS= read -r line; do
                   case "$line" in
@@ -583,8 +562,7 @@ final class CodexModelDefaultsResolverTest {
     void usesCodexAppServerRequestEnvelopeWithoutJsonRpcVersionField() throws Exception {
         // given
         Path requestCapture = tempDir.resolve("codex-requests.txt");
-        Path appServer = appServerScript(
-                """
+        Path appServer = appServerScript("""
                 while IFS= read -r line; do
                   printf '%s\\n' "$line" >> "$CAPTURE"
                   case "$line" in

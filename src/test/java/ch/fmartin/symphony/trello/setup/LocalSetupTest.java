@@ -423,9 +423,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path configDir = tempDir.resolve("implicit-dry-run-workflow");
         Files.createDirectories(configDir);
         Path workflow = configDir.resolve(WorkflowFileNames.generatedFileName("Sol Queue", "trello-board", 1));
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 codex:
                   command: codex app-server
@@ -469,9 +467,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path configDir = tempDir.resolve("forced-board-selector-dry-run");
         Files.createDirectories(configDir);
         Path workflow = configDir.resolve(WorkflowFileNames.generatedFileName("Sol Queue", "trello-board", 1));
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 codex:
                   command: codex app-server
@@ -1413,8 +1409,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         int port = availablePort();
         writeWorkflow(workflow, "board-1", port);
         Files.writeString(env, TestEnv.trelloCredentials());
-        writeManifest(
-                """
+        writeManifest("""
                 {
                   "boards": [
                     {
@@ -1432,8 +1427,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                     }
                   ]
                 }
-                """
-                        .formatted(json(workflow), json(env), json(tempDir.resolve("workspaces")), port));
+                """.formatted(json(workflow), json(env), json(tempDir.resolve("workspaces")), port));
         commands.stopHealthServer(workflow.toString());
         commands.startHealthServer(workflow, "other-board");
 
@@ -1461,8 +1455,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         int port = availablePort();
         writeWorkflow(workflow, "board-1", port);
         Files.writeString(env, TestEnv.trelloCredentials());
-        writeManifest(
-                """
+        writeManifest("""
                 {
                   "boards": [
                     {
@@ -1480,8 +1473,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                     }
                   ]
                 }
-                """
-                        .formatted(boardName, json(workflow), json(env), json(tempDir.resolve("workspaces")), port));
+                """.formatted(boardName, json(workflow), json(env), json(tempDir.resolve("workspaces")), port));
         commands.stopHealthServer(workflow.toString());
         commands.startHealthServer(workflow, "other-board");
 
@@ -1718,20 +1710,18 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path alphaWorkflow = tempDir.resolve("config/WORKFLOW.alpha.md");
         Path betaWorkflow = tempDir.resolve("config/nested/WORKFLOW.beta.md");
-        writeManifest(
-                """
+        writeManifest("""
                 {"boards":[
                   {"boardId":"board-1","boardKey":"alpha001","boardName":"Alpha Queue","boardUrl":"https://trello.example/alpha","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":18080,"githubEnabled":false,"additionalWritableRoots":[],"dangerFullAccess":false},
                   {"boardId":"board-2","boardKey":"beta0002","boardName":"Beta Queue","boardUrl":"https://trello.example/beta","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":18081,"githubEnabled":true,"additionalWritableRoots":[],"dangerFullAccess":false}
                 ]}
-                """
-                        .formatted(
-                                json(alphaWorkflow),
-                                json(tempDir.resolve("config/.env.alpha")),
-                                json(tempDir.resolve("workspaces/alpha")),
-                                json(betaWorkflow),
-                                json(tempDir.resolve("config/.env.beta")),
-                                json(tempDir.resolve("workspaces/beta"))));
+                """.formatted(
+                        json(alphaWorkflow),
+                        json(tempDir.resolve("config/.env.alpha")),
+                        json(tempDir.resolve("workspaces/alpha")),
+                        json(betaWorkflow),
+                        json(tempDir.resolve("config/.env.beta")),
+                        json(tempDir.resolve("workspaces/beta"))));
         String manifestBefore = Files.readString(fixture.manifestPath());
         CommandRunner forbiddenCommands = command -> {
             throw new AssertionError("completion-only setup must not run commands: " + String.join(" ", command));
@@ -1785,23 +1775,18 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         String fileName = "cmd".equals(shell) ? "Fran's \"queue\" workflow.md" : "Fran's $queue workflow.md";
         Path workflow = tempDir.resolve("config/tricky paths").resolve(fileName);
-        String extension =
-                switch (shell) {
-                    case "powershell" -> ".ps1";
-                    case "cmd" -> ".cmd";
-                    default -> "";
-                };
+        String extension = switch (shell) {
+            case "powershell" -> ".ps1";
+            case "cmd" -> ".cmd";
+            default -> "";
+        };
         Path command = tempDir.resolve("installed CLI/Fran's Symphony/symphony-trello" + extension);
-        writeManifest(
-                """
+        writeManifest("""
                 {"boards":[
                   {"boardId":"board-1","boardKey":"alpha001","boardName":"Alpha Queue","boardUrl":"https://trello.example/alpha","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":18080,"githubEnabled":false,"additionalWritableRoots":[],"dangerFullAccess":false}
                 ]}
-                """
-                        .formatted(
-                                json(workflow),
-                                json(tempDir.resolve("config/.env.alpha")),
-                                json(tempDir.resolve("workspaces/alpha"))));
+                """.formatted(
+                json(workflow), json(tempDir.resolve("config/.env.alpha")), json(tempDir.resolve("workspaces/alpha"))));
         LocalSetup completionSetup = setupWithEnvironment(installerCompletionEnvironment("print", command.toString()));
         String previousShell = System.getProperty(ShellCommandRenderer.SHELL_PROPERTY);
 
@@ -2125,9 +2110,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.preserve-concurrency.md");
         Path env = tempDir.resolve(".env.preserve-concurrency");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 agent:
                   max_concurrent_agents: 4
@@ -2164,9 +2147,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.preserve-large-concurrency.md");
         Path env = tempDir.resolve(".env.preserve-large-concurrency");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 agent:
                   max_concurrent_agents: 64
@@ -2202,9 +2183,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.preserve-large-interactive-concurrency.md");
         Path env = tempDir.resolve(".env.preserve-large-interactive-concurrency");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 agent:
                   max_concurrent_agents: 64
@@ -2678,12 +2657,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @Test
     void interactiveSetupPrefersTerraFromLaterModelListPageOverCatalogDefault() throws Exception {
         // given
-        Path appServer = CodexModelAppServerFixture.createPaginated(
-                tempDir,
-                """
+        Path appServer = CodexModelAppServerFixture.createPaginated(tempDir, """
                 [{"model":"gpt-5.5","defaultReasoningEffort":"medium","isDefault":true}]
-                """,
-                """
+                """, """
                 [{"model":"gpt-5.6-terra","defaultReasoningEffort":"high","isDefault":false,"supportedReasoningEfforts":[{"reasoningEffort":"high","description":"Terra recommendation from Codex"},{"reasoningEffort":"max","description":"Deeper Terra reasoning"}]}]
                 """);
         LocalSetup resolverBackedSetup = setupWithCodexAppServer(appServer);
@@ -2782,9 +2758,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         LocalSetup resolverBackedSetup = setupWithCodexAppServer(pickerCatalogAppServer());
         Path workflow = tempDir.resolve("WORKFLOW.catalog-picker-existing.md");
         Path env = tempDir.resolve(".env.catalog-picker-existing");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 codex:
                   command: codex app-server
@@ -2853,12 +2827,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     private Path pickerCatalogAppServer() throws IOException {
-        return CodexModelAppServerFixture.createPaginated(
-                tempDir,
-                """
+        return CodexModelAppServerFixture.createPaginated(tempDir, """
                 [{"model":"gpt-5.6-terra","displayName":"GPT-5.6-Terra","defaultReasoningEffort":"medium","supportedReasoningEfforts":[{"reasoningEffort":"medium","description":"Balanced Terra"},{"reasoningEffort":"high","description":"Deep Terra"}]}]
-                """,
-                """
+                """, """
                 [{"model":"gpt-6.1-sol","displayName":"Sol Preview","isDefault":true,"defaultReasoningEffort":"low","supportedReasoningEfforts":[{"reasoningEffort":"low","description":"Fast Sol"},{"reasoningEffort":"ultra","description":"Delegating Sol"}]}]
                 """);
     }
@@ -2913,12 +2884,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @Test
     void interactiveSetupOmitsReasoningWhenPreferredTerraHasNoRecommendation() throws Exception {
         // given
-        Path appServer = CodexModelAppServerFixture.createPaginated(
-                tempDir,
-                """
+        Path appServer = CodexModelAppServerFixture.createPaginated(tempDir, """
                 [{"model":"gpt-5.5","defaultReasoningEffort":"medium","isDefault":true}]
-                """,
-                """
+                """, """
                 [{"model":"gpt-5.6-terra","isDefault":false,"supportedReasoningEfforts":[{"reasoningEffort":"low","description":"Faster Terra reasoning"},{"reasoningEffort":"high","description":"Deeper Terra reasoning"}]}]
                 """);
         LocalSetup resolverBackedSetup = setupWithCodexAppServer(appServer);
@@ -3039,9 +3007,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.selected-replace-model.md");
         Path env = tempDir.resolve(".env.selected-replace-model");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 codex:
                   command: codex app-server
@@ -3092,9 +3058,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                                                 "ultra", "Maximum reasoning with automatic task delegation")))));
         Path workflow = tempDir.resolve("WORKFLOW.existing-model-prompt.md");
         Path env = tempDir.resolve(".env.existing-model-prompt");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 codex:
                   command: codex app-server
@@ -3151,9 +3115,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                                         new ReasoningEffortOption("max", "Selected-model maximum")))));
         Path workflow = tempDir.resolve("WORKFLOW.existing-reasoning-model-change.md");
         Path env = tempDir.resolve(".env.existing-reasoning-model-change");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 codex:
                   command: codex app-server
@@ -3207,9 +3169,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path workflow = tempDir.resolve("WORKFLOW.existing-model-reasoning-omitted.md");
         Path env = tempDir.resolve(".env.existing-model-reasoning-omitted");
         int selectedPort = availablePortOtherThan(ConfigDefaults.DEFAULT_SERVER_PORT);
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 codex:
                   command: codex app-server
@@ -3255,9 +3215,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 Map.of("gpt-5.5", "medium", "gpt-6", "high")));
         Path workflow = tempDir.resolve("WORKFLOW.existing-model-without-reasoning.md");
         Path env = tempDir.resolve(".env.existing-model-without-reasoning");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 codex:
                   command: codex app-server
@@ -3330,9 +3288,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.replace-model.md");
         Path env = tempDir.resolve(".env.replace-model");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 codex:
                   command: codex app-server
@@ -3380,9 +3336,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 Map.of("gpt-5.5", "medium", "gpt-new", "high")));
         Path workflow = tempDir.resolve("WORKFLOW.partial-replace-model.md");
         Path env = tempDir.resolve(".env.partial-replace-model");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 codex:
                   command: codex app-server
@@ -3464,9 +3418,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 setupWithCodexDefaults(TrelloBoardSetup.CodexModelDefaults.unsupportedFirstClassFields());
         Path workflow = tempDir.resolve("WORKFLOW.unsupported-explicit-existing-omitted.md");
         Path env = tempDir.resolve(".env.unsupported-explicit-existing-omitted");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 codex:
                   command: codex app-server
@@ -3538,9 +3490,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 setupWithCodexDefaults(TrelloBoardSetup.CodexModelDefaults.unsupportedFirstClassFields());
         Path workflow = tempDir.resolve("WORKFLOW.unsupported-existing-omitted.md");
         Path env = tempDir.resolve(".env.unsupported-existing-omitted");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 codex:
                   command: codex app-server
@@ -3579,9 +3529,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 setupWithCodexDefaults(TrelloBoardSetup.CodexModelDefaults.unsupportedFirstClassFields());
         Path workflow = tempDir.resolve("WORKFLOW.unsupported-existing-omitted-noninteractive.md");
         Path env = tempDir.resolve(".env.unsupported-existing-omitted-noninteractive");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 codex:
                   command: codex app-server
@@ -3620,9 +3568,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 setupWithCodexDefaults(TrelloBoardSetup.CodexModelDefaults.unsupportedFirstClassFields());
         Path workflow = tempDir.resolve("WORKFLOW.unsupported-existing-configured.md");
         Path env = tempDir.resolve(".env.unsupported-existing-configured");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 codex:
                   command: codex app-server
@@ -4135,14 +4081,11 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         commands.healthPortOverride = overridePort;
         Path workflow = tempDir.resolve("WORKFLOW.env-port-override.md");
         Path env = tempDir.resolve(".env.port-override");
-        Files.writeString(
-                env,
-                """
+        Files.writeString(env, """
                 TRELLO_API_KEY=key
                 TRELLO_API_TOKEN=token
                 SYMPHONY_HTTP_PORT=%d
-                """
-                        .formatted(overridePort));
+                """.formatted(overridePort));
 
         // when
         SetupRunResult setupResult = runSetup(
@@ -4452,9 +4395,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path siblingWorkflow = config.resolve("WORKFLOW.sibling-env-port.md");
         Path workflow = config.resolve("WORKFLOW.import-sibling-env-port.md");
         Path env = tempDir.resolve(".env.import-sibling-env-port");
-        Files.writeString(
-                siblingWorkflow,
-                """
+        Files.writeString(siblingWorkflow, """
                 ---
                 tracker:
                   board_id: "sibling-board"
@@ -4463,14 +4404,11 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 ---
                 Body
                 """);
-        Files.writeString(
-                env,
-                """
+        Files.writeString(env, """
                 TRELLO_API_KEY=key
                 TRELLO_API_TOKEN=token
                 SIBLING_WORKFLOW_PORT=%d
-                """
-                        .formatted(ConfigDefaults.DEFAULT_SERVER_PORT));
+                """.formatted(ConfigDefaults.DEFAULT_SERVER_PORT));
         // The scan runs in the production 18080+ range where live workers bind and release ports,
         // so the probe fakes every port as free; skipping the default port must come from the
         // sibling workflow's environment-backed reservation alone.
@@ -4580,8 +4518,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @Test
     void nonInteractiveSetupConnectsExistingBoardWithExplicitListMappings() throws Exception {
         // given
-        trello.givenRawBoardListsJson(
-                """
+        trello.givenRawBoardListsJson("""
                 [
                   {"id":"list-1","name":"Backlog","closed":false,"pos":1},
                   {"id":"list-2","name":"Build Next","closed":false,"pos":2},
@@ -4634,8 +4571,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @Test
     void nonInteractiveSetupAcceptsCommaContainingListSelectors() throws Exception {
         // given
-        trello.givenRawBoardListsJson(
-                """
+        trello.givenRawBoardListsJson("""
                 [
                   {"id":"list-1","name":"Backlog","closed":false,"pos":1},
                   {"id":"list-2","name":"Comma, Active Probe","closed":false,"pos":2},
@@ -4687,8 +4623,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @Test
     void nonInteractiveSetupAcceptsRepeatedActiveAndTerminalListOptions() throws Exception {
         // given
-        trello.givenRawBoardListsJson(
-                """
+        trello.givenRawBoardListsJson("""
                 [
                   {"id":"list-1","name":"Backlog","closed":false,"pos":1},
                   {"id":"list-2","name":"Build Next","closed":false,"pos":2},
@@ -4815,8 +4750,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     void githubExistingBoardSetupCreatesMissingRecommendedLists() throws Exception {
         // given
         commands.githubAuthenticated = true;
-        trello.givenRawBoardListsJson(
-                """
+        trello.givenRawBoardListsJson("""
                 [
                   {"id":"list-1","name":"Inbox","closed":false,"pos":1},
                   {"id":"list-2","name":"Ready for Codex","closed":false,"pos":2},
@@ -4882,8 +4816,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     void interactiveGithubExistingBoardSetupAbortsWhenMissingMergingListCreationIsDeclined() throws Exception {
         // given
         commands.githubAuthenticated = true;
-        trello.givenRawBoardListsJson(
-                """
+        trello.givenRawBoardListsJson("""
                 [
                   {"id":"list-1","name":"Ready for Codex","closed":false,"pos":1},
                   {"id":"list-2","name":"In Progress","closed":false,"pos":2},
@@ -4926,8 +4859,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @Test
     void interactiveExistingBoardSetupPromptsForListMappings() throws Exception {
         // given
-        trello.givenRawBoardListsJson(
-                """
+        trello.givenRawBoardListsJson("""
                 [
                   {"id":"list-1","name":"Queue","closed":false,"pos":1},
                   {"id":"list-2","name":"Working","closed":false,"pos":2},
@@ -4965,8 +4897,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @Test
     void interactiveExistingBoardListCsvRetainsJavaTrimSemantics() throws Exception {
         // given
-        trello.givenRawBoardListsJson(
-                """
+        trello.givenRawBoardListsJson("""
                 [
                   {"id":"list-1","name":"Queue","closed":false,"pos":1},
                   {"id":"list-2","name":"%1$sReview%1$s","closed":false,"pos":2},
@@ -4974,8 +4905,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                   {"id":"list-4","name":"Blocked","closed":false,"pos":4},
                   {"id":"list-5","name":"Finished","closed":false,"pos":5}
                 ]
-                """
-                        .formatted(PRESERVED_EN_SPACE));
+                """.formatted(PRESERVED_EN_SPACE));
 
         // when
         SetupRunResult result = runSetupWithInput(
@@ -5007,8 +4937,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @Test
     void interactiveExistingBoardSetupAcceptsExplicitInProgressWithoutBoardArgument() throws Exception {
         // given
-        trello.givenRawBoardListsJson(
-                """
+        trello.givenRawBoardListsJson("""
                 [
                   {"id":"list-1","name":"Queue","closed":false,"pos":1},
                   {"id":"list-2","name":"Working","closed":false,"pos":2},
@@ -5048,8 +4977,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @Test
     void interactiveExistingBoardSetupTreatsDashAsNoBlockedList() throws Exception {
         // given
-        trello.givenRawBoardListsJson(
-                """
+        trello.givenRawBoardListsJson("""
                 [
                   {"id":"list-1","name":"Queue","closed":false,"pos":1},
                   {"id":"list-2","name":"Working","closed":false,"pos":2},
@@ -5081,8 +5009,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @Test
     void interactiveExistingBoardSetupCanOptOutOfDetectedOptionalLists() throws Exception {
         // given
-        trello.givenRawBoardListsJson(
-                """
+        trello.givenRawBoardListsJson("""
                 [
                   {"id":"list-1","name":"Ready for Codex","closed":false,"pos":1},
                   {"id":"list-2","name":"In Progress","closed":false,"pos":2},
@@ -5252,14 +5179,11 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Files.writeString(
                 workflow,
                 Files.readString(workflow).replace("port: " + configuredPort, "port: $ENV_BACKED_IMPORT_PORT"));
-        Files.writeString(
-                env,
-                """
+        Files.writeString(env, """
                 TRELLO_API_KEY=key
                 TRELLO_API_TOKEN=token
                 ENV_BACKED_IMPORT_PORT=%d
-                """
-                        .formatted(configuredPort));
+                """.formatted(configuredPort));
 
         // when
         SetupRunResult result = runSetupWithProductionDefaultPort(
@@ -5707,9 +5631,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                     .isTrue();
             int stalePort = boardPort + 1;
             Path staleWorkflow = tempDir.resolve("config").resolve("WORKFLOW.stale-port.md");
-            Files.writeString(
-                    staleWorkflow,
-                    """
+            Files.writeString(staleWorkflow, """
                     ---
                     tracker:
                       kind: trello
@@ -5718,8 +5640,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                       port: %d
                     ---
                     Body
-                    """
-                            .formatted(stalePort));
+                    """.formatted(stalePort));
             commands.startedWorkflows.clear();
             commands.stoppedWorkflows.clear();
 
@@ -6085,9 +6006,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env.overlap-check");
         Path manifest = tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME);
         int port = availablePort();
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -6102,8 +6021,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                   command: codex app-server
                 ---
                 Body
-                """
-                        .formatted(port));
+                """.formatted(port));
         Files.writeString(env, TestEnv.trelloCredentials());
         writeConnectedBoardManifest(manifest, "Overlap Check Queue", workflow, env, port);
 
@@ -6198,8 +6116,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         writeWorkflow(otherWorkflow, "board-2", conflictingPort);
         Files.writeString(env, TestEnv.trelloCredentials());
         Files.writeString(otherEnv, TestEnv.trelloCredentials());
-        writeManifest(
-                """
+        writeManifest("""
                 {
                   "boards": [
                     {
@@ -6230,16 +6147,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                     }
                   ]
                 }
-                """
-                        .formatted(
-                                json(workflow),
-                                json(env),
-                                json(tempDir.resolve("workspaces")),
-                                ConfigDefaults.DEFAULT_SERVER_PORT,
-                                json(otherWorkflow),
-                                json(otherEnv),
-                                json(tempDir.resolve("workspaces")),
-                                conflictingPort));
+                """.formatted(
+                        json(workflow),
+                        json(env),
+                        json(tempDir.resolve("workspaces")),
+                        ConfigDefaults.DEFAULT_SERVER_PORT,
+                        json(otherWorkflow),
+                        json(otherEnv),
+                        json(tempDir.resolve("workspaces")),
+                        conflictingPort));
         commands.startHealthServer(workflow);
 
         // when
@@ -6276,8 +6192,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         writeWorkflow(otherWorkflow, "board-2", conflictingPort);
         Files.writeString(env, TestEnv.trelloCredentials());
         Files.writeString(otherEnv, TestEnv.trelloCredentials());
-        writeManifest(
-                """
+        writeManifest("""
                 {
                   "boards": [
                     {
@@ -6308,16 +6223,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                     }
                   ]
                 }
-                """
-                        .formatted(
-                                json(workflow),
-                                json(env),
-                                json(tempDir.resolve("workspaces")),
-                                ConfigDefaults.DEFAULT_SERVER_PORT,
-                                json(otherWorkflow),
-                                json(otherEnv),
-                                json(tempDir.resolve("workspaces")),
-                                conflictingPort));
+                """.formatted(
+                        json(workflow),
+                        json(env),
+                        json(tempDir.resolve("workspaces")),
+                        ConfigDefaults.DEFAULT_SERVER_PORT,
+                        json(otherWorkflow),
+                        json(otherEnv),
+                        json(tempDir.resolve("workspaces")),
+                        conflictingPort));
         commands.startHealthServer(workflow);
         doThrow(new IOException("simulated stop failure")).when(workerManager).stop(any(), any(), any());
 
@@ -6631,8 +6545,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @Test
     void nonInteractiveNewBoardRequiresWorkspaceIdWhenTokenHasMultipleWorkspaces() {
         // given
-        trello.givenWorkspaces(
-                """
+        trello.givenWorkspaces("""
                 [
                   {"id":"workspace-1","name":"first","displayName":"First"},
                   {"id":"workspace-2","name":"second","displayName":"Second"}
@@ -6667,8 +6580,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @Test
     void interactiveNewBoardWithMultipleWorkspacesRejectsBlankWorkspaceSelection() {
         // given
-        trello.givenWorkspaces(
-                """
+        trello.givenWorkspaces("""
                 [
                   {"id":"workspace-1","name":"first","displayName":"First"},
                   {"id":"workspace-2","name":"second","displayName":"Second"}
@@ -7002,9 +6914,12 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .assertSuccess()
                 .stdoutContains("GitHub workflow enabled for \"GitHub Upgrade Repository Defaults\"");
         Object repository = new WorkflowLoader().load(workflow).config().get("repository");
-        assertThat(repository).isInstanceOfSatisfying(Map.class, defaults -> assertThat(defaults)
-                .containsEntry("default_url", REPOSITORY_URL_REFERENCE)
-                .containsEntry("default_path", REPOSITORY_PATH_REFERENCE));
+        assertThat(repository)
+                .isInstanceOfSatisfying(
+                        Map.class,
+                        defaults -> assertThat(defaults)
+                                .containsEntry("default_url", REPOSITORY_URL_REFERENCE)
+                                .containsEntry("default_path", REPOSITORY_PATH_REFERENCE));
         assertThat(trello.createdLists()).containsExactly("Merging");
         assertThat(commands.stoppedWorkflows).containsExactly(workflow.toString());
         assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
@@ -7904,9 +7819,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.replaced-env.md");
         Path env = tempDir.resolve(".env.custom");
-        Files.writeString(
-                env,
-                """
+        Files.writeString(env, """
                 export TRELLO_API_KEY=old-key
                 TRELLO_API_TOKEN = old-token
                 """);
@@ -8332,9 +8245,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     private void writeOldBoardManifest(Path manifest, Path workflow) throws IOException {
-        Files.writeString(
-                manifest,
-                """
+        Files.writeString(manifest, """
                 {
                   "boards": [
                     {
@@ -8352,20 +8263,17 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                     }
                   ]
                 }
-                """
-                        .formatted(
-                                workflow,
-                                tempDir.resolve(".env.old"),
-                                tempDir.resolve("workspaces"),
-                                ConfigDefaults.DEFAULT_SERVER_PORT));
+                """.formatted(
+                        workflow,
+                        tempDir.resolve(".env.old"),
+                        tempDir.resolve("workspaces"),
+                        ConfigDefaults.DEFAULT_SERVER_PORT));
     }
 
     private void writeConnectedBoardManifest(Path manifest, String boardName, Path workflow, Path env, int serverPort)
             throws IOException {
         Files.createDirectories(manifest.getParent());
-        Files.writeString(
-                manifest,
-                """
+        Files.writeString(manifest, """
                 {
                   "boards": [
                     {
@@ -8383,8 +8291,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                     }
                   ]
                 }
-                """
-                        .formatted(boardName, workflow, env, tempDir.resolve("workspaces"), serverPort));
+                """.formatted(boardName, workflow, env, tempDir.resolve("workspaces"), serverPort));
     }
 
     private static int firstAvailableManagedPort(int... reservedPorts) {
@@ -8432,8 +8339,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
     private void writeDuplicateConnectedBoardsManifest(
             Path firstWorkflow, Path firstEnv, Path secondWorkflow, Path secondEnv) throws IOException {
-        writeManifest(
-                """
+        writeManifest("""
                 {
                   "boards": [
                     {
@@ -8464,14 +8370,13 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                     }
                   ]
                 }
-                """
-                        .formatted(
-                                json(firstWorkflow),
-                                json(firstEnv),
-                                json(tempDir.resolve("workspaces-one")),
-                                json(secondWorkflow),
-                                json(secondEnv),
-                                json(tempDir.resolve("workspaces-two"))));
+                """.formatted(
+                        json(firstWorkflow),
+                        json(firstEnv),
+                        json(tempDir.resolve("workspaces-one")),
+                        json(secondWorkflow),
+                        json(secondEnv),
+                        json(tempDir.resolve("workspaces-two"))));
     }
 
     private DuplicateConnectedBoardsFixture duplicateConnectedBoards() throws IOException {

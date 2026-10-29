@@ -91,8 +91,7 @@ public class StatusResource {
                   </table>
                 </body>
                 </html>
-                """
-                .formatted(
+                """.formatted(
                         snapshot.counts().running(),
                         snapshot.counts().retrying(),
                         pollingLine(snapshot.polling()),

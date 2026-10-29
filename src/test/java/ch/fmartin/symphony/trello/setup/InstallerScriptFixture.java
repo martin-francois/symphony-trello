@@ -63,8 +63,8 @@ final class InstallerScriptFixture {
     static final String FAKE_SLOW_TERM_UNTIL_KILLED = "until-killed";
     // The real start returns once the worker is healthy; the fake start waits this long for jar-start.
     static final int FAKE_WORKER_READY_SECONDS = 30;
-    private static final String FAKE_WORKER_TERM_HANDLER = singleQuoteFree(
-            """
+    private static final String FAKE_WORKER_TERM_HANDLER =
+            singleQuoteFree("""
             fake_worker_on_term() {
               echo "jar-term-received pid=$$" >> "${SYMPHONY_FAKE_LOG:?}"
               if [[ "${SYMPHONY_FAKE_SLOW_TERM:-}" == "%s" ]]; then sleep 2; fi
@@ -80,8 +80,7 @@ final class InstallerScriptFixture {
               exit 0
             }
             trap fake_worker_on_term TERM
-            """
-                    .formatted(FAKE_SLOW_TERM_DELAYED, FAKE_SLOW_TERM_UNTIL_KILLED));
+            """.formatted(FAKE_SLOW_TERM_DELAYED, FAKE_SLOW_TERM_UNTIL_KILLED));
     private static final String REPOSITORY_ENVIRONMENT_PREFIX = "SYMPHONY_";
     /// The installers decide whether to color their output from these variables. Tests start without
     /// the developer's or CI runner's values so a transcript does not depend on the host terminal.
@@ -97,9 +96,7 @@ final class InstallerScriptFixture {
     }
 
     static void writeCommandProxy(Path directory, String name, String target) throws IOException {
-        writeExecutable(
-                directory.resolve(name),
-                """
+        writeExecutable(directory.resolve(name), """
                 #!/bin/sh
                 exec %s "$@"
                 """.formatted(target));
@@ -746,9 +743,7 @@ final class InstallerScriptFixture {
         Files.createDirectories(repository);
         Files.writeString(repository.resolve("pom.xml"), "<project><version>1.0.0</version></project>\n");
         Files.writeString(repository.resolve("WORKFLOW.example.md"), "# Example workflow\n");
-        Files.writeString(
-                repository.resolve("mvnw"),
-                """
+        Files.writeString(repository.resolve("mvnw"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 echo "mvnw $*" >> "${SYMPHONY_FAKE_LOG:?}"
@@ -767,9 +762,7 @@ final class InstallerScriptFixture {
         Files.createDirectories(repository);
         Files.writeString(repository.resolve("pom.xml"), "<project><version>1.0.0</version></project>\n");
         Files.writeString(repository.resolve("WORKFLOW.example.md"), "# Example workflow\n");
-        Files.writeString(
-                repository.resolve("mvnw.cmd"),
-                """
+        Files.writeString(repository.resolve("mvnw.cmd"), """
                 @echo off
                 setlocal DisableDelayedExpansion
                 echo mvnw.cmd %* >> "%SYMPHONY_FAKE_LOG%"
@@ -824,9 +817,7 @@ final class InstallerScriptFixture {
     static Path createFakeToolchain(Path temporaryDirectory) throws IOException {
         Path fakeBin = temporaryDirectory.resolve("fake-bin");
         Files.createDirectories(fakeBin);
-        writeExecutable(
-                fakeBin.resolve("codex"),
-                """
+        writeExecutable(fakeBin.resolve("codex"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 echo "codex $*" >> "${SYMPHONY_FAKE_LOG:?}"
@@ -840,9 +831,7 @@ final class InstallerScriptFixture {
                 fi
                 exit 0
                 """);
-        writeExecutable(
-                fakeBin.resolve("systemctl"),
-                """
+        writeExecutable(fakeBin.resolve("systemctl"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 echo "systemctl $*" >> "${SYMPHONY_FAKE_LOG:?}"
@@ -874,9 +863,7 @@ final class InstallerScriptFixture {
                 fi
                 exit 0
                 """);
-        writeExecutable(
-                fakeBin.resolve("loginctl"),
-                """
+        writeExecutable(fakeBin.resolve("loginctl"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 echo "loginctl $*" >> "${SYMPHONY_FAKE_LOG:?}"
@@ -885,9 +872,7 @@ final class InstallerScriptFixture {
                 fi
                 exit 0
                 """);
-        writeExecutable(
-                fakeBin.resolve("java"),
-                """
+        writeExecutable(fakeBin.resolve("java"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 if [[ "${1:-}" == "-version" ]]; then
@@ -1295,31 +1280,28 @@ final class InstallerScriptFixture {
                 fi
                 echo "java $*" >> "${SYMPHONY_FAKE_LOG:?}"
                 exit 0
-                """
-                        .transform(script -> withPlaceholders(
-                                script,
-                                Map.of(
-                                        "@FAKE_APP_VERSION@",
-                                        FAKE_APP_VERSION,
-                                        "@TRELLO_KEY_PROMPT@",
-                                        TRELLO_KEY_PROMPT,
-                                        "@TRELLO_TOKEN_PROMPT@",
-                                        TRELLO_TOKEN_PROMPT,
-                                        "@TRELLO_BOARD_PROMPT@",
-                                        TRELLO_BOARD_PROMPT,
-                                        "@TUTORIAL_OFFER_PROMPT@",
-                                        GuidedTutorial.OFFER_PROMPT,
-                                        "@FAKE_WORKER_TERM_HANDLER@",
-                                        FAKE_WORKER_TERM_HANDLER,
-                                        "@FAKE_WORKER_READY_SECONDS@",
-                                        Integer.toString(FAKE_WORKER_READY_SECONDS),
-                                        "@WORKER_STOP_GRACE_SECONDS@",
-                                        Long.toString(LocalWorkerManager.WORKER_STOP_GRACE.toSeconds()),
-                                        "@WORKER_KILL_WAIT_SECONDS@",
-                                        Long.toString(LocalWorkerManager.WORKER_KILL_WAIT.toSeconds())))));
-        writeExecutable(
-                fakeBin.resolve("javac"),
-                """
+                """.transform(script -> withPlaceholders(
+                script,
+                Map.of(
+                        "@FAKE_APP_VERSION@",
+                        FAKE_APP_VERSION,
+                        "@TRELLO_KEY_PROMPT@",
+                        TRELLO_KEY_PROMPT,
+                        "@TRELLO_TOKEN_PROMPT@",
+                        TRELLO_TOKEN_PROMPT,
+                        "@TRELLO_BOARD_PROMPT@",
+                        TRELLO_BOARD_PROMPT,
+                        "@TUTORIAL_OFFER_PROMPT@",
+                        GuidedTutorial.OFFER_PROMPT,
+                        "@FAKE_WORKER_TERM_HANDLER@",
+                        FAKE_WORKER_TERM_HANDLER,
+                        "@FAKE_WORKER_READY_SECONDS@",
+                        Integer.toString(FAKE_WORKER_READY_SECONDS),
+                        "@WORKER_STOP_GRACE_SECONDS@",
+                        Long.toString(LocalWorkerManager.WORKER_STOP_GRACE.toSeconds()),
+                        "@WORKER_KILL_WAIT_SECONDS@",
+                        Long.toString(LocalWorkerManager.WORKER_KILL_WAIT.toSeconds())))));
+        writeExecutable(fakeBin.resolve("javac"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 echo 'javac 25.0.1'
@@ -1332,9 +1314,7 @@ final class InstallerScriptFixture {
             return createWindowsSourceRepository(temporaryDirectory);
         }
         Path repository = createSourceRepository(temporaryDirectory);
-        writeExecutable(
-                repository.resolve("mvnw.cmd"),
-                """
+        writeExecutable(repository.resolve("mvnw.cmd"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 echo "mvnw.cmd $*" >> "${SYMPHONY_FAKE_LOG:?}"
@@ -1419,9 +1399,7 @@ final class InstallerScriptFixture {
             writeFakeWindowsGitHubCli(fakeBin);
             return fakeBin;
         }
-        writeExecutable(
-                fakeBin.resolve("gh"),
-                """
+        writeExecutable(fakeBin.resolve("gh"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 echo "gh GH_HOST=${GH_HOST:-} $*" >> "${SYMPHONY_FAKE_LOG:?}"
@@ -1450,16 +1428,12 @@ final class InstallerScriptFixture {
     }
 
     private static void writeFakeWindowsGitHubCli(Path fakeBin) throws IOException {
-        Files.writeString(
-                fakeBin.resolve("gh.cmd"),
-                """
+        Files.writeString(fakeBin.resolve("gh.cmd"), """
                 @echo off
                 pwsh -NoProfile -File "%~dp0fake-gh.ps1" %*
                 exit /b %ERRORLEVEL%
                 """);
-        Files.writeString(
-                fakeBin.resolve("fake-gh.ps1"),
-                """
+        Files.writeString(fakeBin.resolve("fake-gh.ps1"), """
                 Add-Content -Path $env:SYMPHONY_FAKE_LOG -Value ("gh GH_HOST=$env:GH_HOST " + ($args -join " "))
                 $mode = if ($env:SYMPHONY_FAKE_GH_ATTESTATION) { $env:SYMPHONY_FAKE_GH_ATTESTATION } else { "verified" }
                 if ($args.Count -gt 0 -and $args[0] -eq "--version") {
@@ -1485,29 +1459,21 @@ final class InstallerScriptFixture {
     static Path createFakeWindowsToolchain(Path temporaryDirectory) throws IOException {
         Path fakeBin = temporaryDirectory.resolve("fake-windows-bin");
         Files.createDirectories(fakeBin);
-        Files.writeString(
-                fakeBin.resolve("java.cmd"),
-                """
+        Files.writeString(fakeBin.resolve("java.cmd"), """
                 @echo off
                 pwsh -NoProfile -File "%SYMPHONY_FAKE_JAVA%" %*
                 """);
-        Files.writeString(
-                fakeBin.resolve("javac.cmd"),
-                """
+        Files.writeString(fakeBin.resolve("javac.cmd"), """
                 @echo off
                 echo javac 25.0.1
                 """);
-        Files.writeString(
-                fakeBin.resolve("codex.cmd"),
-                """
+        Files.writeString(fakeBin.resolve("codex.cmd"), """
                 @echo off
                 if "%1"=="login" if "%2"=="status" exit /b 0
                 echo codex %* >> "%SYMPHONY_FAKE_LOG%"
                 exit /b 0
                 """);
-        Files.writeString(
-                fakeBin.resolve("fake-java.ps1"),
-                """
+        Files.writeString(fakeBin.resolve("fake-java.ps1"), """
                 if ($args.Count -gt 0 -and $args[0] -eq "-version") {
                   [Console]::Error.WriteLine('openjdk version "25.0.1" 2026-04-21')
                   exit 0
@@ -1615,8 +1581,7 @@ final class InstallerScriptFixture {
 	                }
                 "java $($args -join ' ')" | Add-Content -Path $env:SYMPHONY_FAKE_LOG
                 exit 0
-                """
-                        .replace("@FAKE_APP_VERSION@", FAKE_APP_VERSION));
+                """.replace("@FAKE_APP_VERSION@", FAKE_APP_VERSION));
         return fakeBin;
     }
 

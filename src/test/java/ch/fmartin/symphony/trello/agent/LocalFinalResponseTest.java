@@ -115,13 +115,12 @@ final class LocalFinalResponseTest {
                 }
             };
             AgentEventListener listener = recording.listener(delegate);
-            String text =
-                    switch (scenario) {
-                        case BLANK -> " \n\t";
-                        case EMPTY -> "";
-                        case OVERSIZED -> "x".repeat(FinalResponseStore.MAX_RESPONSE_BYTES + 1);
-                        default -> RESPONSE;
-                    };
+            String text = switch (scenario) {
+                case BLANK -> " \n\t";
+                case EMPTY -> "";
+                case OVERSIZED -> "x".repeat(FinalResponseStore.MAX_RESPONSE_BYTES + 1);
+                default -> RESPONSE;
+            };
 
             // when
             if (scenario == IncompleteFinal.PARTIAL_FINAL) {

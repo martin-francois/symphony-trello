@@ -13,8 +13,7 @@ public final class TestWorkflows {
                   port: %d
                 ---
                 Body
-                """
-                .formatted(boardId, port);
+                """.formatted(boardId, port);
     }
 
     public static String diagnosticsWorkflowWithPort(int port) {
@@ -26,8 +25,7 @@ public final class TestWorkflows {
                   port: %d
                 ---
                 Body
-                """
-                .formatted(port);
+                """.formatted(port);
     }
 
     public static String diagnosticsWorkflowWithEnvironmentBackedPort() {
@@ -56,8 +54,7 @@ public final class TestWorkflows {
                   port: %d
                 ---
                 Existing body
-                """
-                .formatted(boardId, repositoryDefaultUrl, repositoryDefaultPath, port);
+                """.formatted(boardId, repositoryDefaultUrl, repositoryDefaultPath, port);
     }
 
     public static String diagnosticsWorkflowWithMaxAgents(String maxAgentsValue) {
@@ -75,8 +72,7 @@ public final class TestWorkflows {
                   port: 20731
                 ---
                 Body
-                """
-                .formatted(maxAgentsValue);
+                """.formatted(maxAgentsValue);
     }
 
     public static String diagnosticsWorkflowWithRoutingLists(String routingListValue) {
@@ -90,7 +86,6 @@ public final class TestWorkflows {
                   port: 20722
                 ---
                 Body
-                """
-                .formatted(routingListValue, routingListValue);
+                """.formatted(routingListValue, routingListValue);
     }
 }

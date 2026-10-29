@@ -100,14 +100,15 @@ final class TrelloFollowUpCardToolTest {
         FakeTrelloBoard.FakeCard followUp = board.cardByName(FOLLOW_UP_TITLE).orElseThrow();
         FakeTrelloBoard.FakeCard source = board.cardByName(SOURCE_TITLE).orElseThrow();
         assertThat(followUp.description()).contains(relationship.visibleDescription());
-        assertThat(source.comments()).anySatisfy(text -> assertThat(text)
-                .contains(
-                        "## Codex Workpad",
-                        "**Follow-ups**",
-                        followUp.url(),
-                        FOLLOW_UP_TITLE,
-                        "_Written by Symphony",
-                        relationship.sourceCardNote()));
+        assertThat(source.comments())
+                .anySatisfy(text -> assertThat(text)
+                        .contains(
+                                "## Codex Workpad",
+                                "**Follow-ups**",
+                                followUp.url(),
+                                FOLLOW_UP_TITLE,
+                                "_Written by Symphony",
+                                relationship.sourceCardNote()));
     }
 
     @ParameterizedTest
@@ -150,8 +151,9 @@ final class TrelloFollowUpCardToolTest {
         // then
         assertThat(successPayload(result)).containsEntry("status", TrelloFollowUpCardTool.STATUS_EXISTS);
         assertThat(existing.labelIds()).hasSize(1);
-        assertThat(existing.attachments()).singleElement().satisfies(link -> assertThat(link.url())
-                .isEqualTo(SOURCE_URL));
+        assertThat(existing.attachments())
+                .singleElement()
+                .satisfies(link -> assertThat(link.url()).isEqualTo(SOURCE_URL));
         assertThat(board.cardByName(SOURCE_TITLE).orElseThrow().comments())
                 .singleElement()
                 .asString()
@@ -687,9 +689,7 @@ final class TrelloFollowUpCardToolTest {
                 .description("Found while working on " + SOURCE_URL + ", related work.");
         board.card("card-edited", "SYNTH203", "Edited footer", INBOX_ID)
                 .description("Body\n\n" + MANAGED_FOOTER_PREFIX + "Something a human typed_");
-        board.card("card-other", "SYNTH204", "Other source", INBOX_ID)
-                .description(
-                        """
+        board.card("card-other", "SYNTH204", "Other source", INBOX_ID).description("""
                         Body
 
                         _Written by Symphony · Follow-up of [the source card](https://trello.com/c/SYNTH299)\

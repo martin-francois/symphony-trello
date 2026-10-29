@@ -513,16 +513,14 @@ public class CodexAppServerClient {
         private void respondToServerRequest(JsonNode request) throws IOException {
             int id = request.path("id").asInt();
             String method = request.path("method").asText();
-            ObjectNode result =
-                    switch (method) {
-                        case "item/commandExecution/requestApproval" -> object("decision", "acceptForSession");
-                        case "item/fileChange/requestApproval" -> object("decision", "acceptForSession");
-                        case "item/permissions/requestApproval" -> object("decision", "cancel");
-                        case "item/tool/requestUserInput", "mcpServer/elicitation/request" ->
-                            object("answers", object());
-                        case "item/tool/call" -> handleToolCall(request.path("params"));
-                        default -> null;
-                    };
+            ObjectNode result = switch (method) {
+                case "item/commandExecution/requestApproval" -> object("decision", "acceptForSession");
+                case "item/fileChange/requestApproval" -> object("decision", "acceptForSession");
+                case "item/permissions/requestApproval" -> object("decision", "cancel");
+                case "item/tool/requestUserInput", "mcpServer/elicitation/request" -> object("answers", object());
+                case "item/tool/call" -> handleToolCall(request.path("params"));
+                default -> null;
+            };
             if (result == null) {
                 write(object(
                         "id", id, "error", object("code", -32601, "message", "Unsupported client request: " + method)));
@@ -691,12 +689,11 @@ public class CodexAppServerClient {
         }
 
         private String notificationSummary(String method, JsonNode params) {
-            JsonNode error =
-                    switch (method) {
-                        case "turn/completed", "turn/failed" -> turnError(params);
-                        case "error" -> params.path("error");
-                        default -> json.getNodeFactory().missingNode();
-                    };
+            JsonNode error = switch (method) {
+                case "turn/completed", "turn/failed" -> turnError(params);
+                case "error" -> params.path("error");
+                default -> json.getNodeFactory().missingNode();
+            };
             return isUsageLimitError(error) ? turnErrorMessage(error) : summarize(params);
         }
 

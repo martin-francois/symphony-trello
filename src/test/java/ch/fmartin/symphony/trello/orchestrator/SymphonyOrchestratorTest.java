@@ -132,9 +132,7 @@ final class SymphonyOrchestratorTest {
     void dispatchRequiresAllConfiguredLabelsUsingNormalizedMatching() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -174,8 +172,9 @@ final class SymphonyOrchestratorTest {
 
         // then
         assertThat(runs).hasValue(1);
-        assertThat(snapshot.retrying()).singleElement().satisfies(row -> assertThat(row.cardIdentifier())
-                .isEqualTo("TRELLO-match"));
+        assertThat(snapshot.retrying())
+                .singleElement()
+                .satisfies(row -> assertThat(row.cardIdentifier()).isEqualTo("TRELLO-match"));
         assertThat(tracker.promptStateFetches.get()).isOne();
     }
 
@@ -183,9 +182,7 @@ final class SymphonyOrchestratorTest {
     void blankRequiredLabelMakesNoCardDispatchEligible() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -225,11 +222,7 @@ final class SymphonyOrchestratorTest {
     void refreshesSelectedCardBeforeRenderingPrompt() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        writeWorkflow(
-                workflow,
-                "60000",
-                "",
-                """
+        writeWorkflow(workflow, "60000", "", """
                 {% for comment in card.comments %}{{ comment.text }}{% endfor %}
                 """);
         Card listedCard = TestCards.card("card-1", "TRELLO-abc", "Todo");
@@ -265,9 +258,7 @@ final class SymphonyOrchestratorTest {
     void preparesCardForDispatchBeforeRenderingPromptAndStartingAgent() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -312,9 +303,7 @@ final class SymphonyOrchestratorTest {
     void rendersPullRequestHandoffModeFromWorkflowLabelAndDispatchedCardLabels() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -362,9 +351,7 @@ final class SymphonyOrchestratorTest {
     void retriesCardFromInProgressWhenAgentRunFailsAfterPickupMove() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -416,9 +403,7 @@ final class SymphonyOrchestratorTest {
     void releasesIdleInProgressCardsWhenConcurrencyIsFull() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -464,8 +449,9 @@ final class SymphonyOrchestratorTest {
         orchestrator.stop();
 
         // then
-        assertThat(snapshot.running()).singleElement().satisfies(row -> assertThat(row.cardIdentifier())
-                .isEqualTo("TRELLO-first"));
+        assertThat(snapshot.running())
+                .singleElement()
+                .satisfies(row -> assertThat(row.cardIdentifier()).isEqualTo("TRELLO-first"));
         assertThat(tracker.releasedCards).containsExactly("TRELLO-second");
     }
 
@@ -494,9 +480,7 @@ final class SymphonyOrchestratorTest {
     void releasesFailedInProgressCardUsingDispatchSourceBeforeRetryBackoff() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -529,8 +513,9 @@ final class SymphonyOrchestratorTest {
         orchestrator.stop();
 
         // then
-        assertThat(snapshot.retrying()).singleElement().satisfies(row -> assertThat(row.cardIdentifier())
-                .isEqualTo("TRELLO-abc"));
+        assertThat(snapshot.retrying())
+                .singleElement()
+                .satisfies(row -> assertThat(row.cardIdentifier()).isEqualTo("TRELLO-abc"));
         assertThat(tracker.releases).singleElement().isEqualTo(new ReleaseRecord("In Progress", "Normal Queue"));
         assertThat(tracker.cardState("card-1").state()).isEqualTo("Normal Queue");
     }
@@ -559,9 +544,7 @@ final class SymphonyOrchestratorTest {
     void doesNotRetryFailedCardThatAlreadyMovedOutOfInProgress() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1215,8 +1198,9 @@ final class SymphonyOrchestratorTest {
         orchestrator.stop();
 
         // then
-        assertThat(snapshot.running()).singleElement().satisfies(row -> assertThat(row.turnCount())
-                .isEqualTo(2));
+        assertThat(snapshot.running())
+                .singleElement()
+                .satisfies(row -> assertThat(row.turnCount()).isEqualTo(2));
     }
 
     @Test
@@ -1256,8 +1240,9 @@ final class SymphonyOrchestratorTest {
         assertThat(snapshot.codexTotals().inputTokens()).isEqualTo(10);
         assertThat(snapshot.codexTotals().outputTokens()).isEqualTo(3);
         assertThat(snapshot.codexTotals().totalTokens()).isEqualTo(13);
-        assertThat(snapshot.retrying()).singleElement().satisfies(row -> assertThat(row.error())
-                .isEqualTo("boom"));
+        assertThat(snapshot.retrying())
+                .singleElement()
+                .satisfies(row -> assertThat(row.error()).isEqualTo("boom"));
         assertThat(details).hasValueSatisfying(detail -> {
             assertThat(detail.status()).isEqualTo("retrying");
             assertThat(detail.lastError()).isEqualTo("boom");
@@ -1304,10 +1289,11 @@ final class SymphonyOrchestratorTest {
         // then
         List<String> expectedEvents =
                 IntStream.range(5, 55).mapToObj(index -> "event-" + index).toList();
-        assertThat(details).hasValueSatisfying(detail -> assertThat(detail.recentEvents())
-                .hasSize(50)
-                .extracting(CardDebugDetails.EventInfo::event)
-                .containsExactlyElementsOf(expectedEvents));
+        assertThat(details)
+                .hasValueSatisfying(detail -> assertThat(detail.recentEvents())
+                        .hasSize(50)
+                        .extracting(CardDebugDetails.EventInfo::event)
+                        .containsExactlyElementsOf(expectedEvents));
     }
 
     @Test
@@ -1338,8 +1324,9 @@ final class SymphonyOrchestratorTest {
         orchestrator.stop();
 
         // then
-        assertThat(snapshot.running()).singleElement().satisfies(row -> assertThat(row.cardUrl())
-                .isEqualTo("https://trello.com/c/SYNTH101"));
+        assertThat(snapshot.running())
+                .singleElement()
+                .satisfies(row -> assertThat(row.cardUrl()).isEqualTo("https://trello.com/c/SYNTH101"));
     }
 
     @CsvSource(
@@ -1371,18 +1358,16 @@ final class SymphonyOrchestratorTest {
         orchestrator.stop();
 
         // then
-        assertThat(snapshot.retrying()).singleElement().satisfies(row -> assertThat(row.cardUrl())
-                .isEqualTo(expectedCardUrl));
+        assertThat(snapshot.retrying())
+                .singleElement()
+                .satisfies(row -> assertThat(row.cardUrl()).isEqualTo(expectedCardUrl));
     }
 
     @Test
     void retryTimerDispatchesAgainWhenCardRemainsEligible() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        writeWorkflow(
-                workflow,
-                "60000",
-                """
+        writeWorkflow(workflow, "60000", """
                 agent:
                   max_retry_backoff_ms: 500
                 """);
@@ -1425,9 +1410,7 @@ final class SymphonyOrchestratorTest {
     void retryTimerReleasesAndRequeuesCardWhenItLosesRequiredLabel() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1504,9 +1487,7 @@ final class SymphonyOrchestratorTest {
     void runningCardIsCancelledReleasedAndRetriedWhenItLosesRequiredLabel() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1550,8 +1531,9 @@ final class SymphonyOrchestratorTest {
 
         // then
         assertThat(snapshot.counts().running()).isZero();
-        assertThat(snapshot.retrying()).singleElement().satisfies(row -> assertThat(row.cardIdentifier())
-                .isEqualTo("TRELLO-abc"));
+        assertThat(snapshot.retrying())
+                .singleElement()
+                .satisfies(row -> assertThat(row.cardIdentifier()).isEqualTo("TRELLO-abc"));
         assertThat(tracker.releasedCards).containsExactly("TRELLO-abc");
         assertThat(tracker.cardState("card-1").state()).isEqualTo("Todo");
     }
@@ -1560,9 +1542,7 @@ final class SymphonyOrchestratorTest {
     void dispatchesEligiblePrerequisiteBeforeUnrelatedLowerPriorityWork() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1601,9 +1581,7 @@ final class SymphonyOrchestratorTest {
     void prerequisiteProblemsDenyDispatchEvenWhenPrerequisiteBlockerIsTerminal() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1646,9 +1624,7 @@ final class SymphonyOrchestratorTest {
     void runningCardContinuesWhenItOnlyGainsANonTerminalBlocker() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1713,9 +1689,7 @@ final class SymphonyOrchestratorTest {
         orchestrator.start();
         waitUntil(() -> runs.get() == 1 && orchestrator.snapshot().counts().retrying() == 1);
         int fetchesBeforeUnsafeReload = tracker.candidateFetches.get();
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker: []
                 workspace:
@@ -1748,8 +1722,9 @@ final class SymphonyOrchestratorTest {
 
         // then
         assertThat(runs).hasValue(1);
-        assertThat(snapshot.retrying()).singleElement().satisfies(row -> assertThat(row.cardIdentifier())
-                .isEqualTo("TRELLO-first"));
+        assertThat(snapshot.retrying())
+                .singleElement()
+                .satisfies(row -> assertThat(row.cardIdentifier()).isEqualTo("TRELLO-first"));
     }
 
     @Test

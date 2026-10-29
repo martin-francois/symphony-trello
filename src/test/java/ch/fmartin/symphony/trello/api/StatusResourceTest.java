@@ -110,9 +110,11 @@ final class StatusResourceTest {
 
         // then
         assertThat(logInfo.codexSessionLogs()).containsExactlyElementsOf(snapshot);
-        assertThat(snapshot).isUnmodifiable().singleElement().satisfies(log -> assertThat(log)
-                .containsEntry("path", "session.log")
-                .isUnmodifiable());
+        assertThat(snapshot)
+                .isUnmodifiable()
+                .singleElement()
+                .satisfies(log ->
+                        assertThat(log).containsEntry("path", "session.log").isUnmodifiable());
     }
 
     @MethodSource("pollingStates")
@@ -192,10 +194,12 @@ final class StatusResourceTest {
         // then
         assertThat(state).isInstanceOf(StateSnapshotResponse.class);
         var response = (StateSnapshotResponse) state;
-        assertThat(response.running()).singleElement().satisfies(row -> assertThat(row.cardUrl())
-                .isEqualTo("https://trello.com/c/SYNTH001"));
-        assertThat(response.retrying()).singleElement().satisfies(row -> assertThat(row.cardUrl())
-                .isEqualTo("https://trello.com/c/SYNTH002"));
+        assertThat(response.running())
+                .singleElement()
+                .satisfies(row -> assertThat(row.cardUrl()).isEqualTo("https://trello.com/c/SYNTH001"));
+        assertThat(response.retrying())
+                .singleElement()
+                .satisfies(row -> assertThat(row.cardUrl()).isEqualTo("https://trello.com/c/SYNTH002"));
     }
 
     @Test
@@ -213,11 +217,14 @@ final class StatusResourceTest {
         Throwable remoteFailure = catchThrowable(remoteResource::localStatus);
 
         // then
-        assertThat(loopbackStatus).isInstanceOfSatisfying(Map.class, status -> assertThat(status)
-                .containsEntry("boardId", "board-1")
-                .containsEntry("configuredBoardId", "abc123")
-                .containsEntry("workflowPath", "/private/workflow.md")
-                .containsEntry("pid", ProcessHandle.current().pid()));
+        assertThat(loopbackStatus)
+                .isInstanceOfSatisfying(
+                        Map.class,
+                        status -> assertThat(status)
+                                .containsEntry("boardId", "board-1")
+                                .containsEntry("configuredBoardId", "abc123")
+                                .containsEntry("workflowPath", "/private/workflow.md")
+                                .containsEntry("pid", ProcessHandle.current().pid()));
         assertThat(remoteFailure).isInstanceOf(NotFoundException.class);
     }
 
@@ -267,8 +274,9 @@ final class StatusResourceTest {
 
         // then
         assertThat(found)
-                .isInstanceOfSatisfying(CardDebugDetailsResponse.class, response -> assertThat(response.cardId())
-                        .isEqualTo(details.cardId()));
+                .isInstanceOfSatisfying(
+                        CardDebugDetailsResponse.class,
+                        response -> assertThat(response.cardId()).isEqualTo(details.cardId()));
         assertThatThrownBy(() -> resource.card("TRELLO-missing"))
                 .isInstanceOf(CardNotFoundException.class)
                 .hasMessageContaining("Unknown card: TRELLO-missing");
@@ -294,8 +302,9 @@ final class StatusResourceTest {
             // then
             verify(orchestrator).requestRefresh();
             assertThat(refresh.getStatus()).isEqualTo(202);
-            assertThat(refresh.getEntity()).isInstanceOfSatisfying(Map.class, entity -> assertThat(entity)
-                    .containsEntry("requested_at", requestedAt));
+            assertThat(refresh.getEntity())
+                    .isInstanceOfSatisfying(
+                            Map.class, entity -> assertThat(entity).containsEntry("requested_at", requestedAt));
             assertThat(notFound.getStatus()).isEqualTo(404);
             assertThat(notFound.getEntity().toString())
                     .contains("card_not_found")

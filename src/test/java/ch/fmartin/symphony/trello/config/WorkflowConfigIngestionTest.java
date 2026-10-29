@@ -34,10 +34,12 @@ final class WorkflowConfigIngestionTest {
         TypedWorkflowConfig config = WorkflowConfigIngestion.collect(workflow, ignored -> Optional.empty());
 
         // then
-        assertThat(config.agentMaxConcurrentAgents().finding()).hasValueSatisfying(finding -> assertThat(finding.kind())
-                .isEqualTo(WorkflowConfigFinding.Kind.FRACTIONAL));
-        assertThat(config.serverPort().finding()).hasValueSatisfying(finding -> assertThat(finding.kind())
-                .isEqualTo(WorkflowConfigFinding.Kind.OUT_OF_INT_RANGE));
+        assertThat(config.agentMaxConcurrentAgents().finding())
+                .hasValueSatisfying(
+                        finding -> assertThat(finding.kind()).isEqualTo(WorkflowConfigFinding.Kind.FRACTIONAL));
+        assertThat(config.serverPort().finding())
+                .hasValueSatisfying(
+                        finding -> assertThat(finding.kind()).isEqualTo(WorkflowConfigFinding.Kind.OUT_OF_INT_RANGE));
     }
 
     @Test
@@ -87,8 +89,9 @@ final class WorkflowConfigIngestionTest {
                 frontMatter, ignored -> Optional.empty(), WorkflowConfigIngestion.UnresolvedEnvironmentPolicy.OMIT);
 
         // then
-        assertThat(omitted).hasValueSatisfying(config -> assertThat(config.serverPort())
-                .isEqualTo(WorkflowIntegerSetting.omitted()));
+        assertThat(omitted)
+                .hasValueSatisfying(
+                        config -> assertThat(config.serverPort()).isEqualTo(WorkflowIntegerSetting.omitted()));
         assertThatThrownBy(() -> WorkflowConfigIngestion.collectFrontMatter(
                         frontMatter,
                         ignored -> Optional.empty(),

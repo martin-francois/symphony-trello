@@ -734,9 +734,10 @@ public class SymphonyOrchestrator {
             return;
         }
         Map<EffectiveConfig, List<RunningEntry>> entriesByLaunchConfig = new LinkedHashMap<>();
-        List.copyOf(running.values()).forEach(entry -> entriesByLaunchConfig
-                .computeIfAbsent(entry.launchConfig, ignored -> new ArrayList<>())
-                .add(entry));
+        List.copyOf(running.values())
+                .forEach(entry -> entriesByLaunchConfig
+                        .computeIfAbsent(entry.launchConfig, ignored -> new ArrayList<>())
+                        .add(entry));
         entriesByLaunchConfig.forEach((launchConfig, entries) -> {
             Map<String, CardLookupResult> refreshed;
             try {

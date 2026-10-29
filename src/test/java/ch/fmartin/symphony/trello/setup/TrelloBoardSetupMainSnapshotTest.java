@@ -312,13 +312,10 @@ final class TrelloBoardSetupMainSnapshotTest extends LocalSetupFixtureSupport {
     void logs() throws Exception {
         // given
         WorkerScenario worker = connectedWorker();
-        Files.writeString(
-                worker.managedFiles().stdoutLog(),
-                """
+        Files.writeString(worker.managedFiles().stdoutLog(), """
                 2026-01-01 00:00:00 INFO Symphony for Trello started
                 2026-01-01 00:00:01 INFO Polling board "%s"
-                """
-                        .formatted(SnapshotBoard.NAME));
+                """.formatted(SnapshotBoard.NAME));
 
         // when
         CliRunResult result = runWorkerCommand(worker, "logs");

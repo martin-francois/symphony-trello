@@ -310,8 +310,7 @@ final class ContainerRuntimeScriptTest {
 
     private void installRecordingRuntime(String name, Path invocation, String versionOutput) throws Exception {
         writeExecutable(
-                tempDir.resolve(name),
-                """
+                tempDir.resolve(name), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 if [[ "$*" == --version ]]; then
@@ -324,21 +323,17 @@ final class ContainerRuntimeScriptTest {
                 fi
                 printf '%%s\n' "$@" > "%s"
                 printf '%%s' "$HOME" > "%s"
-                """
-                        .formatted(shellQuote(versionOutput), invocation, recordedRuntimeHome()));
+                """.formatted(shellQuote(versionOutput), invocation, recordedRuntimeHome()));
     }
 
     private void installPasswdLookup(Path accountHome) throws Exception {
-        writeExecutable(
-                tempDir.resolve("getent"),
-                """
+        writeExecutable(tempDir.resolve("getent"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 [ "$1" = passwd ]
                 [ "$2" = "$(id -u)" ]
                 printf 'tester:x:%%s:%%s::%%s:/bin/sh\n' "$2" "$(id -g)" %s
-                """
-                        .formatted(shellQuote(accountHome.toString())));
+                """.formatted(shellQuote(accountHome.toString())));
     }
 
     private Path invocationFile() {
@@ -354,9 +349,7 @@ final class ContainerRuntimeScriptTest {
     }
 
     private void installFailingRuntime(String name) throws Exception {
-        writeExecutable(
-                tempDir.resolve(name),
-                """
+        writeExecutable(tempDir.resolve(name), """
                 #!/usr/bin/env bash
                 exit 71
                 """);
@@ -369,13 +362,11 @@ final class ContainerRuntimeScriptTest {
                 .filter(path -> Files.isRegularFile(path) && Files.isExecutable(path))
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException(name + " is required to run this test"));
-        writeExecutable(
-                tempDir.resolve(name),
-                """
+        writeExecutable(tempDir.resolve(name), """
                 #!/bin/sh
                 exec %s "$@"
-                """
-                        .formatted(shellQuote(executable.toAbsolutePath().toString())));
+                """.formatted(
+                        shellQuote(executable.toAbsolutePath().toString())));
     }
 
     private Map<String, String> runtimeEnvironment(String runtime) {

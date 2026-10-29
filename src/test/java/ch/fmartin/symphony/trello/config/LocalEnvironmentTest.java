@@ -26,8 +26,7 @@ final class LocalEnvironmentTest {
     @Test
     void readsProjectDotenvWhenEnvironmentVariableIsMissing() throws Exception {
         // given
-        Path dotenv = dotenvContaining(
-                """
+        Path dotenv = dotenvContaining("""
                 # Trello credentials for local runs
                 TRELLO_API_KEY=key-from-dotenv
                 export TRELLO_API_TOKEN='token-from-dotenv'
@@ -183,8 +182,7 @@ final class LocalEnvironmentTest {
             })
     void ignoresInvalidDotenvLines(String ignoredLine) throws Exception {
         // given
-        Path dotenv = dotenvContaining(
-                """
+        Path dotenv = dotenvContaining("""
                 %s
                 VALID=value
                 """.formatted(ignoredLine));
@@ -199,8 +197,7 @@ final class LocalEnvironmentTest {
     @Test
     void loadStripsTrailingCommentsAfterQuotedAndUnquotedValues() throws Exception {
         // given
-        Path dotenv = dotenvContaining(
-                """
+        Path dotenv = dotenvContaining("""
                 # credentials with comments
                 TRELLO_API_KEY="synthetic-key" # key comment
                 TRELLO_API_TOKEN='synthetic-token' # token comment

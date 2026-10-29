@@ -40,19 +40,16 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 final class TrelloClientChaosTest {
     private static final String CARD_ID = "000000000000000000000101";
-    private static final String CHECKLIST_BODY =
-            """
+    private static final String CHECKLIST_BODY = """
             [
               {"id":"checklist-1","name":"Prerequisites","checkItems":[{"id":"item-1","name":"https://trello.com/c/SYNTH103","state":"incomplete"}]}
             ]
             """;
-    private static final String OPEN_CARDS_BODY =
-            """
+    private static final String OPEN_CARDS_BODY = """
             [
               {"id":"%s","name":"A","desc":"","idList":"list-todo","idBoard":"board-1","closed":false,"shortLink":"abc","shortUrl":"https://trello.com/c/abc","url":"https://trello.com/c/abc/card","labels":[],"badges":{"checkItems":1},"pos":1}
             ]
-            """
-                    .formatted(CARD_ID);
+            """.formatted(CARD_ID);
 
     private static final int CLASSIFICATION_MAX_API_RETRIES = 2;
     private static final int SINGLE_RETRY = 1;
@@ -258,10 +255,13 @@ final class TrelloClientChaosTest {
         assertThat(poller.isAlive())
                 .as("an interrupt ends the %s Retry-After wait within %s", LONG_RETRY_AFTER, TEST_WAIT_LIMIT)
                 .isFalse();
-        assertThat(failure.get()).isInstanceOfSatisfying(TrelloException.class, e -> assertThat(e)
-                .hasMessage("Trello retry sleep interrupted")
-                .extracting(TrelloException::code)
-                .isEqualTo("trello_api_request"));
+        assertThat(failure.get())
+                .isInstanceOfSatisfying(
+                        TrelloException.class,
+                        e -> assertThat(e)
+                                .hasMessage("Trello retry sleep interrupted")
+                                .extracting(TrelloException::code)
+                                .isEqualTo("trello_api_request"));
         assertThat(interruptFlagKept.get())
                 .as("the polling thread still sees its interrupt after the Trello client gives up")
                 .isTrue();

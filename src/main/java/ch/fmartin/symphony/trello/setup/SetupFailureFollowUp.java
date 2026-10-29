@@ -223,8 +223,7 @@ final class SetupFailureFollowUp {
                 %s
                 %s
                 %s
-                """
-                .formatted(
+                """.formatted(
                         new TrelloBoardSetupMain.ProjectVersion().getVersion()[0],
                         sanitizer.apply(failure.commandName()),
                         startedBy(),
@@ -333,24 +332,22 @@ final class SetupFailureFollowUp {
         if (!commands.run("gh", "auth", "status").success()) {
             return;
         }
-        String question =
-                switch (investigation) {
-                    case Answered answered
-                    when isLocalConfiguration(answered.finding()) -> "Post a GitHub issue anyway? [y/N] ";
-                    case Answered answered
-                    when answered.finding().verifiedSymphonyFix() ->
-                        "Codex changed files locally and validation passed. Open a GitHub issue that describes the"
-                                + " failure and the local fix? [y/N] ";
-                    case Investigation _ -> "GitHub CLI is authenticated. Open a GitHub issue with this report? [y/N] ";
-                };
+        String question = switch (investigation) {
+            case Answered answered
+            when isLocalConfiguration(answered.finding()) -> "Post a GitHub issue anyway? [y/N] ";
+            case Answered answered
+            when answered.finding().verifiedSymphonyFix() ->
+                "Codex changed files locally and validation passed. Open a GitHub issue that describes the"
+                        + " failure and the local fix? [y/N] ";
+            case Investigation _ -> "GitHub CLI is authenticated. Open a GitHub issue with this report? [y/N] ";
+        };
         if (!confirmed(terminal.readLine(question))) {
             return;
         }
-        Path bodyFile =
-                switch (investigation) {
-                    case Answered answered -> writeIssueDraft(failure, answered.finding());
-                    case Investigation.NoAnswer _ -> failure.reportPath();
-                };
+        Path bodyFile = switch (investigation) {
+            case Answered answered -> writeIssueDraft(failure, answered.finding());
+            case Investigation.NoAnswer _ -> failure.reportPath();
+        };
         printIssueDraft(terminal.out(), Files.readString(bodyFile));
         if (!confirmed(terminal.readLine("Post this GitHub issue now? [y/N] "))) {
             return;

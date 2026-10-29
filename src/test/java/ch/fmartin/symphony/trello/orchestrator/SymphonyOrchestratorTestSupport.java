@@ -91,10 +91,7 @@ final class SymphonyOrchestratorTestSupport {
     record UsageProbeScenario(FakeTracker tracker, AtomicInteger runs, SymphonyOrchestrator orchestrator) {}
 
     static ConcurrentCommandScenario concurrentCommandScenario(Path workflow) throws Exception {
-        writeWorkflowWithCommand(
-                workflow,
-                "command-a",
-                """
+        writeWorkflowWithCommand(workflow, "command-a", """
                 agent:
                   max_concurrent_agents: 2
                 """);
@@ -273,9 +270,7 @@ final class SymphonyOrchestratorTestSupport {
 
     static void writeWorkflow(Path workflow, String pollIntervalMs, String extraConfig, String prompt)
             throws Exception {
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -292,14 +287,11 @@ final class SymphonyOrchestratorTestSupport {
                   command: fake
                 ---
                 %s
-                """
-                        .formatted(pollIntervalMs, extraConfig, prompt));
+                """.formatted(pollIntervalMs, extraConfig, prompt));
     }
 
     static void writeWorkflowWithCommand(Path workflow, String command, String extraConfig) throws Exception {
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -316,8 +308,7 @@ final class SymphonyOrchestratorTestSupport {
                   command: %s
                 ---
                 {{ card.title }}
-                """
-                        .formatted(extraConfig, command));
+                """.formatted(extraConfig, command));
     }
 
     static void rewriteWorkflowWithCommand(Path workflow, String command, String extraConfig) throws Exception {
@@ -328,9 +319,7 @@ final class SymphonyOrchestratorTestSupport {
 
     static void writeWorkflowWithCommandAndBoard(Path workflow, String command, String boardId, String apiToken)
             throws Exception {
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -346,8 +335,7 @@ final class SymphonyOrchestratorTestSupport {
                   command: %s
                 ---
                 {{ card.title }}
-                """
-                        .formatted(apiToken, boardId, command));
+                """.formatted(apiToken, boardId, command));
     }
 
     static void rewriteWorkflowWithCommandAndBoard(Path workflow, String command, String boardId, String apiToken)
@@ -373,9 +361,7 @@ final class SymphonyOrchestratorTestSupport {
             long maxRetryBackoffMillis,
             int maxConcurrentAgents)
             throws Exception {
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -396,15 +382,8 @@ final class SymphonyOrchestratorTestSupport {
                   command: %s
                 ---
                 {{ card.title }}
-                """
-                        .formatted(
-                                endpoint,
-                                apiToken,
-                                boardId,
-                                workspaceRoot,
-                                maxRetryBackoffMillis,
-                                maxConcurrentAgents,
-                                command));
+                """.formatted(
+                endpoint, apiToken, boardId, workspaceRoot, maxRetryBackoffMillis, maxConcurrentAgents, command));
     }
 
     static void rewriteWorkflowWithTarget(
@@ -437,9 +416,7 @@ final class SymphonyOrchestratorTestSupport {
     }
 
     static void writeWorkflowWithStallTimeout(Path workflow, long stallTimeoutMillis) throws Exception {
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -456,8 +433,7 @@ final class SymphonyOrchestratorTestSupport {
                   stall_timeout_ms: %d
                 ---
                 {{ card.title }}
-                """
-                        .formatted(stallTimeoutMillis));
+                """.formatted(stallTimeoutMillis));
     }
 
     static void rewriteWorkflowWithStallTimeout(Path workflow, long stallTimeoutMillis) throws Exception {
@@ -548,9 +524,7 @@ final class SymphonyOrchestratorTestSupport {
     }
 
     static void writeRetryableInProgressWorkflow(Path workflow) throws Exception {
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -573,8 +547,9 @@ final class SymphonyOrchestratorTestSupport {
     }
 
     static void assertCardReleasedForRetry(RuntimeSnapshot snapshot, FakeTracker tracker) {
-        assertThat(snapshot.retrying()).singleElement().satisfies(row -> assertThat(row.cardIdentifier())
-                .isEqualTo("TRELLO-abc"));
+        assertThat(snapshot.retrying())
+                .singleElement()
+                .satisfies(row -> assertThat(row.cardIdentifier()).isEqualTo("TRELLO-abc"));
         assertThat(tracker.releasedCards).containsExactly("TRELLO-abc");
         assertThat(tracker.cardState("card-1").state()).isEqualTo("Todo");
     }

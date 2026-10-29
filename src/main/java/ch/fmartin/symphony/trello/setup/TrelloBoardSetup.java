@@ -79,8 +79,7 @@ public final class TrelloBoardSetup {
 
     private static final List<String> SYSTEM_TERMINAL_STATES =
             List.of("Archived", "ArchivedList", "ArchivedBoard", "Deleted");
-    static final String FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION =
-            """
+    static final String FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION = """
             Filesystem access blocker details must explain that the requested file or folder is inaccessible
             because deployed Symphony blocks undeclared host paths by default for security reasons, so Trello
             cards cannot make Codex read or edit unrelated host files. Tell the operator to use files already
@@ -963,8 +962,7 @@ public final class TrelloBoardSetup {
                   read_timeout_ms: %d
                   stall_timeout_ms: %d
                 ---
-                """
-                        .formatted(
+                """.formatted(
                                 TrelloEnvironment.API_KEY,
                                 TrelloEnvironment.API_TOKEN,
                                 yamlScalar(boardId),
@@ -1055,48 +1053,46 @@ public final class TrelloBoardSetup {
                 %s
 
                 Card URL: {{ card.url }}
-                """
-                .formatted(
-                        trelloRelationshipContextPrompt(),
-                        workpadPrompt(!handoffStates.isEmpty()),
-                        repositorySkillsPrompt(githubEnabled),
-                        repositoryCheckoutPolicyPrompt(
-                                blockedDestination(reviewState, blockedState),
-                                !handoffStates.isEmpty(),
-                                !handoffStates.isEmpty()),
-                        operatingPosturePrompt(!handoffStates.isEmpty()),
-                        routingPrompt(
-                                activeStates, terminalStates, inProgressState, reviewState, blockedState, mergingState),
-                        executionPrompt(
-                                reviewState,
-                                blockedDestination(reviewState, blockedState),
-                                !handoffStates.isEmpty(),
-                                githubEnabled),
-                        validationPrompt(!handoffStates.isEmpty(), reviewState),
-                        prPublicationPrompt(
-                                reviewState,
-                                blockedDestination(reviewState, blockedState),
-                                !handoffStates.isEmpty(),
-                                githubEnabled),
-                        prFeedbackPrompt(
-                                reviewState,
-                                blockedDestination(reviewState, blockedState),
-                                !handoffStates.isEmpty(),
-                                githubEnabled),
-                        reworkPrompt(activeStates, reviewState, mergingState, !handoffStates.isEmpty(), githubEnabled),
-                        landingPrompt(
-                                mergingState,
-                                reviewState,
-                                doneState,
-                                blockedDestination(reviewState, blockedState),
-                                githubEnabled),
-                        pickupPrompt(activeStates, inProgressState, mergingState),
-                        completionBarPrompt(
-                                reviewState,
-                                blockedDestination(reviewState, blockedState),
-                                !handoffStates.isEmpty(),
-                                githubEnabled),
-                        handoffPrompt(reviewState, blockedState, !handoffStates.isEmpty(), githubEnabled));
+                """.formatted(
+                trelloRelationshipContextPrompt(),
+                workpadPrompt(!handoffStates.isEmpty()),
+                repositorySkillsPrompt(githubEnabled),
+                repositoryCheckoutPolicyPrompt(
+                        blockedDestination(reviewState, blockedState),
+                        !handoffStates.isEmpty(),
+                        !handoffStates.isEmpty()),
+                operatingPosturePrompt(!handoffStates.isEmpty()),
+                routingPrompt(activeStates, terminalStates, inProgressState, reviewState, blockedState, mergingState),
+                executionPrompt(
+                        reviewState,
+                        blockedDestination(reviewState, blockedState),
+                        !handoffStates.isEmpty(),
+                        githubEnabled),
+                validationPrompt(!handoffStates.isEmpty(), reviewState),
+                prPublicationPrompt(
+                        reviewState,
+                        blockedDestination(reviewState, blockedState),
+                        !handoffStates.isEmpty(),
+                        githubEnabled),
+                prFeedbackPrompt(
+                        reviewState,
+                        blockedDestination(reviewState, blockedState),
+                        !handoffStates.isEmpty(),
+                        githubEnabled),
+                reworkPrompt(activeStates, reviewState, mergingState, !handoffStates.isEmpty(), githubEnabled),
+                landingPrompt(
+                        mergingState,
+                        reviewState,
+                        doneState,
+                        blockedDestination(reviewState, blockedState),
+                        githubEnabled),
+                pickupPrompt(activeStates, inProgressState, mergingState),
+                completionBarPrompt(
+                        reviewState,
+                        blockedDestination(reviewState, blockedState),
+                        !handoffStates.isEmpty(),
+                        githubEnabled),
+                handoffPrompt(reviewState, blockedState, !handoffStates.isEmpty(), githubEnabled));
     }
 
     private static String trelloRelationshipContextPrompt() {
@@ -1152,14 +1148,12 @@ public final class TrelloBoardSetup {
                     - `%s` for Trello pickup, review, blocked, and done handoff.
                     - `%s` and `%s` for branch and commit hygiene.
                     - `%s` when diagnosing a stuck or retrying run.
-                    """
-                    .formatted(
-                            skillPath("trello-workpad"),
-                            skillPath("trello-handoff"),
-                            skillPath("repo-sync"),
-                            skillPath("commit"),
-                            skillPath("debug"))
-                    .stripTrailing();
+                    """.formatted(
+                    skillPath("trello-workpad"),
+                    skillPath("trello-handoff"),
+                    skillPath("repo-sync"),
+                    skillPath("commit"),
+                    skillPath("debug")).stripTrailing();
         }
         return """
                 ## Repository Skills
@@ -1175,17 +1169,15 @@ public final class TrelloBoardSetup {
                 - `%s`, `%s`, and `%s` for branch, commit, and PR hygiene.
                 - `%s` only when this workflow says the current Trello list is Merging.
                 - `%s` when diagnosing a stuck or retrying run.
-                """
-                .formatted(
-                        skillPath("trello-workpad"),
-                        skillPath("trello-handoff"),
-                        skillPath("review-sweep"),
-                        skillPath("repo-sync"),
-                        skillPath("commit"),
-                        skillPath("push-pr"),
-                        skillPath("land"),
-                        skillPath("debug"))
-                .stripTrailing();
+                """.formatted(
+                skillPath("trello-workpad"),
+                skillPath("trello-handoff"),
+                skillPath("review-sweep"),
+                skillPath("repo-sync"),
+                skillPath("commit"),
+                skillPath("push-pr"),
+                skillPath("land"),
+                skillPath("debug")).stripTrailing();
     }
 
     private static String repositoryCheckoutPolicyPrompt(
@@ -1291,8 +1283,7 @@ public final class TrelloBoardSetup {
 
                 When the classification above requires a blocker because repository identity or a checkout is missing,
                 or because the selected source is invalid or unusable, %s
-                """
-                .formatted(RepositorySourcePrompt.checkoutPreparationPolicy(), blockerInstruction)
+                """.formatted(RepositorySourcePrompt.checkoutPreparationPolicy(), blockerInstruction)
                 .stripTrailing();
     }
 
@@ -1472,9 +1463,7 @@ public final class TrelloBoardSetup {
                 `current_card_moved_to` is empty, finish with the blocked handoff. If the tool is unavailable or
                 fails, list the follow-up work under a `Proposed follow-ups` heading in the workpad, or under a
                 `Follow-ups` heading in the final response instead.
-                """
-                .formatted(workpadText)
-                .stripTrailing();
+                """.formatted(workpadText).stripTrailing();
     }
 
     private static String executionPrompt(
@@ -1495,13 +1484,11 @@ public final class TrelloBoardSetup {
         String progressRecord = workpadToolEnabled
                 ? "Keep the workpad checklist current when scope, risks, validation, or blockers change."
                 : "Keep final-response notes current when scope, risks, validation, or blockers change.";
-        String duplicateProgress = workpadToolEnabled
-                ? """
+        String duplicateProgress = workpadToolEnabled ? """
 
                 Do not leave completed work unchecked in the workpad. Do not create duplicate progress comments when
                 the workpad contains the details.
-                """
-                : """
+                """ : """
 
                 Do not report completed work as ready until the final response contains the implementation, validation,
                 repository, and blocker details that apply to the card.
@@ -1527,20 +1514,16 @@ public final class TrelloBoardSetup {
                 10. Only move to %s after the completion bar below is met. If the work cannot safely reach the
                     completion bar, %s.
                 %s
-                """
-                .formatted(
-                        planningRecord, progressRecord, publicationStep, reviewHandoff, blockedText, duplicateProgress)
-                .stripTrailing();
+                """.formatted(
+                planningRecord, progressRecord, publicationStep, reviewHandoff, blockedText, duplicateProgress).stripTrailing();
     }
 
     private static String githubIssueAssignmentPrompt(boolean workpadToolEnabled) {
-        String timing = workpadToolEnabled
-                ? """
+        String timing = workpadToolEnabled ? """
                 When the recheck tool is advertised, first complete its initial `checking` call successfully.
                 When it is unavailable, issue assignment does not require that call.
 
-                Before you implement the change"""
-                : "Before you implement the change";
+                Before you implement the change""" : "Before you implement the change";
         String skipRecord = workpadToolEnabled
                 ? "the workpad when its tool is advertised, otherwise the final response"
                 : "the final response";
@@ -1570,9 +1553,7 @@ public final class TrelloBoardSetup {
                 issue cannot be resolved, a command fails, or the login is missing from the assignees afterwards,
                 continue the implementation and record which issue was not assigned and why in %s. Do not treat a
                 failed assignment as a blocker.
-                """
-                .formatted(timing, skipRecord)
-                .stripTrailing();
+                """.formatted(timing, skipRecord).stripTrailing();
     }
 
     private static String optionalTrackerStateYaml(String key, String value) {
@@ -1588,8 +1569,7 @@ public final class TrelloBoardSetup {
                     trello_tools:
                       enabled: false
                       allow_writes: false
-                    """
-                    .stripTrailing();
+                    """.stripTrailing();
         }
         return """
                 trello_tools:
@@ -1600,9 +1580,7 @@ public final class TrelloBoardSetup {
                   allow_comments: true
                   allow_checklists: false
                   allow_url_attachments: false
-                """
-                .formatted(yamlList(handoffStates))
-                .stripTrailing();
+                """.formatted(yamlList(handoffStates)).stripTrailing();
     }
 
     private static String validationPrompt(boolean workpadToolEnabled, String reviewState) {
@@ -1630,9 +1608,7 @@ public final class TrelloBoardSetup {
                 If required validation cannot be performed because auth, files, tools, or environment access are
                 missing, treat the work as blocked. Do not move the card to %s until the blocker is fixed or a human
                 explicitly changes the requirement.
-                """
-                .formatted(evidenceDestination, reviewHandoff)
-                .stripTrailing();
+                """.formatted(evidenceDestination, reviewHandoff).stripTrailing();
     }
 
     private static String prPublicationPrompt(
@@ -1653,9 +1629,7 @@ public final class TrelloBoardSetup {
                     the workspace and describe the workspace-relative file names. If the work needs a remote Git provider or permission
                     that is not available in this non-GitHub workflow, treat that as a blocker instead of inventing a
                     GitHub PR flow.
-                    """
-                    .formatted(localEvidence, reviewHandoff)
-                    .stripTrailing();
+                    """.formatted(localEvidence, reviewHandoff).stripTrailing();
         }
         String reviewHandoff = blank(reviewState) ? "human review" : quote(reviewState);
         String blockedText = blank(blockedDestination)
@@ -1712,18 +1686,16 @@ public final class TrelloBoardSetup {
                 If GitHub auth, push permission, branch protection, or repository policy prevents a required PR, try
                 the fallback strategies in `%s`. If a PR is still required and cannot be
                 created or updated, %s with the exact blocker instead of moving to %s.
-                """
-                        .formatted(
-                                reviewHandoff,
-                                skillPath("commit"),
-                                skillPath("push-pr"),
-                                prEvidence,
-                                PullRequestHandoffPrompt.SECTION_TITLE,
-                                localEvidence,
-                                skillPath("push-pr"),
-                                blockedText,
-                                reviewHandoff)
-                        .stripTrailing()
+                """.formatted(
+                        reviewHandoff,
+                        skillPath("commit"),
+                        skillPath("push-pr"),
+                        prEvidence,
+                        PullRequestHandoffPrompt.SECTION_TITLE,
+                        localEvidence,
+                        skillPath("push-pr"),
+                        blockedText,
+                        reviewHandoff).stripTrailing()
                 + "\n\n"
                 + PullRequestHandoffPrompt.modeSection(reviewHandoff, prEvidence, skillPath("push-pr"));
     }
@@ -1736,8 +1708,7 @@ public final class TrelloBoardSetup {
 
                 %s:
                   %s: %s
-                  %s: %s"""
-                .formatted(
+                  %s: %s""".formatted(
                         EffectiveConfig.GitHubConfig.SECTION_KEY,
                         EffectiveConfig.GitHubConfig.PULL_REQUEST_MODE_KEY,
                         EffectiveConfig.GitHubConfig.DEFAULTS.pullRequestMode().workflowValue(),
@@ -1754,8 +1725,7 @@ public final class TrelloBoardSetup {
                     If a reviewed card is moved back to an active list, reread the Trello card description and Trello
                     comments, then continue from the existing workspace or local branch when possible. Do not require
                     PR comments, PR checks, or GitHub review state in this workflow.
-                    """
-                    .stripTrailing();
+                    """.stripTrailing();
         }
         String reviewHandoff = blank(reviewState) ? "ready-for-review handoff" : quote(reviewState);
         String blockedText = blank(blockedDestination)
@@ -1808,16 +1778,14 @@ public final class TrelloBoardSetup {
                 discovery, or review data are
                 unavailable for a PR-backed card and no documented fallback can provide the required signal, %s
                 instead of handing it off.
-                """
-                .formatted(
-                        skillPath("review-sweep"),
-                        reviewHandoff,
-                        checkCaveatDestination,
-                        quote("Merging"),
-                        reviewHandoff,
-                        reviewHandoff,
-                        blockedText)
-                .stripTrailing();
+                """.formatted(
+                skillPath("review-sweep"),
+                reviewHandoff,
+                checkCaveatDestination,
+                quote("Merging"),
+                reviewHandoff,
+                reviewHandoff,
+                blockedText).stripTrailing();
     }
 
     private static String reworkPrompt(
@@ -1836,11 +1804,9 @@ public final class TrelloBoardSetup {
             String reworkPlan = workpadToolEnabled
                     ? "update the workpad with a short rework plan"
                     : "record a short rework plan for the final response";
-            String reworkEvidence = workpadToolEnabled
-                    ? """
+            String reworkEvidence = workpadToolEnabled ? """
                             update the existing workpad with the rework evidence, and add one concise handoff comment. Do not create
-                            duplicate progress summary comments when the workpad already contains the details."""
-                    : "include the rework evidence in the final response.";
+                            duplicate progress summary comments when the workpad already contains the details.""" : "include the rework evidence in the final response.";
             return """
                     ## Rework From Human Review
 
@@ -1852,8 +1818,7 @@ public final class TrelloBoardSetup {
                     a new branch unless the Trello card or a human explicitly asks for a reset.
 
                     Before returning the card to %s, rerun card-specific validation and %s
-                    """
-                    .formatted(reviewHandoff, activeText, contextSources, reworkPlan, reviewHandoff, reworkEvidence)
+                    """.formatted(reviewHandoff, activeText, contextSources, reworkPlan, reviewHandoff, reworkEvidence)
                     .stripTrailing();
         }
         String contextSources = workpadToolEnabled
@@ -1862,11 +1827,9 @@ public final class TrelloBoardSetup {
         String reworkPlan = workpadToolEnabled
                 ? "update the workpad with a short rework plan"
                 : "record a short rework plan for the final response";
-        String reworkEvidence = workpadToolEnabled
-                ? """
+        String reworkEvidence = workpadToolEnabled ? """
                         update the existing workpad with the rework evidence, and add one concise handoff comment. Do not create
-                        duplicate progress summary comments when the workpad already contains the details."""
-                : "include the rework evidence in the final response.";
+                        duplicate progress summary comments when the workpad already contains the details.""" : "include the rework evidence in the final response.";
         String resetRestrictions = workpadToolEnabled
                 ? "close the existing PR, delete the workpad, or create a new branch"
                 : "close the existing PR or create a new branch";
@@ -1883,17 +1846,15 @@ public final class TrelloBoardSetup {
                 Before returning the card to %s, rerun the card-specific validation and PR feedback sweep, %s
 
                 %s
-                """
-                .formatted(
-                        reviewHandoff,
-                        activeText,
-                        contextSources,
-                        reworkPlan,
-                        resetRestrictions,
-                        reviewHandoff,
-                        reworkEvidence,
-                        PullRequestHandoffPrompt.REWORK_NOTE)
-                .stripTrailing();
+                """.formatted(
+                reviewHandoff,
+                activeText,
+                contextSources,
+                reworkPlan,
+                resetRestrictions,
+                reviewHandoff,
+                reworkEvidence,
+                PullRequestHandoffPrompt.REWORK_NOTE).stripTrailing();
     }
 
     private static String landingPrompt(
@@ -1909,8 +1870,7 @@ public final class TrelloBoardSetup {
                     This workflow has no GitHub merge flow configured. Do not merge remote branches or pull
                     requests from this workflow. Move completed local/non-GitHub work to the configured review or done
                     destination described in the handoff rules.
-                    """
-                    .stripTrailing();
+                    """.stripTrailing();
         }
         String reviewHandoff = blank(reviewState) ? "human review" : quote(reviewState);
         if (blank(mergingState)) {
@@ -1920,9 +1880,7 @@ public final class TrelloBoardSetup {
                     This workflow has no merge approval list configured. Do not merge from %s.
                     A human must merge outside Symphony or add a Merging-style list to the workflow active lists
                     and Trello move allowlist.
-                    """
-                    .formatted(reviewHandoff)
-                    .stripTrailing();
+                    """.formatted(reviewHandoff).stripTrailing();
         }
         String doneDestination = blank(doneState) ? "the configured done list" : quote(doneState);
         String blockedText = blank(blockedDestination)
@@ -1975,18 +1933,16 @@ public final class TrelloBoardSetup {
                 say in the handoff comment that a human can move the card straight to %4$s after review.
 
                 %8$s
-                """
-                .formatted(
-                        quote(mergingState),
-                        reviewHandoff,
-                        skillPath("land"),
-                        doneDestination,
-                        fixupDecision,
-                        blockedText,
-                        noPrFeedback,
-                        PullRequestHandoffPrompt.mergeRules(
-                                quote(mergingState), reviewHandoff, doneDestination, blockedText, skillPath("land")))
-                .stripTrailing();
+                """.formatted(
+                quote(mergingState),
+                reviewHandoff,
+                skillPath("land"),
+                doneDestination,
+                fixupDecision,
+                blockedText,
+                noPrFeedback,
+                PullRequestHandoffPrompt.mergeRules(
+                        quote(mergingState), reviewHandoff, doneDestination, blockedText, skillPath("land"))).stripTrailing();
     }
 
     private static String routingPrompt(
@@ -2028,18 +1984,16 @@ public final class TrelloBoardSetup {
                 - %s: %s.
                 - %s: terminal work. Symphony cleans up matching workspaces for terminal cards.
                 - Any other list: out of scope for this Symphony process unless it is added to active_states or terminal_states.
-                """
-                .formatted(
-                        activeText,
-                        queueText,
-                        pickupText,
-                        inProgressRoute,
-                        blockedText,
-                        reviewText,
-                        mergingText,
-                        landingText,
-                        terminalText)
-                .stripTrailing();
+                """.formatted(
+                activeText,
+                queueText,
+                pickupText,
+                inProgressRoute,
+                blockedText,
+                reviewText,
+                mergingText,
+                landingText,
+                terminalText).stripTrailing();
     }
 
     private static String handoffPrompt(
@@ -2055,18 +2009,14 @@ public final class TrelloBoardSetup {
                         If the work is blocked, summarize the blocker in the Codex response; an operator must move the card out of the active list manually. Leaving blocked work active can make Symphony run it again.
                         If a human returns a reviewed card to an active list, reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
                         A Merging list, when configured, is a human approval signal for a merge flow; do not merge from human review.
-                        %s"""
-                        .formatted(FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION)
-                        .stripTrailing();
+                        %s""".formatted(FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION).stripTrailing();
             }
             return """
                     When the work is ready for human review, update the workpad with the final summary and validation evidence, leave the workspace in a reviewable state, and summarize the status in the Codex response. No review or blocked destination list is configured, so do not move the card for handoff.
                     If the work is blocked, update the workpad with the blocker and summarize the blocker in the Codex response; an operator must move the card out of the active list manually. Leaving blocked work active can make Symphony run it again.
                     If a human returns a reviewed card to an active list, reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
                     A Merging list, when configured, is a human approval signal for a merge flow; do not merge from human review.
-                    %s"""
-                    .formatted(FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION)
-                    .stripTrailing();
+                    %s""".formatted(FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION).stripTrailing();
         }
         if (blank(reviewState)) {
             return """
@@ -2074,8 +2024,7 @@ public final class TrelloBoardSetup {
                     If the work is blocked or unsafe to hand off, update the workpad with the blocker, call trello_add_comment with the blocker, then call
                     trello_move_current_card with list_name %s.
                     If a human returns a reviewed card to an active list, reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
-                    A Merging list, when configured, is a human approval signal for a merge flow; do not merge from human review. %s"""
-                    .formatted(quote(blockedDestination), FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
+                    A Merging list, when configured, is a human approval signal for a merge flow; do not merge from human review. %s""".formatted(quote(blockedDestination), FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
         }
         if (blank(blockedState)) {
             return """
@@ -2085,8 +2034,7 @@ public final class TrelloBoardSetup {
                     trello_move_current_card with list_name %s so the card leaves the active list. Do not leave
                     blocked work in an active list; Symphony may run it again.
                     If a human returns a reviewed card to an active list, treat it as rework: reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
-                    A Merging list, when configured, is a human approval signal for a merge flow; do not merge from human review. %s"""
-                    .formatted(quote(reviewState), quote(blockedDestination), FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
+                    A Merging list, when configured, is a human approval signal for a merge flow; do not merge from human review. %s""".formatted(quote(reviewState), quote(blockedDestination), FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
         }
         return """
                 When the work is ready for human review, update the workpad with the final summary and validation evidence, call trello_add_comment with a concise summary and
@@ -2094,8 +2042,7 @@ public final class TrelloBoardSetup {
                 blocked or unsafe to hand off, update the workpad with the blocker, add a Trello comment explaining the blocker, then call
                 trello_move_current_card with list_name %s.
                 If a human returns a reviewed card to an active list, treat it as rework: reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
-                A Merging list, when configured, is a human approval signal for a merge flow; do not merge from human review. %s"""
-                .formatted(quote(reviewState), quote(blockedDestination), FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
+                A Merging list, when configured, is a human approval signal for a merge flow; do not merge from human review. %s""".formatted(quote(reviewState), quote(blockedDestination), FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
     }
 
     private static String nonGithubHandoffPrompt(
@@ -2108,8 +2055,7 @@ public final class TrelloBoardSetup {
                     When the work is ready for human review, %sleave the workspace in a reviewable state and summarize the status in the Codex response.
                     If the work is blocked, %ssummarize the blocker in the Codex response; an operator must move the card out of the active list manually. Leaving blocked work active can make Symphony run it again.
                     If a human returns a reviewed card to an active list, reread the card and Trello comments before changing code again.
-                    %s"""
-                    .formatted(workpadReview, workpadBlocker, FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION)
+                    %s""".formatted(workpadReview, workpadBlocker, FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION)
                     .stripTrailing();
         }
         if (blank(reviewState)) {
@@ -2117,40 +2063,31 @@ public final class TrelloBoardSetup {
                     When the work is ready for human review, %sleave the workspace in a reviewable state and summarize the status in the Codex response.
                     If the work is blocked or unsafe to hand off, %scall trello_add_comment with the blocker, then call trello_move_current_card with list_name %s.
                     If a human returns a reviewed card to an active list, reread the card and Trello comments before changing code again.
-                    %s"""
-                    .formatted(
-                            workpadReview,
-                            workpadBlocker,
-                            quote(blockedDestination),
-                            FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION)
-                    .stripTrailing();
+                    %s""".formatted(
+                    workpadReview, workpadBlocker, quote(blockedDestination), FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION).stripTrailing();
         }
         if (blank(blockedDestination) || reviewState.equalsIgnoreCase(blockedDestination)) {
             return """
                     When the work is ready for human review, %scall trello_add_comment with a concise summary and verification notes, then call trello_move_current_card with list_name %s.
                     If the work is blocked or unsafe to hand off, %sadd a Trello comment explaining the blocker, then call trello_move_current_card with list_name %s so the card leaves the active list. Do not leave blocked work in an active list; Symphony may run it again.
                     If a human returns a reviewed card to an active list, treat it as rework: reread the card and Trello comments before changing code again.
-                    %s"""
-                    .formatted(
-                            workpadReview,
-                            quote(reviewState),
-                            workpadBlocker,
-                            quote(reviewState),
-                            FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION)
-                    .stripTrailing();
+                    %s""".formatted(
+                    workpadReview,
+                    quote(reviewState),
+                    workpadBlocker,
+                    quote(reviewState),
+                    FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION).stripTrailing();
         }
         return """
                 When the work is ready for human review, %scall trello_add_comment with a concise summary and verification notes, then call trello_move_current_card with list_name %s.
                 If the work is blocked or unsafe to hand off, %sadd a Trello comment explaining the blocker, then call trello_move_current_card with list_name %s.
                 If a human returns a reviewed card to an active list, treat it as rework: reread the card and Trello comments before changing code again.
-                %s"""
-                .formatted(
-                        workpadReview,
-                        quote(reviewState),
-                        workpadBlocker,
-                        quote(blockedDestination),
-                        FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION)
-                .stripTrailing();
+                %s""".formatted(
+                workpadReview,
+                quote(reviewState),
+                workpadBlocker,
+                quote(blockedDestination),
+                FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION).stripTrailing();
     }
 
     private static String pickupPrompt(List<String> activeStates, String inProgressState, String mergingState) {
@@ -2160,9 +2097,7 @@ public final class TrelloBoardSetup {
                     : " If the card is in " + quote(mergingState) + ", follow the merge section instead.";
             return ("""
                     This workflow has no in-progress list configured. Leave the card in its current active list
-                    while working, then move it to the configured handoff list when the work is ready or blocked."""
-                            + landingException)
-                    .stripTrailing();
+                    while working, then move it to the configured handoff list when the work is ready or blocked.""" + landingException).stripTrailing();
         }
         List<String> queueStates = activeStates.stream()
                 .filter(state -> !state.equalsIgnoreCase(inProgressState))
@@ -2171,8 +2106,7 @@ public final class TrelloBoardSetup {
         String queueText = queueStates.isEmpty() ? "an active queue list" : quotedList(queueStates);
         return """
                 Symphony moves cards from %s to %s before Codex starts when tracker.in_progress_state is configured.
-                If the card is already in %s, continue the existing execution flow."""
-                .formatted(queueText, quote(inProgressState), quote(inProgressState));
+                If the card is already in %s, continue the existing execution flow.""".formatted(queueText, quote(inProgressState), quote(inProgressState));
     }
 
     private static String completionBarPrompt(
@@ -2187,25 +2121,21 @@ public final class TrelloBoardSetup {
                     finish the %s, validation, commit, and %s requirements that
                     apply to this card. If the work is blocked, report the blocker clearly and keep the card out of
                     any active list manually.
-                    """
-                    .formatted(planRecord, publicationText)
-                    .stripTrailing();
+                    """.formatted(planRecord, publicationText).stripTrailing();
         }
         String blockedText =
                 blank(blockedDestination) ? "block in the final response" : "move to " + quote(blockedDestination);
         String pullRequestLine = "";
         if (githubEnabled) {
             String linkEvidence = workpadToolEnabled ? "the workpad and handoff comment" : "the final response";
-            pullRequestLine =
-                    """
+            pullRequestLine = """
                 - A pull request exists and is linked in %s for repository-changing work
                   unless the card explicitly requested local-only/no-push work or the %s
                   section selects a branch-only handoff, which needs the pushed branch and its handoff details instead.
                   That section's disabled-evidence fallback also satisfies this completion bar's workpad and
                   comment prerequisites for human review.
                 - PR feedback sweep is complete for any existing or newly created PR.
-                """
-                            .formatted(linkEvidence, PullRequestHandoffPrompt.SECTION_TITLE);
+                """.formatted(linkEvidence, PullRequestHandoffPrompt.SECTION_TITLE);
         }
         return """
                 ## Completion Bar Before %s
@@ -2221,8 +2151,7 @@ public final class TrelloBoardSetup {
                 - The working tree does not contain unrelated uncommitted changes.
 
                 If any required item cannot be satisfied, %s with the exact blocker.
-                """
-                .formatted(quote(reviewState), quote(reviewState), planRecord, pullRequestLine, blockedText)
+                """.formatted(quote(reviewState), quote(reviewState), planRecord, pullRequestLine, blockedText)
                 .stripTrailing();
     }
 
