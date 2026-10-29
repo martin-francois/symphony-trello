@@ -42,11 +42,9 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -684,10 +682,12 @@ final class SymphonyOrchestratorTestSupport {
 
     private static boolean anotherThreadWaitsForALockHeldBy(Thread holder) {
         long holderId = holder.threadId();
-        return Arrays.stream(THREADS.getThreadInfo(THREADS.getAllThreadIds()))
-                .filter(Objects::nonNull)
-                .mapToLong(ThreadInfo::getLockOwnerId)
-                .anyMatch(ownerId -> ownerId == holderId);
+        for (ThreadInfo thread : THREADS.getThreadInfo(THREADS.getAllThreadIds())) {
+            if (thread != null && thread.getLockOwnerId() == holderId) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// Holds a paused operation inside a test hook until the test resumes it.
