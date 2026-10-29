@@ -145,7 +145,12 @@ memory model outcomes.
 
 ## More Information
 
-The audit ran on top of commit `0d135edf` with the tests and test hooks from this change. Mutant IDs:
+The audit ran on top of commit `0d135edf` with the tests and test hooks from this change. The counts,
+the mutant IDs and the source order of the `B` numbers describe that commit. Later work on `main`
+added four operation-lock acquisitions (`onWorkerTaskStopped`, `beforeHandoffMove`,
+`afterHandoffMove` and `finishExpiredHandoffUnderLock`), nine `synchronized (this)` blocks and the
+`synchronized` method `retainWorkspaceOwnership`. This audit does not classify those 14 sites.
+Mutant IDs:
 `L` operation lock, `S` `synchronized` method, `B` `synchronized (this)` block in source order
 (blocks 5 to 7 belong to test-only helpers and were skipped), `V` `volatile`, `A` atomic
 read-modify-write, `O` statement order.

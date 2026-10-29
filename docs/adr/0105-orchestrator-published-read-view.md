@@ -18,10 +18,11 @@ informed: [Future maintainers, Contributors]
 [ADR 0051](0051-orchestrator-operation-lock-and-state-monitor.md) serializes long orchestrator
 operations with an operation lock and keeps the instance monitor around every write that status
 readers can see. [ADR 0102](0102-orchestrator-concurrency-mutation-audit.md) removed each
-synchronization element one at a time. Of the 53 monitor sections and `synchronized` methods, 23 are
-redundant because only operation-lock holders touch their state, and 24 exist only so that
-`snapshot()` and `cardDetails()` read consistent maps. No deterministic test owns those 24, and one
-audit run showed the race they prevent as a `ConcurrentModificationException` in a status poll.
+synchronization element one at a time at its audit base, commit `0d135edf`. Of the 53 monitor
+sections and `synchronized` methods there, 23 are redundant because only operation-lock holders
+touch their state, and 24 exist only so that `snapshot()` and `cardDetails()` read consistent maps.
+No deterministic test owns those 24, and one audit run showed the race they prevent as a
+`ConcurrentModificationException` in a status poll.
 
 [GitHub issue #381](https://github.com/martin-francois/symphony-trello/issues/381) asks whether a
 simpler design can replace this one without a public behavior change. Which design should the
@@ -57,8 +58,9 @@ marks ADR 0051 as superseded by this ADR and records a new mutation matrix here.
 
 The design:
 
-* Writers keep the operation lock. Start, stop, ticks, retry timers, pause deadlines, worker exits
-  and agent events run under it exactly as today.
+* Writers keep the operation lock. Start, stop, ticks, retry timers, pause deadlines, worker exits,
+  worker task stops, handoff moves, handoff deadlines and agent events run under it exactly as
+  today.
 * Status readers (`snapshot()`, `cardDetails()`, `isStarted()`) read one `volatile` reference to an
   immutable read view: `started`, running rows, retry rows, recent events, token totals, ended runtime,
   dispatch pause, rate limits and the effective config. They take no lock.
@@ -84,10 +86,9 @@ The design:
 * Neutral, because each publish copies the running rows, retry rows and the bounded recent-event
   lists. Agent events publish once per event, which means copying a few running entries and at most
   50 events per card.
-* Bad, because the change touches most methods of `SymphonyOrchestrator` and conflicts with
-  [GitHub PR #802](https://github.com/martin-francois/symphony-trello/pull/802), which changes
-  `finishTickAndScheduleNext()` and `snapshot()`. Implementing it after that pull request merges
-  avoids a large rebase.
+* Bad, because the change touches most methods of `SymphonyOrchestrator`, including
+  `finishTickAndScheduleNext()` and `snapshot()`, which
+  [GitHub PR #802](https://github.com/martin-francois/symphony-trello/pull/802) changed.
 * Bad, because publish points are a new rule that contributors must follow, even though forgetting
   one is now harmless for consistency.
 
@@ -160,10 +161,10 @@ succeed a little later if the view were published at the end of the operation. T
 named above reads the status from inside the operation's own Trello I/O, which is why the design
 keeps intermediate publish points.
 
-[GitHub PR #802](https://github.com/martin-francois/symphony-trello/pull/802) adds an adaptive poll
+[GitHub PR #802](https://github.com/martin-francois/symphony-trello/pull/802) added an adaptive poll
 interval. Its interval state is updated in `finishTickAndScheduleNext()` and read by `snapshot()`, so
 in this design it belongs to the tick and its status goes into the published view. Its lock-free
 collector of Trello `429` responses lives in the tracker client, is shared by ticks and Codex tool
-calls, and needs no change. That pull request also lets a rate-limited read wait up to 30 seconds
+calls, and needs no change. That pull request also let a rate-limited read wait up to 30 seconds
 while a tick holds the operation lock. `stop()`, worker exits, retry timers and agent events wait
 for the operation lock today as well, and this design does not change that.
