@@ -67,21 +67,12 @@ final class SymphonyOrchestratorOperationLockTest {
         var tracker = new FakeTracker(List.of(retried));
         AgentRunner runner = mock();
         var firstRun = new AtomicBoolean(true);
-        doAnswer(invocation -> {
-                    if (firstRun.getAndSet(false)) {
-                        return AgentRunResult.fail("first attempt failed");
-                    }
-                    blockUntilInterruptedOrTimedOut(BLOCKED_WORKER_TIMEOUT);
-                    return AgentRunResult.fail("interrupted");
-                })
-                .when(runner)
-                .run(any());
+        doAnswer(invocation -> failFirstRunThenBlock(firstRun)).when(runner).run(any());
         var tickCompletions = new AtomicInteger();
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
         orchestrator.tickCompletionHookForTests = tickCompletions::incrementAndGet;
         orchestrator.start();
-        waitUntil(() -> orchestrator.snapshot().counts().retrying() == 1
-                && orchestrator.snapshot().counts().running() == 0);
+        waitUntil(() -> onlyTheFailedAttemptWaitsForItsRetry(orchestrator.snapshot()));
         tracker.setCandidates(List.of(retried, waiting));
 
         Thread retrier = Thread.ofPlatform().unstarted(() -> orchestrator.retryNowForTests("card-retry"));
@@ -89,11 +80,7 @@ final class SymphonyOrchestratorOperationLockTest {
         var retryBeforeDispatch = new PausePoint("the retry at its pre-dispatch prompt refresh");
         // The retry's second fetch is the prompt refresh: its claim is already released and its
         // slot budget already computed, which is the widest window a concurrent tick could use.
-        tracker.stateFetchHook = () -> {
-            if (Thread.currentThread().equals(retrier) && retrierFetches.incrementAndGet() == 2) {
-                retryBeforeDispatch.pause();
-            }
-        };
+        tracker.stateFetchHook = () -> pauseAtTheRetriersSecondFetch(retrier, retrierFetches, retryBeforeDispatch);
         retrier.start();
         retryBeforeDispatch.awaitPaused();
         int ticksBeforeRefresh = tickCompletions.get();
@@ -101,7 +88,8 @@ final class SymphonyOrchestratorOperationLockTest {
         // when
         orchestrator.requestRefresh();
         retryBeforeDispatch.resumeWhenContendedOr(() -> tickCompletions.get() > ticksBeforeRefresh);
-        waitUntil(() -> !retrier.isAlive() && tickCompletions.get() > ticksBeforeRefresh);
+        waitUntil(() -> !retrier.isAlive());
+        waitUntil(() -> tickCompletions.get() > ticksBeforeRefresh);
         RuntimeSnapshot snapshot = orchestrator.snapshot();
         orchestrator.stop();
 
@@ -111,5 +99,25 @@ final class SymphonyOrchestratorOperationLockTest {
                 .singleElement()
                 .extracting(RuntimeSnapshot.RunningRow::cardIdentifier)
                 .isEqualTo("TRELLO-retry");
+    }
+
+    /// Fails the first agent run so the card gets a retry, then blocks every later run until stop
+    /// cancels it.
+    private static AgentRunResult failFirstRunThenBlock(AtomicBoolean firstRun) throws InterruptedException {
+        if (firstRun.getAndSet(false)) {
+            return AgentRunResult.fail("first attempt failed");
+        }
+        blockUntilInterruptedOrTimedOut(BLOCKED_WORKER_TIMEOUT);
+        return AgentRunResult.fail("blocked attempt was not cancelled in time");
+    }
+
+    private static boolean onlyTheFailedAttemptWaitsForItsRetry(RuntimeSnapshot snapshot) {
+        return snapshot.counts().retrying() == 1 && snapshot.counts().running() == 0;
+    }
+
+    private static void pauseAtTheRetriersSecondFetch(Thread retrier, AtomicInteger retrierFetches, PausePoint pause) {
+        if (Thread.currentThread().equals(retrier) && retrierFetches.incrementAndGet() == 2) {
+            pause.pause();
+        }
     }
 }

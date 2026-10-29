@@ -655,8 +655,8 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         when(runner.run(any())).thenAnswer(invocation -> {
             workerThread.set(Thread.currentThread());
             workerStarted.countDown();
-            assertThat(releaseWorker.await(5, TimeUnit.SECONDS))
-                    .as("the exiting worker should be released within 5 seconds")
+            assertThat(releaseWorker.await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                    .as("the exiting worker should be released within %d seconds", WAIT_TIMEOUT.toSeconds())
                     .isTrue();
             return workerExit.finish();
         });
@@ -664,33 +664,26 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
 
         // when
         orchestrator.start();
-        assertThat(workerStarted.await(5, TimeUnit.SECONDS))
-                .as("the worker that will exit should start within 5 seconds")
+        assertThat(workerStarted.await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                .as("the worker that will exit should start within %d seconds", WAIT_TIMEOUT.toSeconds())
                 .isTrue();
         tracker.stateFetchHook = () -> {
             if (hookedFetches.incrementAndGet() == 1) {
                 tickFetchStarted.countDown();
-                try {
-                    assertThat(releaseTickFetch.await(5, TimeUnit.SECONDS))
-                            .as("the active refresh tracker fetch should be released within 5 seconds")
-                            .isTrue();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    throw new AssertionError(e);
-                }
+                awaitRelease(releaseTickFetch, "the active refresh tracker fetch");
             } else {
                 concurrentWorkerExitFetch.countDown();
             }
         };
         orchestrator.requestRefresh();
-        assertThat(tickFetchStarted.await(5, TimeUnit.SECONDS))
-                .as("the refresh tracker fetch should start within 5 seconds")
+        assertThat(tickFetchStarted.await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS))
+                .as("the refresh tracker fetch should start within %d seconds", WAIT_TIMEOUT.toSeconds())
                 .isTrue();
         releaseWorker.countDown();
 
         // then
         try {
-            waitUntil(() -> concurrentWorkerExitFetch.getCount() == 0 || workerExitWaitsForLock(workerThread.get()));
+            waitUntil(() -> fetchedOrWaitsForLock(concurrentWorkerExitFetch, workerThread.get()));
             assertThat(concurrentWorkerExitFetch.getCount())
                     .as("worker-exit tracker I/O must wait for the active orchestrator operation")
                     .isOne();
@@ -699,6 +692,12 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         }
         waitUntil(() -> orchestrator.snapshot().counts().retrying() == 1);
         orchestrator.stop();
+    }
+
+    /// Correct code leaves the worker exit blocked on the operation lock; a missing lock lets its
+    /// tracker fetch happen. Either state ends the wait, and the caller's assertion tells them apart.
+    private static boolean fetchedOrWaitsForLock(CountDownLatch workerExitFetch, Thread worker) {
+        return workerExitFetch.getCount() == 0 || workerExitWaitsForLock(worker);
     }
 
     private static boolean workerExitWaitsForLock(Thread worker) {
