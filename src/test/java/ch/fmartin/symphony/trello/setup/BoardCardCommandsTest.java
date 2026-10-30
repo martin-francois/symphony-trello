@@ -49,12 +49,17 @@ final class BoardCardCommandsTest {
             .list("list-blocked", "Blocked")
             .list("list-review", "Human Review")
             .list("list-done", "Done");
+    private final FakeTrelloBoard foreignBoard = new FakeTrelloBoard(BOARD_ID).list("list-inbox", "Inbox");
     private FakeTrelloServer server;
+    private FakeTrelloServer foreignServer;
 
     @AfterEach
-    void stopServer() {
+    void stopServers() {
         if (server != null) {
             server.close();
+        }
+        if (foreignServer != null) {
+            foreignServer.close();
         }
     }
 
@@ -525,6 +530,39 @@ final class BoardCardCommandsTest {
     }
 
     @Test
+    void anUnconnectedWorkflowWithAnotherEndpointIsRefusedBeforeAnyRequest() throws Exception {
+        // given
+        Path configDir = connectBoard(DEFAULT_TRELLO_TOOLS);
+        Path unconnected = configDir.resolve("WORKFLOW.unconnected.md");
+        Files.writeString(unconnected, workflow(startForeignServer(), BOARD_ID, DEFAULT_TRELLO_TOOLS, List.of("Done")));
+
+        // when
+        CliRunResult result = runCard(configDir, "list", "--workflow", unconnected.toString());
+
+        // then
+        assertFailure(result, "setup_card_workflow_not_connected");
+        assertThat(foreignBoard.requests()).isEmpty();
+        assertThat(board.requests()).isEmpty();
+    }
+
+    @Test
+    void aConnectedWorkflowWithAnotherEndpointIsRefusedBeforeAnyRequest() throws Exception {
+        // given
+        Path configDir = connectBoard(DEFAULT_TRELLO_TOOLS);
+        Files.writeString(
+                workflowPath(configDir),
+                workflow(startForeignServer(), BOARD_ID, DEFAULT_TRELLO_TOOLS, List.of("Done")));
+
+        // when
+        CliRunResult result = runCard(configDir, "list");
+
+        // then
+        assertFailure(result, "setup_card_endpoint_not_trello");
+        assertThat(foreignBoard.requests()).isEmpty();
+        assertThat(board.requests()).isEmpty();
+    }
+
+    @Test
     void outputNeverContainsTheTrelloCredentials() throws Exception {
         // given
         board.card("card0001", "SYNTH101", "Fix the login redirect", "list-inbox");
@@ -622,6 +660,10 @@ final class BoardCardCommandsTest {
     }
 
     private String workflow(String boardId, String trelloTools, List<String> terminalStates) {
+        return workflow(server.endpoint(), boardId, trelloTools, terminalStates);
+    }
+
+    private static String workflow(String endpoint, String boardId, String trelloTools, List<String> terminalStates) {
         var terminal = new StringBuilder();
         for (String state : terminalStates) {
             terminal.append("    - \"").append(state).append("\"\n");
@@ -641,7 +683,13 @@ final class BoardCardCommandsTest {
                 %s%s---
                 # Queue
                 """
-                .formatted(server.endpoint(), boardId, terminal, trelloTools);
+                .formatted(endpoint, boardId, terminal, trelloTools);
+    }
+
+    /// Starts a second Trello API that the card commands must never call, and returns its endpoint.
+    private String startForeignServer() throws Exception {
+        foreignServer = new FakeTrelloServer().on("/1/", foreignBoard).startEmpty();
+        return foreignServer.endpoint();
     }
 
     private static Path workflowPath(Path configDir) {
@@ -674,7 +722,7 @@ final class BoardCardCommandsTest {
                 new TrelloBoardSetupService(setup, workerManager, environment),
                 new LocalSetup(setup, new ProcessCommandRunner()),
                 workerManager,
-                new BoardCardCommands(workerManager, environment),
+                new BoardCardCommands(workerManager, environment, server.endpointUri()),
                 new PrintStream(stdout, true, StandardCharsets.UTF_8),
                 new PrintStream(stderr, true, StandardCharsets.UTF_8));
         return new CliRunResult(

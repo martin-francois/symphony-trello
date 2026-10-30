@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.google.common.base.Ascii;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.net.URI;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,18 +38,23 @@ final class BoardCardCommands {
 
     private final LocalWorkerManager workerManager;
     private final Map<String, String> environment;
+    private final URI trelloApi;
     private final TrelloClient trello;
     private final TrelloCardWrites writes;
     private final ObjectMapper json;
 
     BoardCardCommands(LocalWorkerManager workerManager, Map<String, String> environment) {
-        this(workerManager, environment, new TrelloClient(new ObjectMapper()));
+        this(workerManager, environment, TrelloBoardSetup.DEFAULT_ENDPOINT);
     }
 
-    BoardCardCommands(LocalWorkerManager workerManager, Map<String, String> environment, TrelloClient trello) {
+    /// `trelloApi` is the only endpoint that may receive the Trello key and token. The CLI passes the
+    /// official Trello API, so no workflow setting can send the credentials anywhere else; tests pass
+    /// a fake Trello API.
+    BoardCardCommands(LocalWorkerManager workerManager, Map<String, String> environment, URI trelloApi) {
         this.workerManager = workerManager;
         this.environment = Map.copyOf(environment);
-        this.trello = trello;
+        this.trelloApi = trelloApi;
+        this.trello = new TrelloClient(new ObjectMapper());
         this.writes = new TrelloCardWrites(trello);
         this.json = new ObjectMapper().setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
     }
@@ -57,7 +63,7 @@ final class BoardCardCommands {
         LocalWorkerPaths paths = LocalWorkerPaths.from(
                 Optional.empty(), request.configDir(), Optional.empty(), Optional.empty(), environment);
         CardCommandTarget target = workerManager.cardCommandTarget(
-                paths, request.board(), request.workflow(), request.operation().commandName());
+                paths, request.board(), request.workflow(), request.operation().commandName(), trelloApi);
         Result result;
         try {
             result = execute(request.operation(), session(paths, target));

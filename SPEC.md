@@ -4244,10 +4244,12 @@ that a second formatting pass leaves the source unchanged.
   contract
 - If the board card commands of Section 19.8 are implemented, deterministic tests drive them against
   a stateful fake Trello API and cover board selection with one board, several boards, `--board`,
-  `--workflow`, and an unknown board; credentials that never appear in output or failures; moves by
-  list name and by role, including ambiguous and unset roles; `trello_tools` refusals for moves,
-  new cards, comments, and archiving; refusal of a card on another board and of an archived card;
-  the `--json` shape of every command; and escaped Trello text. Installer tests cover the skill
+  `--workflow`, and an unknown board; an unconnected workflow and a workflow with another
+  `tracker.endpoint`, both refused before any Trello request; credentials that never appear in
+  output or failures; moves by list name and by role, including ambiguous and unset roles;
+  `trello_tools` refusals for moves, new cards, comments, and archiving; refusal of a card on
+  another board and of an archived card; the `--json` shape of every command; and escaped Trello
+  text. Installer tests cover the skill
   copy, the marker, the recorded skill directory, removal on uninstall, and a user-made skill
   directory that both scripts keep, for both installers
 
@@ -5380,9 +5382,15 @@ Board selection:
   follows the lifecycle commands `start`, `stop`, `status`, and `logs`.
 - With no selector and one connected board, the command MUST use that board. With no selector and
   several connected boards, it MUST fail with the lifecycle commands' selection error.
+- `--workflow` MUST name the workflow of a connected-board manifest row. Unlike `start`, a card
+  command MUST fail with `setup_card_workflow_not_connected` for any other workflow, before it reads
+  credentials.
 - The command MUST read the selected board's Trello credentials the same way a worker start does,
   including the board's `.env` file and the workflow's credential settings. It MUST NOT print the
   key, the token, or a credential file's content, including in failure output.
+- The command MUST send the key and token only to the Trello REST API at `https://api.trello.com/1`.
+  A workflow whose `tracker.endpoint` names another address MUST fail with
+  `setup_card_endpoint_not_trello` before any Trello request.
 
 Card and list arguments:
 

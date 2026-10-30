@@ -118,12 +118,15 @@ final class LocalWorkerManager {
 
     /// The board, workflow configuration, and Trello credentials that a `symphony-trello card`
     /// command uses. Board selection, the credential file, and the credential checks match
-    /// `start`, so the card commands read the same key and token as the worker. The managed worker
-    /// itself is neither inspected nor changed.
+    /// `start`, so the card commands read the same key and token as the worker. Unlike `start`,
+    /// the workflow must belong to a connected board and must use `trelloApi` as its Trello
+    /// endpoint: an agent that runs card commands can write files, so a workflow it wrote must not
+    /// receive the board's credentials. The managed worker itself is neither inspected nor changed.
     CardCommandTarget cardCommandTarget(
-            LocalWorkerPaths paths, Optional<String> board, Optional<Path> workflow, String command)
+            LocalWorkerPaths paths, Optional<String> board, Optional<Path> workflow, String command, URI trelloApi)
             throws IOException {
         ConnectedBoardManifest manifest = loadLifecycleManifest(paths, workflow);
+        workflow.ifPresent(path -> requireConnectedWorkflow(manifest, path));
         Path fallbackEnvPath = paths.defaultEnvPath().toAbsolutePath().normalize();
         ConnectedBoard selected =
                 selectOne(manifest, board, workflow, command, Optional.empty(), fallbackEnvPath, false);
@@ -138,8 +141,28 @@ final class LocalWorkerManager {
                 WorkflowEnvironmentResolver.resolver(environment, envPath),
                 false,
                 paths.configDir());
+        requireCardCommandEndpoint(config, trelloApi);
         credentialUsage.ifPresent(usage -> validateWorkerCredentials(usage, command));
         return new CardCommandTarget(selected, config, failure -> withCredentialContext(failure, credentialUsage));
+    }
+
+    private static void requireConnectedWorkflow(ConnectedBoardManifest manifest, Path workflow) {
+        if (manifest.selectWorkflow(workflow.toAbsolutePath().normalize()).isEmpty()) {
+            throw new TrelloBoardSetupException(
+                    "setup_card_workflow_not_connected",
+                    "--workflow must name the workflow of a connected board. Card commands use only the workflows"
+                            + " in " + ConnectedBoardManifest.FILE_NAME
+                            + "; run symphony-trello status to list them.");
+        }
+    }
+
+    private static void requireCardCommandEndpoint(EffectiveConfig config, URI trelloApi) {
+        if (!TrelloApiEndpoint.sameEndpoint(config.tracker().endpoint(), trelloApi)) {
+            throw new TrelloBoardSetupException(
+                    "setup_card_endpoint_not_trello",
+                    "The workflow sets tracker.endpoint to an address other than " + trelloApi
+                            + ". Card commands send the Trello key and token only to that Trello API.");
+        }
     }
 
     private void rejectBoardManagedByAnotherWorkflow(

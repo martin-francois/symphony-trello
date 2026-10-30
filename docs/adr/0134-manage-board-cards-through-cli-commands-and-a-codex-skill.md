@@ -72,6 +72,13 @@ Details that the design decision left open:
   writes. The skill tells the agent to show the user the card and pass the title the user
   confirmed.
 * `card list` and `card show` only read, so they do not depend on `trello_tools`.
+* `--workflow` accepts only the workflow of a connected board, and the commands send the Trello key
+  and token only to the Trello REST API at `https://api.trello.com/1`. `start` also runs an
+  unconnected workflow and uses its `tracker.endpoint`, but the agent that runs card commands can
+  write files. Without these two rules, a workflow the agent wrote could point `tracker.endpoint` at
+  another host and the command would send that host the credentials of the default `.env` file.
+  The [Codex security review on GitHub PR #1139](https://github.com/martin-francois/symphony-trello/pull/1139#discussion_r4422817881)
+  found this.
 * The skill lives in `.codex/skills/symphony-trello-board-cards` under the name it gets when
   installed. Both installers copy it to `$CODEX_HOME/skills`, or to `~/.codex/skills` when
   `CODEX_HOME` is unset, and write a marker file into the directory. A directory without the marker
@@ -94,6 +101,8 @@ Details that the design decision left open:
 * Good, because `--json` gives agents and scripts a stable output shape.
 * Neutral, because the recommended move allowlist includes `In Progress`, an active list. Moving or
   creating a card there through the commands lets Symphony pick it up, the same as a worker move.
+* Bad, because the commands do not work with a custom `tracker.endpoint`, such as a proxy or the
+  fake Trello API of a live bugbash run, even though the worker does.
 * Bad, because the commands do not cover every Trello field, such as labels, due dates, or members.
   Adding one means a new option or subcommand.
 * Bad, because the agent learns the commands from the skill text, not from tool schemas, so a
@@ -104,7 +113,8 @@ Details that the design decision left open:
 ### Confirmation
 
 * `BoardCardCommandsTest` drives every command against a fake Trello board and covers board
-  selection, role moves, `trello_tools` refusals, a card on another board, archived cards, the
+  selection, an unconnected workflow and a workflow with another endpoint that both fail before any
+  request, role moves, `trello_tools` refusals, a card on another board, archived cards, the
   archive title check, the `--json` shape, and credentials that never appear in output.
 * `TrelloListRolesTest` and `TrelloCardSelectorsTest` cover role and card reference parsing.
 * The worker tool tests, such as `TrelloHandoffToolHandlerTest` and `TrelloFollowUpCardToolTest`,

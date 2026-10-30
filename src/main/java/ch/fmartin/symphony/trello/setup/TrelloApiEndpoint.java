@@ -40,6 +40,17 @@ final class TrelloApiEndpoint {
         }
     }
 
+    /// Whether a workflow's `tracker.endpoint` names `expected`, comparing both in the form that
+    /// [#normalize] gives them. A value that `normalize` rejects is not a Trello REST API base, so it
+    /// cannot be `expected` either.
+    static boolean sameEndpoint(String configured, URI expected) {
+        try {
+            return normalize(new URI(configured)).equals(normalize(expected));
+        } catch (URISyntaxException | TrelloBoardSetupException notTrelloApiBase) {
+            return false;
+        }
+    }
+
     private static String canonicalHost(String host) {
         return DOTS.trimTrailingFrom(host.toLowerCase(Locale.ROOT));
     }

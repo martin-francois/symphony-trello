@@ -781,7 +781,9 @@ them, so the agent does not need to see them. Name a card by its id, its short l
 `https://trello.com/c/` URL. Name a list by its name or by its role in the workflow: `active`,
 `in-progress`, `human-review`, `blocked`, `merging`, or `terminal`. With one connected board you can
 leave out `--board`. With several, pass the board name, id, short link, or URL, or pass
-`--workflow PATH`. Add `--json` for output that a script or agent can read.
+`--workflow PATH` with the workflow of a connected board. Add `--json` for output that a script or
+agent can read. The commands send the key and token only to the Trello API at
+`https://api.trello.com/1`, so a workflow with another `tracker.endpoint` fails.
 
 Writes follow the board's workflow, like the worker's Trello tools in
 [Trello Write Controls](#trello-write-controls). The commands write only when

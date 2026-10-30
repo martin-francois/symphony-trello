@@ -1055,7 +1055,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         @Option(names = "--board", description = "Connected Trello board name, id, short link, or board URL.")
         Optional<String> board = Optional.empty();
 
-        @Option(names = "--workflow", description = "Workflow file of the board.")
+        @Option(names = "--workflow", description = "Workflow file of a connected board.")
         Optional<Path> workflow = Optional.empty();
 
         @Option(names = "--config-dir", description = "Directory for local .env, workflows, and board manifest.")
