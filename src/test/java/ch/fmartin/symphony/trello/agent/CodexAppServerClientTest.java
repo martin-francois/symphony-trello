@@ -32,6 +32,7 @@ import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 final class CodexAppServerClientTest {
@@ -86,6 +87,99 @@ final class CodexAppServerClientTest {
                 .content(StandardCharsets.UTF_8)
                 .isEqualTo(
                         config.workspace().root().toAbsolutePath().normalize().toString());
+    }
+
+    @CsvSource({"stdout, ''", "stderr, '>&2'"})
+    @ParameterizedTest(name = "updates on {0}")
+    void keepsATurnRunningPastTheTurnTimeoutWhileTheAppServerKeepsStreaming(String stream, String redirect)
+            throws Exception {
+        // given
+        int silenceLimitMillis = 2_500;
+        Path appServer = writeExecutableScript(
+                "streaming-app-server-" + stream + ".sh",
+                """
+                #!/usr/bin/env bash
+                while IFS= read -r line; do
+                  case "$line" in
+                    *\\"method\\":\\"initialize\\"*) echo '{"id":1,"result":{"userAgent":"streaming-test"}}' ;;
+                    *\\"method\\":\\"thread/start\\"*) echo '{"id":2,"result":{"thread":{"id":"thread-streaming"}}}' ;;
+                    *\\"method\\":\\"turn/start\\"*)
+                      echo '{"id":3,"result":{"turn":{"id":"turn-streaming"}}}'
+                      # Eight updates half a second apart: four seconds in total, longer than the
+                      # turn timeout, with every gap far shorter than it.
+                      for _ in 1 2 3 4 5 6 7 8; do
+                        sleep 0.5
+                        echo '{"method":"item/agentMessage/delta","params":{"threadId":"thread-streaming","turnId":"turn-streaming","delta":"."}}' __REDIRECT__
+                      done
+                      echo '{"method":"turn/completed","params":{"threadId":"thread-streaming","turn":{"id":"turn-streaming","error":null}}}'
+                      ;;
+                  esac
+                done
+                """
+                        .replace("__REDIRECT__", redirect));
+        EffectiveConfig config = config(Map.of(
+                "command",
+                appServer.toString(),
+                "read_timeout_ms",
+                TEST_PROTOCOL_TIMEOUT_MILLIS,
+                "turn_timeout_ms",
+                silenceLimitMillis));
+        Path workspace = config.workspace().root().resolve("TRELLO-streaming");
+        Files.createDirectories(workspace);
+        var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+
+        // when
+        AgentRunResult result = client.runTurn(
+                config,
+                TestCards.card("card-1", "TRELLO-streaming", "Ready for Codex"),
+                workspace,
+                "Stream updates for longer than the turn timeout.",
+                "worker-streaming",
+                event -> {});
+
+        // then
+        assertThat(result).isEqualTo(AgentRunResult.ok());
+    }
+
+    @Test
+    void failsATurnWithTurnTimeoutAfterTheAppServerStaysSilent() throws Exception {
+        // given
+        int silenceLimitMillis = 300;
+        Path appServer = writeExecutableScript(
+                "silent-app-server.sh",
+                """
+                #!/usr/bin/env bash
+                while IFS= read -r line; do
+                  case "$line" in
+                    *\\"method\\":\\"initialize\\"*) echo '{"id":1,"result":{"userAgent":"silent-test"}}' ;;
+                    *\\"method\\":\\"thread/start\\"*) echo '{"id":2,"result":{"thread":{"id":"thread-silent"}}}' ;;
+                    *\\"method\\":\\"turn/start\\"*) echo '{"id":3,"result":{"turn":{"id":"turn-silent"}}}' ;;
+                  esac
+                done
+                """);
+        EffectiveConfig config = config(Map.of(
+                "command",
+                appServer.toString(),
+                "read_timeout_ms",
+                TEST_PROTOCOL_TIMEOUT_MILLIS,
+                "turn_timeout_ms",
+                silenceLimitMillis));
+        Path workspace = config.workspace().root().resolve("TRELLO-silent");
+        Files.createDirectories(workspace);
+        var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+
+        // when
+        AgentRunResult result = client.runTurn(
+                config,
+                TestCards.card("card-1", "TRELLO-silent", "Ready for Codex"),
+                workspace,
+                "Stay silent after the turn starts.",
+                "worker-silent",
+                event -> {});
+
+        // then
+        assertThat(result)
+                .isEqualTo(AgentRunResult.fail("turn_timeout: no app-server output for " + silenceLimitMillis + " ms"));
     }
 
     @Test

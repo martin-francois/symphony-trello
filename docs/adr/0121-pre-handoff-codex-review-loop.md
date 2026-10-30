@@ -7,6 +7,7 @@ consulted:
   - "[GitHub issue #31](https://github.com/martin-francois/symphony-trello/issues/31)"
   - "[GitHub PR #844](https://github.com/martin-francois/symphony-trello/pull/844)"
   - "[GitHub issue #1025](https://github.com/martin-francois/symphony-trello/issues/1025)"
+  - "[GitHub issue #1124](https://github.com/martin-francois/symphony-trello/issues/1124)"
 informed: [Future maintainers, Contributors, Operators]
 ---
 
@@ -276,6 +277,9 @@ fields to existing front matter.
   key that turns the loop off.
 * Bad, because the agent has to keep the ledger, the budget, and the round count itself. Java
   cannot check them.
+* Neutral, because the review runs inside a Codex turn.
+  [ADR 0136](0136-apply-the-codex-turn-timeout-to-silence-like-upstream.md) applies
+  `codex.turn_timeout_ms` to silence, so a review that keeps producing output does not end the turn.
 * Bad, because the guarantee still depends on Codex following its prompt. Java cannot prove that a
   review ran.
 * Bad, because under the default sandbox the review usually runs in the same Codex session that

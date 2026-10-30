@@ -1754,10 +1754,12 @@ Trello board; setup preserves them when regenerating a workflow unless you pass 
 pass `--codex-reasoning-effort`, or edit the workflow value. If either field is omitted, the
 installed Codex CLI/app-server default or `codex.command` configuration decides the value.
 
-`codex.turn_timeout_ms` limits a full Codex turn. `codex.read_timeout_ms` limits app-server startup
-and request/response reads. `codex.stall_timeout_ms` controls how long Symphony waits without Codex
-events before killing the worker and scheduling a retry. Set `stall_timeout_ms` to `0` only when you
-intentionally want to disable stall detection for that workflow.
+`codex.turn_timeout_ms` is how long a running Codex turn may go without any app-server output. Every
+output line resets it, so a turn that keeps producing output isn't cut off after an hour; the
+timeout fires only when the app-server stays silent for that long. `codex.read_timeout_ms` limits
+app-server startup and request/response reads. `codex.stall_timeout_ms` controls how long Symphony
+waits without Codex events before killing the worker and scheduling a retry. Set `stall_timeout_ms`
+to `0` only when you intentionally want to disable stall detection for that workflow.
 
 ### Workspace-Local Skills
 
@@ -1882,6 +1884,12 @@ Codex not to bypass the sandbox.
 While a review run is going, Codex checks on it at least every two minutes, or every half of
 `codex.stall_timeout_ms` when that is shorter, so the stall check never mistakes the wait for a
 stuck turn.
+
+The review runs inside the Codex turn. `codex.turn_timeout_ms` only ends a turn after that long
+without app-server output, so a review that runs for a long time doesn't end the turn while the
+app-server keeps streaming updates, such as the output of the review command. A review command that
+prints nothing for the whole hour ends the turn only when the app-server writes nothing else during
+that hour.
 
 Cards that only investigate, call an API, or need no repository change skip the loop.
 
