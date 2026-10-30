@@ -16,6 +16,12 @@ pull-request approval and manual merge, but Renovate now creates their pull requ
 Dependency Dashboard approval step. The action-pinning and minimal-configuration decisions remain
 accepted.
 
+The pnpm part of this decision is amended by
+[ADR 0077](0077-refresh-lockfiles-on-a-schedule.md). CI no longer runs Corepack, and no regex
+manager updates a `corepack prepare pnpm@... --activate` pin. Each CI job that runs pnpm installs it
+with a SHA-pinned `pnpm/action-setup` step, which reads the exact version from `packageManager` in
+`package.json`. Renovate's npm manager updates that field.
+
 ## Context and Problem Statement
 
 The project should keep dependencies current with low maintenance overhead, but GitHub Actions tags

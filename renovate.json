@@ -73,19 +73,6 @@
       "customType": "regex",
       "managerFilePatterns": [
         "/^\\.github/workflows/ci\\.yml$/",
-        "/^\\.github/workflows/commitlint\\.yml$/"
-      ],
-      "matchStrings": [
-        "corepack prepare pnpm@(?<currentValue>\\d+\\.\\d+\\.\\d+) --activate"
-      ],
-      "datasourceTemplate": "npm",
-      "depNameTemplate": "pnpm",
-      "versioningTemplate": "semver"
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": [
-        "/^\\.github/workflows/ci\\.yml$/",
         "/^scripts/dependency-governance\\.test\\.ts$/"
       ],
       "matchStrings": [

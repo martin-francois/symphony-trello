@@ -72,9 +72,11 @@ requirements.
 - Keep pnpm's `pmOnFail: ignore` while GitHub's static dependency-graph parser cannot read pnpm 12's
   leading package-manager environment document. This preserves a single-document project lockfile
   so vulnerability alerts continue to see transitive dependencies. Because that setting disables
-  pnpm's internal version switch, keep `packageManager` exact and make every CI pnpm entry point use
-  Corepack to prepare that same version. The script test `pnpm keeps GitHub's dependency graph
-  readable while Corepack pins its version` asserts the complete contract.
+  pnpm's internal version switch, keep `packageManager` exact and give every CI job that runs pnpm a
+  SHA-pinned `pnpm/action-setup` step, after `actions/setup-node` and with no `version` input, so it
+  installs that same version. Do not use Corepack in CI: Node.js 26 no longer ships it. The script
+  test `pnpm keeps GitHub's dependency graph readable while every CI job installs its exact pin`
+  asserts the complete contract; see [ADR 0077](../adr/0077-refresh-lockfiles-on-a-schedule.md).
 - Automatic merge MUST occur only through a pull request after required checks pass. Major updates,
   Quarkus migrations, generated source changes, and vendored guidance remain review-required under
   their owning rules. The `Required merge checks` ruleset on the default branch enforces the

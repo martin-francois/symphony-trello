@@ -426,8 +426,9 @@ skill's advice.
   model unless there is a concrete reason not to.
 - Do not use Perl/Python/Ruby/Node one-liners as the documented implementation of a reproducible
   project workflow when a small Java helper would keep the workflow easier to maintain in this repo.
-- Prefer pnpm for Node-based tooling in this repository. Use Corepack-pinned pnpm in CI instead of
-  adding a `package.json` solely to run a JavaScript CLI in this Java project.
+- Prefer pnpm for Node-based tooling in this repository. CI installs the exact `packageManager` pnpm
+  with `pnpm/action-setup`. Do not add a `package.json` solely to run a JavaScript CLI in this Java
+  project.
 - When configuring build-tool integrations such as Java agents, prefer the official documented Maven
   pattern over hand-built local repository paths or other brittle shortcuts.
 

@@ -31,17 +31,20 @@ interface CommitStatus {
   readonly target_url: string;
 }
 
+interface WorkflowStep {
+  readonly name?: unknown;
+  readonly run?: unknown;
+  readonly uses?: unknown;
+  readonly with?: Readonly<Record<string, unknown>>;
+}
+
 interface WorkflowDocument {
   readonly jobs?: Readonly<
     Record<
       string,
       {
         readonly "runs-on"?: unknown;
-        readonly steps?: readonly {
-          readonly name?: unknown;
-          readonly run?: unknown;
-          readonly with?: {readonly script?: unknown};
-        }[];
+        readonly steps?: readonly WorkflowStep[];
       }
     >
   >;
@@ -56,10 +59,6 @@ const WORKFLOW = readFileSync(
   "utf8",
 );
 const CI_WORKFLOW = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
-const COMMITLINT_WORKFLOW = readFileSync(
-  new URL("../.github/workflows/commitlint.yml", import.meta.url),
-  "utf8",
-);
 const DEPENDENCY_SUBMISSION_WORKFLOW = readFileSync(
   new URL("../.github/workflows/dependency-submission.yml", import.meta.url),
   "utf8",
@@ -103,6 +102,10 @@ const OPENREWRITE_PUBLICATION = [
   .map((name) => readFileSync(new URL(name, SCRIPTS), "utf8"))
   .join("\n");
 const CI_OPENREWRITE = `${CI_WORKFLOW}\n${readFileSync(new URL("run-openrewrite-ci", SCRIPTS), "utf8")}`;
+const WORKFLOW_DIRECTORY = new URL("../.github/workflows/", import.meta.url);
+const PNPM_COMMAND = /(?:^|[\s;&|(])pnpm(?=\s|$)/mu;
+const PNPM_SETUP_ACTION = "pnpm/action-setup";
+const SETUP_NODE_ACTION = "actions/setup-node";
 const CANDIDATE: PullRequest = {
   base: {ref: "main", repo: {full_name: "owner/repo"}},
   head: {
@@ -127,6 +130,35 @@ function workflowScript(stepName: string, workflow = WORKFLOW): string {
   const script = matchingSteps[0]?.with?.script;
   assert.ok(typeof script === "string", `${stepName} script block must exist`);
   return script;
+}
+
+/** Every workflow file name with its text. */
+function readWorkflows(): {readonly fileName: string; readonly text: string}[] {
+  return readdirSync(WORKFLOW_DIRECTORY)
+    .filter((name) => /\.ya?ml$/u.test(name))
+    .map((fileName) => ({
+      fileName,
+      text: readFileSync(new URL(fileName, WORKFLOW_DIRECTORY), "utf8"),
+    }));
+}
+
+/**
+ * Whether a run step calls pnpm itself or through a repository script it names. Only the named
+ * script is read, not scripts it calls in turn. The OpenRewrite workflow runs some scripts from a
+ * second checkout of this repository under `trusted/`.
+ */
+function stepRunsPnpm({run}: WorkflowStep): boolean {
+  if (typeof run !== "string") {
+    return false;
+  }
+  const scripts = [...run.matchAll(/(?:trusted\/)?(scripts\/[\w./-]+)/gu)].map(
+    ([, script]) => readFileSync(new URL(`../${script}`, import.meta.url), "utf8"),
+  );
+  return [run, ...scripts].some((command) => PNPM_COMMAND.test(command));
+}
+
+function stepUses({uses}: WorkflowStep, action: string): boolean {
+  return typeof uses === "string" && uses.startsWith(`${action}@`);
 }
 
 test("workflow script extraction follows YAML structure across indentation styles", () => {
@@ -927,13 +959,11 @@ test("updated OpenRewrite artifacts remain isolated in pull request CI", () => {
 });
 
 test("Blacksmith runners are reserved for the critical-path test jobs", () => {
-  const workflowDirectory = new URL("../.github/workflows/", import.meta.url);
   const blacksmithJobs: string[] = [];
   const hostedUbuntuVersions = new Set<string>();
 
-  for (const fileName of readdirSync(workflowDirectory).filter((name) => /\.ya?ml$/u.test(name))) {
-    const workflow = parse(readFileSync(new URL(fileName, workflowDirectory), "utf8")) as
-      WorkflowDocument;
+  for (const {fileName, text} of readWorkflows()) {
+    const workflow = parse(text) as WorkflowDocument;
     for (const [jobName, job] of Object.entries(workflow.jobs ?? {})) {
       if (typeof job["runs-on"] !== "string") {
         continue;
@@ -1501,7 +1531,7 @@ test("The lockfile refresh path enforces the same seven-day cooldown", () => {
   assert.equal(PNPM_WORKSPACE.minimumReleaseAge, 10_080);
 });
 
-test("pnpm keeps GitHub's dependency graph readable while Corepack pins its version", () => {
+test("pnpm keeps GitHub's dependency graph readable while every CI job installs its exact pin", () => {
   assert.equal(
     PNPM_WORKSPACE.pmOnFail,
     "ignore",
@@ -1517,16 +1547,53 @@ test("pnpm keeps GitHub's dependency graph readable while Corepack pins its vers
     /^\s*packageManagerDependencies:/mu,
     "the project lockfile must not contain pnpm's environment-only package graph",
   );
+  // pmOnFail: ignore turns off pnpm's own version switch, so packageManager is the only pin and
+  // pnpm/action-setup must read it rather than carry a second version (ADR 0077).
+  assert.match(PACKAGE.packageManager ?? "", /^pnpm@\d+\.\d+\.\d+$/u);
 
-  const pinnedPnpm = PACKAGE.packageManager;
-  assert.match(pinnedPnpm ?? "", /^pnpm@\d+\.\d+\.\d+$/u);
-  const workflowPins = `${CI_WORKFLOW}\n${COMMITLINT_WORKFLOW}`
-    .match(/corepack prepare (pnpm@\d+\.\d+\.\d+) --activate/gu)
-    ?.map((command) => command.split(" ")[2]);
+  const pnpmJobs: string[] = [];
+  for (const {fileName, text} of readWorkflows()) {
+    // Node.js 26 no longer ships Corepack, so a corepack step works only on a runner image that
+    // happens to carry an older Node.js.
+    assert.doesNotMatch(text, /corepack/iu, `${fileName} must install pnpm with pnpm/action-setup`);
+    const pinnedSetup = new RegExp(
+      `^ +- uses: ${PNPM_SETUP_ACTION}@[0-9a-f]{40} # v\\d+\\.\\d+\\.\\d+$`,
+      "u",
+    );
+    const setupLines = text.split("\n").filter((line) => line.includes(`${PNPM_SETUP_ACTION}@`));
+    for (const line of setupLines) {
+      assert.match(
+        line,
+        pinnedSetup,
+        `${fileName} must pin pnpm/action-setup by commit SHA with its version comment`,
+      );
+    }
+
+    const workflow = parse(text) as WorkflowDocument;
+    for (const [jobName, {steps = []}] of Object.entries(workflow.jobs ?? {})) {
+      const firstPnpmStep = steps.findIndex(stepRunsPnpm);
+      if (firstPnpmStep === -1) {
+        continue;
+      }
+      const job = `${fileName}:${jobName}`;
+      pnpmJobs.push(job);
+      const setupNode = steps.findIndex((step) => stepUses(step, SETUP_NODE_ACTION));
+      const setupPnpm = steps.findIndex((step) => stepUses(step, PNPM_SETUP_ACTION));
+      assert.ok(setupPnpm !== -1 && setupPnpm < firstPnpmStep, `${job} must install pnpm before using it`);
+      // pnpm/action-setup bootstraps pnpm with the npm on PATH, which is the runner image's own
+      // Node.js until setup-node runs.
+      assert.ok(setupNode !== -1 && setupNode < setupPnpm, `${job} must set up Node.js before pnpm`);
+      assert.equal(
+        steps[setupPnpm]?.with?.version,
+        undefined,
+        `${job} must take the pnpm version from packageManager`,
+      );
+    }
+  }
   assert.deepEqual(
-    workflowPins,
-    [pinnedPnpm, pinnedPnpm, pinnedPnpm],
-    "every pnpm workflow entry point must use Corepack's exact packageManager pin",
+    pnpmJobs.sort(),
+    ["ci.yml:renovate", "ci.yml:script-tests", "commitlint.yml:commitlint"],
+    "the scan must find every job that runs pnpm",
   );
 });
 
