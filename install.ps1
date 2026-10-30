@@ -1416,7 +1416,7 @@ function Write-DryRunPrerequisitePlan {
 }
 
 function Assert-ExistingCheckoutSafe {
-  if (Test-Path "$Prefix\.symphony-trello-install") {
+  if (Test-Path -LiteralPath (Join-Path $Prefix ".symphony-trello-install")) {
     return
   }
   $originUrl = ""
@@ -2030,7 +2030,7 @@ if ($InstallSource -eq "source-checkout") {
 }
 Invoke-Step "create $BinDir\symphony-trello.ps1" {
   New-Item -ItemType Directory -Force -Path $BinDir, $ConfigDir, $WorkspaceRoot, $StateHome | Out-Null
-  Set-Content -Encoding ASCII -Path "$Prefix\.symphony-trello-install" -Value "symphony-trello installer-managed app directory"
+  Set-Content -Encoding ASCII -LiteralPath (Join-Path $Prefix ".symphony-trello-install") -Value "symphony-trello installer-managed app directory"
   $PrefixLiteral = ConvertTo-PowerShellLiteral $Prefix
   $ConfigDirLiteral = ConvertTo-PowerShellLiteral $ConfigDir
   $WorkspaceRootLiteral = ConvertTo-PowerShellLiteral $WorkspaceRoot

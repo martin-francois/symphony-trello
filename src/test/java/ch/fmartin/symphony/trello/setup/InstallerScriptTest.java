@@ -7290,6 +7290,44 @@ final class InstallerScriptTest {
     }
 
     @Test
+    void powershellUninstallerRemovesMarkedBracketedAppAndKeepsMatchingSiblingWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        Path home = temporaryDirectory.resolve("bracketed-uninstall-home");
+        Path prefix = home.resolve("app[one]");
+        Path sibling = home.resolve("appo");
+        Files.createDirectories(prefix);
+        Files.createDirectories(sibling);
+        Files.writeString(prefix.resolve(".symphony-trello-install"), "marker");
+        Files.writeString(sibling.resolve("keep.txt"), "unrelated sibling\n");
+
+        // when
+        ProcessResult result = run(
+                nonWindowsPowerShellEnvironment(),
+                command(
+                                pwsh,
+                                "-NoProfile",
+                                "-File",
+                                "./uninstall.ps1",
+                                "--yes",
+                                "--symphony-home",
+                                home.toString(),
+                                "--prefix",
+                                prefix.toString(),
+                                "--bin-dir",
+                                temporaryDirectory
+                                        .resolve("bracketed-uninstall-bin")
+                                        .toString())
+                        .toArray(String[]::new));
+
+        // then
+        result.assertSuccess();
+        assertThat(prefix).doesNotExist();
+        assertThat(sibling.resolve("keep.txt")).hasContent("unrelated sibling\n");
+    }
+
+    @Test
     void posixUninstallerRequiresSeparateConfirmationForLocalUserData() throws Exception {
         // given
         assumeTrue(commandExists("bash"));
@@ -9834,39 +9872,28 @@ final class InstallerScriptTest {
         }
     }
 
-    @Test
-    void powershellInstallerRefusesUnmarkedUnrelatedExistingCheckoutWhenAvailable() throws Exception {
+    @EnumSource(UnauthorizedExistingCheckout.class)
+    @ParameterizedTest
+    void powershellInstallerRefusesUnmarkedUnrelatedExistingCheckoutWhenAvailable(UnauthorizedExistingCheckout checkout)
+            throws Exception {
         // given
         List<String> pwsh = powershellCommand();
         assumeFalse(pwsh.isEmpty());
         assumeTrue(commandExists("git"));
         Path sourceRepository = createPowerShellSourceRepository(temporaryDirectory);
-        Path existingCheckout = createUnmarkedCheckout("unrelated-powershell-checkout");
-        Path fakeBin = createPowerShellFakeToolchain(temporaryDirectory);
-        Path fakeLog = temporaryDirectory.resolve("unrelated-powershell.log");
-        Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
-        environment.put("PATH", fakeBin + File.pathSeparator + System.getenv("PATH"));
-        environment.put("SYMPHONY_FAKE_JAVA", fakeBin.resolve("fake-java.ps1").toString());
-        environment.put("SYMPHONY_FAKE_LOG", fakeLog.toString());
+        Path existingCheckout = createUnmarkedCheckout(checkout.directoryName);
+        boolean hasMarkedSibling = !checkout.markedSiblingName.isEmpty();
+        Path siblingMarker = temporaryDirectory
+                .resolve(hasMarkedSibling ? checkout.markedSiblingName : "unused-sibling")
+                .resolve(".symphony-trello-install");
+        if (hasMarkedSibling) {
+            Files.createDirectories(siblingMarker.getParent());
+            Files.writeString(siblingMarker, "unrelated marker\n");
+        }
+        String headBefore = gitHead(existingCheckout);
 
         // when
-        ProcessResult result = run(
-                environment,
-                command(
-                                pwsh,
-                                "-NoProfile",
-                                "-File",
-                                "./install.ps1",
-                                "--no-onboard",
-                                "--prefix",
-                                existingCheckout.toString(),
-                                "--bin-dir",
-                                temporaryDirectory
-                                        .resolve("unrelated-powershell-bin")
-                                        .toString(),
-                                "--repo",
-                                sourceRepository.toUri().toString())
-                        .toArray(String[]::new));
+        ProcessResult result = runPowerShellInstallIntoExistingCheckout(pwsh, sourceRepository, existingCheckout);
 
         // then
         assertThat(result.exitCode()).as(result.output()).isOne();
@@ -9878,6 +9905,47 @@ final class InstallerScriptTest {
                         "dedicated",
                         "app checkout path");
         assertThat(existingCheckout.resolve(".symphony-trello-install")).doesNotExist();
+        assertThat(existingCheckout.resolve("README.md")).hasContent("unrelated\n");
+        assertThat(gitHead(existingCheckout)).isEqualTo(headBefore);
+        if (hasMarkedSibling) {
+            assertThat(siblingMarker).hasContent("unrelated marker\n");
+        }
+    }
+
+    @EnumSource(AuthorizedExistingCheckout.class)
+    @ParameterizedTest
+    void powershellInstallerUpdatesAuthorizedExistingCheckoutWhenAvailable(AuthorizedExistingCheckout checkout)
+            throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        assumeTrue(commandExists("git"));
+        Path sourceRepository = createPowerShellSourceRepository(temporaryDirectory);
+        Path existingCheckout = createUnmarkedCheckout(checkout.directoryName);
+        if (checkout.marked) {
+            Files.writeString(existingCheckout.resolve(".symphony-trello-install"), "marker");
+        }
+        if (checkout.originIsRequestedRepository) {
+            run(
+                            Map.of(),
+                            "git",
+                            "-C",
+                            existingCheckout.toString(),
+                            "remote",
+                            "set-url",
+                            "origin",
+                            sourceRepository.toUri().toString())
+                    .assertSuccess();
+        }
+
+        // when
+        ProcessResult result = runPowerShellInstallIntoExistingCheckout(pwsh, sourceRepository, existingCheckout);
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output()).contains("OK  Source checked out");
+        assertThat(gitHead(existingCheckout)).isEqualTo(gitHead(sourceRepository));
+        assertThat(existingCheckout.resolve(".symphony-trello-install")).isRegularFile();
     }
 
     @Test
@@ -10414,6 +10482,46 @@ final class InstallerScriptTest {
         return checkout;
     }
 
+    private ProcessResult runPowerShellInstallIntoExistingCheckout(
+            List<String> pwsh, Path sourceRepository, Path existingCheckout) throws Exception {
+        Path fakeBin = createPowerShellFakeToolchain(temporaryDirectory);
+        Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
+        environment.put("PATH", fakeBin + File.pathSeparator + System.getenv("PATH"));
+        environment.put(
+                "SYMPHONY_HOME",
+                temporaryDirectory.resolve("existing-checkout-home").toString());
+        environment.put("SYMPHONY_FAKE_JAVA", fakeBin.resolve("fake-java.ps1").toString());
+        environment.put(
+                "SYMPHONY_FAKE_LOG",
+                temporaryDirectory.resolve("existing-checkout.log").toString());
+        return run(
+                environment,
+                command(
+                                pwsh,
+                                "-NoProfile",
+                                "-File",
+                                "./install.ps1",
+                                "--no-onboard",
+                                "--from-source",
+                                "--repo",
+                                sourceRepository.toUri().toString(),
+                                "--ref",
+                                "main",
+                                "--prefix",
+                                existingCheckout.toString(),
+                                "--bin-dir",
+                                temporaryDirectory
+                                        .resolve("existing-checkout-bin")
+                                        .toString())
+                        .toArray(String[]::new));
+    }
+
+    private static String gitHead(Path repository) throws Exception {
+        return run(Map.of(), "git", "-C", repository.toString(), "rev-parse", "HEAD")
+                .output()
+                .trim();
+    }
+
     private static ProcessResult runWithoutHome(String... command) throws Exception {
         var processBuilder = new ProcessBuilder(command);
         processBuilder.environment().remove("HOME");
@@ -10721,6 +10829,41 @@ final class InstallerScriptTest {
     private static String platformRootPath() {
         Path root = Path.of("").toAbsolutePath().getRoot();
         return root == null ? "/" : root.toString();
+    }
+
+    /// Existing Git checkouts that `install.ps1` must refuse to update. A bracketed name is a
+    /// PowerShell wildcard pattern, so `sibling[one]` matches its marked sibling `siblingo` unless
+    /// the installer looks the marker up by literal path.
+    enum UnauthorizedExistingCheckout {
+        PLAIN_UNMARKED("unrelated-powershell-checkout", ""),
+        BRACKETED_UNMARKED("unmarked[one]", ""),
+        BRACKETED_WITH_MARKED_SIBLING("sibling[one]", "siblingo");
+
+        private final String directoryName;
+        private final String markedSiblingName;
+
+        UnauthorizedExistingCheckout(String directoryName, String markedSiblingName) {
+            this.directoryName = directoryName;
+            this.markedSiblingName = markedSiblingName;
+        }
+    }
+
+    /// Existing Git checkouts that `install.ps1` updates: an installer marker or an `origin` equal
+    /// to the requested repository authorizes them, whatever brackets the path contains.
+    enum AuthorizedExistingCheckout {
+        BRACKETED_MARKED_WITH_DIFFERENT_ORIGIN("app[one]", true, false),
+        PLAIN_MARKED_WITH_DIFFERENT_ORIGIN("plain-marked-checkout", true, false),
+        BRACKETED_UNMARKED_WITH_REQUESTED_ORIGIN("matching[one]", false, true);
+
+        private final String directoryName;
+        private final boolean marked;
+        private final boolean originIsRequestedRepository;
+
+        AuthorizedExistingCheckout(String directoryName, boolean marked, boolean originIsRequestedRepository) {
+            this.directoryName = directoryName;
+            this.marked = marked;
+            this.originIsRequestedRepository = originIsRequestedRepository;
+        }
     }
 
     enum ReleaseSignatureCheck {

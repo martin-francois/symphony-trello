@@ -858,7 +858,7 @@ Write-Status "AUTH" "            Codex login/auth files and GitHub auth"
 Write-Status "TRELLO" "          Trello boards are not deleted or archived"
 Write-Host
 if (Confirm-Step "Remove installer-managed app files and CLI executable?" $Yes) {
-  if ((Test-Path $Prefix) -and (-not (Test-Path "$Prefix\.symphony-trello-install"))) {
+  if ((Test-Path -LiteralPath $Prefix) -and (-not (Test-Path -LiteralPath (Join-Path $Prefix ".symphony-trello-install")))) {
     throw "Refusing to remove app directory without Symphony installer marker: $Prefix"
   }
   Assert-AppRemovalPreservesCurrentData
