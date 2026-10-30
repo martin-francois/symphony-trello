@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
 import { createFakeCommandEnvironment } from "./test-support/fake-command-environment.ts";
@@ -140,4 +140,31 @@ test("local commitlint setup reinstalls after the shared pins change", (t) => {
     "@commitlint/cli@99.2.0 @commitlint/config-conventional@99.1.0\n",
     "the cache marker must record the new pins",
   );
+});
+
+test("local setup rejects a foreign-owned cache before invoking pnpm", {
+  skip: process.platform !== "linux" || process.getuid?.() === 0,
+}, (t) => {
+  // given
+  const commands = createFakeCommandEnvironment("commitlint-foreign-cache-", {
+    pnpm: '#!/bin/bash\nprintf "%s\\n" "$*" >>"$FAKE_COMMAND_LOG"\n',
+  });
+  t.after(() => rmSync(commands.directory, { recursive: true, force: true }));
+  const cache = join(commands.directory, "symphony-trello");
+  // Bash's -O follows symlinks. /proc is owned by root, and is not a writable cache even if the
+  // guard regresses. This exercises the real ownership check without privileged fixture setup.
+  symlinkSync("/proc", cache, "dir");
+
+  // when
+  const result = spawnSync("bash", ["scripts/commitlint-local", "title", "fix: reject foreign cache"], {
+    encoding: "utf8",
+    env: commands.environment({ XDG_CACHE_HOME: commands.directory }),
+  });
+
+  // then
+  assert.ifError(result.error);
+  assert.equal(result.status, 2, result.stderr);
+  assert.ok(result.stderr.includes(`Cache directory is not owned by the current user: ${cache}`),
+    "an existing foreign-owned cache must fail with the ownership diagnostic");
+  assert.equal(commands.readLog(), "", "a rejected cache must never invoke the package manager");
 });
