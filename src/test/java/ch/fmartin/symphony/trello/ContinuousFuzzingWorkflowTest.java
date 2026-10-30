@@ -68,7 +68,6 @@ final class ContinuousFuzzingWorkflowTest {
                         "output-sarif: true",
                         "storage-repo: https://${{ secrets.CLUSTERFUZZLITE_STORAGE_TOKEN }}@github.com/"
                                 + "martin-francois/symphony-trello-fuzzing-storage.git",
-                        "scripts/verify-clusterfuzzlite-storage corpus \"${{ matrix.target }}\"",
                         "github/codeql-action/upload-sarif@",
                         "category: clusterfuzzlite-${{ matrix.target }}",
                         "sarif_file: cifuzz-sarif/results.sarif",
@@ -77,6 +76,13 @@ final class ContinuousFuzzingWorkflowTest {
                         "scripts/report-clusterfuzzlite-failure",
                         "!cancelled()")
                 .doesNotContain("blacksmith-", "parallel-fuzzing: true");
+        String verifyStep = batchJob.substring(batchJob.indexOf("      - name: Verify corpus persistence"));
+        assertThat(verifyStep.substring(0, verifyStep.indexOf("      - name: Upload fuzzing result")))
+                .as("the verifier reads the target through env, never an expression inside run")
+                .contains(
+                        "CFL_TARGET: ${{ matrix.target }}",
+                        "scripts/verify-clusterfuzzlite-storage corpus \"$CFL_TARGET\"")
+                .doesNotContain("corpus \"${{");
         String issueStep = batchJob.substring(batchJob.indexOf("      - name: Create or update fuzz failure issue"));
         assertThat(issueStep.substring(0, issueStep.indexOf("      - name: Fail after publishing")))
                 .doesNotContain("hashFiles('cifuzz-sarif/results.sarif')");
