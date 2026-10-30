@@ -70,7 +70,7 @@ command tells you whether it is needed. After its checks pass, it compares the n
 The comparison splits every frame into tiles of 120 by 120 pixels and computes FFmpeg's SSIM, a
 similarity score from 0 to 1, for each tile in each frame. A change is visible when any tile scores
 below 0.95. `scripts/readme-demo-visual-change.ts` defines both numbers.
-[ADR 0132](../adr/0132-re-upload-the-readme-video-only-after-a-visible-change.md) records the
+[ADR 0133](../adr/0133-re-upload-the-readme-video-only-after-a-visible-change.md) records the
 measured re-render noise, a measured one-word caption change, and why whole-frame SSIM was not
 enough. If the comparison itself fails, the render keeps the new media and asks for an upload.
 

@@ -98,7 +98,7 @@ requirements.
   the `--compare-with` command. Pull-request review checks that the PR states the verdict, that it
   compared with `main`, and that no agent merged past a re-upload verdict or asked for an upload
   after a keep verdict. See
-  [ADR 0132](../adr/0132-re-upload-the-readme-video-only-after-a-visible-change.md).
+  [ADR 0133](../adr/0133-re-upload-the-readme-video-only-after-a-visible-change.md).
 - This public repository groups dependencies by release or compatibility contract. Unrelated
   non-major updates have separate pull requests and no weekly update schedule. The one exception
   is the `gcr.io/oss-fuzz-base` digest updates above, which would otherwise open a pull request
@@ -124,4 +124,4 @@ requirements.
 - [ADR 0125](../adr/0125-read-mcr-push-times-for-the-dotnet-sdk-image.md)
 - [ADR 0126](../adr/0126-offer-the-newest-oss-fuzz-build-past-the-cooldown.md)
 - [ADR 0127](../adr/0127-run-powershell-tests-on-the-pinned-dotnet-sdk-image.md)
-- [ADR 0132](../adr/0132-re-upload-the-readme-video-only-after-a-visible-change.md)
+- [ADR 0133](../adr/0133-re-upload-the-readme-video-only-after-a-visible-change.md)

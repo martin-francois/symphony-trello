@@ -25,7 +25,7 @@ import {
   writeBaselineVideo,
 } from "./readme-demo-visual-change.ts";
 
-// Lowest tile SSIM of real 1080p renders, measured for ADR 0132: HyperFrames 0.8.174 against
+// Lowest tile SSIM of real 1080p renders, measured for ADR 0133: HyperFrames 0.8.174 against
 // 0.8.181 with unchanged sources, and 0.8.181 against a render that changed one caption word.
 const NOISE_SSIM = 0.979292;
 const CAPTION_WORD_SSIM = 0.9165;

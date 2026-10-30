@@ -15,7 +15,7 @@ informed: [Future maintainers, Contributors]
 
 # Let Renovate Update HyperFrames and Re-render the README Demo by Hand
 
-[ADR 0132](0132-re-upload-the-readme-video-only-after-a-visible-change.md) narrows the README
+[ADR 0133](0133-re-upload-the-readme-video-only-after-a-visible-change.md) narrows the README
 attachment step below: the maintainer replaces the attachment only when the render reports a
 visible change.
 

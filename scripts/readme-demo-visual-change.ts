@@ -1,7 +1,7 @@
 /**
  * Decides whether a new README demo render looks different from a committed one, which tells the
  * maintainer whether the README's uploaded video attachment needs replacing. See
- * docs/adr/0132-re-upload-the-readme-video-only-after-a-visible-change.md.
+ * docs/adr/0133-re-upload-the-readme-video-only-after-a-visible-change.md.
  */
 
 import {spawnSync} from "node:child_process";
