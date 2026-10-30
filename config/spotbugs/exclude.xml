@@ -3,7 +3,7 @@
   <!-- CDI/service constructors intentionally retain injected collaborators. They are application components, not caller-owned mutable value objects. -->
   <Match>
     <Bug pattern="EI_EXPOSE_REP2"/>
-    <Class name="~ch\.fmartin\.symphony\.trello\.(SymphonyLifecycle|agent\.(CodexAppServerClient|LocalAgentRunner|TrelloHandoffToolHandler)|orchestrator\.SymphonyOrchestrator|tracker\.TrelloClient)"/>
+    <Class name="~ch\.fmartin\.symphony\.trello\.(SymphonyLifecycle|agent\.(CodexAppServerClient|LocalAgentRunner|TrelloHandoffToolHandler)|orchestrator\.SymphonyOrchestrator|tracker\.(TrelloCardWrites|TrelloClient))"/>
   </Match>
 
   <!-- Running external commands is the product boundary for Codex, hooks, worker startup, and setup probes. Command lists are constructed explicitly and reviewed at call sites. -->
