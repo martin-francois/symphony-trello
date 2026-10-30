@@ -2,8 +2,8 @@
 
 ## Scope
 
-How to run issue triage sweeps, manage issue dependencies, and apply triage labels. Spec-alignment
-auditing that may create issues lives in
+How to write issues through the issue forms, run issue triage sweeps, manage issue dependencies,
+and apply triage labels. Spec-alignment auditing that may create issues lives in
 [Specification & ADR discipline](specification-and-adr-discipline.md).
 
 ## Issue dependencies
@@ -153,8 +153,27 @@ auditing that may create issues lives in
   a maintainer must confirm. Never close on resemblance alone: the issue's actual acceptance criteria
   must be met, not just its premise or a partial overlap.
 
+## Issue forms
+
+- Every issue an agent creates in this repository, and every body it rewrites on an issue the
+  authenticated account opened, uses the matching `.github/ISSUE_TEMPLATE` form: `bug_report.yml`
+  for a defect, `feature_request.yml` for everything else. Read the form for its fields; this page
+  does not list them. Write each field as a `### <field label>` heading in the form's order, fill
+  every required field, and leave out optional fields that have nothing true to say. A dropdown
+  answer is one of the form's options, written as plain text.
+- Never invent a version, OS, or other fact to fill a field. A required text field the issue doesn't
+  depend on says how the issue was found instead, for example
+  `Not OS-specific (found by reading the code on main at <sha>)`.
+- Check `AI-assisted issue` and leave the `I confirm I understand and reviewed this ...` box
+  unticked; only a human who reviewed the issue ticks it. Then apply the
+  [Triage labels](#triage-labels) policy and run the [label audit](#label-audit) before finishing.
+- No automation checks issue bodies. The read-back that [Triage labels](#triage-labels) requires
+  after each create or edit also confirms the headings, required fields, and checkboxes against the
+  form, and the task or sweep summary reports it.
+
 ## Triage labels
 
+- Create or rewrite the issue body through the [issue forms](#issue-forms) first.
 - When creating or editing an issue during any task, not only during a sweep, inspect its current
   labels and apply this full Triage labels policy, then run the [label audit](#label-audit) or at
   least check the touched issue against the rules it lists. Apply every applicable label from the

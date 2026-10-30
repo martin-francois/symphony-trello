@@ -104,7 +104,8 @@ lives in [Testing](testing.md).
   structure, not only a Symphony-generated board imported back again. Use explicit non-default active
   and terminal list names, then verify fake-Codex first and strict real-Codex after.
 - When a live run uncovers a broken scenario after an earlier health claim, record the reproducible
-  scenario in `docs/live-e2e.md` and create or update GitHub issues before fixing behavior. Capture
+  scenario in `docs/live-e2e.md` and create or update GitHub issues, through the
+  [issue forms](github-issue-triage.md#issue-forms), before fixing behavior. Capture
   both the user-visible symptoms and the underlying cause when they are distinct. Keep the broken
   live state available when the user asks to reproduce it before a fix.
 

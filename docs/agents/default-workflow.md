@@ -97,6 +97,8 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
   future acceptable solution would need to provide, and any ADR or PR that records the current
   decision. Use the `idea` label only together with `not ready` when the work is exploratory rather
   than ready to implement.
+- Create every issue in this repository, including the follow-up issues above, through the
+  [issue forms](github-issue-triage.md#issue-forms).
 - Apply [compatibility discipline](#compatibility-discipline): default to the current documented
   contract, make breaking-vs-compatible choices explicit in issues and pull requests, and add
   compatibility behavior only when the issue, specification, or ADR deliberately chooses it.
