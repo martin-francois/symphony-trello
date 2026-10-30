@@ -146,6 +146,7 @@ final class SetupDiagnosticReporter {
             "setup_card_list_role_unset",
             "setup_card_not_found",
             "setup_card_not_on_board",
+            "setup_card_workflow_board_mismatch",
             "setup_card_workflow_not_connected",
             "setup_codex_auth_required",
             "setup_codex_login_failed",

@@ -5385,6 +5385,9 @@ Board selection:
 - `--workflow` MUST name the workflow of a connected-board manifest row. Unlike `start`, a card
   command MUST fail with `setup_card_workflow_not_connected` for any other workflow, before it reads
   credentials.
+- The selected workflow's `tracker.board_id` MUST name the selected board, by the id, short link, or
+  board URL the manifest row records. Otherwise the command MUST fail with
+  `setup_card_workflow_board_mismatch` before any Trello request.
 - The command MUST read the selected board's Trello credentials the same way a worker start does,
   including the board's `.env` file and the workflow's credential settings. It MUST NOT print the
   key, the token, or a credential file's content, including in failure output.

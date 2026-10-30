@@ -563,6 +563,22 @@ final class BoardCardCommandsTest {
     }
 
     @Test
+    void aWorkflowThatNamesAnotherBoardIsRefusedBeforeAnyRequest() throws Exception {
+        // given
+        Path configDir = connectBoard(DEFAULT_TRELLO_TOOLS);
+        Files.writeString(
+                workflowPath(configDir), workflow(server.endpoint(), "board-9", DEFAULT_TRELLO_TOOLS, List.of("Done")));
+
+        // when
+        CliRunResult result = runCard(configDir, "list");
+
+        // then
+        assertFailure(result, "setup_card_workflow_board_mismatch");
+        result.stderrContains("\"Queue\"");
+        assertThat(board.requests()).isEmpty();
+    }
+
+    @Test
     void outputNeverContainsTheTrelloCredentials() throws Exception {
         // given
         board.card("card0001", "SYNTH101", "Fix the login redirect", "list-inbox");

@@ -121,7 +121,9 @@ final class LocalWorkerManager {
     /// `start`, so the card commands read the same key and token as the worker. Unlike `start`,
     /// the workflow must belong to a connected board and must use `trelloApi` as its Trello
     /// endpoint: an agent that runs card commands can write files, so a workflow it wrote must not
-    /// receive the board's credentials. The managed worker itself is neither inspected nor changed.
+    /// receive the board's credentials. The workflow must also name the selected board, so the
+    /// output never shows one board while the command works on another. The managed worker itself
+    /// is neither inspected nor changed.
     CardCommandTarget cardCommandTarget(
             LocalWorkerPaths paths, Optional<String> board, Optional<Path> workflow, String command, URI trelloApi)
             throws IOException {
@@ -142,6 +144,7 @@ final class LocalWorkerManager {
                 false,
                 paths.configDir());
         requireCardCommandEndpoint(config, trelloApi);
+        requireSelectedBoard(selected, config);
         credentialUsage.ifPresent(usage -> validateWorkerCredentials(usage, command));
         return new CardCommandTarget(selected, config, failure -> withCredentialContext(failure, credentialUsage));
     }
@@ -162,6 +165,18 @@ final class LocalWorkerManager {
                     "setup_card_endpoint_not_trello",
                     "The workflow sets tracker.endpoint to an address other than " + trelloApi
                             + ". Card commands send the Trello key and token only to that Trello API.");
+        }
+    }
+
+    private static void requireSelectedBoard(ConnectedBoard selected, EffectiveConfig config) {
+        String configuredBoard =
+                TrelloBoardIds.parseStoredBoardUrl(config.tracker().boardId());
+        if (!stableBoardIdentifiers(selected).contains(configuredBoard.toLowerCase(Locale.ROOT))) {
+            throw new TrelloBoardSetupException(
+                    "setup_card_workflow_board_mismatch",
+                    "The workflow names a different Trello board than the connected board "
+                            + DisplayNames.quotedName(selected.boardName())
+                            + ". Fix tracker.board_id in the workflow, or connect the board again.");
         }
     }
 
