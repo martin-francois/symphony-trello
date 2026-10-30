@@ -104,11 +104,17 @@ auditing that may create issues lives in
   minimum template label, and do not create a new label when an existing label has the intended
   meaning. Explicitly evaluate type labels, priority, `blocked`, `breaking change`, `not ready`,
   `help wanted`, and `good first issue` as applicable. Every open issue should have exactly one
-  priority label: `priority high`, `priority medium`, or `priority low`. Every issue MUST have exactly
-  one size label as defined below. Do not defer `good first issue` to a later sweep: apply it
-  immediately when the issue satisfies the 80% one-shot implementation bar. If the authenticated
-  account cannot manage labels, finish creating or editing the issue and record the exact applicable
-  existing label names in a single hidden JSON-array marker such as
+  priority label: `priority high`, `priority medium`, or `priority low`. Raise an issue at least one
+  priority level above where it would otherwise sit, even when it is not urgent, when it is easy to
+  implement and users, contributors, or maintainers would notice the result, such as a bug users
+  hit, a confusing error message, a CI gap that lets breakage through, or a docs gap that blocks
+  setup; cosmetic churn, tiny refactors with no visible effect, and big issues that are not urgent
+  keep their level, and because no check can judge this, the task or sweep summary lists each issue
+  raised this way. Every issue MUST have exactly one size label as defined below. Do not defer
+  `good first issue` to a later sweep: apply it immediately when the issue satisfies the 80%
+  one-shot implementation bar. If the authenticated account cannot manage labels, finish creating
+  or editing the issue and record the exact applicable existing label names in a single hidden
+  JSON-array marker such as
   `<!-- agent-suggested-labels: ["enhancement", "priority medium", "size S"] -->`. Report the labels
   that still need to be applied. If a marker already exists, replace it with one marker containing
   the de-duplicated labels that remain pending; never append a second marker. When editing or triaging
