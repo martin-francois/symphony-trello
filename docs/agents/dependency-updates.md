@@ -99,6 +99,12 @@ requirements.
   compared with `main`, and that no agent merged past a re-upload verdict or asked for an upload
   after a keep verdict. See
   [ADR 0133](../adr/0133-re-upload-the-readme-video-only-after-a-visible-change.md).
+- `com.networknt:json-schema-validator` stays on 2.x through a Renovate `allowedVersions` hold,
+  because 3.x requires Jackson 3 and Quarkus 3 runs on Jackson 2. The script test `Renovate holds
+  json-schema-validator on 2.x while Quarkus is on Jackson 2` fails once Quarkus reaches 4; then
+  remove the hold and follow
+  [GitHub issue #1119](https://github.com/martin-francois/symphony-trello/issues/1119). See
+  [ADR 0088](../adr/0088-validate-dynamic-tool-arguments-with-json-schema.md).
 - This public repository groups dependencies by release or compatibility contract. Unrelated
   non-major updates have separate pull requests and no weekly update schedule. The one exception
   is the `gcr.io/oss-fuzz-base` digest updates above, which would otherwise open a pull request

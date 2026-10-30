@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { parse } from "yaml";
 import { applyRegexUpdate, extractRegexDependencies } from "./test-support/renovate-regex-manager.ts";
+import { RENOVATE_CONFIG, matchesRegexOrGlobList } from "./test-support/renovate-config.ts";
 
 const POM = readFileSync(new URL("../pom.xml", import.meta.url), "utf8");
 const CONFIDENCE_MAP = readFileSync(
@@ -136,4 +137,35 @@ test("Renovate validation is reproducible and permits only required builds", () 
 
   // then
   assert.equal(validationCommand, expectedCommand);
+});
+
+test("Renovate holds json-schema-validator on 2.x while Quarkus is on Jackson 2", () => {
+  // given
+  const quarkusVersion = /<quarkus\.platform\.version>([^<]+)<\/quarkus\.platform\.version>/u.exec(POM)?.[1];
+  assert.match(quarkusVersion ?? "", /^\d+\./u, "pom.xml must declare a numeric quarkus.platform.version");
+
+  // when
+  const holds = RENOVATE_CONFIG.packageRules
+    .filter(
+      ({ allowedVersions, matchPackageNames }) =>
+        allowedVersions !== undefined &&
+        matchPackageNames !== undefined &&
+        matchesRegexOrGlobList(matchPackageNames, "com.networknt:json-schema-validator"),
+    )
+    .map(({ allowedVersions }) => allowedVersions);
+
+  // then
+  // The hold expires with Quarkus 4, so this check fails first and says what to do.
+  assert.ok(
+    Number.parseInt(quarkusVersion ?? "", 10) < 4,
+    `Quarkus ${quarkusVersion} runs on Jackson 3: remove the json-schema-validator hold from renovate.json, ` +
+      "this test, and the hold notes in ADR 0088 and docs/agents/dependency-updates.md, then move to " +
+      "validator 3.x as https://github.com/martin-francois/symphony-trello/issues/1119 describes",
+  );
+  // A Maven range, because Renovate's Maven versioning rejects "<3" and would fall back to npm semver.
+  assert.deepEqual(
+    holds,
+    ["(,3.0)"],
+    "restore the (,3.0) json-schema-validator hold in renovate.json: 3.x requires Jackson 3, which Quarkus 3 does not use",
+  );
 });

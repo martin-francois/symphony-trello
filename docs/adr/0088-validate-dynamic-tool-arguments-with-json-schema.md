@@ -152,6 +152,8 @@ an independent regression input for the handler.
 * The row for `json-schema-validator` in
   [Dependency upgrade confidence](../testing/dependency-upgrade-confidence.md) names the tests that
   catch a bad update.
+* The script test `Renovate holds json-schema-validator on 2.x while Quarkus is on Jackson 2` checks
+  the Renovate hold and fails once `quarkus.platform.version` reaches 4.
 
 ## Pros and Cons of the Options
 
@@ -214,3 +216,6 @@ validator does not need its own Jackson override.
 Revisit this decision if Codex starts sending properties outside the advertised schema often enough
 to stop runs, if networknt ends the 2.x line, or if Quarkus moves to Jackson 3. In the last case,
 evaluate the 3.x line again.
+Until Quarkus moves to Jackson 3, a Renovate rule holds the validator on 2.x, and
+[GitHub issue #1119](https://github.com/martin-francois/symphony-trello/issues/1119) plans the move
+to 3.x with the Quarkus 4 upgrade.

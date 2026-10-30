@@ -11,6 +11,7 @@ export interface RenovateRegexManager {
 
 export interface RenovatePackageRule {
   readonly addLabels?: readonly string[];
+  readonly allowedVersions?: string;
   readonly automerge?: boolean;
   readonly branchTopic?: string;
   readonly dependencyDashboardApproval?: boolean;
