@@ -32,15 +32,22 @@ or issue editing rules here.
 4. Apply the canonical triage document in cycles. After making any change,
    fetch the open issue set again and repeat until one full pass finds no body,
    label, milestone, dependency, already-implemented, or relationship changes.
-5. When creating follow-up issues during the sweep, use the repository issue
-   templates and the same full triage policy before publishing the issue.
-6. Prefer editing maintainer-authored issue bodies over adding comments, unless
+5. End the sweep with the label audit from the repository root:
+   `node scripts/audit-issue-labels.ts`. Fix every failure and rerun it until it
+   reports none, then decide every judgment item as the canonical triage
+   document's Label audit section says. The audit checks only the mechanical
+   label rules; it does not replace step 4.
+6. When creating follow-up issues during the sweep, use the repository issue
+   templates and the same full triage policy before publishing the issue, and
+   create them before the final audit run so it covers them.
+7. Prefer editing maintainer-authored issue bodies over adding comments, unless
    the canonical triage document calls for a historical comment or the issue was
    opened by another account.
-7. Finish with a concise report: number of cycles, issues changed, issues
+8. Finish with a concise report: number of cycles, issues changed, issues
    intentionally left unchanged, labels or dependencies repaired, users assigned
    from pickup comments, stale assigned issues with no open pull request, issues
-   closed as already implemented, and any blockers.
+   closed as already implemented, the final label audit output with the
+   decision for each judgment item, and any blockers.
 
 ## Checks
 

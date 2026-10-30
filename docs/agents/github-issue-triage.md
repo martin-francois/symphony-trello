@@ -30,7 +30,9 @@ auditing that may create issues lives in
   cannot be represented by a GitHub issue dependency, such as third-party approval, an upstream
   release, or a time-based availability constraint. Do not add it to an issue merely because its
   native `blocked by` relationship contains an open issue. Remove it as soon as the external
-  condition is satisfied.
+  condition is satisfied. Once every native blocker of a `blocked` issue has closed, remove
+  `blocked` too, unless an external condition still applies; the sweep summary then says which. The
+  label audit below lists every such issue for that decision.
 
 ## Triage sweeps
 
@@ -62,6 +64,8 @@ auditing that may create issues lives in
   again and repeat the body/label/milestone/link/dependency review until one full pass finds nothing
   else to change. Summarize which issues were changed, how many cycles ran, and which issues were
   intentionally left unchanged.
+- End every sweep with the [label audit](#label-audit), and repeat it after each fix until it
+  reports no failures and every judgment item has a decision.
 - During every sweep, inspect the raw bodies of both open and closed issues for an
   `agent-suggested-labels` marker. Process every matching issue regardless of state before completing
   the sweep, so closing an issue does not bypass pending label review.
@@ -96,8 +100,10 @@ auditing that may create issues lives in
 
 ## Triage labels
 
-- When creating or editing an issue, inspect its current labels and apply every applicable label
-  from the repository's existing label set before finishing when the authenticated account has
+- When creating or editing an issue during any task, not only during a sweep, inspect its current
+  labels and apply this full Triage labels policy, then run the [label audit](#label-audit) or at
+  least check the touched issue against the rules it lists. Apply every applicable label from the
+  repository's existing label set before finishing when the authenticated account has
   permission to manage labels. If reading the current labels or repository label set fails, stop
   label processing and report the failed read as the required verification evidence. Do not apply or
   record labels from incomplete state. After a successful read, do not stop after adding only the
@@ -127,6 +133,31 @@ auditing that may create issues lives in
   When the account can manage labels, the read-back must confirm that no processed marker remains.
   When it cannot, the read-back must confirm that the marker contains every label still awaiting
   review.
+
+### Label audit
+
+- `node scripts/audit-issue-labels.ts [OWNER/REPO]` reads every open issue with its labels,
+  assignees, and native `blocked by` summary, and checks the mechanical rules of this Triage labels
+  policy. Without an argument it audits the current `gh` repository. It exits non-zero when it
+  finds a failure. The policy text stays the authority: the script checks only label combinations
+  that need no judgment, and a clean run does not replace the type, priority level, size estimate,
+  `breaking change`, `needs human review`, or `good first issue` evaluation above. Agents run it
+  instead of a CI job ([ADR 0138](../adr/0138-audit-issue-labels-with-a-local-script.md)).
+- Failures are policy violations to fix: a priority or size label count other than one, `idea` or
+  `needs human review` without `not ready`, `help wanted` or `good first issue` on an issue that is
+  or must be `not ready`, `blocked`, blocked by an open native dependency, or a dependency dashboard,
+  `help wanted` on an assigned issue, a ready unassigned issue without `help wanted`, and an open
+  `already implemented` issue without both `needs human review` and `not ready`.
+- Judgment items need a decision, not a label change by rule: confirm that each `blocked` issue
+  waits on an external condition, and remove `blocked` from an issue whose native blockers have all
+  closed unless an external condition still applies, saying which in the summary; verify each
+  `already implemented` issue against the code and close it or comment what a maintainer must
+  confirm, and decide for each small (`size XS` or `size S`) ready issue without `good first issue`
+  whether it meets the 80% one-shot bar. Report each decision in the task or sweep summary.
+- When a rule in this policy changes, update `RULES` in `scripts/audit-issue-labels.ts` and its
+  tests in the same change. `scripts/audit-issue-labels.test.ts` covers every rule in required CI
+  through `pnpm run verify:scripts`; pull-request review checks that the script still matches
+  this page.
 
 ### Size labels
 

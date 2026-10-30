@@ -79,7 +79,10 @@ Before posting anything, read:
    operator explicitly approves that exact body before `gh issue comment`.
 9. If the best match is closed, do not suppress the current finding. Create a new issue unless the
    operator explicitly decides to comment on the closed issue instead.
-10. Apply only labels that already exist in the target repository. Do not create labels.
+10. Apply only labels that already exist in the target repository. Do not create labels. Choose
+    them by the Triage labels policy in `../../../docs/agents/github-issue-triage.md`, then run
+    `node scripts/audit-issue-labels.ts "$TARGET_REPO"` from the repository root and record any
+    failure or judgment item it lists for a created issue in `publication-report.md`.
 11. Write `publication-report.md` and `published-issues.json`.
 12. Add created issue URLs, numbers, or duplicate-comment URLs to local publication metadata.
 
