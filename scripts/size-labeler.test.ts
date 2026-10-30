@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import test from "node:test";
+import {loadWorkflowScript, withDateNow, withEnvironment} from "./test-support/workflow-script.ts";
 
 interface LabelChanges {
   readonly added: string[];
@@ -83,10 +84,6 @@ interface CandidateQueryParameters {
   readonly state: string;
 }
 
-type ExecutableAsyncFunction = (...arguments_: readonly unknown[]) => Promise<unknown>;
-type AsyncFunctionConstructor = new (...arguments_: readonly string[]) => ExecutableAsyncFunction;
-
-const AsyncFunction = Object.getPrototypeOf(async function (): Promise<void> {}).constructor as AsyncFunctionConstructor;
 const DEFAULT_PAYLOAD = {workflow_run: {pull_requests: [{number: 42}]}};
 const DIRECT_PAYLOAD = {pull_request: {number: 42}};
 const FORK_PAYLOAD = {
@@ -111,26 +108,8 @@ const WORKFLOW = readFileSync(
   new URL("../.github/workflows/size-labeler.yml", import.meta.url),
   "utf8",
 );
-
-function workflowScript(stepName: string): string {
-  const lines = WORKFLOW.split("\n");
-  const stepStart = lines.findIndex((line) => line.trim() === `- name: ${stepName}`);
-  assert.notEqual(stepStart, -1, `${stepName} step must exist`);
-  const relativeScriptStart = lines
-    .slice(stepStart + 1)
-    .findIndex((line) => line.trim() === "script: |");
-  assert.notEqual(relativeScriptStart, -1, `${stepName} script block must exist`);
-  const scriptStart = stepStart + relativeScriptStart + 1;
-
-  const scriptLines: string[] = [];
-  for (const line of lines.slice(scriptStart + 1)) {
-    if (line && !line.startsWith("            ")) {
-      break;
-    }
-    scriptLines.push(line.slice(12));
-  }
-  return scriptLines.join("\n");
-}
+const RESOLVE = loadWorkflowScript("size-labeler.yml", "Resolve pull requests from trusted event metadata");
+const SYNC = loadWorkflowScript("size-labeler.yml", "Apply size label from changed lines");
 
 async function runLabeler(
   payload: SizeLabelerPayload = DEFAULT_PAYLOAD,
@@ -232,21 +211,9 @@ async function runLabeler(
     },
   };
 
-  await new AsyncFunction(
-    "context",
-    "github",
-    "core",
-    "Date",
-    workflowScript("Resolve pull requests from trusted event metadata"),
-  )(context, github, core, {now: (): number => options.nowMs ?? 0});
+  await withDateNow(options.nowMs ?? 0, () => RESOLVE({context, github, core}));
   for (const issueNumber of JSON.parse(issueNumbersOutput ?? "[]") as unknown[]) {
-    await new AsyncFunction(
-      "context",
-      "github",
-      "core",
-      "process",
-      workflowScript("Apply size label from changed lines"),
-    )(context, github, core, {env: {ISSUE_NUMBER: String(issueNumber)}});
+    await withEnvironment({ISSUE_NUMBER: String(issueNumber)}, () => SYNC({context, github, core}));
   }
   return {
     candidatePullRequestReads,
@@ -283,7 +250,12 @@ test("the workflow combines immediate trusted events with all-path and scheduled
 test("the privileged immediate route executes only trusted metadata API scripts", () => {
   assert.match(WORKFLOW, /^  pull_request_target:/m);
   assert.doesNotMatch(WORKFLOW, /^  pull_request:/m);
-  assert.doesNotMatch(WORKFLOW, /actions\/checkout|^\s+run:/m);
+  assert.doesNotMatch(WORKFLOW, /^\s+run:/m);
+  // Each job checks out only its script, at a base-branch commit, without the token.
+  assert.equal(WORKFLOW.match(/uses: actions\/checkout@/g)?.length, 2);
+  assert.equal(WORKFLOW.match(/ref: \$\{\{ github\.sha \}\}/g)?.length, 2);
+  assert.equal(WORKFLOW.match(/sparse-checkout: scripts\/size-labeler-[\w-]+\.cjs$/gm)?.length, 2);
+  assert.equal(WORKFLOW.match(/persist-credentials: false/g)?.length, 2);
 });
 
 test("only trusted pull-request routes start the size-label job", () => {
