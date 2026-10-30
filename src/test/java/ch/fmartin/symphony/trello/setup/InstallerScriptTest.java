@@ -127,9 +127,7 @@ final class InstallerScriptTest {
     void fixtureCapturesOutputLargerThanProcessPipesWithoutDeadlocking() throws Exception {
         // given
         Path source = temporaryDirectory.resolve("LargeOutput.java");
-        Files.writeString(
-                source,
-                """
+        Files.writeString(source, """
                 public class LargeOutput {
                     public static void main(String[] arguments) {
                         System.out.print("o".repeat(262_144));
@@ -159,9 +157,7 @@ final class InstallerScriptTest {
     void fixtureStartsTimeoutBeforeChildConsumesLargeInput() throws Exception {
         // given
         Path source = temporaryDirectory.resolve("DelayedInput.java");
-        Files.writeString(
-                source,
-                """
+        Files.writeString(source, """
                 public class DelayedInput {
                     public static void main(String[] arguments) throws Exception {
                         Thread.sleep(3_000);
@@ -185,9 +181,7 @@ final class InstallerScriptTest {
     void fixtureReplacesMalformedUtf8InCapturedOutput() throws Exception {
         // given
         Path source = temporaryDirectory.resolve("MalformedOutput.java");
-        Files.writeString(
-                source,
-                """
+        Files.writeString(source, """
                 public class MalformedOutput {
                     public static void main(String[] arguments) throws Exception {
                         System.out.write(new byte[] {'o', 'u', 't', (byte) 0xff});
@@ -235,10 +229,7 @@ final class InstallerScriptTest {
                 .isEmpty();
     }
 
-    @CsvSource(
-            delimiter = '|',
-            textBlock =
-                    """
+    @CsvSource(delimiter = '|', textBlock = """
                     root replaces its terminated child       | exec bash "$@"
                     descendant replaces its terminated child | bash "$@" & wait
                     """)
@@ -249,9 +240,7 @@ final class InstallerScriptTest {
         assumeFalse(isWindows());
         assumeTrue(commandExists("bash"));
         Path replacingScript = temporaryDirectory.resolve("replace-terminated-child.sh");
-        Files.writeString(
-                replacingScript,
-                """
+        Files.writeString(replacingScript, """
                 trap 'sleep 60 & printf "%s" "$!" > "$2"' CHLD
                 sleep 60 &
                 printf '%s' "$!" > "$1"
@@ -1109,15 +1098,12 @@ final class InstallerScriptTest {
         Files.createDirectories(varPath);
         Files.createDirectories(partialApp);
         Files.createDirectories(partialContext.getParent());
-        Files.writeString(
-                partialContext,
-                """
+        Files.writeString(partialContext, """
                 installer=install.sh
                 install_format_version=2
                 app_dir=%s
                 config_dir=/tmp/ignored-config
-                """
-                        .formatted(partialApp));
+                """.formatted(partialApp));
         Map<String, String> environment = new LinkedHashMap<>(microOsLayoutEnvironment(home, varPath, usersRoot));
         environment.put("SYMPHONY_TRELLO_TEST_OS_ID", "debian");
         environment.put("SYMPHONY_TRELLO_TEST_OS_PRETTY_NAME", "Debian GNU/Linux");
@@ -1160,9 +1146,7 @@ final class InstallerScriptTest {
         Files.createDirectories(varPath);
         Files.createDirectories(unsafeContext.getParent());
         Files.createSymbolicLink(home.resolve(".local"), outside);
-        Files.writeString(
-                unsafeContext,
-                """
+        Files.writeString(unsafeContext, """
                 installer=install.sh
                 install_format_version=2
                 layout_mode=custom-flags
@@ -1172,13 +1156,12 @@ final class InstallerScriptTest {
                 state_home=%s
                 bin_dir=%s
                 created_microos_var_root=false
-                """
-                        .formatted(
-                                replayedApp,
-                                temporaryDirectory.resolve("unsafe-legacy-context-replayed-config"),
-                                temporaryDirectory.resolve("unsafe-legacy-context-replayed-workspaces"),
-                                temporaryDirectory.resolve("unsafe-legacy-context-replayed-state"),
-                                temporaryDirectory.resolve("unsafe-legacy-context-replayed-bin")));
+                """.formatted(
+                        replayedApp,
+                        temporaryDirectory.resolve("unsafe-legacy-context-replayed-config"),
+                        temporaryDirectory.resolve("unsafe-legacy-context-replayed-workspaces"),
+                        temporaryDirectory.resolve("unsafe-legacy-context-replayed-state"),
+                        temporaryDirectory.resolve("unsafe-legacy-context-replayed-bin")));
         Map<String, String> environment = new LinkedHashMap<>(microOsLayoutEnvironment(home, varPath, usersRoot));
         environment.put("SYMPHONY_TRELLO_TEST_OS_ID", "debian");
         environment.put("SYMPHONY_TRELLO_TEST_OS_PRETTY_NAME", "Debian GNU/Linux");
@@ -1209,9 +1192,7 @@ final class InstallerScriptTest {
         Path fakeBin = temporaryDirectory.resolve("generic-context-no-user-bin");
         Files.createDirectories(home);
         Files.createDirectories(fakeBin);
-        writeExecutable(
-                fakeBin.resolve("id"),
-                """
+        writeExecutable(fakeBin.resolve("id"), """
                 #!/usr/bin/env bash
                 exit 1
                 """);
@@ -1283,15 +1264,11 @@ final class InstallerScriptTest {
         Files.createDirectories(home);
         Files.createDirectories(varPath);
         Files.createDirectories(fakeBin);
-        writeExecutable(
-                fakeBin.resolve("java"),
-                """
+        writeExecutable(fakeBin.resolve("java"), """
                 #!/bin/sh
                 echo 'openjdk version "25.0.1"' >&2
                 """);
-        writeExecutable(
-                fakeBin.resolve("javac"),
-                """
+        writeExecutable(fakeBin.resolve("javac"), """
                 #!/bin/sh
                 echo 'javac 25.0.1'
                 """);
@@ -1354,17 +1331,13 @@ final class InstallerScriptTest {
         Path fakeLog = temporaryDirectory.resolve("microos-interactive.log");
         Files.createDirectories(home);
         Files.createDirectories(varPath);
-        writeExecutable(
-                fakeBin.resolve("sudo"),
-                """
+        writeExecutable(fakeBin.resolve("sudo"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 echo "sudo $*" >> "${SYMPHONY_FAKE_LOG:?}"
                 "$@"
                 """);
-        writeExecutable(
-                fakeBin.resolve("install"),
-                """
+        writeExecutable(fakeBin.resolve("install"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 directory="${@: -1}"
@@ -1419,17 +1392,13 @@ final class InstallerScriptTest {
         Path fakeLog = temporaryDirectory.resolve("microos-custom-config.log");
         Files.createDirectories(home);
         Files.createDirectories(varPath);
-        writeExecutable(
-                fakeBin.resolve("sudo"),
-                """
+        writeExecutable(fakeBin.resolve("sudo"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 echo "sudo $*" >> "${SYMPHONY_FAKE_LOG:?}"
                 "$@"
                 """);
-        writeExecutable(
-                fakeBin.resolve("install"),
-                """
+        writeExecutable(fakeBin.resolve("install"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 directory="${@: -1}"
@@ -1648,16 +1617,12 @@ final class InstallerScriptTest {
         Files.writeString(command, "launcher\n");
         Files.writeString(legacyService, "legacy service\n");
         Files.writeString(legacyAutostartEnv, "TRELLO_API_KEY=\"legacy\"\n");
-        writeExecutable(
-                fakeTools.resolve("systemctl"),
-                """
+        writeExecutable(fakeTools.resolve("systemctl"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 echo "systemctl $*" >> "${SYMPHONY_FAKE_LOG:?}"
                 """);
-        Files.writeString(
-                state.resolve("install-context.properties"),
-                """
+        Files.writeString(state.resolve("install-context.properties"), """
                 installer=install.sh
                 install_format_version=1
                 app_dir=%s
@@ -1667,8 +1632,8 @@ final class InstallerScriptTest {
                 cache_dir=%s
                 bin_dir=%s
                 codex_npm_prefix=%s
-                """
-                        .formatted(app, config, workspaces, state, cache, binDirectory, cache.resolve("npm")));
+                """.formatted(
+                        app, config, workspaces, state, cache, binDirectory, cache.resolve("npm")));
         Map<String, String> environment = Map.of(
                 "HOME",
                 home.toString(),
@@ -1730,9 +1695,7 @@ final class InstallerScriptTest {
         Files.createDirectories(binDirectory);
         Files.writeString(app.resolve(".symphony-trello-install"), "marker");
         Files.writeString(recordedAutostartEnv, "TRELLO_API_KEY=\"recorded\"\n");
-        Files.writeString(
-                state.resolve("install-context.properties"),
-                """
+        Files.writeString(state.resolve("install-context.properties"), """
                 installer=install.sh
                 install_format_version=2
                 layout_mode=custom-env
@@ -1745,16 +1708,8 @@ final class InstallerScriptTest {
                 autostart_env_path=%s
                 codex_npm_prefix=%s
                 created_microos_var_root=false
-                """
-                        .formatted(
-                                app,
-                                oldConfig,
-                                workspaces,
-                                state,
-                                cache,
-                                binDirectory,
-                                recordedAutostartEnv,
-                                cache.resolve("npm")));
+                """.formatted(
+                app, oldConfig, workspaces, state, cache, binDirectory, recordedAutostartEnv, cache.resolve("npm")));
         Map<String, String> environment =
                 Map.of("HOME", home.toString(), "SYMPHONY_TRELLO_CONFIG_DIR", newConfig.toString());
 
@@ -1793,9 +1748,7 @@ final class InstallerScriptTest {
         Files.createDirectories(cache);
         Files.createDirectories(binDirectory);
         Files.writeString(recordedAutostartEnv, "TRELLO_API_KEY=\"recorded\"\n");
-        Files.writeString(
-                state.resolve(INSTALL_CONTEXT_PROPERTIES),
-                """
+        Files.writeString(state.resolve(INSTALL_CONTEXT_PROPERTIES), """
                 installer=install.sh
                 install_format_version=2
                 layout_mode=custom-flags
@@ -1808,16 +1761,8 @@ final class InstallerScriptTest {
                 autostart_env_path=%s
                 codex_npm_prefix=%s
                 created_microos_var_root=false
-                """
-                        .formatted(
-                                app,
-                                oldConfig,
-                                workspaces,
-                                state,
-                                cache,
-                                binDirectory,
-                                recordedAutostartEnv,
-                                cache.resolve("npm")));
+                """.formatted(
+                app, oldConfig, workspaces, state, cache, binDirectory, recordedAutostartEnv, cache.resolve("npm")));
         Map<String, String> environment = Map.of(
                 "PATH",
                 fakeBin + File.pathSeparator + System.getenv("PATH"),
@@ -1895,9 +1840,7 @@ final class InstallerScriptTest {
         Path dataHome = home.resolve(".local/share/symphony-trello");
         Path stateHome = home.resolve(".local/state/symphony-trello");
         Files.createDirectories(stateHome);
-        Files.writeString(
-                stateHome.resolve("install-context.properties"),
-                """
+        Files.writeString(stateHome.resolve("install-context.properties"), """
                 installer=install.sh
                 install_format_version=1
                 install_source=release-archive
@@ -1908,14 +1851,13 @@ final class InstallerScriptTest {
                 state_home=%s
                 bin_dir=%s
                 codex_npm_prefix=%s
-                """
-                        .formatted(
-                                app,
-                                dataHome.resolve("config"),
-                                dataHome.resolve("workspaces"),
-                                dataHome.resolve("state"),
-                                home.resolve(".local/bin"),
-                                dataHome.resolve("npm")));
+                """.formatted(
+                        app,
+                        dataHome.resolve("config"),
+                        dataHome.resolve("workspaces"),
+                        dataHome.resolve("state"),
+                        home.resolve(".local/bin"),
+                        dataHome.resolve("npm")));
 
         // when
         ProcessResult install = run(Map.of("HOME", home.toString()), "bash", "install.sh", "--dry-run", "--no-onboard");
@@ -1953,9 +1895,7 @@ final class InstallerScriptTest {
         Files.createDirectories(cache);
         Files.writeString(outside.resolve("app/.symphony-trello-install"), "marker");
         Files.createSymbolicLink(symlink, outside);
-        Files.writeString(
-                state.resolve("install-context.properties"),
-                """
+        Files.writeString(state.resolve("install-context.properties"), """
                 installer=install.sh
                 install_format_version=2
                 layout_mode=custom-flags
@@ -1967,8 +1907,8 @@ final class InstallerScriptTest {
                 bin_dir=%s
                 codex_npm_prefix=%s
                 created_microos_var_root=false
-                """
-                        .formatted(app, config, workspaces, state, cache, commandDirectory, cache.resolve("npm")));
+                """.formatted(
+                        app, config, workspaces, state, cache, commandDirectory, cache.resolve("npm")));
 
         // when
         ProcessResult install = run(Map.of("HOME", home.toString()), "bash", "install.sh", "--dry-run", "--no-onboard");
@@ -2035,9 +1975,7 @@ final class InstallerScriptTest {
         Path stateHome = dataHome.resolve("state");
         Path binDirectory = home.resolve(".local/bin");
         Files.createDirectories(stateHome);
-        Files.writeString(
-                stateHome.resolve("install-context.properties"),
-                """
+        Files.writeString(stateHome.resolve("install-context.properties"), """
                 installer=install.sh
                 install_format_version=1
                 install_source=release-archive
@@ -2048,14 +1986,13 @@ final class InstallerScriptTest {
                 state_home=%s
                 bin_dir=%s
                 codex_npm_prefix=%s
-                """
-                        .formatted(
-                                app,
-                                dataHome.resolve("config"),
-                                dataHome.resolve("workspaces"),
-                                dataHome.resolve("state"),
-                                binDirectory,
-                                dataHome.resolve("npm")));
+                """.formatted(
+                        app,
+                        dataHome.resolve("config"),
+                        dataHome.resolve("workspaces"),
+                        dataHome.resolve("state"),
+                        binDirectory,
+                        dataHome.resolve("npm")));
 
         // when
         ProcessResult result = run(
@@ -2101,9 +2038,7 @@ final class InstallerScriptTest {
         Files.createDirectories(cache.resolve("npm"));
         Files.createDirectories(bin);
         Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n");
-        Files.writeString(
-                home.resolve(".config/symphony-trello/install-context.properties"),
-                """
+        Files.writeString(home.resolve(".config/symphony-trello/install-context.properties"), """
                 installer=install.sh
                 install_format_version=2
                 layout_mode=custom-env
@@ -2115,8 +2050,8 @@ final class InstallerScriptTest {
                 bin_dir=%s
                 codex_npm_prefix=%s
                 created_microos_var_root=false
-                """
-                        .formatted(app, config, workspaces, state, cache, bin, cache.resolve("npm")));
+                """.formatted(
+                        app, config, workspaces, state, cache, bin, cache.resolve("npm")));
         Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
 
         // when
@@ -2160,9 +2095,7 @@ final class InstallerScriptTest {
         Files.createDirectories(state);
         Files.createDirectories(cache.resolve("npm"));
         Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n");
-        Files.writeString(
-                state.resolve("install-context.properties"),
-                """
+        Files.writeString(state.resolve("install-context.properties"), """
                 installer=install.sh
                 install_format_version=2
                 layout_mode=custom-env
@@ -2174,15 +2107,8 @@ final class InstallerScriptTest {
                 bin_dir=%s
                 codex_npm_prefix=%s
                 created_microos_var_root=false
-                """
-                        .formatted(
-                                app,
-                                config,
-                                workspaces,
-                                state,
-                                cache,
-                                home.resolve(".local/bin"),
-                                cache.resolve("npm")));
+                """.formatted(
+                        app, config, workspaces, state, cache, home.resolve(".local/bin"), cache.resolve("npm")));
 
         // when
         ProcessResult result = run(
@@ -2231,9 +2157,7 @@ final class InstallerScriptTest {
         Files.writeString(config.resolve(".env"), "TRELLO_API_KEY=secret\n");
         Files.writeString(workspaces.resolve("card.txt"), "work\n");
         Files.writeString(state.resolve("worker.pid"), "123\n");
-        Files.writeString(
-                state.resolve("install-context.properties"),
-                """
+        Files.writeString(state.resolve("install-context.properties"), """
                 installer=install.sh
                 install_format_version=2
                 layout_mode=custom-env
@@ -2245,15 +2169,8 @@ final class InstallerScriptTest {
                 bin_dir=%s
                 codex_npm_prefix=%s
                 created_microos_var_root=false
-                """
-                        .formatted(
-                                contextApp,
-                                config,
-                                workspaces,
-                                state,
-                                cache,
-                                home.resolve(".local/bin"),
-                                cache.resolve("npm")));
+                """.formatted(
+                contextApp, config, workspaces, state, cache, home.resolve(".local/bin"), cache.resolve("npm")));
 
         // when
         ProcessResult result = run(
@@ -2671,9 +2588,7 @@ final class InstallerScriptTest {
         Files.createDirectories(contextBin);
         Files.createDirectories(overrideBin);
         Files.writeString(app.resolve(".symphony-trello-install"), "marker");
-        Files.writeString(
-                home.resolve(".config/symphony-trello/install-context.properties"),
-                """
+        Files.writeString(home.resolve(".config/symphony-trello/install-context.properties"), """
                 installer=install.sh
                 install_format_version=2
                 layout_mode=custom-env
@@ -2685,8 +2600,8 @@ final class InstallerScriptTest {
                 bin_dir=%s
                 codex_npm_prefix=%s
                 created_microos_var_root=false
-                """
-                        .formatted(app, config, workspaces, state, cache, contextBin, cache.resolve("npm")));
+                """.formatted(
+                        app, config, workspaces, state, cache, contextBin, cache.resolve("npm")));
 
         // when
         ProcessResult result = run(
@@ -2733,9 +2648,7 @@ final class InstallerScriptTest {
         Files.createDirectories(state);
         Files.createDirectories(cache.resolve("npm"));
         Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n");
-        Files.writeString(
-                state.resolve("install-context.properties"),
-                """
+        Files.writeString(state.resolve("install-context.properties"), """
                 installer=install.sh
                 install_format_version=2
                 layout_mode=microos-var
@@ -2747,15 +2660,8 @@ final class InstallerScriptTest {
                 bin_dir=%s
                 codex_npm_prefix=%s
                 created_microos_var_root=true
-                """
-                        .formatted(
-                                app,
-                                config,
-                                workspaces,
-                                state,
-                                cache,
-                                home.resolve(".local/bin"),
-                                cache.resolve("npm")));
+                """.formatted(
+                        app, config, workspaces, state, cache, home.resolve(".local/bin"), cache.resolve("npm")));
 
         // when
         ProcessResult result = run(
@@ -2792,9 +2698,7 @@ final class InstallerScriptTest {
         Files.createDirectories(workspaces);
         Files.createDirectories(state);
         Files.createDirectories(cache);
-        Files.writeString(
-                state.resolve("install-context.properties"),
-                """
+        Files.writeString(state.resolve("install-context.properties"), """
                 installer=install.sh
                 install_format_version=2
                 layout_mode=microos-var
@@ -2806,15 +2710,14 @@ final class InstallerScriptTest {
                 bin_dir=%s
                 codex_npm_prefix=%s
                 created_microos_var_root=true
-                """
-                        .formatted(
-                                data.resolve("app"),
-                                config,
-                                workspaces,
-                                state,
-                                cache,
-                                home.resolve(".local/bin"),
-                                cache.resolve("npm")));
+                """.formatted(
+                        data.resolve("app"),
+                        config,
+                        workspaces,
+                        state,
+                        cache,
+                        home.resolve(".local/bin"),
+                        cache.resolve("npm")));
 
         // when
         ProcessResult result = run(
@@ -2848,9 +2751,7 @@ final class InstallerScriptTest {
         Files.createDirectories(fakeBin);
         Files.createDirectories(app);
         Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n");
-        writeExecutable(
-                fakeBin.resolve("btrfs"),
-                """
+        writeExecutable(fakeBin.resolve("btrfs"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 case "$1 $2" in
@@ -2887,16 +2788,12 @@ final class InstallerScriptTest {
         Files.createDirectories(fakeBin);
         Files.createDirectories(app.resolve("nested/deeper"));
         Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n");
-        writeExecutable(
-                fakeBin.resolve("findmnt"),
-                """
+        writeExecutable(fakeBin.resolve("findmnt"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 echo "${SYMPHONY_FAKE_BTRFS_MOUNT:?}"
                 """);
-        writeExecutable(
-                fakeBin.resolve("btrfs"),
-                """
+        writeExecutable(fakeBin.resolve("btrfs"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 case "$1 $2" in
@@ -2953,9 +2850,7 @@ final class InstallerScriptTest {
         Files.createDirectories(fakeBin);
         Files.createDirectories(app.resolve("nested/deeper"));
         Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n");
-        writeExecutable(
-                fakeBin.resolve("btrfs"),
-                """
+        writeExecutable(fakeBin.resolve("btrfs"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 case "$1 $2" in
@@ -2972,9 +2867,7 @@ final class InstallerScriptTest {
                     ;;
                 esac
                 """);
-        writeExecutable(
-                fakeBin.resolve("rm"),
-                """
+        writeExecutable(fakeBin.resolve("rm"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 if [[ "${1:-}" == "--help" ]]; then
@@ -3011,9 +2904,7 @@ final class InstallerScriptTest {
         Files.createDirectories(fakeBin);
         Files.createDirectories(app);
         Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n");
-        writeExecutable(
-                fakeBin.resolve("btrfs"),
-                """
+        writeExecutable(fakeBin.resolve("btrfs"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 case "$1 $2" in
@@ -3028,9 +2919,7 @@ final class InstallerScriptTest {
                     ;;
                 esac
                 """);
-        writeExecutable(
-                fakeBin.resolve("rm"),
-                """
+        writeExecutable(fakeBin.resolve("rm"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 if [[ "${1:-}" == "--help" ]]; then
@@ -3068,17 +2957,13 @@ final class InstallerScriptTest {
         Files.createDirectories(symphonyHome);
         Files.createDirectories(targetConfig);
         Files.createSymbolicLink(configSymlink, targetConfig);
-        writeExecutable(
-                fakeBin.resolve("btrfs"),
-                """
+        writeExecutable(fakeBin.resolve("btrfs"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 echo "btrfs $*" >> "${SYMPHONY_FAKE_LOG:?}"
                 exit 3
                 """);
-        writeExecutable(
-                fakeBin.resolve("rm"),
-                """
+        writeExecutable(fakeBin.resolve("rm"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 if [[ "${1:-}" == "--help" ]]; then
@@ -3125,9 +3010,7 @@ final class InstallerScriptTest {
         Files.createDirectories(fakeBin);
         Files.createDirectories(app.resolve("nested/deeper"));
         Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n");
-        writeExecutable(
-                fakeBin.resolve("btrfs"),
-                """
+        writeExecutable(fakeBin.resolve("btrfs"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 case "$1 $2" in
@@ -3177,9 +3060,7 @@ final class InstallerScriptTest {
         Files.createDirectories(fakeBin);
         Files.createDirectories(app.resolve("nested/deeper"));
         Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n");
-        writeExecutable(
-                fakeBin.resolve("btrfs"),
-                """
+        writeExecutable(fakeBin.resolve("btrfs"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 case "$1 $2" in
@@ -3224,9 +3105,7 @@ final class InstallerScriptTest {
         Files.createDirectories(fakeBin);
         Files.createDirectories(app);
         Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n");
-        writeExecutable(
-                fakeBin.resolve("rm"),
-                """
+        writeExecutable(fakeBin.resolve("rm"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 if [[ "${1:-}" == "--help" ]]; then
@@ -4283,9 +4162,7 @@ final class InstallerScriptTest {
         Path prefix = temporaryDirectory.resolve("credential-repo-label-prefix").resolve("app");
         Path binDirectory = temporaryDirectory.resolve("credential-repo-label-bin");
         Path fakeLog = temporaryDirectory.resolve("credential-repo-label.log");
-        writeExecutable(
-                fakeBin.resolve("git"),
-                """
+        writeExecutable(fakeBin.resolve("git"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 case "${1:-}" in
@@ -4646,9 +4523,7 @@ final class InstallerScriptTest {
         Path installScript = Path.of("install.sh").toAbsolutePath();
         Path sourceRepository = createSourceRepository(temporaryDirectory);
         Path fakeBin = createFakeToolchain(temporaryDirectory);
-        writeExecutable(
-                fakeBin.resolve("java"),
-                """
+        writeExecutable(fakeBin.resolve("java"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 if [[ "${1:-}" == "-version" ]]; then
@@ -5000,15 +4875,13 @@ final class InstallerScriptTest {
         Path binDirectory = temporaryDirectory.resolve("path-cleanup-dry-run-bin");
         Files.createDirectories(home);
         String pathLine = "export PATH='" + binDirectory + "':\"$PATH\"";
-        String managedBlock =
-                """
+        String managedBlock = """
                 before
                 # >>> Symphony for Trello PATH >>>
                 %s
                 # <<< Symphony for Trello PATH <<<
                 after
-                """
-                        .formatted(pathLine);
+                """.formatted(pathLine);
         Files.writeString(home.resolve(".bashrc"), managedBlock);
         Files.writeString(home.resolve(".profile"), managedBlock);
         Map<String, String> environment = Map.of(
@@ -5038,14 +4911,12 @@ final class InstallerScriptTest {
         Path symphonyHome = temporaryDirectory.resolve("path-cleanup-corrupt-symphony-home");
         Path binDirectory = temporaryDirectory.resolve("path-cleanup-corrupt-bin");
         Files.createDirectories(home);
-        String profile =
-                """
+        String profile = """
                 before
                 # >>> Symphony for Trello PATH >>>
                 export PATH='%s':"$PATH"
                 alias kept='still here'
-                """
-                        .formatted(binDirectory);
+                """.formatted(binDirectory);
         Files.writeString(home.resolve(".bashrc"), profile);
         Map<String, String> environment = Map.of(
                 "HOME", home.toString(),
@@ -5073,8 +4944,7 @@ final class InstallerScriptTest {
         Files.createDirectories(home);
         String currentPathLine = "export PATH='" + binDirectory + "':\"$PATH\"";
         String otherPathLine = "export PATH='" + otherBinDirectory + "':\"$PATH\"";
-        String profile =
-                """
+        String profile = """
                 before
                 # >>> Symphony for Trello PATH >>>
                 %s
@@ -5084,8 +4954,7 @@ final class InstallerScriptTest {
                 %s
                 # <<< Symphony for Trello PATH <<<
                 after
-                """
-                        .formatted(otherPathLine, currentPathLine);
+                """.formatted(otherPathLine, currentPathLine);
         Files.writeString(home.resolve(".bashrc"), profile);
 
         // when
@@ -5094,18 +4963,14 @@ final class InstallerScriptTest {
         // then
         result.assertSuccess();
         assertRemovedPathSetup(result, home);
-        assertThat(home.resolve(".bashrc"))
-                .content(StandardCharsets.UTF_8)
-                .isEqualTo(
-                        """
+        assertThat(home.resolve(".bashrc")).content(StandardCharsets.UTF_8).isEqualTo("""
                         before
                         # >>> Symphony for Trello PATH >>>
                         %s
                         # <<< Symphony for Trello PATH <<<
                         middle
                         after
-                        """
-                                .formatted(otherPathLine));
+                        """.formatted(otherPathLine));
     }
 
     @Test
@@ -5117,15 +4982,13 @@ final class InstallerScriptTest {
         Path binDirectory = temporaryDirectory.resolve("path-cleanup-read-only-bin");
         Files.createDirectories(home);
         String pathLine = "export PATH='" + binDirectory + "':\"$PATH\"";
-        String profile =
-                """
+        String profile = """
                 before
                 # >>> Symphony for Trello PATH >>>
                 %s
                 # <<< Symphony for Trello PATH <<<
                 after
-                """
-                        .formatted(pathLine);
+                """.formatted(pathLine);
         Path shellProfile = home.resolve(".bashrc");
         Files.writeString(shellProfile, profile);
         assertThat(shellProfile.toFile().setWritable(false, false))
@@ -5163,15 +5026,13 @@ final class InstallerScriptTest {
         home.toFile().setReadable(true, false);
         home.toFile().setExecutable(true, false);
         String pathLine = "export PATH='" + binDirectory + "':\"$PATH\"";
-        String profile =
-                """
+        String profile = """
                 before
                 # >>> Symphony for Trello PATH >>>
                 %s
                 # <<< Symphony for Trello PATH <<<
                 after
-                """
-                        .formatted(pathLine);
+                """.formatted(pathLine);
         Path shellProfile = home.resolve(".bashrc");
         Files.writeString(shellProfile, profile);
         assertThat(shellProfile.toFile().setReadable(false, false))
@@ -5276,15 +5137,11 @@ final class InstallerScriptTest {
         writeExecutable(fakeBin.resolve("apt-get"), success);
         writeCommandProxy(fakeBin, "sed", "/bin/sed");
         writeCommandProxy(fakeBin, "head", "/usr/bin/head");
-        writeExecutable(
-                fakeBin.resolve("java"),
-                """
+        writeExecutable(fakeBin.resolve("java"), """
                 #!/bin/sh
                 echo 'openjdk version "24.0.2"' >&2
                 """);
-        writeExecutable(
-                fakeBin.resolve("javac"),
-                """
+        writeExecutable(fakeBin.resolve("javac"), """
                 #!/bin/sh
                 echo 'javac 24.0.2'
                 """);
@@ -5315,9 +5172,7 @@ final class InstallerScriptTest {
         Path installScript = Path.of("install.sh").toAbsolutePath();
         Path fakeBin = temporaryDirectory.resolve("package-manager-bin");
         Files.createDirectories(fakeBin);
-        writeExecutable(
-                fakeBin.resolve("apt-get"),
-                """
+        writeExecutable(fakeBin.resolve("apt-get"), """
                 #!/usr/bin/env bash
                 exit 0
                 """);
@@ -5347,9 +5202,7 @@ final class InstallerScriptTest {
         assumeTrue(Files.exists(Path.of("/bin/bash")));
         Path fakeBin = temporaryDirectory.resolve("package-manager-without-sudo");
         Files.createDirectories(fakeBin);
-        writeExecutable(
-                fakeBin.resolve("apt-get"),
-                """
+        writeExecutable(fakeBin.resolve("apt-get"), """
                 #!/usr/bin/env bash
                 exit 0
                 """);
@@ -5379,9 +5232,7 @@ final class InstallerScriptTest {
         assumeTrue(Files.exists(Path.of("/bin/bash")));
         Path fakeBin = temporaryDirectory.resolve("dry-run-package-manager-without-sudo");
         Files.createDirectories(fakeBin);
-        writeExecutable(
-                fakeBin.resolve("apt-get"),
-                """
+        writeExecutable(fakeBin.resolve("apt-get"), """
                 #!/usr/bin/env bash
                 exit 0
                 """);
@@ -5450,21 +5301,15 @@ final class InstallerScriptTest {
         assumeTrue(Files.exists(Path.of("/bin/bash")));
         Path fakeBin = temporaryDirectory.resolve("managed-codex-rerun-tools");
         Files.createDirectories(fakeBin);
-        writeExecutable(
-                fakeBin.resolve("git"),
-                """
+        writeExecutable(fakeBin.resolve("git"), """
                 #!/usr/bin/env bash
                 exit 0
                 """);
-        writeExecutable(
-                fakeBin.resolve("java"),
-                """
+        writeExecutable(fakeBin.resolve("java"), """
                 #!/usr/bin/env bash
                 echo 'openjdk version "25.0.1"' >&2
                 """);
-        writeExecutable(
-                fakeBin.resolve("javac"),
-                """
+        writeExecutable(fakeBin.resolve("javac"), """
                 #!/usr/bin/env bash
                 echo 'javac 25.0.1'
                 """);
@@ -5473,8 +5318,7 @@ final class InstallerScriptTest {
         Path symphonyHome = temporaryDirectory.resolve("managed-codex-rerun-home");
         Path managedCodex = symphonyHome.resolve("npm/bin/codex");
         Files.createDirectories(managedCodex.getParent());
-        writeExecutable(
-                managedCodex, """
+        writeExecutable(managedCodex, """
                 #!/usr/bin/env bash
                 exit 0
                 """);
@@ -5509,9 +5353,7 @@ final class InstallerScriptTest {
         writeCommandProxy(fakeBin, "sed", "/bin/sed");
         writeCommandProxy(fakeBin, "head", "/usr/bin/head");
         Path aptLog = temporaryDirectory.resolve("apt-update-once.log");
-        writeExecutable(
-                fakeBin.resolve("apt-get"),
-                """
+        writeExecutable(fakeBin.resolve("apt-get"), """
                 #!/bin/bash
                 set -euo pipefail
                 echo "$*" >> "${SYMPHONY_FAKE_LOG:?}"
@@ -5570,24 +5412,18 @@ final class InstallerScriptTest {
         Files.createDirectories(varPath);
         writeCommandProxy(fakeBin, "bash", "/bin/bash");
         Path commandLog = temporaryDirectory.resolve("microos-transactional.log");
-        writeExecutable(
-                fakeBin.resolve("sudo"),
-                """
+        writeExecutable(fakeBin.resolve("sudo"), """
                 #!/bin/bash
                 set -euo pipefail
                 echo "sudo $*" >> "${SYMPHONY_FAKE_LOG:?}"
                 "$@"
                 """);
-        writeExecutable(
-                fakeBin.resolve("transactional-update"),
-                """
+        writeExecutable(fakeBin.resolve("transactional-update"), """
                 #!/bin/bash
                 set -euo pipefail
                 echo "transactional-update $*" >> "${SYMPHONY_FAKE_LOG:?}"
                 """);
-        writeExecutable(
-                fakeBin.resolve("install"),
-                """
+        writeExecutable(fakeBin.resolve("install"), """
                 #!/bin/bash
                 set -euo pipefail
                 directory="${@: -1}"
@@ -5624,10 +5460,7 @@ final class InstallerScriptTest {
                         "Open a new terminal with Java 25+ on PATH",
                         "Open a new terminal with npm on PATH");
         assertThat(userRoot).doesNotExist();
-        assertThat(commandLog)
-                .content(StandardCharsets.UTF_8)
-                .isEqualTo(
-                        """
+        assertThat(commandLog).content(StandardCharsets.UTF_8).isEqualTo("""
                         sudo transactional-update --non-interactive pkg install git java-25-openjdk-devel nodejs npm
                         transactional-update --non-interactive pkg install git java-25-openjdk-devel nodejs npm
                         """);
@@ -5804,25 +5637,19 @@ final class InstallerScriptTest {
         writeCommandProxy(fakeBin, "uname", "/bin/uname");
         writeCommandProxy(fakeBin, "sed", "/bin/sed");
         writeCommandProxy(fakeBin, "head", "/usr/bin/head");
-        writeExecutable(
-                fakeBin.resolve("git"), """
+        writeExecutable(fakeBin.resolve("git"), """
                 #!/bin/bash
                 exit 0
                 """);
-        writeExecutable(
-                fakeBin.resolve("java"),
-                """
+        writeExecutable(fakeBin.resolve("java"), """
                 #!/bin/bash
                 echo 'openjdk version "25.0.1"' >&2
                 """);
-        writeExecutable(
-                fakeBin.resolve("javac"),
-                """
+        writeExecutable(fakeBin.resolve("javac"), """
                 #!/bin/bash
                 echo 'javac 25.0.1'
                 """);
-        writeExecutable(
-                fakeBin.resolve("apt-get"), """
+        writeExecutable(fakeBin.resolve("apt-get"), """
                 #!/bin/bash
                 exit 0
                 """);
@@ -7354,8 +7181,7 @@ final class InstallerScriptTest {
         Files.createDirectories(binDirectory);
         Files.createDirectories(defaultStateContext.getParent());
         Files.createDirectories(defaultConfigContext.getParent());
-        String context =
-                """
+        String context = """
                 installer=install.sh
                 install_format_version=2
                 layout_mode=custom-flags
@@ -7365,8 +7191,7 @@ final class InstallerScriptTest {
                 state_home=%s
                 bin_dir=%s
                 created_microos_var_root=false
-                """
-                        .formatted(appHome, configDirectory, workspaceRoot, stateHome, binDirectory);
+                """.formatted(appHome, configDirectory, workspaceRoot, stateHome, binDirectory);
         Files.writeString(defaultStateContext, context);
         Files.writeString(defaultConfigContext, context);
         Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
@@ -7790,9 +7615,7 @@ final class InstallerScriptTest {
         Path fakeBin = createFakeToolchain(temporaryDirectory);
         Files.delete(fakeBin.resolve("codex"));
         writeCommandProxy(fakeBin, "bash", "/bin/bash");
-        writeExecutable(
-                fakeBin.resolve("git"),
-                """
+        writeExecutable(fakeBin.resolve("git"), """
                 #!/usr/bin/env bash
                 exec /usr/bin/git "$@"
                 """);
@@ -7815,9 +7638,7 @@ final class InstallerScriptTest {
         writeCommandProxy(fakeBin, "grep", "/bin/grep");
         writeCommandProxy(fakeBin, "mktemp", "/usr/bin/mktemp");
         writeCommandProxy(fakeBin, "mv", "/bin/mv");
-        writeExecutable(
-                fakeBin.resolve("npm"),
-                """
+        writeExecutable(fakeBin.resolve("npm"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 prefix=""
@@ -8872,14 +8693,12 @@ final class InstallerScriptTest {
         gitLocation.assertSuccess();
         Path fakeBin = temporaryDirectory.resolve("index-inspection-bin");
         Files.createDirectories(fakeBin);
-        writeExecutable(
-                fakeBin.resolve("git"),
-                """
+        writeExecutable(fakeBin.resolve("git"), """
                 #!/usr/bin/env bash
                 if [[ "${3:-}" == ls-files && "${4:-}" == -v ]]; then exit 37; fi
                 exec %s "$@"
-                """
-                        .formatted(shellQuote(gitLocation.output().strip())));
+                """.formatted(
+                        shellQuote(gitLocation.output().strip())));
         source.installed()
                 .environment()
                 .put(
@@ -8964,18 +8783,15 @@ final class InstallerScriptTest {
         assumeTrue(commandExists("git"));
         SourceDowngrade source = sourceDowngrade(false);
         source.recordWorkerStopRequests();
-        String pom =
-                switch (scenario) {
-                    case "invalid" -> "<project />";
-                    case "mojibake" -> "\u00EF\u00BB\u00BF<project><version>1.5.0</version></project>";
-                    default ->
-                        "\uFEFF<?xml version=\"1.0\" encoding=\"UTF-8\"?><project><version>1.5.0</version></project>";
-                };
+        String pom = switch (scenario) {
+            case "invalid" -> "<project />";
+            case "mojibake" -> "\u00EF\u00BB\u00BF<project><version>1.5.0</version></project>";
+            default -> "\uFEFF<?xml version=\"1.0\" encoding=\"UTF-8\"?><project><version>1.5.0</version></project>";
+        };
         addSourceRepositoryCommit(source.source(), "pom.xml", pom);
         Path encodingRecord = temporaryDirectory.resolve("console-encoding.txt");
         Path launcher = temporaryDirectory.resolve("encoded-console-install.ps1");
-        String gitFailure = scenario.equals("git-failure")
-                ? """
+        String gitFailure = scenario.equals("git-failure") ? """
                   $nativeGit = @(Get-Command git -CommandType Application)[0].Source
                   function git {
                     if ($args.Count -ge 3 -and $args[2] -eq 'show') {
@@ -8984,37 +8800,31 @@ final class InstallerScriptTest {
                     }
                     & $nativeGit @args
                   }
-                  """
-                : "";
-        Files.writeString(
-                launcher,
-                """
+                  """ : "";
+        Files.writeString(launcher, """
                 [Console]::OutputEncoding = [Text.Encoding]::GetEncoding(%s)
                 %s
                 & %s @args
                 $installerExit = $LASTEXITCODE
                 [IO.File]::WriteAllText(%s, [Console]::OutputEncoding.CodePage.ToString())
                 exit $installerExit
-                """
-                        .formatted(
-                                codePage,
-                                gitFailure,
-                                powerShellLiteral(
-                                        Path.of("install.ps1").toAbsolutePath().toString()),
-                                powerShellLiteral(encodingRecord.toString())));
+                """.formatted(
+                codePage,
+                gitFailure,
+                powerShellLiteral(Path.of("install.ps1").toAbsolutePath().toString()),
+                powerShellLiteral(encodingRecord.toString())));
 
         // when
         ProcessResult result = source.run(command(pwsh, "-NoProfile", "-File", launcher.toString()));
 
         // then
         assertThat(result.exitCode()).as(result.output()).isOne();
-        String expectedMessage =
-                switch (scenario) {
-                    case "invalid" -> "cannot read source project/version";
-                    case "git-failure" -> "cannot read source pom.xml";
-                    case "mojibake" -> "Data at the root level is invalid";
-                    default -> "release 1.5.0 belongs to an older major version";
-                };
+        String expectedMessage = switch (scenario) {
+            case "invalid" -> "cannot read source project/version";
+            case "git-failure" -> "cannot read source pom.xml";
+            case "mojibake" -> "Data at the root level is invalid";
+            default -> "release 1.5.0 belongs to an older major version";
+        };
         assertThat(normalizedWhitespace(result.output())).contains(expectedMessage);
         assertThat(encodingRecord).hasContent(Integer.toString(codePage));
         source.assertAppUntouched();
@@ -9063,11 +8873,7 @@ final class InstallerScriptTest {
         addSourceRepositoryCommit(update.source(), "pom.xml", "<project />\n");
         Path installer = temporaryDirectory.resolve("cleanup-failure-install.ps1");
         Files.writeString(
-                installer,
-                Files.readString(Path.of("install.ps1"))
-                        .replace(
-                                "$ErrorActionPreference = \"Stop\"",
-                                """
+                installer, Files.readString(Path.of("install.ps1")).replace("$ErrorActionPreference = \"Stop\"", """
                                 function Remove-Item { throw 'synthetic cleanup failure' }
                                 $ErrorActionPreference = "Stop"\
                                 """));
@@ -9098,25 +8904,21 @@ final class InstallerScriptTest {
                         "<project><version>1.5.0+build.2</version></project>", "belongs to an older major version"),
                 new SourcePom(
                         "<project><version>1.5.0+build..2</version></project>", "cannot read source project/version"),
-                new SourcePom(
-                        """
+                new SourcePom("""
                         <project xmlns="http://maven.apache.org/POM/4.0.0">
                           <!-- <version>99.0.0</version>
                                <project><version>99.0.0</version></project> -->
                           <parent><version>99.0.0</version></parent>
                           <version>1.0.0</version>
                         </project>
-                        """,
-                        "belongs to an older major version"),
-                new SourcePom(
-                        """
+                        """, "belongs to an older major version"),
+                new SourcePom("""
                         <project><dependencyManagement><dependencies><dependency>
                           <version>99.0.0</version>
                         </dependency></dependencies></dependencyManagement>
                         <build><plugins><plugin><version>99.0.0</version></plugin></plugins></build>
                         <version>1.0.0</version></project>
-                        """,
-                        "belongs to an older major version"),
+                        """, "belongs to an older major version"),
                 new SourcePom(
                         "<project><parent><version>1.0.0</version></parent></project>",
                         "cannot read source project/version"),
@@ -9158,15 +8960,11 @@ final class InstallerScriptTest {
             Path state = installed.appHome().resolveSibling("state");
             Files.createDirectories(state);
             Files.writeString(state.resolve("WORKFLOW.preflight.pid"), "999999\n");
-            writeExecutable(
-                    installed.binDirectory().resolve("symphony-trello"),
-                    """
+            writeExecutable(installed.binDirectory().resolve("symphony-trello"), """
                     #!/usr/bin/env bash
                     if [[ "${1:-}" == stop ]]; then : > "$0.stop"; fi
                     """);
-            Files.writeString(
-                    installed.binDirectory().resolve("symphony-trello.ps1"),
-                    """
+            Files.writeString(installed.binDirectory().resolve("symphony-trello.ps1"), """
                     if ($args[0] -eq 'stop') { Set-Content -LiteralPath "$PSCommandPath.stop" -Value 'stop requested' }
                     """);
         }
@@ -9222,13 +9020,10 @@ final class InstallerScriptTest {
         Files.writeString(appHome.resolve(".symphony-trello-install"), "installer-managed archive\n");
         Files.createDirectories(binDirectory);
         // Keep an existing command wrapper while both installers read the app version through the Java stub.
-        writeExecutable(
-                binDirectory.resolve("symphony-trello"),
-                """
+        writeExecutable(binDirectory.resolve("symphony-trello"), """
                 #!/usr/bin/env bash
                 echo "symphony-trello %s"
-                """
-                        .formatted(installedVersion));
+                """.formatted(installedVersion));
         Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
         environment.put("PATH", fakeBin + File.pathSeparator + System.getenv("PATH"));
         environment.put("SYMPHONY_HOME", symphonyHome.toString());
@@ -9413,9 +9208,7 @@ final class InstallerScriptTest {
         Path fakeLog = temporaryDirectory.resolve("homebrew-installer.log");
         Files.createDirectories(fakeBin);
         Files.createDirectories(brewOpenJdkBin);
-        writeExecutable(
-                fakeBin.resolve("brew"),
-                """
+        writeExecutable(fakeBin.resolve("brew"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 if [[ "${1:-}" == "--prefix" && "${2:-}" == "openjdk@25" ]]; then
@@ -9425,16 +9218,12 @@ final class InstallerScriptTest {
                 echo "brew $*" >> "${SYMPHONY_FAKE_LOG:?}"
                 exit 0
                 """);
-        writeExecutable(
-                brewOpenJdkBin.resolve("java"),
-                """
+        writeExecutable(brewOpenJdkBin.resolve("java"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 echo 'openjdk version "25.0.1" 2026-04-21' >&2
                 """);
-        writeExecutable(
-                brewOpenJdkBin.resolve("javac"),
-                """
+        writeExecutable(brewOpenJdkBin.resolve("javac"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 echo 'javac 25.0.1'
@@ -9558,10 +9347,7 @@ final class InstallerScriptTest {
         Files.writeString(
                 installer,
                 Files.readString(Path.of("install.sh"))
-                        .replaceFirst(
-                                Pattern.quote("set -euo pipefail"),
-                                Matcher.quoteReplacement(
-                                        """
+                        .replaceFirst(Pattern.quote("set -euo pipefail"), Matcher.quoteReplacement("""
                                         set -euo pipefail
                                         mv() {
                                           if [[ -d "$1/.git" && "$(dirname "$1")" != "$(dirname "$2")" ]]; then
@@ -9799,9 +9585,7 @@ final class InstallerScriptTest {
                 installer,
                 Files.readString(Path.of("install.ps1"))
                         .replaceFirst(
-                                Pattern.quote("$ErrorActionPreference = \"Stop\""),
-                                Matcher.quoteReplacement(
-                                        """
+                                Pattern.quote("$ErrorActionPreference = \"Stop\""), Matcher.quoteReplacement("""
                                 function Move-Item {
                                   param([string]$LiteralPath, [string]$Destination)
                                   if ((Split-Path $LiteralPath) -ne (Split-Path $Destination)) {
@@ -10035,14 +9819,10 @@ final class InstallerScriptTest {
         // when
         ProcessResult install = run(
                 environment, "bash", installScript.toString(), "--no-onboard", "--bin-dir", binDirectory.toString());
-        Files.writeString(
-                symphonyHome.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME),
-                """
+        Files.writeString(symphonyHome.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME), """
                 {"boards":[{"boardId":"board-1","boardName":"Relative","workflowPath":"%s","envPath":"%s"}]}
-                """
-                        .formatted(
-                                callerDirectory.resolve("WORKFLOW.relative.md"),
-                                callerDirectory.resolve(".env.relative")));
+                """.formatted(
+                        callerDirectory.resolve("WORKFLOW.relative.md"), callerDirectory.resolve(".env.relative")));
         ProcessResult start = run(
                 environment,
                 callerDirectory,
@@ -10138,9 +9918,7 @@ final class InstallerScriptTest {
 
     private static ProcessResult runBtrfsUninstall(Path fakeBin, Path mountRoot, Path symphonyHome, Path btrfsLog)
             throws Exception {
-        writeExecutable(
-                fakeBin.resolve("findmnt"),
-                """
+        writeExecutable(fakeBin.resolve("findmnt"), """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 echo "${SYMPHONY_FAKE_BTRFS_MOUNT:?}"

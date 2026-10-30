@@ -42,11 +42,9 @@ final class LocalHealthCheckerTest {
     void workflowHealthAcceptsConfiguredBoardKeyWhenRuntimeReportsResolvedBoardId() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md").toAbsolutePath().normalize();
-        startLocalStatusServer(
-                """
+        startLocalStatusServer("""
                 {"workflowPath":"%s","boardId":"full-board-id","configuredBoardId":"abc123"}
-                """
-                        .formatted(workflow));
+                """.formatted(workflow));
         var checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
 
         // when
@@ -63,11 +61,9 @@ final class LocalHealthCheckerTest {
     void workflowHealthParsesReportedWorkerPid() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md").toAbsolutePath().normalize();
-        startLocalStatusServer(
-                """
+        startLocalStatusServer("""
                 {"workflowPath":"%s","boardId":"full-board-id","configuredBoardId":"abc123","pid":4242}
-                """
-                        .formatted(workflow));
+                """.formatted(workflow));
         var checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
 
         // when
@@ -99,12 +95,9 @@ final class LocalHealthCheckerTest {
                     return;
                 }
                 reprobeArrived.countDown();
-                respondWithJson(
-                        exchange,
-                        """
+                respondWithJson(exchange, """
                         {"workflowPath":"%s","boardId":"full-board-id","configuredBoardId":"abc123"}
-                        """
-                                .formatted(workflow));
+                        """.formatted(workflow));
             });
             server.start();
             var checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
@@ -175,9 +168,7 @@ final class LocalHealthCheckerTest {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Path dotenv = tempDir.resolve(".env");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 server:
                   port: $SYMPHONY_TEST_PORT
@@ -239,8 +230,7 @@ final class LocalHealthCheckerTest {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md").toAbsolutePath().normalize();
         var requests = new AtomicInteger();
-        String healthyJson =
-                """
+        String healthyJson = """
                 {"workflowPath":"%s","boardId":"board-1"}
                 """.formatted(workflow);
         server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);

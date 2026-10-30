@@ -8,7 +8,11 @@ import org.jspecify.annotations.Nullable;
 
 @NullMarked
 public record RepositorySource(
-        Kind kind, Origin origin, String value, @Nullable RepositoryIdentity identity, @Nullable Path path) {
+        Kind kind,
+        Origin origin,
+        String value,
+        @Nullable RepositoryIdentity identity,
+        @Nullable Path path) {
     public RepositorySource {
         checkArgument(kind != null, "Repository source kind is required");
         checkArgument(origin != null, "Repository source origin is required");

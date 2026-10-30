@@ -59,8 +59,9 @@ final class WorkflowBodyClassifier {
 
         /// Whether every occurrence lies inside some occurrence of `outer`.
         boolean allInside(Occurrences outer) {
-            return starts.stream().allMatch(inner -> outer.starts().stream()
-                    .anyMatch(start -> start <= inner && inner + length <= start + outer.length()));
+            return starts.stream()
+                    .allMatch(inner -> outer.starts().stream()
+                            .anyMatch(start -> start <= inner && inner + length <= start + outer.length()));
         }
     }
 

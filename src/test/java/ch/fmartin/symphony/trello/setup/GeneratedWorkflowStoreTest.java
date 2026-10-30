@@ -70,8 +70,9 @@ final class GeneratedWorkflowStoreTest {
                 unusableConfig.resolve(ConnectedBoardManifest.FILE_NAME), workflow, inputs());
 
         // then
-        assertThat(warning).hasValueSatisfying(message -> assertThat(message)
-                .contains("Could not record", "manual workflow migration"));
+        assertThat(warning)
+                .hasValueSatisfying(
+                        message -> assertThat(message).contains("Could not record", "manual workflow migration"));
         assertThat(workflow).hasContent("finished workflow");
         assertThat(unusableConfig).hasContent("keep");
     }

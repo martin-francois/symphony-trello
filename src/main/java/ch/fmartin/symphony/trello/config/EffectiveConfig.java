@@ -93,7 +93,8 @@ public record EffectiveConfig(
     public record WorkspaceConfig(Path root) {}
 
     @NullMarked
-    public record RepositoryConfig(@Nullable String defaultUrl, @Nullable Path defaultPath) {
+    public record RepositoryConfig(
+            @Nullable String defaultUrl, @Nullable Path defaultPath) {
         /// The repository source context shows the default path on one prompt line, so a path with a
         /// control character or a Unicode line or paragraph separator cannot be a default.
         public static boolean usableDefaultPath(Path path) {
@@ -200,7 +201,8 @@ public record EffectiveConfig(
     /// Branch-only handoff settings from the workflow's `github` section. A `null` label means the
     /// card-level label signal is disabled.
     @NullMarked
-    public record GitHubConfig(PullRequestMode pullRequestMode, @Nullable String noPrLabel) {
+    public record GitHubConfig(
+            PullRequestMode pullRequestMode, @Nullable String noPrLabel) {
         public static final GitHubConfig DEFAULTS =
                 new GitHubConfig(PullRequestMode.CREATE, ConfigDefaults.DEFAULT_NO_PR_LABEL);
 

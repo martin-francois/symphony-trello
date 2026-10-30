@@ -357,15 +357,13 @@ final class LocalAgentRunnerTest {
     @Test
     void runtimeNoSourceContextSupersedesLegacyUnconditionalMissingSourceBlocker() {
         // given
-        String persistedLegacyPrompt =
-                """
+        String persistedLegacyPrompt = """
                 If no source is selected or the selected source is missing, unreadable, unclonable, or lacks required
                 repository/auth context, move the Trello card to `Blocked` with path-safe guidance instead of
                 guessing.
 
                 Summarize the supplied release schedule. No repository action.
-                """
-                        .strip();
+                """.strip();
         EffectiveConfig config = configWithRepository(Map.of());
 
         // when

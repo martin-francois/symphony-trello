@@ -1215,9 +1215,10 @@ final class SetupDiagnosticReporter {
     }
 
     private static Optional<String> osReleaseNameAndVersion(List<String> lines) {
-        return osReleaseValue(lines, "NAME").map(name -> osReleaseValue(lines, "VERSION")
-                .map(version -> name + " " + version)
-                .orElse(name));
+        return osReleaseValue(lines, "NAME")
+                .map(name -> osReleaseValue(lines, "VERSION")
+                        .map(version -> name + " " + version)
+                        .orElse(name));
     }
 
     private static Optional<String> osReleaseValue(List<String> lines, String key) {
@@ -1312,12 +1313,11 @@ final class SetupDiagnosticReporter {
         }
         // The auth status stays out of the sanitized version line so a path token in that line is the
         // same with and without --deep, and the private-context lookup can resolve it.
-        String authStatus =
-                switch (tool) {
-                    case "codex" -> authStatus(executable, "login");
-                    case "gh" -> authStatus(executable, "auth");
-                    default -> "";
-                };
+        String authStatus = switch (tool) {
+            case "codex" -> authStatus(executable, "login");
+            case "gh" -> authStatus(executable, "auth");
+            default -> "";
+        };
         return new ToolProbe("available", firstLine(version.output()), authStatus);
     }
 
@@ -2591,16 +2591,17 @@ final class SetupDiagnosticReporter {
         addDistinctiveInstallerContextValue(values, "repo_url", environment.get("SYMPHONY_TRELLO_REPO_URL"));
         addDistinctiveInstallerContextValue(values, "ref", environment.get("SYMPHONY_TRELLO_REF"));
         Path context = paths.stateHome().resolve("install-context.properties");
-        readInstallContextContent(context).ifPresent(content -> content.lines().forEach(line -> {
-            int separator = line.indexOf('=');
-            if (separator < 0) {
-                return;
-            }
-            String key = line.substring(0, separator).toLowerCase(Locale.ROOT);
-            if (HASHED_INSTALLER_CONTEXT_KEYS.contains(key)) {
-                addDistinctiveInstallerContextValue(values, key, line.substring(separator + 1));
-            }
-        }));
+        readInstallContextContent(context)
+                .ifPresent(content -> content.lines().forEach(line -> {
+                    int separator = line.indexOf('=');
+                    if (separator < 0) {
+                        return;
+                    }
+                    String key = line.substring(0, separator).toLowerCase(Locale.ROOT);
+                    if (HASHED_INSTALLER_CONTEXT_KEYS.contains(key)) {
+                        addDistinctiveInstallerContextValue(values, key, line.substring(separator + 1));
+                    }
+                }));
         return values.stream().distinct().toList();
     }
 

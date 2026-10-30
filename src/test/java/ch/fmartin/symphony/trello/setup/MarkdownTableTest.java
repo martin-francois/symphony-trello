@@ -22,9 +22,7 @@ final class MarkdownTableTest {
         table.appendTo(body);
 
         // then
-        assertThat(body)
-                .hasToString(
-                        """
+        assertThat(body).hasToString("""
                 | name | status |
                 | --- | --- |
                 | git | available |
@@ -90,13 +88,11 @@ final class MarkdownTableTest {
         // then
         assertThat(body)
                 .as("diagnostics reports are pasted as plain text, so only table syntax may be escaped")
-                .hasToString(
-                        """
+                .hasToString("""
                 | danger_full_access | detail |
                 | --- | --- |
                 | false | %s |
-                """
-                                .formatted(cell));
+                """.formatted(cell));
     }
 
     @Test

@@ -504,8 +504,8 @@ final class WorkflowConfigEditor {
     }
 
     private static Optional<String> secretFileTokenHint(Optional<Path> diagnosticsConfigDir, ConfigException failure) {
-        return diagnosticsConfigDir.flatMap(
-                configDir -> secretPathFromConfigFailure(failure).map(path -> {
+        return diagnosticsConfigDir.flatMap(configDir -> secretPathFromConfigFailure(failure)
+                .map(path -> {
                     String token = PrivateContextTokens.pathToken(configDir, path);
                     return "secret_file_token=" + token + PrivateContextTokens.lookupHint(token);
                 }));

@@ -26,8 +26,7 @@ final class TerminalSnapshotsTest {
     private static final String SCENARIO = "suite/scenario";
     private static final char BELL = '\u0007';
     private static final char ESCAPE = TerminalTranscript.ESCAPE;
-    private static final String BASELINE_STDOUT =
-            """
+    private static final String BASELINE_STDOUT = """
             Checking prerequisites...
               OK      Git
               OK      Java 25+ JDK
@@ -67,9 +66,7 @@ final class TerminalSnapshotsTest {
     static Stream<Arguments> unapprovedChanges() {
         return Stream.of(
                 Arguments.of(
-                        "unexpected line",
-                        BASELINE_STDOUT.replace("Done.", "  WARN    Unexpected line\nDone."),
-                        """
+                        "unexpected line", BASELINE_STDOUT.replace("Done.", "  WARN    Unexpected line\nDone."), """
                         Extra content at line 6:
                           ["  WARN    Unexpected line"]"""),
                 Arguments.of(
@@ -83,9 +80,7 @@ final class TerminalSnapshotsTest {
                         Extra content at line 6:
                           ["  OK      Git"]"""),
                 Arguments.of(
-                        "meaningful whitespace change",
-                        BASELINE_STDOUT.replace("  OK      Git", "  OK     Git"),
-                        """
+                        "meaningful whitespace change", BASELINE_STDOUT.replace("  OK      Git", "  OK     Git"), """
                         Changed content at line 4:
                         expecting:
                           ["  OK      Git"]
@@ -244,9 +239,7 @@ final class TerminalSnapshotsTest {
         String terminal = TerminalTranscript.ofTerminal(0, "prompt: answer\r\n");
 
         // then
-        assertThat(rendered)
-                .isEqualTo(
-                        """
+        assertThat(rendered).isEqualTo("""
                         exitCode: 1
                         --- stdout ---
                         <ESC>[1mbold<ESC>[0m

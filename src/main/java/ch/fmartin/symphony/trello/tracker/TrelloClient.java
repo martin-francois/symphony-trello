@@ -1437,17 +1437,15 @@ public class TrelloClient implements TrackerClient {
                         .timeout(config.tracker().requestTimeout())
                         .header("Accept", "application/json")
                         .header("Authorization", authorization(config));
-                HttpRequest request =
-                        switch (method) {
-                            case "GET" -> builder.GET().build();
-                            case "POST" ->
-                                builder.POST(HttpRequest.BodyPublishers.noBody())
-                                        .build();
-                            case "PUT" ->
-                                builder.PUT(HttpRequest.BodyPublishers.noBody()).build();
-                            case "DELETE" -> builder.DELETE().build();
-                            default -> throw new IllegalArgumentException("Unsupported Trello method: " + method);
-                        };
+                HttpRequest request = switch (method) {
+                    case "GET" -> builder.GET().build();
+                    case "POST" ->
+                        builder.POST(HttpRequest.BodyPublishers.noBody()).build();
+                    case "PUT" ->
+                        builder.PUT(HttpRequest.BodyPublishers.noBody()).build();
+                    case "DELETE" -> builder.DELETE().build();
+                    default -> throw new IllegalArgumentException("Unsupported Trello method: " + method);
+                };
                 HttpResponse<String> response = transport.send(request);
                 if (isSuccessfulStatus(response.statusCode())) {
                     return response.body();

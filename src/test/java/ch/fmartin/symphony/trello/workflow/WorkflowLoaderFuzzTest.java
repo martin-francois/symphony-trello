@@ -88,10 +88,11 @@ final class WorkflowLoaderFuzzTest {
         }
 
         // then
-        assertThat(seeds).isNotEmpty().allSatisfy(seed -> assertThat(
-                        WorkflowLoaderFuzzTest.class.getResource(inputsDirectory + "/" + seed))
-                .as(seed)
-                .isNotNull());
+        assertThat(seeds)
+                .isNotEmpty()
+                .allSatisfy(seed -> assertThat(WorkflowLoaderFuzzTest.class.getResource(inputsDirectory + "/" + seed))
+                        .as(seed)
+                        .isNotNull());
     }
 
     private static String fuzzTestMethodName() {
@@ -143,10 +144,7 @@ final class WorkflowLoaderFuzzTest {
     private static Stream<Named<byte[]>> workflowBytes() {
         return Stream.of(
                 named("empty file", bytes("")),
-                named(
-                        "valid front matter",
-                        bytes(
-                                """
+                named("valid front matter", bytes("""
                                 ---
                                 tracker:
                                   kind: trello

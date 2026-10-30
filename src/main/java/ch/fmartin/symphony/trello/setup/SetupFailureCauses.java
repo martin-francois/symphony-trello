@@ -73,12 +73,11 @@ final class SetupFailureCauses {
     /// already identifies, so only its path-free reason is kept. Parser messages quote the parsed
     /// content, which can hold credentials or board names, so they are dropped.
     private static Optional<String> detail(Throwable throwable) {
-        String detail =
-                switch (throwable) {
-                    case FileSystemException fileSystemFailure -> fileSystemFailure.getReason();
-                    case JsonProcessingException _ -> null;
-                    default -> throwable.getMessage();
-                };
+        String detail = switch (throwable) {
+            case FileSystemException fileSystemFailure -> fileSystemFailure.getReason();
+            case JsonProcessingException _ -> null;
+            default -> throwable.getMessage();
+        };
         return Optional.ofNullable(detail).filter(not(String::isBlank));
     }
 }

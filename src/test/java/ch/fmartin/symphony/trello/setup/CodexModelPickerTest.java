@@ -82,8 +82,9 @@ final class CodexModelPickerTest {
 
         // then
         assertThatThrownBy(choose)
-                .isInstanceOfSatisfying(TrelloBoardSetupException.class, error -> assertThat(error.code())
-                        .isEqualTo("setup_invalid_choice"))
+                .isInstanceOfSatisfying(
+                        TrelloBoardSetupException.class,
+                        error -> assertThat(error.code()).isEqualTo("setup_invalid_choice"))
                 .hasMessage(scenario.message());
     }
 

@@ -167,7 +167,9 @@ public final class WorkflowLoaderInvariants {
         return new AssertionError("workflow loader property violated: " + description);
     }
 
-    public record LoadResult(@Nullable WorkflowDefinition definition, @Nullable WorkflowException failure) {
+    public record LoadResult(
+            @Nullable WorkflowDefinition definition,
+            @Nullable WorkflowException failure) {
         public static LoadResult of(Supplier<WorkflowDefinition> load) {
             try {
                 return new LoadResult(load.get(), null);

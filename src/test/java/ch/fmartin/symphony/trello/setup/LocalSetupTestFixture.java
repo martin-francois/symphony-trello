@@ -179,21 +179,12 @@ final class LocalSetupTestFixture implements AutoCloseable {
         givenManifest(
                 """
                 {"boards":[{"boardId":"board-1","boardKey":"abc123","boardName":"%s","boardUrl":"https://trello.example/board","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":%d,"githubEnabled":%s,"additionalWritableRoots":[],"dangerFullAccess":false}]}
-                """
-                        .formatted(
-                                boardName,
-                                json(workflow),
-                                json(env),
-                                json(workspaceRoot()),
-                                serverPort,
-                                githubEnabled));
+                """.formatted(boardName, json(workflow), json(env), json(workspaceRoot()), serverPort, githubEnabled));
     }
 
     void givenWorkflow(Path workflow, String boardId, int port) throws IOException {
         Files.createDirectories(workflow.getParent());
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -204,8 +195,7 @@ final class LocalSetupTestFixture implements AutoCloseable {
                   model: gpt-5.2
                 ---
                 # Test workflow
-                """
-                        .formatted(boardId, port));
+                """.formatted(boardId, port));
     }
 
     void givenWorkflowWithGithub(Path workflow, String boardId, int port) throws IOException {
@@ -489,16 +479,10 @@ final class LocalSetupTestFixture implements AutoCloseable {
                 healthServer.createContext(
                         "/api/v1/local-status",
                         exchange -> FakeTrelloServer.respond(
-                                exchange,
-                                """
+                                exchange, """
                         {"workflowPath":"%s","boardId":"%s"}
-                        """
-                                        .formatted(workflow.replace("\\", "\\\\"), boardId)));
-                healthServer.createContext(
-                        "/api/v1/state",
-                        exchange -> FakeTrelloServer.respond(
-                                exchange,
-                                """
+                        """.formatted(workflow.replace("\\", "\\\\"), boardId)));
+                healthServer.createContext("/api/v1/state", exchange -> FakeTrelloServer.respond(exchange, """
                         {"counts":{"running":0,"retrying":0}}
                         """));
                 healthServer.start();

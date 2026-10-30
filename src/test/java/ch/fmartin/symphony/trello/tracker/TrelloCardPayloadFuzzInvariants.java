@@ -142,7 +142,8 @@ public final class TrelloCardPayloadFuzzInvariants {
     private record ListChoice(String id, String name) {}
 
     /// The card mapping's outcome: a card, no card, or the [TrelloException] it threw.
-    public record MappingResult(Optional<Card> card, @Nullable TrelloException rejection) {
+    public record MappingResult(
+            Optional<Card> card, @Nullable TrelloException rejection) {
         static final MappingResult NOT_MAPPED = new MappingResult(Optional.empty(), null);
     }
 }

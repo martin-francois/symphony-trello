@@ -57,9 +57,7 @@ final class TrelloRateLimitPollingIntegrationTest {
     void trelloRateLimitSlowsTheWorkerAndTheNextTickWaitsForRetryAfter() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -77,8 +75,7 @@ final class TrelloRateLimitPollingIntegrationTest {
                   command: fake
                 ---
                 {{ card.title }}
-                """
-                        .formatted(trello.endpoint(), CONFIGURED.toMillis()));
+                """.formatted(trello.endpoint(), CONFIGURED.toMillis()));
         var workspaces = new WorkspaceManager(new HookRunner());
         var orchestrator = new SymphonyOrchestrator(
                 new WorkflowLoader(),

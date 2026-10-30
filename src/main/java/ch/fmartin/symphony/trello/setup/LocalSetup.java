@@ -325,8 +325,10 @@ public final class LocalSetup {
         String command = ShellCommandRenderer.executable(
                 options.command(), SetupSystemProperties.get(ShellCommandRenderer.SHELL_PROPERTY));
         TutorialOffer.run(
-                terminal, command, "Setup is complete. Start the tutorial again with:", () -> GuidedTutorial.forCli(
-                                options.endpoint(), credentials.load(), terminal)
+                terminal,
+                command,
+                "Setup is complete. Start the tutorial again with:",
+                () -> GuidedTutorial.forCli(options.endpoint(), credentials.load(), terminal)
                         .run(new GuidedTutorial.Options(
                                 githubEnabled,
                                 GuidedTutorial.BoardCleanup.ARCHIVE_BY_DEFAULT,

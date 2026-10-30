@@ -30,9 +30,7 @@ final class WorkflowConfigPromptTest {
     void parsesFrontMatterAppliesDefaultsAndRendersStrictPrompt() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -90,9 +88,7 @@ final class WorkflowConfigPromptTest {
         Files.writeString(secretDirectory.resolve("trello-api-key"), "key-from-file\n");
         Files.writeString(secretDirectory.resolve("trello-api-token"), "token-from-file\r\n");
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -115,9 +111,7 @@ final class WorkflowConfigPromptTest {
     void rejectsInProgressStateThatIsNotDispatchActive() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -226,9 +220,7 @@ final class WorkflowConfigPromptTest {
     void fileBackedTrackerSecretFailureDoesNotExposeSecretValues() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello

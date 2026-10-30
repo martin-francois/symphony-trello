@@ -105,8 +105,10 @@ final class CodexSkillInstallerTest {
         Throwable thrown = catchThrowable(() -> installer.installInto(workspace));
 
         // then
-        assertThat(thrown).isInstanceOfSatisfying(WorkspaceException.class, error -> assertThat(error.code())
-                .isEqualTo("workspace_skill_gitdir_file_failed"));
+        assertThat(thrown)
+                .isInstanceOfSatisfying(
+                        WorkspaceException.class,
+                        error -> assertThat(error.code()).isEqualTo("workspace_skill_gitdir_file_failed"));
         assertThat(outsideGitDir.resolve("info/exclude")).doesNotExist();
     }
 
@@ -147,8 +149,10 @@ final class CodexSkillInstallerTest {
         Throwable thrown = catchThrowable(() -> installer.installInto(workspace));
 
         // then
-        assertThat(thrown).isInstanceOfSatisfying(WorkspaceException.class, error -> assertThat(error.code())
-                .isEqualTo("workspace_skill_install_failed"));
+        assertThat(thrown)
+                .isInstanceOfSatisfying(
+                        WorkspaceException.class,
+                        error -> assertThat(error.code()).isEqualTo("workspace_skill_install_failed"));
         assertThat(outside).content().isEqualTo("do not overwrite");
     }
 
@@ -166,8 +170,10 @@ final class CodexSkillInstallerTest {
         Throwable thrown = catchThrowable(() -> installer.installInto(workspace));
 
         // then
-        assertThat(thrown).isInstanceOfSatisfying(WorkspaceException.class, error -> assertThat(error.code())
-                .isEqualTo("workspace_skill_git_exclude_failed"));
+        assertThat(thrown)
+                .isInstanceOfSatisfying(
+                        WorkspaceException.class,
+                        error -> assertThat(error.code()).isEqualTo("workspace_skill_git_exclude_failed"));
         assertThat(outside).content().isEqualTo("do not mutate");
     }
 }

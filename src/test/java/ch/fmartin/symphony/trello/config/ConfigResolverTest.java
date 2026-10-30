@@ -39,10 +39,7 @@ final class ConfigResolverTest {
     @Test
     void resolvesWorkflowEnvironmentReferencesForBoardScopeAndServerPort() throws Exception {
         // given
-        Path workflow = writeTrelloWorkflow(
-                "WORKFLOW.md",
-                "$SYMPHONY_BOARD_ID",
-                """
+        Path workflow = writeTrelloWorkflow("WORKFLOW.md", "$SYMPHONY_BOARD_ID", """
                   resolved_board_id: $SYMPHONY_RESOLVED_BOARD_ID
                 server:
                   port: $SYMPHONY_TEST_PORT
@@ -66,9 +63,7 @@ final class ConfigResolverTest {
     @Test
     void resolvesLiteralRepositoryDefaultUrl() throws Exception {
         // given
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.repository-url.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.repository-url.md", """
                 repository:
                   default_url: https://github.com/example/project.git
                 """);
@@ -86,9 +81,7 @@ final class ConfigResolverTest {
     @Test
     void resolvesEnvironmentBackedRepositoryDefaultUrl() throws Exception {
         // given
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.repository-url-env.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.repository-url-env.md", """
                 repository:
                   default_url: $SYMPHONY_DEFAULT_REPOSITORY_URL
                 """);
@@ -107,9 +100,7 @@ final class ConfigResolverTest {
     @Test
     void missingOptionalRepositoryDefaultUrlEnvironmentReferenceResolvesToAbsent() throws Exception {
         // given
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.repository-url-env-missing.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.repository-url-env-missing.md", """
                 repository:
                   default_url: $SYMPHONY_MISSING_REPOSITORY_URL
                 """);
@@ -126,9 +117,7 @@ final class ConfigResolverTest {
     @Test
     void blankOptionalRepositoryDefaultUrlEnvironmentReferenceResolvesToAbsent() throws Exception {
         // given
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.repository-url-env-blank.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.repository-url-env-blank.md", """
                 repository:
                   default_url: $SYMPHONY_BLANK_REPOSITORY_URL
                 """);
@@ -146,9 +135,7 @@ final class ConfigResolverTest {
     @Test
     void resolvesLiteralRelativeRepositoryDefaultPathAgainstWorkflowDirectoryWithoutProbingIt() throws Exception {
         // given
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.repository-path-relative.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.repository-path-relative.md", """
                 repository:
                   default_path: ../repositories/project
                 """);
@@ -170,13 +157,10 @@ final class ConfigResolverTest {
     void resolvesLiteralAbsoluteRepositoryDefaultPathWithoutProbingIt() throws Exception {
         // given
         Path missingCheckout = tempDir.resolve("missing-checkout");
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.repository-path-absolute.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.repository-path-absolute.md", """
                 repository:
                   default_path: %s
-                """
-                        .formatted(missingCheckout));
+                """.formatted(missingCheckout));
         var resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
@@ -192,9 +176,7 @@ final class ConfigResolverTest {
     void resolvesEnvironmentBackedRepositoryDefaultPath() throws Exception {
         // given
         Path repositoryPath = tempDir.resolve("source-repository");
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.repository-path-env.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.repository-path-env.md", """
                 repository:
                   default_path: $SYMPHONY_DEFAULT_REPOSITORY_PATH
                 """);
@@ -217,9 +199,7 @@ final class ConfigResolverTest {
             throws Exception {
         // given
         Path parent = tempDir.resolve("parent");
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.path-env-prefix.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.path-env-prefix.md", """
                 workspace:
                   root: %1$s
                 repository:
@@ -227,8 +207,7 @@ final class ConfigResolverTest {
                 codex:
                   additional_writable_roots:
                     - %1$s
-                """
-                        .formatted(configuredPath));
+                """.formatted(configuredPath));
         var resolver = parentResolver(parent);
 
         // when
@@ -251,16 +230,13 @@ final class ConfigResolverTest {
         // given
         Path secrets = Files.createDirectories(tempDir.resolve("secrets"));
         Files.writeString(secrets.resolve("api-key"), "file-key\n");
-        Path workflow = writeWorkflow(
-                "WORKFLOW.secret-file-env-prefix.md",
-                """
+        Path workflow = writeWorkflow("WORKFLOW.secret-file-env-prefix.md", """
                 tracker:
                   kind: trello
                   api_key: file:%s/api-key
                   api_token: literal-token
                   board_id: board-1
-                """
-                        .formatted(parentReference));
+                """.formatted(parentReference));
         var resolver = parentResolver(secrets);
 
         // when
@@ -273,9 +249,7 @@ final class ConfigResolverTest {
     @Test
     void missingOptionalRepositoryDefaultPathEnvironmentReferenceResolvesToAbsent() throws Exception {
         // given
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.repository-path-env-missing.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.repository-path-env-missing.md", """
                 repository:
                   default_path: $SYMPHONY_MISSING_REPOSITORY_PATH
                 """);
@@ -292,9 +266,7 @@ final class ConfigResolverTest {
     @Test
     void blankOptionalRepositoryDefaultPathEnvironmentReferenceResolvesToAbsent() throws Exception {
         // given
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.repository-path-env-blank.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.repository-path-env-blank.md", """
                 repository:
                   default_path: $SYMPHONY_BLANK_REPOSITORY_PATH
                 """);
@@ -312,9 +284,7 @@ final class ConfigResolverTest {
     @Test
     void repositoryDefaultUrlKeepsRepositoryDefaultPathAsCheckoutCandidate() throws Exception {
         // given
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.repository-url-over-path.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.repository-url-over-path.md", """
                 repository:
                   default_url: https://github.com/example/project.git
                   default_path: ../repositories/project
@@ -379,14 +349,12 @@ final class ConfigResolverTest {
             throws Exception {
         // given
         Path repositoryPath = tempDir.resolve("selected-path");
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.repository-url-absent-path-selected.md",
-                """
+        Path workflow =
+                writeDefaultWorkflow("WORKFLOW.repository-url-absent-path-selected.md", """
                 repository:
                   default_url: $SYMPHONY_DEFAULT_REPOSITORY_URL
                   default_path: %s
-                """
-                        .formatted(repositoryPath));
+                """.formatted(repositoryPath));
         var resolver = new ConfigResolver(name -> Optional.ofNullable(environment.get(name)));
 
         // when
@@ -494,8 +462,7 @@ final class ConfigResolverTest {
     }
 
     private static List<Arguments> pathSettingsReferencingMissingParentVariable() {
-        String tracker =
-                """
+        String tracker = """
                 tracker:
                   kind: trello
                   api_key: %s
@@ -726,9 +693,7 @@ final class ConfigResolverTest {
     @Test
     void resolvesConfiguredFollowUpCards() throws Exception {
         // given
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.follow-up-configured.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.follow-up-configured.md", """
                 trello_tools:
                   follow_up_cards:
                     enabled: true
@@ -799,9 +764,7 @@ final class ConfigResolverTest {
     @Test
     void emptyPriorityLabelValuesFallBackToDefaultsInsteadOfCrashing() throws Exception {
         // given
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.empty-priority.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.empty-priority.md", """
                   priority_labels:
                     rush:
                 """);
@@ -817,9 +780,7 @@ final class ConfigResolverTest {
     @Test
     void rejectsFractionalEnvironmentBackedServerPortInsteadOfCrashingRaw() throws Exception {
         // given
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.fractional-env-port.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.fractional-env-port.md", """
                 server:
                   port: $SYMPHONY_FRACTIONAL_PORT
                 """);
@@ -838,9 +799,7 @@ final class ConfigResolverTest {
     @Test
     void reportsWholeButTooLargeServerPortAsOutOfRangeNotAsFractional() throws Exception {
         // given
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.huge-port.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.huge-port.md", """
                 server:
                   port: 99999999999999999999999
                 """);
@@ -858,9 +817,7 @@ final class ConfigResolverTest {
     @Test
     void reportsWholeButTooLargeEnvironmentBackedServerPortAsOutOfRange() throws Exception {
         // given
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.huge-env-port.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.huge-env-port.md", """
                 server:
                   port: $SYMPHONY_HUGE_PORT
                 """);
@@ -879,9 +836,7 @@ final class ConfigResolverTest {
     @Test
     void acceptsWholeValuedFloatingPointServerPort() throws Exception {
         // given
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.whole-float-port.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.whole-float-port.md", """
                 server:
                   port: 18080.0
                 """);
@@ -901,9 +856,7 @@ final class ConfigResolverTest {
         // the raw workflow or the SYMPHONY_HTTP_PORT/QUARKUS_HTTP_PORT overrides), so rejecting
         // ranges here would only break deployed workers whose unused workflow port is stale.
         // Range validation stays at the launch layer (WorkflowConfigEditor/LocalPort).
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.out-of-range-port.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.out-of-range-port.md", """
                 codex:
                   command: fake
                 server:
@@ -924,9 +877,7 @@ final class ConfigResolverTest {
     void keepsEphemeralServerPortZeroDispatchable() throws Exception {
         // given
         // SPEC.md allows server.port 0 for temporary local runs on an ephemeral port.
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.ephemeral-port.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.ephemeral-port.md", """
                 codex:
                   command: fake
                 server:
@@ -946,9 +897,7 @@ final class ConfigResolverTest {
     @Test
     void fractionalPriorityLabelValuesFallBackToDefaultsInsteadOfTruncating() throws Exception {
         // given
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.fractional-priority.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.fractional-priority.md", """
                   priority_labels:
                     rush: 2.5
                 """);
@@ -965,9 +914,7 @@ final class ConfigResolverTest {
     void requiredLabelsDefaultEmptyAndConfiguredLabelsAreNormalizedWithoutDroppingBlanks() throws Exception {
         // given
         Path configuredWorkflow = tempDir.resolve("WORKFLOW.required-labels.md");
-        Files.writeString(
-                configuredWorkflow,
-                """
+        Files.writeString(configuredWorkflow, """
                 ---
                 tracker:
                   kind: trello
@@ -981,9 +928,7 @@ final class ConfigResolverTest {
                 Prompt
                 """);
         Path defaultWorkflow = tempDir.resolve("WORKFLOW.default-required-labels.md");
-        Files.writeString(
-                defaultWorkflow,
-                """
+        Files.writeString(defaultWorkflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1008,9 +953,7 @@ final class ConfigResolverTest {
     void unresolvedWorkflowBoardIdEnvironmentReferenceFailsBeforeDispatch() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1048,8 +991,9 @@ final class ConfigResolverTest {
         // then
         assertThat(error)
                 .as("%s must fail configuration, not resolve to a literal $%s directory", scenario, PARENT_VARIABLE)
-                .isInstanceOfSatisfying(ConfigException.class, failure -> assertThat(failure.code())
-                        .isEqualTo("missing_path_environment_variable"))
+                .isInstanceOfSatisfying(
+                        ConfigException.class,
+                        failure -> assertThat(failure.code()).isEqualTo("missing_path_environment_variable"))
                 .hasMessage("%s references missing environment variable %s", setting, PARENT_VARIABLE);
     }
 
@@ -1058,13 +1002,11 @@ final class ConfigResolverTest {
     void missingEnvironmentReferenceInRepositoryDefaultPathPrefixResolvesToAbsent(MissingParentVariable missing)
             throws Exception {
         // given
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.repository-path-env-prefix-missing.md",
-                """
+        Path workflow =
+                writeDefaultWorkflow("WORKFLOW.repository-path-env-prefix-missing.md", """
                 repository:
                   default_path: %s/project
-                """
-                        .formatted(PARENT_REFERENCE));
+                """.formatted(PARENT_REFERENCE));
         var resolver = new ConfigResolver(name -> Optional.ofNullable(missing.environment.get(name)));
 
         // when
@@ -1080,13 +1022,10 @@ final class ConfigResolverTest {
     void workspaceRootExpandsSetLeadingEnvironmentReference(String reference) throws Exception {
         // given
         Path parent = tempDir.resolve("parent");
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.workspace-root-env-prefix.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.workspace-root-env-prefix.md", """
                 workspace:
                   root: %s/workspaces
-                """
-                        .formatted(reference));
+                """.formatted(reference));
         var resolver = new ConfigResolver(
                 name -> PARENT_VARIABLE.equals(name) ? Optional.of(parent.toString()) : Optional.empty());
 
@@ -1102,9 +1041,7 @@ final class ConfigResolverTest {
     @ValueSource(strings = {"$", "$not-a-name/workspaces"})
     void workspaceRootKeepsDollarTextThatIsNotAnEnvironmentReferenceLiteral(String configured) throws Exception {
         // given
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.workspace-root-literal-dollar.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.workspace-root-literal-dollar.md", """
                 workspace:
                   root: "%s"
                 """.formatted(configured));
@@ -1122,9 +1059,7 @@ final class ConfigResolverTest {
     void overlappingWorkflowListRolesFailBeforeDispatch() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.overlap.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1155,9 +1090,7 @@ final class ConfigResolverTest {
     void overlappingBlockedWorkflowListRoleFailsBeforeDispatch() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.blocked-overlap.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1189,9 +1122,7 @@ final class ConfigResolverTest {
     void overlappingListNamesAreAllowedWhenListIdsAreAuthoritative() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.list-ids.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1226,9 +1157,7 @@ final class ConfigResolverTest {
     void overlappingListIdsFailBeforeDispatch() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.list-id-overlap.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1263,9 +1192,7 @@ final class ConfigResolverTest {
     void duplicateValuesWithinOneRoleAreAllowedBeforeDispatch() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.duplicate-role-values.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1297,9 +1224,7 @@ final class ConfigResolverTest {
     void rejectsNonPositivePollingInterval() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1325,9 +1250,7 @@ final class ConfigResolverTest {
     void rejectsInvalidTrackerEndpointBeforeDispatch() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1352,9 +1275,7 @@ final class ConfigResolverTest {
     void acceptsLoopbackHttpTrackerEndpointForDispatch() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1379,9 +1300,7 @@ final class ConfigResolverTest {
     void acceptsUppercaseSchemeInTrackerEndpointLikeSetupNormalization() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1406,9 +1325,7 @@ final class ConfigResolverTest {
     void resolvesBraceStyleEnvironmentReferencesForCredentials() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1436,9 +1353,7 @@ final class ConfigResolverTest {
     void keepsShellDefaultExpansionSyntaxAsLiteralText() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1460,9 +1375,7 @@ final class ConfigResolverTest {
     @Test
     void preservesReadOnlyCodexSandboxPolicyWithoutWritableRootMerge() throws Exception {
         // given
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.read-only-sandbox.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.read-only-sandbox.md", """
                 codex:
                   command: codex app-server
                   turn_sandbox_policy:
@@ -1480,9 +1393,7 @@ final class ConfigResolverTest {
     @Test
     void rejectsReadOnlySandboxPolicyWithAdditionalWritableRoots() throws Exception {
         // given
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.read-only-sandbox-with-roots.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.read-only-sandbox-with-roots.md", """
                 codex:
                   command: codex app-server
                   turn_sandbox_policy:
@@ -1506,9 +1417,7 @@ final class ConfigResolverTest {
     @Test
     void rejectsReadOnlySandboxPolicyWithEnvironmentAdditionalWritableRoots() throws Exception {
         // given
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.read-only-sandbox-with-env-roots.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.read-only-sandbox-with-env-roots.md", """
                 codex:
                   command: codex app-server
                   turn_sandbox_policy:
@@ -1532,9 +1441,7 @@ final class ConfigResolverTest {
     @Test
     void forceDangerFullAccessIgnoresReadOnlyAdditionalWritableRootConflict() throws Exception {
         // given
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.read-only-sandbox-force-danger.md",
-                """
+        Path workflow = writeDefaultWorkflow("WORKFLOW.read-only-sandbox-force-danger.md", """
                 codex:
                   command: codex app-server
                   turn_sandbox_policy:
@@ -1563,14 +1470,12 @@ final class ConfigResolverTest {
     @SuppressWarnings("JUnitValueSource")
     void forceDangerFullAccessIgnoresInvalidConfiguredSandboxFallback(String codexYaml) throws Exception {
         // given
-        Path workflow = writeDefaultWorkflow(
-                "WORKFLOW.force-danger-invalid-sandbox.md",
-                """
+        Path workflow =
+                writeDefaultWorkflow("WORKFLOW.force-danger-invalid-sandbox.md", """
                 codex:
                   command: codex app-server
                 %s
-                """
-                        .formatted(codexYaml.indent(2)));
+                """.formatted(codexYaml.indent(2)));
         var resolver = new ConfigResolver(
                 name -> "SYMPHONY_CODEX_DANGER_FULL_ACCESS".equals(name) ? Optional.of("true") : Optional.empty());
 
@@ -1590,9 +1495,7 @@ final class ConfigResolverTest {
     void forceDangerFullAccessIgnoresInvalidCurrentSandboxPolicy() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.force-danger-invalid-sandbox.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1691,30 +1594,24 @@ final class ConfigResolverTest {
     }
 
     private Path writeTrelloWorkflow(String fileName, String boardId, String extraFrontMatter) throws Exception {
-        return writeWorkflow(
-                fileName,
-                """
+        return writeWorkflow(fileName, """
                 tracker:
                   kind: trello
                   api_key: literal-key
                   api_token: literal-token
                   board_id: %s
                 %s
-                """
-                        .formatted(boardId, extraFrontMatter));
+                """.formatted(boardId, extraFrontMatter));
     }
 
     private Path writeWorkflow(String fileName, String frontMatter) throws Exception {
         Path workflow = tempDir.resolve(fileName);
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 %s
                 ---
                 Prompt
-                """
-                        .formatted(frontMatter));
+                """.formatted(frontMatter));
         return workflow;
     }
 }

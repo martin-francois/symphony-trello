@@ -259,19 +259,14 @@ final class LocalSetupFollowUpCardsTest extends LocalSetupFixtureSupport {
 
     private void configureExistingFollowUps(boolean enabled) throws IOException {
         String content = Files.readString(workflow());
-        Files.writeString(
-                workflow(),
-                content.replace(
-                        "  allow_url_attachments: false",
-                        """
+        Files.writeString(workflow(), content.replace("  allow_url_attachments: false", """
                   allow_url_attachments: false
                   follow_up_cards:
                     enabled: %s
                     list_name: Later findings
                     max_cards_per_source_card: 2
                     max_cards_per_hour: 7
-                """
-                                .formatted(enabled)
-                                .stripTrailing()));
+                """.formatted(enabled)
+                .stripTrailing()));
     }
 }
