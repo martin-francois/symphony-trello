@@ -17,6 +17,14 @@ identities such as `Test User` or `example.invalid`; follow the commit and push 
 feature branch, and stop on the default branch unless the maintainer explicitly authorizes a history
 rewrite.
 
+Every commit that reaches `main` is one cohesive change, on every pull request, outside
+contributors' included. Squash a one-change pull request; otherwise clean up its history to one
+commit per change and merge it with a rebase merge. Fold each review fix into the commit it fixes,
+keeping that commit's author, unless the fix is a cohesive change of its own, and re-check the
+Commit History in Main checkboxes after every push. Pull-request review checks the history; see
+[Committing and pull requests](docs/agents/default-workflow.md#committing-and-pull-requests) and
+[Outside contributor pull requests](docs/agents/default-workflow.md#outside-contributor-pull-requests).
+
 Before starting any task, open [docs/agents/default-workflow.md](docs/agents/default-workflow.md)
 and follow it.
 
