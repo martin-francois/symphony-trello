@@ -2702,10 +2702,16 @@ final class SetupDiagnosticReporter {
     private String sanitizeCommand(List<String> args) {
         List<String> sanitizedArgs = new ArrayList<>();
         boolean redactNext = false;
-        for (String arg : args) {
+        boolean cardCommand = !args.isEmpty() && CardCommandRequest.COMMAND.equals(args.getFirst());
+        for (int index = 0; index < args.size(); index++) {
+            String arg = args.get(index);
             if (redactNext) {
                 sanitizedArgs.add("<redacted>");
                 redactNext = false;
+            } else if (cardCommand && index > 1 && !arg.startsWith("-")) {
+                // The only positional argument after `card SUBCOMMAND` is the CARD selector. Card URLs
+                // and ids are hashed below, but a bare short link has no shape to recognize.
+                sanitizedArgs.add("<redacted>");
             } else {
                 Optional<String> redactedOption = redactedCommandValueOption(arg);
                 sanitizedArgs.add(redactedOption

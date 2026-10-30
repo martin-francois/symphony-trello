@@ -5437,7 +5437,7 @@ Output:
   list failures use the `setup_card_*` codes; policy refusals keep the worker tool codes, such as
   `trello_writes_disabled` or `trello_move_not_allowed`. These failures are expected setup failures
   and MUST NOT write a troubleshooting report. Option values such as titles, descriptions, and
-  comment text MUST be redacted from diagnostics.
+  comment text, and the `CARD` argument, MUST be redacted from diagnostics.
 
 Codex skill:
 

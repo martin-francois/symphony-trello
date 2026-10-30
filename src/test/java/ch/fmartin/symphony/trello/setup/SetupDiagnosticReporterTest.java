@@ -2596,6 +2596,36 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void setupFailureReportRedactsTheCardSelectorOfACardCommand() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("card-failure-config");
+        Path stateHome = tempDir.resolve("card-failure-state");
+        Files.createDirectories(configDir);
+        var reporter = new SetupDiagnosticReporter(
+                Map.of("SYMPHONY_TRELLO_STATE_HOME", stateHome.toString()), new FakeCommandRunner());
+
+        // when
+        Path report = reporter.write(
+                        new RuntimeException("unexpected failure"),
+                        List.of(
+                                "card",
+                                "move",
+                                "SYNTH101",
+                                "--to",
+                                "Done",
+                                "--json",
+                                "--config-dir",
+                                configDir.toString()))
+                .orElseThrow();
+
+        // then
+        assertThat(report)
+                .content(StandardCharsets.UTF_8)
+                .contains("command:** card move <redacted> --to <redacted> --json --config-dir <redacted>")
+                .doesNotContain("SYNTH101");
+    }
+
+    @Test
     void setupFailureReportIncludesTemporaryTokenKeyFallback() throws Exception {
         // given
         Path configDir = tempDir.resolve("setup-failure-temporary-key-config");
