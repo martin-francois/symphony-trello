@@ -120,7 +120,7 @@ test("Renovate validation is reproducible and permits only required builds", () 
   // given
   const expectedCommand =
     "pnpm dlx --allow-build=core-js-pure --allow-build=dtrace-provider " +
-    "--allow-build=protobufjs --allow-build=re2 --package renovate@44.179.0 " +
+    "--allow-build=protobufjs --allow-build=re2 --package renovate@44.179.1 " +
     "renovate-config-validator renovate.json --strict";
   const ciWorkflow = parse(CI_WORKFLOW) as {
     jobs?: {
