@@ -39,6 +39,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       # build-mode none asks Maven for the dependency classpath with the java on the PATH, and
       # .mvn/jvm.config passes a flag that JDKs before 24 reject, so the lookup needs the project's JDK.
       - name: Set up the project's JDK for the Maven dependency lookup
