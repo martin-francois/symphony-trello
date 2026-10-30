@@ -795,9 +795,11 @@ Codex unless you add that list to the allowlist. `In Progress` is an active list
 agent moves or creates there gets picked up like any other active card. Comments need
 `trello_tools.allow_comments`. Archiving needs no extra setting: Trello keeps archived cards, and you
 can restore them from **Archived items** in the board menu. `card archive` asks for the card title in
-`--confirm-title` and refuses a title that differs from the card's, so an agent has to show you the
-card before it archives it. `card list` and `card show` only read and
-work with any `trello_tools` settings. A command that fails prints `setup_failed code=... message=...`
+`--confirm-title` and refuses a title that differs from the card's, so a typo or a wrong card id
+cannot archive the wrong card. The command cannot tell whether you saw the card: an agent can read
+the title with `card show` and pass it. The installed skill tells Codex to confirm the exact title
+with you first, and that rule is the only check that you agreed. `card list` and `card show` only
+read and work with any `trello_tools` settings. A command that fails prints `setup_failed code=... message=...`
 and exits with status 2.
 
 The installer puts a Codex skill named `symphony-trello-board-cards` into

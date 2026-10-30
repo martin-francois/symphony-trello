@@ -46,8 +46,14 @@ an open list name or a role: `active`, `in-progress`, `human-review`,
   a title that differs from the card's. Trello keeps archived cards, and the
   board menu restores them.
 - The workflow's `trello_tools` settings decide where cards may move and start.
-  A failure prints `setup_failed code=CODE message=...` and exits with 2. For a
-  `trello_*` code, tell the user which setting refused the write; edit the
-  workflow only when the user asks for that.
+  A failure prints `setup_failed code=CODE message=...` and exits with 2. These
+  codes mean a setting refused the write: `trello_tools_disabled`,
+  `trello_writes_disabled`, `trello_comments_disabled`,
+  `trello_move_not_allowed`, `trello_move_allowlist_required`, and
+  `trello_create_list_not_allowed`. For them, tell the user which setting
+  refused the write; edit the workflow only when the user asks for that.
+- Any other code, such as `trello_auth_failed` or `trello_api_request`, is not
+  a workflow setting. Tell the user the message and the `Next step:` line that
+  follows it, and leave `trello_tools` alone.
 - In a Symphony worker run on a card, where the `trello_move_current_card` tool
   exists, handle that card with the worker's `trello_*` tools.
