@@ -79,7 +79,8 @@ guidance here, put it in docs/agents and add a link instead.
 - [Dependency updates](docs/agents/dependency-updates.md)
 - [Documentation & README](docs/agents/documentation-and-readme.md)
 - Creating, editing, or triaging GitHub issues: [GitHub issue triage](docs/agents/github-issue-triage.md);
-  label triage follows its Triage labels policy and ends with `node scripts/audit-issue-labels.ts`
+  label triage follows its Triage labels policy and ends with `node scripts/audit-issue-labels.ts`,
+  and sweeps answer people's comments and paid-help or bounty offers as that page says
 - [Autonomy & escalation](docs/agents/autonomy-and-escalation.md) including the Codex review/fix loop
 - [Private-context redaction](docs/agents/private-context-redaction.md)
 - [Maintaining agent docs](docs/agents/maintaining-agent-docs.md)
