@@ -4,13 +4,15 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.FollowUpRelationship;
-import ch.fmartin.symphony.trello.config.StateNames;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.time.ApplicationClock;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.SymphonyCommentFooter;
+import ch.fmartin.symphony.trello.tracker.TrelloCardWrites;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import ch.fmartin.symphony.trello.tracker.TrelloException;
+import ch.fmartin.symphony.trello.tracker.TrelloMarkdown;
+import ch.fmartin.symphony.trello.tracker.TrelloWritePermission;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -89,6 +91,7 @@ public class TrelloHandoffToolHandler {
 
     private final ObjectMapper json;
     private final TrelloClient trello;
+    private final TrelloCardWrites cardWrites;
     private final Object[] workpadLocks = new Object[WORKPAD_LOCK_STRIPES];
     private final TrelloFollowUpCardTool followUpCards;
 
@@ -100,6 +103,7 @@ public class TrelloHandoffToolHandler {
     public TrelloHandoffToolHandler(ObjectMapper json, TrelloClient trello, Clock clock) {
         this.json = json;
         this.trello = trello;
+        this.cardWrites = new TrelloCardWrites(trello);
         this.followUpCards = new TrelloFollowUpCardTool(trello, clock);
         for (int index = 0; index < workpadLocks.length; index++) {
             workpadLocks[index] = new Object();
@@ -127,7 +131,7 @@ public class TrelloHandoffToolHandler {
         if (TrelloFollowUpCardTool.advertised(config)) {
             addToolSpecs(tools, CREATE_FOLLOW_UP_CARD);
         }
-        if (moveAllowlistConfigured(config)) {
+        if (TrelloCardWrites.moveAllowlistConfigured(config)) {
             addToolSpecs(tools, MOVE_CURRENT_CARD);
         }
         return tools;
@@ -150,7 +154,7 @@ public class TrelloHandoffToolHandler {
         List<ToolDefinition> definitions = List.of(
                 toolDefinition(
                         ADD_COMMENT,
-                        List.of(ToolPermission.COMMENTS),
+                        List.of(TrelloWritePermission.COMMENTS),
                         TrelloHandoffToolHandler::addComment,
                         "Add a handoff comment to the current Trello card. The current card is fixed by Symphony; do not include a card id.",
                         objectSchema(
@@ -161,7 +165,7 @@ public class TrelloHandoffToolHandler {
                                 List.of("text"))),
                 toolDefinition(
                         UPSERT_WORKPAD,
-                        List.of(ToolPermission.COMMENTS),
+                        List.of(TrelloWritePermission.COMMENTS),
                         TrelloHandoffToolHandler::upsertWorkpad,
                         "Create or update the single Codex workpad comment on the current Trello card. The text is Markdown and must summarize current plan, acceptance criteria, progress, validation, blockers, and handoff notes.",
                         objectSchema(
@@ -172,7 +176,7 @@ public class TrelloHandoffToolHandler {
                                 List.of("text"))),
                 toolDefinition(
                         UPDATE_BLOCKER_RECHECK_STATUS,
-                        List.of(ToolPermission.COMMENTS),
+                        List.of(TrelloWritePermission.COMMENTS),
                         TrelloHandoffToolHandler::updateBlockerRecheckStatus,
                         "Maintain one managed status while rechecking the newest exact Blocked: or Blocked by handoff. Set checking before the recheck, then set resumed only after that blocker no longer applies.",
                         objectSchema(
@@ -184,7 +188,7 @@ public class TrelloHandoffToolHandler {
                                 List.of("status"))),
                 toolDefinition(
                         UPSERT_CHECKLIST_ITEM,
-                        List.of(ToolPermission.CHECKLISTS),
+                        List.of(TrelloWritePermission.CHECKLISTS),
                         TrelloHandoffToolHandler::upsertChecklistItem,
                         "Create or update one checklist item on the current Trello card. The current card is fixed by Symphony; do not include a card id.",
                         objectSchema(
@@ -198,7 +202,7 @@ public class TrelloHandoffToolHandler {
                                 List.of("checklist_name", "item_name", "complete"))),
                 toolDefinition(
                         ADD_URL_ATTACHMENT,
-                        List.of(ToolPermission.URL_ATTACHMENTS),
+                        List.of(TrelloWritePermission.URL_ATTACHMENTS),
                         TrelloHandoffToolHandler::addUrlAttachment,
                         "Attach one http or https URL without credentials, query string, or fragment to the current Trello card. The current card is fixed by Symphony; do not include a card id.",
                         objectSchema(
@@ -212,9 +216,9 @@ public class TrelloHandoffToolHandler {
                 toolDefinition(
                         CREATE_FOLLOW_UP_CARD,
                         List.of(
-                                ToolPermission.FOLLOW_UP_CARDS,
-                                ToolPermission.URL_ATTACHMENTS,
-                                ToolPermission.COMMENTS),
+                                TrelloWritePermission.FOLLOW_UP_CARDS,
+                                TrelloWritePermission.URL_ATTACHMENTS,
+                                TrelloWritePermission.COMMENTS),
                         TrelloHandoffToolHandler::createFollowUpCard,
                         "Create one linked Trello card for actionable pre-existing work outside this card. Fix problems introduced or worsened by the current change here. Establish discovered problems on the actual target branch before filing them. Creating a card does not start work. Symphony chooses the board, list, and labels; do not include a card id or list id.",
                         objectSchema(
@@ -239,7 +243,7 @@ public class TrelloHandoffToolHandler {
                                 List.of("title", "description", "acceptance_criteria"))),
                 toolDefinition(
                         MOVE_CURRENT_CARD,
-                        List.of(ToolPermission.WRITES),
+                        List.of(TrelloWritePermission.WRITES),
                         TrelloHandoffToolHandler::moveCurrentCard,
                         "Move the current Trello card to one configured board-local handoff list. Use list_name unless the workflow explicitly gives a Trello list_id.",
                         objectSchema(
@@ -270,19 +274,17 @@ public class TrelloHandoffToolHandler {
         if (definition == null) {
             return failure("unsupported_tool", "Unsupported Trello handoff tool: " + tool);
         }
-        if (!config.trelloTools().enabled()) {
-            return failure("trello_tools_disabled", "Trello handoff tools are disabled by trello_tools.enabled.");
-        }
-        if (!config.trelloTools().allowWrites()) {
-            return failure("trello_writes_disabled", "Trello writes are disabled by trello_tools.allow_writes.");
+        TrelloWritePermission switchedOff = TrelloWritePermission.firstRefused(
+                config, List.of(TrelloWritePermission.TOOLS, TrelloWritePermission.WRITES));
+        if (switchedOff != null) {
+            return failure(switchedOff.code(), switchedOff.message());
         }
         if (blank(card.id())) {
             return failure("missing_card_context", "The active worker session has no Trello card id.");
         }
-        for (ToolPermission permission : definition.permissions()) {
-            if (!permission.enabled(config.trelloTools())) {
-                return failure(permission.code, permission.message);
-            }
+        TrelloWritePermission refused = TrelloWritePermission.firstRefused(config, definition.permissions());
+        if (refused != null) {
+            return failure(refused.code(), refused.message());
         }
         JsonNode arguments = params.path("arguments");
         String violation = definition.argumentViolation(arguments);
@@ -302,12 +304,7 @@ public class TrelloHandoffToolHandler {
     }
 
     private ObjectNode addComment(EffectiveConfig config, Card card, JsonNode arguments) {
-        String text = arguments.path("text").textValue();
-        if (SymphonyCommentFooter.isFooterOnly(text)) {
-            return failure("invalid_comment_text", "Comment text must contain more than the Symphony footer.");
-        }
-        String body = SymphonyCommentFooter.withoutTrailingFooters(text.stripTrailing());
-        trello.addComment(config, card.id(), SymphonyCommentFooter.append(TrelloMarkdown.escapeLeadingHashtags(body)));
+        cardWrites.addComment(config, card.id(), arguments.path("text").textValue());
         return success(Map.of("status", "comment_added", "card_id", card.id()));
     }
 
@@ -727,12 +724,9 @@ public class TrelloHandoffToolHandler {
     }
 
     private ObjectNode createFollowUpCard(EffectiveConfig config, Card card, JsonNode arguments) {
-        TrelloFollowUpCardTool.Outcome outcome = followUpCards.handle(
-                config,
-                card,
-                arguments,
-                listName -> Optional.ofNullable(
-                        resolveAllowedTarget(config, null, listName).list()));
+        TrelloFollowUpCardTool.Outcome outcome = followUpCards.handle(config, card, arguments, listName -> cardWrites
+                .resolveMoveTarget(config, null, listName)
+                .allowedList());
         return switch (outcome) {
             case TrelloFollowUpCardTool.Outcome.Success success ->
                 recordFollowUpWorkpad(config, card, success.payload());
@@ -1227,32 +1221,17 @@ public class TrelloHandoffToolHandler {
 
     private ObjectNode moveCurrentCard(
             EffectiveConfig config, Card card, JsonNode arguments, HandoffMoveObserver observer) {
-        if (!moveAllowlistConfigured(config)) {
-            return failure(
-                    "trello_move_allowlist_required",
-                    "Trello card moves require trello_tools.allowed_move_list_ids or allowed_move_list_names.");
-        }
-        String listId = arguments.path("list_id").textValue();
-        String listName = arguments.path("list_name").textValue();
-        if (blank(listId) && blank(listName)) {
-            return failure("missing_destination_list", "Provide list_name or list_id for the destination list.");
-        }
-
-        BoardListMatch target = resolveAllowedTarget(config, listId, listName);
-        if (target.list() == null) {
-            return failure("trello_move_not_allowed", target.error());
-        }
-
-        boolean handoff =
-                TrelloClient.isTerminalList(config, target.list()) || !TrelloClient.isActiveList(config, target.list());
-        if (handoff
-                && !observer.beforeMove(
-                        config.tracker().resolvedBoardId(), target.list().id())) {
+        TrelloClient.BoardList target = cardWrites.allowedMoveTarget(
+                config,
+                arguments.path("list_id").textValue(),
+                arguments.path("list_name").textValue());
+        boolean handoff = TrelloClient.isTerminalList(config, target) || !TrelloClient.isActiveList(config, target);
+        if (handoff && !observer.beforeMove(config.tracker().resolvedBoardId(), target.id())) {
             return failure("stale_handoff_owner", "cannot move current card: expected a current worker and turn");
         }
         boolean succeeded = false;
         try {
-            trello.moveCardToList(config, card.id(), target.list().id());
+            trello.moveCardToList(config, card.id(), target.id());
             succeeded = true;
         } finally {
             if (handoff) {
@@ -1260,92 +1239,19 @@ public class TrelloHandoffToolHandler {
             }
         }
         return success(Map.of(
-                "status",
-                "card_moved",
-                "card_id",
-                card.id(),
-                "list_id",
-                target.list().id(),
-                "list_name",
-                target.list().name()));
-    }
-
-    private BoardListMatch resolveAllowedTarget(EffectiveConfig config, String listId, String listName) {
-        List<TrelloClient.BoardList> lists = trello.fetchBoardLists(config);
-        List<TrelloClient.BoardList> openLists =
-                lists.stream().filter(list -> !list.closed()).toList();
-        if (!blank(listId)) {
-            return openLists.stream()
-                    .filter(list -> list.id().equals(listId))
-                    .findAny()
-                    .map(list -> allowedTargetById(config, list, openLists))
-                    .orElseGet(() -> new BoardListMatch(null, "Destination list is not open on the configured board."));
-        }
-
-        List<TrelloClient.BoardList> nameMatches = openLists.stream()
-                .filter(list -> StateNames.normalize(list.name()).equals(StateNames.normalize(listName)))
-                .toList();
-        if (nameMatches.size() > 1) {
-            return new BoardListMatch(
-                    null,
-                    "Destination list name matches multiple open Trello lists. Rename the duplicate lists or move by list_id.");
-        }
-        if (nameMatches.isEmpty()) {
-            return new BoardListMatch(null, "Destination list is not open on the configured board.");
-        }
-        return allowedTarget(config, nameMatches.getFirst());
-    }
-
-    private BoardListMatch allowedTargetById(
-            EffectiveConfig config, TrelloClient.BoardList list, List<TrelloClient.BoardList> openLists) {
-        if (allowedById(config, list)) {
-            return new BoardListMatch(list, null);
-        }
-        if (allowedByName(config, list) && hasUniqueOpenListName(list, openLists)) {
-            return new BoardListMatch(list, null);
-        }
-        if (allowedByName(config, list)) {
-            return new BoardListMatch(
-                    null,
-                    "Destination list name matches multiple open Trello lists. Allow the exact list_id before moving by list_id.");
-        }
-        return new BoardListMatch(null, "Destination list is not included in the configured Trello move allowlist.");
-    }
-
-    private BoardListMatch allowedTarget(EffectiveConfig config, TrelloClient.BoardList list) {
-        return allowedById(config, list) || allowedByName(config, list)
-                ? new BoardListMatch(list, null)
-                : new BoardListMatch(null, "Destination list is not included in the configured Trello move allowlist.");
-    }
-
-    private boolean hasUniqueOpenListName(TrelloClient.BoardList list, List<TrelloClient.BoardList> openLists) {
-        String normalized = StateNames.normalize(list.name());
-        return openLists.stream()
-                        .filter(candidate -> normalized.equals(StateNames.normalize(candidate.name())))
-                        .count()
-                == 1;
-    }
-
-    private boolean allowedById(EffectiveConfig config, TrelloClient.BoardList list) {
-        return config.trelloTools().allowedMoveListIds().contains(list.id());
-    }
-
-    private boolean allowedByName(EffectiveConfig config, TrelloClient.BoardList list) {
-        String normalized = StateNames.normalize(list.name());
-        return config.trelloTools().allowedMoveListNames().contains(normalized);
+                "status", "card_moved", "card_id", card.id(), "list_id", target.id(), "list_name", target.name()));
     }
 
     private static boolean writesEnabled(EffectiveConfig config) {
-        return config.trelloTools().enabled() && config.trelloTools().allowWrites();
-    }
-
-    private boolean moveAllowlistConfigured(EffectiveConfig config) {
-        return !config.trelloTools().allowedMoveListIds().isEmpty()
-                || !config.trelloTools().allowedMoveListNames().isEmpty();
+        return TrelloWritePermission.allGranted(config, TrelloWritePermission.TOOLS, TrelloWritePermission.WRITES);
     }
 
     private static ToolDefinition toolDefinition(
-            String name, List<ToolPermission> permissions, ToolCall call, String description, ObjectNode inputSchema) {
+            String name,
+            List<TrelloWritePermission> permissions,
+            ToolCall call,
+            String description,
+            ObjectNode inputSchema) {
         ObjectNode spec = JsonNodeFactory.instance
                 .objectNode()
                 .put("namespace", "symphony")
@@ -1471,45 +1377,13 @@ public class TrelloHandoffToolHandler {
         return value == null || value.isBlank();
     }
 
-    private record BoardListMatch(TrelloClient.BoardList list, String error) {}
-
     @FunctionalInterface
     private interface ToolCall {
         ObjectNode invoke(TrelloHandoffToolHandler handler, EffectiveConfig config, Card card, JsonNode arguments);
     }
 
-    private enum ToolPermission {
-        FOLLOW_UP_CARDS(
-                "trello_follow_up_cards_disabled",
-                "Follow-up cards are disabled by trello_tools.follow_up_cards.enabled."),
-        WRITES("trello_writes_disabled", "Trello writes are disabled by trello_tools.allow_writes."),
-        COMMENTS("trello_comments_disabled", "Trello comments are disabled by trello_tools.allow_comments."),
-        CHECKLISTS("trello_checklists_disabled", "Trello checklists are disabled by trello_tools.allow_checklists."),
-        URL_ATTACHMENTS(
-                "trello_url_attachments_disabled",
-                "Trello URL attachments are disabled by trello_tools.allow_url_attachments.");
-
-        private final String code;
-        private final String message;
-
-        ToolPermission(String code, String message) {
-            this.code = code;
-            this.message = message;
-        }
-
-        boolean enabled(EffectiveConfig.TrelloToolsConfig tools) {
-            return switch (this) {
-                case FOLLOW_UP_CARDS -> tools.followUpCards().enabled();
-                case WRITES -> tools.allowWrites();
-                case COMMENTS -> tools.allowComments();
-                case CHECKLISTS -> tools.allowChecklists();
-                case URL_ATTACHMENTS -> tools.allowUrlAttachments();
-            };
-        }
-    }
-
     private record ToolDefinition(
-            ObjectNode spec, Schema argumentSchema, List<ToolPermission> permissions, ToolCall call) {
+            ObjectNode spec, Schema argumentSchema, List<TrelloWritePermission> permissions, ToolCall call) {
         String name() {
             return spec.path(TOOL_NAME).textValue();
         }

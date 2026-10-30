@@ -1,4 +1,4 @@
-package ch.fmartin.symphony.trello.agent;
+package ch.fmartin.symphony.trello.tracker;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

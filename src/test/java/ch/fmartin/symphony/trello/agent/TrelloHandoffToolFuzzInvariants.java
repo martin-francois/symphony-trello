@@ -8,6 +8,7 @@ import ch.fmartin.symphony.trello.tracker.InMemoryTrelloBoard;
 import ch.fmartin.symphony.trello.tracker.InMemoryTrelloBoard.Write;
 import ch.fmartin.symphony.trello.tracker.InMemoryTrelloBoard.WriteKind;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
+import ch.fmartin.symphony.trello.tracker.TrelloMarkdown;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.fasterxml.jackson.databind.JsonNode;

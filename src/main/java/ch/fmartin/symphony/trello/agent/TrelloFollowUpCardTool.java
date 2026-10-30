@@ -7,7 +7,10 @@ import ch.fmartin.symphony.trello.config.FollowUpRelationship;
 import ch.fmartin.symphony.trello.config.StateNames;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.tracker.SymphonyCommentFooter;
+import ch.fmartin.symphony.trello.tracker.TrelloCardText;
+import ch.fmartin.symphony.trello.tracker.TrelloCardWrites;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
+import ch.fmartin.symphony.trello.tracker.TrelloMarkdown;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Clock;
 import java.time.Duration;
@@ -19,7 +22,6 @@ import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
@@ -38,8 +40,8 @@ final class TrelloFollowUpCardTool {
     static final String FOLLOW_UP_ATTACHMENT_PREFIX = "Follow-up: ";
     static final String SOURCE_ATTACHMENT_PREFIX = "Follow-up of: ";
     static final String ACCEPTANCE_CRITERIA_HEADING = "## Acceptance criteria";
-    static final int MAX_TITLE_CODE_POINTS = 200;
-    static final int MAX_DESCRIPTION_CODE_POINTS = 4000;
+    static final int MAX_TITLE_CODE_POINTS = TrelloCardText.MAX_TITLE_CODE_POINTS;
+    static final int MAX_DESCRIPTION_CODE_POINTS = TrelloCardText.MAX_DESCRIPTION_CODE_POINTS;
     static final int MAX_ACCEPTANCE_CRITERIA = 10;
     static final int MAX_ACCEPTANCE_CRITERION_CODE_POINTS = 300;
     static final Duration RATE_WINDOW = Duration.ofHours(1);
@@ -112,9 +114,7 @@ final class TrelloFollowUpCardTool {
         }
 
         synchronized (creationLock) {
-            List<TrelloClient.BoardList> openLists = trello.fetchBoardLists(config).stream()
-                    .filter(list -> !list.closed())
-                    .toList();
+            List<TrelloClient.BoardList> openLists = TrelloCardWrites.openLists(trello.fetchBoardLists(config));
             Checked<TrelloClient.BoardList> destination = destinationList(config, policy, openLists);
             Checked<Optional<TrelloClient.BoardList>> blockedTarget =
                     blockedTarget(config, policy, request.relationship(), allowedMoveTarget);
@@ -371,23 +371,20 @@ final class TrelloFollowUpCardTool {
             EffectiveConfig config,
             EffectiveConfig.FollowUpCardsConfig policy,
             List<TrelloClient.BoardList> openLists) {
-        String normalizedName = StateNames.normalize(policy.listName());
-        List<TrelloClient.BoardList> matches = openLists.stream()
-                .filter(list -> policy.listId() == null
-                        ? StateNames.normalize(list.name()).equals(normalizedName)
-                        : list.id().equals(policy.listId()))
-                .toList();
-        if (matches.size() > 1) {
-            return Checked.failed(
-                    "trello_follow_up_list_ambiguous",
-                    "The follow-up list name matches more than one open Trello list. Rename the duplicates or set trello_tools.follow_up_cards.list_id.");
-        }
-        if (matches.isEmpty()) {
-            return Checked.failed(
-                    "trello_follow_up_list_missing",
-                    "The configured follow-up list is not open on the configured board.");
-        }
-        TrelloClient.BoardList list = matches.getFirst();
+        return switch (TrelloCardWrites.matchOpenList(openLists, policy.listId(), policy.listName())) {
+            case TrelloCardWrites.OpenListMatch.Found found -> intakeList(config, found.list());
+            case TrelloCardWrites.OpenListMatch.Missing _ ->
+                Checked.failed(
+                        "trello_follow_up_list_missing",
+                        "The configured follow-up list is not open on the configured board.");
+            case TrelloCardWrites.OpenListMatch.Ambiguous _ ->
+                Checked.failed(
+                        "trello_follow_up_list_ambiguous",
+                        "The follow-up list name matches more than one open Trello list. Rename the duplicates or set trello_tools.follow_up_cards.list_id.");
+        };
+    }
+
+    private static Checked<TrelloClient.BoardList> intakeList(EffectiveConfig config, TrelloClient.BoardList list) {
         if (TrelloClient.isActiveList(config, list) || TrelloClient.isTerminalList(config, list)) {
             return Checked.failed(
                     "trello_follow_up_list_not_allowed",
@@ -442,15 +439,10 @@ final class TrelloFollowUpCardTool {
             return "";
         }
         var line = new StringBuilder();
-        text.codePoints().forEach(codePoint -> line.appendCodePoint(lineBreakOrControl(codePoint) ? ' ' : codePoint));
+        text.codePoints()
+                .forEach(codePoint ->
+                        line.appendCodePoint(TrelloCardText.lineBreakOrControl(codePoint) ? ' ' : codePoint));
         return line.toString().strip();
-    }
-
-    private static boolean lineBreakOrControl(int codePoint) {
-        int type = Character.getType(codePoint);
-        return Character.isISOControl(codePoint)
-                || type == Character.LINE_SEPARATOR
-                || type == Character.PARAGRAPH_SEPARATOR;
     }
 
     private static String truncate(String text, int maxCodePoints) {
@@ -471,20 +463,7 @@ final class TrelloFollowUpCardTool {
                             "Unsupported argument %s; Symphony chooses the board, list, labels, and cards",
                             name));
             String title = requiredLine(arguments, "title", MAX_TITLE_CODE_POINTS);
-            String description = requiredText(arguments, "description").replace("\r\n", "\n");
-            checkArgument(
-                    description.codePointCount(0, description.length()) <= MAX_DESCRIPTION_CODE_POINTS,
-                    "description must be at most %s characters",
-                    MAX_DESCRIPTION_CODE_POINTS);
-            checkArgument(
-                    description
-                            .codePoints()
-                            .noneMatch(codePoint ->
-                                    codePoint != '\n' && codePoint != '\t' && lineBreakOrControl(codePoint)),
-                    "description must not contain control characters");
-            checkArgument(
-                    description.lines().map(String::strip).noneMatch(SymphonyCommentFooter::hasAttributionPrefix),
-                    "cannot accept description: omit the attribution footer; Symphony writes it");
+            String description = TrelloCardText.description(requiredText(arguments, "description"));
             List<String> criteria = acceptanceCriteria(arguments);
             FollowUpRelationship relationship = relationship(arguments);
             var body = new StringBuilder(description.strip());
@@ -531,18 +510,7 @@ final class TrelloFollowUpCardTool {
         }
 
         private static String validLine(String value, String name, int maxCodePoints) {
-            String stripped = Objects.requireNonNull(value).strip();
-            checkArgument(!stripped.isEmpty(), "%s must not be blank", name);
-            checkArgument(
-                    stripped.codePoints().noneMatch(TrelloFollowUpCardTool::lineBreakOrControl),
-                    "%s must be one line",
-                    name);
-            checkArgument(
-                    stripped.codePointCount(0, stripped.length()) <= maxCodePoints,
-                    "%s must be at most %s characters",
-                    name,
-                    maxCodePoints);
-            return stripped;
+            return TrelloCardText.singleLine(value, name, maxCodePoints);
         }
     }
 

@@ -1,9 +1,10 @@
-package ch.fmartin.symphony.trello.agent;
+package ch.fmartin.symphony.trello.tracker;
 
-final class TrelloMarkdown {
+/// Markdown adjustments for text that Symphony writes to Trello cards and comments.
+public final class TrelloMarkdown {
     private TrelloMarkdown() {}
 
-    static String escapeLeadingHashtags(String markdown) {
+    public static String escapeLeadingHashtags(String markdown) {
         var escaped = new StringBuilder(markdown.length());
         int lineStart = 0;
         Fence fence = Fence.none();
