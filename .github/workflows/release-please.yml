@@ -68,7 +68,8 @@ jobs:
         with:
           distribution: temurin
           java-version: "25.0.4+7.0.LTS"
-          cache: maven
+          # No cache: this job holds id-token: write, so it builds from a clean runner
+          # (docs/agents/github-actions-security.md).
       - name: Build release assets
         if: ${{ steps.release-assets.outputs.upload_assets == 'true' }}
         env:
