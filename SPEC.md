@@ -818,6 +818,12 @@ precedence.
     environment value for deployment-managed allowed host paths.
 - `turn_timeout_ms` (integer)
   - Default: `3600000` (1 hour)
+  - The longest time a running turn may go without app-server output. Every line the app-server
+    writes while the turn runs, on stdout or stderr, resets the interval, so it is not a cap on the
+    total turn runtime. A turn that keeps streaming updates runs until it completes, fails, or the
+    orchestrator stops it. This matches upstream Symphony.
+  - A cap on the total turn runtime is not defined. A later version MAY add one as a separate
+    optional key that is off by default, which would not change the behavior of existing workflows.
 - `read_timeout_ms` (integer)
   - Default: `5000`
 - `stall_timeout_ms` (integer)
@@ -1520,7 +1526,8 @@ as a checkout candidate instead of failing.
   turn sandbox policy to `dangerFullAccess`
 - `SYMPHONY_TRELLO_DOTENV`: implementation environment extension that selects the ignored dotenv
   file loaded for local runs instead of the project-root `.env`
-- `codex.turn_timeout_ms`: integer, default `3600000`
+- `codex.turn_timeout_ms`: integer, default `3600000`; maximum silence interval while a turn runs,
+  not a total runtime cap (Section 5.3.6)
 - `codex.read_timeout_ms`: integer, default `5000`
 - `codex.stall_timeout_ms`: integer, default `300000`
 - `trello_tools.enabled`: boolean, default `false`
@@ -2199,7 +2206,7 @@ Completion conditions:
 - Targeted-protocol turn completion signal -> success
 - Targeted-protocol turn failure signal -> failure
 - Targeted-protocol turn cancellation signal -> failure
-- turn timeout (`turn_timeout_ms`) -> failure
+- turn stream silence timeout (`turn_timeout_ms`) -> failure
 - subprocess exit -> failure
 
 Failure results MAY include a structured failure category and an optional earliest retry time. The
@@ -2509,7 +2516,8 @@ User-input-required policy:
 Timeouts:
 
 - `codex.read_timeout_ms`: request/response timeout during startup and sync requests
-- `codex.turn_timeout_ms`: total turn stream timeout
+- `codex.turn_timeout_ms`: maximum silence interval while a turn stream is active; each
+  app-server output resets it, so it is not a total turn runtime cap
 - `codex.stall_timeout_ms`: enforced by orchestrator based on event inactivity
 
 Error mapping (RECOMMENDED normalized categories):
@@ -3361,7 +3369,7 @@ API design notes:
 3. `Agent Session Failures`
    - Startup handshake failure
    - Turn failed/cancelled
-   - Turn timeout
+   - Turn timeout after `turn_timeout_ms` without app-server output
    - User input requested and handled as failure by the implementation's documented policy
    - Subprocess exit
    - Stalled session, no activity
@@ -4148,7 +4156,8 @@ that a second formatting pass leaves the source unchanged.
 - Thread and turn identities exposed by the targeted protocol are extracted and used to emit
   `session_started`
 - Request/response read timeout is enforced
-- Turn timeout is enforced
+- Turn timeout is enforced as a silence interval: app-server output during the turn resets it, and a
+  turn that keeps streaming past `turn_timeout_ms` is not failed
 - Transport framing required by the targeted protocol is handled correctly
 - For stdio-based transports, diagnostic stderr handling is kept separate from the protocol stream
 - Command/file-change approvals are handled according to the implementation's documented policy
@@ -5320,7 +5329,11 @@ Fields:
     and the reviewer uses its own Codex default.
 
 All fields follow normal dynamic reload: the next dispatched run uses the current values without a
-restart.
+restart. The review runs inside a coding-agent turn. `codex.turn_timeout_ms` limits only the time
+without app-server output (Section 5.3.6), so a long review does not end the turn while the
+app-server keeps streaming, for example the command output of a separate review run. A review
+command that prints nothing for the whole interval ends the turn with `turn_timeout` only when the
+app-server writes nothing else to stdout or stderr during that interval.
 
 A workflow that omits the fields runs the loop with the defaults. Workflows written before this
 profile existed therefore get the loop without regeneration; such a workflow keeps the earlier

@@ -369,6 +369,7 @@ public class CodexAppServerClient {
         private final Object turnCompletionLock = new Object();
         private final Object writerLock = new Object();
         private final AtomicReference<Throwable> readerFailure = new AtomicReference<>();
+        private final TurnSilenceTimeout turnSilence = new TurnSilenceTimeout(System::nanoTime);
         private final RateLimitState rateLimitState;
         private final BufferedWriter writer;
 
@@ -422,7 +423,9 @@ public class CodexAppServerClient {
             write(object("method", method));
         }
 
-        JsonNode awaitTurnCompleted(String turnId, Duration timeout) throws Exception {
+        /// Waits for the turn to end. `silenceTimeout` is the longest time without app-server output,
+        /// not a cap on the whole turn.
+        JsonNode awaitTurnCompleted(String turnId, Duration silenceTimeout) throws Exception {
             CompletableFuture<JsonNode> future;
             synchronized (turnCompletionLock) {
                 Throwable terminalFailure = terminalTurnFailures.remove(turnId);
@@ -441,7 +444,7 @@ public class CodexAppServerClient {
                 turnCompletions.put(turnId, future);
             }
             try {
-                return future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+                return turnSilence.await(nanos -> future.get(nanos, TimeUnit.NANOSECONDS), silenceTimeout);
             } catch (ExecutionException e) {
                 throw unwrapReaderFailure(e);
             } finally {
@@ -464,6 +467,7 @@ public class CodexAppServerClient {
                     new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8), 10 * 1024 * 1024)) {
                 String line = reader.readLine();
                 while (line != null) {
+                    turnSilence.outputReceived();
                     handleMessage(json.readTree(line));
                     line = reader.readLine();
                 }
@@ -479,6 +483,8 @@ public class CodexAppServerClient {
                     new BufferedReader(new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
                 String line = reader.readLine();
                 while (line != null) {
+                    // Upstream Symphony reads stderr on the same stream as stdout, so it counts as output.
+                    turnSilence.outputReceived();
                     LOG.debugf("codex_stderr pid=%d message=%s", process.pid(), line);
                     line = reader.readLine();
                 }

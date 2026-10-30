@@ -57,6 +57,7 @@ codex:
   turn_sandbox_policy:
     type: workspaceWrite
     networkAccess: true
+  # Longest time a running turn may go without app-server output; each update resets it.
   turn_timeout_ms: 3600000
   read_timeout_ms: 5000
   stall_timeout_ms: 300000
