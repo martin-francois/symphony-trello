@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import test from "node:test";
+import {loadWorkflowScript} from "./test-support/workflow-script.ts";
 
 interface UserNode {
   readonly id?: number;
@@ -86,14 +87,11 @@ interface TimelineEventNode {
   readonly sha?: string;
 }
 
-type ExecutableAsyncFunction = (...arguments_: readonly unknown[]) => Promise<unknown>;
-type AsyncFunctionConstructor = new (...arguments_: readonly string[]) => ExecutableAsyncFunction;
-
-const AsyncFunction = Object.getPrototypeOf(async function (): Promise<void> {}).constructor as AsyncFunctionConstructor;
 const WORKFLOW = readFileSync(
   new URL("../.github/workflows/pull-request-author-handoff.yml", import.meta.url),
   "utf8",
 );
+const HANDOFF = loadWorkflowScript("pull-request-author-handoff.yml", "Synchronize author handoff labels");
 const AUTHOR = {login: "octocat"};
 const WAITING_LABEL = "waiting-for-author";
 const REVIEW_LABEL = "needs-maintainer-review";
@@ -119,21 +117,6 @@ const DEFAULT_TIMELINE: readonly TimelineEventNode[] = [
   },
   {event: "commented", id: READY_COMMENT_ID},
 ];
-
-function workflowScript(): string {
-  const lines = WORKFLOW.split("\n");
-  const scriptStart = lines.findIndex((line) => line.trim() === "script: |");
-  assert.notEqual(scriptStart, -1, "author handoff script block must exist");
-
-  const scriptLines: string[] = [];
-  for (const line of lines.slice(scriptStart + 1)) {
-    if (line && !line.startsWith("            ")) {
-      break;
-    }
-    scriptLines.push(line.slice(12));
-  }
-  return scriptLines.join("\n");
-}
 
 async function runHandoff(
   eventName: "issue_comment" | "pull_request_target",
@@ -224,7 +207,7 @@ async function runHandoff(
     },
   };
 
-  await new AsyncFunction("context", "github", "core", workflowScript())(context, github, core);
+  await HANDOFF({context, github, core});
   return {
     added,
     attemptedAdds,
@@ -287,7 +270,12 @@ test("the privileged workflow uses only trusted metadata and least-privilege API
     /^    concurrency:\n      group: pull-request-author-handoff-.+\n(?:      # .+\n)?      queue: max$/m,
   );
   assert.doesNotMatch(WORKFLOW, /^      cancel-in-progress:/m);
-  assert.doesNotMatch(WORKFLOW, /actions\/checkout|^\s+run:/m);
+  assert.doesNotMatch(WORKFLOW, /^\s+run:/m);
+  // The job checks out only its script, at a base-branch commit, without the token.
+  assert.equal(WORKFLOW.match(/uses: actions\/checkout@/g)?.length, 1);
+  assert.match(WORKFLOW, /ref: \$\{\{ github\.sha \}\}/);
+  assert.match(WORKFLOW, /sparse-checkout: scripts\/pull-request-author-handoff\.cjs$/m);
+  assert.match(WORKFLOW, /persist-credentials: false/);
 });
 
 test("applying the waiting label removes the review label and explains the handoff", async () => {
