@@ -147,8 +147,10 @@ test("Renovate holds json-schema-validator on 2.x while Quarkus is on Jackson 2"
   // when
   const holds = RENOVATE_CONFIG.packageRules
     .filter(
-      ({ allowedVersions, matchPackageNames }) =>
+      ({ allowedVersions, enabled, matchDatasources, matchPackageNames }) =>
         allowedVersions !== undefined &&
+        enabled !== false &&
+        (matchDatasources === undefined || matchDatasources.includes("maven")) &&
         matchPackageNames !== undefined &&
         matchesRegexOrGlobList(matchPackageNames, "com.networknt:json-schema-validator"),
     )
