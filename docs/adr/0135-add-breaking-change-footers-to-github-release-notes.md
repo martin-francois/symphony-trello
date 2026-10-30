@@ -94,7 +94,7 @@ another run's Release Please step is rewriting.
 * Good, because the `BREAKING CHANGE:` footer stays the single source of the migration text, and
   contributors keep writing it as `CONTRIBUTING.md` already asks.
 * Good, because the script and commitlint read footers with the same parser library. The versions
-  are pinned separately: `package.json` for the script, `scripts/prepare-commitlint` for commitlint.
+  are pinned separately: `package.json` for the script, `scripts/commitlint-versions` for commitlint.
 * Bad, because the repository owns code that edits a pull request and a branch Release Please
   manages. Each Release Please update rewrites both, and the script writes the section again in the
   same workflow run.
