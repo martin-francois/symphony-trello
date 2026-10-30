@@ -14,6 +14,7 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.google.common.base.Ascii;
+import com.google.common.base.Strings;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.net.URI;
@@ -108,8 +109,9 @@ final class BoardCardCommands {
             List<CardSummary> inList = new ArrayList<>();
             for (TrelloClient.BoardCard card : cards) {
                 if (list.id().equals(card.listId())) {
-                    inList.add(new CardSummary(
-                            card.id(), card.shortLink(), TrelloCardSelectors.cardUrl(card.shortLink()), card.name()));
+                    String reference = reference(card.id(), card.shortLink());
+                    inList.add(
+                            new CardSummary(card.id(), reference, TrelloCardSelectors.cardUrl(reference), card.name()));
                 }
             }
             listed.add(new ListWithCards(listView(session, list), inList));
@@ -266,16 +268,19 @@ final class BoardCardCommands {
     }
 
     private static CardSummary summary(Card card) {
-        return new CardSummary(
-                card.id(), Objects.requireNonNullElse(card.shortLink(), card.id()), cardUrl(card), card.title());
+        return new CardSummary(card.id(), reference(card.id(), card.shortLink()), cardUrl(card), card.title());
     }
 
-    /// The card URL from its short link, else the URL Trello reported, else a URL from the card id,
-    /// which Trello also resolves.
+    /// The card's short link, or its id when Trello sent no short link. `card show` and the other
+    /// commands accept both, and Trello resolves a card URL with either.
+    private static String reference(String id, @Nullable String shortLink) {
+        return Strings.isNullOrEmpty(shortLink) ? id : shortLink;
+    }
+
+    /// The card URL from its short link, else the URL Trello reported, else a URL from the card id.
     private static String cardUrl(Card card) {
-        String shortLink = card.shortLink();
-        if (shortLink != null) {
-            return TrelloCardSelectors.cardUrl(shortLink);
+        if (!Strings.isNullOrEmpty(card.shortLink())) {
+            return TrelloCardSelectors.cardUrl(card.shortLink());
         }
         return Objects.requireNonNullElseGet(card.url(), () -> TrelloCardSelectors.cardUrl(card.id()));
     }

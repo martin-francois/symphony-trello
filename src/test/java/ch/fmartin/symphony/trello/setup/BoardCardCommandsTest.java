@@ -100,6 +100,23 @@ final class BoardCardCommandsTest {
     }
 
     @Test
+    void listNamesACardWithoutShortLinkByItsId() throws Exception {
+        // given
+        board.card("SYNTH0000000000000000201", "", "Fix the login redirect", "list-inbox");
+        Path configDir = connectBoard(DEFAULT_TRELLO_TOOLS);
+
+        // when
+        CliRunResult text = runCard(configDir, "list", "--list", "Inbox");
+        CliRunResult json = runCard(configDir, "list", "--list", "Inbox", "--json");
+
+        // then
+        text.assertSuccess().stdoutContains("  SYNTH0000000000000000201  \"Fix the login redirect\"");
+        json.assertSuccess()
+                .stdoutContains(
+                        "\"short_link\":\"SYNTH0000000000000000201\",\"url\":\"https://trello.com/c/SYNTH0000000000000000201\"");
+    }
+
+    @Test
     void listJsonNamesTheBoardTheListRolesAndTheCards() throws Exception {
         // given
         board.card("card0001", "SYNTH101", "Fix the login redirect", "list-review");

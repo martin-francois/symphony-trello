@@ -5427,8 +5427,9 @@ Write permissions:
 
 Output:
 
-- Default output is readable text. Names, titles, and comment text from Trello MUST be escaped so
-  they cannot add lines or terminal control sequences.
+- Default output is readable text. Names, titles, comment text, short links, and URLs from Trello
+  or the manifest MUST be escaped so they cannot add lines or terminal control sequences. A card
+  that Trello returns without a short link is named and linked by its card id.
 - `--json` prints one JSON object with snake_case field names. Reads report `status: "ok"`; writes
   report `card_created`, `card_moved`, `comment_added`, or `card_archived`. Every object has `board`
   with `name`, `id`, `url`, and `workflow`.

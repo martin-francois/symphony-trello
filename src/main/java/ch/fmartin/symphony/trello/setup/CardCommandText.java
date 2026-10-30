@@ -7,8 +7,9 @@ import java.util.List;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
-/// The readable form of a card command result. Names and text from Trello are escaped, so a card
-/// title or comment cannot add lines or terminal control sequences to the output.
+/// The readable form of a card command result. Names, text, and URLs from Trello or the board
+/// manifest are escaped, so a card title, comment, or edited manifest URL cannot add lines or terminal
+/// control sequences to the output.
 @NullMarked
 final class CardCommandText {
     private static final Splitter LINES = Splitter.on('\n');
@@ -27,7 +28,7 @@ final class CardCommandText {
 
     private static void renderLists(BoardCardCommands.Listed listed, List<String> lines) {
         lines.add("Board " + DisplayNames.quotedName(listed.board().name()) + " "
-                + listed.board().url());
+                + DisplayNames.escapedText(listed.board().url()));
         for (BoardCardCommands.ListWithCards list : listed.lists()) {
             lines.add("");
             lines.add(listLine(list.list()));
@@ -35,7 +36,8 @@ final class CardCommandText {
                 lines.add("  (no open cards)");
             }
             for (BoardCardCommands.CardSummary card : list.cards()) {
-                lines.add("  " + card.shortLink() + "  " + DisplayNames.quotedName(card.title()));
+                lines.add("  " + DisplayNames.escapedText(card.shortLink()) + "  "
+                        + DisplayNames.quotedName(card.title()));
             }
         }
     }
@@ -48,7 +50,7 @@ final class CardCommandText {
 
     private static void renderCard(BoardCardCommands.CardDetails card, List<String> lines) {
         lines.add("Card " + DisplayNames.quotedName(card.title()));
-        lines.add("  URL: " + card.url());
+        lines.add("  URL: " + DisplayNames.escapedText(card.url()));
         lines.add("  List: " + listName(card.list()));
         lines.add("  Archived: " + yesNo(card.archived()));
         if (!card.labels().isEmpty()) {
@@ -87,7 +89,7 @@ final class CardCommandText {
         return switch (changed.status()) {
             case CARD_CREATED ->
                 "Created card " + card + " in " + listName(changed.list()) + ": "
-                        + changed.card().url();
+                        + DisplayNames.escapedText(changed.card().url());
             case CARD_MOVED -> "Moved card " + card + " to " + listName(changed.list()) + ".";
             case COMMENT_ADDED -> "Added a comment to card " + card + ".";
             case CARD_ARCHIVED ->
