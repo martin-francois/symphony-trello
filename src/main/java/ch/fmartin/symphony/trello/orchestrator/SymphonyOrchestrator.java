@@ -73,6 +73,7 @@ import java.util.random.RandomGenerator;
 import java.util.stream.Collectors;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
+import org.jspecify.annotations.Nullable;
 
 @ApplicationScoped
 public class SymphonyOrchestrator {
@@ -309,7 +310,7 @@ public class SymphonyOrchestrator {
                 entries.forEach(entry ->
                         ignoredWorkers.put(entry.workerIdentity, clock.instant().plus(IGNORED_WORKER_TTL)));
                 entries.forEach(this::addRuntime);
-                running.clear();
+                List.copyOf(running.keySet()).forEach(this::removeRunning);
                 pendingHandoffCleanup.clear();
                 pendingWorkspaceRelease.clear();
                 retainedWorkspaces.clear();
@@ -733,7 +734,7 @@ public class SymphonyOrchestrator {
         removeExpiredIgnoredWorkers();
         reconcileStalls();
         for (RunningEntry entry : List.copyOf(running.values())) {
-            if (entry.handoffCancellationRequested || handoffExpired(entry)) {
+            if (entry.handoffCancellationRequested() || handoffExpired(entry)) {
                 expireHandoff(entry);
                 finishExpiredHandoff(entry);
             }
@@ -806,23 +807,35 @@ public class SymphonyOrchestrator {
         stalled.forEach(cardKey -> terminateRunning(cardKey, false, false, "stalled"));
     }
 
+    /// Removes the card's running entry and marks it removed, so a handoff deadline that has not
+    /// claimed it yet can no longer do so. A worker exit removes its entry through
+    /// [RunningEntry#markRemovedUnlessHandoffClaimed()] instead, because a claim that came first
+    /// hands its cleanup to the deadline.
+    private @Nullable RunningEntry removeRunning(RuntimeCardKey cardKey) {
+        RunningEntry entry = running.remove(cardKey);
+        if (entry != null) {
+            entry.markRemovedFromRunning();
+        }
+        return entry;
+    }
+
     private void terminateRunning(
             RuntimeCardKey cardKey, boolean cleanupWorkspace, boolean suppressRetry, String reason) {
         RunningEntry entry;
         boolean usageProbe;
         synchronized (this) {
-            entry = running.remove(cardKey);
+            entry = removeRunning(cardKey);
             if (entry == null) {
                 return;
             }
             cancelHandoffTimer(entry);
             retainWorkspaceOwnership(entry, cleanupWorkspace);
-            boolean retainHandoffCleanup = entry.handoffCancellationRequested && !cleanupWorkspace && !suppressRetry;
+            boolean retainHandoffCleanup = entry.handoffCancellationRequested() && !cleanupWorkspace && !suppressRetry;
             if (retainHandoffCleanup) {
                 pendingHandoffCleanup.put(cardKey, entry);
                 claimed.add(cardKey);
             }
-            if (entry.handoffCancellationRequested) {
+            if (entry.handoffCancellationRequested()) {
                 suppressRetry = true;
             }
             usageProbe = isBoundUsageProbe(entry.launchTarget, entry.cardId, entry.workerIdentity);
@@ -959,7 +972,7 @@ public class SymphonyOrchestrator {
             prompt = prompts.render(workflow.promptTemplate(), dispatchCard, attempt, launchConfig.github());
         } catch (RuntimeException e) {
             synchronized (this) {
-                running.remove(runningKey);
+                removeRunning(runningKey);
             }
             releaseFromDispatch(dispatchCard, card, "prompt render failed");
             scheduleRetry(
@@ -989,7 +1002,7 @@ public class SymphonyOrchestrator {
             workers.execute(task);
         } catch (RuntimeException e) {
             synchronized (this) {
-                running.remove(runningKey);
+                removeRunning(runningKey);
             }
             releaseFromDispatch(dispatchCard, card, "worker submission failed");
             scheduleRetry(
@@ -1204,7 +1217,7 @@ public class SymphonyOrchestrator {
             currentRunningEntry(cardKey, workerIdentity).ifPresent(entry -> {
                 String reason =
                         blank(failure.getMessage()) ? "agent runner failed without a result" : failure.getMessage();
-                if (entry.handoffCancellationRequested) {
+                if (entry.handoffCancellationRequested()) {
                     finishExpiredHandoff(entry);
                 } else if (isBoundUsageProbe(entry.launchTarget, cardKey.cardId(), workerIdentity)) {
                     terminateRunning(cardKey, false, false, reason);
@@ -1221,7 +1234,7 @@ public class SymphonyOrchestrator {
             RuntimeCardKey cardKey, String workerIdentity, AgentRunResult result, RunningEntry entry) {
         boolean handoffCancelled;
         synchronized (this) {
-            handoffCancelled = entry.handoffCancellationRequested;
+            handoffCancelled = !entry.markRemovedUnlessHandoffClaimed();
             if (!handoffCancelled) {
                 running.remove(cardKey);
                 cancelHandoffTimer(entry);
@@ -1347,7 +1360,7 @@ public class SymphonyOrchestrator {
     }
 
     private void cancelWorker(RunningEntry entry) {
-        if (entry.handoffCancellationRequested) {
+        if (entry.handoffCancellationRequested()) {
             // Future.cancel is idempotent. A competing cleanup must establish interruption even
             // when the deadline has marked ownership but has not reached its own cancellation call.
             cancelWorkerTask(entry);
@@ -1389,7 +1402,7 @@ public class SymphonyOrchestrator {
                 return false;
             }
             RunningEntry entry = currentEntry.orElseThrow();
-            if (entry.handoffCancellationRequested) {
+            if (entry.handoffCancellationRequested()) {
                 return false;
             }
             applyAgentEvent(cardKey, entry, event);
@@ -1415,6 +1428,7 @@ public class SymphonyOrchestrator {
                         return false;
                     }
                     entry.handoffMove = move;
+                    entry.protectHandoff();
                     if (entry.handoffTimer == null) {
                         entry.handoffTimer = handoffDeadlines.schedule(
                                 () -> expireHandoff(entry),
@@ -1431,7 +1445,7 @@ public class SymphonyOrchestrator {
     }
 
     private boolean ownsHandoff(RunningEntry entry, CardHandoffMove move) {
-        return !entry.handoffCancellationRequested
+        return !entry.handoffCancellationRequested()
                 && entry.workerIdentity.equals(move.workerIdentity())
                 && entry.cardId.equals(move.cardId())
                 && Objects.equals(entry.launchConfig.tracker().resolvedBoardId(), move.boardId())
@@ -1449,6 +1463,7 @@ public class SymphonyOrchestrator {
                         if (!succeeded) {
                             entry.handoffMove = null;
                             if (!entry.handoffSucceeded) {
+                                entry.endHandoffProtection();
                                 cancelHandoffTimer(entry);
                             }
                         }
@@ -1478,15 +1493,14 @@ public class SymphonyOrchestrator {
                 && !clock.instant().isBefore(entry.handoffDeadline);
     }
 
+    /// Runs on the handoff deadline executor without the operation lock or any monitor, so a slow
+    /// tracker operation cannot delay the cancellation. The entry's own atomic claim decides
+    /// against a concurrent removal from the running map and against a failed move that ends the
+    /// protection; a stale task holds the old entry, so it can never claim or cancel a replacement
+    /// worker.
     private void expireHandoff(RunningEntry entry) {
-        synchronized (this) {
-            if (!entry.equals(running.get(runtimeKey(entry)))
-                    || entry.handoffCancellationRequested
-                    || (entry.handoffMove == null && !entry.handoffSucceeded)) {
-                return;
-            }
-            entry.handoffCancelledAt = clock.instant();
-            entry.handoffCancellationRequested = true;
+        if (!entry.claimHandoffCancellation(clock.instant())) {
+            return;
         }
         handoffCancellationMarkedHookForTests.run();
         // The worker Future is created by our executor. Interrupt it before any runner callback or
@@ -1518,7 +1532,7 @@ public class SymphonyOrchestrator {
     }
 
     private void finishExpiredHandoff(RunningEntry entry) {
-        if (!entry.equals(running.get(runtimeKey(entry))) || !entry.handoffCancellationRequested) {
+        if (!entry.equals(running.get(runtimeKey(entry))) || !entry.handoffCancellationRequested()) {
             return;
         }
         moveToPendingHandoffCleanup(entry);
@@ -2894,7 +2908,7 @@ public class SymphonyOrchestrator {
     }
 
     private static long runtimeMillis(RunningEntry entry, Instant observedAt) {
-        Instant endedAt = Objects.requireNonNullElse(entry.handoffCancelledAt, observedAt);
+        Instant endedAt = Objects.requireNonNullElse(entry.handoffCancelledAt(), observedAt);
         return Duration.between(entry.startedAt, endedAt).toMillis();
     }
 
@@ -2935,7 +2949,7 @@ public class SymphonyOrchestrator {
     public synchronized RuntimeSnapshot snapshot() {
         Instant now = clock.instant();
         List<RuntimeSnapshot.RunningRow> runningRows = running.values().stream()
-                .filter(entry -> !entry.handoffCancellationRequested)
+                .filter(entry -> !entry.handoffCancellationRequested())
                 .map(this::runningRow)
                 .toList();
         List<RuntimeSnapshot.RetryRow> retryRows =
@@ -2978,7 +2992,7 @@ public class SymphonyOrchestrator {
     public synchronized Optional<CardDebugDetails> cardDetails(String cardIdentifier) {
         TrackerTarget currentTarget = config == null ? null : TrackerTarget.from(config);
         Optional<CardDetailsSelection> selection = running.entrySet().stream()
-                .filter(entry -> !entry.getValue().handoffCancellationRequested)
+                .filter(entry -> !entry.getValue().handoffCancellationRequested())
                 .filter(entry -> Objects.equals(entry.getKey().trackerTarget(), currentTarget))
                 .filter(entry -> entry.getValue().identifier().equals(cardIdentifier))
                 .findFirst()
@@ -2989,7 +3003,7 @@ public class SymphonyOrchestrator {
                         .findFirst()
                         .map(this::retryCardDetailsSelection))
                 .or(() -> running.entrySet().stream()
-                        .filter(entry -> !entry.getValue().handoffCancellationRequested)
+                        .filter(entry -> !entry.getValue().handoffCancellationRequested())
                         .filter(entry -> entry.getValue().identifier().equals(cardIdentifier))
                         .findFirst()
                         .map(this::runningCardDetailsSelection))

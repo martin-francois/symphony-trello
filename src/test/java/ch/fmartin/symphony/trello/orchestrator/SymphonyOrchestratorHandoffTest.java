@@ -597,6 +597,88 @@ final class SymphonyOrchestratorHandoffTest {
     }
 
     @Test
+    void deadlineThatStartedBeforeAFailedMoveDoesNotCancelTheTurn() throws Exception {
+        // given
+        try (var run = new HandoffRun(false, true, REVIEW_LIST, DEFAULT_TURN_TIMEOUT_MS)) {
+            run.start();
+            run.awaitFinalStarted();
+            String worker = run.move().workerIdentity();
+            // The test scheduler's futures ignore cancel, like a deadline task that already started.
+            Runnable deadlineTask = run.deadlineTasks.getFirst();
+            run.clock.advance(HANDOFF_COMPLETION_WINDOW);
+            var claims = new AtomicInteger();
+            run.orchestrator.handoffCancellationMarkedHookForTests = claims::incrementAndGet;
+
+            // when
+            deadlineTask.run();
+
+            // then
+            assertThat(claims)
+                    .as("a failed move ends the handoff, so its deadline must not claim the turn")
+                    .hasValue(0);
+            verify(run.runner, never()).cancel(worker);
+            assertThat(run.orchestrator.snapshot().counts().running()).isOne();
+        }
+    }
+
+    @Test
+    void moveAfterAFailedMoveRestoresTheDeadline() throws Exception {
+        // given
+        try (var run = new HandoffRun(false, true, REVIEW_LIST, DEFAULT_TURN_TIMEOUT_MS)) {
+            run.start();
+            run.awaitFinalStarted();
+            CardHandoffMove failed = run.move();
+            var retried = new CardHandoffMove(
+                    "retry",
+                    failed.workerIdentity(),
+                    failed.threadId(),
+                    failed.turnId(),
+                    failed.cardId(),
+                    failed.boardId(),
+                    failed.listId());
+            assertThat(run.listener.get().beforeHandoffMove(retried))
+                    .as("the worker may retry its failed move inside the original window")
+                    .isTrue();
+            run.listener.get().afterHandoffMove(retried, true);
+            run.clock.advance(HANDOFF_COMPLETION_WINDOW);
+            var claims = new AtomicInteger();
+            run.orchestrator.handoffCancellationMarkedHookForTests = claims::incrementAndGet;
+
+            // when
+            run.deadlineTasks.getLast().run();
+
+            // then
+            assertThat(claims)
+                    .as("a retried move protects the turn again, so its deadline claims it")
+                    .hasValue(1);
+            waitUntil(() -> run.orchestrator.snapshot().counts().running() == 0);
+            verify(run.runner).cancel(failed.workerIdentity());
+        }
+    }
+
+    @Test
+    void deadlineAfterTheWorkerExitedDoesNotClaimItsEntry() throws Exception {
+        // given
+        try (var run = new HandoffRun(false, false, REVIEW_LIST, DEFAULT_TURN_TIMEOUT_MS)) {
+            run.start();
+            Runnable deadlineTask = run.deadlineTasks.getFirst();
+            run.finish();
+            run.clock.advance(HANDOFF_COMPLETION_WINDOW);
+            var claims = new AtomicInteger();
+            run.orchestrator.handoffCancellationMarkedHookForTests = claims::incrementAndGet;
+
+            // when
+            deadlineTask.run();
+
+            // then
+            assertThat(claims)
+                    .as("a deadline that fires after the worker exited must not claim the finished entry")
+                    .hasValue(0);
+            run.assertCompletedFinal();
+        }
+    }
+
+    @Test
     void staleDeadlineTaskDoesNotCancelReplacementWorker() throws Exception {
         // given
         try (var run = new HandoffRun(false, false, REVIEW_LIST, DEFAULT_TURN_TIMEOUT_MS)) {
@@ -606,6 +688,8 @@ final class SymphonyOrchestratorHandoffTest {
             run.replaceWorker();
             String replacement = run.move().workerIdentity();
             run.clock.advance(HANDOFF_COMPLETION_WINDOW);
+            var claims = new AtomicInteger();
+            run.orchestrator.handoffCancellationMarkedHookForTests = claims::incrementAndGet;
 
             // when
             Thread deadline = Thread.ofVirtual().start(staleDeadline);
@@ -615,6 +699,9 @@ final class SymphonyOrchestratorHandoffTest {
             assertThat(deadline.isAlive())
                     .as("a stale deadline task returns without touching its successor")
                     .isFalse();
+            assertThat(claims)
+                    .as("a deadline whose worker already left the running map must not claim its cancellation")
+                    .hasValue(0);
             verify(run.runner, never()).cancel(replacement);
             assertThat(run.orchestrator.snapshot().counts().running()).isOne();
         }

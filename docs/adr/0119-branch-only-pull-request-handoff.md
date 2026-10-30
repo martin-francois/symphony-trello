@@ -158,10 +158,13 @@ For that exact open destination, reconciliation allows the existing turn at most
 first registration. Neither another move nor continuing events renew this window. The normal turn
 timeout and stall policy remain in force. A failed move removes protection, and a successful handoff
 prevents another turn even when a person reactivates the card before completion. An independent
-deadline scheduler verifies the captured worker under the short state monitor and interrupts that
-worker before any tracker lookup. It does not wait for the reconciliation operation lock. Runner
-cancellation and cleanup continue outside the monitor; ordinary serialized worker exit or
-reconciliation decides cleanup after cancellation. This keeps slow tracker requests from extending
+deadline scheduler claims the captured worker with an atomic compare-and-set on that worker's own
+entry and interrupts it before any tracker lookup. The claim fails once the entry left the running
+map or a failed move ended its protection, so whichever of the deadline and a worker exit,
+reconciliation or failed move reaches the entry first decides. The deadline takes neither the reconciliation operation lock nor a monitor
+([ADR 0105](0105-orchestrator-published-read-view.md)). Runner cancellation and cleanup continue
+after the claim; ordinary serialized worker exit or reconciliation decides cleanup after
+cancellation. This keeps slow tracker requests from extending
 agent execution without making concurrent cleanup decisions or canceling a replacement worker.
 
 Failed or absent cleanup lookups move the canceled attempt into separate pending cleanup bookkeeping
@@ -287,3 +290,12 @@ pre-push Codex review cycles. When that feature lands, it should apply to branch
 the push too, because the push is the last automated step before human review.
 
 `SPEC.md` Section 19.6 holds the normative contract.
+
+The handoff deadline first verified its worker under the orchestrator's state monitor.
+[ADR 0105](0105-orchestrator-published-read-view.md) removes that monitor, so the deadline claims the
+worker's entry with a compare-and-set instead
+([GitHub PR #848](https://github.com/martin-francois/symphony-trello/pull/848#issuecomment-6517349255)).
+The claim keeps the order the monitor gave: a deadline that reaches the entry after a worker exit or
+reconciliation removed it, or after a failed move ended its protection, does nothing, and one that
+reaches it first wins. The claim time lives in the same atomic, so a reader that sees the claim also
+sees when it happened.
