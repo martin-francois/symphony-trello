@@ -1592,7 +1592,7 @@ test("pnpm keeps GitHub's dependency graph readable while every CI job installs 
   }
   assert.deepEqual(
     pnpmJobs.sort(),
-    ["ci.yml:renovate", "ci.yml:script-tests", "commitlint.yml:commitlint"],
+    ["ci.yml:renovate", "ci.yml:script-tests", "commitlint.yml:commitlint", "release-please.yml:release-please"],
     "the scan must find every job that runs pnpm",
   );
 });

@@ -187,9 +187,11 @@ auditing that may create issues lives in
   record no user-facing contract change instead of leaving the decision implicit. For breaking
   changes, include the affected contract, why the break is necessary, and the migration path. Also
   note that the implementing squash commit body or retained commit must use a Conventional Commit
-  `BREAKING CHANGE:` footer so release automation puts the reason and migration guidance in the
-  generated changelog. For
-  temporary compatibility or migration logic, include the removal condition and where cleanup is
+  `BREAKING CHANGE:` footer. The release workflow copies each footer since the last release into the
+  `Breaking Changes` section of the release pull request, `CHANGELOG.md`, and the GitHub release
+  ([ADR 0135](../adr/0135-add-breaking-change-footers-to-github-release-notes.md)), so the footer
+  text is the migration guidance users read. For temporary compatibility or migration logic,
+  include the removal condition and where cleanup is
   tracked, such as a follow-up issue. If the issue template did not capture this clearly, edit issues
   opened by the authenticated account, or comment on issues opened by another account, so the
   decision is explicit before work starts.

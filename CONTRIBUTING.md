@@ -419,6 +419,19 @@ request credits its author, and GitHub adds a separate `New Contributors` sectio
 contains a contributor's first merged pull request. This contributor recognition is generated
 automatically from GitHub pull request history.
 
+GitHub's notes list pull request titles only, so they leave out the migration steps in
+`BREAKING CHANGE:` footers. After Release Please updates its pull request, the release workflow runs
+`scripts/release-breaking-changes.ts`. The script reads every commit since the last release tag and
+writes a `Breaking Changes` section, one entry per footer, into the pull request body and into
+`CHANGELOG.md` on the release branch. It then reads both back and fails the workflow run on `main`
+when an entry is missing, so check that the latest run passed before merging a release pull request.
+Release Please builds the GitHub release from that body when the pull request merges. Before the
+draft release is published, the workflow checks its notes for the same footers. If one is missing,
+the run fails and the draft stays unpublished with its assets. Add the missing entries to the draft
+release notes, then publish the draft from the release page.
+[ADR 0135](docs/adr/0135-add-breaking-change-footers-to-github-release-notes.md) explains the
+choice.
+
 When Release Please creates a GitHub release, the release workflow checks out the tag, builds the
 packaged Quarkus app, uploads `install.sh`, `install.ps1`, `uninstall.sh`, `uninstall.ps1`, Linux
 and Windows release archives, a SHA3-256 `checksums.txt` file, and the signature bundle

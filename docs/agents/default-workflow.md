@@ -319,6 +319,13 @@ optional verification. Follow this order:
 - Treat Release Please pull request titles and bodies as generated metadata. Do not normalize its
   body to the general pull request template or manually edit version text: Release Please parses that
   body when updating the PR. Put extra review or verification evidence in a comment instead.
+- Before merging a Release Please pull request, check that the latest `Release Please` workflow run
+  on `main` passed. Its last step adds every `BREAKING CHANGE:` footer since the last release to the
+  pull request body and `CHANGELOG.md`, and fails when one is missing
+  ([ADR 0135](../adr/0135-add-breaking-change-footers-to-github-release-notes.md)). Release pull
+  requests skip CI, so no check blocks the merge itself; name the passing run in the merge handoff
+  so pull-request review can check it. The release job's `Verify breaking changes in the release`
+  step keeps a draft release that misses a footer from being published.
 - Merge the Release Please pull request last. First merge every other pull request planned for
   that release: those the task or martinfrancois names for it, and any pull request the agent is
   landing in the same session. Release Please rewrites its pull request after each merge to `main`,

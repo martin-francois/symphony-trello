@@ -7,6 +7,12 @@ on:
 
 permissions: read-all
 
+concurrency:
+  # Release Please force-pushes its branch and the breaking-changes step writes to it afterwards, so
+  # two runs must not interleave. Queued runs wait; a newer push replaces a queued run.
+  group: release-please
+  cancel-in-progress: false
+
 jobs:
   release-please:
     name: Create or update release PR
@@ -23,6 +29,9 @@ jobs:
     steps:
       - name: Checkout release workflow source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The breaking-changes step reads every commit since the last release tag.
+          fetch-depth: 0
       - name: Release Please
         if: ${{ github.event_name == 'push' }}
         id: release
@@ -39,6 +48,15 @@ jobs:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
           RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
         run: scripts/resolve-release-asset-target
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: ${{ steps.release.outputs.prs_created == 'true' || steps.release-assets.outputs.upload_assets == 'true' }}
+        with:
+          node-version: "26"
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        if: ${{ steps.release.outputs.prs_created == 'true' || steps.release-assets.outputs.upload_assets == 'true' }}
+      - name: Install script dependencies
+        if: ${{ steps.release.outputs.prs_created == 'true' || steps.release-assets.outputs.upload_assets == 'true' }}
+        run: pnpm install --frozen-lockfile
       - name: Checkout release source tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: ${{ steps.release-assets.outputs.upload_assets == 'true' }}
@@ -93,12 +111,26 @@ jobs:
           RELEASE_TAG: ${{ steps.release-assets.outputs.tag_name }}
           RELEASE_VERSION: ${{ steps.release-assets.outputs.version }}
         run: scripts/verify-release-assets
+      - name: Verify breaking changes in the release
+        # The github changelog type leaves out BREAKING CHANGE footers (ADR 0135).
+        if: ${{ steps.release-assets.outputs.upload_assets == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release-assets.outputs.tag_name }}
+        run: node scripts/release-breaking-changes.ts release
       - name: Publish release
         if: ${{ steps.release-assets.outputs.upload_assets == 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.release-assets.outputs.tag_name }}
         run: gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+      - name: Add breaking changes to the release pull request
+        # Runs after the release steps so a failure here never holds back a release.
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_PR: ${{ steps.release.outputs.pr }}
+        run: node scripts/release-breaking-changes.ts pull-request
 
   maven-central:
     name: Publish Maven Central artifacts
