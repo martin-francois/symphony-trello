@@ -4244,15 +4244,17 @@ that a second formatting pass leaves the source unchanged.
   contract
 - If the board card commands of Section 19.8 are implemented, deterministic tests drive them against
   a stateful fake Trello API and cover board selection with one board, several boards, `--board`,
-  `--workflow`, and an unknown board; an unconnected workflow and a workflow with another
-  `tracker.endpoint`, both refused before any Trello request; credentials that never appear in
-  output or failures; moves by list name and by role, including ambiguous and unset roles;
-  `trello_tools` refusals for moves, new cards, comments, and archiving; refusal of a card on
-  another board and of an archived card; the `--json` shape of every command; and escaped Trello
-  text. Installer tests cover the skill
-  copy, the marker, the recorded skill directory, removal on uninstall, a user-made skill
-  directory that both scripts and their dry runs keep, a linked marker or `SKILL.md`, and a
-  `CODEX_HOME` on a drive that does not exist
+  `--workflow`, and an unknown board; an unconnected workflow, refused before its credentials are
+  read, and a workflow with another `tracker.endpoint` or another board, each refused before any
+  Trello request; credentials that never appear in output or failures; moves by list name and by
+  role, including ambiguous and unset roles, and active and terminal roles taken from configured
+  list ids; `trello_tools` refusals for moves, new cards, comments, and archiving; refusal of a card
+  on another board and of an archived card; the `--json` shape of every command; a card without a
+  short link, named by its id; escaped Trello text; and diagnostics that redact the card arguments.
+  Installer tests cover, for both installers, the skill copy, the marker, the recorded skill
+  directory, removal on uninstall, a user-made skill directory that the scripts and their dry runs
+  keep, and a linked skill directory, marker, or `SKILL.md`. They also cover a `CODEX_HOME` on a
+  drive that does not exist for `install.ps1`.
 
 ### 17.8 Trello Workflow Conformance
 
@@ -5432,15 +5434,16 @@ Output:
 
 - Default output is readable text. Names, titles, comment text, short links, and URLs from Trello
   or the manifest MUST be escaped so they cannot add lines or terminal control sequences. A card
-  that Trello returns without a short link is named and linked by its card id.
+  that Trello lists or reads without a short link is named and linked by its card id.
 - `--json` prints one JSON object with snake_case field names. Reads report `status: "ok"`; writes
   report `card_created`, `card_moved`, `comment_added`, or `card_archived`. Every object has `board`
   with `name`, `id`, `url`, and `workflow`.
 - A failure prints `setup_failed code=CODE message=MESSAGE` and exits with status 2. Selector and
   list failures use the `setup_card_*` codes; policy refusals keep the worker tool codes, such as
   `trello_writes_disabled` or `trello_move_not_allowed`. These failures are expected setup failures
-  and MUST NOT write a troubleshooting report. Option values such as titles, descriptions, and
-  comment text, and the `CARD` argument, MUST be redacted from diagnostics.
+  and MUST NOT write a troubleshooting report. Diagnostics MUST redact every argument after
+  `card SUBCOMMAND` that is not an option name: the `CARD` argument and every option value, such as
+  titles, descriptions, comment text, and board and list names.
 
 Codex skill:
 

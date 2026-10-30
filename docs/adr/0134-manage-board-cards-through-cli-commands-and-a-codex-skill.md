@@ -113,15 +113,19 @@ Details that the design decision left open:
 ### Confirmation
 
 * `BoardCardCommandsTest` drives every command against a fake Trello board and covers board
-  selection, an unconnected workflow and a workflow with another endpoint that both fail before any
-  request, role moves, `trello_tools` refusals, a card on another board, archived cards, the
-  archive title check, the `--json` shape, and credentials that never appear in output.
-* `TrelloListRolesTest` and `TrelloCardSelectorsTest` cover role and card reference parsing.
+  selection, an unconnected workflow that fails before its credentials are read, a workflow with
+  another endpoint or another board that fails before any request, role moves, `trello_tools`
+  refusals whose codes the skill names, a card on another board, archived cards, the archive title
+  check, the `--json` shape, a card without a short link, and credentials that never appear in
+  output.
+* `TrelloListRolesTest` and `TrelloCardSelectorsTest` cover role and card reference parsing,
+  including roles taken from configured list ids.
+* `SetupDiagnosticReporterTest` checks that a troubleshooting report redacts the card arguments.
 * The worker tool tests, such as `TrelloHandoffToolHandlerTest` and `TrelloFollowUpCardToolTest`,
   still pass unchanged after the shared write rules moved into `TrelloCardWrites`.
 * `InstallerScriptTest` covers the skill copy, the marker, the recorded skill directory, removal on
-  uninstall, and a user-made directory that both scripts and their dry runs keep, for `install.sh`
-  and `install.ps1`. It also covers a linked marker or `SKILL.md` for `install.sh` and a
+  uninstall, a user-made directory that both scripts and their dry runs keep, and a linked skill
+  directory, marker, or `SKILL.md`, for `install.sh` and `install.ps1`. It also covers a
   `CODEX_HOME` on a drive that does not exist for `install.ps1`.
 * `CodexSkillStructureTest` checks the skill file.
 

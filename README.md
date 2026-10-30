@@ -802,10 +802,27 @@ with you first, and that rule is the only check that you agreed. `card list` and
 read and work with any `trello_tools` settings. A command that fails prints `setup_failed code=... message=...`
 and exits with status 2.
 
+These failure codes have a fix on your side:
+
+- `setup_card_workflow_not_connected`: the `--workflow` file is not the workflow of a board that
+  `symphony-trello status` lists. Pass that workflow, or pass `--board` instead.
+- `setup_card_endpoint_not_trello`: the workflow's `tracker.endpoint` names an address other than
+  `https://api.trello.com/1`. Remove the setting or set it to that address.
+- `setup_card_workflow_board_mismatch`: the workflow's `tracker.board_id` names another board than
+  the connected one. Fix the setting, or connect the board again.
+- `setup_worker_missing_trello_credentials`, `setup_worker_missing_api_key`,
+  `setup_worker_missing_api_token`, or `trello_auth_failed`: the board's Trello key or token is
+  missing or rejected. The failure output names the credential file to fix.
+- `trello_tools_disabled`, `trello_writes_disabled`, `trello_comments_disabled`,
+  `trello_move_not_allowed`, `trello_move_allowlist_required`, or `trello_create_list_not_allowed`:
+  a `trello_tools` setting refused the write. The message says which rule refused it.
+
 The installer puts a Codex skill named `symphony-trello-board-cards` into
 `~/.codex/skills`, or into `$CODEX_HOME/skills` when you set `CODEX_HOME`, so Codex knows these
-commands. The skill tells Codex to check `symphony-trello status` first, to pass `--board` and
-`--json`, never to read the credential files, and to ask you before it archives a card. If that
+commands. The skill tells Codex to check `symphony-trello status` first, to pass `--board` when more
+than one board is connected, to add `--json` when it reads the output, never to read the credential
+files, to ask you which list to use when the request names none that fits, and to ask you before it
+archives a card. If that
 directory already holds a skill with the same name that the installer did not create, the installer
 leaves it alone. The uninstaller removes only the copy the installer made. The skill is not copied
 into card workspaces: a Codex run that works on a card uses its own Trello tools.

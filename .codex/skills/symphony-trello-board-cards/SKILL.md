@@ -41,6 +41,9 @@ an open list name or a role: `active`, `in-progress`, `human-review`,
 
 ## Rules
 
+- When the user does not name the list for a new card or a move, and the list
+  roles from `card list` leave more than one list that fits, ask the user which
+  list to use. Never guess a list.
 - Archive a card only after the user confirmed that exact card, by title, in
   this conversation. Pass that title as `--confirm-title`; the command refuses
   a title that differs from the card's. Trello keeps archived cards, and the
