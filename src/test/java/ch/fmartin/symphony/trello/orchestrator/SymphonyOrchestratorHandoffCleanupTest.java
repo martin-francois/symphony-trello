@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -169,7 +170,7 @@ final class SymphonyOrchestratorHandoffCleanupTest {
                         .isEqualTo(129);
                 assertThat(orchestrator.snapshot().counts().retrying()).isZero();
                 verify(runner, times(258)).run(any());
-                verify(runner, times(129)).cancel(any());
+                verify(runner, timeout(WAIT_TIMEOUT.toMillis()).times(129)).cancel(any());
                 verify(workspaces, never()).removeForIdentifierIfPresent(eq("PENDING-0"), any());
                 verify(workspaces).removeForIdentifierIfPresent(eq("PENDING-1"), any());
             } finally {
