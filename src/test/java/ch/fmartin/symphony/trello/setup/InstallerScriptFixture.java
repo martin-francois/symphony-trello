@@ -23,6 +23,7 @@ import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -42,6 +43,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+import org.jspecify.annotations.Nullable;
 import picocli.CommandLine;
 
 final class InstallerScriptFixture {
@@ -235,14 +237,26 @@ final class InstallerScriptFixture {
     }
 
     private static Path testCodexHome(Map<String, String> environment, List<Path> cleanupRoots) throws IOException {
-        String symphonyHome = environment.get("SYMPHONY_HOME");
-        Path symphonyHomePath = symphonyHome == null || symphonyHome.isBlank() ? null : Path.of(symphonyHome);
+        Path symphonyHomePath = usablePath(environment.get("SYMPHONY_HOME"));
         if (symphonyHomePath != null && symphonyHomePath.isAbsolute() && symphonyHomePath.getFileName() != null) {
             return symphonyHomePath.resolveSibling(symphonyHomePath.getFileName() + "-codex-home");
         }
         Path codexHome = Files.createTempDirectory("symphony-trello-installer-codex-home-");
         cleanupRoots.add(codexHome);
         return codexHome;
+    }
+
+    /// Tests pass invalid SYMPHONY_HOME values on purpose, such as one with a line break, which
+    /// Windows paths cannot hold; those fall back to a temporary Codex home.
+    private static @Nullable Path usablePath(@Nullable String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Path.of(value);
+        } catch (InvalidPathException e) {
+            return null;
+        }
     }
 
     static boolean isRepositoryEnvironmentControl(String name) {

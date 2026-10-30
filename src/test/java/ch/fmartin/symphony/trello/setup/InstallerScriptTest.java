@@ -9960,7 +9960,11 @@ final class InstallerScriptTest {
         assertThat(symphonyHome.resolve("state/install-context.properties"))
                 .content(StandardCharsets.UTF_8)
                 .contains("codex_skill_dir=" + skillDirectory);
-        assertThat(normalizedWhitespace(uninstall.output())).contains("CODEX SKILL " + skillDirectory);
+        // uninstall.ps1 prints the full path, which on Windows expands a short 8.3 temp directory name.
+        assertThat(normalizedWhitespace(uninstall.output()))
+                .contains("CODEX SKILL ")
+                .contains(Path.of("ps-skill-codex-home", "skills", "symphony-trello-board-cards")
+                        .toString());
         assertThat(skillDirectory).doesNotExist();
     }
 
