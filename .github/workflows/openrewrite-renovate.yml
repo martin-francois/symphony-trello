@@ -25,6 +25,16 @@ jobs:
       pull-requests: read
       statuses: write
     steps:
+      - name: Check out the workflow script from the base commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The commit this workflow file was read from: the base branch tip on pull_request_target,
+          # the default branch tip on schedule, the dispatched branch's tip on workflow_dispatch.
+          ref: ${{ github.sha }}
+          sparse-checkout: scripts/openrewrite-renovate-invalidate-derived-source.cjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
       - name: Invalidate stale generated source
         if: >-
           ${{
@@ -37,60 +47,7 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            const { owner, repo } = context.repo;
-            const source = context.payload.pull_request;
-            const sourceIsEligible =
-              source.state === "open"
-              && source.base.ref === "main"
-              && source.labels.some(({ name }) => name === "openrewrite");
-            await github.rest.repos.createCommitStatus({
-              owner,
-              repo,
-              sha: source.head.sha,
-              context: "OpenRewrite update validation",
-              state: sourceIsEligible ? "pending" : "failure",
-              description: sourceIsEligible
-                ? `Validating Renovate PR #${source.number}`
-                : `Renovate PR #${source.number} is no longer eligible`,
-              target_url: source.html_url,
-            });
-
-            const branch = `${process.env.GENERATED_BRANCH_PREFIX}${source.number}`;
-            const generatedPullRequests = await github.paginate(github.rest.pulls.list, {
-              owner,
-              repo,
-              base: "main",
-              head: `${owner}:${branch}`,
-              per_page: 100,
-              state: "open",
-            });
-            const generated = generatedPullRequests[0];
-            if (!generated) {
-              return;
-            }
-
-            const generatedCommit = await github.rest.repos.getCommit({
-              owner,
-              repo,
-              ref: generated.head.sha,
-            });
-            const sourceIsCurrent =
-              sourceIsEligible
-              && generatedCommit.data.parents.length === 1
-              && generatedCommit.data.parents[0]?.sha === source.head.sha;
-            await github.rest.repos.createCommitStatus({
-              owner,
-              repo,
-              sha: generated.head.sha,
-              context: "OpenRewrite source freshness",
-              state: sourceIsCurrent ? "success" : sourceIsEligible ? "pending" : "failure",
-              description: sourceIsCurrent
-                ? `Generated from current Renovate PR #${source.number}`
-                : sourceIsEligible
-                  ? `Waiting for current Renovate PR #${source.number}`
-                  : `Renovate PR #${source.number} is no longer eligible`,
-              target_url: source.html_url,
-            });
+            await require("./scripts/openrewrite-renovate-invalidate-derived-source.cjs")({ github, context, core });
 
   verify-derived-source:
     if: >-
@@ -105,170 +62,21 @@ jobs:
       pull-requests: read
       statuses: write
     steps:
+      - name: Check out the workflow script from the base commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The commit this workflow file was read from: the base branch tip on pull_request_target,
+          # the default branch tip on schedule, the dispatched branch's tip on workflow_dispatch.
+          ref: ${{ github.sha }}
+          sparse-checkout: scripts/openrewrite-renovate-verify-derived-source.cjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
       - name: Verify current Renovate source
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            const { owner, repo } = context.repo;
-            const generated = context.payload.pull_request;
-            const repository = `${owner}/${repo}`;
-            const isRenovateSource =
-              generated.base.repo?.full_name === repository
-              && generated.base.ref === "main"
-              && generated.head.repo?.full_name === repository
-              && generated.head.ref === "renovate/openrewrite-toolchain"
-              && generated.user?.login === "renovate[bot]";
-            const generatedPrefix = process.env.GENERATED_BRANCH_PREFIX;
-            const generatedSuffix =
-              generated.base.repo?.full_name === repository
-              && generated.base.ref === "main"
-              && generated.head.repo?.full_name === repository
-              && generated.head.ref.startsWith(generatedPrefix)
-                ? generated.head.ref.slice(generatedPrefix.length)
-                : "";
-            const generatedMatch = generatedSuffix.match(/^(\d+)$/);
-            if (!isRenovateSource && !generatedMatch) {
-              const associatedPullRequests = await github.paginate(
-                github.rest.repos.listPullRequestsAssociatedWithCommit,
-                {
-                  owner,
-                  repo,
-                  commit_sha: generated.head.sha,
-                  per_page: 100,
-                },
-              );
-              const governedPullRequestSharesCommit = associatedPullRequests.some(
-                (pullRequest) =>
-                  pullRequest.state === "open"
-                  && pullRequest.base.repo?.full_name === repository
-                  && pullRequest.base.ref === "main"
-                  && pullRequest.head.repo?.full_name === repository
-                  && (
-                    (
-                      pullRequest.head.ref === "renovate/openrewrite-toolchain"
-                      && pullRequest.user?.login === "renovate[bot]"
-                    )
-                    || (
-                      pullRequest.head.ref.startsWith(generatedPrefix)
-                      && /^\d+$/.test(pullRequest.head.ref.slice(generatedPrefix.length))
-                    )
-                  ),
-              );
-              if (governedPullRequestSharesCommit) {
-                return;
-              }
-              await Promise.all([
-                github.rest.repos.createCommitStatus({
-                  owner,
-                  repo,
-                  sha: generated.head.sha,
-                  context: "OpenRewrite source provenance",
-                  state: "success",
-                  description: "Not an OpenRewrite Renovate source",
-                  target_url: generated.html_url,
-                }),
-                github.rest.repos.createCommitStatus({
-                  owner,
-                  repo,
-                  sha: generated.head.sha,
-                  context: "OpenRewrite update validation",
-                  state: "success",
-                  description: "Not an OpenRewrite Renovate source",
-                  target_url: generated.html_url,
-                }),
-                github.rest.repos.createCommitStatus({
-                  owner,
-                  repo,
-                  sha: generated.head.sha,
-                  context: "OpenRewrite source freshness",
-                  state: "success",
-                  description: "Not a generated OpenRewrite pull request",
-                  target_url: generated.html_url,
-                }),
-              ]);
-              return;
-            }
-
-            if (isRenovateSource) {
-              await github.rest.repos.createCommitStatus({
-                owner,
-                repo,
-                sha: generated.head.sha,
-                context: "OpenRewrite source freshness",
-                state: "success",
-                description: "Not a generated OpenRewrite pull request",
-                target_url: generated.html_url,
-              });
-              return;
-            }
-
-            await Promise.all([
-              github.rest.repos.createCommitStatus({
-                owner,
-                repo,
-                sha: generated.head.sha,
-                context: "OpenRewrite source provenance",
-                state: "success",
-                description: "Not an OpenRewrite Renovate source",
-                target_url: generated.html_url,
-              }),
-              github.rest.repos.createCommitStatus({
-                owner,
-                repo,
-                sha: generated.head.sha,
-                context: "OpenRewrite update validation",
-                state: "success",
-                description: "Not an OpenRewrite Renovate source",
-                target_url: generated.html_url,
-              }),
-            ]);
-
-            const sourceNumber = Number(generatedMatch?.[1]);
-            if (!Number.isSafeInteger(sourceNumber) || sourceNumber <= 0) {
-              core.setFailed(`Invalid generated branch: ${generated.head.ref}`);
-              return;
-            }
-
-            const [sourceResponse, generatedCommit] = await Promise.all([
-              github.rest.pulls.get({
-                owner,
-                repo,
-                pull_number: sourceNumber,
-              }),
-              github.rest.repos.getCommit({
-                owner,
-                repo,
-                ref: generated.head.sha,
-              }),
-            ]);
-            const source = sourceResponse.data;
-            const sourceIsEligible =
-              generated.head.repo?.full_name === repository
-              && source.state === "open"
-              && source.base.repo.full_name === repository
-              && source.base.ref === "main"
-              && source.head.repo?.full_name === repository
-              && source.head.ref === "renovate/openrewrite-toolchain"
-              && source.user?.login === "renovate[bot]"
-              && source.labels.some(({ name }) => name === "openrewrite");
-            const sourceIsCurrent =
-              sourceIsEligible
-              && generatedCommit.data.parents.length === 1
-              && generatedCommit.data.parents[0]?.sha === source.head.sha;
-            await github.rest.repos.createCommitStatus({
-              owner,
-              repo,
-              sha: generated.head.sha,
-              context: "OpenRewrite source freshness",
-              state: sourceIsCurrent ? "success" : "failure",
-              description: sourceIsCurrent
-                ? `Generated from current Renovate PR #${sourceNumber}`
-                : `Does not match current Renovate PR #${sourceNumber}`,
-              target_url: source.html_url,
-            });
-            if (!sourceIsCurrent) {
-              core.setFailed(`Generated pull request does not match current Renovate PR #${sourceNumber}`);
-            }
+            await require("./scripts/openrewrite-renovate-verify-derived-source.cjs")({ github, context, core });
 
   attest-source:
     runs-on: ubuntu-latest
@@ -276,6 +84,16 @@ jobs:
       contents: read
       statuses: write
     steps:
+      - name: Check out the workflow script from the base commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The commit this workflow file was read from: the base branch tip on pull_request_target,
+          # the default branch tip on schedule, the dispatched branch's tip on workflow_dispatch.
+          ref: ${{ github.sha }}
+          sparse-checkout: scripts/openrewrite-renovate-attest-source.cjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
       - name: Attest the Renovate source sender
         if: >-
           ${{
@@ -288,23 +106,7 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            if (!["opened", "synchronize"].includes(context.payload.action)) {
-              return;
-            }
-            const { owner, repo } = context.repo;
-            const source = context.payload.pull_request;
-            const senderIsRenovate = context.payload.sender?.login === "renovate[bot]";
-            await github.rest.repos.createCommitStatus({
-              owner,
-              repo,
-              sha: source.head.sha,
-              context: "OpenRewrite source provenance",
-              state: senderIsRenovate ? "success" : "failure",
-              description: senderIsRenovate
-                ? "Source SHA delivered by Renovate"
-                : "Source SHA was not delivered by Renovate",
-              target_url: source.html_url,
-            });
+            await require("./scripts/openrewrite-renovate-attest-source.cjs")({ github, context, core });
 
   resolve:
     runs-on: ubuntu-latest
@@ -313,6 +115,16 @@ jobs:
     outputs:
       pull_request_numbers: ${{ steps.candidates.outputs.pull_request_numbers }}
     steps:
+      - name: Check out the workflow script from the base commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The commit this workflow file was read from: the base branch tip on pull_request_target,
+          # the default branch tip on schedule, the dispatched branch's tip on workflow_dispatch.
+          ref: ${{ github.sha }}
+          sparse-checkout: scripts/openrewrite-renovate-resolve.cjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
       - name: Resolve OpenRewrite Renovate pull requests
         id: candidates
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -320,82 +132,7 @@ jobs:
           REQUESTED_PULL_REQUEST: ${{ inputs.pull_request_number }}
         with:
           script: |
-            const { owner, repo } = context.repo;
-            const repository = `${owner}/${repo}`;
-            const generatedPrefix = process.env.GENERATED_BRANCH_PREFIX;
-            const isManagedRenovatePullRequest = (pullRequest) =>
-              Number.isSafeInteger(pullRequest.number)
-              && pullRequest.number > 0
-              && pullRequest.base?.repo?.full_name === repository
-              && pullRequest.head?.repo?.full_name === repository
-              && pullRequest.head?.ref === "renovate/openrewrite-toolchain"
-              && pullRequest.user?.login === "renovate[bot]";
-            const generatedSourceNumber = (pullRequest) => {
-              if (
-                pullRequest.base?.repo?.full_name !== repository
-                || pullRequest.base?.ref !== "main"
-                || pullRequest.head?.repo?.full_name !== repository
-              ) {
-                return undefined;
-              }
-              const generatedSuffix = pullRequest.head.ref.startsWith(generatedPrefix)
-                ? pullRequest.head.ref.slice(generatedPrefix.length)
-                : "";
-              const sourceNumber = /^\d+$/.test(generatedSuffix)
-                ? Number(generatedSuffix)
-                : Number.NaN;
-              return Number.isSafeInteger(sourceNumber) && sourceNumber > 0
-                ? sourceNumber
-                : undefined;
-            };
-            const setCandidates = (numbers) =>
-              core.setOutput(
-                "pull_request_numbers",
-                JSON.stringify([...new Set(numbers)].sort((left, right) => left - right)),
-              );
-
-            if (context.eventName === "pull_request_target") {
-              const pullRequest = context.payload.pull_request;
-              setCandidates(
-                pullRequest && isManagedRenovatePullRequest(pullRequest)
-                  ? [pullRequest.number]
-                  : [],
-              );
-              return;
-            }
-
-            const requested = process.env.REQUESTED_PULL_REQUEST;
-            if (requested) {
-              const pullRequestNumber = Number(requested);
-              if (!Number.isSafeInteger(pullRequestNumber) || pullRequestNumber <= 0) {
-                core.setFailed(`Invalid pull request number: ${requested}`);
-                return;
-              }
-              const response = await github.rest.pulls.get({
-                owner,
-                repo,
-                pull_number: pullRequestNumber,
-              });
-              setCandidates(
-                isManagedRenovatePullRequest(response.data) ? [pullRequestNumber] : [],
-              );
-              return;
-            }
-
-            const pullRequests = await github.paginate(github.rest.pulls.list, {
-              owner,
-              repo,
-              per_page: 100,
-              state: "open",
-            });
-            setCandidates([
-              ...pullRequests
-                .filter((pullRequest) => isManagedRenovatePullRequest(pullRequest))
-                .map(({ number }) => number),
-              ...pullRequests
-                .map(generatedSourceNumber)
-                .filter((sourceNumber) => sourceNumber !== undefined),
-            ]);
+            await require("./scripts/openrewrite-renovate-resolve.cjs")({ github, context, core });
 
   invalidate-reconciled-source:
     needs: [resolve, attest-source, invalidate-derived-source]
@@ -414,122 +151,23 @@ jobs:
       pull-requests: read
       statuses: write
     steps:
+      - name: Check out the workflow script from the base commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The commit this workflow file was read from: the base branch tip on pull_request_target,
+          # the default branch tip on schedule, the dispatched branch's tip on workflow_dispatch.
+          ref: ${{ github.sha }}
+          sparse-checkout: scripts/openrewrite-renovate-invalidate-reconciled-source.cjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
       - name: Invalidate generated result before reconciliation
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           SOURCE_PULL_REQUEST: ${{ matrix.pull_request_number }}
         with:
           script: |
-            const sourceNumber = Number(process.env.SOURCE_PULL_REQUEST);
-            const { owner, repo } = context.repo;
-            const repository = `${owner}/${repo}`;
-            const sourceResponse = await github.rest.pulls.get({
-              owner,
-              repo,
-              pull_number: sourceNumber,
-            });
-            const source = sourceResponse.data;
-            if (
-              !Number.isSafeInteger(sourceNumber)
-              || sourceNumber <= 0
-              || source.base.repo.full_name !== repository
-              || source.head.repo?.full_name !== repository
-              || source.head.ref !== "renovate/openrewrite-toolchain"
-              || source.user?.login !== "renovate[bot]"
-            ) {
-              core.setFailed(`Pull request #${sourceNumber} is not a same-repository Renovate source`);
-              return;
-            }
-
-            const sourceIsEligible =
-              source.state === "open"
-              && source.base.ref === "main"
-              && source.labels.some(({ name }) => name === "openrewrite");
-            let provenanceIsTrusted = false;
-            if (sourceIsEligible) {
-              const sourceStatuses = await github.paginate(
-                github.rest.repos.listCommitStatusesForRef,
-                {
-                  owner,
-                  repo,
-                  ref: source.head.sha,
-                  per_page: 100,
-                },
-              );
-              const provenance = sourceStatuses.find(
-                ({ context: statusContext }) =>
-                  statusContext === "OpenRewrite source provenance",
-              );
-              provenanceIsTrusted =
-                provenance?.state === "success"
-                && provenance.creator?.login === "github-actions[bot]"
-                && provenance.description === "Source SHA delivered by Renovate"
-                && provenance.target_url === source.html_url;
-            }
-
-            await github.rest.repos.createCommitStatus({
-              owner,
-              repo,
-              sha: source.head.sha,
-              context: "OpenRewrite update validation",
-              state: sourceIsEligible && provenanceIsTrusted ? "pending" : "failure",
-              description: !sourceIsEligible
-                ? `Renovate PR #${sourceNumber} is no longer eligible`
-                : provenanceIsTrusted
-                  ? `Validating Renovate PR #${sourceNumber}`
-                  : "Renovate source provenance is missing or invalid",
-              target_url: source.html_url,
-            });
-
-            const branch = `${process.env.GENERATED_BRANCH_PREFIX}${sourceNumber}`;
-            const generatedPullRequests = await github.paginate(github.rest.pulls.list, {
-              owner,
-              repo,
-              base: "main",
-              head: `${owner}:${branch}`,
-              per_page: 100,
-              state: "open",
-            });
-            const generated = generatedPullRequests[0];
-            if (!generated) {
-              if (sourceIsEligible && !provenanceIsTrusted) {
-                core.setFailed(`Pull request #${sourceNumber} lacks trusted Renovate provenance`);
-              }
-              return;
-            }
-
-            const generatedCommit = await github.rest.repos.getCommit({
-              owner,
-              repo,
-              ref: generated.head.sha,
-            });
-            const sourceIsCurrent =
-              sourceIsEligible
-              && provenanceIsTrusted
-              && generatedCommit.data.parents.length === 1
-              && generatedCommit.data.parents[0]?.sha === source.head.sha;
-            await github.rest.repos.createCommitStatus({
-              owner,
-              repo,
-              sha: generated.head.sha,
-              context: "OpenRewrite source freshness",
-              state: sourceIsCurrent
-                ? "success"
-                : sourceIsEligible && provenanceIsTrusted
-                  ? "pending"
-                  : "failure",
-              description: sourceIsCurrent
-                ? `Generated from current Renovate PR #${sourceNumber}`
-                : sourceIsEligible && provenanceIsTrusted
-                  ? `Waiting for current Renovate PR #${sourceNumber}`
-                  : sourceIsEligible
-                    ? `Renovate PR #${sourceNumber} lacks trusted provenance`
-                    : `Renovate PR #${sourceNumber} is no longer eligible`,
-              target_url: source.html_url,
-            });
-            if (sourceIsEligible && !provenanceIsTrusted) {
-              core.setFailed(`Pull request #${sourceNumber} lacks trusted Renovate provenance`);
-            }
+            await require("./scripts/openrewrite-renovate-invalidate-reconciled-source.cjs")({ github, context, core });
 
   generate:
     needs: [resolve, invalidate-reconciled-source]
@@ -550,6 +188,18 @@ jobs:
       contents: read
       pull-requests: read
     steps:
+      - name: Check out the workflow script from the base commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The commit this workflow file was read from: the base branch tip on pull_request_target,
+          # the default branch tip on schedule, the dispatched branch's tip on workflow_dispatch.
+          ref: ${{ github.sha }}
+          sparse-checkout: |
+            scripts/openrewrite-renovate-validate-source.cjs
+            scripts/openrewrite-renovate-materialize-pom.cjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
       - name: Validate source pull request metadata
         id: source
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -557,67 +207,7 @@ jobs:
           SOURCE_PULL_REQUEST: ${{ matrix.pull_request_number }}
         with:
           script: |
-            const pullRequestNumber = Number(process.env.SOURCE_PULL_REQUEST);
-            const { owner, repo } = context.repo;
-            const repository = `${owner}/${repo}`;
-            const response = await github.rest.pulls.get({
-              owner,
-              repo,
-              pull_number: pullRequestNumber,
-            });
-            const pullRequest = response.data;
-            if (
-              pullRequest.base.repo.full_name !== repository
-              || pullRequest.head.repo?.full_name !== repository
-              || pullRequest.head.ref !== "renovate/openrewrite-toolchain"
-              || pullRequest.user?.login !== "renovate[bot]"
-            ) {
-              core.setFailed(`Pull request #${pullRequestNumber} is not a same-repository OpenRewrite Renovate update`);
-              return;
-            }
-            const isEligible =
-              pullRequest.base.ref === "main"
-              && pullRequest.labels.some(({ name }) => name === "openrewrite");
-            core.setOutput(
-              "state",
-              pullRequest.state === "open" && !isEligible ? "ineligible" : pullRequest.state,
-            );
-            core.setOutput("source_sha", pullRequest.head.sha);
-            core.setOutput("source_url", pullRequest.html_url);
-            core.setOutput("base_sha", pullRequest.base.sha);
-            if (pullRequest.state !== "open" || !isEligible) {
-              return;
-            }
-
-            const [files, commits] = await Promise.all([
-              github.paginate(github.rest.pulls.listFiles, {
-                owner,
-                repo,
-                pull_number: pullRequestNumber,
-                per_page: 100,
-              }),
-              github.paginate(github.rest.pulls.listCommits, {
-                owner,
-                repo,
-                pull_number: pullRequestNumber,
-                per_page: 100,
-              }),
-            ]);
-            if (files.length !== 1 || files[0]?.filename !== "pom.xml") {
-              core.setFailed(`Pull request #${pullRequestNumber} must change only pom.xml`);
-              return;
-            }
-            if (
-              commits.length !== 1
-              || commits[0]?.author?.login !== "renovate[bot]"
-              || commits[0]?.sha !== pullRequest.head.sha
-              || commits[0]?.parents.length !== 1
-              || commits[0]?.parents[0]?.sha !== pullRequest.base.sha
-            ) {
-              core.setFailed(
-                `Pull request #${pullRequestNumber} must contain one Renovate-authored commit directly on its current base`,
-              );
-            }
+            await require("./scripts/openrewrite-renovate-validate-source.cjs")({ github, context, core });
 
       - name: Checkout trusted automation source
         if: ${{ steps.source.outputs.state == 'open' }}
@@ -642,28 +232,7 @@ jobs:
           SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
         with:
           script: |
-            const fs = require("fs");
-            const { owner, repo } = context.repo;
-            const response = await github.rest.repos.getContent({
-              owner,
-              repo,
-              path: "pom.xml",
-              ref: process.env.SOURCE_SHA,
-            });
-            const pom = response.data;
-            if (
-              Array.isArray(pom)
-              || pom.type !== "file"
-              || pom.encoding !== "base64"
-              || typeof pom.content !== "string"
-            ) {
-              core.setFailed("The Renovate source does not contain a regular base64-encoded pom.xml");
-              return;
-            }
-            fs.writeFileSync(
-              "source/pom.xml",
-              Buffer.from(pom.content.replaceAll("\n", ""), "base64"),
-            );
+            await require("./scripts/openrewrite-renovate-materialize-pom.cjs")({ github, context, core });
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: ${{ steps.source.outputs.state == 'open' }}
@@ -750,6 +319,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # The commit this workflow file was read from: the base branch tip on pull_request_target,
+          # the default branch tip on schedule, the dispatched branch's tip on workflow_dispatch.
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -770,41 +342,7 @@ jobs:
           VALIDATION_PASSED: ${{ steps.artifact.outputs.validation_passed }}
         with:
           script: |
-            const sourceNumber = Number(process.env.SOURCE_PULL_REQUEST);
-            const sourceSha = process.env.SOURCE_SHA;
-            const validationPassed = process.env.VALIDATION_PASSED === "true";
-            const generatedChanges = process.env.GENERATED_CHANGES === "true";
-            const { owner, repo } = context.repo;
-            const repository = `${owner}/${repo}`;
-            const response = await github.rest.pulls.get({
-              owner,
-              repo,
-              pull_number: sourceNumber,
-            });
-            const source = response.data;
-            const sourceIsCurrent =
-              source.state === "open"
-              && source.base.repo.full_name === repository
-              && source.base.ref === "main"
-              && source.head.repo?.full_name === repository
-              && source.head.ref === "renovate/openrewrite-toolchain"
-              && source.head.sha === sourceSha
-              && source.user?.login === "renovate[bot]"
-              && source.labels.some(({ name }) => name === "openrewrite");
-            const successfulNoResult = sourceIsCurrent && validationPassed && !generatedChanges;
-            await github.rest.repos.createCommitStatus({
-              owner,
-              repo,
-              sha: sourceSha,
-              context: "OpenRewrite update validation",
-              state: successfulNoResult ? "success" : "failure",
-              description: successfulNoResult
-                ? "Validated with no generated changes"
-                : sourceIsCurrent && validationPassed && generatedChanges
-                  ? "Generated changes require the derived pull request"
-                  : "OpenRewrite update validation failed",
-              target_url: source.html_url,
-            });
+            await require("./scripts/openrewrite-renovate-report-source-validation.cjs")({ github, context, core });
 
   publish:
     needs: [resolve, generate, report-source-validation]

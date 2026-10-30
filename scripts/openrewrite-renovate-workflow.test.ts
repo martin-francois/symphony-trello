@@ -6,6 +6,7 @@ import {dirname, join} from "node:path";
 import test from "node:test";
 import {parse} from "yaml";
 import {matchesMajor, matchesNonMajor, RENOVATE_CONFIG} from "./test-support/renovate-config.ts";
+import {loadWorkflowScript, withEnvironment, workflowScriptPath} from "./test-support/workflow-script.ts";
 
 interface PullRequest {
   readonly base: {readonly ref: string; readonly repo: {readonly full_name: string}};
@@ -50,10 +51,6 @@ interface WorkflowDocument {
   >;
 }
 
-type ExecutableAsyncFunction = (...arguments_: readonly unknown[]) => Promise<unknown>;
-type AsyncFunctionConstructor = new (...arguments_: readonly string[]) => ExecutableAsyncFunction;
-
-const AsyncFunction = Object.getPrototypeOf(async function (): Promise<void> {}).constructor as AsyncFunctionConstructor;
 const WORKFLOW = readFileSync(
   new URL("../.github/workflows/openrewrite-renovate.yml", import.meta.url),
   "utf8",
@@ -101,6 +98,10 @@ const OPENREWRITE_PUBLICATION = [
 ]
   .map((name) => readFileSync(new URL(name, SCRIPTS), "utf8"))
   .join("\n");
+const OPENREWRITE_WORKFLOW_FILE = "openrewrite-renovate.yml";
+const RESOLVE_SCRIPT = loadWorkflowScript(OPENREWRITE_WORKFLOW_FILE, "Resolve OpenRewrite Renovate pull requests");
+const ATTEST_SCRIPT = loadWorkflowScript(OPENREWRITE_WORKFLOW_FILE, "Attest the Renovate source sender");
+const REPORT_SCRIPT = loadWorkflowScript(OPENREWRITE_WORKFLOW_FILE, "Report source validation");
 const CI_OPENREWRITE = `${CI_WORKFLOW}\n${readFileSync(new URL("run-openrewrite-ci", SCRIPTS), "utf8")}`;
 const WORKFLOW_DIRECTORY = new URL("../.github/workflows/", import.meta.url);
 const PNPM_COMMAND = /(?:^|[\s;&|(])pnpm(?=\s|$)/mu;
@@ -120,16 +121,9 @@ const CANDIDATE: PullRequest = {
   user: {login: "renovate[bot]"},
 };
 
-function workflowScript(stepName: string, workflow = WORKFLOW): string {
-  const document = parse(workflow) as WorkflowDocument;
-  assert.ok(document.jobs, "workflow jobs must exist");
-  const matchingSteps = Object.values(document.jobs)
-    .flatMap(({steps}) => steps ?? [])
-    .filter(({name}) => name === stepName);
-  assert.equal(matchingSteps.length, 1, `${stepName} step must exist exactly once`);
-  const script = matchingSteps[0]?.with?.script;
-  assert.ok(typeof script === "string", `${stepName} script block must exist`);
-  return script;
+/** The source of the module a github-script step loads, for the job-slice assertions below. */
+function workflowScriptSource(stepName: string): string {
+  return readFileSync(new URL(`../${workflowScriptPath(OPENREWRITE_WORKFLOW_FILE, stepName)}`, import.meta.url), "utf8");
 }
 
 /** Every workflow file name with its text. */
@@ -160,38 +154,6 @@ function stepRunsPnpm({run}: WorkflowStep): boolean {
 function stepUses({uses}: WorkflowStep, action: string): boolean {
   return typeof uses === "string" && uses.startsWith(`${action}@`);
 }
-
-test("workflow script extraction follows YAML structure across indentation styles", () => {
-  const workflow = `jobs:
-  verify:
-    steps:
-    - name: Execute workflow script
-      uses: actions/github-script@pinned
-      with:
-        script: |
-          return "parsed";
-`;
-
-  assert.equal(workflowScript("Execute workflow script", workflow), 'return "parsed";\n');
-});
-
-test("workflow script extraction reports missing structure clearly", () => {
-  const workflow = `jobs:
-  verify:
-    steps:
-      - name: Checkout source
-        uses: actions/checkout@pinned
-`;
-
-  assert.throws(
-    () => workflowScript("Absent", workflow),
-    /Absent step must exist exactly once/,
-  );
-  assert.throws(
-    () => workflowScript("Checkout source", workflow),
-    /Checkout source script block must exist/,
-  );
-});
 
 async function resolve(
   eventName: "pull_request_target" | "schedule" | "workflow_dispatch",
@@ -232,18 +194,13 @@ async function resolve(
     repo: {owner: "owner", repo: "repo"},
   };
 
-  await new AsyncFunction(
-    "context",
-    "github",
-    "core",
-    "process",
-    workflowScript("Resolve OpenRewrite Renovate pull requests"),
-  )(context, github, core, {
-    env: {
+  await withEnvironment(
+    {
       GENERATED_BRANCH_PREFIX: "automation/openrewrite/renovate-",
       REQUESTED_PULL_REQUEST: requestedPullRequest,
     },
-  });
+    () => RESOLVE_SCRIPT({context, github, core}),
+  );
   return {failures, numbers: JSON.parse(output) as number[]};
 }
 
@@ -309,16 +266,12 @@ async function runFreshnessScript(
     repo: {owner: "owner", repo: "repo"},
   };
 
-  await new AsyncFunction("context", "github", "core", "process", workflowScript(stepName))(
-    context,
-    github,
-    core,
+  await withEnvironment(
     {
-      env: {
-        GENERATED_BRANCH_PREFIX: "automation/openrewrite/renovate-",
-        SOURCE_PULL_REQUEST: String(source.number),
-      },
+      GENERATED_BRANCH_PREFIX: "automation/openrewrite/renovate-",
+      SOURCE_PULL_REQUEST: String(source.number),
     },
+    () => loadWorkflowScript(OPENREWRITE_WORKFLOW_FILE, stepName)({context, github, core}),
   );
   return {failures, statuses};
 }
@@ -343,12 +296,7 @@ async function attestSource(sender: string): Promise<readonly CommitStatus[]> {
     repo: {owner: "owner", repo: "repo"},
   };
 
-  await new AsyncFunction(
-    "context",
-    "github",
-    "core",
-    workflowScript("Attest the Renovate source sender"),
-  )(context, github, {});
+  await ATTEST_SCRIPT({context, github, core: {}});
   return statuses;
 }
 
@@ -371,13 +319,10 @@ async function reportSourceValidation(
   };
   const context = {repo: {owner: "owner", repo: "repo"}};
 
-  await new AsyncFunction(
-    "context",
-    "github",
-    "core",
-    "process",
-    workflowScript("Report source validation"),
-  )(context, github, {}, {env: environment});
+  await withEnvironment(
+    environment,
+    () => REPORT_SCRIPT({context, github, core: {}}),
+  );
   return statuses;
 }
 
@@ -768,9 +713,15 @@ test("write credentials are isolated from recipe execution", () => {
       && reportStart > generateStart
       && publishStart > reportStart,
   );
-  const invalidationJob = WORKFLOW.slice(invalidationStart, verificationStart);
-  const generateJob = `${WORKFLOW.slice(generateStart, reportStart)}\n${OPENREWRITE_GENERATION}`;
-  const reportJob = WORKFLOW.slice(reportStart, publishStart);
+  const invalidationJob = `${WORKFLOW.slice(invalidationStart, verificationStart)}\n${
+    workflowScriptSource("Invalidate stale generated source")}`;
+  const generateJob = [
+    WORKFLOW.slice(generateStart, reportStart),
+    workflowScriptSource("Validate source pull request metadata"),
+    workflowScriptSource("Materialize the exact Renovate POM"),
+    OPENREWRITE_GENERATION,
+  ].join("\n");
+  const reportJob = `${WORKFLOW.slice(reportStart, publishStart)}\n${workflowScriptSource("Report source validation")}`;
   const publishJob = `${WORKFLOW.slice(publishStart)}\n${OPENREWRITE_PUBLICATION}`;
 
   assert.match(invalidationJob, /contents: read/);
@@ -909,8 +860,12 @@ test("write credentials are isolated from recipe execution", () => {
 });
 
 test("the generated branch prefix has one workflow source of truth", () => {
+  const workflowScripts = readdirSync(SCRIPTS)
+    .filter((name) => name.startsWith("openrewrite-renovate-") && name.endsWith(".cjs"))
+    .map((name) => readFileSync(new URL(name, SCRIPTS), "utf8"))
+    .join("\n");
   assert.equal(
-    WORKFLOW.match(/automation\/openrewrite\/renovate-/g)?.length,
+    `${WORKFLOW}\n${workflowScripts}`.match(/automation\/openrewrite\/renovate-/g)?.length,
     1,
   );
   assert.match(
@@ -918,7 +873,7 @@ test("the generated branch prefix has one workflow source of truth", () => {
     /GENERATED_BRANCH_PREFIX: automation\/openrewrite\/renovate-/,
   );
   assert.match(
-    WORKFLOW,
+    workflowScripts,
     /const branch = `\$\{process\.env\.GENERATED_BRANCH_PREFIX\}\$\{source\.number\}`/,
   );
   assert.match(
