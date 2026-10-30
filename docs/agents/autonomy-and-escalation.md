@@ -49,6 +49,9 @@ this repository.
   outside that scope, open a GitHub issue through the
   [issue forms](github-issue-triage.md#issue-forms) and link it in the reply or the handoff. The
   merge handoff names the review that ran, so pull-request review can check it.
+- Before posting a review comment on an outside contributor's pull request, check its description
+  and fix or ask as
+  [Outside contributor pull requests](default-workflow.md#outside-contributor-pull-requests) says.
 - When Codex makes repository changes, run the Codex review/fix loop after every completed change
   unless the user explicitly says not to. This requirement is specific to Codex sessions; do not
   impose it on Claude or other AI tools.
