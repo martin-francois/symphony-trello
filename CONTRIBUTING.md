@@ -550,6 +550,13 @@ Decision. Tick that box on every PR, whether or not AI helped: you're saying you
 your change does. While one of those checks fails, CodeRabbit requests changes and the PR cannot
 merge. Fix the description, then comment `@coderabbitai run pre-merge checks` to rerun them.
 
+The description is also checked the moment you open or edit the PR. If `I confirm I understand
+what the code does` isn't ticked, or the AI Assistance section is missing or has no single choice,
+a comment says what to fix, the PR gets `waiting-for-author`, and nobody reviews it until you fix
+the description. If it's still incomplete on the date that comment gives, 14 days on, the PR is
+closed automatically. Fixing the description reopens it; don't force-push or rebase the branch
+while it's closed, because GitHub can't reopen a PR whose head moved.
+
 Before marking a PR ready for review:
 
 - run the validation commands listed in [Quality Bar](#quality-bar);

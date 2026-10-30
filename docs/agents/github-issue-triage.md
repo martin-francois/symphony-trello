@@ -271,6 +271,19 @@ and apply triage labels. Spec-alignment auditing that may create issues lives in
   requests whose paths match the Release Please exclusions. A scheduled default-branch
   reconciliation repairs suppressed events, base-branch diff changes, and pull requests that were
   already open when the workflow was introduced.
+- `missing-confirmation` is a pull-request label that `.github/workflows/pull-request-disclosure.yml`
+  adds beside `waiting-for-author` while a pull request's description is incomplete (the
+  understanding box unticked, no single AI choice, or those sections missing), for every author
+  except martinfrancois and bots, and removes when the body is fixed. The first daily run 14 days
+  after the flag closes the pull request, and the workflow reopens it once fixed
+  ([ADR 0142](../adr/0142-flag-and-close-pull-requests-with-an-incomplete-ai-disclosure.md)).
+  The workflow reads its own marker comment to decide what it added, so a label added by hand on a
+  valid body is never removed. Removing the label by hand from a flagged pull request opts it out:
+  the workflow stops adding the label back and the daily run doesn't close it. The opt-out ends
+  when the description becomes complete, which resolves the comment, so a later incomplete edit
+  starts a fresh 14 days; adding the label back by hand instead resumes the original close date.
+  Never put it on an issue. `scripts/pull-request-disclosure.test.ts` runs the exact script; the
+  audit script reads issues only, so pull-request review is the check for a stray label.
 
 - During issue triage, check every open issue for breaking-change risk, especially while the
   affected contract is still small enough to change deliberately. Add the `breaking change` label

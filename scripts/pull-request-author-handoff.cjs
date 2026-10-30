@@ -4,6 +4,8 @@
 module.exports = async ({ github, context, core }) => {
   const waitingLabel = "waiting-for-author";
   const reviewLabel = "needs-maintainer-review";
+  // pull-request-disclosure.yml owns the waiting state while this label is present (ADR 0142).
+  const missingLabel = "missing-confirmation";
   const { owner, repo } = context.repo;
 
   const validIssueNumber = (candidate) =>
@@ -141,7 +143,7 @@ module.exports = async ({ github, context, core }) => {
       return;
     }
     const names = new Set(labels.map(({ name }) => name));
-    if (!names.has(waitingLabel)) {
+    if (!names.has(waitingLabel) || names.has(missingLabel)) {
       return;
     }
     const timeline = await timelineFor(issueNumber);
