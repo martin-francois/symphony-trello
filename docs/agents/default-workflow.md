@@ -302,17 +302,35 @@ optional verification. Follow this order:
   has no documented convention, infer from the last 20 to 50 commits on the default branch. If the
   repository has no commits, only one commit, no reachable default-branch history, or mixed recent
   styles, default to Conventional Commits.
-- For feature-branch work in this repository, preserve a single review commit by amending the
-  existing branch commit or squashing related local commits before pushing, unless the user
-  explicitly asks for multiple commits or the change includes a refactor, which belongs in its own
-  focused commit before the behavior-change commit. An outside contributor's pull request is the
-  exception; see [Outside contributor pull requests](#outside-contributor-pull-requests).
-- In the pull request template, choose the intended history result in plain language. **Combine this
-  pull request into one final commit** means the branch commits are review steps; maintainers normally
-  use GitHub's squash merge. **Keep the individual commits** means each focused commit remains in
-  `main`; maintainers normally use GitHub's rebase merge or an equivalent history-preserving
-  fast-forward operation. The template's `(squash)` and `(rebase)` suffixes are optional hints, not
-  knowledge contributors need to make the choice. Do not infer the result from commit count.
+- Every commit that reaches `main` is one cohesive change. This holds for every pull request,
+  whoever authored it. Keep a branch in that shape while working: amend the owning commit or squash
+  related local commits before pushing. A pull request with more than one cohesive change, such as
+  a required refactor before a behavior change or work for two related issues, keeps one commit per
+  change. Pull-request review of the branch history is the evidence; no automation checks
+  cohesion.
+- Maintainers choose the merge method from the commits. Squash-merge a pull request that is one
+  cohesive change, however many commits it has. When a pull request holds several cohesive
+  changes, first clean up its history to one commit per change, then merge it with GitHub's rebase
+  merge or an equivalent history-preserving fast-forward operation. Five commits that hold two
+  cohesive changes become two commits before the merge. Final merge review checks the merge method
+  against the commits, and the merge handoff names the method and the commits that reached `main`.
+- The template's Commit History in Main choice records the intended result in plain language.
+  **Combine this pull request into one final commit** means one cohesive change, merged as one
+  commit. **Keep the individual commits** means several cohesive changes, one commit each. The
+  `(squash)` and `(rebase)` suffixes are optional hints, not knowledge contributors need to make the
+  choice. Do not infer the result from commit count; count the cohesive changes.
+- The author answers that choice for the branch as they submitted it. When the choice and the
+  commits disagree, the maintainer cleans up the history to one commit per cohesive change, or asks
+  the author which result they meant. Before merging, the ticked box matches the result that will
+  reach `main`.
+- Whenever martinfrancois or his agents push to a pull request, including an outside contributor's,
+  re-check the Commit History in Main choice against the new commits and change the checkboxes to
+  match: one cohesive change means Combine, several cohesive changes with one commit each means
+  Keep. Mention a changed checkbox in a pull request comment. On a breaking pull request, move the
+  breaking markers with the box: Keep needs both markers in the retained commit that owns the
+  break, and Combine needs `!` in the title and the footer in the squash message. Editing the body
+  re-runs the PR metadata check, which then validates the breaking markers for the history that
+  will reach `main`. Pull-request review checks that the ticked box matches the commits.
 - Do not preemptively rewrite every older open pull request when the template contract changes. When
   substantive work resumes on an older pull request, update its body to the current template before
   considering it ready.
@@ -333,12 +351,31 @@ optional verification. Follow this order:
   merging agent runs `gh pr list --state open` right before the merge and names the pull requests
   it left for later in its handoff.
 - Synchronize feature branches by rebasing onto the latest default branch. Never create merge
-  commits to update a pull request branch; after verifying the rewritten history, push it with
-  `--force-with-lease` against the previously fetched remote head.
-- If the user explicitly wants a multi-commit pull request, keep each commit focused and Conventional
-  Commit titled. Use one commit for the user-visible feature or fix and separate commits only for
-  directly supporting cleanup or refactoring that belongs to the same cohesive change; unrelated work
-  still belongs in a separate branch or pull request.
+  commits to update a pull request branch.
+- Rewrite a pushed branch, after a rebase or a fixup, only on top of the pull request's current
+  head. Fetch the branch, check that its remote-tracking ref equals `headRefOid` from
+  `gh pr view <n> --json headRefOid`, and start the rewrite from that ref. For a fork, add the fork
+  as a named remote first so the remote-tracking ref exists. Before pushing, compare the old and new
+  history with `git range-diff` and check every commit's author with
+  `git log --format='%h %an <%ae>'`. Push from a local branch with the pull request branch's name,
+  because `--force-if-includes` reads the reflog of the local branch named like the destination.
+  When that name is taken locally, such as a contributor's `main`, push from a separate clone of
+  the fork:
+
+  ```bash
+  git push --force-with-lease --force-if-includes <remote> <branch>
+  ```
+
+  The lease then holds the pull request's head SHA, and `--force-if-includes` refuses the push when
+  the local branch never contained that head. Do not write the lease as
+  `--force-with-lease=<branch>:<sha>`: Git ignores `--force-if-includes` when the lease names its
+  value, so a rewrite started from an older head would silently drop the newer commits. The
+  handoff or the pull request comment names the old and new head SHAs, so pull-request review can
+  check the rewrite with `git range-diff`.
+- In a pull request that keeps its individual commits, give each commit a Conventional Commit title
+  and one cohesive change, such as the user-visible feature or fix, or a refactor it needs.
+  Unrelated work still belongs in a separate branch or pull request. Commitlint checks the titles;
+  pull-request review checks cohesion.
 - A pull request that keeps its individual commits must have coherent ownership. Keep implementation
   and tests in their owning commit, verify each retained commit independently where practical, and do
   not let a later commit silently repair an earlier commit that is presented as complete. Focused
@@ -351,23 +388,29 @@ optional verification. Follow this order:
 - When one pull request intentionally covers multiple GitHub issues, keep at least one focused commit
   per issue so each issue has its own reviewable unit. Combine multiple issues in one pull request
   only when the issues are cohesive or merging them together is materially easier. A single issue may
-  still use multiple focused commits when requested or when that improves review, but do not collapse
-  separate issue work into one mixed commit unless the user explicitly asks.
-- When the user asks to address review comments on an existing pull request, make the review-response
-  changes in a separate follow-up commit so the review delta is easy to inspect. Do not amend those
-  changes into the existing PR commit unless the user explicitly asks. Run the Codex review/fix loop
-  before pushing, reply on GitHub to every handled review comment or thread, and push the updated
-  branch. Do not resolve GitHub review threads after replying; leave them for the reviewer to resolve
+  still use multiple commits when its work holds more than one cohesive change, but do not collapse
+  separate issue work into one mixed commit.
+- After a review, put each fix into the commit that introduced the problem with
+  `git commit --fixup=<commit>` and `git rebase --autosquash`. The rewritten commit keeps its
+  author. A fix that is a separate cohesive change gets its own commit instead. This holds for every
+  pull request: martinfrancois's, his agents', Renovate's, and outside contributors'. The rule
+  covers review threads on GitHub as well as the review loop in
+  [Review before finalizing](autonomy-and-escalation.md#review-before-finalizing). The source branch
+  of a Renovate toolchain update is the exception: only Renovate commits to it, and its generated
+  changes go through a derived pull request
+  ([ADR 0071](../adr/0071-automate-openrewrite-renovate-updates.md)). Pull-request review of the
+  branch history is the evidence.
+- When the user asks to address review comments on an existing pull request, fix them as described
+  above, run the Codex review/fix loop before pushing, reply on GitHub to every handled review
+  comment or thread, and push the rewritten branch as described above. Do not resolve GitHub review
+  threads after replying; leave them for the reviewer to resolve
   unless the user explicitly asks you to resolve them. When a review reply reports a code, test,
   documentation, configuration, or PR-metadata change, name the short commit hash that contains the
   change and include the final relevant code, text, or configuration in fenced code blocks with enough
   surrounding context that the reviewer can understand it without hunting through the diff. A prose
   summary, file link, or commit link does not replace the required final snippet. When no file content
   changed, say that explicitly and give the rationale or validation evidence instead of inventing a
-  snippet. This requirement applies to all review comment handling in this repository. If the user also
-  asks to squash the
-  already-pushed PR commits first, squash them into one base commit before adding the separate
-  review-response commit.
+  snippet. This requirement applies to all review comment handling in this repository.
 - When authoring new inline review feedback, collect all comments for that pull request before
   publishing them. Create one pending review containing the complete comment set, then submit that
   review once at the end so contributors receive one review notification instead of one notification
@@ -420,7 +463,8 @@ optional verification. Follow this order:
   finishing whether the PR description needs to change because the scope, verification, known
   limitations, linked issues, or deployment/live evidence changed. Update the PR description when it
   would otherwise be stale or incomplete, and report whether you updated it. For PRs authored by
-  someone else, do not edit the PR description unless the user explicitly asks.
+  someone else, do not edit the PR description unless the user explicitly asks. The Commit History
+  in Main checkboxes are the one exception; re-check them after every push as described above.
 - When waiting for pull request checks, wait for GitHub Actions and other required CI checks to
   finish, but do not block only on a pending CodeRabbit status context. Treat CodeRabbit as
   asynchronous review feedback: address it when it posts actionable comments or requested changes,
@@ -439,7 +483,7 @@ optional verification. Follow this order:
     `@coderabbitai run pre-merge checks` after ticking it.
   - A Renovate or Release Please pull request that martinfrancois lands counts as his. Their
     generated bodies have no box today. If one has it, ticking it is the only edit his agent makes
-    to that body.
+    to that body, apart from the Commit History in Main checkboxes when the body has them.
   - On a pull request authored by anyone else, the box belongs to that author, even when
     martinfrancois or his agents help finish the pull request. Neither martinfrancois nor his agents
     tick it. An agent working for that author, such as an outside contributor's agent on its own
@@ -461,14 +505,15 @@ the posted comments and the branch history is the evidence; no automation checks
   `CONTRIBUTING.md` is met, required checks pass, and the code review in
   [Review before finalizing](autonomy-and-escalation.md#review-before-finalizing) left nothing to
   fix.
-- Put review fixes in separate commits on top of the contributor's commits. Do not amend, squash, or
-  fix up the contributor's commits, and keep the contributor as their author. Merge with a rebase
-  merge so the separate commits reach `main`. When the body asks to combine the pull request into
-  one commit, ask the contributor in a comment before merging. This overrides the single-commit rule
-  above and the fix-into-the-owning-commit rule in the
-  [Codex review/fix loop](autonomy-and-escalation.md#codex-reviewfix-loop). Pushing to a fork needs
-  maintainer edits enabled; when they are off, ask the contributor to enable them.
-- The `I confirm I understand what the code does` box stays the contributor's; see
+- Review fixes, history cleanup, the force-push, and the Commit History in Main checkboxes follow
+  [Committing and pull requests](#committing-and-pull-requests), the same as on any other pull
+  request. A fix folded into a contributor's commit keeps the contributor as its author. Pushing to
+  a fork needs maintainer edits enabled; when they are off, ask the contributor to enable them.
+- After rewriting the contributor's branch, comment on the pull request. Thank them, name each of
+  their commits that changed and what changed in it, and name any Commit History in Main checkbox
+  you changed.
+- The `I confirm I understand what the code does` box stays the contributor's, even though the
+  agent may change the Commit History in Main checkboxes in the same body; see
   [Committing and pull requests](#committing-and-pull-requests).
 
 ## References

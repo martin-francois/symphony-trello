@@ -336,6 +336,13 @@ The template includes `(squash)` and `(rebase)` as short hints for experienced c
 plain-language result is the required choice. Contributors do not need to choose or understand a Git
 command. GitHub merge commits are disabled for this repository.
 
+Every commit that reaches `main` is one cohesive change. Maintainers check your choice against the
+commits, clean up the history or ask you when the two disagree, and change the checkbox to match
+the result. When maintainers fix something after a review, they fold the fix into the commit it
+belongs to and force-push the cleaned-up branch. For a pull request from a fork, that push needs
+maintainer edits allowed on your pull request. You stay the author of your commits, and a comment on
+the pull request says what changed in each one.
+
 For a pull request that becomes one final commit, the PR title is the normal source of truth for
 changelog and version bump decisions:
 

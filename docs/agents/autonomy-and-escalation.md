@@ -86,14 +86,17 @@ this repository.
   reporting progress to the user. Do not send progress updates merely because the review process is
   still running or because the session was polled. Report again only when the review completes, fails,
   or needs external input.
-- When a Codex review/fix loop changes an already committed branch, fix each justified finding into
-  the commit that introduced or owns the reviewed code. Use `git commit --fixup` plus autosquash,
-  amend the owning commit, or otherwise rewrite the branch so the final history does not leave
-  generic "review fixes" commits behind. If a finding spans multiple existing commits, split the
-  repair by ownership when practical; otherwise put the fix in the earliest commit that needs the
-  corrected behavior and keep the resulting commit focused. On an outside contributor's pull request,
-  put each fix in a new commit instead; see
-  [Outside contributor pull requests](default-workflow.md#outside-contributor-pull-requests).
+- When a Codex review/fix loop changes an already committed branch, pushed or not, fix each
+  justified finding into the commit that introduced or owns the reviewed code. Use
+  `git commit --fixup` plus autosquash, or amend the owning commit when it is the branch tip, so the
+  final history does not leave generic "review fixes" commits behind. Both keep the owning commit's
+  author, which on an outside contributor's pull request is the contributor. A fix that is a
+  separate cohesive change gets its own commit. If a finding spans multiple existing commits, split
+  the repair by ownership when practical; otherwise put the fix in the earliest commit that needs
+  the corrected behavior and keep the resulting commit focused. Push a rewritten branch as
+  [Committing and pull requests](default-workflow.md#committing-and-pull-requests) describes.
+  Pull-request review of the branch history is the evidence; no automation checks where a fix
+  landed.
 
 ## References
 

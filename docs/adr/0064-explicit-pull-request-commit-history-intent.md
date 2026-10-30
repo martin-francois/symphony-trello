@@ -14,6 +14,10 @@ informed: [Contributors, Reviewers, Future maintainers]
 
 # Explicit Pull Request Commit History Intent
 
+[ADR 0137](0137-one-cohesive-change-per-commit-in-main.md) changes who picks the result: maintainers
+choose it from the commits and change the selection to match. This ADR still decides how the
+selection drives the breaking-marker validation.
+
 ## Context and Problem Statement
 
 This repository supports two intended results for a pull request. A pull request can become one final
