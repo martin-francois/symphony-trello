@@ -185,8 +185,8 @@ final class WorkflowMigrationReporter {
     void settingsUpdateExplained(MigrationTarget target, CodexTimeoutSettingsMigration.Plan plan) {
         out.println("  " + target.heading());
         out.println("    " + settingChange(plan.change()));
-        out.println("    " + running() + " writes this value into new workflows, so a full Codex review fits"
-                + " inside one Codex turn. No other line in the workflow changes.");
+        out.println("    " + running() + " writes this value into new workflows, because the Codex review runs"
+                + " inside the Codex turn. No other line in the workflow changes.");
     }
 
     void settingsUpdateNeedsManualEdit(MigrationTarget target) {

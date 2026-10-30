@@ -1038,6 +1038,11 @@ that line, and it keeps a backup next to the workflow. Any other turn timeout yo
 is. It doesn't add review-loop settings, so a workflow without them keeps using the review-loop
 defaults of the version you run.
 
+The command only edits the value when it's on its own line, as setup writes it. If your workflow
+writes it another way, for example in flow style as `codex: {turn_timeout_ms: 3600000}`, the
+command prints `MANUAL` with the change to make and leaves the file as it is. Make that edit before
+you start the workers, or Symphony refuses to start a card while the review loop is on.
+
 A workflow that `migrate-workflows` doesn't check keeps its values, and so does one with another
 turn timeout. If the turn timeout of such a workflow isn't above the review timeout while the review
 loop is on, raise `codex.turn_timeout_ms`, lower `repository.codex_review_timeout_ms`, or set
