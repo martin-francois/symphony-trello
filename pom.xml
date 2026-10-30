@@ -53,6 +53,7 @@
     <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
     <maven.plugins.group-id>org.apache.maven.plugins</maven.plugins.group-id>
     <maven-pmd-plugin.version>3.28.0</maven-pmd-plugin.version>
+    <pmd.version>7.28.0</pmd.version>
     <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
     <pmd.failOnViolation>true</pmd.failOnViolation>
     <pmd.ruleset>config/pmd/ruleset.xml</pmd.ruleset>
@@ -442,6 +443,30 @@
             <ruleset>${pmd.ruleset}</ruleset>
           </rulesets>
         </configuration>
+        <!-- Run a newer PMD than the plugin bundles. Every module the plugin loads stays on
+             pmd.version so the language modules match pmd-core. -->
+        <dependencies>
+          <dependency>
+            <groupId>net.sourceforge.pmd</groupId>
+            <artifactId>pmd-core</artifactId>
+            <version>${pmd.version}</version>
+          </dependency>
+          <dependency>
+            <groupId>net.sourceforge.pmd</groupId>
+            <artifactId>pmd-java</artifactId>
+            <version>${pmd.version}</version>
+          </dependency>
+          <dependency>
+            <groupId>net.sourceforge.pmd</groupId>
+            <artifactId>pmd-javascript</artifactId>
+            <version>${pmd.version}</version>
+          </dependency>
+          <dependency>
+            <groupId>net.sourceforge.pmd</groupId>
+            <artifactId>pmd-jsp</artifactId>
+            <version>${pmd.version}</version>
+          </dependency>
+        </dependencies>
         <executions>
           <execution>
             <id>pmd-check</id>
