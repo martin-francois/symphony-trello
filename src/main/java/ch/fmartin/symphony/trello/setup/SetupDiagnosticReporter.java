@@ -57,6 +57,8 @@ import java.util.stream.Stream;
 
 final class SetupDiagnosticReporter {
     private static final String CONFIG_DIR_ENV = "SYMPHONY_TRELLO_CONFIG_DIR";
+    /// Index of the first argument after `card SUBCOMMAND`.
+    private static final int CARD_COMMAND_FIRST_ARGUMENT = 2;
     private static final DateTimeFormatter FILE_TIMESTAMP =
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneOffset.UTC);
     private static final Duration PROBE_TIMEOUT = Duration.ofSeconds(2);
@@ -2708,9 +2710,10 @@ final class SetupDiagnosticReporter {
             if (redactNext) {
                 sanitizedArgs.add("<redacted>");
                 redactNext = false;
-            } else if (cardCommand && index > 1 && !arg.startsWith("-")) {
-                // The only positional argument after `card SUBCOMMAND` is the CARD selector. Card URLs
-                // and ids are hashed below, but a bare short link has no shape to recognize.
+            } else if (cardCommand && index >= CARD_COMMAND_FIRST_ARGUMENT && !arg.startsWith("-")) {
+                // Every bare word after `card SUBCOMMAND` is redacted: the CARD selector and the values
+                // of options such as --board and --list. Card URLs and ids are hashed below, but a bare
+                // short link has no shape to recognize.
                 sanitizedArgs.add("<redacted>");
             } else {
                 Optional<String> redactedOption = redactedCommandValueOption(arg);
