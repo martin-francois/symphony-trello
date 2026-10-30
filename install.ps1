@@ -83,7 +83,8 @@ $CodexSkillName = "symphony-trello-board-cards"
 # and the optional skill must not stop the install.
 $CodexUserHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $WindowsUserProfile ".codex" }
 $CodexSkillDir = [System.IO.Path]::Combine($CodexUserHome, "skills", $CodexSkillName)
-$CodexSkillMarker = ".symphony-trello-install"
+$CodexSkillMarker = [System.IO.Path]::Combine($CodexSkillDir, ".symphony-trello-install")
+$CodexSkillFile = [System.IO.Path]::Combine($CodexSkillDir, "SKILL.md")
 $InstallerCompletionWasSet = Test-Path -LiteralPath "Env:$InstallerCompletionEnvironmentName"
 $InstallerCompletionPreviousValue = [Environment]::GetEnvironmentVariable($InstallerCompletionEnvironmentName, "Process")
 $ReleaseBaseUrl = if ($env:SYMPHONY_TRELLO_RELEASE_BASE_URL) {
@@ -932,8 +933,8 @@ function Test-CodexSkillOwnedByUser {
   if ($existing.LinkType) {
     return $true
   }
-  $marker = Get-Item -LiteralPath ([System.IO.Path]::Combine($CodexSkillDir, $CodexSkillMarker)) -Force -ErrorAction SilentlyContinue
-  $skill = Get-Item -LiteralPath ([System.IO.Path]::Combine($CodexSkillDir, "SKILL.md")) -Force -ErrorAction SilentlyContinue
+  $marker = Get-Item -LiteralPath $CodexSkillMarker -Force -ErrorAction SilentlyContinue
+  $skill = Get-Item -LiteralPath $CodexSkillFile -Force -ErrorAction SilentlyContinue
   return (-not $marker) -or $marker.PSIsContainer -or [bool]$marker.LinkType -or ($skill -and [bool]$skill.LinkType)
 }
 
@@ -952,10 +953,9 @@ function Install-CodexSkill {
   # The skill only helps agents; a Codex directory the installer cannot write must not fail the
   # install. The marker goes first, so a half-written directory still counts as the installer's own.
   try {
-    $marker = [System.IO.Path]::Combine($CodexSkillDir, $CodexSkillMarker)
     New-Item -ItemType Directory -Force -Path $CodexSkillDir -ErrorAction Stop | Out-Null
-    Set-Content -Encoding UTF8 -LiteralPath $marker -Value "symphony-trello installer-managed Codex skill" -ErrorAction Stop
-    Copy-Item -LiteralPath $source -Destination ([System.IO.Path]::Combine($CodexSkillDir, "SKILL.md")) -Force -ErrorAction Stop
+    Set-Content -Encoding UTF8 -LiteralPath $CodexSkillMarker -Value "symphony-trello installer-managed Codex skill" -ErrorAction Stop
+    Copy-Item -LiteralPath $source -Destination $CodexSkillFile -Force -ErrorAction Stop
   } catch {
     Write-Status "SKIP" "  Codex skill: could not write $CodexSkillDir"
     return
