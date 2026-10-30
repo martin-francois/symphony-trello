@@ -130,29 +130,7 @@ jobs:
           .\uninstall.ps1 --dry-run --yes
       - name: PowerShell static analysis
         shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
-            Install-Module PSScriptAnalyzer -Scope CurrentUser -Force -Repository PSGallery
-          }
-          $ignoredRules = @(
-            "PSAvoidUsingInvokeExpression",
-            "PSAvoidUsingWriteHost",
-            "PSReviewUnusedParameter",
-            "PSUseApprovedVerbs",
-            "PSUseShouldProcessForStateChangingFunctions",
-            "PSUseSingularNouns"
-          )
-          $results = @(
-            foreach ($script in @("install.ps1", "uninstall.ps1")) {
-              Invoke-ScriptAnalyzer -Path $script -Severity Warning,Error
-            }
-          )
-          $results = @($results | Where-Object { $ignoredRules -notcontains $_.RuleName })
-          if ($results.Count -gt 0) {
-            $results | Format-Table -AutoSize | Out-String | Write-Host
-            exit 1
-          }
+        run: ./scripts/check-powershell-scripts.ps1
       - name: PowerShell installer option tests
         if: ${{ env.ISOLATE_OPENREWRITE != 'true' }}
         run: .\mvnw.cmd -q '-Djunit.parallel.enabled=false' '-Dtest=InstallerScriptTest#*powershell*+*powerShell*,InstallerProgressOutputTest#powershell*' test
