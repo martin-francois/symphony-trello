@@ -1033,10 +1033,10 @@ leaves no time for a full review. Symphony now refuses to start a card while
 You don't have to edit anything for workflows that setup created. The installer runs
 `migrate-workflows` after the update, also without a terminal. In every workflow the command checks,
 it changes `turn_timeout_ms: 3600000` to `turn_timeout_ms: 10800000`, so this also applies to a
-connected workflow you wrote yourself with that exact value. When the `repository` section has no
-review-loop settings yet, it adds `codex_review_max_rounds: 1` and
-`codex_review_timeout_ms: 3600000`. It doesn't ask first, it changes only those lines, and it keeps
-a backup next to the workflow. Any other turn timeout you set stays as it is.
+connected workflow you wrote yourself with that exact value. It doesn't ask first, it changes only
+that line, and it keeps a backup next to the workflow. Any other turn timeout you set stays as it
+is. It doesn't add review-loop settings, so a workflow without them keeps using the review-loop
+defaults of the version you run.
 
 A workflow that `migrate-workflows` doesn't check keeps its values, and so does one with another
 turn timeout. If the turn timeout of such a workflow isn't above the review timeout while the review

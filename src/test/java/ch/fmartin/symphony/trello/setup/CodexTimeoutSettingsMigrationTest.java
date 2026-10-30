@@ -2,18 +2,13 @@ package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.setup.CodexTimeoutSettingsMigration.RELEASED_GENERATED_TURN_TIMEOUT_MS;
 import static ch.fmartin.symphony.trello.setup.CodexTimeoutSettingsMigration.TARGET_TURN_TIMEOUT_MS;
-import static ch.fmartin.symphony.trello.setup.WorkflowMigrationFixture.GENERATED_REVIEW_SETTINGS;
 import static ch.fmartin.symphony.trello.setup.WorkflowMigrationFixture.turnTimeoutLine;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.InstanceOfAssertFactories.list;
-import static org.assertj.core.groups.Tuple.tuple;
 
-import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.setup.CodexTimeoutSettingsMigration.Change;
 import ch.fmartin.symphony.trello.setup.CodexTimeoutSettingsMigration.Plan;
 import java.nio.file.Path;
 import java.util.Optional;
-import java.util.OptionalInt;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -24,9 +19,6 @@ final class CodexTimeoutSettingsMigrationTest {
     private static final String OLD_TURN_TIMEOUT_LINE = turnTimeoutLine(RELEASED_GENERATED_TURN_TIMEOUT_MS);
     private static final String NEW_TURN_TIMEOUT_LINE = turnTimeoutLine(TARGET_TURN_TIMEOUT_MS);
     private static final String REPOSITORY_LINES = "  default_url: null\n  default_path: null\n";
-    private static final String REVIEW_DEFAULT_LINES = GENERATED_REVIEW_SETTINGS;
-    private static final String REVIEW_TIMEOUT_LINE =
-            "  codex_review_timeout_ms: " + ConfigDefaults.DEFAULT_CODEX_REVIEW_TIMEOUT_MS + "\n";
 
     /// The front matter layout that setup wrote in the 1.x releases, before the review-loop settings
     /// and the three-hour turn timeout existed.
@@ -68,7 +60,7 @@ final class CodexTimeoutSettingsMigrationTest {
             """;
 
     @Test
-    void updatesAReleasedGeneratedWorkflowToTheCurrentTimeoutSettings() {
+    void raisesOnlyTheTurnTimeoutOfAReleasedGeneratedWorkflow() {
         // given
         String released = releasedWorkflow(REPOSITORY_LINES, OLD_TURN_TIMEOUT_LINE);
 
@@ -79,30 +71,18 @@ final class CodexTimeoutSettingsMigrationTest {
         assertThat(plan)
                 .get()
                 .satisfies(update -> assertThat(update.updatedContent())
-                        .hasValue(releasedWorkflow(REPOSITORY_LINES + REVIEW_DEFAULT_LINES, NEW_TURN_TIMEOUT_LINE)))
-                .extracting(Plan::changes)
-                .asInstanceOf(list(Change.class))
+                        .hasValue(releasedWorkflow(REPOSITORY_LINES, NEW_TURN_TIMEOUT_LINE)))
+                .extracting(Plan::change)
                 .extracting(Change::path, Change::from, Change::to)
-                .containsExactly(
-                        tuple(
-                                "codex.turn_timeout_ms",
-                                OptionalInt.of(RELEASED_GENERATED_TURN_TIMEOUT_MS),
-                                TARGET_TURN_TIMEOUT_MS),
-                        tuple(
-                                "repository.codex_review_max_rounds",
-                                OptionalInt.empty(),
-                                ConfigDefaults.DEFAULT_CODEX_REVIEW_MAX_ROUNDS),
-                        tuple(
-                                "repository.codex_review_timeout_ms",
-                                OptionalInt.empty(),
-                                Math.toIntExact(ConfigDefaults.DEFAULT_CODEX_REVIEW_TIMEOUT_MS)));
+                .containsExactly("codex.turn_timeout_ms", RELEASED_GENERATED_TURN_TIMEOUT_MS, TARGET_TURN_TIMEOUT_MS);
     }
 
     @Test
     void keepsCommentsSpacingAndCrlfLineBreaksOnEveryOtherLine() {
         // given
+        String repositoryLines = "  default_url: null # set by setup\n  default_path: null\n\n  # keep this comment\n";
         String released = releasedWorkflow(
-                        "  default_url: null # set by setup\n  default_path: null\n\n  # keep this comment\n",
+                        repositoryLines,
                         "  turn_timeout_ms:   " + RELEASED_GENERATED_TURN_TIMEOUT_MS + "   # one hour\n")
                 .replace("\n", "\r\n");
 
@@ -114,9 +94,7 @@ final class CodexTimeoutSettingsMigrationTest {
                 .get()
                 .extracting(Plan::updatedContent)
                 .isEqualTo(Optional.of(releasedWorkflow(
-                                "  default_url: null # set by setup\n  default_path: null\n" + REVIEW_DEFAULT_LINES
-                                        + "\n  # keep this comment\n",
-                                "  turn_timeout_ms:   " + TARGET_TURN_TIMEOUT_MS + "   # one hour\n")
+                                repositoryLines, "  turn_timeout_ms:   " + TARGET_TURN_TIMEOUT_MS + "   # one hour\n")
                         .replace("\n", "\r\n")));
     }
 
@@ -124,8 +102,7 @@ final class CodexTimeoutSettingsMigrationTest {
     @ValueSource(strings = {"5400000", "1800000", "\"3600000\"", "36000000"})
     void keepsEveryOtherExplicitTurnTimeout(String configuredTurnTimeout) {
         // given
-        String workflow = releasedWorkflow(
-                REPOSITORY_LINES + REVIEW_DEFAULT_LINES, "  turn_timeout_ms: " + configuredTurnTimeout + "\n");
+        String workflow = releasedWorkflow(REPOSITORY_LINES, "  turn_timeout_ms: " + configuredTurnTimeout + "\n");
 
         // when
         Optional<Plan> plan = CodexTimeoutSettingsMigration.plan(WORKFLOW, workflow);
@@ -135,9 +112,10 @@ final class CodexTimeoutSettingsMigrationTest {
     }
 
     @Test
-    void addsOnlyTheMissingReviewSettingAndKeepsAConfiguredOne() {
+    void leavesConfiguredReviewSettingsAsTheyAre() {
         // given
-        String workflow = releasedWorkflow(REPOSITORY_LINES + "  codex_review_max_rounds: 0\n", NEW_TURN_TIMEOUT_LINE);
+        String repositoryLines = REPOSITORY_LINES + "  codex_review_max_rounds: 0\n";
+        String workflow = releasedWorkflow(repositoryLines, OLD_TURN_TIMEOUT_LINE);
 
         // when
         Optional<Plan> plan = CodexTimeoutSettingsMigration.plan(WORKFLOW, workflow);
@@ -146,15 +124,13 @@ final class CodexTimeoutSettingsMigrationTest {
         assertThat(plan)
                 .get()
                 .extracting(Plan::updatedContent)
-                .isEqualTo(Optional.of(releasedWorkflow(
-                        REPOSITORY_LINES + "  codex_review_max_rounds: 0\n" + REVIEW_TIMEOUT_LINE,
-                        NEW_TURN_TIMEOUT_LINE)));
+                .isEqualTo(Optional.of(releasedWorkflow(repositoryLines, NEW_TURN_TIMEOUT_LINE)));
     }
 
     @Test
-    void leavesAWorkflowWithTheCurrentSettingsUnchanged() {
+    void leavesAWorkflowWithTheCurrentTurnTimeoutUnchanged() {
         // given
-        String current = releasedWorkflow(REPOSITORY_LINES + REVIEW_DEFAULT_LINES, NEW_TURN_TIMEOUT_LINE);
+        String current = releasedWorkflow(REPOSITORY_LINES, NEW_TURN_TIMEOUT_LINE);
 
         // when
         Optional<Plan> plan = CodexTimeoutSettingsMigration.plan(WORKFLOW, current);
@@ -164,7 +140,7 @@ final class CodexTimeoutSettingsMigrationTest {
     }
 
     @Test
-    void leavesTheReviewSettingsAbsentWhenTheWorkflowHasNoRepositorySection() {
+    void updatesAWorkflowWithoutARepositorySection() {
         // given
         String workflow = "---\ncodex:\n  command: codex app-server\n" + OLD_TURN_TIMEOUT_LINE + "---\n" + BODY;
 
@@ -194,13 +170,9 @@ final class CodexTimeoutSettingsMigrationTest {
         assertThat(plan)
                 .get()
                 .satisfies(manual -> assertThat(manual.updatedContent()).isEmpty())
-                .extracting(Plan::changes)
-                .asInstanceOf(list(Change.class))
+                .extracting(Plan::change)
                 .extracting(Change::path)
-                .containsExactly(
-                        "codex.turn_timeout_ms",
-                        "repository.codex_review_max_rounds",
-                        "repository.codex_review_timeout_ms");
+                .isEqualTo("codex.turn_timeout_ms");
     }
 
     @Test

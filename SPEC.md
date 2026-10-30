@@ -4222,9 +4222,10 @@ that a second formatting pass leaves the source unchanged.
   limits, major-downgrade rejection, provenance recording by setup, and both installer integrations.
   If the timeout settings update (Section 19.4.2) is implemented, deterministic tests cover the
   front matter that 1.x setup wrote before and after the update, comment, spacing, and CRLF
-  preservation, every other explicit turn timeout left unchanged, a missing repository section, a
-  value that is not on its own line, unattended and interactive runs, dry-run, and a body
-  replacement in the same run.
+  preservation, every other explicit turn timeout left unchanged, review-loop settings neither added
+  nor changed, a missing repository section, a value that is not on its own line, a failed write,
+  `--mark-migrated`, unattended and interactive runs, dry-run, and a body replacement in the same
+  run.
   Installer process tests cover unreadable installed versions, tracked and untracked build inputs,
   ignored configuration, retained non-input files, app-directory builds, failed help probes, and
   rejected migrations before restart. They also cover BOM-prefixed root POMs, clean and modified
@@ -5118,20 +5119,21 @@ Settings update:
 - When `codex.turn_timeout_ms` is the integer `3600000`, the command MUST change it to the current
   default `10800000`. Every other value, including the same number written as a string, MUST stay
   unchanged.
-- When the `repository` section exists and lacks `codex_review_max_rounds` or
-  `codex_review_timeout_ms`, the command MUST add the missing keys with their Section 19.7 defaults.
-- The command MUST change only the affected lines: it replaces the old number on its own line and
-  inserts missing keys after the last setting line of the `repository` section, with that section's
-  indentation and line break. Comments, quoting, spacing, other lines, and the body MUST stay byte
-  for byte. The edited front matter MUST parse to the original settings plus exactly the planned
-  changes. When a change has no line that can be edited this way, for example in flow-style YAML,
-  the command MUST NOT write the workflow and MUST tell the operator which values to change by hand.
+- The command MUST NOT add, change, or remove any review-loop setting. A workflow without
+  `codex_review_max_rounds` or `codex_review_timeout_ms` keeps following the Section 19.7 defaults of
+  the running version, so a later change to those defaults reaches it too.
+- The command MUST change only the affected line: it replaces the old number on its own line and
+  keeps the spacing, any trailing comment, and the line break. Comments, quoting, spacing, other
+  lines, and the body MUST stay byte for byte. The edited front matter MUST parse to the original
+  settings with exactly that value changed. When the value is not on a line that can be edited this
+  way, for example in flow-style YAML, the command MUST NOT write the workflow and MUST tell the
+  operator which value to change by hand.
 - The update MUST NOT ask for confirmation, and it MUST also run with `--non-interactive`, so an
   unattended installer update leaves the workflow ready to dispatch. `--dry-run` MUST report the
   planned changes without writing any file.
 - Before writing, the command MUST create the same backup as a Section 19.4.1 migration and MUST
   check the result the same way, except that the body MUST stay unchanged instead of the metadata.
-  It MUST print every planned change, the backup path, and how to restore it. A failed write MUST be
+  It MUST print the planned change, the backup path, and how to restore it. A failed write MUST be
   reported like a failed body migration, and the command MUST NOT migrate the body of that workflow
   in the same run.
 

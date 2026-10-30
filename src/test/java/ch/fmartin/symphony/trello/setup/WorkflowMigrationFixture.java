@@ -26,7 +26,7 @@ final class WorkflowMigrationFixture {
     static final Instant NOW = Instant.parse("2026-10-04T08:15:30Z");
     static final String BACKUP_SUFFIX = WorkflowBodyWriter.BACKUP_INFIX + "20261004T081530Z";
     /// The review-loop lines that setup writes into the `repository` section and 1.x setup did not.
-    static final String GENERATED_REVIEW_SETTINGS = "  " + CodexReviewConfig.MAX_ROUNDS_KEY + ": "
+    private static final String GENERATED_REVIEW_SETTINGS = "  " + CodexReviewConfig.MAX_ROUNDS_KEY + ": "
             + ConfigDefaults.DEFAULT_CODEX_REVIEW_MAX_ROUNDS + "\n  " + CodexReviewConfig.TIMEOUT_MS_KEY + ": "
             + ConfigDefaults.DEFAULT_CODEX_REVIEW_TIMEOUT_MS + "\n";
     static final GeneratedWorkflowBodyInputs GITHUB_INPUTS = new GeneratedWorkflowBodyInputs(
@@ -94,6 +94,13 @@ final class WorkflowMigrationFixture {
                 .replace(
                         currentTurnTimeout,
                         turnTimeoutLine(CodexTimeoutSettingsMigration.RELEASED_GENERATED_TURN_TIMEOUT_MS));
+    }
+
+    /// `releasedFile` after the Codex timeout settings update: only the turn timeout line changes.
+    static String withUpdatedTurnTimeout(String releasedFile) {
+        return releasedFile.replace(
+                turnTimeoutLine(CodexTimeoutSettingsMigration.RELEASED_GENERATED_TURN_TIMEOUT_MS),
+                turnTimeoutLine(CodexTimeoutSettingsMigration.TARGET_TURN_TIMEOUT_MS));
     }
 
     /// The `codex.turn_timeout_ms` line as setup writes it, with the value `turnTimeoutMs`.

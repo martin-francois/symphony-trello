@@ -41,6 +41,9 @@ update. How do existing workflows reach the new values?
   of a turn that times out in the middle of a review.
 * 2.0.0 already ships breaking changes, so it is the release to move these defaults.
 * The migration must not touch values that an operator chose.
+* The migration must not pin existing workflows to today's review-loop defaults. The planned
+  redesign changes those defaults, and a workflow without explicit review settings should get the
+  new ones.
 
 ## Considered Options
 
@@ -89,14 +92,15 @@ a check that the total review budget is below the turn timeout.
 
 * It changes `codex.turn_timeout_ms` from the integer `3600000` to `10800000`. That number is the
   value every 1.x setup wrote. Any other value, including `"3600000"` as a string, stays.
-* It adds `repository.codex_review_max_rounds: 1` and `repository.codex_review_timeout_ms: 3600000`
-  when the `repository` section exists and lacks them. Freshly generated workflows have both, so
-  the update leaves an old generated workflow in the same state.
-* It edits only those lines. It replaces the number on its own line and inserts missing keys after
-  the last setting line of the `repository` section. Comments, quoting, spacing, the order of other
-  lines, and the body stay byte for byte. The edited front matter must parse to the original
-  settings plus exactly the planned changes. When that is not possible, for example in flow-style
-  YAML, nothing is written and the output names the values to change by hand.
+* It adds no review-loop settings. A 1.x workflow has none, so it keeps using the review-loop
+  defaults of whichever version runs it. Writing today's values (`codex_review_max_rounds: 1`,
+  `codex_review_timeout_ms: 3600000`) would pin every existing board to them and hide the new
+  defaults of the planned review-loop redesign (three rounds with a two-hour total budget).
+* It edits only that line. It replaces the number on its own line and keeps its spacing, trailing
+  comment, and line break. Comments, quoting, spacing, every other line, and the body stay byte for
+  byte. The edited front matter must parse to the original settings with exactly that value
+  changed. When that is not possible, for example in flow-style YAML, nothing is written and the
+  output names the value to change by hand.
 * It runs without confirmation, and also with `--non-interactive`, which installers pass when there
   is no terminal. Otherwise an unattended update would leave boards that fail to dispatch.
 * It writes the same timestamped backup as a body migration and checks the written file the same
@@ -111,8 +115,7 @@ value would also fail the check, so raising it is the fix it needs anyway.
 
 [ADR 0095](0095-generated-workflow-body-migration.md) keeps metadata unchanged and asks before it
 replaces a body. That rule protects the body text that users edit. This step only changes a number
-that Symphony itself wrote and adds two settings that equal the runtime defaults, so it needs no
-question. Unattended body migrations still only report.
+that Symphony itself wrote, so it needs no question. Unattended body migrations still only report.
 
 ### Removal
 
@@ -125,8 +128,8 @@ hand-written values.
 ### Consequences
 
 * Good, because a full review run and the in-session fallback fit inside the default turn.
-* Good, because boards set up with 1.x get the new values on the installer's update, also when the
-  update runs without a terminal.
+* Good, because boards set up with 1.x get the new turn timeout on the installer's update, also
+  when the update runs without a terminal.
 * Good, because a review limit that cannot fit fails before dispatch with a message that names the
   fix, instead of a turn timeout in the middle of a review.
 * Good, because every operator-chosen value other than exactly `3600000` stays unchanged.
@@ -145,10 +148,12 @@ hand-written values.
   below the turn or a loop that is off.
 * `WorkflowConfigEditorTest` checks that setup shows the message before a worker starts.
 * `CodexTimeoutSettingsMigrationTest` checks the update of the 1.x generated front matter, kept
-  comments, spacing, and CRLF line breaks, unchanged explicit values, a missing `repository`
-  section, a value in flow-style YAML, and unreadable front matter.
-* `WorkflowBodyMigrationTest` checks the update in interactive and unattended runs, the dry run, a
-  workflow that already has the current values, and a body migration in the same run.
+  comments, spacing, and CRLF line breaks, unchanged explicit values, review-loop settings that are
+  neither added nor changed, a missing `repository` section, a value in flow-style YAML, and
+  unreadable front matter.
+* `WorkflowBodyMigrationTest` checks the update in interactive and unattended runs, the dry run, an
+  updated workflow without review settings that stays unchanged, the manual-edit output, a failed
+  write, `--mark-migrated`, and a body migration in the same run.
 * `TrelloBoardSetupTest` and `WorkflowConfigPromptTest` check that generated workflows and
   `WORKFLOW.example.md` use the default turn timeout, which is above the review timeout.
 * `SPEC.md` Sections 5.3.6, 6.3, 19.4.2, and 19.7 hold the contract.
@@ -159,7 +164,7 @@ hand-written values.
 
 The turn timeout default goes to three hours, dispatch validation rejects a review timeout that is
 not below the turn timeout while the loop is on, and `migrate-workflows` changes the exact old
-generated value and adds the missing review settings by editing those lines.
+generated value by editing that one line.
 
 * Good, because updated boards keep working without a manual edit.
 * Good, because the check catches hand-written values that cannot work.

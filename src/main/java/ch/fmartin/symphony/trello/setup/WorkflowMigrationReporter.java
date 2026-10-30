@@ -184,13 +184,13 @@ final class WorkflowMigrationReporter {
 
     void settingsUpdateExplained(MigrationTarget target, CodexTimeoutSettingsMigration.Plan plan) {
         out.println("  " + target.heading());
-        plan.changes().forEach(change -> out.println("    " + settingChange(change)));
-        out.println("    " + running() + " writes these values into new workflows, so a full Codex review run fits"
+        out.println("    " + settingChange(plan.change()));
+        out.println("    " + running() + " writes this value into new workflows, so a full Codex review fits"
                 + " inside one Codex turn. No other line in the workflow changes.");
     }
 
     void settingsUpdateNeedsManualEdit(MigrationTarget target) {
-        out.println("  MANUAL  Symphony cannot change these lines without touching others. Make the changes"
+        out.println("  MANUAL  Symphony cannot change this line without touching others. Make the change"
                 + " above by hand in:");
         out.println("          " + target.workflowPath());
     }
@@ -281,9 +281,7 @@ final class WorkflowMigrationReporter {
     }
 
     private static String settingChange(CodexTimeoutSettingsMigration.Change change) {
-        return change.from().isPresent()
-                ? "Changes " + change.path() + " from " + change.from().getAsInt() + " to " + change.to() + "."
-                : "Adds " + change.path() + ": " + change.to() + ", the value Symphony uses when it is missing.";
+        return "Changes " + change.path() + " from " + change.from() + " to " + change.to() + ".";
     }
 
     /// `count` followed by the singular or plural noun, such as `1 workflow` or `2 workflows`.

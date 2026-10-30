@@ -10,6 +10,7 @@ import static ch.fmartin.symphony.trello.setup.WorkflowMigrationFixture.backupOf
 import static ch.fmartin.symphony.trello.setup.WorkflowMigrationFixture.otherVersionBody;
 import static ch.fmartin.symphony.trello.setup.WorkflowMigrationFixture.releasedWorkflowFile;
 import static ch.fmartin.symphony.trello.setup.WorkflowMigrationFixture.targetBody;
+import static ch.fmartin.symphony.trello.setup.WorkflowMigrationFixture.withUpdatedTurnTimeout;
 import static ch.fmartin.symphony.trello.setup.WorkflowMigrationFixture.workflowFile;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.abort;
@@ -105,13 +106,11 @@ final class WorkflowBodyMigrationTest {
                         "Workflow setting updates",
                         "\"Released Board\" (" + workflow + ")",
                         "Changes codex.turn_timeout_ms from 3600000 to 10800000.",
-                        "Adds repository.codex_review_max_rounds: 1, the value Symphony uses when it is missing.",
-                        "Adds repository.codex_review_timeout_ms: 3600000, the value Symphony uses when it is missing.",
                         "No other line in the workflow changes.",
                         "OK  Updated the settings in " + workflow,
                         "Backup: " + backupOf(workflow))
-                .doesNotContain("[y/N]");
-        assertThat(workflow).hasContent(workflowFile(GITHUB_INPUTS, body));
+                .doesNotContain("[y/N]", "codex_review_max_rounds", "codex_review_timeout_ms");
+        assertThat(workflow).hasContent(withUpdatedTurnTimeout(released));
         assertThat(backupOf(workflow)).hasContent(released);
     }
 
@@ -149,7 +148,8 @@ final class WorkflowBodyMigrationTest {
         assertThat(run.exitCode()).as(run.output()).isZero();
         assertThat(run.output())
                 .containsSubsequence("OK  Updated the settings in " + workflow, "OK  Migrated " + workflow);
-        assertThat(workflow).hasContent(workflowFile(GITHUB_INPUTS, targetBody(GITHUB_INPUTS)));
+        assertThat(workflow)
+                .hasContent(withUpdatedTurnTimeout(releasedWorkflowFile(GITHUB_INPUTS, targetBody(GITHUB_INPUTS))));
         assertThat(backupOf(workflow)).hasContent(released);
     }
 
@@ -169,7 +169,7 @@ final class WorkflowBodyMigrationTest {
         assertThat(run.output())
                 .containsSubsequence(
                         "Changes codex.turn_timeout_ms from 3600000 to 10800000.",
-                        "MANUAL  Symphony cannot change these lines without touching others. Make the changes"
+                        "MANUAL  Symphony cannot change this line without touching others. Make the change"
                                 + " above by hand in:",
                         "          " + workflow)
                 .doesNotContain("OK  Updated the settings in");
@@ -223,9 +223,9 @@ final class WorkflowBodyMigrationTest {
     }
 
     @Test
-    void leavesAWorkflowWithTheCurrentTimeoutSettingsAlone() throws Exception {
+    void leavesAnUpdatedWorkflowWithoutReviewSettingsAlone() throws Exception {
         // given
-        String current = workflowFile(GITHUB_INPUTS, HAND_WRITTEN_BODY);
+        String current = withUpdatedTurnTimeout(releasedWorkflowFile(GITHUB_INPUTS, HAND_WRITTEN_BODY));
         Path workflow = fixture.connectedWorkflow("Current Settings Board", GITHUB_INPUTS, current);
 
         // when

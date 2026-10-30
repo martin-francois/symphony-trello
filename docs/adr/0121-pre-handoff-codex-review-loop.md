@@ -136,10 +136,11 @@ whose sync changed the candidate.
 A workflow that omits the fields uses the defaults, so existing boards start running one review
 round per repository-changing card after the update. That is the intended effect of the decision.
 Operators who want the old behavior set `codex_review_max_rounds: 0`. Workflow body migration from
-[ADR 0095](0095-generated-workflow-body-migration.md) only changes the body. The temporary settings
-update from [ADR 0136](0136-raise-the-codex-turn-timeout-and-migrate-generated-workflows.md) adds
-the two fields to existing front matter that has a `repository` section and raises the old
-one-hour turn timeout.
+[ADR 0095](0095-generated-workflow-body-migration.md) only changes the body, so it does not add the
+two fields to existing front matter. The temporary settings update from
+[ADR 0136](0136-raise-the-codex-turn-timeout-and-migrate-generated-workflows.md) only raises the old
+one-hour turn timeout and does not add them either, so migrated workflows keep following the
+defaults.
 
 Setup gets no new command-line option or question. Editing one front-matter value changes the
 loop. A setup option would add another prompt or flag to `setup-local`, `new-board`, and

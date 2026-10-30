@@ -12,19 +12,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.jspecify.annotations.NullMarked;
 
-/// Temporary front matter migration that brings workflows written before Symphony 2.0.0 to the
-/// Codex timeout settings that setup writes now (ADR 0136). It raises `codex.turn_timeout_ms` from
-/// the old generated default to the current default, so one review run fits inside a turn, and
-/// writes the review-loop settings that setup now writes when they are missing.
+/// Temporary front matter migration that raises `codex.turn_timeout_ms` in workflows written before
+/// Symphony 2.0.0 from the old generated default to the current default, so a full Codex review fits
+/// inside a turn (ADR 0136). It adds no review-loop settings, so a migrated workflow keeps following
+/// the review-loop defaults of the running version.
 ///
-/// The change is a text edit of the affected lines, so comments, quoting, and the order of every
-/// other line stay as they are. A planned edit counts only when the edited front matter parses to
-/// the original settings plus exactly the planned changes.
+/// The change is a text edit of the one affected line, so comments, quoting, and every other line
+/// stay as they are. A planned edit counts only when the edited front matter parses to the original
+/// settings with exactly that value changed.
 ///
 /// Remove this class as tracked in GitHub issue #1150, together with the settings-update step in
 /// [WorkflowBodyMigration], the settings-update output in [WorkflowMigrationReporter], and
@@ -40,6 +39,11 @@ final class CodexTimeoutSettingsMigration {
     private static final Pattern TOP_LEVEL_KEY = Pattern.compile("([A-Za-z_][A-Za-z0-9_-]*):[ \\t]*(?:#.*)?");
     private static final Pattern LEADING_SPACES = Pattern.compile("^( +)\\S");
     private static final String COMMENT_START = "#";
+    private static final Change TURN_TIMEOUT_CHANGE = new Change(
+            EffectiveConfig.CodexConfig.SECTION_KEY,
+            EffectiveConfig.CodexConfig.TURN_TIMEOUT_MS_KEY,
+            RELEASED_GENERATED_TURN_TIMEOUT_MS,
+            TARGET_TURN_TIMEOUT_MS);
 
     private CodexTimeoutSettingsMigration() {}
 
@@ -50,50 +54,23 @@ final class CodexTimeoutSettingsMigration {
     }
 
     private static Optional<Plan> plan(Path workflowPath, WorkflowFileText text) {
-        return settings(workflowPath, text.content())
-                .map(CodexTimeoutSettingsMigration::changes)
-                .filter(changes -> !changes.isEmpty())
-                .map(changes -> new Plan(text, changes, verifiedEdit(workflowPath, text, changes)));
+        boolean needsUpdate = settings(workflowPath, text.content())
+                .filter(CodexTimeoutSettingsMigration::hasReleasedGeneratedTurnTimeout)
+                .isPresent();
+        return needsUpdate
+                ? Optional.of(new Plan(text, TURN_TIMEOUT_CHANGE, verifiedEdit(workflowPath, text)))
+                : Optional.empty();
     }
 
-    private static Optional<String> verifiedEdit(Path workflowPath, WorkflowFileText text, List<Change> changes) {
-        return edit(text, changes).filter(candidate -> parsesTo(workflowPath, candidate, text.content(), changes));
-    }
-
-    private static List<Change> changes(Map<String, Object> settings) {
-        List<Change> changes = new ArrayList<>();
-        if (section(settings, EffectiveConfig.CodexConfig.SECTION_KEY)
-                .map(codex -> codex.get(EffectiveConfig.CodexConfig.TURN_TIMEOUT_MS_KEY))
+    private static boolean hasReleasedGeneratedTurnTimeout(Map<String, Object> settings) {
+        return section(settings, TURN_TIMEOUT_CHANGE.section())
+                .map(codex -> codex.get(TURN_TIMEOUT_CHANGE.key()))
                 .filter(Integer.valueOf(RELEASED_GENERATED_TURN_TIMEOUT_MS)::equals)
-                .isPresent()) {
-            changes.add(new Change(
-                    EffectiveConfig.CodexConfig.SECTION_KEY,
-                    EffectiveConfig.CodexConfig.TURN_TIMEOUT_MS_KEY,
-                    OptionalInt.of(RELEASED_GENERATED_TURN_TIMEOUT_MS),
-                    TARGET_TURN_TIMEOUT_MS));
-        }
-        section(settings, EffectiveConfig.RepositoryConfig.SECTION_KEY)
-                .ifPresent(repository -> addMissingReviewSettings(changes, repository));
-        return List.copyOf(changes);
+                .isPresent();
     }
 
-    private static void addMissingReviewSettings(List<Change> changes, Map<String, Object> repository) {
-        addIfMissing(
-                changes,
-                repository,
-                EffectiveConfig.CodexReviewConfig.MAX_ROUNDS_KEY,
-                ConfigDefaults.DEFAULT_CODEX_REVIEW_MAX_ROUNDS);
-        addIfMissing(
-                changes,
-                repository,
-                EffectiveConfig.CodexReviewConfig.TIMEOUT_MS_KEY,
-                Math.toIntExact(ConfigDefaults.DEFAULT_CODEX_REVIEW_TIMEOUT_MS));
-    }
-
-    private static void addIfMissing(List<Change> changes, Map<String, Object> repository, String key, int value) {
-        if (!repository.containsKey(key)) {
-            changes.add(new Change(EffectiveConfig.RepositoryConfig.SECTION_KEY, key, OptionalInt.empty(), value));
-        }
+    private static Optional<String> verifiedEdit(Path workflowPath, WorkflowFileText text) {
+        return edit(text).filter(candidate -> parsesTo(workflowPath, candidate, text.content()));
     }
 
     // The runtime loader reads YAML maps with String keys, so a nested map has String keys too.
@@ -115,31 +92,20 @@ final class CodexTimeoutSettingsMigration {
         }
     }
 
-    /// Applies every change as a line edit, or returns empty when a change has no line it can edit,
-    /// for example in a flow-style or quoted value.
-    private static Optional<String> edit(WorkflowFileText text, List<Change> changes) {
+    /// Replaces the old value on its own line, or returns empty when there is no such line, for
+    /// example in a flow-style or quoted value.
+    private static Optional<String> edit(WorkflowFileText text) {
         List<String> lines = splitKeepingLineBreaks(text.metadata());
-        for (Change change : changes) {
-            if (!apply(lines, change)) {
-                return Optional.empty();
-            }
-        }
-        return Optional.of(String.join("", lines) + text.body());
+        return Block.find(lines, TURN_TIMEOUT_CHANGE.section())
+                .flatMap(block -> replaceValue(lines, block, TURN_TIMEOUT_CHANGE))
+                .map(metadata -> metadata + text.body());
     }
 
-    private static boolean apply(List<String> lines, Change change) {
-        return Block.find(lines, change.section())
-                .map(block -> applyInBlock(lines, block, change))
-                .orElse(false);
-    }
-
-    private static boolean applyInBlock(List<String> lines, Block block, Change change) {
-        return change.from().isPresent() ? replaceValue(lines, block, change) : insertLine(lines, block, change);
-    }
-
-    private static boolean replaceValue(List<String> lines, Block block, Change change) {
+    /// The metadata with the value of `change` replaced, or empty unless exactly one line of the
+    /// block holds the old value.
+    private static Optional<String> replaceValue(List<String> lines, Block block, Change change) {
         Pattern settingLine = Pattern.compile(Pattern.quote(block.childIndent() + change.key() + ":") + "([ \\t]+)"
-                + change.from().orElseThrow() + "([ \\t]*(?:#.*)?)");
+                + change.from() + "([ \\t]*(?:#.*)?)");
         List<LineMatch> matches = new ArrayList<>();
         for (int index = block.firstChild(); index < block.end(); index++) {
             Matcher matcher = settingLine.matcher(withoutLineBreak(lines.get(index)));
@@ -148,41 +114,31 @@ final class CodexTimeoutSettingsMigration {
             }
         }
         if (matches.size() != 1) {
-            return false;
+            return Optional.empty();
         }
         LineMatch match = matches.getFirst();
-        lines.set(
+        List<String> edited = new ArrayList<>(lines);
+        edited.set(
                 match.index(),
                 block.childIndent() + change.key() + ":" + match.matcher().group(1) + change.to()
                         + match.matcher().group(2) + lineBreak(lines.get(match.index())));
-        return true;
+        return Optional.of(String.join("", edited));
     }
 
     private record LineMatch(int index, Matcher matcher) {}
 
-    /// Adds the setting after the block's last setting line, with the block's indentation and line break.
-    private static boolean insertLine(List<String> lines, Block block, Change change) {
-        int last = block.lastContentLine(lines);
-        if (last < block.firstChild()) {
-            return false;
-        }
-        lines.add(last + 1, block.childIndent() + change.key() + ": " + change.to() + lineBreak(lines.get(last)));
-        return true;
-    }
-
-    private static boolean parsesTo(Path workflowPath, String updated, String original, List<Change> changes) {
+    private static boolean parsesTo(Path workflowPath, String updated, String original) {
         return settings(workflowPath, updated)
                 .flatMap(actual -> settings(workflowPath, original)
-                        .map(expected -> withChanges(expected, changes))
+                        .map(CodexTimeoutSettingsMigration::withChange)
                         .map(actual::equals))
                 .orElse(false);
     }
 
-    /// The parsed settings with every planned change applied, as the edited file should parse.
-    private static Map<String, Object> withChanges(Map<String, Object> settings, List<Change> changes) {
-        for (Change change : changes) {
-            section(settings, change.section()).ifPresent(section -> section.put(change.key(), change.to()));
-        }
+    /// The parsed settings with the planned change applied, as the edited file should parse.
+    private static Map<String, Object> withChange(Map<String, Object> settings) {
+        section(settings, TURN_TIMEOUT_CHANGE.section())
+                .ifPresent(section -> section.put(TURN_TIMEOUT_CHANGE.key(), TURN_TIMEOUT_CHANGE.to()));
         return settings;
     }
 
@@ -214,12 +170,11 @@ final class CodexTimeoutSettingsMigration {
         return !stripped.isEmpty() && !stripped.startsWith(COMMENT_START);
     }
 
-    /// One planned setting change. `from` is the value being replaced, or empty for a missing key.
-    record Change(String section, String key, OptionalInt from, int to) {
+    /// One planned setting change from the value `from` to the value `to`.
+    record Change(String section, String key, int from, int to) {
         Change {
             Objects.requireNonNull(section, "section");
             Objects.requireNonNull(key, "key");
-            Objects.requireNonNull(from, "from");
         }
 
         String path() {
@@ -228,12 +183,8 @@ final class CodexTimeoutSettingsMigration {
     }
 
     /// The planned update for one workflow. `updatedContent` is empty when Symphony cannot make the
-    /// changes safely, so the operator has to make them by hand.
-    record Plan(WorkflowFileText original, List<Change> changes, Optional<String> updatedContent) {
-        Plan {
-            changes = List.copyOf(changes);
-        }
-    }
+    /// change safely, so the operator has to make it by hand.
+    record Plan(WorkflowFileText original, Change change, Optional<String> updatedContent) {}
 
     /// The lines of one top-level front matter key: the key line at `keyLine`, its child lines from
     /// `firstChild` up to `end`, and the indentation of its direct children.
@@ -271,15 +222,6 @@ final class CodexTimeoutSettingsMigration {
 
         int firstChild() {
             return keyLine + 1;
-        }
-
-        int lastContentLine(List<String> lines) {
-            for (int index = end - 1; index > keyLine; index--) {
-                if (contentLine(lines.get(index))) {
-                    return index;
-                }
-            }
-            return keyLine;
         }
     }
 }
