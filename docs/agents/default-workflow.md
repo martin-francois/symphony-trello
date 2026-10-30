@@ -465,8 +465,9 @@ optional verification. Follow this order:
   finishing whether the PR description needs to change because the scope, verification, known
   limitations, linked issues, or deployment/live evidence changed. Update the PR description when it
   would otherwise be stale or incomplete, and report whether you updated it. For PRs authored by
-  someone else, do not edit the PR description unless the user explicitly asks. The Commit History
-  in Main checkboxes are the one exception; re-check them after every push as described above.
+  someone else, edit the description only where the user asks or where
+  [Outside contributor pull requests](#outside-contributor-pull-requests) says to, and re-check the
+  Commit History in Main checkboxes after every push as described above.
 - When waiting for pull request checks, wait for GitHub Actions and other required CI checks to
   finish, but do not block only on a pending CodeRabbit status context. Treat CodeRabbit as
   asynchronous review feedback: address it when it posts actionable comments or requested changes,
@@ -497,7 +498,8 @@ optional verification. Follow this order:
 
 An outside contributor's pull request is one whose author is neither martinfrancois nor a bot. These
 rules apply to the agents working for martinfrancois on such a pull request. Pull-request review of
-the posted comments and the branch history is the evidence; no automation checks them.
+the posted comments, the branch history, and the description's edit history is the evidence; no
+automation checks them.
 
 - Every comment on the pull request thanks the contributor and names what their change fixes, for
   example "Thanks for fixing the setup crash when the state home is a symlink." This covers review
@@ -514,9 +516,18 @@ the posted comments and the branch history is the evidence; no automation checks
 - After rewriting the contributor's branch, comment on the pull request. Thank them, name each of
   their commits that changed and what changed in it, and name any Commit History in Main checkbox
   you changed.
+- Keep the description true to the branch yourself:
+  - When a change from the maintainer side, such as a review fix, a fixup into the contributor's
+    commit, or a dropped check, makes the description wrong, update it in the same pass. The author
+    never gets asked to fix it.
+  - When the author's version was already wrong and the diff makes the correct text obvious, fix it
+    too, and say in the pull request comment what changed in the description.
+  - Ask the author in the pull request comment only when the correct text isn't obvious.
+  - Before posting a review comment, re-read the live description and comments, because the author
+    may have changed them since you drafted it.
 - The `I confirm I understand what the code does` box stays the contributor's, even though the
-  agent may change the Commit History in Main checkboxes in the same body; see
-  [Committing and pull requests](#committing-and-pull-requests).
+  agent may change the Commit History in Main checkboxes and fix the description in the same body;
+  see [Committing and pull requests](#committing-and-pull-requests).
 
 ## References
 
