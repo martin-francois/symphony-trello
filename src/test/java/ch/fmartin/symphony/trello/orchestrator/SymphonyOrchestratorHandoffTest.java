@@ -10,6 +10,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -423,7 +424,7 @@ final class SymphonyOrchestratorHandoffTest {
                 assertThat(run.workspace.get()).doesNotExist();
                 verify(run.workspaces).removeForIdentifierIfPresent(eq(CARD_IDENTIFIER), any());
                 verify(run.runner).run(any());
-                verify(run.runner).cancel(worker);
+                verify(run.runner, timeout(WAIT_TIMEOUT.toMillis())).cancel(worker);
             } finally {
                 run.orchestrator.stallSelectionHookForTests = () -> {};
                 releaseStall.countDown();
@@ -710,8 +711,10 @@ final class SymphonyOrchestratorHandoffTest {
             assertThat(claims)
                     .as("a retried move protects the turn again, so its deadline claims it")
                     .hasValue(1);
+            // The deadline cancels the runner on the orchestrator's worker executor, which can run
+            // after the status view already hides the claimed card, so the verify waits for the call.
+            verify(run.runner, timeout(WAIT_TIMEOUT.toMillis())).cancel(failed.workerIdentity());
             waitUntil(() -> run.orchestrator.snapshot().counts().running() == 0);
-            verify(run.runner).cancel(failed.workerIdentity());
         }
     }
 
@@ -792,7 +795,7 @@ final class SymphonyOrchestratorHandoffTest {
             assertThat(run.workspace.get()).doesNotExist();
             verify(run.workspaces).removeForIdentifierIfPresent(eq(CARD_IDENTIFIER), any());
             verify(run.runner).run(any());
-            verify(run.runner).cancel(worker);
+            verify(run.runner, timeout(WAIT_TIMEOUT.toMillis())).cancel(worker);
         }
     }
 
