@@ -1025,14 +1025,14 @@ board. It changes the YAML metadata at the top of the file only for the Codex ti
 
 #### Codex timeout update in 2.0.0
 
-Version 2.0.0 raises the default `codex.turn_timeout_ms` from one hour (`3600000`) to three hours
-(`10800000`). The Codex review before handoff runs inside the Codex turn, so a turn of one hour
+Version 2.0.0 raises the default `codex.turn_timeout_ms` from one hour (`3600000`) to two hours
+(`7200000`). The Codex review before handoff runs inside the Codex turn, so a turn of one hour
 leaves no time for a full review. Symphony now refuses to start a card while
 `repository.codex_review_timeout_ms` is not below `codex.turn_timeout_ms` and the review loop is on.
 
 You don't have to edit anything for workflows that setup created. The installer runs
 `migrate-workflows` after the update, also without a terminal. In every workflow the command checks,
-it changes `turn_timeout_ms: 3600000` to `turn_timeout_ms: 10800000`, so this also applies to a
+it changes `turn_timeout_ms: 3600000` to `turn_timeout_ms: 7200000`, so this also applies to a
 connected workflow you wrote yourself with that exact value. It doesn't ask first, it changes only
 that line, and it keeps a backup next to the workflow. Any other turn timeout you set stays as it
 is. It doesn't add review-loop settings, so a workflow without them keeps using the review-loop
@@ -1773,7 +1773,7 @@ Trello board; setup preserves them when regenerating a workflow unless you pass 
 pass `--codex-reasoning-effort`, or edit the workflow value. If either field is omitted, the
 installed Codex CLI/app-server default or `codex.command` configuration decides the value.
 
-`codex.turn_timeout_ms` limits a full Codex turn. The default is three hours, so the Codex review
+`codex.turn_timeout_ms` limits a full Codex turn. The default is two hours, so the Codex review
 before handoff fits inside the turn. Keep it above `repository.codex_review_timeout_ms` while the
 review loop is on; Symphony refuses to start a card otherwise. `codex.read_timeout_ms` limits
 app-server startup and request/response reads. `codex.stall_timeout_ms` controls how long Symphony
@@ -1873,7 +1873,7 @@ same diff in its own session and says so in the handoff. The separate review use
 sandbox (`dangerFullAccess`). Otherwise the prompt tells Codex not to bypass the sandbox.
 
 The review runs inside the Codex turn, so `codex.turn_timeout_ms` still limits the whole turn. Its
-default of three hours leaves room for the change, a review that uses its full hour, and the review
+default of two hours leaves room for the change, a review that uses its full hour, and the review
 in Codex's own session after it. While the round limit is above `0`, `codex_review_timeout_ms` has
 to be below `codex.turn_timeout_ms`; otherwise Symphony refuses to start a card and names both
 values.

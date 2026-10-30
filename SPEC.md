@@ -818,7 +818,7 @@ precedence.
   - The Java implementation also supports the `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`
     environment value for deployment-managed allowed host paths.
 - `turn_timeout_ms` (integer)
-  - Default: `10800000` (3 hours)
+  - Default: `7200000` (2 hours)
   - Java implementation divergence: upstream Symphony defaults to `3600000` (1 hour). The Java
     pre-handoff review loop in Section 19.7 runs inside the turn, and a turn of one hour leaves no
     time for a full review run. Realigning with upstream requires a review loop that does not run
@@ -1521,7 +1521,7 @@ as a checkout candidate instead of failing.
   turn sandbox policy to `dangerFullAccess`
 - `SYMPHONY_TRELLO_DOTENV`: implementation environment extension that selects the ignored dotenv
   file loaded for local runs instead of the project-root `.env`
-- `codex.turn_timeout_ms`: integer, default `10800000` (Java implementation divergence; upstream
+- `codex.turn_timeout_ms`: integer, default `7200000` (Java implementation divergence; upstream
   uses `3600000`)
 - `codex.read_timeout_ms`: integer, default `5000`
 - `codex.stall_timeout_ms`: integer, default `300000`
@@ -5117,7 +5117,7 @@ Settings update:
 - `migrate-workflows` MUST check the same workflows as Section 19.4.1, after a major-downgrade
   rejection and before any body migration. It MUST NOT run with `--mark-migrated`.
 - When `codex.turn_timeout_ms` is the integer `3600000`, the command MUST change it to the current
-  default `10800000`. Every other value, including the same number written as a string, MUST stay
+  default `7200000`. Every other value, including the same number written as a string, MUST stay
   unchanged.
 - The command MUST NOT add, change, or remove any review-loop setting. A workflow without
   `codex_review_max_rounds` or `codex_review_timeout_ms` keeps following the Section 19.7 defaults of
@@ -5354,7 +5354,7 @@ Fields:
 
 Both fields follow normal dynamic reload: the next dispatched run uses the current values without a
 restart. The review runs inside a coding-agent turn, so `codex.turn_timeout_ms` still bounds the
-whole turn, including the review. The default turn timeout of `10800000` (3 hours) leaves room for
+whole turn, including the review. The default turn timeout of `7200000` (2 hours) leaves room for
 the implementation, a review run that reaches its own limit, and the in-session review after it.
 Section 19.4.2 updates workflows that 1.x setup wrote with a one-hour turn timeout.
 

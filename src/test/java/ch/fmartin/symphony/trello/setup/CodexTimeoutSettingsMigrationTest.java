@@ -21,7 +21,7 @@ final class CodexTimeoutSettingsMigrationTest {
     private static final String REPOSITORY_LINES = "  default_url: null\n  default_path: null\n";
 
     /// The front matter layout that setup wrote in the 1.x releases, before the review-loop settings
-    /// and the three-hour turn timeout existed.
+    /// and the two-hour turn timeout existed.
     private static final String RELEASED_GENERATED_METADATA =
             """
             ---

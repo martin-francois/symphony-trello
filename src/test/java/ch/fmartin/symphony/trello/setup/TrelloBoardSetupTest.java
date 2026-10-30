@@ -682,7 +682,7 @@ final class TrelloBoardSetupTest {
                 .contains("server:")
                 .contains("port: " + expectedPort)
                 .contains("command: " + ConfigDefaults.DEFAULT_CODEX_COMMAND)
-                .contains("  turn_timeout_ms: 10800000\n")
+                .contains("  turn_timeout_ms: 7200000\n")
                 .contains("model: \"gpt-5.5\"")
                 .contains("reasoning_effort: \"medium\"")
                 .contains("turn_sandbox_policy:", "type: workspaceWrite", "networkAccess: true")
@@ -699,7 +699,7 @@ final class TrelloBoardSetupTest {
         assertThat(config.codex().turnSandboxPolicy())
                 .isEqualTo(Map.of("type", "workspaceWrite", "networkAccess", true));
         assertThat(config.codex().turnTimeout())
-                .isEqualTo(Duration.ofHours(3))
+                .isEqualTo(Duration.ofHours(2))
                 .isGreaterThan(config.repository().codexReview().timeout());
         assertThat(config.codex().readTimeout()).isEqualTo(ConfigDefaults.DEFAULT_CODEX_READ_TIMEOUT);
         assertThat(config.codex().stallTimeout()).isEqualTo(ConfigDefaults.DEFAULT_CODEX_STALL_TIMEOUT);

@@ -105,7 +105,7 @@ final class WorkflowBodyMigrationTest {
                 .containsSubsequence(
                         "Workflow setting updates",
                         "\"Released Board\" (" + workflow + ")",
-                        "Changes codex.turn_timeout_ms from 3600000 to 10800000.",
+                        "Changes codex.turn_timeout_ms from 3600000 to 7200000.",
                         "No other line in the workflow changes.",
                         "OK  Updated the settings in " + workflow,
                         "Backup: " + backupOf(workflow))
@@ -127,7 +127,7 @@ final class WorkflowBodyMigrationTest {
         assertThat(run.exitCode()).as(run.output()).isZero();
         assertThat(run.output())
                 .containsSubsequence(
-                        "Changes codex.turn_timeout_ms from 3600000 to 10800000.",
+                        "Changes codex.turn_timeout_ms from 3600000 to 7200000.",
                         "WOULD back up and update the settings in:",
                         "    " + workflow);
         assertThat(workflow).hasContent(released);
@@ -168,7 +168,7 @@ final class WorkflowBodyMigrationTest {
         assertThat(run.exitCode()).as(run.output()).isZero();
         assertThat(run.output())
                 .containsSubsequence(
-                        "Changes codex.turn_timeout_ms from 3600000 to 10800000.",
+                        "Changes codex.turn_timeout_ms from 3600000 to 7200000.",
                         "MANUAL  Symphony cannot change this line without touching others. Make the change"
                                 + " above by hand in:",
                         "          " + workflow)

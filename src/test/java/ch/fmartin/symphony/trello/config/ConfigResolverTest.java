@@ -519,7 +519,7 @@ final class ConfigResolverTest {
     }
 
     @Test
-    void turnTimeoutDefaultsToThreeHoursSoTheDefaultReviewFitsInsideTheTurn() throws Exception {
+    void turnTimeoutDefaultsToTwoHoursSoTheDefaultReviewFitsInsideTheTurn() throws Exception {
         // given
         Path workflow = writeTrelloWorkflow("WORKFLOW.turn-timeout-default.md", "SYNTH001", "");
         var resolver = new ConfigResolver(ignored -> Optional.empty());
@@ -529,7 +529,7 @@ final class ConfigResolverTest {
         Throwable dispatchFailure = catchThrowable(() -> resolver.validateForDispatch(config));
 
         // then
-        assertThat(config.codex().turnTimeout()).isEqualTo(Duration.ofHours(3));
+        assertThat(config.codex().turnTimeout()).isEqualTo(Duration.ofHours(2));
         assertThat(dispatchFailure).isNull();
     }
 
@@ -547,7 +547,7 @@ final class ConfigResolverTest {
         assertThat(config.codex().turnTimeout()).isEqualTo(Duration.ofMinutes(90));
     }
 
-    @CsvSource({"3600000, 3600000", "3600000, 1800000", "10800001, 10800000"})
+    @CsvSource({"3600000, 3600000", "3600000, 1800000", "7200001, 7200000"})
     @ParameterizedTest(name = "review {0} ms, turn {1} ms")
     void rejectsAReviewTimeoutThatIsNotBelowTheTurnTimeoutWhileTheLoopIsOn(long reviewMillis, long turnMillis)
             throws Exception {
@@ -574,7 +574,7 @@ final class ConfigResolverTest {
                 .hasMessage(
                         "repository.codex_review_timeout_ms (%d) must be below codex.turn_timeout_ms (%d) while"
                                 + " repository.codex_review_max_rounds is above 0. Raise codex.turn_timeout_ms above"
-                                + " %d (the default is 10800000), lower repository.codex_review_timeout_ms, or set"
+                                + " %d (the default is 7200000), lower repository.codex_review_timeout_ms, or set"
                                 + " repository.codex_review_max_rounds to 0 to turn the review loop off.",
                         reviewMillis, turnMillis, reviewMillis);
     }

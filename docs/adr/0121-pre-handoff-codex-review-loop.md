@@ -75,7 +75,7 @@ rounds. No alias or migration exists for the draft names because no release acce
 earlier draft hard-coded 30 minutes; the maintainer chose a longer default and made it
 configurable, because a review of a large change can need more time. The review runs inside a Codex
 turn, so [ADR 0136](0136-raise-the-codex-turn-timeout-and-migrate-generated-workflows.md) raises
-the default `codex.turn_timeout_ms` to three hours and rejects a review timeout that is not below
+the default `codex.turn_timeout_ms` to two hours and rejects a review timeout that is not below
 the turn timeout while the loop is on.
 
 The names follow the existing key style. `max_rounds` matches `agent.max_turns` and
@@ -160,7 +160,7 @@ loop. A setup option would add another prompt or flag to `setup-local`, `new-boa
   Codex time until the operator sets the limit to `0`.
 * Bad, because the review runs inside a Codex turn, so `codex.turn_timeout_ms` still bounds it.
   [ADR 0136](0136-raise-the-codex-turn-timeout-and-migrate-generated-workflows.md) raises the
-  default turn timeout to three hours and requires the review timeout to be below it.
+  default turn timeout to two hours and requires the review timeout to be below it.
 * Bad, because the guarantee still depends on Codex following its prompt. Java cannot prove that a
   review ran.
 * Bad, because under the default sandbox the review usually runs in the same Codex session that
