@@ -21,7 +21,9 @@ The confirmation part of this decision is amended by
 [ADR 0143](0143-keep-workflow-step-code-in-repository-files.md). Each job now checks out its
 `scripts/size-labeler-*.cjs` module at `github.sha`, sparse and without the token, and the script
 tests load the two modules through the workflow's `require` calls instead of extracting the
-JavaScript blocks.
+JavaScript blocks. The counting part is amended by
+[ADR 0145](0145-leave-adr-lines-out-of-pull-request-size-labels.md): lines under `docs/adr/` are
+left out unless the other changed files change no lines.
 
 ## Context and Problem Statement
 
