@@ -12,25 +12,19 @@ jobs:
     permissions:
       pull-requests: read
     steps:
-      # The base-branch workflow reads metadata only; it never checks out or runs PR code.
+      # The base-branch workflow reads metadata only. It checks out its script at a base-branch
+      # commit and never checks out or runs PR code.
+      - name: Check out the workflow script from the base commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The commit this workflow file was read from: the base branch tip, never the pull request.
+          ref: ${{ github.sha }}
+          sparse-checkout: scripts/coderabbit-config-guard.cjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
       - name: Restrict CodeRabbit configuration changes to the owner
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            if (context.payload.pull_request.user.login === "martinfrancois") {
-              return;
-            }
-            const files = await github.paginate(github.rest.pulls.listFiles, {
-              ...context.repo,
-              pull_number: context.payload.pull_request.number,
-              per_page: 100,
-            });
-            // GitHub truncates this API at 3000 files, even with pagination.
-            if (files.length >= 3000) {
-              core.setFailed("Cannot verify CodeRabbit configuration at GitHub's 3000-file limit. Split this PR.");
-              return;
-            }
-            if (files.some(file => file.filename === ".coderabbit.yaml"
-                || file.previous_filename === ".coderabbit.yaml")) {
-              core.setFailed("Only martinfrancois may change .coderabbit.yaml.");
-            }
+            await require("./scripts/coderabbit-config-guard.cjs")({ github, context, core });
