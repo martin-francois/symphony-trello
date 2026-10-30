@@ -1,4 +1,4 @@
-FROM gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers:v1@sha256:66a14553ab8b8b9dba9d38ad70de2d6cd4fae36d90ddbf21e7fe757a7392804c
+FROM gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers:v1@sha256:e37442825f1662e65e37ac53c24e7de4be70b46ead9b95638ada5c47029e13e9
 
 ARG JACOCO_VERSION
 
