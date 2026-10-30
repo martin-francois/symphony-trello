@@ -1690,8 +1690,8 @@ final class InstallerScriptTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {".symphony-trello-install", "SKILL.md"})
-    void posixInstallDoesNotWriteThroughALinkInTheCodexSkillDirectory(String linkedFile) throws Exception {
+    @ValueSource(strings = {LINKED_CODEX_SKILL_DIRECTORY, ".symphony-trello-install", "SKILL.md"})
+    void posixInstallDoesNotWriteThroughALinkedCodexSkill(String linkedEntry) throws Exception {
         // given
         assumeTrue(commandExists("bash"));
         assumeTrue(commandExists("git"));
@@ -1700,14 +1700,9 @@ final class InstallerScriptTest {
         Path home = temporaryDirectory.resolve("linked-skill-home");
         Path symphonyHome = temporaryDirectory.resolve("linked-skill-symphony-home");
         Path skillDirectory = home.resolve(".codex/skills/symphony-trello-board-cards");
-        Path outsideFile = temporaryDirectory.resolve("outside-file.txt");
+        Path outside = temporaryDirectory.resolve("linked-skill-outside");
         Path fakeLog = temporaryDirectory.resolve("linked-skill.log");
-        Files.createDirectories(skillDirectory);
-        Files.writeString(skillDirectory.resolve(".symphony-trello-install"), "marker\n");
-        Files.writeString(skillDirectory.resolve("SKILL.md"), "earlier skill\n");
-        Files.writeString(outsideFile, "not the installer's file\n");
-        Files.delete(skillDirectory.resolve(linkedFile));
-        Files.createSymbolicLink(skillDirectory.resolve(linkedFile), outsideFile);
+        linkCodexSkill(skillDirectory, linkedEntry, outside);
 
         // when
         ProcessResult install = run(
@@ -1720,7 +1715,7 @@ final class InstallerScriptTest {
         install.assertSuccess();
         assertThat(install.output())
                 .contains("Codex skill: " + skillDirectory + " exists and was not made by this installer");
-        assertThat(outsideFile).content(StandardCharsets.UTF_8).isEqualTo("not the installer's file\n");
+        assertOutsideCodexSkillUnchanged(outside);
     }
 
     @Test
@@ -10054,6 +10049,40 @@ final class InstallerScriptTest {
         assertThat(skillDirectory.resolve("SKILL.md"))
                 .content(StandardCharsets.UTF_8)
                 .isEqualTo("my own skill\n");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {LINKED_CODEX_SKILL_DIRECTORY, ".symphony-trello-install", "SKILL.md"})
+    void powershellInstallDoesNotWriteThroughALinkedCodexSkillWhenAvailable(String linkedEntry) throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        assumeTrue(commandExists("git"));
+        Path sourceRepository = addCodexSkill(createPowerShellSourceRepository(temporaryDirectory));
+        Path fakeBin = createPowerShellFakeToolchain(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve("ps-linked-skill-home");
+        Path binDirectory = temporaryDirectory.resolve("ps-linked-skill-bin");
+        Path codexHome = temporaryDirectory.resolve("ps-linked-skill-codex-home");
+        Path skillDirectory = codexHome.resolve("skills").resolve("symphony-trello-board-cards");
+        Path outside = temporaryDirectory.resolve("ps-linked-skill-outside");
+        Path fakeLog = temporaryDirectory.resolve("ps-linked-skill.log");
+        linkCodexSkill(skillDirectory, linkedEntry, outside);
+
+        // when
+        ProcessResult install = runPowerShellSourceCheckoutInstall(
+                pwsh,
+                sourceRepository,
+                fakeBin,
+                symphonyHome,
+                binDirectory,
+                fakeLog,
+                Map.of("CODEX_HOME", codexHome.toString()));
+
+        // then
+        install.assertSuccess();
+        assertThat(normalizedWhitespace(install.output()))
+                .contains("Codex skill: " + skillDirectory + " exists and was not made by this installer");
+        assertOutsideCodexSkillUnchanged(outside);
     }
 
     @Test

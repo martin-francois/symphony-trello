@@ -54,6 +54,11 @@ final class InstallerScriptFixture {
     /// The installers copy this skill from the app directory into the user's Codex skills directory.
     static final String CODEX_SKILL_PATH = ".codex/skills/symphony-trello-board-cards/SKILL.md";
     static final String CODEX_SKILL_CONTENT = "---\nname: symphony-trello-board-cards\n---\nTest skill\n";
+    /// Links the whole Codex skill directory in [#linkCodexSkill(Path, String, Path)].
+    static final String LINKED_CODEX_SKILL_DIRECTORY = ".";
+    /// The installer-made skill files that [#linkCodexSkill(Path, String, Path)] creates.
+    static final List<String> CODEX_SKILL_FILES = List.of(".symphony-trello-install", "SKILL.md");
+    static final String OUTSIDE_CODEX_SKILL_CONTENT = "not the installer's file\n";
     private static final int PROCESS_DESCENDANT_DISCOVERY_MILLIS = 1_000;
     private static final int PROCESS_TERMINATION_SECONDS = 5;
     private static final int PROCESS_STOP_SECONDS = 5;
@@ -833,6 +838,33 @@ final class InstallerScriptFixture {
         run(Map.of(), "git", "-C", repository.toString(), "commit", "-m", "Add Codex skill")
                 .assertSuccess();
         return repository;
+    }
+
+    /// Makes `skillDirectory` look installer-made, then replaces `linkedEntry` in it with a link into
+    /// `outside`, or links the whole directory to `outside` for [#LINKED_CODEX_SKILL_DIRECTORY].
+    /// Every file in `outside` holds [#OUTSIDE_CODEX_SKILL_CONTENT], which an install must not change.
+    static void linkCodexSkill(Path skillDirectory, String linkedEntry, Path outside) throws IOException {
+        Files.createDirectories(outside);
+        for (String file : CODEX_SKILL_FILES) {
+            Files.writeString(outside.resolve(file), OUTSIDE_CODEX_SKILL_CONTENT);
+        }
+        if (LINKED_CODEX_SKILL_DIRECTORY.equals(linkedEntry)) {
+            Files.createDirectories(skillDirectory.getParent());
+            Files.createSymbolicLink(skillDirectory, outside);
+            return;
+        }
+        Files.createDirectories(skillDirectory);
+        for (String file : CODEX_SKILL_FILES) {
+            Files.writeString(skillDirectory.resolve(file), "earlier " + file + "\n");
+        }
+        Files.delete(skillDirectory.resolve(linkedEntry));
+        Files.createSymbolicLink(skillDirectory.resolve(linkedEntry), outside.resolve(linkedEntry));
+    }
+
+    static void assertOutsideCodexSkillUnchanged(Path outside) {
+        for (String file : CODEX_SKILL_FILES) {
+            assertThat(outside.resolve(file)).content(StandardCharsets.UTF_8).isEqualTo(OUTSIDE_CODEX_SKILL_CONTENT);
+        }
     }
 
     private static void writeCodexSkill(Path appDirectory) throws IOException {
