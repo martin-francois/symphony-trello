@@ -16,6 +16,10 @@ export interface CommitMetadata {
 
 const COMPATIBILITY_HEADING = "## Compatibility Decision";
 const COMMIT_HISTORY_HEADING = "## Commit History in Main";
+const AI_ASSISTANCE_HEADING = "## AI Assistance (if used)";
+const NO_AI_ASSISTANCE_CHOICE = "No AI assistance beyond short completion, search, formatting, or typo fixes";
+const AI_ASSISTED_CHOICE = "AI-assisted PR";
+const UNDERSTANDING_CONFIRMATION = "I confirm I understand what the code does";
 const DECISIONS = new Map<string, CompatibilityKind>([
   ["- [x] Compatible: no previously supported, working usage stops working", "compatible"],
   ["- [x] Breaking: previously supported, working usage stops working", "breaking"],
@@ -32,6 +36,13 @@ const COMMIT_HISTORY_CHOICES = new Map<string, {readonly continuation: string; r
   ],
 ]);
 const SELECTION_ERROR = "Select exactly one current option in the Compatibility Decision section.";
+const AI_ASSISTANCE_SECTION_ERROR = "Provide exactly one visible AI Assistance (if used) section.";
+const AI_ASSISTANCE_CHECKBOXES_ERROR =
+  "Keep the three AI Assistance checkboxes from the pull request template, one line each.";
+const AI_ASSISTANCE_CHOICE_ERROR =
+  `Tick exactly one AI assistance choice: \`${NO_AI_ASSISTANCE_CHOICE}\` or \`${AI_ASSISTED_CHOICE}\`.`;
+const UNDERSTANDING_CONFIRMATION_ERROR =
+  `An AI-assisted pull request merges only after a person ticks \`${UNDERSTANDING_CONFIRMATION}\`.`;
 const COMMIT_HISTORY_SELECTION_ERROR =
   "Select exactly one current option in the Commit History in Main section.";
 
@@ -121,6 +132,33 @@ function compatibilitySection(lines: readonly string[]): readonly string[] | und
 
 function commitHistorySection(lines: readonly string[]): readonly string[] | undefined {
   return visibleSection(lines, COMMIT_HISTORY_HEADING);
+}
+
+function checkboxState(section: readonly string[], label: string): boolean | undefined {
+  const states = section.flatMap((line) => {
+    const match = /^- \[([ xX])\] (.+?)[ \t]*$/.exec(line);
+    return match?.[2] === label ? [match[1] !== " "] : [];
+  });
+  return states.length === 1 ? states[0] : undefined;
+}
+
+// The "AI assistance disclosed" CodeRabbit check in .coderabbit.yaml is a subset of this (ADR
+// 0085), so a rate-limited CodeRabbit still leaves a check that fails (ADR 0141).
+export function evaluateAiAssistanceDisclosure(body: string): string[] {
+  const section = visibleSection(visibleMarkdownLines(body), AI_ASSISTANCE_HEADING);
+  if (!section) {
+    return [AI_ASSISTANCE_SECTION_ERROR];
+  }
+  const noAssistance = checkboxState(section, NO_AI_ASSISTANCE_CHOICE);
+  const assisted = checkboxState(section, AI_ASSISTED_CHOICE);
+  const understood = checkboxState(section, UNDERSTANDING_CONFIRMATION);
+  if (noAssistance === undefined || assisted === undefined || understood === undefined) {
+    return [AI_ASSISTANCE_CHECKBOXES_ERROR];
+  }
+  if (noAssistance === assisted) {
+    return [AI_ASSISTANCE_CHOICE_ERROR];
+  }
+  return assisted && !understood ? [UNDERSTANDING_CONFIRMATION_ERROR] : [];
 }
 
 function selectedDecision(section: readonly string[]): CompatibilityKind | undefined {
@@ -319,6 +357,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const commits = base && head ? commitsInRange(base, head) : [];
   const errors = [
     ...evaluateCompatibilityMetadata(title, body),
+    ...evaluateAiAssistanceDisclosure(body),
     ...evaluatePullRequestBreakingConsistency(title, body, commits),
   ];
   for (const error of errors) {
