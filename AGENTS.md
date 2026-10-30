@@ -55,6 +55,10 @@ AssertJ can express the expectation directly.
 Follow the compatibility and migration rules in
 [Compatibility discipline](docs/agents/default-workflow.md#compatibility-discipline).
 
+Never let a GitHub Actions workflow run or restore anything a pull request controls in a
+privileged context; follow [GitHub Actions security](docs/agents/github-actions-security.md) for
+every workflow change.
+
 For normal code changes, run `./mvnw -q spotless:check verify` before finishing (use
 `spotless:apply` first when formatting changed). Static-analysis and lint gates must be clean; give
 every suppression the narrowest possible scope and a documented reason.
@@ -76,6 +80,7 @@ guidance here, put it in docs/agents and add a link instead.
 - [Deployment & live verification](docs/agents/deployment-and-live-verification.md)
 - [Java style & design preferences](docs/agents/java-style.md)
 - [Static analysis policy](docs/agents/static-analysis.md)
+- [GitHub Actions security](docs/agents/github-actions-security.md)
 - [Dependency updates](docs/agents/dependency-updates.md)
 - [Documentation & README](docs/agents/documentation-and-readme.md)
 - Creating, editing, or triaging GitHub issues: [GitHub issue triage](docs/agents/github-issue-triage.md);
