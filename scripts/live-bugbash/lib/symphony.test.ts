@@ -36,10 +36,14 @@ test("cancelling a command stops its process group before cleanup awaits the ins
   // given
   const directory = mkdtempSync(join(tmpdir(), "bugbash-cancel-"));
   const parentPid = join(directory, "parent-pid");
-  const childPid = join(directory, "child-pid");
+  const holderPid = join(directory, "holder-pid");
   const stopped = join(directory, "stopped");
   const controller = new AbortController();
-  const descendant = `trap 'printf stopped > "$2"; exit 0' TERM; echo $$ > "$1"; sleep 60 & wait`;
+  // The pipe-holding subshell writes the readiness marker once bash has reset its TERM trap, so
+  // every process that can hold the pipes exists before the test sends the group SIGTERM. A marker
+  // written before the fork lets SIGTERM arrive first, and the late sleep then holds the pipes until
+  // the SIGKILL grace runs out.
+  const descendant = `trap 'printf stopped > "$2"; exit 0' TERM; { echo $BASHPID > "$1"; exec sleep 60; } & wait`;
   let ownedGroupPid: number | null = null;
   const readyPid = (path: string): number | null => {
     if (!existsSync(path)) return null;
@@ -47,7 +51,7 @@ test("cancelling a command stops its process group before cleanup awaits the ins
     return Number.isSafeInteger(pid) && pid > 0 ? pid : null;
   };
   let completed: Awaited<ReturnType<typeof runCommand>> | undefined;
-  const command = runCommand("bash", ["-c", 'echo $$ > "$1"; bash -c "$4" bash "$2" "$3" & wait', "bash", parentPid, childPid, stopped, descendant], {
+  const command = runCommand("bash", ["-c", 'echo $$ > "$1"; bash -c "$4" bash "$2" "$3" & wait', "bash", parentPid, holderPid, stopped, descendant], {
     cwd: directory,
     timeoutMs: 10_000,
     signal: controller.signal,
@@ -57,7 +61,7 @@ test("cancelling a command stops its process group before cleanup awaits the ins
   });
   try {
     ownedGroupPid = await waitFor("installer process group ready", () => readyPid(parentPid), 2_000, 5);
-    await waitFor("installer descendant ready", () => readyPid(childPid), 2_000, 5);
+    await waitFor("pipe-holding descendant ready", () => readyPid(holderPid), 2_000, 5);
 
     // when
     controller.abort();
