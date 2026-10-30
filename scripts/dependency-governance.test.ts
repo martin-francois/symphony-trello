@@ -20,6 +20,32 @@ const PROJECT_ARTIFACTS = new Set([
   "symphony-trello",
 ]);
 
+test("Renovate owns both commitlint packages", () => {
+  // given
+  const path = "scripts/commitlint-versions";
+  const content = readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+
+  // when
+  const pins = extractRegexDependencies(path, content);
+
+  // then
+  assert.deepEqual(
+    pins.map(({ depName, datasource }) => ({ depName, datasource })).sort(
+      (left, right) => (left.depName ?? "").localeCompare(right.depName ?? ""),
+    ),
+    [
+      { depName: "@commitlint/cli", datasource: "npm" },
+      { depName: "@commitlint/config-conventional", datasource: "npm" },
+    ],
+    `${path} must expose exactly both commitlint packages to Renovate`,
+  );
+  assert.deepEqual(
+    pins.filter(({ depName, currentValue }) => !content.includes(`"${depName}@${currentValue}"`)),
+    [],
+    `Renovate must read each full version pinned in ${path}`,
+  );
+});
+
 test("Renovate updates the actual Palantir formatter pin without changing other POM content", () => {
   // given
   const formatterPins = extractRegexDependencies("pom.xml", POM).filter(

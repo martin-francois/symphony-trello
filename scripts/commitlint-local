@@ -15,10 +15,10 @@ die() {
 }
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+# shellcheck source=scripts/commitlint-versions
+source "$repo_root/scripts/commitlint-versions"
 cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/symphony-trello"
 commitlint_home="$cache_root/commitlint"
-commitlint_cli_package="@commitlint/cli@21.0.1"
-commitlint_config_package="@commitlint/config-conventional@21.0.1"
 commitlint_cli_version="${commitlint_cli_package##*@}"
 commitlint_config_version="${commitlint_config_package##*@}"
 version_marker="$commitlint_home/.pinned-versions"

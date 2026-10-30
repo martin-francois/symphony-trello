@@ -86,15 +86,14 @@
     {
       "customType": "regex",
       "managerFilePatterns": [
-        "/^\\.github/workflows/commitlint\\.yml$/",
-        "/^scripts/commitlint-local$/"
+        "/^scripts/commitlint-versions$/"
       ],
       "matchStrings": [
-        "(?:--package\\s+|\\s+)(?<depName>@commitlint/(?:cli|config-conventional))@(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+        "\"(?<depName>@commitlint/(?:cli|config-conventional))@(?<currentValue>\\d+\\.\\d+\\.\\d+)\""
       ],
       "datasourceTemplate": "npm",
       "versioningTemplate": "semver",
-      "description": "The commitlint versions pinned inline in the commitlint workflow and in scripts/commitlint-local. No built-in manager reads a version out of a shell script or a workflow run step, and the two must move together or a local check disagrees with CI."
+      "description": "The commitlint package pins shared by local and CI setup in scripts/commitlint-versions. No built-in manager reads shell assignments; the dependency-governance test guards discovery of both packages."
     },
     {
       "customType": "regex",
