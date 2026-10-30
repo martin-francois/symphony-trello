@@ -8,6 +8,7 @@ consulted:
   - "[GitHub PR #802](https://github.com/martin-francois/symphony-trello/pull/802)"
   - "[ADR 0051](0051-orchestrator-operation-lock-and-state-monitor.md)"
   - "[ADR 0102](0102-orchestrator-concurrency-mutation-audit.md)"
+  - "[ADR 0119](0119-branch-only-pull-request-handoff.md)"
 informed: [Future maintainers, Contributors]
 ---
 
@@ -52,26 +53,37 @@ removes the 47 monitor sections that the audit shows are either redundant or unt
 operation and Trello call as it is, and turns a forgotten publish into a stale but consistent status
 view instead of a data race.
 
-[GitHub issue #815](https://github.com/martin-francois/symphony-trello/issues/815) implements the
-decision in its own pull request. Until it lands, ADR 0051 describes the code. That pull request
-marks ADR 0051 as superseded by this ADR and records a new mutation matrix here.
+[GitHub issue #815](https://github.com/martin-francois/symphony-trello/issues/815) implemented the
+decision. ADR 0051 is superseded by this ADR. More Information records how the code follows the
+design and the mutation matrix of the new code.
 
 The design:
 
 * Writers keep the operation lock. Start, stop, ticks, retry timers, pause deadlines, worker exits,
-  worker task stops, handoff moves, handoff deadlines and agent events run under it exactly as
-  today.
-* Status readers (`snapshot()`, `cardDetails()`, `isStarted()`) read one `volatile` reference to an
-  immutable read view: `started`, running rows, retry rows, recent events, token totals, ended runtime,
-  dispatch pause, rate limits and the effective config. They take no lock.
-* An operation publishes a new view at each point where a monitor section ends today with
-  reader-visible state, and always when it releases the operation lock. Some intermediate points are
-  part of the contract: `typedUsageLimitInstallsFallbackPauseBeforeTrelloIoAndGatesManualDispatch`
-  requires the usage pause to be visible before the worker-exit Trello I/O.
-* `started`, `tickRunning`, the tick timer and the refresh flag move into one small object with its
-  own monitor. `requestRefresh()` keeps using only that monitor, so it still never waits for a tick.
-  Every start and stop publishes each changed `started` value in the read view before returning.
-  Scheduling reads the monitor-owned value; `isStarted()` reads only the published value.
+  worker task stops, handoff moves and agent events run under it exactly as before.
+* The handoff deadline is the one writer outside the operation lock
+  ([ADR 0119](0119-branch-only-pull-request-handoff.md) keeps a slow tracker request from delaying
+  it). It claims its captured running entry through that entry's own atomic, which also records the
+  entry's removal from the running map, the end of its handoff protection after a failed move, and
+  the claim time, so whichever comes first wins. Its operation-lock follow-up publishes the view, so
+  status readers hide the cancelled card from that publish on.
+* Status readers (`snapshot()`, `cardDetails()`, `isStarted()`) and the local-status getters
+  (`selectedBoardId()`, `selectedConfiguredBoardId()`, `selectedWorkflowPath()`,
+  `cardIdentifierPrefix()`) read one `volatile` reference to an immutable read view, `StatusView`:
+  running rows, retry entries, recent events, token totals, ended runtime, the dispatch pause, rate
+  limits, the effective config and the started flag. They take no lock.
+* An operation publishes a new view after it changes reader-visible state when more Trello, worker
+  or filesystem I/O follows before it releases the operation lock, and always when it releases the
+  lock. Some intermediate points are part of the contract:
+  `typedUsageLimitInstallsFallbackPauseBeforeTrelloIoAndGatesManualDispatch` requires the usage
+  pause to be visible before the worker-exit Trello I/O.
+* `started`, `tickRunning`, the tick timer and the refresh flag live in one small object,
+  `TickSchedule`, with its own monitor. `requestRefresh()` uses only that monitor, so it still never
+  waits for a tick.
+  Every start and stop publishes each changed `started` value before returning. Scheduling reads
+  the monitor-owned value; `isStarted()` reads only the published value. The view also contains the
+  adaptive polling status. Its mutable policy remains under the operation lock, and tick scheduling
+  receives the computed delay without accessing that policy under its monitor.
 * The 23 redundant sections from ADR 0102 are deleted without replacement.
 
 ### Consequences
@@ -88,18 +100,26 @@ The design:
   50 events per card.
 * Bad, because the change touches most methods of `SymphonyOrchestrator`, including
   `finishTickAndScheduleNext()` and `snapshot()`, which
-  [GitHub PR #802](https://github.com/martin-francois/symphony-trello/pull/802) changed.
+  [GitHub PR #802](https://github.com/martin-francois/symphony-trello/pull/802) changed. More
+  Information describes where its polling state goes.
+* Bad, because the status page can still show a card whose handoff deadline already claimed it,
+  until the deadline's operation-lock follow-up publishes. That wait lasts as long as an in-flight
+  tick holds the lock; one rate-limited Trello read alone can hold it for up to 30 seconds.
 * Bad, because publish points are a new rule that contributors must follow, even though forgetting
   one is now harmless for consistency.
 
 ### Confirmation
 
-[GitHub issue #815](https://github.com/martin-francois/symphony-trello/issues/815) is done when the
-orchestrator tests pass unchanged, the ADR 0102 owning tests still fail against their mutants,
-`SymphonyOrchestrator` contains no `synchronized (this)` block or `synchronized` method outside the
-tick-schedule object, and a rerun of the ADR 0102 mutant list is recorded in this ADR. Lifecycle tests
-must show that `isStarted()` reads the updated view after each start and stop transition, including
-repeated calls and failed starts that leave the orchestrator stopped.
+`SymphonyOrchestrator` contains no `synchronized (this)` block and no `synchronized` method outside
+`TickSchedule`, and it calls `operationLock.lock()` only inside `callOperation()`. The handoff
+deadline's claim is the only state change outside the operation lock. The ADR 0102 owning tests
+still fail against their mutants, and
+`SymphonyOrchestratorStatusViewTest` owns the publish points. To repeat the audit, apply each mutant
+in More Information on its own and run
+`./mvnw -q -Dtest='SymphonyOrchestrator*Test,UsageLimitPauseIntegrationTest' -Dsurefire.failIfNoSpecifiedTests=false test`,
+as ADR 0102 describes.
+Lifecycle tests must show that `isStarted()` reads the updated view after each start and stop,
+including repeated calls and failed starts that leave the orchestrator stopped.
 
 ## Pros and Cons of the Options
 
@@ -168,3 +188,145 @@ collector of Trello `429` responses lives in the tracker client, is shared by ti
 calls, and needs no change. That pull request also let a rate-limited read wait up to 30 seconds
 while a tick holds the operation lock. `stop()`, worker exits, retry timers and agent events wait
 for the operation lock today as well, and this design does not change that.
+
+### How the code follows the design
+
+These details were decided while implementing
+[GitHub issue #815](https://github.com/martin-francois/symphony-trello/issues/815):
+
+* `publishStatus()` builds the view from the operation state and fails with
+  `IllegalStateException` when the caller does not hold the operation lock, so a publish from a
+  thread that does not own the state fails at once instead of racing a writer.
+* Every operation runs through `runOperation()` or `callOperation()`. They take the operation lock,
+  run the operation, publish and unlock, so the end-of-operation publish has one place in the code
+  and a new operation cannot skip it. The worker-exit test completion hook runs after the operation
+  has published and unlocked, because tests read the status right after that hook.
+* The effective config is no longer `volatile`. Operation-lock holders read and write the field.
+  The only other reader is the workflow watcher thread, which reads it once when it starts; `start()`
+  starts that thread under the operation lock after it set the config, so `Thread.start()` orders
+  the read. The lock-free getters read the config of the view. Startup publishes once right after it loads the
+  workflow, so a local-status probe sees the selected board during the startup Trello I/O, as it
+  did before.
+* `isStarted()` reads the view. It turns true when `start()` returns and false once `stop()` has
+  torn down its state. Operations that check the lifecycle read `TickSchedule` instead.
+* The refresh flag is a plain field under the `TickSchedule` monitor, so the atomic flag that
+  ADR 0102 mutated as A01 is gone.
+* The view keeps the internal dispatch pause and the retry entries, which are immutable records.
+  `snapshot()` shows the pause only while it belongs to the current Codex command, as before. The
+  retry-timer and usage-deadline test callbacks read these from the view without a lock. A first
+  version read them under the operation lock, and then the deadline lock mutant L08 survived: the
+  callback itself waited for the in-flight tick, so the test no longer checked the deadline's own
+  lock.
+* `dispatch()` does not publish after it drops a pending retry of the card it dispatches. Cards with
+  a pending retry are claimed, and every dispatch path skips claimed cards, so the publish would
+  never run.
+* Each publish copies the running rows, the retry entries and at most 50 recent events for each
+  running or retrying card. Other cards' events stay in the operation state and are not copied.
+* Every removal from the running map goes through `removeRunning()`, which marks the entry
+  removed so a handoff deadline can no longer claim it. A worker exit is the one exception: it
+  removes its entry only when no deadline claimed it first, and otherwise hands the cleanup to that
+  deadline.
+* A running entry keeps the handoff claim state in one `AtomicReference` to an immutable record:
+  removed from the running map, still protected by a handoff move, and the claim time. The claim,
+  the removal and the end of protection after a failed move each update that one reference, so a
+  reader that sees the claim also sees its time. The handoff move fields themselves are plain fields
+  that only operation-lock holders touch, because the deadline no longer reads them.
+* A status row carries the claim time, and the view hides a claimed card while it counts that
+  card's runtime only up to the claim.
+* The worker task stops, handoff moves and workspace-release sections that were added to the
+  orchestrator after the audit also run through `runOperation()` or `callOperation()` and lose
+  their monitor blocks.
+
+### Mutation matrix of the read view
+
+The harness from ADR 0102 ran again against the code of
+[GitHub issue #815](https://github.com/martin-francois/symphony-trello/issues/815): one mutant at a time, all orchestrator
+test classes, one Maven run per mutant. Every mutant ran once more after the code review, and the
+mutants that a new test kills ran at least twice with the same owning test. 27 of 48 mutants were
+killed in that run. Every operation then moved to one locking helper, so the separate
+end-of-operation publishes E01 to E08 and the worker-exit end publish P10 no longer exist; E00 now
+covers all of them. The tables list the 39 mutants that remain: 25 killed and 14 survivors. The 24
+reader-only and 23 redundant monitor sections of ADR 0102 no longer exist.
+
+The worker task stop, handoff move and handoff deadline code that reached `main` after the audit
+added mutants L10 to L13, P18, P19, H01 to H03, H06, H07 and A03. Each ran once against the
+rebased code, and the 25 killed mutants above ran again there against their owning tests. Stop and
+the dispatch failure paths remove entries through `removeRunning()`, so H03 covers their removal
+marks too. With these the tables list 51 mutants: 33 killed and 18 survivors.
+
+Mutant IDs: `L` operation lock, `T` `TickSchedule` monitor method, `P` intermediate publish, `E`
+end-of-operation publish, `O` statement order, `V` `volatile`, `A` atomic read-modify-write, `G`
+guard, `H` handoff claim. There is no P06: it would remove the publish in `dispatch()` after a
+pending retry is dropped, which the code does not have (see above). A lock mutant runs one operation through a copy of `callOperation()` that
+publishes without taking the lock, with the guard in `publishStatus()` disabled, so it fails only
+through the tests.
+
+#### Killed mutants
+
+| ID | Mutation | Owning test |
+| --- | --- | --- |
+| L01 | Remove the operation lock from `start()` | `workflowPathCannotChangeOnceStartHasBegun` |
+| L02 | Remove the operation lock from `stop()` | `stopWaitsForAnInFlightTickAndCancelsTheWorkerItDispatched` |
+| L03 | Remove the operation lock from `setWorkflowPath()` | `workflowPathCannotChangeOnceStartHasBegun` |
+| L04 | Remove the operation lock from `tick()` | `usageDeadlineWaitsForAnInFlightOrchestratorOperation`, both `SymphonyOrchestratorOperationLockTest` tests and others |
+| L05 | Remove the operation lock from `onWorkerExit()` | `workerExitWaitsForAnInFlightOrchestratorOperation[FAILED_RESULT]` |
+| L06 | Remove the operation lock from `onWorkerExitWithoutResult()` | `workerExitWaitsForAnInFlightOrchestratorOperation[EXCEPTION]` |
+| L08 | Remove the operation lock from `onDispatchPauseDeadline()` | `usageDeadlineWaitsForAnInFlightOrchestratorOperation` |
+| L09 | Remove the operation lock from `onRetryTimer()` | `retryDispatchRacingAPollingTickRespectsTheConcurrencyLimit` |
+| T04 | Remove `synchronized` from `TickSchedule.requestRefresh()` | `refreshThatPassedTheStartedCheckSchedulesBeforeStopShutsTheSchedulerDown`, `refreshAtTickCompletionBoundaryIsNotOverwrittenByIntervalSchedule` |
+| T07 | Remove `synchronized` from `TickSchedule.finishTickAndScheduleNext()` | `refreshAtTickCompletionBoundaryIsNotOverwrittenByIntervalSchedule` |
+| O01 | Mark stopping after both executors shut down | `refreshAtSchedulerShutdownBoundaryIsANoOp`, `stopShowsTheStoppedStateWhileItCancelsWorkers` |
+| O05 | Mark stopping at the very end of `stop()` | `refreshAtSchedulerShutdownBoundaryIsANoOp`, `stopShowsTheStoppedStateWhileItCancelsWorkers` |
+| P01 | Remove the publish in `start()` after the workflow load | `localStatusShowsTheSelectedBoardWhileStartupCleanupFetchesTerminalCards` |
+| P02 | Remove the publish in `stop()` after the state teardown | `stopShowsTheStoppedStateWhileItCancelsWorkers` |
+| P03 | Remove the publish in `applyValidReload()` | `reloadedRoutingIsVisibleWhileTheReloadTickReconcilesRunningCards` |
+| P04 | Remove the publish after a running card update in `reconcileRunningCards()` | `refreshedCardStateIsVisibleWhileTheTickDispatchesTheNextCard` |
+| P05 | Remove the publish after the entry removal in `terminateRunning()` | `terminatedCardLeavesTheRunningRowsBeforeItsWorkerIsCancelled` |
+| P07 | Remove the publish after `running.put` in `dispatch()` | `workerSeesItsCardRunningWhileTheDispatchingTickContinues` |
+| P11 | Remove the publish after the entry removal in `handleWorkerExit()` | `workerExitRefreshSeesTheCardNoLongerRunning` |
+| P12 | Remove the publish in `installOrExtendUsagePause()` | `typedUsageLimitInstallsFallbackPauseBeforeTrelloIoAndGatesManualDispatch`, `rearmedUsagePauseIsVisibleBeforeItsWorkpadUpdate` |
+| P13 | Remove the publish in `rearmUsagePauseWithoutProbe()` | `rearmedUsagePauseIsVisibleBeforeItsWorkpadUpdate` |
+| P14 | Remove the publish in `clearUsagePause()` | `clearedUsagePauseIsVisibleBeforeItsWorkpadCleanup` |
+| P15 | Remove the publish in `scheduleRetryAt()` | `scheduledRetryIsVisibleWhileTheTickDispatchesTheNextCard` |
+| P16 | Remove the publish after the retry removal in `handleRetryTimer()` | `retryTimerCardRefreshSeesTheRetryLeaveTheQueue` |
+| L11 | Remove the operation lock from `beforeHandoffMove()` | `handoffMoveCallbackWaitsForAnInFlightTick[beforeHandoffMove]` |
+| L12 | Remove the operation lock from `afterHandoffMove()` | `handoffMoveCallbackWaitsForAnInFlightTick[afterHandoffMove]` |
+| L13 | Remove the operation lock from `finishExpiredHandoffUnderLock()` | `deadlineCancelsWorkerBeforeBlockedTrackerReconciliationReturns` |
+| H01 | The claim ignores the removal mark | `deadlineAfterTheWorkerExitedDoesNotClaimItsEntry`, `staleDeadlineTaskDoesNotCancelReplacementWorker` |
+| H02 | A worker exit reads the claim instead of removing its entry atomically | `deadlineAfterTheWorkerExitedDoesNotClaimItsEntry` |
+| H03 | `removeRunning()` does not mark the entry removed | `staleDeadlineTaskDoesNotCancelReplacementWorker` |
+| H06 | A failed move does not end the handoff protection | `deadlineThatStartedBeforeAFailedMoveDoesNotCancelTheTurn` |
+| H07 | A move after a failed move does not restore the protection | `moveAfterAFailedMoveRestoresTheDeadline` |
+| E00 | `callOperation()` unlocks without publishing | `cardDetailsAndLifecycleReadsAnswerWhileATickIsBlockedInsideTrelloFetch`, `runningSnapshotCountsContinuationTurns` and others |
+
+#### Survivors
+
+| ID | Mutation | Why no deterministic test owns it |
+| --- | --- | --- |
+| L07 | Remove the operation lock from `onAgentEventAndReportAccepted()` | Unchanged from ADR 0102. The event path does no I/O; the only new outcome is a data race on the `running` lookup and `lastEventAt`. |
+| T01 | Remove `synchronized` from `TickSchedule.isStarted()` | Every caller holds the operation lock, and so does every writer of `started`, so the operation lock already orders them. The monitor stays because refresh callers share the field. |
+| T02 | Remove `synchronized` from `markStartedAndScheduleFirstTick()` | Same as B02 in ADR 0102: the first tick is scheduled at zero delay either way, and a refresh that misses `started` only records its flag for that tick. |
+| T03 | Remove `synchronized` from `markStoppingAndCancelTick()` | Same as S01 in ADR 0102: the publish after the teardown in `stop()` reads `started` through the monitor, so it still waits for an in-flight refresh section before the scheduler shuts down. |
+| T05 | Remove `synchronized` from `beginTick()` | Same as S04 in ADR 0102: a refresh that misses `tickRunning = true` schedules one extra tick, which waits for the operation lock. |
+| T06 | Remove `synchronized` from `consumeRefreshRequest()` | Same as A01 in ADR 0102: the lost-update window lies inside one method with no callback a test could pause in. |
+| T08 | Remove `synchronized` from `scheduleImmediateTickIfStarted()` | It runs under the operation lock. Racing a refresh can at worst leave one extra zero-delay tick, which waits for the operation lock. |
+| V01, V02 | Drop `volatile` from `statusView` or `workflowPath` | Java memory model visibility of one immutable reference, as V01 and V02 in ADR 0102. |
+| A02 | Split `getAndSet(false)` on the reload flag | Unchanged from ADR 0102. |
+| G01 | Remove the operation-lock guard in `publishStatus()` | An assertion: no code path publishes without the lock, so no test can reach it. |
+| P08, P09 | Remove the publish after a prompt render or worker submission failure in `dispatch()` | The release Trello call follows, then `scheduleRetryAt()` publishes. No test reads the status during that release; the view stays stale only for that call. |
+| P17 | Remove the publish in `retireUsageProbeWithoutResult()` | The workpad cleanup Trello call follows. No test reads the status during it; the end-of-operation publish covers it. |
+| L10 | Remove the operation lock from `onWorkerTaskStopped()` | It runs on the worker thread right after `onWorkerExit()` on the same thread took and released the operation lock. A test would need a tick to take the lock between the two, and no callback runs there to pause in. |
+| P18 | Remove the publish after a protected handoff card update in `reconcileRunningCards()` | The next card's reconciliation follows with more Trello I/O. No test reads the protected card's refreshed state during it; the end-of-operation publish covers it. |
+| P19 | Remove the publish after the retry removal in `retainUnconfirmedWorkspace()` | The usage-probe workpad cleanup Trello call follows. No test reads the status during it; the end-of-operation publish covers it. |
+| A03 | Split the claim's atomic update into a read and a write | Same as A02: the lost-update window lies inside one method with no callback a test could pause in. |
+
+### Polling state from adaptive polling
+
+[GitHub PR #802](https://github.com/martin-francois/symphony-trello/pull/802) added an adaptive
+poll interval. It fits this design as follows: `tick()` computes the next delay under the operation
+lock, where `AdaptivePollInterval.nextDelay` runs and the tracker's rate-limit pressure is drained,
+and passes it to `TickSchedule.finishTickAndScheduleNext`, which still chooses between that delay
+and an immediate refresh tick. The polling status is one more `StatusView` component that
+`publishStatus()` fills and `StatusView.snapshot()` copies into `RuntimeSnapshot`. A tick always
+ends through `runOperation()`, which publishes, so the status shows the new interval as soon as the
+tick ends. `AdaptivePollInterval` is confined to operation-lock holders and needs no monitor.

@@ -46,6 +46,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -54,6 +55,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
 import java.util.function.LongUnaryOperator;
 import java.util.function.Predicate;
@@ -74,6 +76,23 @@ final class SymphonyOrchestratorTestSupport {
     /// worker, so a competitor queued there behind a paused task never starts.
     static final Executor OWN_PLATFORM_THREAD =
             task -> Thread.ofPlatform().daemon().start(task);
+
+    /// Whether the thread waits for the operation lock inside one of the named orchestrator methods.
+    /// ThreadMXBean omits virtual threads, so this reads the thread's own stack.
+    static boolean waitsForOperationLock(Thread thread, Set<String> orchestratorMethods) {
+        if (thread == null || thread.getState() != Thread.State.WAITING) {
+            return false;
+        }
+        boolean inMethod = false;
+        boolean waitingForLock = false;
+        for (StackTraceElement frame : thread.getStackTrace()) {
+            inMethod |= frame.getClassName().equals(SymphonyOrchestrator.class.getName())
+                    && orchestratorMethods.contains(frame.getMethodName());
+            waitingForLock |= frame.getClassName().equals(ReentrantLock.class.getName())
+                    && frame.getMethodName().equals("lock");
+        }
+        return inMethod && waitingForLock;
+    }
 
     static UsageProbeScenario usageProbeScenario(Path workflow, MutableClock clock, Card first, Card second) {
         var tracker = new FakeTracker(List.of(first, second));
@@ -285,6 +304,16 @@ final class SymphonyOrchestratorTestSupport {
 
     static void writeWorkflow(Path workflow, String pollIntervalMs, String extraConfig, String prompt)
             throws Exception {
+        writeWorkflow(workflow, "[Todo]", pollIntervalMs, extraConfig, prompt);
+    }
+
+    static void writeWorkflowWithActiveStates(Path workflow, String activeStates, String extraConfig) throws Exception {
+        writeWorkflow(workflow, activeStates, "60000", extraConfig, "{{ card.title }}");
+    }
+
+    private static void writeWorkflow(
+            Path workflow, String activeStates, String pollIntervalMs, String extraConfig, String prompt)
+            throws Exception {
         Files.writeString(
                 workflow,
                 """
@@ -294,7 +323,7 @@ final class SymphonyOrchestratorTestSupport {
                   api_key: key
                   api_token: token
                   board_id: board-1
-                  active_states: [Todo]
+                  active_states: %s
                 workspace:
                   root: work
                 polling:
@@ -305,7 +334,7 @@ final class SymphonyOrchestratorTestSupport {
                 ---
                 %s
                 """
-                        .formatted(pollIntervalMs, extraConfig, prompt));
+                        .formatted(activeStates, pollIntervalMs, extraConfig, prompt));
     }
 
     static void writeWorkflowWithCommand(Path workflow, String command, String extraConfig) throws Exception {

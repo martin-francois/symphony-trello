@@ -298,4 +298,6 @@ worker's entry with a compare-and-set instead
 The claim keeps the order the monitor gave: a deadline that reaches the entry after a worker exit or
 reconciliation removed it, or after a failed move ended its protection, does nothing, and one that
 reaches it first wins. The claim time lives in the same atomic, so a reader that sees the claim also
-sees when it happened.
+sees when it happened. Status readers see the claim at the next status publish, which the
+deadline's operation-lock follow-up makes, so the status page can show the cancelled card for as long
+as an in-flight tick holds the operation lock.

@@ -31,6 +31,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -38,7 +39,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.ReentrantLock;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -697,25 +697,8 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     /// Correct code leaves the worker exit blocked on the operation lock; a missing lock lets its
     /// tracker fetch happen. Either state ends the wait, and the caller's assertion tells them apart.
     private static boolean fetchedOrWaitsForLock(CountDownLatch workerExitFetch, Thread worker) {
-        return workerExitFetch.getCount() == 0 || workerExitWaitsForLock(worker);
-    }
-
-    private static boolean workerExitWaitsForLock(Thread worker) {
-        // ThreadMXBean omits virtual workers, so inspect the blocked callback's own stack.
-        if (worker.getState() != Thread.State.WAITING) {
-            return false;
-        }
-        StackTraceElement[] stack = worker.getStackTrace();
-        boolean inCallback = false;
-        boolean waitingForLock = false;
-        for (StackTraceElement frame : stack) {
-            inCallback |= frame.getClassName().equals(SymphonyOrchestrator.class.getName())
-                    && (frame.getMethodName().equals("onWorkerExit")
-                            || frame.getMethodName().equals("onWorkerExitWithoutResult"));
-            waitingForLock |= frame.getClassName().equals(ReentrantLock.class.getName())
-                    && frame.getMethodName().equals("lock");
-        }
-        return inCallback && waitingForLock;
+        return workerExitFetch.getCount() == 0
+                || waitsForOperationLock(worker, Set.of("onWorkerExit", "onWorkerExitWithoutResult"));
     }
 
     @Test

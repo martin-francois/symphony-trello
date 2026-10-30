@@ -14,7 +14,7 @@ import org.jboss.logging.Logger;
 /// Trello `429` responses seen since the previous tick. See
 /// docs/adr/0098-adaptive-trello-polling-interval.md.
 ///
-/// Not thread-safe: the orchestrator calls it only while holding its instance monitor.
+/// Not thread-safe: the orchestrator calls it only while holding its operation lock.
 final class AdaptivePollInterval {
     /// How long the worker must see no `429` before each recovery step.
     static final Duration QUIET_PERIOD = Duration.ofSeconds(60);

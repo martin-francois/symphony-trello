@@ -150,7 +150,10 @@ the mutant IDs and the source order of the `B` numbers describe that commit. Lat
 added four operation-lock acquisitions (`onWorkerTaskStopped`, `beforeHandoffMove`,
 `afterHandoffMove` and `finishExpiredHandoffUnderLock`), nine `synchronized (this)` blocks and the
 `synchronized` method `retainWorkspaceOwnership`. This audit does not classify those 14 sites.
-Mutant IDs:
+[GitHub issue #815](https://github.com/martin-francois/symphony-trello/issues/815) later removed the
+monitor sections listed below and those 14 sites' monitors;
+[ADR 0105](0105-orchestrator-published-read-view.md) records the rerun against that code. Mutant
+IDs:
 `L` operation lock, `S` `synchronized` method, `B` `synchronized (this)` block in source order
 (blocks 5 to 7 belong to test-only helpers and were skipped), `V` `volatile`, `A` atomic
 read-modify-write, `O` statement order.

@@ -39,6 +39,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
@@ -439,8 +440,10 @@ final class SymphonyOrchestratorHandoffTest {
             var trackerEntered = new CountDownLatch(1);
             var releaseTracker = new CountDownLatch(1);
             var cancelled = new CountDownLatch(1);
+            var followUp = new AtomicReference<Thread>();
             String worker = run.move().workerIdentity();
             doAnswer(invocation -> {
+                        followUp.set(Thread.currentThread());
                         cancelled.countDown();
                         return null;
                     })
@@ -480,21 +483,24 @@ final class SymphonyOrchestratorHandoffTest {
                 assertThat(run.result.get().success())
                         .as("deadline stops the unfinished protocol turn")
                         .isFalse();
+                waitUntil(() -> waitsForOperationLock(followUp.get(), Set.of("finishExpiredHandoffUnderLock"))
+                        || run.orchestrator.snapshot().counts().running() == 0);
                 assertThat(run.orchestrator.snapshot().counts().running())
-                        .as("cancellation removes a worker from live counts before blocked reconciliation returns")
-                        .isZero();
+                        .as("the deadline's cleanup waits for the operation lock the blocked reconciliation holds")
+                        .isOne();
+                assertThat(releaseTracker.getCount()).isOne();
+                releaseTracker.countDown();
+                deadline.join(Duration.ofSeconds(5));
+                // The status view hides the cancelled card at the deadline's follow-up publish, which
+                // waits for the operation lock the blocked reconciliation holds (ADR 0105).
+                waitUntil(() -> run.completedTicks.get() > blockedTick
+                        && run.orchestrator.snapshot().counts().running() == 0);
                 assertThat(run.orchestrator.cardDetails(CARD_IDENTIFIER)).isEmpty();
                 double stoppedRuntime =
                         run.orchestrator.snapshot().codexTotals().secondsRunning();
                 run.clock.advance(Duration.ofSeconds(10));
                 assertThat(run.orchestrator.snapshot().codexTotals().secondsRunning())
-                        .isEqualTo(stoppedRuntime);
-                assertThat(releaseTracker.getCount()).isOne();
-                releaseTracker.countDown();
-                deadline.join(Duration.ofSeconds(5));
-                waitUntil(() -> run.completedTicks.get() > blockedTick
-                        && run.orchestrator.snapshot().counts().running() == 0);
-                assertThat(run.orchestrator.snapshot().codexTotals().secondsRunning())
+                        .as("a cancelled worker's runtime stops at its cancellation")
                         .isEqualTo(stoppedRuntime);
                 verify(run.runner).cancel(worker);
             } finally {
@@ -618,6 +624,59 @@ final class SymphonyOrchestratorHandoffTest {
                     .hasValue(0);
             verify(run.runner, never()).cancel(worker);
             assertThat(run.orchestrator.snapshot().counts().running()).isOne();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"beforeHandoffMove", "afterHandoffMove"})
+    void handoffMoveCallbackWaitsForAnInFlightTick(String callback) throws Exception {
+        // given
+        try (var run = new HandoffRun(false, false, REVIEW_LIST, DEFAULT_TURN_TIMEOUT_MS)) {
+            run.start();
+            run.awaitFinalStarted();
+            CardHandoffMove move = run.move();
+            var trackerEntered = new CountDownLatch(1);
+            var releaseTracker = new CountDownLatch(1);
+            run.tracker.stateFetchHook = () -> {
+                trackerEntered.countDown();
+                try {
+                    assertThat(releaseTracker.await(10, TimeUnit.SECONDS))
+                            .as("the test releases the blocked tracker after observing the callback")
+                            .isTrue();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(
+                            "cannot finish tracker test: expected release before interruption", e);
+                }
+            };
+            run.orchestrator.requestRefresh();
+            assertThat(trackerEntered.await(5, TimeUnit.SECONDS))
+                    .as("reconciliation entered the tracker")
+                    .isTrue();
+
+            // when
+            Thread caller = Thread.ofPlatform().start(() -> {
+                if ("beforeHandoffMove".equals(callback)) {
+                    run.listener.get().beforeHandoffMove(move);
+                } else {
+                    run.listener.get().afterHandoffMove(move, true);
+                }
+            });
+
+            // then
+            try {
+                waitUntil(() -> !caller.isAlive() || waitsForOperationLock(caller, Set.of(callback)));
+                assertThat(caller.isAlive())
+                        .as("%s must wait for the operation lock the blocked reconciliation holds", callback)
+                        .isTrue();
+            } finally {
+                run.tracker.stateFetchHook = () -> {};
+                releaseTracker.countDown();
+            }
+            caller.join(Duration.ofSeconds(5));
+            assertThat(caller.isAlive())
+                    .as("%s returns once the tick ends", callback)
+                    .isFalse();
         }
     }
 
