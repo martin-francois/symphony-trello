@@ -22,6 +22,11 @@ informed: [Contributors, Reviewers, Future maintainers]
 `I confirm I understand what the code does`. On a pull request authored by martinfrancois, his agent
 ticks it. The gate in this ADR did not change.
 
+[ADR 0141](0141-check-the-ai-assistance-disclosure-deterministically.md) adds the same AI
+Assistance rules to `scripts/check-pr-compatibility-metadata.ts`, which the Commitlint workflow
+runs on `pull_request`. When a rate-limited CodeRabbit posts nothing, the script's check still
+fails. The CodeRabbit check stays the merge gate.
+
 ## Context and Problem Statement
 
 GitHub fills a new pull request body with `.github/pull_request_template.md`, but it cannot require

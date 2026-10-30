@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   type CommitMetadata,
+  evaluateAiAssistanceDisclosure,
   evaluateCompatibilityMetadata,
   evaluatePullRequestBreakingConsistency,
 } from "./check-pr-compatibility-metadata.ts";
@@ -19,6 +20,13 @@ const COMBINE = "Combine this pull request into one final commit. The branch com
   + "      need to remain separate in `main`. (squash)";
 const KEEP = "Keep the individual commits. Each commit is independently meaningful and should remain visible\n"
   + "      in `main`. (rebase)";
+const NO_AI_ASSISTANCE = "No AI assistance beyond short completion, search, formatting, or typo fixes";
+const AI_ASSISTED = "AI-assisted PR";
+const UNDERSTOOD = "I confirm I understand what the code does";
+const AI_SECTION_ERROR = "Provide exactly one visible AI Assistance (if used) section.";
+const AI_CHECKBOXES_ERROR = "Keep the three AI Assistance checkboxes from the pull request template, one line each.";
+const AI_CHOICE_ERROR = `Tick exactly one AI assistance choice: \`${NO_AI_ASSISTANCE}\` or \`${AI_ASSISTED}\`.`;
+const UNDERSTOOD_ERROR = `An AI-assisted pull request merges only after a person ticks \`${UNDERSTOOD}\`.`;
 const RATIONALE_ERROR = "Provide a non-placeholder `Because ...` compatibility rationale.";
 const SELECTION_ERROR = "Select exactly one current option in the Compatibility Decision section.";
 const HISTORY_SELECTION_ERROR = "Select exactly one current option in the Commit History in Main section.";
@@ -524,4 +532,91 @@ test("unrelated PR-body BREAKING CHANGE text is not a commit marker", () => {
     ]),
     [],
   );
+});
+
+test("accepts the literal template with the no-assistance choice ticked", () => {
+  assert.deepEqual(evaluateAiAssistanceDisclosure(select(TEMPLATE, NO_AI_ASSISTANCE)), []);
+});
+
+test("accepts an AI-assisted pull request once a person ticks the confirmation", () => {
+  const body = select(select(TEMPLATE, AI_ASSISTED), UNDERSTOOD)
+    .replace(`- [x] ${UNDERSTOOD}`, `- [X] ${UNDERSTOOD}  `);
+
+  assert.deepEqual(evaluateAiAssistanceDisclosure(body), []);
+});
+
+test("an AI-assisted pull request without the confirmation says a person has to tick it", () => {
+  assert.deepEqual(evaluateAiAssistanceDisclosure(select(TEMPLATE, AI_ASSISTED)), [UNDERSTOOD_ERROR]);
+});
+
+test("the confirmation is required only for the AI-assisted choice", () => {
+  assert.deepEqual(evaluateAiAssistanceDisclosure(select(select(TEMPLATE, NO_AI_ASSISTANCE), UNDERSTOOD)), []);
+});
+
+test("rejects an untouched AI Assistance section", () => {
+  assert.deepEqual(evaluateAiAssistanceDisclosure(TEMPLATE), [AI_CHOICE_ERROR]);
+});
+
+test("rejects both disclosure choices ticked", () => {
+  const both = select(select(select(TEMPLATE, NO_AI_ASSISTANCE), AI_ASSISTED), UNDERSTOOD);
+  assert.deepEqual(evaluateAiAssistanceDisclosure(both), [AI_CHOICE_ERROR]);
+});
+
+test("rejects a missing, duplicated, or fenced AI Assistance section", () => {
+  const valid = select(TEMPLATE, NO_AI_ASSISTANCE);
+  const [beforeSection] = valid.split("## AI Assistance (if used)");
+  assert.deepEqual(evaluateAiAssistanceDisclosure(beforeSection ?? ""), [AI_SECTION_ERROR]);
+  assert.deepEqual(
+    evaluateAiAssistanceDisclosure(`${valid}\n\n## AI Assistance (if used)\n\n- [x] ${AI_ASSISTED}\n`),
+    [AI_SECTION_ERROR],
+  );
+  const fenced = `${beforeSection}\`\`\`markdown\n## AI Assistance (if used)\n\n- [x] ${NO_AI_ASSISTANCE}\n\`\`\`\n`;
+  assert.deepEqual(evaluateAiAssistanceDisclosure(fenced), [AI_SECTION_ERROR]);
+});
+
+test("rejects a removed, reworded, duplicated, or commented-out AI Assistance checkbox", () => {
+  const valid = select(TEMPLATE, AI_ASSISTED);
+  for (const line of [`- [ ] ${NO_AI_ASSISTANCE}`, `- [x] ${AI_ASSISTED}`, `- [ ] ${UNDERSTOOD}`]) {
+    for (const [change, replacement] of [["removed", ""], ["duplicated", `${line}\n${line}`], ["commented out", `<!-- ${line} -->`]]) {
+      assert.deepEqual(
+        evaluateAiAssistanceDisclosure(replaceExactly(valid, line, replacement ?? "")),
+        [AI_CHECKBOXES_ERROR],
+        `${JSON.stringify(line)} ${change}`,
+      );
+    }
+  }
+  assert.deepEqual(
+    evaluateAiAssistanceDisclosure(replaceExactly(valid, `- [ ] ${UNDERSTOOD}`, "- [x] I understand the code")),
+    [AI_CHECKBOXES_ERROR],
+  );
+});
+
+test("a ticked confirmation inside a fence, a comment, a blockquote, or a nested list does not count", () => {
+  const assisted = select(TEMPLATE, AI_ASSISTED);
+  for (const hidden of [
+    `\`\`\`text\n- [x] ${UNDERSTOOD}\n\`\`\`\n- [ ] ${UNDERSTOOD}`,
+    `<!-- - [x] ${UNDERSTOOD} -->\n- [ ] ${UNDERSTOOD}`,
+    `> - [x] ${UNDERSTOOD}\n- [ ] ${UNDERSTOOD}`,
+    `  - [x] ${UNDERSTOOD}\n- [ ] ${UNDERSTOOD}`,
+  ]) {
+    assert.deepEqual(
+      evaluateAiAssistanceDisclosure(replaceExactly(assisted, `- [ ] ${UNDERSTOOD}`, hidden)),
+      [UNDERSTOOD_ERROR],
+      JSON.stringify(hidden),
+    );
+  }
+});
+
+test("treats CRLF and LF AI Assistance sections identically", () => {
+  const lf = select(TEMPLATE, AI_ASSISTED);
+  assert.deepEqual(evaluateAiAssistanceDisclosure(lf.replaceAll("\n", "\r\n")), [UNDERSTOOD_ERROR]);
+  assert.deepEqual(evaluateAiAssistanceDisclosure(lf), [UNDERSTOOD_ERROR]);
+});
+
+test("the script and the CodeRabbit check quote the same AI Assistance lines", () => {
+  const coderabbit = readFileSync(new URL("../.coderabbit.yaml", import.meta.url), "utf8");
+  for (const text of ["## AI Assistance (if used)", NO_AI_ASSISTANCE, AI_ASSISTED, UNDERSTOOD]) {
+    assert.ok(TEMPLATE.includes(text), `template must contain ${JSON.stringify(text)}`);
+    assert.ok(coderabbit.includes(text), `.coderabbit.yaml must quote ${JSON.stringify(text)}`);
+  }
 });

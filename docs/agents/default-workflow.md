@@ -474,14 +474,18 @@ optional verification. Follow this order:
   and report if it is still pending after the actual CI checks are green.
 - CodeRabbit pre-merge checks read the PR description and request changes while one fails
   ([ADR 0085](../adr/0085-enforce-pull-request-template-with-coderabbit.md)). Fix a failed check by
-  editing the body, then comment `@coderabbitai run pre-merge checks`.
+  editing the body, then comment `@coderabbitai run pre-merge checks`. The Commitlint workflow's
+  `Check compatibility metadata` step applies the same AI Assistance rules through
+  `scripts/check-pr-compatibility-metadata.ts`, so a rate-limited CodeRabbit still leaves a
+  failing check ([ADR 0141](../adr/0141-check-the-ai-assistance-disclosure-deterministically.md)).
+  It runs locally with `PR_TITLE`, `PR_BODY`, `PR_BASE_SHA` and `PR_HEAD_SHA` set.
 - Who ticks `I confirm I understand what the code does` depends on who authored the pull request
   ([ADR 0132](../adr/0132-tick-the-understanding-box-on-martinfrancois-pull-requests.md)). The box
   exists for outside contributors. These rules hold only in `martin-francois/symphony-trello`. In a
   fork or any other repository, the box belongs to that pull request's human author.
-  - On a pull request authored by martinfrancois in this repository, the agent ticks the box itself
-    when it works under his account, which means `gh api user --jq .login` prints
-    `martinfrancois`. This includes a pull request authored by martinfrancois that an agent opened
+  - On a pull request authored by martinfrancois in this repository, the agent ticks the box itself,
+    together with `AI-assisted PR`, when it works under his account, which means
+    `gh api user --jq .login` prints `martinfrancois`. This includes a pull request authored by martinfrancois that an agent opened
     or finished for him. If the AI assistance check had already failed on the empty box, comment
     `@coderabbitai run pre-merge checks` after ticking it.
   - A Renovate or Release Please pull request that martinfrancois lands counts as his. Their

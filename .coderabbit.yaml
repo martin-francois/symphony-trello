@@ -22,6 +22,7 @@ reviews:
     description:
       mode: "error"
     custom_checks:
+      # Subset of scripts/check-pr-compatibility-metadata.ts, never stricter than that script.
       - name: "AI assistance disclosed"
         mode: "error"
         instructions: |
