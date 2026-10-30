@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.setup;
 import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.EnvironmentReferences;
+import ch.fmartin.symphony.trello.process.PlatformEnvironment;
 import ch.fmartin.symphony.trello.setup.TrelloCredentialResolver.CredentialValue;
 import com.google.common.util.concurrent.Striped;
 import java.io.IOException;
@@ -1353,7 +1354,7 @@ final class LocalWorkerManager {
     }
 
     private static ManagedProcessPlatform platformForCurrentOs() {
-        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win")
+        return PlatformEnvironment.isWindows(System.getProperty("os.name", ""))
                 ? new WindowsManagedProcessPlatform()
                 : new PosixManagedProcessPlatform();
     }
@@ -1364,6 +1365,6 @@ final class LocalWorkerManager {
     }
 
     private static boolean isWindows() {
-        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
+        return PlatformEnvironment.isWindows(System.getProperty("os.name", ""));
     }
 }

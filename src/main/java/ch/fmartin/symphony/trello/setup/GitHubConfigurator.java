@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.process.PlatformEnvironment;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.GitHubIntegration;
 import com.google.common.base.Strings;
 import java.io.IOException;
@@ -190,7 +191,7 @@ final class GitHubConfigurator {
     }
 
     private boolean isWindows() {
-        return normalizedOsName().contains("win");
+        return PlatformEnvironment.isWindows(normalizedOsName());
     }
 
     private String normalizedOsName() {
