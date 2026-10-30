@@ -116,6 +116,32 @@ final class LocalWorkerManager {
         return 0;
     }
 
+    /// The board, workflow configuration, and Trello credentials that a `symphony-trello card`
+    /// command uses. Board selection, the credential file, and the credential checks match
+    /// `start`, so the card commands read the same key and token as the worker. The managed worker
+    /// itself is neither inspected nor changed.
+    CardCommandTarget cardCommandTarget(
+            LocalWorkerPaths paths, Optional<String> board, Optional<Path> workflow, String command)
+            throws IOException {
+        ConnectedBoardManifest manifest = loadLifecycleManifest(paths, workflow);
+        Path fallbackEnvPath = paths.defaultEnvPath().toAbsolutePath().normalize();
+        ConnectedBoard selected =
+                selectOne(manifest, board, workflow, command, Optional.empty(), fallbackEnvPath, false);
+        Path envPath = Optional.ofNullable(selected.envPath())
+                .orElse(fallbackEnvPath)
+                .toAbsolutePath()
+                .normalize();
+        validateWorkerEnvPath(envPath);
+        Optional<WorkerCredentialUsage> credentialUsage = workerCredentialUsage(selected.workflowPath(), envPath);
+        EffectiveConfig config = workflowConfig.prepareLaunchWorkflow(
+                selected.workflowPath(),
+                WorkflowEnvironmentResolver.resolver(environment, envPath),
+                false,
+                paths.configDir());
+        credentialUsage.ifPresent(usage -> validateWorkerCredentials(usage, command));
+        return new CardCommandTarget(selected, config, failure -> withCredentialContext(failure, credentialUsage));
+    }
+
     private void rejectBoardManagedByAnotherWorkflow(
             LocalWorkerPaths paths, ConnectedBoardManifest manifest, ConnectedBoard board) throws IOException {
         boardManagedByAnotherRunningWorkflow(paths, manifest, board).ifPresent(row -> {
@@ -314,7 +340,7 @@ final class LocalWorkerManager {
         boolean workflowServerPortUsed = workflowServerPortUsed(envPath);
         EffectiveConfig launchConfig = workflowConfig.prepareLaunchWorkflow(
                 board.workflowPath(), workflowEnvironment, workflowServerPortUsed, paths.configDir());
-        credentialUsage.ifPresent(this::validateWorkerCredentials);
+        credentialUsage.ifPresent(usage -> validateWorkerCredentials(usage, "worker start"));
         workflowConfig.validateLaunchDispatch(launchConfig);
 
         if (!restartManagedWorker) {
@@ -581,20 +607,24 @@ final class LocalWorkerManager {
                 .orElse(exception);
     }
 
-    private void validateWorkerCredentials(WorkerCredentialUsage usage) {
+    /// `purpose` completes "Missing Trello credentials for ...", so an error names the command
+    /// that needed them.
+    private void validateWorkerCredentials(WorkerCredentialUsage usage, String purpose) {
         boolean hasApiKey = usage.apiKey().source() != TrelloCredentialSource.MISSING;
         boolean hasApiToken = usage.apiToken().source() != TrelloCredentialSource.MISSING;
         if (!hasApiKey && !hasApiToken) {
             throw missingWorkerCredentialException(
-                    "setup_worker_missing_trello_credentials", "Missing Trello credentials for worker start.", usage);
+                    "setup_worker_missing_trello_credentials",
+                    "Missing Trello credentials for " + purpose + ".",
+                    usage);
         }
         if (!hasApiKey) {
             throw missingWorkerCredentialException(
-                    "setup_worker_missing_api_key", "Missing Trello API key for worker start.", usage);
+                    "setup_worker_missing_api_key", "Missing Trello API key for " + purpose + ".", usage);
         }
         if (!hasApiToken) {
             throw missingWorkerCredentialException(
-                    "setup_worker_missing_api_token", "Missing Trello API token for worker start.", usage);
+                    "setup_worker_missing_api_token", "Missing Trello API token for " + purpose + ".", usage);
         }
         requireLiteralCredentialFileValue(usage.envPath(), usage.apiKey());
         requireLiteralCredentialFileValue(usage.envPath(), usage.apiToken());

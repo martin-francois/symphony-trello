@@ -9,12 +9,15 @@ import ch.fmartin.symphony.trello.config.StateNames;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 /// Card writes that the worker's Trello tools and the `symphony-trello card` commands share. Both
 /// add comments, check move destinations against the `trello_tools` policy, and match open lists by
 /// name through this class, so a write that one path refuses cannot succeed through the other.
+/// Creating and archiving a chosen card are only reachable from the card commands; the worker
+/// creates follow-up cards through its own tool, which adds relationship metadata.
 ///
 /// A refused write throws [TrelloException] with the same code and message on both paths.
 @NullMarked
@@ -39,6 +42,43 @@ public final class TrelloCardWrites {
         }
         String body = SymphonyCommentFooter.withoutTrailingFooters(text.stripTrailing());
         trello.addComment(config, cardId, SymphonyCommentFooter.append(TrelloMarkdown.escapeLeadingHashtags(body)));
+    }
+
+    /// Creates a card at the bottom of `list`. A card may start in a list that the move allowlist
+    /// names, or in a list that is neither active nor terminal, so creating a card cannot start or
+    /// finish work that a move would not be allowed to.
+    public TrelloClient.CreatedCard createCard(
+            EffectiveConfig config, TrelloClient.BoardList list, String title, String description) {
+        TrelloWritePermission.requireGranted(config, TOOLS, WRITES);
+        if (!startListAllowed(config, list)) {
+            throw new TrelloException(
+                    "trello_create_list_not_allowed",
+                    "New cards can start only in a list that trello_tools allows moves to, or in a list that is"
+                            + " neither active nor terminal.");
+        }
+        String name =
+                checkedText(() -> TrelloCardText.singleLine(title, "title", TrelloCardText.MAX_TITLE_CODE_POINTS));
+        String body = checkedText(() -> TrelloCardText.description(description));
+        return trello.createCard(config, list.id(), name, TrelloMarkdown.escapeLeadingHashtags(body), List.of());
+    }
+
+    private static boolean startListAllowed(EffectiveConfig config, TrelloClient.BoardList list) {
+        return allowedById(config, list)
+                || allowedByName(config, list)
+                || !(TrelloClient.isActiveList(config, list) || TrelloClient.isTerminalList(config, list));
+    }
+
+    /// Moves a card to `list` after the same allowlist check as the worker's move tool, by list id.
+    public void moveCard(EffectiveConfig config, String cardId, TrelloClient.BoardList list) {
+        TrelloClient.BoardList target = allowedMoveTarget(config, list.id(), null);
+        trello.moveCardToList(config, cardId, target.id());
+    }
+
+    /// Archives a card. Trello keeps archived cards and can restore them, so archiving needs the
+    /// write permission but not `allow_destructive_operations`, which covers deletes.
+    public void archiveCard(EffectiveConfig config, String cardId) {
+        TrelloWritePermission.requireGranted(config, TOOLS, WRITES);
+        trello.archiveCard(config, cardId);
     }
 
     public static boolean moveAllowlistConfigured(EffectiveConfig config) {
@@ -69,7 +109,28 @@ public final class TrelloCardWrites {
     /// Checks a destination against the open lists of the configured board and the move
     /// allowlist. Name matches fail closed when several open lists share the requested name.
     public MoveTarget resolveMoveTarget(EffectiveConfig config, @Nullable String listId, @Nullable String listName) {
-        List<TrelloClient.BoardList> openLists = openLists(trello.fetchBoardLists(config));
+        return moveTarget(config, openLists(trello.fetchBoardLists(config)), listId, listName);
+    }
+
+    /// Whether a card may move to `list`, one of `openLists`, under every rule that [#moveCard]
+    /// checks.
+    public static boolean movableTo(
+            EffectiveConfig config, List<TrelloClient.BoardList> openLists, TrelloClient.BoardList list) {
+        return TrelloWritePermission.allGranted(config, TOOLS, WRITES)
+                && moveAllowlistConfigured(config)
+                && moveTarget(config, openLists, list.id(), null) instanceof MoveTarget.Allowed;
+    }
+
+    /// Whether a new card may start in `list` under every rule that [#createCard] checks.
+    public static boolean creatableIn(EffectiveConfig config, TrelloClient.BoardList list) {
+        return TrelloWritePermission.allGranted(config, TOOLS, WRITES) && startListAllowed(config, list);
+    }
+
+    private static MoveTarget moveTarget(
+            EffectiveConfig config,
+            List<TrelloClient.BoardList> openLists,
+            @Nullable String listId,
+            @Nullable String listName) {
         if (!blank(listId)) {
             return openLists.stream()
                     .filter(list -> list.id().equals(listId))
@@ -138,6 +199,14 @@ public final class TrelloCardWrites {
     private static Predicate<TrelloClient.BoardList> namedList(@Nullable String listName) {
         String normalizedName = StateNames.normalize(listName);
         return list -> StateNames.normalize(list.name()).equals(normalizedName);
+    }
+
+    private static String checkedText(Supplier<String> check) {
+        try {
+            return check.get();
+        } catch (IllegalArgumentException e) {
+            throw new TrelloException("invalid_card_text", e.getMessage(), e);
+        }
     }
 
     private static boolean blank(@Nullable String value) {

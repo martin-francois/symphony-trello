@@ -12,6 +12,7 @@ Config: <TEMP>/home/config<CR>
 Workspaces: <TEMP>/home/workspaces<CR>
 State/logs: <TEMP>/home/state<CR>
 Command: <TEMP>/bin/symphony-trello<CR>
+Codex skill: <TEMP>/user-home/.codex/skills/symphony-trello-board-cards<CR>
 <CR>
 <ESC>[1;38;5;32m[1/4] Checking prerequisites<ESC>[0m<CR>
   <ESC>[1;38;5;64mOK<ESC>[0m  Git<CR>
@@ -27,6 +28,7 @@ Can this machine open a browser for Codex login? [Y/n] n<CR>
   <ESC>[1;38;5;64mOK<ESC>[0m  Source checked out<CR>
   <ESC>[1;38;5;64mOK<ESC>[0m  App built with Maven wrapper<CR>
   <ESC>[1;38;5;64mOK<ESC>[0m  Command installed<CR>
+  <ESC>[1;38;5;64mOK<ESC>[0m  Codex skill installed: <TEMP>/user-home/.codex/skills/symphony-trello-board-cards<CR>
   <ESC>[1;38;5;64mOK<ESC>[0m  Added <TEMP>/bin to PATH in <TEMP>/user-home/.bashrc<CR>
   <ESC>[1;38;5;64mOK<ESC>[0m  Added <TEMP>/bin to PATH in <TEMP>/user-home/.profile<CR>
 <CR>

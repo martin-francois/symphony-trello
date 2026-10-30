@@ -162,6 +162,12 @@ lives in [Testing](testing.md).
   Symphony skill paths, so workflows whose prompts do not use the shipped skills, such as
   hand-authored workflows that clone into an empty workspace root, keep their expected workspace
   shape.
+- `.codex/skills/symphony-trello-board-cards` is a user-level skill for the `card` commands
+  ([ADR 0134](../adr/0134-manage-board-cards-through-cli-commands-and-a-codex-skill.md)). The
+  installers copy it into the user's Codex skills directory and the release archive must contain it.
+  Keep it out of `CodexSkillCatalog.SKILL_NAMES`, because worker runs use their own Trello tools.
+  Installer test source repositories include it only when a test calls `addCodexSkill`, so other
+  tests can create their own files and links under `.codex`.
 - The generated workflow body must depend only on `GeneratedWorkflowBodyInputs`, because workflow
   body migration re-renders it from recorded inputs
   ([ADR 0095](../adr/0095-generated-workflow-body-migration.md)). When a body change needs a new

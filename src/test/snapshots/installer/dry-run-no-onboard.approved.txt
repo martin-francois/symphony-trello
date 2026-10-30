@@ -12,6 +12,7 @@ Config: <TEMP>/user-home/.config/symphony-trello
 Workspaces: <TEMP>/user-home/.local/share/symphony-trello/workspaces
 State/logs: <TEMP>/user-home/.local/state/symphony-trello
 Command: <TEMP>/user-home/.local/bin/symphony-trello
+Codex skill: <TEMP>/user-home/.codex/skills/symphony-trello-board-cards
 
 Dry run: no files changed.
 
@@ -25,6 +26,7 @@ Dry run: no files changed.
   WOULD skip release signature check: install GitHub CLI (gh) 2.65 or newer to check it
   WOULD unpack release archive into: <TEMP>/user-home/.local/share/symphony-trello/app
   WOULD install command: <TEMP>/user-home/.local/bin/symphony-trello
+  WOULD install Codex skill: <TEMP>/user-home/.codex/skills/symphony-trello-board-cards
   WOULD add <TEMP>/user-home/.local/bin to PATH in <TEMP>/user-home/.bashrc
         Line: export PATH='<TEMP>/user-home/.local/bin':"$PATH"
   WOULD add <TEMP>/user-home/.local/bin to PATH in <TEMP>/user-home/.profile

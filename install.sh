@@ -77,6 +77,11 @@ LAUNCH_AGENT_LABEL="ch.fmartin.symphony-trello"
 LAUNCH_AGENT_PATH="$LAUNCH_AGENT_DIR/$LAUNCH_AGENT_LABEL.plist"
 INSTALLER_COMPLETION_ENV="SYMPHONY_TRELLO_INSTALLER_COMPLETION"
 CONNECTED_BOARDS_FILE_NAME="connected-boards.json"
+# Codex reads personal skills from $CODEX_HOME/skills. The marker file tells a later install or the
+# uninstaller that this installer owns the skill directory, so a directory the user made stays.
+CODEX_SKILL_NAME="symphony-trello-board-cards"
+CODEX_SKILL_DIR="${CODEX_HOME:-$HOME/.codex}/skills/$CODEX_SKILL_NAME"
+CODEX_SKILL_MARKER=".symphony-trello-install"
 
 # >>> output style >>>
 # Colors only accent words that already carry the meaning (OK, NOTE, RUN, ...), so plain output says
@@ -372,6 +377,7 @@ write_install_context() {
       printf 'no_onboard=%s\n' "$NO_ONBOARD"
       printf 'apt_updated=%s\n' "$APT_UPDATED"
       printf 'codex_npm_prefix=%s\n' "$CODEX_NPM_PREFIX"
+      printf 'codex_skill_dir=%s\n' "$CODEX_SKILL_DIR"
       printf 'git_available=%s\n' "$(if need git; then echo yes; else echo no; fi)"
       printf 'java_25_available=%s\n' "$(if jdk_compatible; then echo yes; else echo no; fi)"
       printf 'npm_available=%s\n' "$(if need npm; then echo yes; else echo no; fi)"
@@ -1866,6 +1872,30 @@ install_release_archive() {
   rm -rf "$temp_dir"
 }
 
+# Copies the board-cards skill into the Codex skills directory. A directory without the installer
+# marker belongs to the user and is left alone, and so is a symbolic link. install.ps1 and both
+# uninstallers repeat this marker rule; ADR 0134 explains why it stays in the scripts.
+install_codex_skill() {
+  local source="$APP_DIR/.codex/skills/$CODEX_SKILL_NAME/SKILL.md"
+  if [[ ! -f "$source" ]]; then
+    print_status SKIP "  Codex skill: this app version has none"
+    return 0
+  fi
+  if [[ -L "$CODEX_SKILL_DIR" ]] || { [[ -e "$CODEX_SKILL_DIR" ]] && [[ ! -f "$CODEX_SKILL_DIR/$CODEX_SKILL_MARKER" ]]; }; then
+    print_status SKIP "  Codex skill: $CODEX_SKILL_DIR exists and was not made by this installer"
+    return 0
+  fi
+  # The skill only helps agents; a Codex directory the installer cannot write must not fail the install.
+  # The marker goes first, so a half-written directory still counts as the installer's own.
+  if ! { mkdir -p "$CODEX_SKILL_DIR" &&
+    printf 'symphony-trello installer-managed Codex skill\n' >"$CODEX_SKILL_DIR/$CODEX_SKILL_MARKER" &&
+    cp "$source" "$CODEX_SKILL_DIR/SKILL.md"; } 2>/dev/null; then
+    print_status SKIP "  Codex skill: could not write $CODEX_SKILL_DIR"
+    return 0
+  fi
+  print_status OK "  Codex skill installed: $CODEX_SKILL_DIR"
+}
+
 shell_literal() {
   local value="$1"
   value="${value//\'/\'\\\'\'}"
@@ -3051,6 +3081,7 @@ STATE_HOME="$(absolutize_path "$STATE_HOME")"
 BIN_DIR="$(absolutize_path "$BIN_DIR")"
 CACHE_DIR="$(absolutize_path "$CACHE_DIR")"
 CODEX_NPM_PREFIX="$(absolutize_path "$CODEX_NPM_PREFIX")"
+CODEX_SKILL_DIR="$(absolutize_path "$CODEX_SKILL_DIR")"
 refresh_service_manager_paths
 validate_app_paths
 validate_command_directory
@@ -3119,6 +3150,7 @@ echo "Config: $CONFIG_DIR"
 echo "Workspaces: $WORKSPACE_ROOT"
 echo "State/logs: $STATE_HOME"
 echo "Command: $BIN_DIR/symphony-trello"
+echo "Codex skill: $CODEX_SKILL_DIR"
 if [[ "$DRY_RUN" == true ]]; then
   echo
   print_heading "Dry run: no files changed."
@@ -3163,6 +3195,7 @@ if [[ "$DRY_RUN" == true ]]; then
     print_status WOULD " unpack release archive into: $APP_DIR"
   fi
   print_status WOULD " install command: $BIN_DIR/symphony-trello"
+  print_status WOULD " install Codex skill: $CODEX_SKILL_DIR"
   if [[ -d "$APP_DIR" ]]; then
     print_status WOULD " check generated workflows after the update: symphony-trello migrate-workflows"
   fi
@@ -3298,6 +3331,7 @@ EOF
   chmod +x "$BIN_DIR/symphony-trello"
 fi
 print_status OK "  Command installed"
+install_codex_skill
 write_install_context
 check_generated_workflows
 

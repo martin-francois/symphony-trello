@@ -761,6 +761,51 @@ sanitized text goes into that issue draft, and you see the full draft before you
 is missing, signed out, times out after 15 minutes, or fails, the command offers the usual issue
 instead. `--non-interactive` runs never start Codex.
 
+### Manage Cards From An Agent
+
+You can ask Codex, or another agent that runs shell commands, to work with the cards on a connected
+board: "what is waiting for review?", "file a card for the flaky login test", "move the docs card to
+Done". The agent uses the `symphony-trello card` commands:
+
+```bash
+symphony-trello card list --board "Symphony Work Queue"
+symphony-trello card show abc12345
+symphony-trello card create --title "Fix the login redirect" --description "Steps to reproduce..." --list Inbox
+symphony-trello card move abc12345 --to human-review
+symphony-trello card comment abc12345 --text "Waiting for the API key."
+symphony-trello card archive abc12345 --confirm-title "Fix the login redirect"
+```
+
+Each command reads the board's Trello key and token the same way the worker does and never prints
+them, so the agent does not need to see them. Name a card by its id, its short link, or its
+`https://trello.com/c/` URL. Name a list by its name or by its role in the workflow: `active`,
+`in-progress`, `human-review`, `blocked`, `merging`, or `terminal`. With one connected board you can
+leave out `--board`. With several, pass the board name, id, short link, or URL, or pass
+`--workflow PATH`. Add `--json` for output that a script or agent can read.
+
+Writes follow the board's workflow, like the worker's Trello tools in
+[Trello Write Controls](#trello-write-controls). The commands write only when
+`trello_tools.enabled` and `trello_tools.allow_writes` are true. A card moves only to a list in the
+move allowlist; on the recommended board that is `In Progress`, `Blocked`, `Human Review`, and
+`Done`. A new card starts in a list from the move allowlist or in a list that is neither active nor
+terminal, such as `Inbox`. `Ready for Codex` is in neither group, so the agent cannot queue work for
+Codex unless you add that list to the allowlist. `In Progress` is an active list, so a card that the
+agent moves or creates there gets picked up like any other active card. Comments need
+`trello_tools.allow_comments`. Archiving needs no extra setting: Trello keeps archived cards, and you
+can restore them from **Archived items** in the board menu. `card archive` asks for the card title in
+`--confirm-title` and refuses a title that differs from the card's, so an agent has to show you the
+card before it archives it. `card list` and `card show` only read and
+work with any `trello_tools` settings. A command that fails prints `setup_failed code=... message=...`
+and exits with status 2.
+
+The installer puts a Codex skill named `symphony-trello-board-cards` into
+`~/.codex/skills`, or into `$CODEX_HOME/skills` when you set `CODEX_HOME`, so Codex knows these
+commands. The skill tells Codex to check `symphony-trello status` first, to pass `--board` and
+`--json`, never to read the credential files, and to ask you before it archives a card. If that
+directory already holds a skill with the same name that the installer did not create, the installer
+leaves it alone. The uninstaller removes only the copy the installer made. The skill is not copied
+into card workspaces: a Codex run that works on a card uses its own Trello tools.
+
 ## Installer Reference
 
 The installer downloads the latest GitHub Release archive and checks its SHA3-256 checksum. When

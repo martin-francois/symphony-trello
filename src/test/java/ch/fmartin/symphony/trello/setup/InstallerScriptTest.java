@@ -1618,6 +1618,75 @@ final class InstallerScriptTest {
     }
 
     @Test
+    void posixInstallCopiesTheCodexSkillAndUninstallFindsItThroughTheInstallContext() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        Path sourceRepository = addCodexSkill(createSourceRepository(temporaryDirectory));
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path home = temporaryDirectory.resolve("skill-home");
+        Path symphonyHome = temporaryDirectory.resolve("skill-symphony-home");
+        Path codexHome = temporaryDirectory.resolve("skill-codex-home");
+        Path skillDirectory = codexHome.resolve("skills/symphony-trello-board-cards");
+        Path fakeLog = temporaryDirectory.resolve("skill.log");
+        Files.createDirectories(home);
+        Map<String, String> installEnvironment = new LinkedHashMap<>(
+                installEnvironmentForCustomHome(sourceRepository, fakeBin, home, symphonyHome, fakeLog));
+        installEnvironment.put("CODEX_HOME", codexHome.toString());
+
+        // when
+        ProcessResult install = run(installEnvironment, "bash", "install.sh", "--no-onboard");
+        String installedSkill = Files.readString(skillDirectory.resolve("SKILL.md"));
+        ProcessResult uninstall = run(Map.of("HOME", home.toString()), "bash", "uninstall.sh", "--yes");
+
+        // then
+        install.assertSuccess();
+        uninstall.assertSuccess();
+        assertThat(install.output())
+                .contains("Codex skill: " + skillDirectory, "Codex skill installed: " + skillDirectory);
+        assertThat(installedSkill).isEqualTo(CODEX_SKILL_CONTENT);
+        assertThat(symphonyHome.resolve("state/install-context.properties"))
+                .content(StandardCharsets.UTF_8)
+                .contains("codex_skill_dir=" + skillDirectory);
+        assertThat(uninstall.output()).contains("CODEX SKILL     " + skillDirectory);
+        assertThat(skillDirectory).doesNotExist();
+        assertThat(codexHome.resolve("skills")).isDirectory();
+    }
+
+    @Test
+    void posixInstallAndUninstallKeepACodexSkillDirectoryTheUserMade() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        Path sourceRepository = addCodexSkill(createSourceRepository(temporaryDirectory));
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path home = temporaryDirectory.resolve("user-skill-home");
+        Path symphonyHome = temporaryDirectory.resolve("user-skill-symphony-home");
+        Path skillDirectory = home.resolve(".codex/skills/symphony-trello-board-cards");
+        Path fakeLog = temporaryDirectory.resolve("user-skill.log");
+        Files.createDirectories(skillDirectory);
+        Files.writeString(skillDirectory.resolve("SKILL.md"), "my own skill\n");
+
+        // when
+        ProcessResult install = run(
+                installEnvironmentForCustomHome(sourceRepository, fakeBin, home, symphonyHome, fakeLog),
+                "bash",
+                "install.sh",
+                "--no-onboard");
+        ProcessResult uninstall = run(Map.of("HOME", home.toString()), "bash", "uninstall.sh", "--yes");
+
+        // then
+        install.assertSuccess();
+        uninstall.assertSuccess();
+        assertThat(install.output())
+                .contains("Codex skill: " + skillDirectory + " exists and was not made by this installer");
+        assertThat(uninstall.output()).doesNotContain("CODEX SKILL");
+        assertThat(skillDirectory.resolve("SKILL.md"))
+                .content(StandardCharsets.UTF_8)
+                .isEqualTo("my own skill\n");
+    }
+
+    @Test
     void posixScriptsUseSymphonyHomeContextAndLegacyAutostartSnapshot() throws Exception {
         // given
         assumeTrue(commandExists("bash"));
@@ -9858,6 +9927,76 @@ final class InstallerScriptTest {
                         "app_version=" + installerDefaultRef().substring(1), "release_tag=", "release_base_url=");
     }
 
+    @Test
+    void powershellInstallCopiesTheCodexSkillAndUninstallRemovesItWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        assumeTrue(commandExists("git"));
+        Path sourceRepository = addCodexSkill(createPowerShellSourceRepository(temporaryDirectory));
+        Path fakeBin = createPowerShellFakeToolchain(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve("ps-skill-home");
+        Path binDirectory = temporaryDirectory.resolve("ps-skill-bin");
+        Path codexHome = temporaryDirectory.resolve("ps-skill-codex-home");
+        Path skillDirectory = codexHome.resolve("skills").resolve("symphony-trello-board-cards");
+        Path fakeLog = temporaryDirectory.resolve("ps-skill.log");
+        Map<String, String> codexEnvironment = Map.of("CODEX_HOME", codexHome.toString());
+
+        // when
+        ProcessResult install = runPowerShellSourceCheckoutInstall(
+                pwsh, sourceRepository, fakeBin, symphonyHome, binDirectory, fakeLog, codexEnvironment);
+        String installedSkill = Files.readString(skillDirectory.resolve("SKILL.md"));
+        boolean markerWritten = Files.isRegularFile(skillDirectory.resolve(".symphony-trello-install"));
+        ProcessResult uninstall = runPowerShellUninstall(pwsh, symphonyHome, binDirectory, codexEnvironment);
+
+        // then
+        install.assertSuccess();
+        uninstall.assertSuccess();
+        assertThat(normalizedWhitespace(install.output())).contains("Codex skill installed: " + skillDirectory);
+        assertThat(installedSkill).isEqualTo(CODEX_SKILL_CONTENT);
+        assertThat(markerWritten)
+                .as("the installer marks the skill directory as its own")
+                .isTrue();
+        assertThat(symphonyHome.resolve("state/install-context.properties"))
+                .content(StandardCharsets.UTF_8)
+                .contains("codex_skill_dir=" + skillDirectory);
+        assertThat(normalizedWhitespace(uninstall.output())).contains("CODEX SKILL " + skillDirectory);
+        assertThat(skillDirectory).doesNotExist();
+    }
+
+    @Test
+    void powershellInstallAndUninstallKeepACodexSkillDirectoryTheUserMadeWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        assumeTrue(commandExists("git"));
+        Path sourceRepository = addCodexSkill(createPowerShellSourceRepository(temporaryDirectory));
+        Path fakeBin = createPowerShellFakeToolchain(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve("ps-user-skill-home");
+        Path binDirectory = temporaryDirectory.resolve("ps-user-skill-bin");
+        Path codexHome = temporaryDirectory.resolve("ps-user-skill-codex-home");
+        Path skillDirectory = codexHome.resolve("skills").resolve("symphony-trello-board-cards");
+        Path fakeLog = temporaryDirectory.resolve("ps-user-skill.log");
+        Files.createDirectories(skillDirectory);
+        Files.writeString(skillDirectory.resolve("SKILL.md"), "my own skill\n");
+        Map<String, String> codexEnvironment = Map.of("CODEX_HOME", codexHome.toString());
+
+        // when
+        ProcessResult install = runPowerShellSourceCheckoutInstall(
+                pwsh, sourceRepository, fakeBin, symphonyHome, binDirectory, fakeLog, codexEnvironment);
+        ProcessResult uninstall = runPowerShellUninstall(pwsh, symphonyHome, binDirectory, codexEnvironment);
+
+        // then
+        install.assertSuccess();
+        uninstall.assertSuccess();
+        assertThat(normalizedWhitespace(install.output()))
+                .contains("Codex skill: " + skillDirectory + " exists and was not made by this installer");
+        assertThat(uninstall.output()).doesNotContain("CODEX SKILL");
+        assertThat(skillDirectory.resolve("SKILL.md"))
+                .content(StandardCharsets.UTF_8)
+                .isEqualTo("my own skill\n");
+    }
+
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     void powershellSourceCheckoutUpdateChecksGeneratedWorkflowsWhenAvailable(boolean migrationSupported)
@@ -9952,6 +10091,25 @@ final class InstallerScriptTest {
         environment.put("SYMPHONY_TRELLO_REF", "main");
         environment.put("SYMPHONY_FAKE_LOG", fakeLog.toString());
         return environment;
+    }
+
+    private static ProcessResult runPowerShellUninstall(
+            List<String> pwsh, Path symphonyHome, Path binDirectory, Map<String, String> extraEnvironment)
+            throws Exception {
+        Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
+        environment.put("SYMPHONY_HOME", symphonyHome.toString());
+        environment.putAll(extraEnvironment);
+        return run(
+                environment,
+                command(
+                                pwsh,
+                                "-NoProfile",
+                                "-File",
+                                Path.of("uninstall.ps1").toAbsolutePath().toString(),
+                                "--yes",
+                                "--bin-dir",
+                                binDirectory.toString())
+                        .toArray(String[]::new));
     }
 
     private static ProcessResult runPowerShellSourceCheckoutInstall(

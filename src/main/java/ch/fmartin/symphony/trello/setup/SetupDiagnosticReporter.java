@@ -129,11 +129,22 @@ final class SetupDiagnosticReporter {
     private static final CharMatcher POSIX_PATH_TERMINATOR =
             CharMatcher.anyOf("\r\n:'\"<>|").precomputed();
     private static final Set<String> EXPECTED_SETUP_FAILURE_CODES = Set.of(
+            "invalid_card_text",
+            "invalid_comment_text",
             "setup_active_state_required",
             "setup_allow_all_paths_without_root",
             "setup_board_not_found",
             "setup_board_selection_required",
             "setup_broad_path_requires_confirmation",
+            "setup_card_archive_title_mismatch",
+            "setup_card_archived",
+            "setup_card_invalid_reference",
+            "setup_card_list_ambiguous",
+            "setup_card_list_not_found",
+            "setup_card_list_role_ambiguous",
+            "setup_card_list_role_unset",
+            "setup_card_not_found",
+            "setup_card_not_on_board",
             "setup_codex_auth_required",
             "setup_codex_login_failed",
             "setup_credentials_environment_reference",
@@ -199,10 +210,16 @@ final class SetupDiagnosticReporter {
             "trello_auth_failed",
             "trello_api_request",
             "trello_board_closed",
+            "trello_comments_disabled",
+            "trello_create_list_not_allowed",
             "trello_invalid_request",
+            "trello_move_allowlist_required",
+            "trello_move_not_allowed",
             "trello_permission_denied",
             "trello_resource_not_found",
-            "trello_write_outcome_unknown");
+            "trello_tools_disabled",
+            "trello_write_outcome_unknown",
+            "trello_writes_disabled");
     private static final Set<String> REDACTED_COMMAND_VALUE_OPTIONS = Set.of(
             "--key",
             "--token",
@@ -224,7 +241,13 @@ final class SetupDiagnosticReporter {
             "--env",
             "--output",
             "--add-path",
-            "--endpoint");
+            "--endpoint",
+            "--title",
+            "--description",
+            "--text",
+            "--list",
+            "--to",
+            "--confirm-title");
 
     private enum WorkflowPathResolution {
         CONFIG_DIR,

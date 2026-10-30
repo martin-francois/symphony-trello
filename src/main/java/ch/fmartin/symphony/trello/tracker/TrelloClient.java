@@ -919,6 +919,18 @@ public class TrelloClient implements TrackerClient {
                 .toList();
     }
 
+    /// One card, looked up by id or short link, with its recent comments, checklists, and URL
+    /// attachments. The card keeps its own board id, so a caller can refuse a card that belongs to
+    /// another board.
+    public CardLookupResult fetchCardDetails(EffectiveConfig config, String cardIdOrShortLink) {
+        return fetchCardStatesByIds(config, List.of(cardIdOrShortLink), true).get(cardIdOrShortLink);
+    }
+
+    /// Archives a card. Trello keeps archived cards and can restore them, so this is not a delete.
+    public Map<String, Object> archiveCard(EffectiveConfig config, String cardId) {
+        return putMap(config, "cards/" + encodeSegment(cardId), Map.of("closed", "true"));
+    }
+
     public Map<String, Object> addComment(EffectiveConfig config, String cardId, String text) {
         return postMap(config, "cards/" + encodeSegment(cardId) + "/actions/comments", Map.of("text", text));
     }

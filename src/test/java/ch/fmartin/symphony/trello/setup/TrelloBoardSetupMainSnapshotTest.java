@@ -64,7 +64,12 @@ final class TrelloBoardSetupMainSnapshotTest extends LocalSetupFixtureSupport {
             var err = new PrintStream(stderr, true, StandardCharsets.UTF_8);
             var boardSetup = new TrelloBoardSetup(new ObjectMapper()).withPortProbe(port -> false);
             var main = new TrelloBoardSetupMain(
-                    new TrelloBoardSetupService(boardSetup, workerManager, Map.of()), workerManager, input, out, err);
+                    new TrelloBoardSetupService(boardSetup, workerManager, Map.of()),
+                    workerManager,
+                    new BoardCardCommands(workerManager, Map.of()),
+                    input,
+                    out,
+                    err);
             var command = new CommandLine(main)
                     .setOut(new PrintWriter(out, true, StandardCharsets.UTF_8))
                     .setErr(new PrintWriter(err, true, StandardCharsets.UTF_8));

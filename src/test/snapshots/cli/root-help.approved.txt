@@ -18,5 +18,7 @@ Commands:
                        supported downgrade.
   tutorial           Practice the Symphony card flow on a temporary Trello
                        board.
+  card               List, show, create, move, comment on, and archive cards on
+                       a connected Trello board.
   setup-local        Set up local Trello-driven Codex automation.
 --- stderr ---

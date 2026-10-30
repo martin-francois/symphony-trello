@@ -10,6 +10,7 @@ import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.NewBoardRequest;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.WorkspaceListRequest;
 import ch.fmartin.symphony.trello.time.ApplicationClock;
+import ch.fmartin.symphony.trello.tracker.TrelloListRoles;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.BufferedReader;
 import java.io.Console;
@@ -37,6 +38,7 @@ import picocli.CommandLine.Model.ArgSpec;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.ParameterException;
+import picocli.CommandLine.Parameters;
 import picocli.CommandLine.ParentCommand;
 import picocli.CommandLine.Spec;
 
@@ -55,7 +57,8 @@ import picocli.CommandLine.Spec;
             TrelloBoardSetupMain.LogsCommand.class,
             TrelloBoardSetupMain.DiagnosticsCommand.class,
             TrelloBoardSetupMain.MigrateWorkflowsCommand.class,
-            TrelloBoardSetupMain.TutorialCommand.class
+            TrelloBoardSetupMain.TutorialCommand.class,
+            TrelloBoardSetupMain.CardCommand.class
         })
 public final class TrelloBoardSetupMain implements Callable<Integer> {
     private static final String CONFIG_DIR_PROPERTY = "symphony.trello.config.dir";
@@ -63,6 +66,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
     private final TrelloBoardSetupService boardSetup;
     private final LocalWorkerManager workerManager;
+    private final BoardCardCommands cardCommands;
     private final BufferedReader input;
     private final PrintStream out;
     private final PrintStream err;
@@ -73,11 +77,13 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     TrelloBoardSetupMain(
             TrelloBoardSetupService boardSetup,
             LocalWorkerManager workerManager,
+            BoardCardCommands cardCommands,
             BufferedReader input,
             PrintStream out,
             PrintStream err) {
         this.boardSetup = boardSetup;
         this.workerManager = workerManager;
+        this.cardCommands = cardCommands;
         this.input = input;
         this.out = out;
         this.err = err;
@@ -151,9 +157,28 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             LocalWorkerManager workerManager,
             PrintStream out,
             PrintStream err) {
+        return run(
+                args,
+                boardSetup,
+                localSetup,
+                workerManager,
+                new BoardCardCommands(workerManager, System.getenv()),
+                out,
+                err);
+    }
+
+    static int run(
+            String[] args,
+            TrelloBoardSetupService boardSetup,
+            LocalSetup localSetup,
+            LocalWorkerManager workerManager,
+            BoardCardCommands cardCommands,
+            PrintStream out,
+            PrintStream err) {
         String[] effectiveArgs = InstalledCliDefaults.apply(args, System.getenv());
         BufferedReader input = standardInputReader(); // NOPMD - System.in is process-owned.
-        CommandLine commandLine = new CommandLine(new TrelloBoardSetupMain(boardSetup, workerManager, input, out, err))
+        CommandLine commandLine = new CommandLine(
+                        new TrelloBoardSetupMain(boardSetup, workerManager, cardCommands, input, out, err))
                 .addSubcommand(
                         "setup-local", new SetupLocalCommandFactory.SetupLocalCommand(localSetup, input, out, err))
                 .setOut(new PrintWriter(out, true, StandardCharsets.UTF_8))
@@ -802,6 +827,250 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                     .or(TrelloBoardSetupMain::configuredConfigDirManifestPath)
                     .orElseGet(() -> LocalWorkerPaths.defaultManifestPath(System.getenv()));
             return GuidedTutorial.connectedBoardUsesGithub(manifest);
+        }
+    }
+
+    @Command(
+            name = CardCommandRequest.COMMAND,
+            description = {
+                "List, show, create, move, comment on, and archive cards on a connected Trello board.",
+                "Each command reads the board's Trello credentials itself and never prints them.",
+                "Writes follow the trello_tools settings of the board's workflow."
+            },
+            footer = {
+                "",
+                "LIST accepts an open list name or a list role: " + TrelloListRoles.ROLE_NAMES + ".",
+                "CARD accepts a Trello card id, a short link, or a https://trello.com/c/ URL.",
+                "",
+                "Examples:",
+                "  symphony-trello card list --board \"Symphony Work Queue\"",
+                "  symphony-trello card show abc12345 --json",
+                "  symphony-trello card create --title \"Fix the login redirect\" --list Inbox",
+                "  symphony-trello card move abc12345 --to human-review",
+                "  symphony-trello card comment abc12345 --text \"Waiting for the API key.\"",
+                "  symphony-trello card archive abc12345 --confirm-title \"Fix the login redirect\""
+            },
+            subcommands = {
+                TrelloBoardSetupMain.CardListCommand.class,
+                TrelloBoardSetupMain.CardShowCommand.class,
+                TrelloBoardSetupMain.CardCreateCommand.class,
+                TrelloBoardSetupMain.CardMoveCommand.class,
+                TrelloBoardSetupMain.CardCommentCommand.class,
+                TrelloBoardSetupMain.CardArchiveCommand.class
+            },
+            versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
+            mixinStandardHelpOptions = true)
+    static final class CardCommand implements Callable<Integer> {
+        @ParentCommand
+        TrelloBoardSetupMain parent;
+
+        @Spec
+        CommandSpec spec;
+
+        @Override
+        public Integer call() {
+            spec.commandLine().usage(parent.out);
+            return 0;
+        }
+
+        private int run(CardOptions options, CardCommandRequest.Operation operation) throws IOException {
+            options.validate();
+            return parent.cardCommands.run(
+                    new CardCommandRequest(options.board, options.workflow, options.configDir, options.json, operation),
+                    parent.out);
+        }
+    }
+
+    @Command(
+            name = CardCommandRequest.LIST,
+            description = "List the board's open lists with their roles and open cards.",
+            versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
+            mixinStandardHelpOptions = true)
+    static final class CardListCommand implements Callable<Integer> {
+        @ParentCommand
+        CardCommand card;
+
+        @Mixin
+        CardOptions options = new CardOptions();
+
+        @Option(
+                names = "--list",
+                paramLabel = "LIST",
+                description = "Show only this list, or every list with this role.")
+        Optional<String> list = Optional.empty();
+
+        @Override
+        public Integer call() throws IOException {
+            CliInputValidation.rejectBlankText("--list", list);
+            return card.run(options, new CardCommandRequest.ListCards(list));
+        }
+    }
+
+    @Command(
+            name = CardCommandRequest.SHOW,
+            description = "Show one card with its description, checklists, attachments, and recent comments.",
+            versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
+            mixinStandardHelpOptions = true)
+    static final class CardShowCommand implements Callable<Integer> {
+        @ParentCommand
+        CardCommand card;
+
+        @Mixin
+        CardOptions options = new CardOptions();
+
+        @Mixin
+        CardReference cardReference = new CardReference();
+
+        @Override
+        public Integer call() throws IOException {
+            return card.run(options, new CardCommandRequest.ShowCard(cardReference.value));
+        }
+    }
+
+    @Command(
+            name = CardCommandRequest.CREATE,
+            description = "Create a card at the bottom of a list.",
+            versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
+            mixinStandardHelpOptions = true)
+    static final class CardCreateCommand implements Callable<Integer> {
+        @ParentCommand
+        CardCommand card;
+
+        @Mixin
+        CardOptions options = new CardOptions();
+
+        @Option(names = "--title", required = true, paramLabel = "TITLE", description = "One-line card title.")
+        String title;
+
+        @Option(
+                names = "--description",
+                paramLabel = "TEXT",
+                description = "Card description in Markdown. Defaults to none.")
+        String description = "";
+
+        @Option(
+                names = "--list",
+                required = true,
+                paramLabel = "LIST",
+                description = "List name or list role for the new card.")
+        String list;
+
+        @Override
+        public Integer call() throws IOException {
+            CliInputValidation.rejectBlankText("--list", list);
+            return card.run(options, new CardCommandRequest.CreateCard(title, description, list));
+        }
+    }
+
+    @Command(
+            name = CardCommandRequest.MOVE,
+            description = "Move a card to a list that the workflow allows moves to.",
+            versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
+            mixinStandardHelpOptions = true)
+    static final class CardMoveCommand implements Callable<Integer> {
+        @ParentCommand
+        CardCommand card;
+
+        @Mixin
+        CardOptions options = new CardOptions();
+
+        @Mixin
+        CardReference cardReference = new CardReference();
+
+        @Option(
+                names = "--to",
+                required = true,
+                paramLabel = "LIST",
+                description = "Destination list name or list role.")
+        String to;
+
+        @Override
+        public Integer call() throws IOException {
+            CliInputValidation.rejectBlankText("--to", to);
+            return card.run(options, new CardCommandRequest.MoveCard(cardReference.value, to));
+        }
+    }
+
+    @Command(
+            name = CardCommandRequest.COMMENT,
+            description = "Add a comment to a card. Symphony appends its attribution footer.",
+            versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
+            mixinStandardHelpOptions = true)
+    static final class CardCommentCommand implements Callable<Integer> {
+        @ParentCommand
+        CardCommand card;
+
+        @Mixin
+        CardOptions options = new CardOptions();
+
+        @Mixin
+        CardReference cardReference = new CardReference();
+
+        @Option(names = "--text", required = true, paramLabel = "TEXT", description = "Comment text in Markdown.")
+        String text;
+
+        @Override
+        public Integer call() throws IOException {
+            return card.run(options, new CardCommandRequest.CommentOnCard(cardReference.value, text));
+        }
+    }
+
+    @Command(
+            name = CardCommandRequest.ARCHIVE,
+            description = {
+                "Archive a card. Trello keeps archived cards, and the board menu can restore them.",
+                "Ask the person you work for before you archive a card, and pass the title they confirmed."
+            },
+            versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
+            mixinStandardHelpOptions = true)
+    static final class CardArchiveCommand implements Callable<Integer> {
+        @ParentCommand
+        CardCommand card;
+
+        @Mixin
+        CardOptions options = new CardOptions();
+
+        @Mixin
+        CardReference cardReference = new CardReference();
+
+        @Option(
+                names = "--confirm-title",
+                required = true,
+                paramLabel = "TITLE",
+                description = "The card title, exactly as the person you work for confirmed it.")
+        String confirmTitle;
+
+        @Override
+        public Integer call() throws IOException {
+            return card.run(options, new CardCommandRequest.ArchiveCard(cardReference.value, confirmTitle));
+        }
+    }
+
+    static final class CardReference {
+        @Parameters(index = "0", paramLabel = "CARD", description = "Card id, short link, or card URL.")
+        String value;
+    }
+
+    static final class CardOptions {
+        @Option(names = "--board", description = "Connected Trello board name, id, short link, or board URL.")
+        Optional<String> board = Optional.empty();
+
+        @Option(names = "--workflow", description = "Workflow file of the board.")
+        Optional<Path> workflow = Optional.empty();
+
+        @Option(names = "--config-dir", description = "Directory for local .env, workflows, and board manifest.")
+        Optional<Path> configDir = Optional.empty();
+
+        @Option(names = "--json", description = "Print the result as one line of JSON.")
+        boolean json;
+
+        private void validate() {
+            CliInputValidation.rejectBlankBoardSelector(board);
+            CliInputValidation.rejectBlankWorkflowSelector(workflow);
+            CliInputValidation.rejectControlCharactersInText("--board", board);
+            CliInputValidation.rejectControlCharacters("--workflow", workflow);
+            CliInputValidation.rejectBlankPath("--config-dir", configDir, "--config-dir must not be empty.");
+            CliInputValidation.rejectControlCharacters("--config-dir", configDir);
         }
     }
 

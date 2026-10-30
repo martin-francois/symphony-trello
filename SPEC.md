@@ -4242,6 +4242,14 @@ that a second formatting pass leaves the source unchanged.
   failure names its cause type and detail without file-system exception paths or parser content, and
   the setup failure troubleshooting report redacts that message under the public-safe diagnostics
   contract
+- If the board card commands of Section 19.8 are implemented, deterministic tests drive them against
+  a stateful fake Trello API and cover board selection with one board, several boards, `--board`,
+  `--workflow`, and an unknown board; credentials that never appear in output or failures; moves by
+  list name and by role, including ambiguous and unset roles; `trello_tools` refusals for moves,
+  new cards, comments, and archiving; refusal of a card on another board and of an archived card;
+  the `--json` shape of every command; and escaped Trello text. Installer tests cover the skill
+  copy, the marker, the recorded skill directory, removal on uninstall, and a user-made skill
+  directory that both scripts keep, for both installers
 
 ### 17.8 Trello Workflow Conformance
 
@@ -5339,6 +5347,99 @@ When this profile is used:
 
 This profile keeps repository actions agent-owned. Java does not run `codex review`, inspect review
 findings, or block a push. See ADR 0121 for the alternatives that were considered.
+
+### 19.8 Board Card Command Profile
+
+This profile is a Java implementation extension. It lets an agent outside a worker run read and
+change cards on a connected board through local CLI commands, without handling Trello credentials.
+It does not change scheduling, the worker tools of Section 10.5, or the `trello_tools` contract
+of Section 5.3.7. [ADR 0134](docs/adr/0134-manage-board-cards-through-cli-commands-and-a-codex-skill.md)
+records why the profile uses CLI commands and a skill instead of an agent session with its own tool
+server.
+
+Commands:
+
+- `card list [--list LIST]` prints the open lists of the board with their roles, whether moves and
+  new cards are allowed there, and the open cards in each list. `--list` limits the output to one
+  list, or to every open list that has the named role.
+- `card show CARD` prints one card with its list, archived state, labels, description, checklists,
+  attachments, and comments, newest comment first.
+- `card create --title TITLE [--description TEXT] --list LIST` creates a card at the bottom of a
+  list.
+- `card move CARD --to LIST` moves a card.
+- `card comment CARD --text TEXT` adds a comment that ends with the `Written by Symphony` footer of
+  Section 10.5, like `trello_add_comment`.
+- `card archive CARD --confirm-title TITLE` archives a card.
+
+Every command accepts `--board SELECTOR`, `--workflow PATH`, `--config-dir PATH`, and `--json`.
+
+Board selection:
+
+- `--board` accepts a connected board name, Trello board id, short link, or board URL. `--workflow`
+  selects the board of the workflow at `PATH`. The two options MUST NOT be combined. Selection
+  follows the lifecycle commands `start`, `stop`, `status`, and `logs`.
+- With no selector and one connected board, the command MUST use that board. With no selector and
+  several connected boards, it MUST fail with the lifecycle commands' selection error.
+- The command MUST read the selected board's Trello credentials the same way a worker start does,
+  including the board's `.env` file and the workflow's credential settings. It MUST NOT print the
+  key, the token, or a credential file's content, including in failure output.
+
+Card and list arguments:
+
+- `CARD` is a Trello card id, a card short link, or a `https://trello.com/c/` URL. A card on another
+  board MUST fail with `setup_card_not_on_board` before any write. A write to an archived card MUST
+  fail with `setup_card_archived`.
+- `LIST` is an open list name or a list role. An exact list name wins over a role name. Roles are
+  `active` (active lists other than the in-progress and merging lists), `in-progress`,
+  `human-review`, `blocked`, `merging`, and `terminal`. The human-review and merging roles come from
+  the inputs setup recorded for the generated workflow, or from the generated workflow's metadata
+  when no record exists. A role that names several open lists MUST fail for a write and list every
+  matching list for `card list --list`. A list name that matches several open lists MUST fail closed.
+
+Write permissions:
+
+- Every write MUST go through the same checks as the worker's Trello tools:
+  `trello_tools.enabled` and `trello_tools.allow_writes` MUST both be true.
+- `card move` MUST accept only a destination that the move allowlist of Section 5.3.7 allows, with
+  the same duplicate-name refusal as `trello_move_current_card`.
+- `card create` MUST accept a list that the move allowlist allows, or a list that is neither active
+  nor terminal. Title and description limits follow `trello_create_follow_up_card`
+  (Section 11.7). A leading issue reference such as `#42:` in the description MUST be escaped so
+  Trello does not render it as a heading.
+- `card comment` MUST also require `trello_tools.allow_comments`.
+- `card archive` MUST require only `trello_tools.enabled` and `trello_tools.allow_writes`. Trello
+  keeps archived cards and can restore them, so archiving is not a destructive operation under
+  `trello_tools.allow_destructive_operations`. The command MUST refuse with
+  `setup_card_archive_title_mismatch`, before any write, when `--confirm-title` differs from the
+  card's current title.
+- `card list` and `card show` only read and MUST NOT depend on `trello_tools`.
+
+Output:
+
+- Default output is readable text. Names, titles, and comment text from Trello MUST be escaped so
+  they cannot add lines or terminal control sequences.
+- `--json` prints one JSON object with snake_case field names. Reads report `status: "ok"`; writes
+  report `card_created`, `card_moved`, `comment_added`, or `card_archived`. Every object has `board`
+  with `name`, `id`, `url`, and `workflow`.
+- A failure prints `setup_failed code=CODE message=MESSAGE` and exits with status 2. Selector and
+  list failures use the `setup_card_*` codes; policy refusals keep the worker tool codes, such as
+  `trello_writes_disabled` or `trello_move_not_allowed`. These failures are expected setup failures
+  and MUST NOT write a troubleshooting report. Option values such as titles, descriptions, and
+  comment text MUST be redacted from diagnostics.
+
+Codex skill:
+
+- The repository ships `.codex/skills/symphony-trello-board-cards/SKILL.md`. Both installers MUST
+  copy it to `$CODEX_HOME/skills/symphony-trello-board-cards`, or to
+  `~/.codex/skills/symphony-trello-board-cards` (`%USERPROFILE%\.codex\skills\...` on Windows)
+  when `CODEX_HOME` is unset, and MUST write an installer marker into that directory. An existing
+  directory without the marker, or a link, MUST be left unchanged. A failure to write the skill MUST
+  NOT fail the install. The install context records the skill directory.
+- Both uninstallers MUST remove the skill directory only when it carries the installer marker.
+  `uninstall.sh` takes the directory from the install context. `uninstall.ps1`, which reads no
+  install context, uses the current `CODEX_HOME` or the user profile.
+- Workspace skill installation (Section 19.1) MUST NOT copy this skill into card workspaces. A worker
+  run handles its own card through the worker's Trello tools.
 
 ## Appendix A. SSH Worker Extension (OPTIONAL)
 

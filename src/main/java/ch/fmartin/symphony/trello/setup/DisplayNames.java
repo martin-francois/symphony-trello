@@ -19,6 +19,12 @@ final class DisplayNames {
         return names.stream().map(DisplayNames::quotedName).collect(Collectors.joining(", "));
     }
 
+    /// Escapes one line of external text for terminal output, like [#quotedName] but without the
+    /// quotes.
+    static String escapedText(String text) {
+        return escape(Strings.nullToEmpty(text));
+    }
+
     private static String escape(String name) {
         var safe = new StringBuilder(name.length());
         for (int index = 0; index < name.length(); index++) {

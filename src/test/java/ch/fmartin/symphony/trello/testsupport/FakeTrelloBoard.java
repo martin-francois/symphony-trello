@@ -52,6 +52,14 @@ public final class FakeTrelloBoard implements HttpHandler {
         return card;
     }
 
+    /// Seeds a card that belongs to another board but answers on this server's card routes, as a
+    /// card on another board of the same Trello account does. Board routes never list it.
+    public synchronized FakeCard foreignCard(String id, String shortLink, String name, String otherBoardId) {
+        var card = new FakeCard(id, shortLink, name, "list-on-" + otherBoardId, otherBoardId);
+        cards.add(card);
+        return card;
+    }
+
     /// Makes the next `count` requests whose `METHOD /path` starts with `requestPrefix` fail with
     /// HTTP 500 before any state changes.
     public synchronized FakeTrelloBoard failNext(String requestPrefix, int count) {
@@ -171,7 +179,9 @@ public final class FakeTrelloBoard implements HttpHandler {
             }
             case "cards/open" -> {
                 for (FakeCard card : cards) {
-                    payload.add(card.json());
+                    if (card.boardId.equals(boardId) && !card.closed) {
+                        payload.add(card.json());
+                    }
                 }
             }
             default -> {
@@ -205,7 +215,14 @@ public final class FakeTrelloBoard implements HttpHandler {
         }
         String tail = String.join("/", segments.subList(2, segments.size()));
         return switch (method + " " + tail) {
-            case "GET " -> card.json();
+            case "GET " -> card.json(query);
+            case "PUT " -> {
+                if (!"true".equals(query.get("closed"))) {
+                    yield null;
+                }
+                card.closed = true;
+                yield card.json();
+            }
             case "GET attachments" -> {
                 List<Object> payload = new ArrayList<>();
                 for (Attachment attachment : card.attachments) {
@@ -331,6 +348,7 @@ public final class FakeTrelloBoard implements HttpHandler {
         private volatile String listId;
         private volatile String description = "";
         private volatile boolean createdThroughApi;
+        private volatile boolean closed;
 
         private FakeCard(String id, String shortLink, String name, String listId, String boardId) {
             this.boardId = boardId;
@@ -338,6 +356,15 @@ public final class FakeTrelloBoard implements HttpHandler {
             this.shortLink = shortLink;
             this.name = name;
             this.listId = listId;
+        }
+
+        public FakeCard archive() {
+            closed = true;
+            return this;
+        }
+
+        public boolean archived() {
+            return closed;
         }
 
         public FakeCard description(String text) {
@@ -414,6 +441,27 @@ public final class FakeTrelloBoard implements HttpHandler {
             return List.copyOf(texts);
         }
 
+        /// The card as `GET /cards/{id}` returns it: checklists and attachments only when the query
+        /// asks for them, as Trello does.
+        private Map<String, Object> json(Map<String, String> query) {
+            Map<String, Object> json = json();
+            if ("all".equals(query.get("checklists"))) {
+                List<Object> checklistPayload = new ArrayList<>();
+                for (Checklist checklist : checklists) {
+                    checklistPayload.add(checklist.json());
+                }
+                json.put("checklists", checklistPayload);
+            }
+            if ("true".equals(query.get("attachments"))) {
+                List<Object> attachmentPayload = new ArrayList<>();
+                for (Attachment attachment : attachments) {
+                    attachmentPayload.add(attachment.json());
+                }
+                json.put("attachments", attachmentPayload);
+            }
+            return json;
+        }
+
         private Map<String, Object> json() {
             Map<String, Object> json = new LinkedHashMap<>();
             json.put("id", id);
@@ -436,7 +484,7 @@ public final class FakeTrelloBoard implements HttpHandler {
             json.put("actions", actions);
             json.put("idList", listId);
             json.put("idLabels", List.copyOf(labelIds));
-            json.put("closed", false);
+            json.put("closed", closed);
             json.put("url", url() + "/1-slug");
             return json;
         }

@@ -52,6 +52,24 @@ final class InstalledCliDefaultsTest {
     }
 
     @Test
+    void addsTheInstalledConfigDirAfterTheCardSubcommand() {
+        // given
+        InstalledCliDefaults.InstalledPaths paths = installedPaths();
+
+        // when
+        List<String> installed = InstalledCliDefaults.apply(List.of("card", "move", "abc12345", "--to", "Done"), paths);
+        List<String> explicit =
+                InstalledCliDefaults.apply(List.of("card", "list", "--config-dir", "/tmp/other-config"), paths);
+        List<String> help = InstalledCliDefaults.apply(List.of("card", "--help"), paths);
+
+        // then
+        assertThat(installed)
+                .containsExactly("card", "move", "--config-dir", configDir.toString(), "abc12345", "--to", "Done");
+        assertThat(explicit).containsExactly("card", "list", "--config-dir", "/tmp/other-config");
+        assertThat(help).containsExactly("card", "--help");
+    }
+
+    @Test
     void derivesIsolatedLifecycleDefaultsFromExplicitConfigDir() {
         // given
         InstalledCliDefaults.InstalledPaths paths = installedPaths();

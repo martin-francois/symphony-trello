@@ -49,6 +49,9 @@ final class InstallerScriptFixture {
     static final String TRELLO_KEY_PROMPT = "Trello API key: ";
     static final String TRELLO_TOKEN_PROMPT = "Trello API token: ";
     static final String TRELLO_BOARD_PROMPT = "Trello board name: ";
+    /// The installers copy this skill from the app directory into the user's Codex skills directory.
+    static final String CODEX_SKILL_PATH = ".codex/skills/symphony-trello-board-cards/SKILL.md";
+    static final String CODEX_SKILL_CONTENT = "---\nname: symphony-trello-board-cards\n---\nTest skill\n";
     private static final int PROCESS_DESCENDANT_DISCOVERY_MILLIS = 1_000;
     private static final int PROCESS_TERMINATION_SECONDS = 5;
     private static final int PROCESS_STOP_SECONDS = 5;
@@ -199,7 +202,17 @@ final class InstallerScriptFixture {
         }
         applyDeterministicLinuxDistro(processEnvironment);
         applyDeterministicLinuxFilesystem(processEnvironment);
-        List<Path> cleanupRoots = List.of();
+        List<Path> cleanupRoots = new ArrayList<>();
+        if (!environment.containsKey("CODEX_HOME")) {
+            // The installers copy a Codex skill into CODEX_HOME. Without this, a test run on a
+            // machine with CODEX_HOME set would write into that user's real Codex directory.
+            processEnvironment.remove("CODEX_HOME");
+            if (isWindows()) {
+                Path codexHome = Files.createTempDirectory("symphony-trello-installer-codex-home-");
+                cleanupRoots.add(codexHome);
+                processEnvironment.put("CODEX_HOME", codexHome.toString());
+            }
+        }
         if (!environment.containsKey("HOME") && !isWindows()) {
             String symphonyHome = environment.get("SYMPHONY_HOME");
             Path home;
@@ -212,7 +225,7 @@ final class InstallerScriptFixture {
                 home = symphonyHomePath.resolveSibling(symphonyHomePath.getFileName() + "-user-home");
             } else {
                 home = Files.createTempDirectory("symphony-trello-installer-home-");
-                cleanupRoots = List.of(home);
+                cleanupRoots.add(home);
             }
             Files.createDirectories(home);
             processEnvironment.put("HOME", home.toString());
@@ -783,6 +796,23 @@ final class InstallerScriptFixture {
                 """);
         initializeSourceRepository(repository);
         return repository;
+    }
+
+    /// Commits the Codex skill that the installers copy into the user's Codex skills directory. The
+    /// other source fixtures leave it out, so tests can put their own files under `.codex`.
+    static Path addCodexSkill(Path repository) throws Exception {
+        writeCodexSkill(repository);
+        run(Map.of(), "git", "-C", repository.toString(), "add", CODEX_SKILL_PATH)
+                .assertSuccess();
+        run(Map.of(), "git", "-C", repository.toString(), "commit", "-m", "Add Codex skill")
+                .assertSuccess();
+        return repository;
+    }
+
+    private static void writeCodexSkill(Path appDirectory) throws IOException {
+        Path skill = appDirectory.resolve(CODEX_SKILL_PATH);
+        Files.createDirectories(skill.getParent());
+        Files.writeString(skill, CODEX_SKILL_CONTENT);
     }
 
     private static void initializeSourceRepository(Path repository) throws Exception {
@@ -1368,12 +1398,16 @@ final class InstallerScriptFixture {
         Files.createDirectories(quarkusApp);
         Files.createDirectories(assets);
         Files.writeString(quarkusApp.resolve("quarkus-run.jar"), "placeholder app\n");
+        writeCodexSkill(staging.resolve(rootName));
         Path archive;
         if (isWindows()) {
             archive = assets.resolve(rootName + ".zip");
             try (var zip = new ZipOutputStream(Files.newOutputStream(archive))) {
                 zip.putNextEntry(new ZipEntry(rootName + "/target/quarkus-app/quarkus-run.jar"));
                 zip.write(Files.readAllBytes(quarkusApp.resolve("quarkus-run.jar")));
+                zip.closeEntry();
+                zip.putNextEntry(new ZipEntry(rootName + "/" + CODEX_SKILL_PATH));
+                zip.write(CODEX_SKILL_CONTENT.getBytes(StandardCharsets.UTF_8));
                 zip.closeEntry();
             }
         } else {
@@ -1624,7 +1658,12 @@ final class InstallerScriptFixture {
         var output = new StringWriter();
         try (var input = new BufferedReader(new StringReader(""))) {
             var main = new TrelloBoardSetupMain(
-                    mock(TrelloBoardSetupService.class), mock(LocalWorkerManager.class), input, System.out, System.err);
+                    mock(TrelloBoardSetupService.class),
+                    mock(LocalWorkerManager.class),
+                    mock(BoardCardCommands.class),
+                    input,
+                    System.out,
+                    System.err);
             var command = new CommandLine(main).setOut(new PrintWriter(output)).setErr(new PrintWriter(output));
             if (!supported) {
                 command.getCommandSpec().removeSubcommand("migrate-workflows");

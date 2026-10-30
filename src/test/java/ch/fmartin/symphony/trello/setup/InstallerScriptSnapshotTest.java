@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.HostEnvironment.CLEARED;
+import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.addCodexSkill;
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.createFakeToolchain;
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.createSourceRepository;
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.hostCommandDirectory;
@@ -245,7 +246,7 @@ final class InstallerScriptSnapshotTest {
         Map<String, String> environment = baseEnvironment(fakeToolchainPath());
         environment.put(
                 "SYMPHONY_TRELLO_REPO_URL",
-                createSourceRepository(temporaryDirectory).toString());
+                addCodexSkill(createSourceRepository(temporaryDirectory)).toString());
         environment.put("SYMPHONY_TRELLO_REF", "main");
         environment.put("SYMPHONY_HOME", symphonyHome().toString());
         environment.put(

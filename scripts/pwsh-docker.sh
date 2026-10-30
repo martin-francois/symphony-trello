@@ -37,7 +37,8 @@ while IFS='=' read -r name _; do
       docker_environment+=(-e "$name")
     fi
     ;;
-  SYMPHONY_* | NO_COLOR | CLICOLOR | CLICOLOR_FORCE) docker_environment+=(-e "$name") ;;
+  # The installers copy their Codex skill into CODEX_HOME, which a test points at its own directory.
+  SYMPHONY_* | CODEX_HOME | NO_COLOR | CLICOLOR | CLICOLOR_FORCE) docker_environment+=(-e "$name") ;;
   esac
 done < <(env)
 

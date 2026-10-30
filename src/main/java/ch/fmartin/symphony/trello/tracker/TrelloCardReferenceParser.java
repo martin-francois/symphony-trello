@@ -10,8 +10,8 @@ import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
 
 final class TrelloCardReferenceParser {
-    private static final String CARD_URL_PREFIX = "https://trello.com/c/";
-    private static final CharMatcher CARD_ID_CHARACTER = CharMatcher.inRange('A', 'Z')
+    static final String CARD_URL_PREFIX = "https://trello.com/c/";
+    static final CharMatcher CARD_ID_CHARACTER = CharMatcher.inRange('A', 'Z')
             .or(CharMatcher.inRange('a', 'z'))
             .or(CharMatcher.inRange('0', '9'))
             .precomputed();
@@ -103,7 +103,7 @@ final class TrelloCardReferenceParser {
     }
 
     private static TrelloCardReference reference(String lookupId) {
-        return new TrelloCardReference(lookupId, "https://trello.com/c/" + lookupId);
+        return new TrelloCardReference(lookupId, CARD_URL_PREFIX + lookupId);
     }
 
     private static Range range(MatchResult result) {

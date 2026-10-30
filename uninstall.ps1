@@ -392,6 +392,11 @@ $AutostartEnvironmentPath = Join-Path $ConfigDir "autostart-env.ps1"
 $AutostartScriptPath = Join-Path $BinDir "symphony-trello-autostart.ps1"
 $CodexHome = [System.IO.Path]::GetFullPath((Join-Path $SymphonyHome "codex"))
 $CodexNpmPrefix = [System.IO.Path]::GetFullPath((Join-Path $SymphonyHome "npm"))
+# The installer copies its Codex skill here and marks the directory; a directory without the marker
+# is the user's. uninstall.sh repeats this rule because the uninstallers never start Java (ADR 0134).
+$CodexUserHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $WindowsUserProfile ".codex" }
+$CodexSkillDir = [System.IO.Path]::GetFullPath((Join-Path (Join-Path $CodexUserHome "skills") "symphony-trello-board-cards"))
+$CodexSkillMarker = ".symphony-trello-install"
 
 function Confirm-Step([string]$Prompt, [bool]$AssumeYes = $false) {
   if ($DryRun) {
@@ -621,6 +626,11 @@ function Write-ManagedCodexRemovalPlan {
   }
 }
 
+function Test-InstallerManagedCodexSkill {
+  $existing = Get-Item -LiteralPath $CodexSkillDir -Force -ErrorAction SilentlyContinue
+  return $existing -and -not $existing.LinkType -and (Test-Path -LiteralPath (Join-Path $CodexSkillDir $CodexSkillMarker) -PathType Leaf)
+}
+
 function Assert-SafeRemovalPath([string]$Path) {
   if ([string]::IsNullOrWhiteSpace($Path)) {
     throw "Refusing dangerous removal path: $Path"
@@ -812,6 +822,7 @@ Write-Status "APP FILES" "       $Prefix"
 Write-Status "CLI EXECUTABLE" "  $(Join-Path $BinDir "symphony-trello.ps1")"
 Write-WindowsAutostartRemovalPlan
 Write-ManagedCodexRemovalPlan
+if (Test-InstallerManagedCodexSkill) { Write-Status "CODEX SKILL" "     $CodexSkillDir" }
 Write-Status "WORKERS" "         Managed Symphony workers are stopped before removal"
 if ($RemoveConfig) { Write-Status "CONFIG" "          $ConfigDir" }
 if ($RemoveWorkspaces) { Write-Status "WORKSPACES" "      $WorkspaceRoot" }
@@ -834,6 +845,7 @@ if (Confirm-Step "Remove installer-managed app files and CLI executable?" $Yes) 
   Remove-ManagedPath "$BinDir\symphony-trello.ps1"
   Remove-ManagedPath "$BinDir\symphony-trello.cmd"
   Remove-ManagedCodexArtifacts
+  if (Test-InstallerManagedCodexSkill) { Remove-ManagedPath $CodexSkillDir }
   Remove-ManagedPath $Prefix
 } else {
   Write-Host "Skipped installer-managed files."

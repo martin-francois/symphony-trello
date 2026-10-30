@@ -405,6 +405,10 @@ stamp_powershell_installer "$ASSET_DIR"
 verify_stamped_installers "$ASSET_DIR"
 cp "$ROOT/uninstall.sh" "$ROOT/uninstall.ps1" "$ASSET_DIR/"
 cp "$ROOT/README.md" "$STAGING/README.md"
+# The installers copy this skill into the user's Codex skills directory.
+codex_skill=".codex/skills/symphony-trello-board-cards/SKILL.md"
+mkdir -p "$(dirname "$STAGING/$codex_skill")"
+cp "$ROOT/$codex_skill" "$STAGING/$codex_skill"
 printf '%s\n' "$VERSION" >"$STAGING/VERSION"
 printf 'symphony-trello installer-managed app directory\n' >"$STAGING/.symphony-trello-install"
 

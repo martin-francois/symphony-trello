@@ -76,6 +76,12 @@ $StartupFolder = Join-Path $WindowsProfileRoot "Microsoft\Windows\Start Menu\Pro
 $StartupCommandPath = Join-Path $StartupFolder "Symphony for Trello.cmd"
 $InstallerCompletionEnvironmentName = "SYMPHONY_TRELLO_INSTALLER_COMPLETION"
 $ConnectedBoardsFileName = "connected-boards.json"
+# Codex reads personal skills from $CODEX_HOME\skills. The marker file tells a later install or the
+# uninstaller that this installer owns the skill directory, so a directory the user made stays.
+$CodexSkillName = "symphony-trello-board-cards"
+$CodexUserHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $WindowsUserProfile ".codex" }
+$CodexSkillDir = Join-Path (Join-Path $CodexUserHome "skills") $CodexSkillName
+$CodexSkillMarker = ".symphony-trello-install"
 $InstallerCompletionWasSet = Test-Path -LiteralPath "Env:$InstallerCompletionEnvironmentName"
 $InstallerCompletionPreviousValue = [Environment]::GetEnvironmentVariable($InstallerCompletionEnvironmentName, "Process")
 $ReleaseBaseUrl = if ($env:SYMPHONY_TRELLO_RELEASE_BASE_URL) {
@@ -899,6 +905,7 @@ function Write-InstallContext {
       "dry_run=$DryRun",
       "no_onboard=$NoOnboard",
       "codex_npm_prefix=$CodexNpmPrefix",
+      "codex_skill_dir=$CodexSkillDir",
       "git_available=$(if (Test-Command "git") { "yes" } else { "no" })",
       "java_25_available=$(if (Test-Java25) { "yes" } else { "no" })",
       "npm_available=$(if (Test-Command "npm") { "yes" } else { "no" })",
@@ -909,6 +916,34 @@ function Write-InstallContext {
   } catch {
     return
   }
+}
+
+# Copies the board-cards skill into the Codex skills directory. A directory without the installer
+# marker belongs to the user and is left alone, and so is a link. install.sh and both uninstallers
+# repeat this marker rule; ADR 0134 explains why it stays in the scripts.
+function Install-CodexSkill {
+  $source = Join-Path $Prefix ".codex\skills\$CodexSkillName\SKILL.md"
+  if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+    Write-Status "SKIP" "  Codex skill: this app version has none"
+    return
+  }
+  $existing = Get-Item -LiteralPath $CodexSkillDir -Force -ErrorAction SilentlyContinue
+  $marker = Join-Path $CodexSkillDir $CodexSkillMarker
+  if ($existing -and ($existing.LinkType -or -not (Test-Path -LiteralPath $marker -PathType Leaf))) {
+    Write-Status "SKIP" "  Codex skill: $CodexSkillDir exists and was not made by this installer"
+    return
+  }
+  # The skill only helps agents; a Codex directory the installer cannot write must not fail the
+  # install. The marker goes first, so a half-written directory still counts as the installer's own.
+  try {
+    New-Item -ItemType Directory -Force -Path $CodexSkillDir -ErrorAction Stop | Out-Null
+    Set-Content -Encoding UTF8 -LiteralPath $marker -Value "symphony-trello installer-managed Codex skill" -ErrorAction Stop
+    Copy-Item -LiteralPath $source -Destination (Join-Path $CodexSkillDir "SKILL.md") -Force -ErrorAction Stop
+  } catch {
+    Write-Status "SKIP" "  Codex skill: could not write $CodexSkillDir"
+    return
+  }
+  Write-Status "OK" "  Codex skill installed: $CodexSkillDir"
 }
 
 function Test-AutostartEnvironmentName([string]$Name) {
@@ -1850,6 +1885,7 @@ Write-Host "Config: $ConfigDir"
 Write-Host "Workspaces: $WorkspaceRoot"
 Write-Host "State/logs: $StateHome"
 Write-Host "Command: $BinDir\symphony-trello.ps1"
+Write-Host "Codex skill: $CodexSkillDir"
 if ($DryRun) {
   Write-Host
   Write-Heading "Dry run: no files changed."
@@ -1889,6 +1925,7 @@ if ($DryRun) {
     Write-Status "WOULD" " unpack release archive into: $Prefix"
   }
   Write-Status "WOULD" " install command: $BinDir\symphony-trello.ps1"
+  Write-Status "WOULD" " install Codex skill: $CodexSkillDir"
   if (Test-Path -LiteralPath $Prefix) {
     Write-Status "WOULD" " check generated workflows after the update: symphony-trello migrate-workflows"
   }
@@ -2038,6 +2075,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0symphony-trello.ps
 "@ | Set-Content -Encoding ASCII "$BinDir\symphony-trello.cmd"
 }
 Write-Status "OK" "  Command installed"
+Install-CodexSkill
 Write-InstallContext
 Invoke-GeneratedWorkflowCheck
 

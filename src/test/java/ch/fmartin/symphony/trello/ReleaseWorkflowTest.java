@@ -270,6 +270,7 @@ final class ReleaseWorkflowTest {
                         "cd \"$ROOT\"",
                         "cp -R \"$ROOT/target/quarkus-app\" \"$STAGING/target/quarkus-app\"",
                         "cp \"$ROOT/README.md\" \"$STAGING/README.md\"",
+                        "cp \"$ROOT/$codex_skill\" \"$STAGING/$codex_skill\"",
                         "cp \"$ROOT/uninstall.sh\" \"$ROOT/uninstall.ps1\" \"$ASSET_DIR/\"")
                 .doesNotContain("SOURCE_ROOT", "[SOURCE_ROOT]");
     }

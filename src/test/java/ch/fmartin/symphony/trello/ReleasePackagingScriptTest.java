@@ -530,6 +530,9 @@ final class ReleasePackagingScriptTest {
         Files.writeString(root.resolve("uninstall.sh"), "#!/usr/bin/env bash\necho uninstall\n");
         Files.writeString(root.resolve("uninstall.ps1"), "Write-Output uninstall\n");
         Files.writeString(root.resolve("README.md"), "readme\n");
+        Path skill = root.resolve(".codex/skills/symphony-trello-board-cards/SKILL.md");
+        Files.createDirectories(skill.getParent());
+        Files.writeString(skill, "skill\n");
         var project = new TestProject(root);
         project.writeSuccessfulMavenWrapper();
         return project;
@@ -588,6 +591,7 @@ final class ReleasePackagingScriptTest {
                             "symphony-trello-" + version + "/",
                             "symphony-trello-" + version + "/VERSION",
                             "symphony-trello-" + version + "/README.md",
+                            "symphony-trello-" + version + "/.codex/skills/symphony-trello-board-cards/SKILL.md",
                             "symphony-trello-" + version + "/target/quarkus-app/application.txt");
         }
     }

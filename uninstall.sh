@@ -36,6 +36,8 @@ CACHE_DIR="$SYMPHONY_HOME/cache"
 MICROOS_VAR_ROOT=""
 MICROOS_VAR_ROOT_CREATED=false
 CODEX_NPM_PREFIX="$SYMPHONY_HOME/npm"
+CODEX_SKILL_DIR="${CODEX_HOME:-$HOME/.codex}/skills/symphony-trello-board-cards"
+CODEX_SKILL_MARKER=".symphony-trello-install"
 DRY_RUN=false
 YES=false
 YES_LOCAL_DATA=false
@@ -618,6 +620,8 @@ apply_install_context() {
     CODEX_NPM_PREFIX="$value"
     [[ -n "$cache_value" ]] || CACHE_DIR="$value"
   fi
+  value="$(install_context_value "$context_file" codex_skill_dir || true)"
+  [[ -n "$value" ]] && CODEX_SKILL_DIR="$value"
   value="$(install_context_value "$context_file" microos_var_root || true)"
   [[ -n "$value" ]] && MICROOS_VAR_ROOT="$value"
   value="$(install_context_value "$context_file" created_microos_var_root || true)"
@@ -1682,6 +1686,24 @@ print_managed_codex_removal_plan() {
   fi
 }
 
+# The installer marks the skill directory it creates; a directory without the marker is the user's.
+# uninstall.ps1 repeats this rule because the uninstallers never start Java (ADR 0134).
+codex_skill_installer_managed() {
+  [[ ! -L "$CODEX_SKILL_DIR" && -f "$CODEX_SKILL_DIR/$CODEX_SKILL_MARKER" ]]
+}
+
+print_codex_skill_removal_plan() {
+  if codex_skill_installer_managed; then
+    print_status "CODEX SKILL" "     $CODEX_SKILL_DIR"
+  fi
+}
+
+remove_codex_skill() {
+  if codex_skill_installer_managed; then
+    remove_path "$CODEX_SKILL_DIR"
+  fi
+}
+
 print_user_systemd_removal_plan() {
   if [[ -e "$SYSTEMD_SERVICE_PATH" || -L "$SYSTEMD_SERVICE_PATH" ]]; then
     print_status "USER SERVICE" "    $SYSTEMD_SERVICE_PATH"
@@ -1709,6 +1731,7 @@ print_status "CLI EXECUTABLE" "  $BIN_DIR/symphony-trello"
 print_user_systemd_removal_plan
 print_launch_agent_removal_plan
 print_managed_codex_removal_plan
+print_codex_skill_removal_plan
 print_status WORKERS "         Managed Symphony workers are stopped before removal"
 if [[ "$REMOVE_CONFIG" == true ]]; then
   print_status CONFIG "          $CONFIG_DIR"
@@ -1748,6 +1771,7 @@ if confirm "Remove installer-managed app files and CLI executable?" "$YES"; then
   remove_autostart_environment_file
   remove_path "$BIN_DIR/symphony-trello"
   remove_managed_codex_artifacts
+  remove_codex_skill
   remove_path "$APP_DIR"
   remove_path_setup_from_profiles
 else

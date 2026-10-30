@@ -56,6 +56,7 @@ final class InstalledCliDefaults {
             case "new-board", "import-board" -> boardSetup(args, paths);
             case "start", "stop", "status", "logs", "diagnostics" -> lifecycle(args, paths);
             case "migrate-workflows" -> configDirOnly(args, paths);
+            case CardCommandRequest.COMMAND -> cardCommand(args, paths);
             default -> args;
         };
     }
@@ -98,6 +99,18 @@ final class InstalledCliDefaults {
         List<String> defaults = new ArrayList<>();
         addIfMissing(defaults, args, "--config-dir", paths.configDir());
         return injectAfterCommand(args, defaults);
+    }
+
+    /// Card commands sit one level deeper, under `card`, so the config directory goes after the
+    /// card subcommand name.
+    private static List<String> cardCommand(List<String> args, InstalledPaths paths) {
+        if (args.size() < 2 || !CardCommandRequest.SUBCOMMANDS.contains(args.get(1))) {
+            return args;
+        }
+        List<String> result = new ArrayList<>(args.size() + 2);
+        result.add(args.getFirst());
+        result.addAll(configDirOnly(args.subList(1, args.size()), paths));
+        return List.copyOf(result);
     }
 
     private static String installedManifest(String configDir) {
