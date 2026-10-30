@@ -29,7 +29,7 @@ record WorkflowMigrationItem(
     }
 
     String heading() {
-        return DisplayNames.quotedName(target.label()) + " (" + workflowPath() + ")";
+        return target.heading();
     }
 
     String sourceVersionLabel() {

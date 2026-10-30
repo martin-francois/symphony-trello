@@ -68,9 +68,9 @@ public final class WorkflowConfigIngestion {
         Map<String, Object> polling = object(root, "polling");
         Map<String, Object> hooks = object(root, "hooks");
         Map<String, Object> agent = object(root, "agent");
-        Map<String, Object> codex = object(root, "codex");
+        Map<String, Object> codex = object(root, EffectiveConfig.CodexConfig.SECTION_KEY);
         Map<String, Object> server = object(root, "server");
-        Map<String, Object> repository = object(root, "repository");
+        Map<String, Object> repository = object(root, EffectiveConfig.RepositoryConfig.SECTION_KEY);
 
         WorkflowIntegerSetting serverPort = serverPort(server, environmentResolver, unresolvedEnvironmentPolicy);
         add(findings, serverPort);
@@ -95,7 +95,10 @@ public final class WorkflowConfigIngestion {
         WorkflowIntegerSetting agentMaxTurns = positiveIntegerSetting(agent, "max_turns", "max_turns");
         WorkflowIntegerSetting agentMaxRetryBackoffMs =
                 integerSetting(agent, "max_retry_backoff_ms", "max_retry_backoff_ms");
-        WorkflowIntegerSetting codexTurnTimeoutMs = integerSetting(codex, "turn_timeout_ms", "turn_timeout_ms");
+        WorkflowIntegerSetting codexTurnTimeoutMs = integerSetting(
+                codex,
+                EffectiveConfig.CodexConfig.TURN_TIMEOUT_MS_KEY,
+                EffectiveConfig.CodexConfig.TURN_TIMEOUT_MS_KEY);
         WorkflowIntegerSetting codexReadTimeoutMs = integerSetting(codex, "read_timeout_ms", "read_timeout_ms");
         WorkflowIntegerSetting codexStallTimeoutMs = integerSetting(codex, "stall_timeout_ms", "stall_timeout_ms");
         WorkflowIntegerSetting repositoryCodexReviewMaxRounds = nonNegativeIntegerSetting(

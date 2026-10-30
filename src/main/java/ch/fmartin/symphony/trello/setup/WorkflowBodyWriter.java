@@ -14,10 +14,11 @@ import java.util.Optional;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
-/// Replaces one workflow file with a migrated body. It keeps a discoverable backup next to the
-/// workflow, writes a same-directory temporary copy that keeps the original file attributes, checks
-/// that copy before an atomic move, checks the result again, and restores the backup when the final
-/// check fails.
+/// Replaces one workflow file with a migrated body or migrated metadata. It keeps a discoverable
+/// backup next to the workflow, writes a same-directory temporary copy that keeps the original file
+/// attributes, checks that copy before an atomic move, checks the result again, and restores the
+/// backup when the final check fails. Each check also requires the part the migration does not own
+/// to stay byte for byte.
 @NullMarked
 final class WorkflowBodyWriter {
     static final String BACKUP_INFIX = ".backup-";
@@ -40,9 +41,18 @@ final class WorkflowBodyWriter {
     }
 
     WriteResult write(Path workflowPath, WorkflowBodyReplacement migration) {
+        return write(workflowPath, migration.original(), migration.proposedContent(), KeptPart.METADATA);
+    }
+
+    /// Writes a front matter change and checks that the body stays byte for byte.
+    WriteResult writeMetadata(Path workflowPath, WorkflowFileText original, String newContent) {
+        return write(workflowPath, original, newContent, KeptPart.BODY);
+    }
+
+    private WriteResult write(Path workflowPath, WorkflowFileText original, String newContent, KeptPart keptPart) {
         Path target = workflowPath.toAbsolutePath().normalize();
-        String expectedContent = migration.original().content();
-        String newContent = migration.proposedContent();
+        String expectedContent = original.content();
+        String expectedKeptText = keptPart.of(original);
         Path backup;
         try {
             requireUnchanged(target, expectedContent);
@@ -57,7 +67,7 @@ final class WorkflowBodyWriter {
             // Copying first keeps the workflow's permissions and other copyable attributes.
             Files.copy(target, temporary, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
             Files.writeString(temporary, newContent);
-            check(temporary, newContent, migration.original().metadata());
+            check(temporary, newContent, keptPart, expectedKeptText);
             requireUnchanged(target, expectedContent);
             replacement.replace(temporary, target);
         } catch (IOException | RuntimeException e) {
@@ -66,7 +76,7 @@ final class WorkflowBodyWriter {
                     "the workflow was not changed (" + reason(e) + ")", Optional.of(backup), WriteOutcome.UNCHANGED);
         }
         try {
-            check(target, newContent, migration.original().metadata());
+            check(target, newContent, keptPart, expectedKeptText);
             return WriteResult.written(backup);
         } catch (IOException | RuntimeException e) {
             boolean restored = restore(backup, target);
@@ -77,18 +87,36 @@ final class WorkflowBodyWriter {
         }
     }
 
-    private void check(Path workflow, String expectedContent, String expectedMetadata) throws IOException {
+    private void check(Path workflow, String expectedContent, KeptPart keptPart, String expectedKeptText)
+            throws IOException {
         String written = Files.readString(workflow);
         if (!written.equals(expectedContent)) {
             throw new IOException("written text differs from the planned text");
         }
-        boolean metadataKept = WorkflowFileText.parse(written)
-                .map(text -> text.metadata().equals(expectedMetadata))
+        boolean kept = WorkflowFileText.parse(written)
+                .map(keptPart::of)
+                .map(expectedKeptText::equals)
                 .orElse(false);
-        if (!metadataKept) {
-            throw new IOException("workflow metadata changed");
+        if (!kept) {
+            throw new IOException("workflow " + keptPart.label + " changed");
         }
         workflowCheck.check(workflow);
+    }
+
+    /// The part of the workflow file that a migration must leave byte for byte.
+    private enum KeptPart {
+        METADATA("metadata"),
+        BODY("body");
+
+        private final String label;
+
+        KeptPart(String label) {
+            this.label = label;
+        }
+
+        String of(WorkflowFileText text) {
+            return this == METADATA ? text.metadata() : text.body();
+        }
     }
 
     private Path createBackup(Path target) throws IOException {

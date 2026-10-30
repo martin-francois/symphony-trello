@@ -64,10 +64,10 @@ public class ConfigResolver {
         Map<String, Object> root = workflow.config();
         Map<String, Object> tracker = object(root, "tracker");
         Map<String, Object> workspace = object(root, "workspace");
-        Map<String, Object> repository = object(root, "repository");
+        Map<String, Object> repository = object(root, EffectiveConfig.RepositoryConfig.SECTION_KEY);
         Map<String, Object> hooks = object(root, "hooks");
         Map<String, Object> agent = object(root, "agent");
-        Map<String, Object> codex = object(root, "codex");
+        Map<String, Object> codex = object(root, EffectiveConfig.CodexConfig.SECTION_KEY);
         boolean codexDangerFullAccess = environmentValue(DANGER_FULL_ACCESS_ENVIRONMENT)
                 .map(Boolean::parseBoolean)
                 .orElse(false);
@@ -166,7 +166,7 @@ public class ConfigResolver {
                         codexDangerFullAccess,
                         millis(
                                 typedWorkflow.codexTurnTimeoutMs(),
-                                "turn_timeout_ms",
+                                EffectiveConfig.CodexConfig.TURN_TIMEOUT_MS_KEY,
                                 ConfigDefaults.DEFAULT_CODEX_TURN_TIMEOUT_MS),
                         millis(
                                 typedWorkflow.codexReadTimeoutMs(),

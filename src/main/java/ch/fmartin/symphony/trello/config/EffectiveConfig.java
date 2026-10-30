@@ -96,6 +96,8 @@ public record EffectiveConfig(
     @NullMarked
     public record RepositoryConfig(
             @Nullable String defaultUrl, @Nullable Path defaultPath, CodexReviewConfig codexReview) {
+        public static final String SECTION_KEY = "repository";
+
         /// For callers that only resolve repository sources, where the review loop plays no part.
         public RepositoryConfig(@Nullable String defaultUrl, @Nullable Path defaultPath) {
             this(defaultUrl, defaultPath, CodexReviewConfig.DEFAULTS);
@@ -130,8 +132,8 @@ public record EffectiveConfig(
         public static final String MAX_ROUNDS_KEY = "codex_review_max_rounds";
 
         public static final String TIMEOUT_MS_KEY = "codex_review_timeout_ms";
-        public static final String MAX_ROUNDS_PATH = "repository." + MAX_ROUNDS_KEY;
-        public static final String TIMEOUT_MS_PATH = "repository." + TIMEOUT_MS_KEY;
+        public static final String MAX_ROUNDS_PATH = RepositoryConfig.SECTION_KEY + "." + MAX_ROUNDS_KEY;
+        public static final String TIMEOUT_MS_PATH = RepositoryConfig.SECTION_KEY + "." + TIMEOUT_MS_KEY;
 
         public boolean enabled() {
             return maxRounds > 0;
@@ -169,6 +171,10 @@ public record EffectiveConfig(
             Duration turnTimeout,
             Duration readTimeout,
             Duration stallTimeout) {
+        public static final String SECTION_KEY = "codex";
+        public static final String TURN_TIMEOUT_MS_KEY = "turn_timeout_ms";
+        public static final String TURN_TIMEOUT_MS_PATH = SECTION_KEY + "." + TURN_TIMEOUT_MS_KEY;
+
         public CodexConfig {
             additionalWritableRoots = List.copyOf(additionalWritableRoots);
         }

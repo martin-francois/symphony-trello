@@ -376,6 +376,10 @@ final class WorkflowBodyMigration {
         static MigrationTarget of(ConnectedBoard board) {
             return new MigrationTarget(board.boardName(), board.workflowPath(), Optional.of(board.githubEnabled()));
         }
+
+        String heading() {
+            return DisplayNames.quotedName(label) + " (" + workflowPath + ")";
+        }
     }
 
     /// The version a workflow body came from: the recorded version, or the previously installed version
