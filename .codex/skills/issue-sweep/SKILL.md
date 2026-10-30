@@ -32,9 +32,9 @@ or issue editing rules here.
 4. Apply the canonical triage document in cycles. After making any change,
    fetch the open issue set again and repeat until one full pass finds no body,
    label, milestone, dependency, already-implemented, or relationship changes.
-5. When creating follow-up issues during the sweep, use the repository issue
-   templates and the same full triage policy before publishing the issue, and
-   create them before the final audit run so it covers them.
+5. Write every issue you create or whose body you rewrite through the Issue
+   forms section of `../../../docs/agents/github-issue-triage.md`, and create
+   follow-up issues before the final audit run so it covers them.
 6. Handle comments by people on open and closed issues, pull requests, and
    Discussions as the canonical triage document's sweep rules say: reply, react,
    hide spam, answer paid-help and bounty offers, and post stale-assignment

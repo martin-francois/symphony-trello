@@ -2,8 +2,8 @@
 
 ## Scope
 
-How `SPEC.md` governs behavior and when and how to write Architecture Decision Records. Issue-triage
-label mechanics live in [GitHub issue triage](github-issue-triage.md).
+How `SPEC.md` governs behavior and when and how to write Architecture Decision Records. The issue
+forms and issue-triage label mechanics live in [GitHub issue triage](github-issue-triage.md).
 
 ## SPEC.md as the contract
 

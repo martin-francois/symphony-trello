@@ -46,9 +46,9 @@ this repository.
   request's base: the Codex review/fix loop below in a Codex session, or the agent's code-review
   skill or tool in any other session. Fix justified findings in the pull request's scope, and
   justified findings from its review threads, directly on the branch. For a justified finding
-  outside that scope, open a GitHub issue as described in
-  [GitHub issue triage](github-issue-triage.md) and link it in the reply or the handoff. The merge
-  handoff names the review that ran, so pull-request review can check it.
+  outside that scope, open a GitHub issue through the
+  [issue forms](github-issue-triage.md#issue-forms) and link it in the reply or the handoff. The
+  merge handoff names the review that ran, so pull-request review can check it.
 - When Codex makes repository changes, run the Codex review/fix loop after every completed change
   unless the user explicitly says not to. This requirement is specific to Codex sessions; do not
   impose it on Claude or other AI tools.

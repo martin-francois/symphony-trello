@@ -101,8 +101,9 @@ parallel safety. Live end-to-end and deployed-verification rules live in
   a paused task there never starts, and the contention wait times out. `ThreadMXBean` lists only
   platform threads, so a contention check cannot see a competitor on a virtual thread.
 - When a test is confirmed flaky, search open and closed issues for that test before creating a
-  focused issue. Create one only when no issue already owns it, and ensure the owning issue has the
-  `flaky` label. Then add `// TODO Flaky: #123` immediately above the test method using the real
+  focused issue. Create one only when no issue already owns it, through the
+  [issue forms](github-issue-triage.md#issue-forms), and ensure the owning issue has the `flaky`
+  label. Then add `// TODO Flaky: #123` immediately above the test method using the real
   issue number. Every time the flake is observed, add a new comment to its issue with the date, run
   or local command, environment, and the relevant failed test output so recurrence frequency and
   cost remain visible. Do not quarantine, disable, retry, or weaken the test merely to restore a
