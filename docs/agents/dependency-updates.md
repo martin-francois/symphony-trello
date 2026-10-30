@@ -87,6 +87,18 @@ requirements.
   `docs/demo/render-manifest.json` without that render. See
   [ADR 0093](../adr/0093-renovate-updates-hyperframes.md) and
   [docs/demo/README.md](../demo/README.md#updating-hyperframes).
+- Replace the README's uploaded demo video only when the render's `README video:` line says
+  `re-upload the README video attachment`. When it says `keep the existing README video
+  attachment`, merge the HyperFrames update with the existing attachment and do not ask for an
+  upload. The upload happens in GitHub's web editor, so an agent that gets the re-upload verdict
+  stops before merging and asks the maintainer. If `HEAD` already holds a render newer than `main`,
+  run the render with `--compare-with origin/main`. `scripts/readme-demo-visual-change.test.ts`
+  checks the threshold against the measured noise and a one-word caption change, and
+  `scripts/readme-demo-hyperframes.test.ts` requires the Renovate notes to quote both verdicts and
+  the `--compare-with` command. Pull-request review checks that the PR states the verdict, that it
+  compared with `main`, and that no agent merged past a re-upload verdict or asked for an upload
+  after a keep verdict. See
+  [ADR 0132](../adr/0132-re-upload-the-readme-video-only-after-a-visible-change.md).
 - This public repository groups dependencies by release or compatibility contract. Unrelated
   non-major updates have separate pull requests and no weekly update schedule. The one exception
   is the `gcr.io/oss-fuzz-base` digest updates above, which would otherwise open a pull request
@@ -112,3 +124,4 @@ requirements.
 - [ADR 0125](../adr/0125-read-mcr-push-times-for-the-dotnet-sdk-image.md)
 - [ADR 0126](../adr/0126-offer-the-newest-oss-fuzz-build-past-the-cooldown.md)
 - [ADR 0127](../adr/0127-run-powershell-tests-on-the-pinned-dotnet-sdk-image.md)
+- [ADR 0132](../adr/0132-re-upload-the-readme-video-only-after-a-visible-change.md)

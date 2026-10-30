@@ -6,7 +6,11 @@
  * - docs/assets/readme-demo-poster.png (hero frame near the end)
  * - docs/demo/render-manifest.json (source and artifact SHA-256 values)
  *
- * Usage: node scripts/render-readme-demo.ts [--skip-check]
+ * It then compares the new MP4 with the one committed at a Git revision, HEAD unless
+ * --compare-with names another, and reports whether the README's uploaded video attachment needs
+ * replacing.
+ *
+ * Usage: node scripts/render-readme-demo.ts [--skip-check] [--compare-with <revision>]
  *
  * Requires a Git working tree, Node 22.18+, Docker, FFmpeg, ffprobe, and pnpm. The HyperFrames
  * CLI is fetched on demand at the exact version pinned in scripts/readme-demo-hyperframes.ts, and
@@ -26,6 +30,7 @@ import {
 import {tmpdir} from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {parseArgs} from "node:util";
 import {
   assertBelowGitHubVideoAttachmentLimit,
   createReadmeDemoSourceSnapshot,
@@ -37,6 +42,11 @@ import {
   type CompositionTiming,
   materializeReadmeDemoTiming,
 } from "./readme-demo-timing.ts";
+import {
+  compareRenderWithBaseline,
+  describeVisualComparison,
+  resolveBaseline,
+} from "./readme-demo-visual-change.ts";
 
 /** Constant quality spends fewer bits on static UI while keeping text crisp. */
 const VIDEO_CRF = "26";
@@ -51,6 +61,13 @@ interface TextRegionSample {
 }
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const {values: options} = parseArgs({
+  options: {
+    "skip-check": {type: "boolean", default: false},
+    "compare-with": {type: "string", default: "HEAD"},
+  },
+});
+const baseline = resolveBaseline(repoRoot, options["compare-with"]);
 const videoPath = join(repoRoot, "docs", "assets", "demo.mp4");
 const posterPath = join(repoRoot, "docs", "assets", "readme-demo-poster.png");
 
@@ -165,9 +182,7 @@ try {
   const timing = materializeReadmeDemoTiming(snapshotDemoDir);
   labelContainerMountForSelinux(renderRoot);
   const expectedDurationSeconds = timing.duration;
-  const skipCheck = process.argv.includes("--skip-check");
-
-  if (!skipCheck) {
+  if (!options["skip-check"]) {
     runHyperframes(["check"], snapshotDemoDir);
   }
 
@@ -221,11 +236,22 @@ try {
   copyFileSync(renderedVideoPath, videoPath);
   copyFileSync(renderedPosterPath, posterPath);
   writeReadmeDemoManifest(repoRoot, sourceBeforeRender);
+  // Compare only after the validated media is saved, because the comparison only reports.
+  console.log(
+    `\nComparing the new video with the video committed in revision ${baseline.revision}`,
+  );
+  const visualComparison = compareRenderWithBaseline(
+    repoRoot,
+    baseline,
+    renderedVideoPath,
+    renderRoot,
+  );
 
   console.log(`\ndemo.mp4: ${(videoBytes / MEBIBYTE).toFixed(1)} MiB, ` +
     `${probe.duration.toFixed(1)}s, H.264, silent (no audio stream)`);
   console.log(`readme-demo-poster.png: ${(statSync(posterPath).size / MEBIBYTE).toFixed(1)} MiB`);
   console.log("render-manifest.json: source and artifact checksums updated");
+  console.log(describeVisualComparison(visualComparison));
   console.log("Done.");
 } finally {
   rmSync(renderRoot, {recursive: true, force: true});

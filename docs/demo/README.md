@@ -38,6 +38,8 @@ from the same file reads used to calculate the source state, so even an edit tha
 the render finishes cannot affect the artifact without affecting its recorded state. Container input
 and output stay in a system temporary directory until media validation passes; on SELinux hosts the
 script labels only that directory for the renderer, leaving the checkout's security labels unchanged.
+It also compares the new MP4 with the committed one and reports whether the README attachment needs
+replacing. See [Updating the inline README video](#updating-the-inline-readme-video).
 
 The normal `pnpm run verify:scripts` CI gate recomputes that manifest. It fails when a composition,
 capture, font, render configuration, render script, HyperFrames version, MP4, or poster changes without
@@ -54,7 +56,34 @@ the same digest as CI.
 ## Updating the inline README video
 
 GitHub serves an inline README video from an uploaded attachment URL, not directly from the MP4 in
-the repository. After re-rendering and committing the generated assets:
+the repository. Replacing that attachment is a manual step in GitHub's web editor, so the render
+command tells you whether it is needed. After its checks pass, it compares the new MP4 with
+`docs/assets/demo.mp4` as committed at `HEAD` and prints one of these lines:
+
+- `README video: keep the existing README video attachment (no visible change, ...)`. No frame
+  differs visibly from the committed video. Commit the generated files and leave `README.md` as it
+  is. The attachment then shows the previous render, which looks the same.
+- `README video: re-upload the README video attachment as docs/demo/README.md describes (...)`.
+  At least one region of one frame differs visibly, the two videos differ in size, frame rate, or
+  frame count, or the compared commit has no video. Replace the attachment as described below.
+
+The comparison splits every frame into tiles of 120 by 120 pixels and computes FFmpeg's SSIM, a
+similarity score from 0 to 1, for each tile in each frame. A change is visible when any tile scores
+below 0.95. `scripts/readme-demo-visual-change.ts` defines both numbers.
+[ADR 0132](../adr/0132-re-upload-the-readme-video-only-after-a-visible-change.md) records the
+measured re-render noise, a measured one-word caption change, and why whole-frame SSIM was not
+enough. If the comparison itself fails, the render keeps the new media and asks for an upload.
+
+The comparison reads the video from a commit, not from the working tree, so running the render twice
+before committing compares both runs with the same video. The README attachment shows the video on
+`main`, so compare with `main` when `HEAD` already holds a newer render, for example after
+rebasing a branch that has a render commit:
+
+```bash
+node scripts/render-readme-demo.ts --compare-with origin/main
+```
+
+To replace the attachment:
 
 1. Download `docs/assets/demo.mp4` from the pull-request branch to your computer.
 2. Open `README.md` in GitHub and select the pencil icon to use the inline editor.
@@ -117,12 +146,15 @@ To finish a HyperFrames update pull request:
    every version between the old and the new pin.
 2. Check out the Renovate branch and run `node scripts/render-readme-demo.ts` from the repository
    root. It has the same requirements as a normal re-render and runs the same checks.
-3. Extract a few stills from the new MP4 and from the previous one, for example with
-   `git show origin/main:docs/assets/demo.mp4 > /tmp/demo-before.mp4`, and compare them.
+3. Read the `README video:` line the render prints. If it reports a visible change, extract a few
+   stills from the new MP4 and from the previous one, for example with
+   `git show origin/main:docs/assets/demo.mp4 > /tmp/demo-before.mp4`, and check that the
+   change is one you want.
 4. Commit `docs/assets/demo.mp4`, `docs/assets/readme-demo-poster.png`, and
    `docs/demo/render-manifest.json` to the Renovate branch and push.
-5. Replace the README inline video as described in
-   [Updating the inline README video](#updating-the-inline-readme-video).
+5. Only if the render reported a visible change, replace the README inline video as described in
+   [Updating the inline README video](#updating-the-inline-readme-video). Otherwise the pull
+   request merges with the existing attachment.
 6. Merge manually after the required checks pass.
 
 No automation renders or commits these files; [ADR 0093](../adr/0093-renovate-updates-hyperframes.md)

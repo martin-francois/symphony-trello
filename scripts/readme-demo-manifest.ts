@@ -8,6 +8,8 @@ export const VIDEO_RELATIVE_PATH = "docs/assets/demo.mp4";
 export const POSTER_RELATIVE_PATH = "docs/assets/readme-demo-poster.png";
 export const GITHUB_VIDEO_ATTACHMENT_LIMIT_BYTES = 10_000_000;
 export const HYPERFRAMES_VERSION_PATH = "scripts/readme-demo-hyperframes.ts";
+// readme-demo-visual-change.ts is left out: it only reports on a finished render, so a threshold
+// change needs no new render.
 const RENDER_SCRIPT_PATHS = [
   ".gitattributes",
   HYPERFRAMES_VERSION_PATH,

@@ -13,6 +13,10 @@ import {
   VIDEO_RELATIVE_PATH,
 } from "./readme-demo-manifest.ts";
 import {
+  KEEP_ATTACHMENT_VERDICT,
+  REUPLOAD_ATTACHMENT_VERDICT,
+} from "./readme-demo-visual-change.ts";
+import {
   matchesNonMajor,
   matchesRegexOrGlobList,
   RENOVATE_CONFIG,
@@ -143,7 +147,7 @@ test("no file other than the canonical pin names a HyperFrames version", () => {
   );
 });
 
-test("HyperFrames updates require a re-render, visual review, and manual merge", () => {
+test("HyperFrames updates require a re-render, a re-upload verdict, and manual merge", () => {
   // given
   const hyperframesRules = PACKAGE_RULES.filter(
     ({matchPackageNames}) => matchPackageNames?.includes("hyperframes"),
@@ -177,7 +181,14 @@ test("HyperFrames updates require a re-render, visual review, and manual merge",
     "the major-update rule must stay last so it still labels HyperFrames majors",
   );
   const notes = rule?.prBodyNotes?.join("\n") ?? "";
-  for (const instruction of ["node scripts/render-readme-demo.ts", ...RENDERED_ARTIFACTS]) {
+  const instructions = [
+    "node scripts/render-readme-demo.ts",
+    ...RENDERED_ARTIFACTS,
+    REUPLOAD_ATTACHMENT_VERDICT,
+    KEEP_ATTACHMENT_VERDICT,
+    "node scripts/render-readme-demo.ts --compare-with origin/main",
+  ];
+  for (const instruction of instructions) {
     assert.ok(notes.includes(instruction), `pull request notes must mention ${instruction}`);
   }
 });

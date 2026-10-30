@@ -15,6 +15,10 @@ informed: [Future maintainers, Contributors]
 
 # Let Renovate Update HyperFrames and Re-render the README Demo by Hand
 
+[ADR 0132](0132-re-upload-the-readme-video-only-after-a-visible-change.md) narrows the README
+attachment step below: the maintainer replaces the attachment only when the render reports a
+visible change.
+
 ## Context and Problem Statement
 
 [ADR 0074](0074-hyperframes-readme-demo-video.md) renders the README demo with an exact HyperFrames
@@ -83,9 +87,9 @@ A 0.x minor update receives no `major update` label and still never merges autom
 
 Renovate's update then changes only the version line. The freshness check fails on that pull request
 until a maintainer checks out the branch, runs `node scripts/render-readme-demo.ts`, reviews the
-media, and commits the MP4, poster, and manifest. The maintainer also replaces the README inline
-video attachment, which GitHub only accepts through its web editor. `docs/demo/README.md` documents
-the update and recovery steps.
+media, and commits the MP4, poster, and manifest. When the render reports a visible change, the
+maintainer also replaces the README inline video attachment, which GitHub only accepts through its
+web editor. `docs/demo/README.md` documents the update and recovery steps.
 
 No workflow renders or publishes the media now. Each update already needs a human for the frame
 review and the README attachment upload, so automation would only remove the local render command.
