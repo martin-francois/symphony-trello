@@ -11,6 +11,7 @@ import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
 import ch.fmartin.symphony.trello.testsupport.TestEnv;
 import ch.fmartin.symphony.trello.tracker.SymphonyCommentFooter;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.BooleanNode;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
@@ -23,9 +24,12 @@ import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 final class BoardCardCommandsTest {
     private static final String BOARD_ID = "board-1";
+    private static final String TERMINAL_ESCAPE = "\u001B";
     private static final String DEFAULT_TRELLO_TOOLS =
             """
             trello_tools:
@@ -176,9 +180,9 @@ final class BoardCardCommandsTest {
         assertThat(card.path("url").asText()).isEqualTo("https://trello.com/c/SYNTH101");
         assertThat(card.path("description").asText()).isEqualTo("The redirect drops the query string.");
         assertThat(card.path("list").path("name").asText()).isEqualTo("Inbox");
-        assertThat(card.path("archived").asBoolean())
-                .as("an open card reports archived false")
-                .isFalse();
+        assertThat(card.path("archived"))
+                .as("an open card reports archived as the JSON boolean false")
+                .isEqualTo(BooleanNode.FALSE);
         assertThat(card.path("checklists").path(0).path("name").asText()).isEqualTo("Acceptance");
         assertThat(card.path("checklists")
                         .path(0)
@@ -195,7 +199,7 @@ final class BoardCardCommandsTest {
     void showPrintsTheCardAsEscapedText() throws Exception {
         // given
         board.card("card0001", "SYNTH101", "Fix \"the\" redirect", "list-inbox")
-                .description("First line\nSecond \u001b[31mline");
+                .description("First line\nSecond " + TERMINAL_ESCAPE + "[31mline");
         Path configDir = connectBoard(DEFAULT_TRELLO_TOOLS);
 
         // when
@@ -415,18 +419,22 @@ final class BoardCardCommandsTest {
         assertThat(board.writeRequests()).isEmpty();
     }
 
-    @Test
-    void writesFollowTheWorkflowToolSwitch() throws Exception {
+    @CsvSource({
+        "enabled: true, enabled: false, trello_tools_disabled",
+        "allow_writes: true, allow_writes: false, trello_writes_disabled"
+    })
+    @ParameterizedTest(name = "{1}")
+    void writesFollowTheWorkflowWriteSwitches(String granted, String refused, String code) throws Exception {
         // given
         board.card("card0001", "SYNTH101", "Fix the login redirect", "list-inbox");
-        Path configDir = connectBoard(DEFAULT_TRELLO_TOOLS.replace("enabled: true", "enabled: false"));
+        Path configDir = connectBoard(DEFAULT_TRELLO_TOOLS.replace(granted, refused));
 
         // when
         CliRunResult archive = runCard(configDir, "archive", "SYNTH101", "--confirm-title", "Fix the login redirect");
         CliRunResult list = runCard(configDir, "list");
 
         // then
-        assertFailure(archive, "trello_tools_disabled");
+        assertFailure(archive, code);
         list.assertSuccess().stdoutContains("List \"Inbox\"  roles: none  move here: no  create here: no");
         assertThat(board.writeRequests()).isEmpty();
     }
