@@ -668,7 +668,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: ${{ steps.source.outputs.state == 'open' }}
         with:
-          node-version: "24"
+          node-version: "26"
 
       - name: Validate the dependency-only update
         id: dependency
@@ -856,7 +856,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: ${{ steps.publication.outputs.required == 'true' }}
         with:
-          node-version: "24"
+          node-version: "26"
 
       - name: Checkout trusted publication source
         if: ${{ steps.publication.outputs.required == 'true' }}
