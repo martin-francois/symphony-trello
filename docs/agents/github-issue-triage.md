@@ -77,6 +77,50 @@ auditing that may create issues lives in
   and add a short comment thanking them, saying they are assigned, and saying they can start work. If
   assignment fails because the authenticated account lacks permission or the repository rejects the
   assignee, do not post the assignment comment; include the blocker in the sweep summary instead.
+- During every sweep, check the comments by people on open and closed issues, the issue comments on
+  pull requests, and Discussions. An issue or Discussion body counts as its first comment. A person
+  is any account other than the maintainer account and bots (GitHub user type `Bot` or a login
+  ending in `[bot]`); the maintainer account is the authenticated GitHub account. A thread is a
+  whole issue, pull request conversation, or Discussion, including nested Discussion replies. A
+  thread is handled up to the maintainer account's last comment in it, so only a person's comment
+  posted after that comment can need attention. Skip such a comment when it already carries the
+  maintainer account's 👍 reaction or is hidden (GraphQL `isMinimized`), for example as spam. Read
+  both in the same GraphQL query that lists the comments:
+  `reactionGroups { content viewerHasReacted }` shows whether the authenticated account has reacted
+  with `THUMBS_UP`, and works for issue, pull request, and Discussion comments and bodies.
+- Reply where the comment asks a question, offers help, gives a status update, points to a fix, or
+  reports a new problem. The reply becomes the maintainer account's last comment in the thread, so
+  it must answer every comment above it that needs a reply, and those comments need no reaction.
+  Every reply thanks the person for the specific thing they did or reported, as the thanks rule in
+  [Outside contributor pull requests](default-workflow.md#outside-contributor-pull-requests)
+  describes, for example "Thanks for tracing the drift between the two commitlint scripts." A plain
+  thank-you, or a comment that the thread already answers, needs no reply; add the maintainer
+  account's 👍 reaction to it instead, so later sweeps skip it, for example with
+  `gh api -X POST repos/<owner>/<repo>/issues/comments/<id>/reactions -f content=+1`, or the
+  `addReaction` GraphQL mutation with `content: THUMBS_UP` for a Discussion or Discussion comment.
+  Bot comments get no reaction.
+- Spam gets no reply and no 👍. Hide each spam comment with the GraphQL `minimizeComment` mutation
+  and `classifier: SPAM`; the hidden state marks it handled. List each one with its author in the
+  sweep summary, so the maintainer can report the account to GitHub, which the API does not let an
+  agent do, and decide whether to block it. A spam issue or Discussion body cannot be hidden this
+  way, so list it for the maintainer too. A comment that only looks odd but has real content is not
+  spam; handle it like any other comment.
+- Do not answer on the maintainer's behalf when a comment needs a maintainer decision, such as a
+  scope change, a partnership, licensing, or anything no written rule in these docs covers. Leave it
+  unanswered and without a 👍 reaction, so the next sweep surfaces it again until the decision is
+  answered, and list it in the sweep summary with its URL and the decision it needs. Until the
+  maintainer answers, do not post in that thread, because any later comment from the maintainer
+  account would mark the pending comment handled; list anything the sweep would have posted there in
+  the summary instead.
+- When someone offers paid help or asks about a bounty, reply without waiting for the maintainer:
+  thank them for the specific work they described, say that the project doesn't pay for
+  contributions or offer bounties, say that a regular pull request would be very welcome, and, on an
+  issue the pickup comment rule above covers, offer to assign it to them if they want it.
+  `CONTRIBUTING.md` states the same terms for contributors.
+- The sweep summary lists every reply posted, with the person and the comment URL, every comment
+  that got a 👍 instead of a reply, every spam comment or body with its author, and every comment
+  left for the maintainer. No automation checks the replies, reactions, or hidden comments; the
+  maintainer's review of that summary and of the posted comments is the evidence.
 - At the end of every sweep, report open issues that were assigned at least 14 days ago and still
   have no open pull request. Check linked pull requests and open repository pull requests that
   reference the issue URL or number, including closing-keyword references. For each stale assigned
@@ -85,7 +129,13 @@ auditing that may create issues lives in
   repository context, use the authenticated GitHub account as the best available approximation and
   state that assumption in the summary. Determine assignment age from the assignment timeline when
   available; if the timeline is unavailable, report only issues whose current assignment is otherwise
-  known to be at least 14 days old.
+  known to be at least 14 days old. On each stale assigned issue, post one friendly check-in that
+  thanks the assignee for taking the issue, asks whether they are still working on it, and offers to
+  free it up for someone else with no pressure, then report the issue as above and say whether a
+  check-in was posted. Skip the check-in when an earlier one is still unanswered, or when the
+  assignee answered that they are still working on it less than 14 days ago. When the assignee asks
+  to free the issue up, unassign them and re-evaluate `help wanted` per the assigned-issue label
+  rule.
 
 ## Already-implemented check
 
