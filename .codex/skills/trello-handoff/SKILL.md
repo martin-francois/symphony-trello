@@ -200,7 +200,9 @@ Before moving to `Human Review`:
    paths are permitted in this successful branch-only handoff and its workpad entry;
    unrelated paths and filesystem blocker details retain their redaction rules.
 2. When the workpad tool is available, update it with final summary, acceptance criteria status,
-   validation evidence, PR URL when applicable, and known limitations.
+   validation evidence, PR URL when applicable, and known limitations. When
+   the prompt has a `Codex Review Before Handoff` section, also record the
+   review loop outcome it asks for, in the workpad and in the handoff comment.
    Format PR links in Trello-visible text on their own line as
    `PR: <https://github.com/owner/repo/pull/123>` so punctuation cannot become
    part of the link.

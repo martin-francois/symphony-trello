@@ -24,6 +24,7 @@ import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.PullRequestMode;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
+import ch.fmartin.symphony.trello.repository.CodexReviewPrompt;
 import ch.fmartin.symphony.trello.repository.RepositorySource;
 import ch.fmartin.symphony.trello.repository.RepositorySourceResolver;
 import ch.fmartin.symphony.trello.repository.RepositorySourceSelection;
@@ -57,6 +58,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 final class TrelloBoardSetupTest {
@@ -975,6 +977,96 @@ final class TrelloBoardSetupTest {
         assertThat(examplePolicy)
                 .as("shipped workflow example repository policy")
                 .isEqualToNormalizingWhitespace(generatedPolicy);
+    }
+
+    @EnumSource(TrelloBoardSetup.GitHubIntegration.class)
+    @ParameterizedTest
+    void generatedWorkflowWritesCodexReviewDefaultsAndPointsAtRuntimeSection(TrelloBoardSetup.GitHubIntegration github)
+            throws IOException {
+        // given
+        Path workflow = tempDir.resolve("review-loop-" + github + ".md");
+        String expectedPublication =
+                github.enabled() ? "any push, the pull request or branch-only handoff," : "the local handoff record";
+
+        // when
+        setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "Review Loop Queue",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                null,
+                1,
+                false,
+                false,
+                github));
+
+        // then
+        EffectiveConfig config =
+                new ConfigResolver(ignored -> Optional.empty()).resolve(new WorkflowLoader().load(workflow));
+        assertThat(config.repository().codexReview()).isEqualTo(EffectiveConfig.CodexReviewConfig.DEFAULTS);
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("  default_path: null\n  codex_review_max_rounds: 1\n  codex_review_timeout_ms: 3600000\n")
+                .contains(TrelloBoardSetup.REVIEW_LOOP_SETTING_HEADING)
+                .containsIgnoringWhitespaces(
+                        "final runtime section titled `" + CodexReviewPrompt.TITLE + "` to this prompt")
+                .containsIgnoringWhitespaces("before the final local validation, " + expectedPublication)
+                .containsIgnoringWhitespaces(
+                        "When that runtime section is absent, run a review loop only when the card asks for one.");
+    }
+
+    @Test
+    void importedBoardWorkflowWritesCodexReviewDefaults() {
+        // given
+        boardListsResponse.set(listsJson(trelloList("list-ready", "Ready for Codex", 1)));
+        Path workflow = tempDir.resolve("review-loop-import.md");
+
+        // when
+        setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "input",
+                List.of("Ready for Codex"),
+                List.of(),
+                null,
+                workflow,
+                Path.of("./agent-workspaces"),
+                1,
+                false));
+
+        // then
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains(
+                        "  codex_review_max_rounds: 1\n  codex_review_timeout_ms: 3600000\n",
+                        TrelloBoardSetup.REVIEW_LOOP_SETTING_HEADING);
+    }
+
+    @Test
+    void exampleWorkflowReviewLoopSettingMatchesGeneratedGithubWorkflow() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("review-loop-example-sync.md");
+
+        // when
+        setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "Review Loop Example Queue",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                false));
+
+        // then
+        assertThat(markdownSection(
+                        Files.readString(Path.of("WORKFLOW.example.md")), TrelloBoardSetup.REVIEW_LOOP_SETTING_HEADING))
+                .as("shipped workflow example review loop setting")
+                .isEqualToNormalizingWhitespace(
+                        markdownSection(Files.readString(workflow), TrelloBoardSetup.REVIEW_LOOP_SETTING_HEADING));
     }
 
     @Test

@@ -25,6 +25,8 @@ workspace:
 repository:
   default_url: null
   default_path: null
+  codex_review_max_rounds: 1
+  codex_review_timeout_ms: 3600000
 github:
   pull_request_mode: create
   no_pr_label: No PR
@@ -453,6 +455,16 @@ the narrower passing validation that still gives confidence in the change.
 If required validation cannot be performed because auth, files, tools, or environment access are
 missing, treat the work as blocked. Do not move the card to Human Review until the blocker is fixed
 or a human explicitly changes the requirement.
+
+## Review Loop Setting
+
+Workflow `repository.codex_review_max_rounds` sets how many Codex review rounds run on
+repository-changing work before handoff; `0` turns the loop off. `repository.codex_review_timeout_ms`
+limits each separate `codex review` run. While the round limit is above `0`, Symphony appends a final
+runtime section titled `Codex Review Before Handoff` to this prompt. Follow that section after the
+implementation candidate is committed and before the final local validation, any push, the pull
+request or branch-only handoff, and the move to "Human Review". When that runtime section is absent,
+run a review loop only when the card asks for one.
 
 ## Pull Request Publication
 

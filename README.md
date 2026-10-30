@@ -1735,6 +1735,57 @@ commits show the wrong author, check `gh auth status`, `gh api user`, `gh api us
 repository's local `git config user.name`, `git config user.email`, and
 `git config symphony-trello.github-author-verified` inside the task checkout.
 
+### Codex Review Before Handoff
+
+Codex reviews its own changes once before it hands them off, so cards don't have to ask for it. Two
+keys in the workflow file control the loop:
+
+```yaml
+repository:
+  codex_review_max_rounds: 1
+  codex_review_timeout_ms: 3600000
+```
+
+`codex_review_max_rounds` is the most review rounds Codex runs per handoff. The default is `1`. Set it
+to `0` to turn the loop off for that board. `codex_review_timeout_ms` stops one separate
+`codex review` run after that many milliseconds. The default is one hour. The next card that starts
+uses the new values; no restart is needed. Workflows that setup generates contain both keys with
+their defaults, and setup keeps edited values when it regenerates the workflow.
+
+The loop also runs for boards whose workflow doesn't have these keys yet, because Symphony uses the
+defaults when a key is missing. If you upgraded from a version without the review loop, Codex now
+spends one review round on every card that changes a repository. Add
+`codex_review_max_rounds: 0` under `repository` to keep the old behavior.
+
+While the round limit is above `0`, Symphony adds a `Codex Review Before Handoff` section at the end
+of the prompt for every card. For cards that change a repository, Codex then works in this order:
+
+1. Finish the change and commit it locally.
+2. Review the whole change against its base branch. Codex fixes justified findings that are inside
+   the card's scope and repeats the review until a round finds nothing worth fixing, or until
+   `codex_review_max_rounds` rounds have run.
+3. Run the repository's local checks once on the reviewed result. This includes the CI-equivalent
+   checks Codex runs when CI is not available.
+4. Push, create or update the pull request, or write the branch-only handoff, then move the card to
+   `Human Review`.
+
+Codex puts review fixes into the commit that caused the problem when that is safe. It does not
+rewrite pushed history or the default branch for a review fix. Findings it rejects or leaves out of
+scope get a one-line reason. The workpad and the handoff comment say how many review rounds ran,
+what was fixed, what was rejected, and whether the loop stopped at the limit with findings still
+open.
+
+Codex first tries a separate `codex review` run. Inside the default `workspaceWrite` sandbox that
+command usually fails because it cannot write to the Codex home directory. Codex then reviews the
+same diff in its own session and says so in the handoff. The separate review uses
+`--dangerously-bypass-approvals-and-sandbox` only when the workflow already runs Codex without its
+sandbox (`dangerFullAccess`). Otherwise the prompt tells Codex not to bypass the sandbox.
+
+The review runs inside the Codex turn, so `codex.turn_timeout_ms` still limits the whole turn. With
+both defaults at one hour, a review that uses its full timeout ends the turn too.
+
+Cards that only investigate, call an API, or need no repository change skip the loop.
+
 ### Trello Write Controls
 
 The recommended workflow gives Codex four scoped Trello handoff tools:

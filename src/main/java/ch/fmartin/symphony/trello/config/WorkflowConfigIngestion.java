@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.IntPredicate;
 
 public final class WorkflowConfigIngestion {
     public static final int MIN_LOCAL_SERVER_PORT = 0;
@@ -69,6 +70,7 @@ public final class WorkflowConfigIngestion {
         Map<String, Object> agent = object(root, "agent");
         Map<String, Object> codex = object(root, "codex");
         Map<String, Object> server = object(root, "server");
+        Map<String, Object> repository = object(root, "repository");
 
         WorkflowIntegerSetting serverPort = serverPort(server, environmentResolver, unresolvedEnvironmentPolicy);
         add(findings, serverPort);
@@ -96,6 +98,14 @@ public final class WorkflowConfigIngestion {
         WorkflowIntegerSetting codexTurnTimeoutMs = integerSetting(codex, "turn_timeout_ms", "turn_timeout_ms");
         WorkflowIntegerSetting codexReadTimeoutMs = integerSetting(codex, "read_timeout_ms", "read_timeout_ms");
         WorkflowIntegerSetting codexStallTimeoutMs = integerSetting(codex, "stall_timeout_ms", "stall_timeout_ms");
+        WorkflowIntegerSetting repositoryCodexReviewMaxRounds = nonNegativeIntegerSetting(
+                repository,
+                EffectiveConfig.CodexReviewConfig.MAX_ROUNDS_KEY,
+                EffectiveConfig.CodexReviewConfig.MAX_ROUNDS_PATH);
+        WorkflowIntegerSetting repositoryCodexReviewTimeoutMs = positiveIntegerSetting(
+                repository,
+                EffectiveConfig.CodexReviewConfig.TIMEOUT_MS_KEY,
+                EffectiveConfig.CodexReviewConfig.TIMEOUT_MS_PATH);
 
         add(
                 findings,
@@ -109,7 +119,9 @@ public final class WorkflowConfigIngestion {
                 agentMaxRetryBackoffMs,
                 codexTurnTimeoutMs,
                 codexReadTimeoutMs,
-                codexStallTimeoutMs);
+                codexStallTimeoutMs,
+                repositoryCodexReviewMaxRounds,
+                repositoryCodexReviewTimeoutMs);
         return new TypedWorkflowConfig(
                 trackerRequestTimeoutMs,
                 trackerMaxApiRetries,
@@ -123,6 +135,8 @@ public final class WorkflowConfigIngestion {
                 codexReadTimeoutMs,
                 codexStallTimeoutMs,
                 serverPort,
+                repositoryCodexReviewMaxRounds,
+                repositoryCodexReviewTimeoutMs,
                 priorityLabels,
                 maxConcurrentAgentsByState,
                 findings);
@@ -195,17 +209,41 @@ public final class WorkflowConfigIngestion {
     }
 
     private static WorkflowIntegerSetting positiveIntegerSetting(Map<String, Object> root, String key, String path) {
-        WorkflowIntegerSetting parsed = integerSetting(root, key, path);
+        return boundedIntegerSetting(
+                integerSetting(root, key, path),
+                value -> value > 0,
+                path,
+                WorkflowConfigFinding.Kind.NON_POSITIVE,
+                "positive");
+    }
+
+    private static WorkflowIntegerSetting nonNegativeIntegerSetting(Map<String, Object> root, String key, String path) {
+        return boundedIntegerSetting(
+                integerSetting(root, key, path),
+                value -> value >= 0,
+                path,
+                WorkflowConfigFinding.Kind.NEGATIVE,
+                "non-negative");
+    }
+
+    /// Keeps a parsed whole number that passes `allowed`, and turns any other one into a strict
+    /// finding that says the value must be `requirement`.
+    private static WorkflowIntegerSetting boundedIntegerSetting(
+            WorkflowIntegerSetting parsed,
+            IntPredicate allowed,
+            String path,
+            WorkflowConfigFinding.Kind kind,
+            String requirement) {
         return parsed.value()
-                .filter(value -> value > 0)
-                .map(WorkflowIntegerSetting::valid)
-                .or(() -> parsed.value()
-                        .map(value -> WorkflowIntegerSetting.invalid(WorkflowConfigFinding.strict(
-                                path,
-                                WorkflowConfigFinding.Kind.NON_POSITIVE,
-                                String.valueOf(value),
-                                path + " must be positive"))))
+                .filter(value -> !allowed.test(value))
+                .map(value -> outOfBounds(path, kind, value, requirement))
                 .orElse(parsed);
+    }
+
+    private static WorkflowIntegerSetting outOfBounds(
+            String path, WorkflowConfigFinding.Kind kind, int value, String requirement) {
+        return WorkflowIntegerSetting.invalid(
+                WorkflowConfigFinding.strict(path, kind, String.valueOf(value), path + " must be " + requirement));
     }
 
     private static WorkflowIntegerSetting parseInteger(String path, Object value) {

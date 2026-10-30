@@ -11,6 +11,7 @@ import ch.fmartin.symphony.trello.config.StateNames;
 import ch.fmartin.symphony.trello.config.TrelloListRoleValidator;
 import ch.fmartin.symphony.trello.config.WorkflowConfigIngestion;
 import ch.fmartin.symphony.trello.config.WorkflowIntegerSetting;
+import ch.fmartin.symphony.trello.repository.CodexReviewPrompt;
 import ch.fmartin.symphony.trello.repository.RepositorySourcePrompt;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -947,7 +948,8 @@ public final class TrelloBoardSetup {
                   root: %s
                 repository:
                   default_url: %s
-                  default_path: %s%s
+                  default_path: %s
+                %s%s
                 server:
                   port: %d
                 polling:
@@ -976,6 +978,7 @@ public final class TrelloBoardSetup {
                                 yamlScalar(workspaceRoot.toString()),
                                 optionalYamlScalar(repositoryDefaults.defaultUrl()),
                                 optionalYamlScalar(repositoryDefaults.defaultPath()),
+                                repositoryDefaults.codexReviewYaml(),
                                 gitHubYaml(bodyInputs.githubEnabled()),
                                 serverPort,
                                 ConfigDefaults.GENERATED_WORKFLOW_POLLING_INTERVAL_MS,
@@ -1054,6 +1057,8 @@ public final class TrelloBoardSetup {
 
                 %s
 
+                %s
+
                 Card URL: {{ card.url }}
                 """
                 .formatted(
@@ -1073,6 +1078,7 @@ public final class TrelloBoardSetup {
                                 !handoffStates.isEmpty(),
                                 githubEnabled),
                         validationPrompt(!handoffStates.isEmpty(), reviewState),
+                        codexReviewSettingPrompt(reviewState, githubEnabled),
                         prPublicationPrompt(
                                 reviewState,
                                 blockedDestination(reviewState, blockedState),
@@ -1632,6 +1638,32 @@ public final class TrelloBoardSetup {
                 explicitly changes the requirement.
                 """
                 .formatted(evidenceDestination, reviewHandoff)
+                .stripTrailing();
+    }
+
+    static final String REVIEW_LOOP_SETTING_HEADING = "## Review Loop Setting";
+
+    private static String codexReviewSettingPrompt(String reviewState, boolean githubEnabled) {
+        String reviewHandoff = blank(reviewState) ? "human review" : quote(reviewState);
+        String publication =
+                githubEnabled ? "any push, the pull request or branch-only handoff," : "the local handoff record";
+        return """
+                %s
+
+                Workflow `%s` sets how many Codex review rounds run on repository-changing work
+                before handoff; `0` turns the loop off. `%s` limits each separate
+                `codex review` run. While the round limit is above `0`, Symphony appends a final runtime section titled
+                `%s` to this prompt. Follow that section after the implementation candidate is
+                committed and before the final local validation, %s and the move to %s. When
+                that runtime section is absent, run a review loop only when the card asks for one.
+                """
+                .formatted(
+                        REVIEW_LOOP_SETTING_HEADING,
+                        EffectiveConfig.CodexReviewConfig.MAX_ROUNDS_PATH,
+                        EffectiveConfig.CodexReviewConfig.TIMEOUT_MS_PATH,
+                        CodexReviewPrompt.TITLE,
+                        publication,
+                        reviewHandoff)
                 .stripTrailing();
     }
 
@@ -3203,17 +3235,20 @@ public final class TrelloBoardSetup {
     public static final class RepositoryDefaults {
         private final String defaultUrl;
         private final String defaultPath;
+        private final CodexReviewYaml codexReview;
 
         public RepositoryDefaults(String defaultUrl, String defaultPath) {
-            this(defaultUrl, defaultPath, false);
+            this(defaultUrl, defaultPath, false, CodexReviewYaml.DEFAULTS);
         }
 
-        private RepositoryDefaults(String defaultUrl, String defaultPath, boolean preserveRaw) {
+        private RepositoryDefaults(
+                String defaultUrl, String defaultPath, boolean preserveRaw, CodexReviewYaml codexReview) {
             this.defaultUrl = preserveRaw
                     ? defaultUrl
                     : RepositoryUrlInput.validateExplicit(Optional.ofNullable(defaultUrl))
                             .orElse(null);
             this.defaultPath = defaultPath;
+            this.codexReview = codexReview;
         }
 
         static RepositoryDefaults empty() {
@@ -3222,12 +3257,18 @@ public final class TrelloBoardSetup {
 
         RepositoryDefaults withExplicitDefaultUrl(Optional<String> explicitDefaultUrl) {
             return explicitDefaultUrl
-                    .map(defaultUrl -> new RepositoryDefaults(defaultUrl, defaultPath))
+                    .map(defaultUrl -> new RepositoryDefaults(defaultUrl, defaultPath, false, codexReview))
                     .orElse(this);
         }
 
-        static RepositoryDefaults preserved(String defaultUrl, String defaultPath) {
-            return new RepositoryDefaults(defaultUrl, defaultPath, true);
+        /// Keeps an operator's review-loop settings when setup regenerates the workflow.
+        static RepositoryDefaults preserved(
+                String defaultUrl, String defaultPath, Object codexReviewMaxRounds, Object codexReviewTimeoutMs) {
+            return new RepositoryDefaults(
+                    defaultUrl,
+                    defaultPath,
+                    true,
+                    CodexReviewYaml.preserved(codexReviewMaxRounds, codexReviewTimeoutMs));
         }
 
         public String defaultUrl() {
@@ -3236,6 +3277,39 @@ public final class TrelloBoardSetup {
 
         public String defaultPath() {
             return defaultPath;
+        }
+
+        String codexReviewYaml() {
+            return codexReview.yamlLines();
+        }
+
+        /// The review-loop settings as YAML scalars, ready to write under `repository`.
+        private record CodexReviewYaml(String maxRounds, String timeoutMs) {
+            private static final CodexReviewYaml DEFAULTS = new CodexReviewYaml(
+                    String.valueOf(ConfigDefaults.DEFAULT_CODEX_REVIEW_MAX_ROUNDS),
+                    String.valueOf(ConfigDefaults.DEFAULT_CODEX_REVIEW_TIMEOUT_MS));
+
+            /// Writes values back as they were, so an invalid value still fails at runtime instead of
+            /// being silently replaced by the default.
+            static CodexReviewYaml preserved(Object maxRounds, Object timeoutMs) {
+                return new CodexReviewYaml(
+                        preservedYamlValue(maxRounds, DEFAULTS.maxRounds()),
+                        preservedYamlValue(timeoutMs, DEFAULTS.timeoutMs()));
+            }
+
+            private static String preservedYamlValue(Object value, String defaultYaml) {
+                return switch (value) {
+                    case null -> defaultYaml;
+                    case Boolean flag -> flag.toString();
+                    case Number number -> number.toString();
+                    default -> yamlScalar(value.toString());
+                };
+            }
+
+            String yamlLines() {
+                return "  " + EffectiveConfig.CodexReviewConfig.MAX_ROUNDS_KEY + ": " + maxRounds + "\n  "
+                        + EffectiveConfig.CodexReviewConfig.TIMEOUT_MS_KEY + ": " + timeoutMs;
+            }
         }
     }
 }

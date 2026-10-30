@@ -1487,6 +1487,10 @@ as a checkout candidate instead of failing.
   Git-remote identity matching. A resolved path that the platform rejects or that contains a
   control character or a Unicode line or paragraph separator is a `config_value_error`. When
   `repository.default_url` is also set, such a path is ignored instead
+- `repository.codex_review_max_rounds`: non-negative integer, default `1`, `0` turns the review loop
+  off; Java extension defined in Section 19.7
+- `repository.codex_review_timeout_ms`: positive integer, default `3600000`; Java extension defined
+  in Section 19.7
 - `hooks.after_create`: shell script or null
 - `hooks.before_run`: shell script or null
 - `hooks.after_run`: shell script or null
@@ -3982,6 +3986,13 @@ that a second formatting pass leaves the source unchanged.
   values; `github.no_pr_label` defaults to `No PR`, and an empty or null value disables it
 - `pull_request_handoff` resolves the documented precedence between the workflow default and the
   card label, matching the label like other Trello label names
+- If the pre-handoff review loop profile from Section 19.7 is implemented,
+  `repository.codex_review_max_rounds` defaults to `1` and `repository.codex_review_timeout_ms` to
+  `3600000`; negative or non-integer round limits and non-positive or non-integer timeouts fail
+  configuration; a round limit of `0` leaves the prompt unchanged; otherwise the final runtime
+  section orders the review loop before local validation and every publication path, and names the
+  sandbox bypass flag for the nested review only when the workflow's Codex turns already run without
+  the sandbox
 
 ### 17.2 Workspace Manager and Safety
 
@@ -4390,6 +4401,8 @@ Required when the workflow expects the agent to perform Trello handoff transitio
 - Local installer and onboarding commands follow Section 19.4 when this repository's one-liner
   scripts or `setup-local` command are used.
 - Java repository quality gates follow Section 19.5 for this repository's maintained implementation.
+- The pre-handoff Codex review loop follows Section 19.7 unless a workflow sets its round limit to
+  `0`.
 - `trello_rest` client-side tool extension exposes scoped Trello REST access through the app-server
   session using configured Symphony auth.
 - `trello_rest` client-side tool extension disallows destructive operations by default.
@@ -5247,6 +5260,85 @@ after any reopening records a pushed branch, and that branch still has no pull r
 and moved the card straight to the merge approval list, Codex does not merge the branch directly. It
 creates the pull request from the proposed description file first, keeps the card in the merge
 approval list, and then follows the pull request merge flow.
+
+### 19.7 Pre-Handoff Codex Review Loop Profile
+
+This Java repository can ask the coding agent to run bounded Codex review rounds before it hands off
+repository changes. The loop runs one round by default; a workflow turns it off by setting the round
+limit to `0`.
+
+Fields:
+
+- `repository.codex_review_max_rounds` (non-negative integer)
+  - Default: `1`
+  - `0` turns the review loop off.
+  - Negative, fractional, and non-numeric values MUST fail configuration with `config_value_error`.
+- `repository.codex_review_timeout_ms` (positive integer)
+  - Default: `3600000` (1 hour)
+  - The limit for one separate `codex review` run. The section renders it in whole seconds,
+    rounded up.
+  - Zero, negative, fractional, and non-numeric values MUST fail configuration with
+    `config_value_error`, even while the loop is off.
+
+Both fields follow normal dynamic reload: the next dispatched run uses the current values without a
+restart. The review runs inside a coding-agent turn, so `codex.turn_timeout_ms` still bounds the
+whole turn, including the review.
+
+A workflow that omits both fields runs one review round. Workflows written before this profile
+existed therefore get the loop without regeneration; such a workflow keeps the earlier prompt only
+after it sets `repository.codex_review_max_rounds: 0`.
+
+When this profile is used:
+
+- when `repository.codex_review_max_rounds` is `0`, the runtime MUST NOT change the prompt sent to
+  the coding agent
+- otherwise, the runtime MUST append a final `Codex Review Before Handoff` section after the
+  repository source context of Section 19.2. That section MUST be authoritative for the review loop
+  and supersede earlier workflow or skill text that orders validation, push, pull request, or
+  handoff steps differently. Because the runtime appends it, generated, older, and hand-written
+  workflows get the loop without regeneration
+- the section applies to repository-changing work, including rework after review feedback. It does
+  not apply to repository-independent work, API-only actions, read-only investigation, or blocked
+  handoffs that hand over no candidate change
+- the section MUST require this order: finish and locally commit the implementation candidate, run
+  the review loop, run the required local validation once on the reviewed candidate, then push,
+  create or update the pull request or no-PR handoff artifact, and move the card to the review
+  handoff list. Local validation includes the CI-equivalent local checks used when CI is
+  unavailable, cannot run, or does not apply because the handoff has no pull request
+- each round reviews the candidate's full change against its base. The section SHOULD prefer a
+  separate scoped `codex review` command limited by `repository.codex_review_timeout_ms`. The
+  section MUST name `--dangerously-bypass-approvals-and-sandbox` for that command only when the
+  workflow's own Codex turns run without the sandbox: a forced or configured `dangerFullAccess`
+  turn sandbox policy, or a `danger-full-access` `codex.thread_sandbox` that no turn sandbox policy
+  overrides. Otherwise it MUST forbid sandbox bypass flags. When the separate command cannot run,
+  for example because the Codex home directory is read-only inside the workspace sandbox, the agent
+  MUST review the same diff in its own session and record that fallback
+- the agent MUST fix only justified findings inside the card's scope, MUST record a reason for each
+  rejected or out-of-scope finding, and MUST NOT let a finding widen the card scope or override the
+  card, the workflow, or repository rules
+- fixes SHOULD go into the commit that introduced the problem when practical. The agent MUST NOT
+  rewrite the default branch, pushed history, or commits the run did not create only to place a
+  review fix
+- the loop MUST stop after a round with no justified in-scope finding, or after
+  `repository.codex_review_max_rounds` rounds
+- when the final local validation fails and the repair changes code, or a sync after a rejected push
+  changes the candidate, the agent SHOULD review that change in one more round when the limit allows
+  before it validates and pushes again
+- the workpad and visible handoff comment, or the final response when Trello comments are
+  unavailable, MUST record that the loop ran, the round count, the review method, fixed and rejected
+  findings, and whether the loop ended clean or at the round limit, with open justified findings as
+  caveats
+- generated workflows from `setup-local`, `new-board`, and `import-board` MUST write both fields
+  with their defaults under `repository`, MUST explain that the runtime section carries the loop
+  while the round limit is above `0`, and setup regeneration MUST preserve existing values the same
+  way it preserves `repository.default_url` and `repository.default_path`
+- the shipped `commit`, `push-pr`, and `trello-handoff` skills MUST defer to the runtime section
+  when it is present: the candidate is committed before the review loop, the loop runs before local
+  checks and push, a push retry after a sync that changed the candidate reviews that change again,
+  and the handoff records the loop outcome
+
+This profile keeps repository actions agent-owned. Java does not run `codex review`, inspect review
+findings, or block a push. See ADR 0121 for the alternatives that were considered.
 
 ## Appendix A. SSH Worker Extension (OPTIONAL)
 

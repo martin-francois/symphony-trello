@@ -10,6 +10,7 @@ import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -460,6 +461,144 @@ final class ConfigResolverTest {
         // then
         assertThat(error.code()).isEqualTo("config_type_error");
         assertThat(error).hasMessage("%s must not contain empty items", key);
+    }
+
+    @Test
+    void codexReviewRunsOneRoundWithAnHourTimeoutByDefault() throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow("WORKFLOW.codex-review-default.md", "");
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.repository().codexReview())
+                .isEqualTo(new EffectiveConfig.CodexReviewConfig(1, Duration.ofMinutes(60)))
+                .isEqualTo(EffectiveConfig.CodexReviewConfig.DEFAULTS);
+        assertThat(config.repository().codexReview().enabled())
+                .as("the review loop must run when the workflow omits the round limit")
+                .isTrue();
+    }
+
+    @Test
+    void resolvesConfiguredCodexReviewRoundsAndTimeout() throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.codex-review-configured.md",
+                """
+                repository:
+                  codex_review_max_rounds: 5
+                  codex_review_timeout_ms: 120000
+                """);
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.repository().codexReview())
+                .isEqualTo(new EffectiveConfig.CodexReviewConfig(5, Duration.ofMinutes(2)));
+    }
+
+    @Test
+    void zeroCodexReviewRoundsTurnTheLoopOff() throws Exception {
+        // given
+        Path workflow =
+                writeDefaultWorkflow("WORKFLOW.codex-review-off.md", "repository:\n  codex_review_max_rounds: 0");
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.repository().codexReview().enabled())
+                .as("zero review rounds must turn the review loop off")
+                .isFalse();
+    }
+
+    @MethodSource("invalidCodexReviewSettings")
+    @ParameterizedTest(name = "{0}")
+    void rejectsInvalidCodexReviewSettingsInsteadOfGuessing(String name, String setting, String expectedMessage)
+            throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow("WORKFLOW." + name + ".md", "repository:\n  " + setting);
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        ConfigException error = catchThrowableOfType(
+                ConfigException.class, () -> resolver.resolve(new WorkflowLoader().load(workflow)));
+
+        // then
+        assertThat(error.code()).isEqualTo("config_value_error");
+        assertThat(error).hasMessage(expectedMessage);
+    }
+
+    private static Stream<Arguments> invalidCodexReviewSettings() {
+        String roundsMessage = "repository.codex_review_max_rounds must be a whole number";
+        String timeoutMessage = "repository.codex_review_timeout_ms must be positive";
+        return Stream.of(
+                Arguments.of(
+                        "review-rounds-negative",
+                        "codex_review_max_rounds: -1",
+                        "repository.codex_review_max_rounds must be non-negative"),
+                Arguments.of("review-rounds-fractional", "codex_review_max_rounds: 1.5", roundsMessage),
+                Arguments.of("review-rounds-word", "codex_review_max_rounds: many", roundsMessage),
+                Arguments.of("review-rounds-boolean", "codex_review_max_rounds: true", roundsMessage),
+                Arguments.of("review-timeout-zero", "codex_review_timeout_ms: 0", timeoutMessage),
+                Arguments.of("review-timeout-negative", "codex_review_timeout_ms: -1000", timeoutMessage),
+                Arguments.of(
+                        "review-timeout-fractional",
+                        "codex_review_timeout_ms: 1000.5",
+                        "repository.codex_review_timeout_ms must be a whole number"));
+    }
+
+    @MethodSource("codexSandboxBypassCases")
+    @ParameterizedTest(name = "{0}")
+    void derivesCodexSandboxBypassFromTheWorkflowSandboxSettings(
+            String name, String codexSection, boolean forced, boolean expectedBypass) throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow("WORKFLOW.sandbox-" + name + ".md", codexSection);
+        Map<String, String> environment =
+                forced ? Map.of(ConfigResolver.DANGER_FULL_ACCESS_ENVIRONMENT, "true") : Map.of();
+        var resolver = new ConfigResolver(variable -> Optional.ofNullable(environment.get(variable)));
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.codex().bypassesSandbox())
+                .as("whether Codex turns run without the sandbox for %s", name)
+                .isEqualTo(expectedBypass);
+    }
+
+    private static Stream<Arguments> codexSandboxBypassCases() {
+        String workspaceWrite = "codex:\n  turn_sandbox_policy:\n    type: workspaceWrite\n";
+        return Stream.of(
+                Arguments.of("no-sandbox-settings", "", false, false),
+                Arguments.of("workspace-write-policy", workspaceWrite, false, false),
+                Arguments.of("read-only-policy", "codex:\n  turn_sandbox_policy:\n    type: readOnly\n", false, false),
+                Arguments.of(
+                        "danger-full-access-policy",
+                        "codex:\n  turn_sandbox_policy:\n    type: dangerFullAccess\n",
+                        false,
+                        true),
+                Arguments.of("forced-by-environment", workspaceWrite, true, true),
+                Arguments.of(
+                        "danger-full-access-thread-sandbox",
+                        "codex:\n  thread_sandbox: danger-full-access\n",
+                        false,
+                        true),
+                Arguments.of(
+                        "turn-policy-overrides-thread-sandbox",
+                        "codex:\n  thread_sandbox: danger-full-access\n  turn_sandbox_policy:\n    type: workspaceWrite\n",
+                        false,
+                        false),
+                Arguments.of(
+                        "writable-roots-override-thread-sandbox",
+                        "codex:\n  thread_sandbox: danger-full-access\n  additional_writable_roots:\n    - ./extra\n",
+                        false,
+                        false));
     }
 
     @MethodSource("fractionalNumericValues")

@@ -18,6 +18,7 @@ import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.process.RuntimeProcessShutdown;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
+import ch.fmartin.symphony.trello.repository.CodexReviewPrompt;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.TrackerClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
@@ -160,6 +161,111 @@ final class LocalAgentRunnerTest {
         assertThat(expectedWorkspace.resolve(CodexSkillInstaller.installedSkillPath("commit")))
                 .content()
                 .contains("configure it from the authenticated GitHub login");
+    }
+
+    @Test
+    void leavesCodexReviewLoopOutOfThePromptWhenWorkflowSetsZeroRounds() {
+        // given
+        EffectiveConfig config = configWithRepository(Map.of("codex_review_max_rounds", 0));
+
+        // when
+        String prompt = promptPassedToCodex(config, "Card task");
+
+        // then
+        assertThat(prompt).doesNotContain(CodexReviewPrompt.HEADING).doesNotContain("codex review");
+    }
+
+    @Test
+    void appendsOneCodexReviewRoundAfterRepositoryContextByDefault() {
+        // given
+        EffectiveConfig config = configWithRepository(Map.of());
+
+        // when
+        String prompt = promptPassedToCodex(config, "Card task");
+
+        // then
+        assertThat(prompt)
+                .startsWith("Card task")
+                .containsSubsequence("## Repository Source Context", CodexReviewPrompt.HEADING)
+                .endsWith("could not be fixed safely in this card, as a handoff caveat.");
+        assertThat(reviewSection(prompt))
+                .contains("`repository.codex_review_max_rounds: 1`")
+                .contains("`repository.codex_review_timeout_ms: 3600000`")
+                .contains("when the number of rounds run reaches 1")
+                .contains("timeout 3600s codex review --base <base-branch> --title")
+                .contains("timeout 3600s codex review --uncommitted --title")
+                .contains("Do not add `--dangerously-bypass-approvals-and-sandbox`")
+                .contains("Review the same diff yourself in this session instead")
+                .contains("Fix a finding only when it is justified and inside the card's scope")
+                .contains("`git commit --fixup` and an autosquash rebase")
+                .contains("Never rewrite the default branch, pushed history")
+                .contains("Skip it for repository-independent work");
+    }
+
+    @Test
+    void codexReviewLoopUsesConfiguredRoundsAndTimeout() {
+        // given
+        EffectiveConfig config =
+                configWithRepository(Map.of("codex_review_max_rounds", 2, "codex_review_timeout_ms", 90_500));
+
+        // when
+        String section = reviewSection(promptPassedToCodex(config, "Card task"));
+
+        // then
+        assertThat(section)
+                .contains("`repository.codex_review_max_rounds: 2`")
+                .contains("`repository.codex_review_timeout_ms: 90500`")
+                .contains("when the number of rounds run reaches 2")
+                .as("the timeout command takes whole seconds and rounds up")
+                .contains("timeout 91s codex review --base <base-branch> --title");
+    }
+
+    @Test
+    void nestedCodexReviewBypassesTheSandboxOnlyWhenTheWorkflowRunsWithoutIt() {
+        // given
+        EffectiveConfig config =
+                configWithRepository(Map.of(), Map.of(ConfigResolver.DANGER_FULL_ACCESS_ENVIRONMENT, "true"));
+
+        // when
+        String section = reviewSection(promptPassedToCodex(config, "Card task"));
+
+        // then
+        assertThat(section)
+                .contains("timeout 3600s codex --dangerously-bypass-approvals-and-sandbox review --base <base-branch>")
+                .contains("timeout 3600s codex --dangerously-bypass-approvals-and-sandbox review --uncommitted")
+                .contains("This workflow already runs Codex without its sandbox")
+                .doesNotContain("Do not add `--dangerously-bypass-approvals-and-sandbox`")
+                .doesNotContain("timeout 3600s codex review");
+    }
+
+    @Test
+    void codexReviewLoopRunsBeforeLocalChecksAndEveryPublicationPath() {
+        // given
+        EffectiveConfig config = configWithRepository(Map.of());
+
+        // when
+        String section = reviewSection(promptPassedToCodex(config, "Card task"));
+
+        // then
+        assertThat(section)
+                .containsSubsequence(
+                        "1. Finish the implementation candidate and commit it locally, unless the card or workflow"
+                                + " asks for a patch or uncommitted changes instead. Do not push yet.",
+                        "2. Run the review loop below.",
+                        "3. Run the required local validation once on the reviewed candidate.",
+                        "CI-equivalent local checks used when CI is unavailable, cannot run, or does not apply"
+                                + " because the handoff has no pull request.",
+                        "4. Only then hand off the way this workflow asks: push the branch, create or update the pull"
+                                + " request, write the branch-only handoff's proposed description file such as"
+                                + " `PR.md`, or leave the local commit or patch. Then move the card to the review"
+                                + " handoff list.")
+                .contains("It does not change which handoff this workflow uses.")
+                .contains("Record the outcome in the Trello workpad and the visible handoff comment");
+        assertThat(section)
+                .containsSubsequence(
+                        "If the final local validation fails and the repair changes code, review that repair",
+                        "Do the same when a sync after a rejected push changes the candidate",
+                        "before you validate and push again.");
     }
 
     @Test
@@ -1057,6 +1163,11 @@ final class LocalAgentRunnerTest {
         assertThat(result).isEqualTo(AgentRunResult.ok());
         assertThat(prompt).hasValueSatisfying(value -> assertThat(value).isNotBlank());
         return prompt.get();
+    }
+
+    /// Collapses line wrapping so assertions do not depend on where the prompt text breaks lines.
+    private static String reviewSection(String prompt) {
+        return prompt.substring(prompt.indexOf(CodexReviewPrompt.HEADING)).replaceAll("\\s+", " ");
     }
 
     private TrackerClient tracker(CardLookup lookup) {

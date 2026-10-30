@@ -96,6 +96,9 @@ description: >
 
 8. Commit with `git commit -F <message-file>` so the message is exactly what was
    reviewed.
+9. If the prompt ends with a runtime `Codex Review Before Handoff` section, that
+   section decides when the review loop, local checks, and push happen after
+   this commit.
 
 After committing, inspect `git log -1 --format='%an <%ae>'`. If the author is
 wrong and the commit has not been pushed, amend it before publishing. If the

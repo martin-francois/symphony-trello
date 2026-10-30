@@ -138,7 +138,7 @@ public class ConfigResolver {
                         typedWorkflow.pollingIntervalMs(), "interval_ms", ConfigDefaults.DEFAULT_POLLING_INTERVAL_MS)),
                 new EffectiveConfig.WorkspaceConfig(pathFailingOnMissingVariable(
                         workflow.path().getParent(), "workspace.root", string(workspace, "root", systemTempRoot()))),
-                repositoryConfig(workflow.path().getParent(), repository),
+                repositoryConfig(workflow.path().getParent(), repository, typedWorkflow),
                 new EffectiveConfig.HooksConfig(
                         string(hooks, "after_create", null),
                         string(hooks, "before_run", null),
@@ -357,13 +357,21 @@ public class ConfigResolver {
         return configured;
     }
 
-    private EffectiveConfig.RepositoryConfig repositoryConfig(Path workflowDirectory, Map<String, Object> repository) {
+    private EffectiveConfig.RepositoryConfig repositoryConfig(
+            Path workflowDirectory, Map<String, Object> repository, TypedWorkflowConfig typedWorkflow) {
+        var codexReview = new EffectiveConfig.CodexReviewConfig(
+                integer(typedWorkflow.repositoryCodexReviewMaxRounds(), ConfigDefaults.DEFAULT_CODEX_REVIEW_MAX_ROUNDS),
+                millis(
+                        typedWorkflow.repositoryCodexReviewTimeoutMs(),
+                        EffectiveConfig.CodexReviewConfig.TIMEOUT_MS_PATH,
+                        ConfigDefaults.DEFAULT_CODEX_REVIEW_TIMEOUT_MS));
         String defaultUrl = optionalEnvironmentString(repository, "default_url");
         if (defaultUrl != null) {
             return new EffectiveConfig.RepositoryConfig(
-                    defaultUrl, optionalLowerPriorityRepositoryPath(workflowDirectory, repository));
+                    defaultUrl, optionalLowerPriorityRepositoryPath(workflowDirectory, repository), codexReview);
         }
-        return new EffectiveConfig.RepositoryConfig(null, optionalRepositoryPath(workflowDirectory, repository));
+        return new EffectiveConfig.RepositoryConfig(
+                null, optionalRepositoryPath(workflowDirectory, repository), codexReview);
     }
 
     private Path optionalLowerPriorityRepositoryPath(Path workflowDirectory, Map<String, Object> repository) {

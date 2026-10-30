@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.config;
 
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNSAFE_SINGLE_LINE_CHARACTERS;
 
+import ch.fmartin.symphony.trello.workflow.CodexSandboxPolicy;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -93,7 +94,13 @@ public record EffectiveConfig(
     public record WorkspaceConfig(Path root) {}
 
     @NullMarked
-    public record RepositoryConfig(@Nullable String defaultUrl, @Nullable Path defaultPath) {
+    public record RepositoryConfig(
+            @Nullable String defaultUrl, @Nullable Path defaultPath, CodexReviewConfig codexReview) {
+        /// For callers that only resolve repository sources, where the review loop plays no part.
+        public RepositoryConfig(@Nullable String defaultUrl, @Nullable Path defaultPath) {
+            this(defaultUrl, defaultPath, CodexReviewConfig.DEFAULTS);
+        }
+
         /// The repository source context shows the default path on one prompt line, so a path with a
         /// control character or a Unicode line or paragraph separator cannot be a default.
         public static boolean usableDefaultPath(Path path) {
@@ -108,6 +115,26 @@ public record EffectiveConfig(
                 return DefaultSource.PATH;
             }
             return DefaultSource.NONE;
+        }
+    }
+
+    /// Review loop that the agent runs before it hands off repository changes; see ADR 0121.
+    ///
+    /// @param maxRounds how many review rounds may run; `0` turns the loop off
+    /// @param timeout the limit for one separate `codex review` run
+    public record CodexReviewConfig(int maxRounds, Duration timeout) {
+        public static final CodexReviewConfig DEFAULTS = new CodexReviewConfig(
+                ConfigDefaults.DEFAULT_CODEX_REVIEW_MAX_ROUNDS, ConfigDefaults.DEFAULT_CODEX_REVIEW_TIMEOUT);
+
+        /// Front-matter keys under `repository`; config parsing, setup, and prompt text all use these.
+        public static final String MAX_ROUNDS_KEY = "codex_review_max_rounds";
+
+        public static final String TIMEOUT_MS_KEY = "codex_review_timeout_ms";
+        public static final String MAX_ROUNDS_PATH = "repository." + MAX_ROUNDS_KEY;
+        public static final String TIMEOUT_MS_PATH = "repository." + TIMEOUT_MS_KEY;
+
+        public boolean enabled() {
+            return maxRounds > 0;
         }
     }
 
@@ -144,6 +171,13 @@ public record EffectiveConfig(
             Duration stallTimeout) {
         public CodexConfig {
             additionalWritableRoots = List.copyOf(additionalWritableRoots);
+        }
+
+        /// Whether Codex runs this workflow's turns without its sandbox. Nested Codex commands may
+        /// bypass the sandbox only when this is true.
+        public boolean bypassesSandbox() {
+            return CodexSandboxPolicy.bypassesSandbox(
+                    threadSandbox, turnSandboxPolicy, additionalWritableRoots, forceDangerFullAccess);
         }
     }
 

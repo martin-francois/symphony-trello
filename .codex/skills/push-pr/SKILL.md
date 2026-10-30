@@ -31,7 +31,10 @@ description: >
    git log --oneline --decorate -5
    ```
 
-2. Run the required local checks for the change.
+2. If the prompt ends with a runtime `Codex Review Before Handoff` section,
+   finish that review loop first. Then run the required local checks for the
+   change, including CI-equivalent local checks when CI cannot run. Without
+   that section, just run the required local checks.
 3. Before pushing, verify that commits intended for the PR are authored as the
    authenticated GitHub login:
 
@@ -135,9 +138,11 @@ description: >
    fi
    ```
 
-5. If push is rejected because the branch is stale, use `repo-sync`, rerun
-   checks, then push again. Use `--force-with-lease` only after a deliberate
-   history rewrite.
+5. If push is rejected because the branch is stale, use `repo-sync`. If the
+   sync changed the candidate, for example through conflict resolution, and
+   the prompt has a `Codex Review Before Handoff` section, review that change
+   as the section describes. Then rerun checks and push again. Use
+   `--force-with-lease` only after a deliberate history rewrite.
 6. If push fails because of auth, permissions, or branch protection, surface the
    exact failure. Do not rewrite remotes or switch protocols as a workaround.
 7. Create or update the PR:
@@ -239,6 +244,8 @@ branch-only handoff:
 
 - The working tree has uncommitted unrelated changes.
 - Required checks have not run and there is no clear reason to publish anyway.
+- The prompt has a `Codex Review Before Handoff` section and its review loop
+  has not run for the current candidate.
 - PR metadata would be misleading or incomplete.
 - The branch contains wrong-author commits and rewriting them would be unsafe
   because the branch is the default branch, unnamed, or contains unrelated

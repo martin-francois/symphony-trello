@@ -16,10 +16,15 @@ public final class CodexSandboxPolicy {
     public static final String READ_ONLY = "readOnly";
     public static final String WORKSPACE_WRITE = "workspaceWrite";
     public static final String DANGER_FULL_ACCESS = "dangerFullAccess";
+    /// The Codex `SandboxMode` value that `codex.thread_sandbox` uses for the same access level.
+    public static final String DANGER_FULL_ACCESS_SANDBOX_MODE = "danger-full-access";
     public static final String NETWORK_ACCESS = "networkAccess";
     public static final String WRITABLE_ROOTS = "writableRoots";
     public static final String TURN_SANDBOX_POLICY = "turn_sandbox_policy";
     public static final String ADDITIONAL_WRITABLE_ROOTS = "additional_writable_roots";
+
+    /// Only builds policy trees for [#bypassesSandbox]; it never reads or writes JSON text.
+    private static final ObjectMapper POLICY_JSON = new ObjectMapper();
 
     private CodexSandboxPolicy() {}
 
@@ -95,6 +100,22 @@ public final class CodexSandboxPolicy {
         }
         appendWritableRoots(policy, additionalWritableRoots);
         return policy;
+    }
+
+    /// Whether Codex runs turns without its sandbox. It reads the turn policy that [#effectivePolicy]
+    /// sends with every turn, so the answer cannot drift from what Codex receives. Without a turn
+    /// policy, the thread sandbox applies.
+    public static boolean bypassesSandbox(
+            @Nullable Object threadSandbox,
+            @Nullable Object configuredPolicy,
+            List<Path> additionalWritableRoots,
+            boolean forceDangerFullAccess) {
+        JsonNode turnPolicy =
+                effectivePolicy(POLICY_JSON, configuredPolicy, additionalWritableRoots, forceDangerFullAccess);
+        if (turnPolicy == null) {
+            return DANGER_FULL_ACCESS_SANDBOX_MODE.equals(threadSandbox);
+        }
+        return DANGER_FULL_ACCESS.equals(turnPolicy.path(TYPE).asText());
     }
 
     public static void validateResolvedPolicy(
