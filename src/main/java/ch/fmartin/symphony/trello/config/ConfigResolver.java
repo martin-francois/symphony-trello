@@ -38,6 +38,10 @@ public class ConfigResolver {
     /// Separates the setting name from the variable name in a `missing_path_environment_variable`
     /// message, so setup can show the setting without the variable.
     public static final String MISSING_PATH_ENVIRONMENT_MARKER = " references missing environment variable ";
+    /// The error code when the review loop is on and one review may run as long as the whole turn.
+    public static final String CODEX_REVIEW_TIMEOUT_NOT_BELOW_TURN_TIMEOUT =
+            "codex_review_timeout_not_below_turn_timeout";
+
     static final String NO_PR_LABEL_TYPE_MESSAGE =
             EffectiveConfig.GitHubConfig.qualifiedKey(EffectiveConfig.GitHubConfig.NO_PR_LABEL_KEY)
                     + " must be a Trello label name, or \"\" to disable the label";
@@ -221,6 +225,35 @@ public class ConfigResolver {
             throw new ConfigException(
                     "invalid_in_progress_state",
                     "tracker.in_progress_state must also be listed in tracker.active_states");
+        }
+        validateCodexReviewFitsTurn(config);
+    }
+
+    /// The review runs inside a Codex turn, so a review that may run as long as the turn leaves no
+    /// time for the in-session fallback after a timed-out review; see ADR 0136.
+    private static void validateCodexReviewFitsTurn(EffectiveConfig config) {
+        EffectiveConfig.CodexReviewConfig codexReview = config.repository().codexReview();
+        Duration turnTimeout = config.codex().turnTimeout();
+        if (codexReview.enabled() && codexReview.timeout().compareTo(turnTimeout) >= 0) {
+            String reviewTimeout = EffectiveConfig.CodexReviewConfig.TIMEOUT_MS_PATH;
+            String maxRounds = EffectiveConfig.CodexReviewConfig.MAX_ROUNDS_PATH;
+            String turnTimeoutKey = EffectiveConfig.CodexConfig.TURN_TIMEOUT_MS_PATH;
+            long reviewMillis = codexReview.timeout().toMillis();
+            throw new ConfigException(
+                    CODEX_REVIEW_TIMEOUT_NOT_BELOW_TURN_TIMEOUT,
+                    ("%s (%d) must be below %s (%d) while %s is above 0. Raise %s above %d (the default is %d),"
+                                    + " lower %s, or set %s to 0 to turn the review loop off.")
+                            .formatted(
+                                    reviewTimeout,
+                                    reviewMillis,
+                                    turnTimeoutKey,
+                                    turnTimeout.toMillis(),
+                                    maxRounds,
+                                    turnTimeoutKey,
+                                    reviewMillis,
+                                    ConfigDefaults.DEFAULT_CODEX_TURN_TIMEOUT_MS,
+                                    reviewTimeout,
+                                    maxRounds));
         }
     }
 

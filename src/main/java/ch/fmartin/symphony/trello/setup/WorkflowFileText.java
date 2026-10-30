@@ -12,8 +12,8 @@ record WorkflowFileText(String content, String metadata, String body) {
     private static final String FRONT_MATTER_DELIMITER = "---";
     private static final char CARRIAGE_RETURN = '\r';
     private static final char LINE_FEED = '\n';
-    private static final String CRLF = "\r\n";
-    private static final String LF = "\n";
+    static final String CRLF = "\r\n";
+    static final String LF = "\n";
 
     /// Returns empty when the file has no complete front matter or uses line breaks that the
     /// runtime loader and this parser would split differently, such as a lone carriage return.

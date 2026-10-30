@@ -753,6 +753,47 @@ final class WorkflowConfigEditorTest {
     }
 
     @Test
+    void launchValidationNamesBothTimeoutsWhenTheReviewDoesNotFitInsideTheTurn() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.review-timeout-too-long.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "SYNTH001"
+                  active_states:
+                    - "Ready for Codex"
+                  terminal_states:
+                    - "Done"
+                server:
+                  port: 18080
+                codex:
+                  command: codex app-server
+                  turn_timeout_ms: 3600000
+                ---
+                Body
+                """);
+        var editor = new WorkflowConfigEditor();
+
+        // when
+        Throwable thrown = catchThrowable(
+                () -> editor.validateLaunchDispatch(editor.prepareLaunchWorkflow(workflow, trelloCredentials(), true)));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_workflow_invalid");
+            assertThat(failure.getMessage())
+                    .contains(
+                            "repository.codex_review_timeout_ms (3600000) must be below codex.turn_timeout_ms"
+                                    + " (3600000) while repository.codex_review_max_rounds is above 0.",
+                            "set repository.codex_review_max_rounds to 0",
+                            "selected workflow file");
+        });
+    }
+
+    @Test
     void permitsDuplicateValuesWithinOneListRole() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.duplicate-role-values.md");

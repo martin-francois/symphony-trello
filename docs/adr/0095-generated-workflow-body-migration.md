@@ -214,8 +214,10 @@ different kept text before the confirmation, while the metadata and the target b
   is the only check that can run before the older app replaces the newer one.
 * Neutral, because an installer dry run cannot preview a target version's classification before
   that version is installed; `migrate-workflows --dry-run` previews it afterwards.
-* Neutral, because unattended updates only report. No automatic apply policy exists yet; adding
-  one is a separate change.
+* Neutral, because unattended updates only report body migrations. No automatic apply policy
+  exists for bodies. The temporary timeout settings update from
+  [ADR 0136](0136-raise-the-codex-turn-timeout-and-migrate-generated-workflows.md) is the one
+  metadata change that runs before the body check, without a question and also unattended.
 
 ### Confirmation
 

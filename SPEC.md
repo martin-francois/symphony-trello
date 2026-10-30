@@ -514,7 +514,8 @@ the condition that removes it.
 
 The Java implementation defines one such permanent compatibility contract: generated workflow body
 migration in Section 19.4.1. It compares bodies only with recorded generated text and never detects
-historical templates by fingerprint.
+historical templates by fingerprint. Section 19.4.2 defines one temporary migration of front matter
+settings, with its removal condition.
 
 Generated workflows explicitly configure Codex with `workspaceWrite` and `networkAccess: true` so
 selected repository URLs can be cloned while keeping filesystem writes limited to the workspace and
@@ -817,7 +818,11 @@ precedence.
   - The Java implementation also supports the `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`
     environment value for deployment-managed allowed host paths.
 - `turn_timeout_ms` (integer)
-  - Default: `3600000` (1 hour)
+  - Default: `10800000` (3 hours)
+  - Java implementation divergence: upstream Symphony defaults to `3600000` (1 hour). The Java
+    pre-handoff review loop in Section 19.7 runs inside the turn, and a turn of one hour leaves no
+    time for a full review run. Realigning with upstream requires a review loop that does not run
+    inside the coding-agent turn.
 - `read_timeout_ms` (integer)
   - Default: `5000`
 - `stall_timeout_ms` (integer)
@@ -1433,6 +1438,8 @@ Validation checks:
   `terminal_list_ids` is non-empty, those ID lists are the authoritative values for this check;
   list names are compared after `normalize_state_name`. Violations fail configuration validation
   with an overlapping-list-roles error.
+- If the pre-handoff review loop profile from Section 19.7 is implemented and the round limit is
+  above `0`, `repository.codex_review_timeout_ms` is below `codex.turn_timeout_ms`.
 
 ### 6.4 Config Fields Summary (Cheat Sheet)
 
@@ -1489,8 +1496,8 @@ as a checkout candidate instead of failing.
   `repository.default_url` is also set, such a path is ignored instead
 - `repository.codex_review_max_rounds`: non-negative integer, default `1`, `0` turns the review loop
   off; Java extension defined in Section 19.7
-- `repository.codex_review_timeout_ms`: positive integer, default `3600000`; Java extension defined
-  in Section 19.7
+- `repository.codex_review_timeout_ms`: positive integer, default `3600000`, below
+  `codex.turn_timeout_ms` while the review loop is on; Java extension defined in Section 19.7
 - `hooks.after_create`: shell script or null
 - `hooks.before_run`: shell script or null
 - `hooks.after_run`: shell script or null
@@ -1514,7 +1521,8 @@ as a checkout candidate instead of failing.
   turn sandbox policy to `dangerFullAccess`
 - `SYMPHONY_TRELLO_DOTENV`: implementation environment extension that selects the ignored dotenv
   file loaded for local runs instead of the project-root `.env`
-- `codex.turn_timeout_ms`: integer, default `3600000`
+- `codex.turn_timeout_ms`: integer, default `10800000` (Java implementation divergence; upstream
+  uses `3600000`)
 - `codex.read_timeout_ms`: integer, default `5000`
 - `codex.stall_timeout_ms`: integer, default `300000`
 - `trello_tools.enabled`: boolean, default `false`
@@ -3989,7 +3997,9 @@ that a second formatting pass leaves the source unchanged.
 - If the pre-handoff review loop profile from Section 19.7 is implemented,
   `repository.codex_review_max_rounds` defaults to `1` and `repository.codex_review_timeout_ms` to
   `3600000`; negative or non-integer round limits and non-positive or non-integer timeouts fail
-  configuration; a round limit of `0` leaves the prompt unchanged; otherwise the final runtime
+  configuration; while the round limit is above `0`, a review timeout that is not below
+  `codex.turn_timeout_ms` fails dispatch validation, and a round limit of `0` accepts it; a round
+  limit of `0` leaves the prompt unchanged; otherwise the final runtime
   section orders the review loop before local validation and every publication path, and names the
   sandbox bypass flag for the nested review only when the workflow's Codex turns already run without
   the sandbox
@@ -4210,6 +4220,11 @@ that a second formatting pass leaves the source unchanged.
   preservation, LF and CRLF input, confirm, decline, batch, dry-run, and non-interactive runs,
   backup, atomic replacement, validation, rollback, permission preservation, link and path-set
   limits, major-downgrade rejection, provenance recording by setup, and both installer integrations.
+  If the timeout settings update (Section 19.4.2) is implemented, deterministic tests cover the
+  front matter that 1.x setup wrote before and after the update, comment, spacing, and CRLF
+  preservation, every other explicit turn timeout left unchanged, a missing repository section, a
+  value that is not on its own line, unattended and interactive runs, dry-run, and a body
+  replacement in the same run.
   Installer process tests cover unreadable installed versions, tracked and untracked build inputs,
   ignored configuration, retained non-input files, app-directory builds, failed help probes, and
   rejected migrations before restart. They also cover BOM-prefixed root POMs, clean and modified
@@ -5016,9 +5031,9 @@ Interaction:
   documentation for release versions, and explain `--mark-migrated`, which records the target
   body as the workflow's provenance without changing the workflow.
 - `--dry-run` MUST show the same classifications and proposed actions without writing any file.
-- With `--non-interactive`, the command MUST NOT ask, MUST NOT change workflows, and MUST NOT write
-  preview files. It reports the classifications and tells the operator to run the command in a
-  terminal.
+- With `--non-interactive`, the command MUST NOT ask, MUST NOT change workflow bodies, and MUST NOT
+  write preview files. It reports the classifications and tells the operator to run the command in a
+  terminal. The settings update in Section 19.4.2 still runs.
 - Before a replacement, the command MUST copy the workflow to
   `<workflow file>.backup-<UTC timestamp>` with its file attributes, write a same-directory
   temporary file that keeps the original attributes where the platform supports it, check that the
@@ -5087,6 +5102,43 @@ Installers:
 - Installer `--dry-run` MUST only say that the workflow check would run after an update. Only
   `migrate-workflows --dry-run` shows classifications and planned workflow changes; classifying
   against a target version requires that version to be installed.
+
+#### 19.4.2 Generated Workflow Timeout Settings Update
+
+This section is a temporary generated workflow compatibility contract for the move to Symphony
+2.0.0; [ADR 0136](docs/adr/0136-raise-the-codex-turn-timeout-and-migrate-generated-workflows.md)
+records why it exists. Setup in 1.x wrote `codex.turn_timeout_ms: 3600000` and no review-loop
+settings. With the Section 19.7 defaults, such a workflow fails dispatch validation, because the
+review timeout is not below the turn timeout.
+
+Settings update:
+
+- `migrate-workflows` MUST check the same workflows as Section 19.4.1, after a major-downgrade
+  rejection and before any body migration. It MUST NOT run with `--mark-migrated`.
+- When `codex.turn_timeout_ms` is the integer `3600000`, the command MUST change it to the current
+  default `10800000`. Every other value, including the same number written as a string, MUST stay
+  unchanged.
+- When the `repository` section exists and lacks `codex_review_max_rounds` or
+  `codex_review_timeout_ms`, the command MUST add the missing keys with their Section 19.7 defaults.
+- The command MUST change only the affected lines: it replaces the old number on its own line and
+  inserts missing keys after the last setting line of the `repository` section, with that section's
+  indentation and line break. Comments, quoting, spacing, other lines, and the body MUST stay byte
+  for byte. The edited front matter MUST parse to the original settings plus exactly the planned
+  changes. When a change has no line that can be edited this way, for example in flow-style YAML,
+  the command MUST NOT write the workflow and MUST tell the operator which values to change by hand.
+- The update MUST NOT ask for confirmation, and it MUST also run with `--non-interactive`, so an
+  unattended installer update leaves the workflow ready to dispatch. `--dry-run` MUST report the
+  planned changes without writing any file.
+- Before writing, the command MUST create the same backup as a Section 19.4.1 migration and MUST
+  check the result the same way, except that the body MUST stay unchanged instead of the metadata.
+  It MUST print every planned change, the backup path, and how to restore it. A failed write MUST be
+  reported like a failed body migration, and the command MUST NOT migrate the body of that workflow
+  in the same run.
+
+Removal: this update is reviewed at the next breaking release or by 2027-10-30, whichever comes
+first, as tracked in
+[GitHub issue #1150](https://github.com/martin-francois/symphony-trello/issues/1150). When it is
+removed, the breaking-change release notes MUST name the latest version that still performs it.
 
 ### 19.5 Java Repository Quality Profile
 
@@ -5292,10 +5344,17 @@ Fields:
     rounded up.
   - Zero, negative, fractional, and non-numeric values MUST fail configuration with
     `config_value_error`, even while the loop is off.
+  - While the round limit is above `0`, the value MUST be below `codex.turn_timeout_ms`. Otherwise
+    dispatch validation (Section 6.3) MUST fail with `codex_review_timeout_not_below_turn_timeout`
+    and a message that names both keys, both values, and the ways to fix it: raise the turn
+    timeout, lower the review timeout, or set the round limit to `0`. With a round limit of `0`,
+    this check MUST NOT run.
 
 Both fields follow normal dynamic reload: the next dispatched run uses the current values without a
 restart. The review runs inside a coding-agent turn, so `codex.turn_timeout_ms` still bounds the
-whole turn, including the review.
+whole turn, including the review. The default turn timeout of `10800000` (3 hours) leaves room for
+the implementation, a review run that reaches its own limit, and the in-session review after it.
+Section 19.4.2 updates workflows that 1.x setup wrote with a one-hour turn timeout.
 
 A workflow that omits both fields runs one review round. Workflows written before this profile
 existed therefore get the loop without regeneration; such a workflow keeps the earlier prompt only

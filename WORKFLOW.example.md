@@ -50,7 +50,8 @@ codex:
   turn_sandbox_policy:
     type: workspaceWrite
     networkAccess: true
-  turn_timeout_ms: 3600000
+  # Keep this above repository.codex_review_timeout_ms while the review loop is on.
+  turn_timeout_ms: 10800000
   read_timeout_ms: 5000
   stall_timeout_ms: 300000
 trello_tools:

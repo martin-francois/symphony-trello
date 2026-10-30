@@ -62,6 +62,9 @@ final class UsageLimitPauseIntegrationTest {
                 agent:
                   max_concurrent_agents: 1
                   max_retry_backoff_ms: 60000
+                repository:
+                  # The fake app server turns last seconds, far shorter than one review run.
+                  codex_review_max_rounds: 0
                 codex:
                   command: %s
                   read_timeout_ms: 5000

@@ -1,6 +1,9 @@
 package ch.fmartin.symphony.trello.setup;
 
 import ch.fmartin.symphony.trello.CliExitCodes;
+import ch.fmartin.symphony.trello.config.ConfigDefaults;
+import ch.fmartin.symphony.trello.config.EffectiveConfig.CodexConfig;
+import ch.fmartin.symphony.trello.config.EffectiveConfig.CodexReviewConfig;
 import ch.fmartin.symphony.trello.testsupport.RecordingTerminal;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -22,6 +25,10 @@ final class WorkflowMigrationFixture {
     static final String COMMAND = "symphony-trello";
     static final Instant NOW = Instant.parse("2026-10-04T08:15:30Z");
     static final String BACKUP_SUFFIX = WorkflowBodyWriter.BACKUP_INFIX + "20261004T081530Z";
+    /// The review-loop lines that setup writes into the `repository` section and 1.x setup did not.
+    static final String GENERATED_REVIEW_SETTINGS = "  " + CodexReviewConfig.MAX_ROUNDS_KEY + ": "
+            + ConfigDefaults.DEFAULT_CODEX_REVIEW_MAX_ROUNDS + "\n  " + CodexReviewConfig.TIMEOUT_MS_KEY + ": "
+            + ConfigDefaults.DEFAULT_CODEX_REVIEW_TIMEOUT_MS + "\n";
     static final GeneratedWorkflowBodyInputs GITHUB_INPUTS = new GeneratedWorkflowBodyInputs(
             List.of("Ready for Codex", "In Progress", "Merging"),
             List.of("Done"),
@@ -73,6 +80,25 @@ final class WorkflowMigrationFixture {
                 TrelloBoardSetup.CodexModelDefaults.fallback(),
                 TrelloBoardSetup.RepositoryDefaults.empty());
         return WorkflowFileText.parse(generated).orElseThrow().metadata() + body;
+    }
+
+    /// The workflow file that setup wrote before Symphony 2.0.0 for the inputs, with the body replaced:
+    /// the one-hour turn timeout and no review-loop settings.
+    static String releasedWorkflowFile(GeneratedWorkflowBodyInputs inputs, String body) {
+        String current = workflowFile(inputs, body);
+        String currentTurnTimeout = turnTimeoutLine(CodexTimeoutSettingsMigration.TARGET_TURN_TIMEOUT_MS);
+        if (!current.contains(currentTurnTimeout) || !current.contains(GENERATED_REVIEW_SETTINGS)) {
+            throw new IllegalStateException("the generated front matter no longer has the lines this fixture replaces");
+        }
+        return current.replace(GENERATED_REVIEW_SETTINGS, "")
+                .replace(
+                        currentTurnTimeout,
+                        turnTimeoutLine(CodexTimeoutSettingsMigration.RELEASED_GENERATED_TURN_TIMEOUT_MS));
+    }
+
+    /// The `codex.turn_timeout_ms` line as setup writes it, with the value `turnTimeoutMs`.
+    static String turnTimeoutLine(int turnTimeoutMs) {
+        return "  " + CodexConfig.TURN_TIMEOUT_MS_KEY + ": " + turnTimeoutMs + "\n";
     }
 
     Path connectedWorkflow(String boardName, GeneratedWorkflowBodyInputs inputs, String content) throws IOException {

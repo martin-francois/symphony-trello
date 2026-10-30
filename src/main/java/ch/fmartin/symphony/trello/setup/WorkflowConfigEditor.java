@@ -435,6 +435,8 @@ final class WorkflowConfigEditor {
             case "overlapping_tracker_list_roles" -> "tracker list roles must use distinct Trello lists.";
             case "invalid_in_progress_state" ->
                 "tracker.in_progress_state must also be listed in tracker.active_states.";
+            // The message names only setting keys and their parsed whole numbers, never workflow text.
+            case ConfigResolver.CODEX_REVIEW_TIMEOUT_NOT_BELOW_TURN_TIMEOUT -> failure.getMessage();
             case "secret_file_too_large" ->
                 publicSecretFileProblem(diagnosticsConfigDir, failure, "secret file is too large.");
             case "secret_file_read_error" ->

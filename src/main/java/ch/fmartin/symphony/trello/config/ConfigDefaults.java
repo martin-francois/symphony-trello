@@ -27,7 +27,10 @@ public final class ConfigDefaults {
     public static final Duration DEFAULT_AGENT_MAX_RETRY_BACKOFF = Duration.ofMinutes(5);
     public static final long DEFAULT_AGENT_MAX_RETRY_BACKOFF_MS = DEFAULT_AGENT_MAX_RETRY_BACKOFF.toMillis();
 
-    public static final Duration DEFAULT_CODEX_TURN_TIMEOUT = Duration.ofHours(1);
+    // Upstream Symphony uses one hour. The pre-handoff Codex review loop runs inside the turn, so
+    // three hours leave room for the implementation, the review rounds, and the in-session review
+    // fallback after a timed-out review; see ADR 0136.
+    public static final Duration DEFAULT_CODEX_TURN_TIMEOUT = Duration.ofHours(3);
     public static final long DEFAULT_CODEX_TURN_TIMEOUT_MS = DEFAULT_CODEX_TURN_TIMEOUT.toMillis();
     public static final String DEFAULT_CODEX_COMMAND = "codex app-server";
     public static final Duration DEFAULT_CODEX_READ_TIMEOUT = Duration.ofSeconds(5);

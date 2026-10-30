@@ -1020,8 +1020,30 @@ also want unattended deletion of local `.env` files, workflows, workspaces, stat
 
 New Symphony for Trello versions can change the generated workflow prompt, the text after the
 closing `---` line of a workflow file. Run `symphony-trello migrate-workflows` after an update
-to check your connected workflows and bring their prompt up to date. It never changes the YAML metadata
-at the top of the file, and it never recreates your Trello board.
+to check your connected workflows and bring their prompt up to date. It never recreates your Trello
+board. It changes the YAML metadata at the top of the file only for the Codex timeout update below.
+
+#### Codex timeout update in 2.0.0
+
+Version 2.0.0 raises the default `codex.turn_timeout_ms` from one hour (`3600000`) to three hours
+(`10800000`). The Codex review before handoff runs inside the Codex turn, so a turn of one hour
+leaves no time for a full review. Symphony now refuses to start a card while
+`repository.codex_review_timeout_ms` is not below `codex.turn_timeout_ms` and the review loop is on.
+
+You don't have to edit anything for workflows that setup created. The installer runs
+`migrate-workflows` after the update, also without a terminal. In every workflow the command checks,
+it changes `turn_timeout_ms: 3600000` to `turn_timeout_ms: 10800000`, so this also applies to a
+connected workflow you wrote yourself with that exact value. When the `repository` section has no
+review-loop settings yet, it adds `codex_review_max_rounds: 1` and
+`codex_review_timeout_ms: 3600000`. It doesn't ask first, it changes only those lines, and it keeps
+a backup next to the workflow. Any other turn timeout you set stays as it is.
+
+A workflow that `migrate-workflows` doesn't check keeps its values, and so does one with another
+turn timeout. If the turn timeout of such a workflow isn't above the review timeout while the review
+loop is on, raise `codex.turn_timeout_ms`, lower `repository.codex_review_timeout_ms`, or set
+`repository.codex_review_max_rounds: 0`. The error message names the values from your workflow.
+
+#### Prompt migration
 
 Setup remembers which version generated each workflow prompt in `generated-workflows.json`, next
 to the connected-board manifest in the config directory. The check compares each workflow with
@@ -1071,9 +1093,9 @@ The installer's own `--dry-run` only says that this check would run after an upd
 classify workflows before the target version is installed. Updates with `--no-onboard` pass
 `--non-interactive` to the command.
 Without a terminal, or with `--non-interactive`, the command only reports, leaves every workflow
-unchanged, and writes no preview files. It still records `CURRENT`
-workflows in `generated-workflows.json`, so later checks compare against the prompt they already
-have.
+prompt unchanged, and writes no preview files. The Codex timeout update still runs. The command
+also records `CURRENT` workflows in `generated-workflows.json`, so later checks compare against the
+prompt they already have.
 
 Downgrading to an older release of the same major version runs the same check in reverse. Symphony
 says that the workflow was made for a newer version. If you keep the newer prompt, it warns that the
@@ -1751,10 +1773,13 @@ Trello board; setup preserves them when regenerating a workflow unless you pass 
 pass `--codex-reasoning-effort`, or edit the workflow value. If either field is omitted, the
 installed Codex CLI/app-server default or `codex.command` configuration decides the value.
 
-`codex.turn_timeout_ms` limits a full Codex turn. `codex.read_timeout_ms` limits app-server startup
-and request/response reads. `codex.stall_timeout_ms` controls how long Symphony waits without Codex
-events before killing the worker and scheduling a retry. Set `stall_timeout_ms` to `0` only when you
-intentionally want to disable stall detection for that workflow.
+`codex.turn_timeout_ms` limits a full Codex turn. The default is three hours, so the Codex review
+before handoff fits inside the turn. Keep it above `repository.codex_review_timeout_ms` while the
+review loop is on; Symphony refuses to start a card otherwise. `codex.read_timeout_ms` limits
+app-server startup and request/response reads. `codex.stall_timeout_ms` controls how long Symphony
+waits without Codex events before killing the worker and scheduling a retry. Set
+`stall_timeout_ms` to `0` only when you intentionally want to disable stall detection for that
+workflow.
 
 ### Workspace-Local Skills
 
@@ -1847,8 +1872,11 @@ same diff in its own session and says so in the handoff. The separate review use
 `--dangerously-bypass-approvals-and-sandbox` only when the workflow already runs Codex without its
 sandbox (`dangerFullAccess`). Otherwise the prompt tells Codex not to bypass the sandbox.
 
-The review runs inside the Codex turn, so `codex.turn_timeout_ms` still limits the whole turn. With
-both defaults at one hour, a review that uses its full timeout ends the turn too.
+The review runs inside the Codex turn, so `codex.turn_timeout_ms` still limits the whole turn. Its
+default of three hours leaves room for the change, a review that uses its full hour, and the review
+in Codex's own session after it. While the round limit is above `0`, `codex_review_timeout_ms` has
+to be below `codex.turn_timeout_ms`; otherwise Symphony refuses to start a card and names both
+values.
 
 Cards that only investigate, call an API, or need no repository change skip the loop.
 

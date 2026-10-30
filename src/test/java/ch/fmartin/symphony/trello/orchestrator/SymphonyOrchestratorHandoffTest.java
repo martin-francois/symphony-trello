@@ -1142,6 +1142,9 @@ final class SymphonyOrchestratorHandoffTest {
                   allow_writes: true
                   allow_comments: false
                   allowed_move_list_names: [%s]
+                repository:
+                  # The fake app server turns last seconds, far shorter than one review run.
+                  codex_review_max_rounds: 0
                 codex:
                   command: "bash %s"
                   read_timeout_ms: 5000

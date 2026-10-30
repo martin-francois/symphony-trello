@@ -1,7 +1,9 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.setup.WorkflowBodyMigration.MigrationTarget;
 import java.io.PrintStream;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.UnaryOperator;
@@ -175,9 +177,50 @@ final class WorkflowMigrationReporter {
                 + " with the installer's --version option.");
     }
 
+    void settingsUpdatesStarted() {
+        out.println();
+        out.println("Workflow setting updates");
+    }
+
+    void settingsUpdateExplained(MigrationTarget target, CodexTimeoutSettingsMigration.Plan plan) {
+        out.println("  " + target.heading());
+        plan.changes().forEach(change -> out.println("    " + settingChange(change)));
+        out.println("    " + running() + " writes these values into new workflows, so a full Codex review run fits"
+                + " inside one Codex turn. No other line in the workflow changes.");
+    }
+
+    void settingsUpdateNeedsManualEdit(MigrationTarget target) {
+        out.println("  MANUAL  Symphony cannot change these lines without touching others. Make the changes"
+                + " above by hand in:");
+        out.println("          " + target.workflowPath());
+    }
+
+    void wouldUpdateSettings(MigrationTarget target) {
+        out.println("  WOULD back up and update the settings in:");
+        out.println("    " + target.workflowPath());
+    }
+
+    void settingsUpdated(MigrationTarget target, Path backup) {
+        out.println("  OK  Updated the settings in " + target.workflowPath());
+        out.println("      Backup: " + backup);
+        out.println("      To undo, copy the backup over the workflow.");
+    }
+
+    void settingsUpdateFailed(MigrationTarget target, WorkflowBodyWriter.WriteResult result) {
+        out.println("  FAILED  Could not update the settings in this workflow (" + result.failure() + "):");
+        out.println("          " + target.workflowPath());
+        writeFailureDetails(result);
+        out.println("          This run leaves the body of this workflow alone too. Run " + migrateCommand()
+                + " again once the cause is fixed.");
+    }
+
     void migrationFailed(WorkflowMigrationItem item, WorkflowBodyWriter.WriteResult result) {
         out.println("  FAILED  Could not migrate this workflow (" + result.failure() + "):");
         out.println("          " + item.workflowPath());
+        writeFailureDetails(result);
+    }
+
+    private void writeFailureDetails(WorkflowBodyWriter.WriteResult result) {
         switch (result.outcome()) {
             case UNCHANGED -> out.println("          Symphony left the existing workflow in place.");
             case RESTORED ->
@@ -224,9 +267,23 @@ final class WorkflowMigrationReporter {
                 + " in the provenance store. The next check may ask about this workflow again.");
     }
 
-    static String failedWritesMessage(int failedWrites) {
-        return "Could not migrate " + quantity(failedWrites, "confirmed workflow body", "confirmed workflow bodies")
+    static String failedWritesMessage(int failedSettingsUpdates, int failedBodyReplacements) {
+        List<String> failures = new ArrayList<>();
+        if (failedSettingsUpdates > 0) {
+            failures.add("update the settings in " + quantity(failedSettingsUpdates, "workflow", "workflows"));
+        }
+        if (failedBodyReplacements > 0) {
+            failures.add("migrate "
+                    + quantity(failedBodyReplacements, "confirmed workflow body", "confirmed workflow bodies"));
+        }
+        return "Could not " + String.join(" and ", failures)
                 + ". The output above says where each backup is and whether the original is in place.";
+    }
+
+    private static String settingChange(CodexTimeoutSettingsMigration.Change change) {
+        return change.from().isPresent()
+                ? "Changes " + change.path() + " from " + change.from().getAsInt() + " to " + change.to() + "."
+                : "Adds " + change.path() + ": " + change.to() + ", the value Symphony uses when it is missing.";
     }
 
     /// `count` followed by the singular or plural noun, such as `1 workflow` or `2 workflows`.

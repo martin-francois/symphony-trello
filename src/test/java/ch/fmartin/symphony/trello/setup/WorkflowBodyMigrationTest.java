@@ -8,6 +8,7 @@ import static ch.fmartin.symphony.trello.setup.WorkflowMigrationFixture.OLDER_VE
 import static ch.fmartin.symphony.trello.setup.WorkflowMigrationFixture.RUNNING_VERSION;
 import static ch.fmartin.symphony.trello.setup.WorkflowMigrationFixture.backupOf;
 import static ch.fmartin.symphony.trello.setup.WorkflowMigrationFixture.otherVersionBody;
+import static ch.fmartin.symphony.trello.setup.WorkflowMigrationFixture.releasedWorkflowFile;
 import static ch.fmartin.symphony.trello.setup.WorkflowMigrationFixture.targetBody;
 import static ch.fmartin.symphony.trello.setup.WorkflowMigrationFixture.workflowFile;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -84,6 +85,156 @@ final class WorkflowBodyMigrationTest {
                 .get()
                 .extracting(GeneratedWorkflowRecord::symphonyVersion, GeneratedWorkflowRecord::body)
                 .containsExactly(RUNNING_VERSION, targetBody(GITHUB_INPUTS));
+    }
+
+    @ParameterizedTest(name = "non-interactive: {0}")
+    @ValueSource(booleans = {false, true})
+    void updatesReleasedTimeoutSettingsWithoutAskingAndKeepsTheBody(boolean nonInteractive) throws Exception {
+        // given
+        String body = otherVersionBody(GITHUB_INPUTS);
+        String released = releasedWorkflowFile(GITHUB_INPUTS, body);
+        Path workflow = fixture.connectedWorkflow("Released Board", GITHUB_INPUTS, released);
+
+        // when
+        MigrationRun run = fixture.run(nonInteractive ? fixture.nonInteractive() : fixture.request());
+
+        // then
+        assertThat(run.exitCode()).as(run.output()).isZero();
+        assertThat(run.output())
+                .containsSubsequence(
+                        "Workflow setting updates",
+                        "\"Released Board\" (" + workflow + ")",
+                        "Changes codex.turn_timeout_ms from 3600000 to 10800000.",
+                        "Adds repository.codex_review_max_rounds: 1, the value Symphony uses when it is missing.",
+                        "Adds repository.codex_review_timeout_ms: 3600000, the value Symphony uses when it is missing.",
+                        "No other line in the workflow changes.",
+                        "OK  Updated the settings in " + workflow,
+                        "Backup: " + backupOf(workflow))
+                .doesNotContain("[y/N]");
+        assertThat(workflow).hasContent(workflowFile(GITHUB_INPUTS, body));
+        assertThat(backupOf(workflow)).hasContent(released);
+    }
+
+    @Test
+    void dryRunOnlyReportsTheTimeoutSettingsUpdate() throws Exception {
+        // given
+        String released = releasedWorkflowFile(NON_GITHUB_INPUTS, targetBody(NON_GITHUB_INPUTS));
+        Path workflow = fixture.connectedWorkflow("Dry Run Board", NON_GITHUB_INPUTS, released);
+
+        // when
+        MigrationRun run = fixture.run(fixture.dryRun());
+
+        // then
+        assertThat(run.exitCode()).as(run.output()).isZero();
+        assertThat(run.output())
+                .containsSubsequence(
+                        "Changes codex.turn_timeout_ms from 3600000 to 10800000.",
+                        "WOULD back up and update the settings in:",
+                        "    " + workflow);
+        assertThat(workflow).hasContent(released);
+        assertThat(backupOf(workflow)).doesNotExist();
+    }
+
+    @Test
+    void replacesTheBodyAfterTheSettingsUpdateInTheSameRun() throws Exception {
+        // given
+        String released = releasedWorkflowFile(GITHUB_INPUTS, otherVersionBody(GITHUB_INPUTS));
+        Path workflow = fixture.connectedWorkflow("Both Changes Board", GITHUB_INPUTS, released);
+        fixture.record(workflow, OLDER_VERSION, GITHUB_INPUTS, otherVersionBody(GITHUB_INPUTS));
+
+        // when
+        MigrationRun run = fixture.run(fixture.request(), "y");
+
+        // then
+        assertThat(run.exitCode()).as(run.output()).isZero();
+        assertThat(run.output())
+                .containsSubsequence("OK  Updated the settings in " + workflow, "OK  Migrated " + workflow);
+        assertThat(workflow).hasContent(workflowFile(GITHUB_INPUTS, targetBody(GITHUB_INPUTS)));
+        assertThat(backupOf(workflow)).hasContent(released);
+    }
+
+    @Test
+    void asksForAManualSettingsEditWhenTheOldValueIsNotOnTheKeyLine() throws Exception {
+        // given
+        String body = otherVersionBody(GITHUB_INPUTS);
+        String released = releasedWorkflowFile(GITHUB_INPUTS, body)
+                .replace("  turn_timeout_ms: 3600000\n", "  turn_timeout_ms:\n    3600000\n");
+        Path workflow = fixture.connectedWorkflow("Manual Settings Board", GITHUB_INPUTS, released);
+
+        // when
+        MigrationRun run = fixture.run(fixture.nonInteractive());
+
+        // then
+        assertThat(run.exitCode()).as(run.output()).isZero();
+        assertThat(run.output())
+                .containsSubsequence(
+                        "Changes codex.turn_timeout_ms from 3600000 to 10800000.",
+                        "MANUAL  Symphony cannot change these lines without touching others. Make the changes"
+                                + " above by hand in:",
+                        "          " + workflow)
+                .doesNotContain("OK  Updated the settings in");
+        assertThat(workflow).hasContent(released);
+        assertThat(backupOf(workflow)).doesNotExist();
+    }
+
+    @Test
+    void reportsAFailedSettingsUpdateOnceAndLeavesTheBodyForTheNextRun() throws Exception {
+        // given
+        String released = releasedWorkflowFile(GITHUB_INPUTS, otherVersionBody(GITHUB_INPUTS));
+        Path workflow = fixture.connectedWorkflow("Failed Settings Board", GITHUB_INPUTS, released);
+        fixture.record(workflow, OLDER_VERSION, GITHUB_INPUTS, otherVersionBody(GITHUB_INPUTS));
+        var writer = new WorkflowBodyWriter(
+                WorkflowMigrationFixture.clock(),
+                (source, target) -> {
+                    throw new IOException("simulated disk full");
+                },
+                ignored -> {});
+
+        // when
+        MigrationRun run = WorkflowMigrationFixture.run(fixture.migration(writer), fixture.request(), "y");
+
+        // then
+        assertThat(run.exitCode()).isEqualTo(SETUP_FAILURE);
+        assertThat(run.failureCode()).hasValue("setup_workflow_migration_failed");
+        assertThat(run.output())
+                .contains(
+                        "FAILED  Could not update the settings in this workflow (the workflow was not changed"
+                                + " (simulated disk full)):\n"
+                                + "          " + workflow,
+                        "This run leaves the body of this workflow alone too.")
+                .doesNotContain("[y/N]", "Could not migrate this workflow");
+        assertThat(workflow).hasContent(released);
+    }
+
+    @Test
+    void markingAWorkflowAsMigratedLeavesItsTimeoutSettingsAlone() throws Exception {
+        // given
+        String released = releasedWorkflowFile(GITHUB_INPUTS, otherVersionBody(GITHUB_INPUTS));
+        Path workflow = fixture.connectedWorkflow("Marked Board", GITHUB_INPUTS, released);
+
+        // when
+        MigrationRun run = fixture.run(fixture.explicitWorkflow(workflow, true));
+
+        // then
+        assertThat(run.exitCode()).as(run.output()).isZero();
+        assertThat(run.output()).doesNotContain("Workflow setting updates");
+        assertThat(workflow).hasContent(released);
+        assertThat(backupOf(workflow)).doesNotExist();
+    }
+
+    @Test
+    void leavesAWorkflowWithTheCurrentTimeoutSettingsAlone() throws Exception {
+        // given
+        String current = workflowFile(GITHUB_INPUTS, HAND_WRITTEN_BODY);
+        Path workflow = fixture.connectedWorkflow("Current Settings Board", GITHUB_INPUTS, current);
+
+        // when
+        MigrationRun run = fixture.run(fixture.nonInteractive());
+
+        // then
+        assertThat(run.exitCode()).as(run.output()).isZero();
+        assertThat(run.output()).doesNotContain("Workflow setting updates");
+        assertThat(workflow).hasContent(current);
     }
 
     @MethodSource("additionsInBothDirections")

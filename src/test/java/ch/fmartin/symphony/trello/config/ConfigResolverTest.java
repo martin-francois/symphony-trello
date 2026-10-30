@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -515,6 +516,97 @@ final class ConfigResolverTest {
         assertThat(config.repository().codexReview().enabled())
                 .as("zero review rounds must turn the review loop off")
                 .isFalse();
+    }
+
+    @Test
+    void turnTimeoutDefaultsToThreeHoursSoTheDefaultReviewFitsInsideTheTurn() throws Exception {
+        // given
+        Path workflow = writeTrelloWorkflow("WORKFLOW.turn-timeout-default.md", "SYNTH001", "");
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+        Throwable dispatchFailure = catchThrowable(() -> resolver.validateForDispatch(config));
+
+        // then
+        assertThat(config.codex().turnTimeout()).isEqualTo(Duration.ofHours(3));
+        assertThat(dispatchFailure).isNull();
+    }
+
+    @Test
+    void keepsAnExplicitlyConfiguredTurnTimeout() throws Exception {
+        // given
+        Path workflow = writeTrelloWorkflow(
+                "WORKFLOW.turn-timeout-configured.md", "SYNTH001", "codex:\n  turn_timeout_ms: 5400000");
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.codex().turnTimeout()).isEqualTo(Duration.ofMinutes(90));
+    }
+
+    @CsvSource({"3600000, 3600000", "3600000, 1800000", "10800001, 10800000"})
+    @ParameterizedTest(name = "review {0} ms, turn {1} ms")
+    void rejectsAReviewTimeoutThatIsNotBelowTheTurnTimeoutWhileTheLoopIsOn(long reviewMillis, long turnMillis)
+            throws Exception {
+        // given
+        Path workflow = writeTrelloWorkflow(
+                "WORKFLOW.review-timeout-" + reviewMillis + "-" + turnMillis + ".md",
+                "SYNTH001",
+                """
+                repository:
+                  codex_review_timeout_ms: %d
+                codex:
+                  turn_timeout_ms: %d
+                """
+                        .formatted(reviewMillis, turnMillis));
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // when
+        ConfigException error = catchThrowableOfType(ConfigException.class, () -> resolver.validateForDispatch(config));
+
+        // then
+        assertThat(error.code()).isEqualTo(ConfigResolver.CODEX_REVIEW_TIMEOUT_NOT_BELOW_TURN_TIMEOUT);
+        assertThat(error)
+                .hasMessage(
+                        "repository.codex_review_timeout_ms (%d) must be below codex.turn_timeout_ms (%d) while"
+                                + " repository.codex_review_max_rounds is above 0. Raise codex.turn_timeout_ms above"
+                                + " %d (the default is 10800000), lower repository.codex_review_timeout_ms, or set"
+                                + " repository.codex_review_max_rounds to 0 to turn the review loop off.",
+                        reviewMillis, turnMillis, reviewMillis);
+    }
+
+    @CsvSource({
+        "loop off with an equal review timeout, 0, 3600000, 3600000",
+        "loop off with a longer review timeout, 0, 7200000, 3600000",
+        "loop on with a review timeout just below the turn, 1, 3599999, 3600000"
+    })
+    @ParameterizedTest(name = "{0}")
+    void acceptsAReviewTimeoutThatFitsOrALoopThatIsOff(
+            String scenario, int maxRounds, long reviewMillis, long turnMillis) throws Exception {
+        // given
+        Path workflow = writeTrelloWorkflow(
+                "WORKFLOW.review-fits-" + maxRounds + "-" + reviewMillis + ".md",
+                "SYNTH001",
+                """
+                repository:
+                  codex_review_max_rounds: %d
+                  codex_review_timeout_ms: %d
+                codex:
+                  turn_timeout_ms: %d
+                """
+                        .formatted(maxRounds, reviewMillis, turnMillis));
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // when
+        Throwable dispatchFailure = catchThrowable(() -> resolver.validateForDispatch(config));
+
+        // then
+        assertThat(dispatchFailure).as(scenario).isNull();
     }
 
     @MethodSource("invalidCodexReviewSettings")

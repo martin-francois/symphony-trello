@@ -7,6 +7,7 @@ consulted:
   - "[GitHub issue #31](https://github.com/martin-francois/symphony-trello/issues/31)"
   - "[GitHub PR #844](https://github.com/martin-francois/symphony-trello/pull/844)"
   - "[GitHub issue #1025](https://github.com/martin-francois/symphony-trello/issues/1025)"
+  - "[GitHub issue #1124](https://github.com/martin-francois/symphony-trello/issues/1124)"
 informed: [Future maintainers, Contributors, Operators]
 ---
 
@@ -72,7 +73,10 @@ rounds. No alias or migration exists for the draft names because no release acce
 
 `codex_review_timeout_ms` limits one separate `codex review` run. The default is one hour. The
 earlier draft hard-coded 30 minutes; the maintainer chose a longer default and made it
-configurable, because a review of a large change can need more time.
+configurable, because a review of a large change can need more time. The review runs inside a Codex
+turn, so [ADR 0136](0136-raise-the-codex-turn-timeout-and-migrate-generated-workflows.md) raises
+the default `codex.turn_timeout_ms` to three hours and rejects a review timeout that is not below
+the turn timeout while the loop is on.
 
 The names follow the existing key style. `max_rounds` matches `agent.max_turns` and
 `trello_tools.follow_up_cards.max_cards_per_hour`, and `_timeout_ms` matches `codex.turn_timeout_ms`
@@ -132,8 +136,10 @@ whose sync changed the candidate.
 A workflow that omits the fields uses the defaults, so existing boards start running one review
 round per repository-changing card after the update. That is the intended effect of the decision.
 Operators who want the old behavior set `codex_review_max_rounds: 0`. Workflow body migration from
-[ADR 0095](0095-generated-workflow-body-migration.md) only changes the body, so it does not add the
-two fields to existing front matter.
+[ADR 0095](0095-generated-workflow-body-migration.md) only changes the body. The temporary settings
+update from [ADR 0136](0136-raise-the-codex-turn-timeout-and-migrate-generated-workflows.md) adds
+the two fields to existing front matter that has a `repository` section and raises the old
+one-hour turn timeout.
 
 Setup gets no new command-line option or question. Editing one front-matter value changes the
 loop. A setup option would add another prompt or flag to `setup-local`, `new-board`, and
@@ -151,9 +157,9 @@ loop. A setup option would add another prompt or flag to `setup-local`, `new-boa
 * Good, because Java still does not run reviews, inspect findings, or block pushes.
 * Bad, because existing boards change behavior after the update: cards take longer and use more
   Codex time until the operator sets the limit to `0`.
-* Bad, because the review runs inside a Codex turn, so `codex.turn_timeout_ms` still bounds it. With
-  both defaults at one hour, a review that reaches its own timeout has already used the turn's
-  time.
+* Bad, because the review runs inside a Codex turn, so `codex.turn_timeout_ms` still bounds it.
+  [ADR 0136](0136-raise-the-codex-turn-timeout-and-migrate-generated-workflows.md) raises the
+  default turn timeout to three hours and requires the review timeout to be below it.
 * Bad, because the guarantee still depends on Codex following its prompt. Java cannot prove that a
   review ran.
 * Bad, because under the default sandbox the review usually runs in the same Codex session that
@@ -162,7 +168,7 @@ loop. A setup option would add another prompt or flag to `setup-local`, `new-boa
 ### Confirmation
 
 * `ConfigResolverTest` checks the defaults, configured values, a limit of `0`, the rejected values,
-  and which sandbox settings count as a bypass.
+  a review timeout that is not below the turn timeout, and which sandbox settings count as a bypass.
 * `LocalAgentRunnerTest` checks that a limit of `0` adds no review section, that the default
   section comes after the repository source context with one round and a 3600 second timeout, that
   configured values reach the text, that the bypass flag appears only for a workflow without the

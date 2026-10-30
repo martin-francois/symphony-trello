@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -64,30 +65,105 @@ final class WorkflowBodyMigration {
         }
         GeneratedWorkflowStore store = GeneratedWorkflowStore.inConfigDir(request.configDir());
         List<GeneratedWorkflowRecord> records = records(store, report);
-        List<WorkflowMigrationItem> items = targets.stream()
-                .map(target -> assess(target, records, from, running))
-                .toList();
+        List<WorkflowMigrationItem> items = assessAll(targets, records, from, running);
         report.comparison(items);
         if (items.stream().anyMatch(item -> item.action() == Action.REJECT)) {
             items.stream().filter(item -> item.action() == Action.REJECT).forEach(report::majorDowngradeNotMigrated);
             return CliExitCodes.SETUP_FAILURE;
         }
-
-        var context = new RunContext(request, store, items, terminal, report);
         if (request.markMigrated()) {
-            markManualMigrations(context);
+            markManualMigrations(new RunContext(request, store, items, terminal, report));
             return 0;
         }
+
+        SettingsUpdates settingsUpdates = updateCodexTimeoutSettings(targets, request, report);
+        if (settingsUpdates.written() > 0) {
+            // A settings update changed the metadata that each planned body replacement compares
+            // against before it writes, so the bodies are assessed again from the updated files.
+            items = assessAll(targets, records, from, running);
+        }
+        // A workflow whose settings update failed may be in an unknown state, so this run leaves its
+        // body alone as well and reports the failure once.
+        items = withoutTargets(items, settingsUpdates.failed());
+        var context = new RunContext(request, store, items, terminal, report);
         recordCurrentBodies(context);
         guideManualMigrations(context);
-        int failedWrites = replaceGeneratedBodies(context);
-        if (failedWrites > 0) {
+        int failedBodies = replaceGeneratedBodies(context);
+        if (!settingsUpdates.failed().isEmpty() || failedBodies > 0) {
             // A failed workflow write is unexpected, so it goes through the CLI failure path that
             // writes a sanitized troubleshooting report. The lines above already name each backup.
             throw new TrelloBoardSetupException(
-                    "setup_workflow_migration_failed", WorkflowMigrationReporter.failedWritesMessage(failedWrites));
+                    "setup_workflow_migration_failed",
+                    WorkflowMigrationReporter.failedWritesMessage(
+                            settingsUpdates.failed().size(), failedBodies));
         }
         return 0;
+    }
+
+    private List<WorkflowMigrationItem> assessAll(
+            List<MigrationTarget> targets,
+            List<GeneratedWorkflowRecord> records,
+            Optional<SymphonyVersion> from,
+            Optional<SymphonyVersion> running) {
+        return targets.stream()
+                .map(target -> assess(target, records, from, running))
+                .toList();
+    }
+
+    private static List<WorkflowMigrationItem> withoutTargets(
+            List<WorkflowMigrationItem> items, List<MigrationTarget> skipped) {
+        return items.stream().filter(item -> !skipped.contains(item.target())).toList();
+    }
+
+    /// Brings the Codex timeout settings of older workflows to the current values (ADR 0136). Unlike
+    /// a body replacement, this update needs no confirmation and also runs unattended, because it
+    /// only changes values that Symphony itself wrote or left out.
+    private SettingsUpdates updateCodexTimeoutSettings(
+            List<MigrationTarget> targets, WorkflowMigrationRequest request, WorkflowMigrationReporter report) {
+        List<PlannedSettingsUpdate> planned = targets.stream()
+                .flatMap(target -> plannedSettingsUpdate(target).stream())
+                .toList();
+        if (planned.isEmpty()) {
+            return new SettingsUpdates(0, List.of());
+        }
+        report.settingsUpdatesStarted();
+        int written = 0;
+        List<MigrationTarget> failed = new ArrayList<>();
+        for (PlannedSettingsUpdate update : planned) {
+            report.settingsUpdateExplained(update.target(), update.plan());
+            Optional<String> updatedContent = update.plan().updatedContent();
+            if (updatedContent.isEmpty()) {
+                report.settingsUpdateNeedsManualEdit(update.target());
+            } else if (request.dryRun()) {
+                report.wouldUpdateSettings(update.target());
+            } else {
+                WorkflowBodyWriter.WriteResult result = writer.writeMetadata(
+                        update.target().workflowPath(), update.plan().original(), updatedContent.orElseThrow());
+                if (result.written()) {
+                    report.settingsUpdated(update.target(), result.backup().orElseThrow());
+                    written++;
+                } else {
+                    report.settingsUpdateFailed(update.target(), result);
+                    failed.add(update.target());
+                }
+            }
+        }
+        return new SettingsUpdates(written, List.copyOf(failed));
+    }
+
+    private static Optional<PlannedSettingsUpdate> plannedSettingsUpdate(MigrationTarget target) {
+        Path path = target.workflowPath();
+        if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+            // The body check reports these paths as needing a manual migration.
+            return Optional.empty();
+        }
+        try {
+            return CodexTimeoutSettingsMigration.plan(path, Files.readString(path))
+                    .map(plan -> new PlannedSettingsUpdate(target, plan));
+        } catch (IOException e) {
+            // The body check reads the same file and reports it as unreadable.
+            return Optional.empty();
+        }
     }
 
     private static boolean rejectsMajorDowngrade(
@@ -359,6 +435,10 @@ final class WorkflowBodyMigration {
     private static boolean newerMajor(SymphonyVersion source, Optional<SymphonyVersion> running) {
         return running.map(current -> source.major() > current.major()).orElse(false);
     }
+
+    private record PlannedSettingsUpdate(MigrationTarget target, CodexTimeoutSettingsMigration.Plan plan) {}
+
+    private record SettingsUpdates(int written, List<MigrationTarget> failed) {}
 
     /// The state one `migrate-workflows` run shares between its steps.
     private record RunContext(

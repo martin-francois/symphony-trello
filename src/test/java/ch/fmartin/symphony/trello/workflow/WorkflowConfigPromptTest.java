@@ -160,6 +160,20 @@ final class WorkflowConfigPromptTest {
     }
 
     @Test
+    void exampleWorkflowUsesTheDefaultTurnTimeoutThatFitsTheReview() {
+        // given
+        WorkflowDefinition definition = loader.load(Path.of("WORKFLOW.example.md"));
+
+        // when
+        var config = configs.resolve(definition);
+
+        // then
+        assertThat(config.codex().turnTimeout())
+                .isEqualTo(ConfigDefaults.DEFAULT_CODEX_TURN_TIMEOUT)
+                .isGreaterThan(config.repository().codexReview().timeout());
+    }
+
+    @Test
     void exampleWorkflowEnforcesBlockersForEveryActiveState() {
         // given
         Path workflow = Path.of("WORKFLOW.example.md");
