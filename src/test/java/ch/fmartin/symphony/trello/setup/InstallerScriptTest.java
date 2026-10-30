@@ -1644,7 +1644,7 @@ final class InstallerScriptTest {
         uninstall.assertSuccess();
         assertThat(install.output())
                 .contains("Codex skill: " + skillDirectory, "Codex skill installed: " + skillDirectory);
-        assertThat(installedSkill).isEqualTo(CODEX_SKILL_CONTENT);
+        assertThat(installedSkill).isEqualToNormalizingNewlines(CODEX_SKILL_CONTENT);
         assertThat(symphonyHome.resolve("state/install-context.properties"))
                 .content(StandardCharsets.UTF_8)
                 .contains("codex_skill_dir=" + skillDirectory);
@@ -9953,7 +9953,7 @@ final class InstallerScriptTest {
         install.assertSuccess();
         uninstall.assertSuccess();
         assertThat(normalizedWhitespace(install.output())).contains("Codex skill installed: " + skillDirectory);
-        assertThat(installedSkill).isEqualTo(CODEX_SKILL_CONTENT);
+        assertThat(installedSkill).isEqualToNormalizingNewlines(CODEX_SKILL_CONTENT);
         assertThat(markerWritten)
                 .as("the installer marks the skill directory as its own")
                 .isTrue();

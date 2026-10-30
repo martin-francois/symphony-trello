@@ -62,7 +62,7 @@ final class BoardCardCommandsTest {
     void listShowsEachOpenListWithItsRolesPermissionsAndCards() throws Exception {
         // given
         board.card("card0001", "SYNTH101", "Fix the login redirect", "list-inbox");
-        board.card("card0002", "def67890", "Write the release notes", "list-review");
+        board.card("card0002", "SYNTH102", "Write the release notes", "list-review");
         Path configDir = connectBoard(DEFAULT_TRELLO_TOOLS);
 
         // when
@@ -87,7 +87,7 @@ final class BoardCardCommandsTest {
                         "  (no open cards)",
                         "",
                         "List \"Human Review\"  roles: human-review  move here: yes  create here: yes",
-                        "  def67890  \"Write the release notes\"",
+                        "  SYNTH102  \"Write the release notes\"",
                         "",
                         "List \"Done\"  roles: terminal  move here: yes  create here: yes",
                         "  (no open cards)");
@@ -447,11 +447,11 @@ final class BoardCardCommandsTest {
     @Test
     void archiveRefusesACardOnAnotherBoard() throws Exception {
         // given
-        FakeTrelloBoard.FakeCard foreign = board.foreignCard("card0009", "zzz99999", "Other team card", "board-2");
+        FakeTrelloBoard.FakeCard foreign = board.foreignCard("card0009", "SYNTH999", "Other team card", "board-2");
         Path configDir = connectBoard(DEFAULT_TRELLO_TOOLS);
 
         // when
-        CliRunResult result = runCard(configDir, "archive", "zzz99999", "--confirm-title", "Other team card");
+        CliRunResult result = runCard(configDir, "archive", "SYNTH999", "--confirm-title", "Other team card");
 
         // then
         assertFailure(result, "setup_card_not_on_board");

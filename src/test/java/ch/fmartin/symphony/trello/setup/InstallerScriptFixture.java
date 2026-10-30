@@ -208,9 +208,10 @@ final class InstallerScriptFixture {
             // machine with CODEX_HOME set would write into that user's real Codex directory.
             processEnvironment.remove("CODEX_HOME");
             if (isWindows()) {
-                Path codexHome = Files.createTempDirectory("symphony-trello-installer-codex-home-");
-                cleanupRoots.add(codexHome);
-                processEnvironment.put("CODEX_HOME", codexHome.toString());
+                // Without CODEX_HOME, install.ps1 uses the real user profile. A path derived from the
+                // test's SYMPHONY_HOME keeps output identical across the runs of one test.
+                processEnvironment.put(
+                        "CODEX_HOME", testCodexHome(environment, cleanupRoots).toString());
             }
         }
         if (!environment.containsKey("HOME") && !isWindows()) {
@@ -231,6 +232,17 @@ final class InstallerScriptFixture {
             processEnvironment.put("HOME", home.toString());
         }
         return new AppliedTestEnvironment(cleanupRoots);
+    }
+
+    private static Path testCodexHome(Map<String, String> environment, List<Path> cleanupRoots) throws IOException {
+        String symphonyHome = environment.get("SYMPHONY_HOME");
+        Path symphonyHomePath = symphonyHome == null || symphonyHome.isBlank() ? null : Path.of(symphonyHome);
+        if (symphonyHomePath != null && symphonyHomePath.isAbsolute() && symphonyHomePath.getFileName() != null) {
+            return symphonyHomePath.resolveSibling(symphonyHomePath.getFileName() + "-codex-home");
+        }
+        Path codexHome = Files.createTempDirectory("symphony-trello-installer-codex-home-");
+        cleanupRoots.add(codexHome);
+        return codexHome;
     }
 
     static boolean isRepositoryEnvironmentControl(String name) {

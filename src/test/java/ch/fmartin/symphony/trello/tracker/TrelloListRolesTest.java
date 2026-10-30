@@ -75,10 +75,11 @@ final class TrelloListRolesTest {
 
     @Test
     void roleNamesListEveryRoleKeyInOrder() {
+        // given
+        TrelloListRoles.Role[] roles = TrelloListRoles.Role.values();
+
         // when
-        String keys = Arrays.stream(TrelloListRoles.Role.values())
-                .map(TrelloListRoles.Role::key)
-                .collect(Collectors.joining(", "));
+        String keys = Arrays.stream(roles).map(TrelloListRoles.Role::key).collect(Collectors.joining(", "));
 
         // then
         assertThat(TrelloListRoles.ROLE_NAMES).isEqualTo(keys);
