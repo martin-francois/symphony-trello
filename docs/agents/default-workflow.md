@@ -29,11 +29,9 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
 
 ## Making the change
 
-- Keep CI workflow `run` blocks to one or two simple commands. Move longer shell logic into a
-  versioned script so it can be linted with ShellCheck, tested independently, and run locally while
-  troubleshooting. Start tracked Bash scripts with a Bash shebang; `scripts/check-shell-scripts`
-  discovers `#!/bin/bash` and `#!/usr/bin/env bash` and includes every matching file in the
-  repository's `bash -n`, ShellCheck, and shfmt checks.
+- Keep code out of workflow files. A `run:` or github-script block stays inline only while it has
+  at most 10 non-blank, non-comment lines and no function; everything else is a file under
+  `scripts/` that the step runs, as [GitHub Actions workflows](github-actions.md) specifies.
 
 - Prefer TDD when the behavior can be isolated. If TDD is impractical, make sure the final tests
   would have failed for the bug or missing behavior.

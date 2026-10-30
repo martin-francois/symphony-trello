@@ -18,6 +18,11 @@ informed: [Future maintainers, Contributors]
 
 # Keep caches and pull request code out of privileged jobs
 
+The audit summary of this decision is amended by
+[ADR 0143](0143-keep-workflow-step-code-in-repository-files.md). The metadata-only workflows now
+check out their script files at `github.sha`, sparse and without the token, still with no cache;
+the rules and the audit table on the page carry the current state.
+
 ## Context and Problem Statement
 
 On 2026-05-11 an attacker published 84 malicious versions of 42 `@tanstack/*` packages without

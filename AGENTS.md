@@ -80,6 +80,8 @@ guidance here, put it in docs/agents and add a link instead.
 - [Deployment & live verification](docs/agents/deployment-and-live-verification.md)
 - [Java style & design preferences](docs/agents/java-style.md)
 - [Static analysis policy](docs/agents/static-analysis.md)
+- [GitHub Actions workflows](docs/agents/github-actions.md): step code lives in `scripts/`, not in
+  the workflow file
 - [GitHub Actions security](docs/agents/github-actions-security.md)
 - [Dependency updates](docs/agents/dependency-updates.md)
 - [Documentation & README](docs/agents/documentation-and-readme.md)

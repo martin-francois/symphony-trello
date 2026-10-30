@@ -5,6 +5,7 @@
 Rules for every file under `.github/workflows`, and the audit of the current workflows against
 them. Version pinning policy for dependencies lives in [Dependency updates](dependency-updates.md).
 Each privileged workflow's design lives in its ADR; this page says what any workflow may do.
+Where step code lives and how a job loads it is in [GitHub Actions workflows](github-actions.md).
 
 The attack these rules close is the one that hit TanStack on 2026-05-11
 ([postmortem](https://tanstack.com/blog/npm-supply-chain-compromise-postmortem),
@@ -40,8 +41,14 @@ job through `pnpm run verify:scripts`; CodeQL scans the `actions` language on pu
   [GitHub Security Lab: preventing pwn requests](https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/)).
   Check: the script test rejects a checkout in a privileged job that has a `repository` input
   or a `ref` other than a base SHA or the Release Please job's release ref, and checks that the
-  step producing `base_sha` reads the pull request's base; CodeQL's `actions/untrusted-checkout`
-  query; review for hand-written fetches.
+  step producing `base_sha`, or the module it loads, reads the pull request's base. A base SHA is
+  a `base_sha` step output or `github.event.pull_request.base.sha`. It is also `github.sha` in a
+  workflow whose every trigger is in `TRIGGERS_WITH_A_TRUSTED_SHA`, the set
+  [GitHub Actions workflows](github-actions.md) lists: there it is the commit the workflow file
+  was read from, never pull request code. On `pull_request` it is the pull request's merge commit
+  and on `push` whatever was pushed, so a workflow with either trigger gets no `github.sha`
+  checkout in a privileged job. CodeQL's `actions/untrusted-checkout` query; review for
+  hand-written fetches.
 - Metadata-only work is fine: read the event payload, call the API, set labels, post comments and
   statuses. Treat every payload field as data, never as a command or a path.
 - Pass each event value into a step through `env:`, never as `${{ github.event... }}` inside
@@ -118,24 +125,26 @@ The script test keeps the table complete; update a row when its workflow changes
 | --- | --- | --- | --- | --- | --- |
 | `ci.yml` | `pull_request`, push `main` | PR head, no token | `maven`, PR-scoped | none, `contents: read` | OK |
 | `codeql.yml` | `pull_request`, push `main`, schedule | PR head, no token | `maven`, PR-scoped | `security-events: write`, read-only in fork runs | OK |
-| `coderabbit-config-guard.yml` | `pull_request_target` | none | none | `pull-requests: read` | OK, metadata only |
+| `coderabbit-config-guard.yml` | `pull_request_target` | `github.sha`, sparse: its script, no token | none | `pull-requests: read` | OK, metadata only |
 | `commitlint.yml` | `pull_request` | PR head, no token | none | none, read | OK |
-| `compatibility-labeler.yml` | `pull_request_target`, `issues` | none | none | `issues`, `pull-requests: write` | OK, metadata only |
+| `compatibility-labeler.yml` | `pull_request_target`, `issues` | `github.sha`, sparse: its script, no token | none | `issues`, `pull-requests: write` | OK, metadata only |
 | `continuous-fuzzing-watchdog.yml` | push `main`, `workflow_run` of `Continuous Fuzzing`, dispatch | default branch, no token | none | `actions: write` | OK; `workflow_run` is gated to dispatch runs on `main` and checks out `main` |
 | `continuous-fuzzing.yml` | `pull_request`, push `main`, dispatch | default branch or PR head, no token | none | `security-events: write` in `code-change`, read-only in fork runs; `CLUSTERFUZZLITE_STORAGE_TOKEN`, `issues`, `security-events` and `actions: write` in jobs gated to `refs/heads/main` and dispatch | OK |
 | `dependency-submission.yml` | `pull_request` on `pom.xml`, push `main` | PR head, no token | `maven`, PR-scoped | `contents: write` | OK; GitHub drops the write for fork runs, and a same-repository author already has write |
-| `openrewrite-renovate.yml` | `pull_request_target`, schedule, dispatch | base SHA only | none | `statuses: write` in six jobs; App token in `publish` only | OK, see below |
-| `private-context.yml` | `pull_request`, push `main` | PR head plus base scanner, no token | none | none, `contents: read` | OK |
-| `pull-request-author-handoff.yml` | `pull_request_target`, `issue_comment` | none | none | `issues: write` | OK, metadata only |
+| `openrewrite-renovate.yml` | `pull_request_target`, schedule, dispatch | `github.sha` for its scripts, `base_sha` for the recipe run, no token outside `publish` | none | `statuses: write` in six jobs; App token in `publish` only | OK, see below |
+| `private-context.yml` | `pull_request`, push `main` | PR head plus base scanner, plus the merge commit's comparison script, no token | none | none, `contents: read` | OK |
+| `pull-request-author-handoff.yml` | `pull_request_target`, `issue_comment` | `github.sha`, sparse: its script, no token | none | `issues: write` | OK, metadata only |
 | `release-please.yml` | push `main` | `main` and the release tag, token kept | none | `id-token: write`, Maven Central secrets in a separate job | OK |
 | `scorecard.yml` | `branch_protection_rule`, schedule, push `main` | `main`, no token | none | `id-token: write` | OK |
 | `semgrep.yml` | `pull_request`, push `main` | PR head, no token | none | none, `contents: read` | OK |
-| `size-labeler.yml` | `pull_request_target`, `workflow_run`, schedule | none | none | `pull-requests: write` | OK, metadata only |
+| `size-labeler.yml` | `pull_request_target`, `workflow_run`, schedule | `github.sha`, sparse: its script, no token | none | `pull-requests: write` | OK, metadata only |
 
-`openrewrite-renovate.yml` in detail. `generate` checks out `base_sha` twice, the head of `main`
-that Renovate's pull request is based on, as reported by the API; nothing checks out the source
-head. The only pull request content that reaches a step is `pom.xml` from the source head, read
-through the contents API and accepted only when `trusted/scripts/openrewrite-renovate.ts` from the
+`openrewrite-renovate.yml` in detail. Every job that loads a `scripts/*.cjs` module first checks
+it out at `github.sha`, sparse and without the token. `generate` then checks out `base_sha`
+twice, the head of `main` that Renovate's pull request is based on, as reported by the API;
+nothing checks out the source head. The only pull request content that reaches a step is
+`pom.xml` from the source head, read through the contents API and accepted only when
+`trusted/scripts/openrewrite-renovate.ts` from the
 base shows that it differs from the base `pom.xml` in allowlisted version properties alone. Maven
 then runs on that tree inside a pinned container with no runner token. `generate` holds
 `contents: read` and `pull-requests: read`. The App token exists only in `publish`, which checks
@@ -157,6 +166,7 @@ Release Please checkouts can drop the token, and whether dependency submission s
 
 ## References
 
+- [GitHub Actions workflows](github-actions.md)
 - [Dependency updates](dependency-updates.md)
 - [Default workflow](default-workflow.md)
 - [ADR 0140](../adr/0140-keep-caches-and-pull-request-code-out-of-privileged-jobs.md)
