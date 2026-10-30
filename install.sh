@@ -1872,16 +1872,25 @@ install_release_archive() {
   rm -rf "$temp_dir"
 }
 
-# Copies the board-cards skill into the Codex skills directory. A directory without the installer
-# marker belongs to the user and is left alone, and so is a symbolic link. install.ps1 and both
-# uninstallers repeat this marker rule; ADR 0134 explains why it stays in the scripts.
+# Succeeds when $CODEX_SKILL_DIR belongs to the user: a symbolic link, a directory without the
+# installer marker, or a directory whose marker or SKILL.md is a link that a write would follow out
+# of the directory. install.ps1 and both uninstallers repeat this marker rule; ADR 0134 explains why
+# it stays in the scripts.
+codex_skill_owned_by_user() {
+  [[ -L "$CODEX_SKILL_DIR" ]] && return 0
+  [[ -e "$CODEX_SKILL_DIR" ]] || return 1
+  [[ ! -f "$CODEX_SKILL_DIR/$CODEX_SKILL_MARKER" || -L "$CODEX_SKILL_DIR/$CODEX_SKILL_MARKER" || -L "$CODEX_SKILL_DIR/SKILL.md" ]]
+}
+
+# Copies the board-cards skill into the Codex skills directory unless that directory belongs to the
+# user.
 install_codex_skill() {
   local source="$APP_DIR/.codex/skills/$CODEX_SKILL_NAME/SKILL.md"
   if [[ ! -f "$source" ]]; then
     print_status SKIP "  Codex skill: this app version has none"
     return 0
   fi
-  if [[ -L "$CODEX_SKILL_DIR" ]] || { [[ -e "$CODEX_SKILL_DIR" ]] && [[ ! -f "$CODEX_SKILL_DIR/$CODEX_SKILL_MARKER" ]]; }; then
+  if codex_skill_owned_by_user; then
     print_status SKIP "  Codex skill: $CODEX_SKILL_DIR exists and was not made by this installer"
     return 0
   fi
@@ -3195,7 +3204,11 @@ if [[ "$DRY_RUN" == true ]]; then
     print_status WOULD " unpack release archive into: $APP_DIR"
   fi
   print_status WOULD " install command: $BIN_DIR/symphony-trello"
-  print_status WOULD " install Codex skill: $CODEX_SKILL_DIR"
+  if codex_skill_owned_by_user; then
+    print_status SKIP " Codex skill: $CODEX_SKILL_DIR exists and was not made by this installer"
+  else
+    print_status WOULD " install Codex skill: $CODEX_SKILL_DIR"
+  fi
   if [[ -d "$APP_DIR" ]]; then
     print_status WOULD " check generated workflows after the update: symphony-trello migrate-workflows"
   fi

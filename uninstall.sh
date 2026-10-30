@@ -1686,10 +1686,11 @@ print_managed_codex_removal_plan() {
   fi
 }
 
-# The installer marks the skill directory it creates; a directory without the marker is the user's.
-# uninstall.ps1 repeats this rule because the uninstallers never start Java (ADR 0134).
+# The installer marks the skill directory it creates; a directory without the marker, or with a
+# linked marker, is the user's. uninstall.ps1 repeats this rule because the uninstallers never start
+# Java (ADR 0134).
 codex_skill_installer_managed() {
-  [[ ! -L "$CODEX_SKILL_DIR" && -f "$CODEX_SKILL_DIR/$CODEX_SKILL_MARKER" ]]
+  [[ ! -L "$CODEX_SKILL_DIR" && -f "$CODEX_SKILL_DIR/$CODEX_SKILL_MARKER" && ! -L "$CODEX_SKILL_DIR/$CODEX_SKILL_MARKER" ]]
 }
 
 print_codex_skill_removal_plan() {

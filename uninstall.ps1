@@ -392,10 +392,28 @@ $AutostartEnvironmentPath = Join-Path $ConfigDir "autostart-env.ps1"
 $AutostartScriptPath = Join-Path $BinDir "symphony-trello-autostart.ps1"
 $CodexHome = [System.IO.Path]::GetFullPath((Join-Path $SymphonyHome "codex"))
 $CodexNpmPrefix = [System.IO.Path]::GetFullPath((Join-Path $SymphonyHome "npm"))
-# The installer copies its Codex skill here and marks the directory; a directory without the marker
-# is the user's. uninstall.sh repeats this rule because the uninstallers never start Java (ADR 0134).
-$CodexUserHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $WindowsUserProfile ".codex" }
-$CodexSkillDir = [System.IO.Path]::GetFullPath((Join-Path (Join-Path $CodexUserHome "skills") "symphony-trello-board-cards"))
+# The installer copies its Codex skill here, marks the directory, and records it in the install
+# context, so a later CODEX_HOME change does not hide it. A directory without the marker, or with a
+# linked marker, is the user's. uninstall.sh repeats this rule because the uninstallers never start
+# Java (ADR 0134). Path.Combine instead of Join-Path, which fails for a drive that is not mapped.
+function Get-InstallContextValue([string]$Path, [string]$Key) {
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    return $null
+  }
+  foreach ($line in Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue) {
+    if ($line.StartsWith("$Key=")) {
+      return $line.Substring($Key.Length + 1)
+    }
+  }
+  return $null
+}
+
+$CodexSkillDir = Get-InstallContextValue (Join-Path $StateHome "install-context.properties") "codex_skill_dir"
+if ([string]::IsNullOrWhiteSpace($CodexSkillDir)) {
+  $CodexUserHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $WindowsUserProfile ".codex" }
+  $CodexSkillDir = [System.IO.Path]::Combine($CodexUserHome, "skills", "symphony-trello-board-cards")
+}
+$CodexSkillDir = [System.IO.Path]::GetFullPath($CodexSkillDir)
 $CodexSkillMarker = ".symphony-trello-install"
 
 function Confirm-Step([string]$Prompt, [bool]$AssumeYes = $false) {
@@ -628,7 +646,11 @@ function Write-ManagedCodexRemovalPlan {
 
 function Test-InstallerManagedCodexSkill {
   $existing = Get-Item -LiteralPath $CodexSkillDir -Force -ErrorAction SilentlyContinue
-  return $existing -and -not $existing.LinkType -and (Test-Path -LiteralPath (Join-Path $CodexSkillDir $CodexSkillMarker) -PathType Leaf)
+  if (-not $existing -or $existing.LinkType) {
+    return $false
+  }
+  $marker = Get-Item -LiteralPath ([System.IO.Path]::Combine($CodexSkillDir, $CodexSkillMarker)) -Force -ErrorAction SilentlyContinue
+  return $marker -and -not $marker.PSIsContainer -and -not $marker.LinkType
 }
 
 function Assert-SafeRemovalPath([string]$Path) {

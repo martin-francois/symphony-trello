@@ -4250,8 +4250,9 @@ that a second formatting pass leaves the source unchanged.
   `trello_tools` refusals for moves, new cards, comments, and archiving; refusal of a card on
   another board and of an archived card; the `--json` shape of every command; and escaped Trello
   text. Installer tests cover the skill
-  copy, the marker, the recorded skill directory, removal on uninstall, and a user-made skill
-  directory that both scripts keep, for both installers
+  copy, the marker, the recorded skill directory, removal on uninstall, a user-made skill
+  directory that both scripts and their dry runs keep, a linked marker or `SKILL.md`, and a
+  `CODEX_HOME` on a drive that does not exist
 
 ### 17.8 Trello Workflow Conformance
 
@@ -5447,11 +5448,13 @@ Codex skill:
   copy it to `$CODEX_HOME/skills/symphony-trello-board-cards`, or to
   `~/.codex/skills/symphony-trello-board-cards` (`%USERPROFILE%\.codex\skills\...` on Windows)
   when `CODEX_HOME` is unset, and MUST write an installer marker into that directory. An existing
-  directory without the marker, or a link, MUST be left unchanged. A failure to write the skill MUST
-  NOT fail the install. The install context records the skill directory.
-- Both uninstallers MUST remove the skill directory only when it carries the installer marker.
-  `uninstall.sh` takes the directory from the install context. `uninstall.ps1`, which reads no
-  install context, uses the current `CODEX_HOME` or the user profile.
+  directory without the marker, a link, or a directory whose marker or `SKILL.md` is a link MUST be
+  left unchanged, and a dry run MUST report the same skip. A failure to write the skill, including a
+  `CODEX_HOME` on a drive that does not exist, MUST NOT fail the install. The install context
+  records the skill directory.
+- Both uninstallers MUST remove the skill directory only when it carries the installer marker as a
+  regular file. They take the directory from the install context and fall back to the current
+  `CODEX_HOME` or the user profile when the context has none.
 - Workspace skill installation (Section 19.1) MUST NOT copy this skill into card workspaces. A worker
   run handles its own card through the worker's Trello tools.
 

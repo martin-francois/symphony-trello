@@ -79,8 +79,10 @@ $ConnectedBoardsFileName = "connected-boards.json"
 # Codex reads personal skills from $CODEX_HOME\skills. The marker file tells a later install or the
 # uninstaller that this installer owns the skill directory, so a directory the user made stays.
 $CodexSkillName = "symphony-trello-board-cards"
+# Path.Combine instead of Join-Path: Join-Path fails for a CODEX_HOME on a drive that is not mapped,
+# and the optional skill must not stop the install.
 $CodexUserHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $WindowsUserProfile ".codex" }
-$CodexSkillDir = Join-Path (Join-Path $CodexUserHome "skills") $CodexSkillName
+$CodexSkillDir = [System.IO.Path]::Combine($CodexUserHome, "skills", $CodexSkillName)
 $CodexSkillMarker = ".symphony-trello-install"
 $InstallerCompletionWasSet = Test-Path -LiteralPath "Env:$InstallerCompletionEnvironmentName"
 $InstallerCompletionPreviousValue = [Environment]::GetEnvironmentVariable($InstallerCompletionEnvironmentName, "Process")
@@ -918,27 +920,42 @@ function Write-InstallContext {
   }
 }
 
-# Copies the board-cards skill into the Codex skills directory. A directory without the installer
-# marker belongs to the user and is left alone, and so is a link. install.sh and both uninstallers
-# repeat this marker rule; ADR 0134 explains why it stays in the scripts.
+# True when $CodexSkillDir belongs to the user: a link, a directory without the installer marker, or
+# a directory whose marker or SKILL.md is a link that a write would follow out of the directory.
+# install.sh and both uninstallers repeat this marker rule; ADR 0134 explains why it stays in the
+# scripts.
+function Test-CodexSkillOwnedByUser {
+  $existing = Get-Item -LiteralPath $CodexSkillDir -Force -ErrorAction SilentlyContinue
+  if (-not $existing) {
+    return $false
+  }
+  if ($existing.LinkType) {
+    return $true
+  }
+  $marker = Get-Item -LiteralPath ([System.IO.Path]::Combine($CodexSkillDir, $CodexSkillMarker)) -Force -ErrorAction SilentlyContinue
+  $skill = Get-Item -LiteralPath ([System.IO.Path]::Combine($CodexSkillDir, "SKILL.md")) -Force -ErrorAction SilentlyContinue
+  return (-not $marker) -or $marker.PSIsContainer -or [bool]$marker.LinkType -or ($skill -and [bool]$skill.LinkType)
+}
+
+# Copies the board-cards skill into the Codex skills directory unless that directory belongs to the
+# user.
 function Install-CodexSkill {
   $source = Join-Path $Prefix ".codex\skills\$CodexSkillName\SKILL.md"
   if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
     Write-Status "SKIP" "  Codex skill: this app version has none"
     return
   }
-  $existing = Get-Item -LiteralPath $CodexSkillDir -Force -ErrorAction SilentlyContinue
-  $marker = Join-Path $CodexSkillDir $CodexSkillMarker
-  if ($existing -and ($existing.LinkType -or -not (Test-Path -LiteralPath $marker -PathType Leaf))) {
+  if (Test-CodexSkillOwnedByUser) {
     Write-Status "SKIP" "  Codex skill: $CodexSkillDir exists and was not made by this installer"
     return
   }
   # The skill only helps agents; a Codex directory the installer cannot write must not fail the
   # install. The marker goes first, so a half-written directory still counts as the installer's own.
   try {
+    $marker = [System.IO.Path]::Combine($CodexSkillDir, $CodexSkillMarker)
     New-Item -ItemType Directory -Force -Path $CodexSkillDir -ErrorAction Stop | Out-Null
     Set-Content -Encoding UTF8 -LiteralPath $marker -Value "symphony-trello installer-managed Codex skill" -ErrorAction Stop
-    Copy-Item -LiteralPath $source -Destination (Join-Path $CodexSkillDir "SKILL.md") -Force -ErrorAction Stop
+    Copy-Item -LiteralPath $source -Destination ([System.IO.Path]::Combine($CodexSkillDir, "SKILL.md")) -Force -ErrorAction Stop
   } catch {
     Write-Status "SKIP" "  Codex skill: could not write $CodexSkillDir"
     return
@@ -1925,7 +1942,11 @@ if ($DryRun) {
     Write-Status "WOULD" " unpack release archive into: $Prefix"
   }
   Write-Status "WOULD" " install command: $BinDir\symphony-trello.ps1"
-  Write-Status "WOULD" " install Codex skill: $CodexSkillDir"
+  if (Test-CodexSkillOwnedByUser) {
+    Write-Status "SKIP" " Codex skill: $CodexSkillDir exists and was not made by this installer"
+  } else {
+    Write-Status "WOULD" " install Codex skill: $CodexSkillDir"
+  }
   if (Test-Path -LiteralPath $Prefix) {
     Write-Status "WOULD" " check generated workflows after the update: symphony-trello migrate-workflows"
   }

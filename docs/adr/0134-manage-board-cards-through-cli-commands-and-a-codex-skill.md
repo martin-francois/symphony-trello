@@ -120,7 +120,9 @@ Details that the design decision left open:
 * The worker tool tests, such as `TrelloHandoffToolHandlerTest` and `TrelloFollowUpCardToolTest`,
   still pass unchanged after the shared write rules moved into `TrelloCardWrites`.
 * `InstallerScriptTest` covers the skill copy, the marker, the recorded skill directory, removal on
-  uninstall, and a user-made directory that both scripts keep, for `install.sh` and `install.ps1`.
+  uninstall, and a user-made directory that both scripts and their dry runs keep, for `install.sh`
+  and `install.ps1`. It also covers a linked marker or `SKILL.md` for `install.sh` and a
+  `CODEX_HOME` on a drive that does not exist for `install.ps1`.
 * `CodexSkillStructureTest` checks the skill file.
 
 ## Pros and Cons of the Options

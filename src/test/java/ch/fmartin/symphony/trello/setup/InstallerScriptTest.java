@@ -1666,6 +1666,48 @@ final class InstallerScriptTest {
         Path fakeLog = temporaryDirectory.resolve("user-skill.log");
         Files.createDirectories(skillDirectory);
         Files.writeString(skillDirectory.resolve("SKILL.md"), "my own skill\n");
+        Map<String, String> environment =
+                installEnvironmentForCustomHome(sourceRepository, fakeBin, home, symphonyHome, fakeLog);
+
+        // when
+        ProcessResult dryRun = run(environment, "bash", "install.sh", "--dry-run", "--no-onboard");
+        ProcessResult install = run(environment, "bash", "install.sh", "--no-onboard");
+        ProcessResult uninstall = run(Map.of("HOME", home.toString()), "bash", "uninstall.sh", "--yes");
+
+        // then
+        dryRun.assertSuccess();
+        install.assertSuccess();
+        uninstall.assertSuccess();
+        assertThat(dryRun.output())
+                .contains("Codex skill: " + skillDirectory + " exists and was not made by this installer")
+                .doesNotContain("install Codex skill");
+        assertThat(install.output())
+                .contains("Codex skill: " + skillDirectory + " exists and was not made by this installer");
+        assertThat(uninstall.output()).doesNotContain("CODEX SKILL");
+        assertThat(skillDirectory.resolve("SKILL.md"))
+                .content(StandardCharsets.UTF_8)
+                .isEqualTo("my own skill\n");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {".symphony-trello-install", "SKILL.md"})
+    void posixInstallDoesNotWriteThroughALinkInTheCodexSkillDirectory(String linkedFile) throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        Path sourceRepository = addCodexSkill(createSourceRepository(temporaryDirectory));
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path home = temporaryDirectory.resolve("linked-skill-home");
+        Path symphonyHome = temporaryDirectory.resolve("linked-skill-symphony-home");
+        Path skillDirectory = home.resolve(".codex/skills/symphony-trello-board-cards");
+        Path outsideFile = temporaryDirectory.resolve("outside-file.txt");
+        Path fakeLog = temporaryDirectory.resolve("linked-skill.log");
+        Files.createDirectories(skillDirectory);
+        Files.writeString(skillDirectory.resolve(".symphony-trello-install"), "marker\n");
+        Files.writeString(skillDirectory.resolve("SKILL.md"), "earlier skill\n");
+        Files.writeString(outsideFile, "not the installer's file\n");
+        Files.delete(skillDirectory.resolve(linkedFile));
+        Files.createSymbolicLink(skillDirectory.resolve(linkedFile), outsideFile);
 
         // when
         ProcessResult install = run(
@@ -1673,17 +1715,12 @@ final class InstallerScriptTest {
                 "bash",
                 "install.sh",
                 "--no-onboard");
-        ProcessResult uninstall = run(Map.of("HOME", home.toString()), "bash", "uninstall.sh", "--yes");
 
         // then
         install.assertSuccess();
-        uninstall.assertSuccess();
         assertThat(install.output())
                 .contains("Codex skill: " + skillDirectory + " exists and was not made by this installer");
-        assertThat(uninstall.output()).doesNotContain("CODEX SKILL");
-        assertThat(skillDirectory.resolve("SKILL.md"))
-                .content(StandardCharsets.UTF_8)
-                .isEqualTo("my own skill\n");
+        assertThat(outsideFile).content(StandardCharsets.UTF_8).isEqualTo("not the installer's file\n");
     }
 
     @Test
@@ -9928,7 +9965,8 @@ final class InstallerScriptTest {
     }
 
     @Test
-    void powershellInstallCopiesTheCodexSkillAndUninstallRemovesItWhenAvailable() throws Exception {
+    void powershellInstallCopiesTheCodexSkillAndUninstallFindsItThroughTheInstallContextWhenAvailable()
+            throws Exception {
         // given
         List<String> pwsh = powershellCommand();
         assumeFalse(pwsh.isEmpty());
@@ -9941,13 +9979,16 @@ final class InstallerScriptTest {
         Path skillDirectory = codexHome.resolve("skills").resolve("symphony-trello-board-cards");
         Path fakeLog = temporaryDirectory.resolve("ps-skill.log");
         Map<String, String> codexEnvironment = Map.of("CODEX_HOME", codexHome.toString());
+        Map<String, String> laterCodexEnvironment = Map.of(
+                "CODEX_HOME",
+                temporaryDirectory.resolve("ps-skill-later-codex-home").toString());
 
         // when
         ProcessResult install = runPowerShellSourceCheckoutInstall(
                 pwsh, sourceRepository, fakeBin, symphonyHome, binDirectory, fakeLog, codexEnvironment);
         String installedSkill = Files.readString(skillDirectory.resolve("SKILL.md"));
         boolean markerWritten = Files.isRegularFile(skillDirectory.resolve(".symphony-trello-install"));
-        ProcessResult uninstall = runPowerShellUninstall(pwsh, symphonyHome, binDirectory, codexEnvironment);
+        ProcessResult uninstall = runPowerShellUninstall(pwsh, symphonyHome, binDirectory, laterCodexEnvironment);
 
         // then
         install.assertSuccess();
@@ -9986,19 +10027,57 @@ final class InstallerScriptTest {
         Map<String, String> codexEnvironment = Map.of("CODEX_HOME", codexHome.toString());
 
         // when
+        ProcessResult dryRun = runPowerShellSourceCheckoutInstall(
+                pwsh,
+                sourceRepository,
+                fakeBin,
+                symphonyHome,
+                binDirectory,
+                fakeLog,
+                codexEnvironment,
+                Path.of("install.ps1"),
+                List.of("--dry-run"));
         ProcessResult install = runPowerShellSourceCheckoutInstall(
                 pwsh, sourceRepository, fakeBin, symphonyHome, binDirectory, fakeLog, codexEnvironment);
         ProcessResult uninstall = runPowerShellUninstall(pwsh, symphonyHome, binDirectory, codexEnvironment);
 
         // then
+        dryRun.assertSuccess();
         install.assertSuccess();
         uninstall.assertSuccess();
+        assertThat(normalizedWhitespace(dryRun.output()))
+                .contains("Codex skill: " + skillDirectory + " exists and was not made by this installer")
+                .doesNotContain("install Codex skill");
         assertThat(normalizedWhitespace(install.output()))
                 .contains("Codex skill: " + skillDirectory + " exists and was not made by this installer");
         assertThat(uninstall.output()).doesNotContain("CODEX SKILL");
         assertThat(skillDirectory.resolve("SKILL.md"))
                 .content(StandardCharsets.UTF_8)
                 .isEqualTo("my own skill\n");
+    }
+
+    @Test
+    void powershellInstallSkipsTheCodexSkillOnADriveThatDoesNotExistWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        assumeTrue(commandExists("git"));
+        Path sourceRepository = addCodexSkill(createPowerShellSourceRepository(temporaryDirectory));
+        Path fakeBin = createPowerShellFakeToolchain(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve("ps-unmapped-home");
+        Path binDirectory = temporaryDirectory.resolve("ps-unmapped-bin");
+        Path fakeLog = temporaryDirectory.resolve("ps-unmapped.log");
+        // PowerShell treats `Q:` as a drive on every platform, and test machines do not map it.
+        Map<String, String> codexEnvironment = Map.of("CODEX_HOME", "Q:\\symphony-trello-test-codex");
+
+        // when
+        ProcessResult install = runPowerShellSourceCheckoutInstall(
+                pwsh, sourceRepository, fakeBin, symphonyHome, binDirectory, fakeLog, codexEnvironment);
+
+        // then
+        install.assertSuccess();
+        assertThat(normalizedWhitespace(install.output()))
+                .contains("Codex skill: could not write Q:\\symphony-trello-test-codex", "Command installed");
     }
 
     @ParameterizedTest
@@ -10146,28 +10225,50 @@ final class InstallerScriptTest {
             Map<String, String> extraEnvironment,
             Path installer)
             throws Exception {
+        return runPowerShellSourceCheckoutInstall(
+                pwsh,
+                sourceRepository,
+                fakeBin,
+                symphonyHome,
+                binDirectory,
+                fakeLog,
+                extraEnvironment,
+                installer,
+                List.of());
+    }
+
+    private static ProcessResult runPowerShellSourceCheckoutInstall(
+            List<String> pwsh,
+            Path sourceRepository,
+            Path fakeBin,
+            Path symphonyHome,
+            Path binDirectory,
+            Path fakeLog,
+            Map<String, String> extraEnvironment,
+            Path installer,
+            List<String> extraArguments)
+            throws Exception {
         Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
         environment.put("PATH", fakeBin + File.pathSeparator + System.getenv("PATH"));
         environment.put("SYMPHONY_HOME", symphonyHome.toString());
         environment.put("SYMPHONY_FAKE_JAVA", fakeBin.resolve("fake-java.ps1").toString());
         environment.put("SYMPHONY_FAKE_LOG", fakeLog.toString());
         environment.putAll(extraEnvironment);
-        return run(
-                environment,
-                command(
-                                pwsh,
-                                "-NoProfile",
-                                "-File",
-                                installer.toAbsolutePath().toString(),
-                                "--no-onboard",
-                                "--from-source",
-                                "--repo",
-                                sourceRepository.toUri().toString(),
-                                "--ref",
-                                "main",
-                                "--bin-dir",
-                                binDirectory.toString())
-                        .toArray(String[]::new));
+        List<String> arguments = new ArrayList<>(command(
+                pwsh,
+                "-NoProfile",
+                "-File",
+                installer.toAbsolutePath().toString(),
+                "--no-onboard",
+                "--from-source",
+                "--repo",
+                sourceRepository.toUri().toString(),
+                "--ref",
+                "main",
+                "--bin-dir",
+                binDirectory.toString()));
+        arguments.addAll(extraArguments);
+        return run(environment, arguments.toArray(String[]::new));
     }
 
     @Test
