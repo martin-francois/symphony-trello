@@ -40,6 +40,8 @@ final class SetupLocalCommandFactory {
             "--max-agents",
             "--codex-model",
             "--codex-reasoning-effort",
+            CodexReviewerOverrides.MODEL_OPTION,
+            CodexReviewerOverrides.REASONING_EFFORT_OPTION,
             "--env",
             "--add-path",
             "--allow-all-paths",
@@ -65,6 +67,8 @@ final class SetupLocalCommandFactory {
             "--workflow",
             "--workspace-root",
             "--server-port",
+            CodexReviewerOverrides.MODEL_OPTION,
+            CodexReviewerOverrides.REASONING_EFFORT_OPTION,
             "--env",
             "--no-github");
 
@@ -347,6 +351,9 @@ final class SetupLocalCommandFactory {
         @Option(names = "--codex-reasoning-effort", description = SetupOptionHelp.CODEX_REASONING_EFFORT)
         Optional<String> codexReasoningEffort = Optional.empty();
 
+        @Mixin
+        CodexReviewerOptions codexReviewer = new CodexReviewerOptions();
+
         @Option(names = "--env", description = "Dotenv file for Trello credentials.")
         Optional<Path> envPath = Optional.empty();
 
@@ -455,6 +462,7 @@ final class SetupLocalCommandFactory {
                     maxAgents.isPresent(),
                     codexModel.map(String::strip).filter(value -> !value.isBlank()),
                     codexReasoningEffort.map(String::strip).filter(value -> !value.isBlank()),
+                    codexReviewer.overrides(),
                     envPath,
                     writableRoots,
                     allowAllPaths,
@@ -531,6 +539,8 @@ final class SetupLocalCommandFactory {
             addIfPresent(unsupported, "--workflow", workflowPath);
             addIfPresent(unsupported, "--workspace-root", workspaceRoot);
             addIfPresent(unsupported, "--server-port", serverPort);
+            addIfPresent(unsupported, CodexReviewerOverrides.MODEL_OPTION, codexReviewer.model);
+            addIfPresent(unsupported, CodexReviewerOverrides.REASONING_EFFORT_OPTION, codexReviewer.reasoningEffort);
             addIfPresent(unsupported, "--env", envPath);
             return unsupported;
         }
@@ -549,6 +559,8 @@ final class SetupLocalCommandFactory {
             addIfPresent(unsupported, "--max-agents", maxAgents);
             addIfPresent(unsupported, "--codex-model", codexModel);
             addIfPresent(unsupported, "--codex-reasoning-effort", codexReasoningEffort);
+            addIfPresent(unsupported, CodexReviewerOverrides.MODEL_OPTION, codexReviewer.model);
+            addIfPresent(unsupported, CodexReviewerOverrides.REASONING_EFFORT_OPTION, codexReviewer.reasoningEffort);
             addIfPresent(unsupported, "--env", envPath);
             addListIfPresent(unsupported, "--add-path", additionalWritableRoots);
             addIfPresent(unsupported, "--allow-all-paths", allowAllPaths);
@@ -654,6 +666,7 @@ final class SetupLocalCommandFactory {
             merged.maxAgents = child.maxAgents.or(() -> merged.maxAgents);
             merged.codexModel = child.codexModel.or(() -> merged.codexModel);
             merged.codexReasoningEffort = child.codexReasoningEffort.or(() -> merged.codexReasoningEffort);
+            merged.codexReviewer = merged.codexReviewer.mergedWith(child.codexReviewer);
             merged.envPath = child.envPath.or(() -> merged.envPath);
             merged.additionalWritableRoots.addAll(child.additionalWritableRoots);
             merged.allowAllPaths = merged.allowAllPaths || child.allowAllPaths;
@@ -690,6 +703,7 @@ final class SetupLocalCommandFactory {
             copy.maxAgents = source.maxAgents;
             copy.codexModel = source.codexModel;
             copy.codexReasoningEffort = source.codexReasoningEffort;
+            copy.codexReviewer = source.codexReviewer.copy();
             copy.envPath = source.envPath;
             copy.additionalWritableRoots = new ArrayList<>(source.additionalWritableRoots);
             copy.allowAllPaths = source.allowAllPaths;

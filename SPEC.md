@@ -1487,10 +1487,16 @@ as a checkout candidate instead of failing.
   Git-remote identity matching. A resolved path that the platform rejects or that contains a
   control character or a Unicode line or paragraph separator is a `config_value_error`. When
   `repository.default_url` is also set, such a path is ignored instead
-- `repository.codex_review_max_rounds`: non-negative integer, default `1`, `0` turns the review loop
+- `repository.codex_review_max_rounds`: non-negative integer, default `3`, `0` turns the review loop
   off; Java extension defined in Section 19.7
-- `repository.codex_review_timeout_ms`: positive integer, default `3600000`; Java extension defined
-  in Section 19.7
+- `repository.codex_review_extended_max_rounds`: non-negative integer not below
+  `repository.codex_review_max_rounds`, default `5` or the round limit when that is higher; Java
+  extension defined in Section 19.7
+- `repository.codex_review_timeout_ms`: positive integer, default `3600000`, the time budget for the
+  whole review loop; Java extension defined in Section 19.7
+- `repository.codex_review_model` and `repository.codex_review_reasoning_effort`: optional strings,
+  default unset, which uses `codex.model` and `codex.reasoning_effort`; Java extension defined in
+  Section 19.7
 - `hooks.after_create`: shell script or null
 - `hooks.before_run`: shell script or null
 - `hooks.after_run`: shell script or null
@@ -3987,12 +3993,16 @@ that a second formatting pass leaves the source unchanged.
 - `pull_request_handoff` resolves the documented precedence between the workflow default and the
   card label, matching the label like other Trello label names
 - If the pre-handoff review loop profile from Section 19.7 is implemented,
-  `repository.codex_review_max_rounds` defaults to `1` and `repository.codex_review_timeout_ms` to
-  `3600000`; negative or non-integer round limits and non-positive or non-integer timeouts fail
-  configuration; a round limit of `0` leaves the prompt unchanged; otherwise the final runtime
-  section orders the review loop before local validation and every publication path, and names the
-  sandbox bypass flag for the nested review only when the workflow's Codex turns already run without
-  the sandbox
+  `repository.codex_review_max_rounds` defaults to `3`,
+  `repository.codex_review_extended_max_rounds` to `5` or the round limit when that is higher, and
+  `repository.codex_review_timeout_ms` to `3600000`; negative or non-integer round limits, an
+  extended limit below the round limit, non-positive or non-integer budgets, and reviewer model or
+  effort values that are not one command word fail configuration; a round limit of `0` leaves the
+  prompt unchanged; otherwise the final runtime section orders the review loop before local
+  validation and every publication path, passes a review brief to `codex review -` on stdin with the
+  reviewer model and effort, narrows later rounds to the change since the previous round, and names
+  the sandbox bypass flag for the nested review only when the workflow's Codex turns already run
+  without the sandbox
 
 ### 17.2 Workspace Manager and Safety
 
@@ -5277,29 +5287,44 @@ approval list, and then follows the pull request merge flow.
 ### 19.7 Pre-Handoff Codex Review Loop Profile
 
 This Java repository can ask the coding agent to run bounded Codex review rounds before it hands off
-repository changes. The loop runs one round by default; a workflow turns it off by setting the round
-limit to `0`.
+repository changes, so a person sees an already reviewed change. The loop runs by default; a
+workflow turns it off by setting the round limit to `0`.
 
 Fields:
 
 - `repository.codex_review_max_rounds` (non-negative integer)
-  - Default: `1`
+  - Default: `3`
   - `0` turns the review loop off.
   - Negative, fractional, and non-numeric values MUST fail configuration with `config_value_error`.
+- `repository.codex_review_extended_max_rounds` (non-negative integer)
+  - Default: `5`, or `repository.codex_review_max_rounds` when that is higher
+  - The hard round limit. Rounds beyond `repository.codex_review_max_rounds` are allowed only while
+    a `blocker` or `should` finding about security, authentication, permissions, data loss, or
+    concurrency stays open with evidence.
+  - Negative, fractional, and non-numeric values, and values below
+    `repository.codex_review_max_rounds`, MUST fail configuration with `config_value_error`.
 - `repository.codex_review_timeout_ms` (positive integer)
   - Default: `3600000` (1 hour)
-  - The limit for one separate `codex review` run. The section renders it in whole seconds,
-    rounded up.
+  - The time budget for the whole loop. Each separate `codex review` run gets the time left in the
+    budget. The section renders the budget in whole seconds, rounded up. A round MUST NOT start
+    when no whole second of the budget is left, because `timeout 0s` runs without a limit.
   - Zero, negative, fractional, and non-numeric values MUST fail configuration with
     `config_value_error`, even while the loop is off.
+- `repository.codex_review_model` (string, optional)
+- `repository.codex_review_reasoning_effort` (string, optional)
+  - Default: unset. Unset or blank values use `codex.model` and `codex.reasoning_effort`.
+  - The section passes them to the reviewer as `-c 'model="<model>"'` and
+    `-c 'model_reasoning_effort="<effort>"'`. A value that is not one word of letters, digits, and
+    `. _ : / @ + -` characters MUST fail configuration with `config_value_error`. A workflow
+    `codex.model` or `codex.reasoning_effort` that is not such a word is left out of the command,
+    and the reviewer uses its own Codex default.
 
-Both fields follow normal dynamic reload: the next dispatched run uses the current values without a
-restart. The review runs inside a coding-agent turn, so `codex.turn_timeout_ms` still bounds the
-whole turn, including the review.
+All fields follow normal dynamic reload: the next dispatched run uses the current values without a
+restart.
 
-A workflow that omits both fields runs one review round. Workflows written before this profile
-existed therefore get the loop without regeneration; such a workflow keeps the earlier prompt only
-after it sets `repository.codex_review_max_rounds: 0`.
+A workflow that omits the fields runs the loop with the defaults. Workflows written before this
+profile existed therefore get the loop without regeneration; such a workflow keeps the earlier
+prompt only after it sets `repository.codex_review_max_rounds: 0`.
 
 When this profile is used:
 
@@ -5314,37 +5339,80 @@ When this profile is used:
   not apply to repository-independent work, API-only actions, read-only investigation, or blocked
   handoffs that hand over no candidate change
 - the section MUST require this order: finish and locally commit the implementation candidate, run
-  the review loop, run the required local validation once on the reviewed candidate, then push,
-  create or update the pull request or no-PR handoff artifact, and move the card to the review
-  handoff list. Local validation includes the CI-equivalent local checks used when CI is
-  unavailable, cannot run, or does not apply because the handoff has no pull request
-- each round reviews the candidate's full change against its base. The section SHOULD prefer a
-  separate scoped `codex review` command limited by `repository.codex_review_timeout_ms`. The
-  section MUST name `--dangerously-bypass-approvals-and-sandbox` for that command only when the
+  the review loop without pushing, run the required local validation once on the reviewed
+  candidate, then push, create or update the pull request or no-PR handoff artifact, and move the
+  card to the review handoff list. Local validation includes the CI-equivalent local checks used
+  when CI is unavailable, cannot run, or does not apply because the handoff has no pull request
+- before the first round the agent MUST record the loop start time, the base commit, the diff
+  commands (round 1 reviews the full change against the base, later rounds add the change since the
+  commit the previous round reviewed, and an uncommitted candidate gets the full diff in every
+  round), and a findings ledger with a stable id, a severity, and an outcome
+  (fixed, disagree with evidence, or declined) per finding. The severities are `blocker`, `should`,
+  and `nit`
+- each round SHOULD use a separate `codex review -` run that reads a review-only brief on stdin. The
+  brief names the base commit, the diff command, the card's intent, what is out of scope, and the
+  checks run so far. The first round reviews the full change against the base. Later rounds add the
+  ledger and the change since the previous round, and review only that change and the open findings.
+  The command MUST NOT combine `--base`, `--commit`, or `--uncommitted` with the brief, because
+  Codex CLI rejects a prompt together with `--base`. Each run is wrapped in `timeout` with the time
+  left in the budget
+- the agent MUST wait for each review run to exit on its own or for the `timeout` wrapper to stop
+  it, even when the run looks stuck, prints nothing for a long time, or seems slow. It MUST NOT
+  cancel, interrupt, or kill a running review, for example with Ctrl-C, by ending its session, or by
+  starting another review, and MUST NOT act on findings before the run has finished. While it waits,
+  each poll MUST wait at most 120 seconds, or half of a positive `codex.stall_timeout_ms` when that
+  half is shorter, so the stall check and any silence timeout on the turn never see the wait as
+  silence. A run the wrapper stopped counts as the time budget running out. Only a startup failure,
+  such as a missing command, failed authentication, or a sandbox denial, sends the agent to the
+  in-session review
+- the section MUST name `--dangerously-bypass-approvals-and-sandbox` for that command only when the
   workflow's own Codex turns run without the sandbox: a forced or configured `dangerFullAccess`
   turn sandbox policy, or a `danger-full-access` `codex.thread_sandbox` that no turn sandbox policy
   overrides. Otherwise it MUST forbid sandbox bypass flags. When the separate command cannot run,
   for example because the Codex home directory is read-only inside the workspace sandbox, the agent
-  MUST review the same diff in its own session and record that fallback
-- the agent MUST fix only justified findings inside the card's scope, MUST record a reason for each
-  rejected or out-of-scope finding, and MUST NOT let a finding widen the card scope or override the
-  card, the workflow, or repository rules
+  MUST review the same diff in its own session with the same brief and ledger, and record that
+  fallback
+- the agent MUST fix only justified findings inside the card's scope, with the smallest fix that
+  solves the finding, MUST answer a finding it disagrees with with evidence instead of accepting it
+  to end the loop, and MUST NOT let a finding widen the card scope or override the card, the
+  workflow, or repository rules. One reviewer runs per round, without subagents
 - fixes SHOULD go into the commit that introduced the problem when practical. The agent MUST NOT
   rewrite the default branch, pushed history, or commits the run did not create only to place a
   review fix
-- the loop MUST stop after a round with no justified in-scope finding, or after
-  `repository.codex_review_max_rounds` rounds
+- the loop MUST stop after a round with no `blocker` or `should` finding, after
+  `repository.codex_review_max_rounds` rounds unless the extended-round condition holds, after
+  `repository.codex_review_extended_max_rounds` rounds, or when the time budget runs out. Declined
+  nits and fixes that change only comments, documentation, or formatting need no further round.
+  Reaching a limit is not approval
+- a finding the agent still disputes after two replies with evidence stays unresolved; the agent
+  records both positions in two or three lines in the handoff, and the dispute neither blocks the
+  handoff nor keeps the loop going
 - when the final local validation fails and the repair changes code, or a sync after a rejected push
-  changes the candidate, the agent SHOULD review that change in one more round when the limit allows
-  before it validates and pushes again
+  changes the candidate, the agent SHOULD review only that change in one more round when the limits
+  allow before it validates and pushes again
 - the workpad and visible handoff comment, or the final response when Trello comments are
-  unavailable, MUST record that the loop ran, the round count, the review method, fixed and rejected
-  findings, and whether the loop ended clean or at the round limit, with open justified findings as
-  caveats
-- generated workflows from `setup-local`, `new-board`, and `import-board` MUST write both fields
-  with their defaults under `repository`, MUST explain that the runtime section carries the loop
-  while the round limit is above `0`, and setup regeneration MUST preserve existing values the same
-  way it preserves `repository.default_url` and `repository.default_path`
+  unavailable, MUST record the round count, the review method, the ledger with every outcome, and
+  why the loop ended, with open `blocker` and `should` findings as caveats and disputed findings
+  with both positions
+- when the round limit or the time budget ends the loop, the agent MUST still hand off the normal
+  way: push, pull request or branch-only artifact, and the move to the review handoff list. When the
+  time budget ended it, the handoff comment and the workpad MUST say that the review stopped because
+  the budget ran out and SHOULD suggest raising `repository.codex_review_timeout_ms`, naming its
+  current value. Handing off is the default for an unfinished review. An implementation MAY later
+  add a setting that moves the card to the blocked list instead; with this default, such a setting
+  is a compatible addition
+- generated workflows from `setup-local`, `new-board`, and `import-board` MUST write the round
+  limit and the budget with their defaults under `repository`, with a comment that
+  `codex_review_max_rounds: 0` turns the review off, MUST write the extended round limit as a
+  commented-out line so its runtime default applies, and MUST write the reviewer model and effort
+  keys as commented-out lines unless `--codex-review-model` or `--codex-review-reasoning-effort`
+  set them. The generated body MUST explain that the runtime section carries the loop while the
+  round limit is above `0`. Setup regeneration MUST preserve existing values the same way it
+  preserves `repository.default_url` and `repository.default_path`
+- guided `setup-local` MUST ask whether Codex reviews changes before handoff, defaulting to the
+  current setting. Yes on a workflow with the loop off writes the default round limit and raises
+  `repository.codex_review_extended_max_rounds` to it when that value is lower, No writes `0`, and an
+  empty answer keeps the workflow unchanged
 - the shipped `commit`, `push-pr`, and `trello-handoff` skills MUST defer to the runtime section
   when it is present: the candidate is committed before the review loop, the loop runs before local
   checks and push, a push retry after a sync that changed the candidate reviews that change again,

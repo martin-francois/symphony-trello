@@ -123,7 +123,8 @@ final class ArchitectureTest {
                 return input.getPackageName().contains(".setup")
                         && !input.getName().contains("TrelloBoardSetupMain")
                         && !input.getName().contains("SetupLocalCommandFactory")
-                        && !input.getName().contains("GitHubMode");
+                        && !input.getName().contains("GitHubMode")
+                        && !input.getName().contains("CodexReviewerOptions");
             }
         };
     }

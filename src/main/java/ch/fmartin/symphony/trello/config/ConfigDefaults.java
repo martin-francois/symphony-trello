@@ -48,9 +48,13 @@ public final class ConfigDefaults {
     public static final int DEFAULT_FOLLOW_UP_MAX_CARDS_PER_SOURCE_CARD = 3;
     public static final int DEFAULT_FOLLOW_UP_MAX_CARDS_PER_HOUR = 10;
 
-    // One review round catches most findings before handoff; 0 turns the loop off.
-    public static final int DEFAULT_CODEX_REVIEW_MAX_ROUNDS = 1;
-    public static final Duration DEFAULT_CODEX_REVIEW_TIMEOUT = Duration.ofMinutes(60);
+    // Later rounds review only the fixes, so three rounds fit most changes; 0 turns the loop off.
+    public static final int DEFAULT_CODEX_REVIEW_MAX_ROUNDS = 3;
+    // Rounds 4 and 5 run only while a security, authentication, permission, data-loss, or concurrency
+    // finding stays open (CodexReviewConfig.HIGH_RISK_TOPICS).
+    public static final int DEFAULT_CODEX_REVIEW_EXTENDED_MAX_ROUNDS = 5;
+    // The budget covers the whole loop; each review run gets the time left.
+    public static final Duration DEFAULT_CODEX_REVIEW_TIMEOUT = Duration.ofHours(1);
     public static final long DEFAULT_CODEX_REVIEW_TIMEOUT_MS = DEFAULT_CODEX_REVIEW_TIMEOUT.toMillis();
 
     private ConfigDefaults() {}

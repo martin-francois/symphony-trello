@@ -36,6 +36,8 @@ final class InstalledCliDefaults {
             "--max-agents",
             "--codex-model",
             "--codex-reasoning-effort",
+            CodexReviewerOverrides.MODEL_OPTION,
+            CodexReviewerOverrides.REASONING_EFFORT_OPTION,
             "--env",
             "--add-path",
             "--endpoint");

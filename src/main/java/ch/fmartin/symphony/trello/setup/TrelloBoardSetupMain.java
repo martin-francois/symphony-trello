@@ -1218,6 +1218,9 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         @Option(names = "--codex-reasoning-effort", description = SetupOptionHelp.CODEX_REASONING_EFFORT)
         Optional<String> codexReasoningEffort = Optional.empty();
 
+        @Mixin
+        CodexReviewerOptions codexReviewer = new CodexReviewerOptions();
+
         @Option(names = "--force", description = "Overwrite the workflow file when needed.")
         boolean force;
 
@@ -1362,6 +1365,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             manifest.ifPresent(path -> CliInputValidation.rejectDirectoryPath("--manifest", path));
             TrelloCredentialStore.validateEnvPathOption(envPath);
             validateCodexModelOverrides();
+            codexReviewer();
             repositoryUrl = RepositoryUrlInput.validateExplicit(repositoryUrl);
             if (serverPort != null) {
                 LocalPort.validateCliServerPort(serverPort);
@@ -1376,10 +1380,15 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             return codexReasoningEffort.map(String::strip).filter(value -> !value.isBlank());
         }
 
+        CodexReviewerOverrides codexReviewer() {
+            return codexReviewer.overrides();
+        }
+
         private void validate() {
             endpoint = TrelloApiEndpoint.normalize(endpoint);
             github.validate();
             validateCodexModelOverrides();
+            codexReviewer();
             repositoryUrl = RepositoryUrlInput.validateExplicit(repositoryUrl);
             TrelloBoardSetup.validateSetupMaxAgents(maxConcurrentAgents);
         }

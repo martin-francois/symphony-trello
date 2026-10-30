@@ -8,6 +8,7 @@ import ch.fmartin.symphony.trello.config.EnvironmentReferences;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.config.TrelloListRoleValidator;
 import ch.fmartin.symphony.trello.config.TypedWorkflowConfig;
+import ch.fmartin.symphony.trello.config.WholeNumbers;
 import ch.fmartin.symphony.trello.config.WorkflowConfigIngestion;
 import ch.fmartin.symphony.trello.config.WorkflowIntegerSetting;
 import ch.fmartin.symphony.trello.config.WorkflowServerPortClassification;
@@ -245,8 +246,7 @@ final class WorkflowConfigEditor {
             return TrelloBoardSetup.RepositoryDefaults.preserved(
                     optionalString(repository.get("default_url")).orElse(null),
                     optionalString(repository.get("default_path")).orElse(null),
-                    repository.get(EffectiveConfig.CodexReviewConfig.MAX_ROUNDS_KEY),
-                    repository.get(EffectiveConfig.CodexReviewConfig.TIMEOUT_MS_KEY));
+                    repository);
         } catch (IOException | RuntimeException ignored) {
             return TrelloBoardSetup.RepositoryDefaults.empty();
         }
@@ -671,6 +671,39 @@ final class WorkflowConfigEditor {
         }
         yaml.put("trello_tools", tools);
         write(workflowPath, original.content(), yaml, original.frontMatter().body());
+    }
+
+    /// The configured review round limit, the default when the key is missing, or empty when the
+    /// value is not a whole number.
+    Optional<Integer> codexReviewMaxRounds(Path workflowPath) throws IOException {
+        Map<String, Object> repository = section(parseYaml(read(workflowPath)).get("repository"));
+        if (!repository.containsKey(EffectiveConfig.CodexReviewConfig.MAX_ROUNDS_KEY)) {
+            return Optional.of(ConfigDefaults.DEFAULT_CODEX_REVIEW_MAX_ROUNDS);
+        }
+        return wholeNumber(repository.get(EffectiveConfig.CodexReviewConfig.MAX_ROUNDS_KEY));
+    }
+
+    void updateCodexReviewMaxRounds(Path workflowPath, int maxRounds) throws IOException {
+        ReadWorkflow original = readWorkflow(workflowPath);
+        SequencedMap<String, Object> yaml = parseYaml(original.frontMatter());
+        Map<String, Object> repository = section(yaml.get("repository"));
+        repository.put(EffectiveConfig.CodexReviewConfig.MAX_ROUNDS_KEY, maxRounds);
+        // The hard limit may not be below the round limit, so turning the loop back on raises it.
+        wholeNumber(repository.get(EffectiveConfig.CodexReviewConfig.EXTENDED_MAX_ROUNDS_KEY))
+                .filter(extended -> extended < maxRounds)
+                .ifPresent(ignored ->
+                        repository.put(EffectiveConfig.CodexReviewConfig.EXTENDED_MAX_ROUNDS_KEY, maxRounds));
+        yaml.put("repository", repository);
+        write(workflowPath, original.content(), yaml, original.frontMatter().body());
+    }
+
+    /// Reads a round limit the way config resolution does, so `"3"` and `3.0` count as `3`.
+    private static Optional<Integer> wholeNumber(Object value) {
+        if (!(value instanceof Number) && !(value instanceof String)) {
+            return Optional.empty();
+        }
+        WholeNumbers.Classified parsed = WholeNumbers.classify(String.valueOf(value));
+        return parsed.kind() == WholeNumbers.Kind.WHOLE ? Optional.of(parsed.value()) : Optional.empty();
     }
 
     static String preserveTrelloTools(

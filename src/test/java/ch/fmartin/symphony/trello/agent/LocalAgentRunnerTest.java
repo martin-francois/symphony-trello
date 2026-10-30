@@ -43,6 +43,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
@@ -176,7 +177,7 @@ final class LocalAgentRunnerTest {
     }
 
     @Test
-    void appendsOneCodexReviewRoundAfterRepositoryContextByDefault() {
+    void appendsCodexReviewLoopAfterRepositoryContextByDefault() {
         // given
         EffectiveConfig config = configWithRepository(Map.of());
 
@@ -187,26 +188,149 @@ final class LocalAgentRunnerTest {
         assertThat(prompt)
                 .startsWith("Card task")
                 .containsSubsequence("## Repository Source Context", CodexReviewPrompt.HEADING)
-                .endsWith("could not be fixed safely in this card, as a handoff caveat.");
+                .endsWith("`3600000`.");
         assertThat(reviewSection(prompt))
-                .contains("`repository.codex_review_max_rounds: 1`")
+                .contains("`repository.codex_review_max_rounds: 3`")
+                .contains("`repository.codex_review_extended_max_rounds: 5`")
                 .contains("`repository.codex_review_timeout_ms: 3600000`")
-                .contains("when the number of rounds run reaches 1")
-                .contains("timeout 3600s codex review --base <base-branch> --title")
-                .contains("timeout 3600s codex review --uncommitted --title")
+                .contains("The whole loop, every round included, has 3600 seconds.")
+                .as("a workflow without a Codex model passes no model override to the reviewer")
+                .contains("`timeout <remaining>s codex review - < <brief-file>`")
+                .contains("Add no `--base`, `--commit`, `--uncommitted`, or prompt argument.")
                 .contains("Do not add `--dangerously-bypass-approvals-and-sandbox`")
                 .contains("Review the same diff yourself in this session instead")
-                .contains("Fix a finding only when it is justified and inside the card's scope")
-                .contains("`git commit --fixup` and an autosquash rebase")
-                .contains("Never rewrite the default branch, pushed history")
                 .contains("Skip it for repository-independent work");
     }
 
     @Test
-    void codexReviewLoopUsesConfiguredRoundsAndTimeout() {
+    void codexReviewLoopNeverStopsARunningReviewItself() {
         // given
-        EffectiveConfig config =
-                configWithRepository(Map.of("codex_review_max_rounds", 2, "codex_review_timeout_ms", 90_500));
+        EffectiveConfig config = configWithRepository(Map.of());
+
+        // when
+        String section = reviewSection(promptPassedToCodex(config, "Card task"));
+
+        // then
+        assertThat(section)
+                .contains("A `codex review` run often prints little for many minutes.")
+                .contains("Never cancel, interrupt, or kill a running `codex review`: not with Ctrl-C, not by ending"
+                        + " its session, and not by starting another review, even when it looks stuck, prints nothing"
+                        + " for a long time, or seems slow.")
+                .contains("Only the `timeout` wrapper ends a run early.")
+                .contains("Keep polling until the command exits on its own or the wrapper stops it, and do not act"
+                        + " on findings until then.")
+                .contains("Wait at most 120 seconds per poll, so the stall check (`codex.stall_timeout_ms`) and the"
+                        + " turn's silence timeout never see the wait as silence.")
+                .as("a run the wrapper stopped ends the loop instead of switching to the in-session review")
+                .containsSubsequence(
+                        "`timeout <remaining>s codex review - < <brief-file>`",
+                        "A run the wrapper stopped means the time budget ran out: the loop ends, and the rule below"
+                                + " for an unfinished review applies.",
+                        "If the command is missing, fails to start, cannot authenticate, or is denied by the sandbox,"
+                                + " do not retry it in other forms.",
+                        "Review the same diff yourself in this session instead");
+    }
+
+    @CsvSource({"300000,120", "600000,120", "60000,30", "1000,1", "0,120"})
+    @ParameterizedTest(name = "stall timeout {0} ms -> {1} s per poll")
+    void codexReviewPollWaitFollowsTheStallTimeout(long stallTimeoutMs, long pollWaitSeconds) {
+        // given
+        EffectiveConfig config = configWithCodex(Map.of(), Map.of("stall_timeout_ms", stallTimeoutMs));
+
+        // when
+        String section = reviewSection(promptPassedToCodex(config, "Card task"));
+
+        // then
+        assertThat(section).contains("Wait at most " + pollWaitSeconds + " seconds per poll,");
+    }
+
+    @Test
+    void codexReviewLoopHandsOffWithCaveatsWhenTheTimeBudgetRunsOut() {
+        // given
+        EffectiveConfig config = configWithRepository(Map.of("codex_review_timeout_ms", 900000));
+
+        // when
+        String section = reviewSection(promptPassedToCodex(config, "Card task"));
+
+        // then
+        assertThat(section)
+                .contains("The whole loop, every round included, has 900 seconds. Do not start a round when no"
+                        + " whole second of the budget is left, because `timeout 0s` runs without a limit; that means"
+                        + " the time budget ran out.")
+                .endsWith("When the round limit or the time budget ends the loop, still hand off the normal way in"
+                        + " step 4, with the open findings as caveats. An unfinished review does not block the"
+                        + " handoff. When the time budget ended it, say plainly in the handoff comment and the workpad"
+                        + " that the review stopped because its time budget ran out, and suggest raising"
+                        + " `repository.codex_review_timeout_ms` in the workflow file, which is now `900000`.");
+    }
+
+    @Test
+    void codexReviewLoopNarrowsLaterRoundsAndKeepsAFindingsLedger() {
+        // given
+        EffectiveConfig config = configWithRepository(Map.of());
+
+        // when
+        String section = reviewSection(promptPassedToCodex(config, "Card task"));
+
+        // then
+        assertThat(section)
+                .contains("the diff commands: round 1 reviews `git diff <base-sha> HEAD`, and later rounds add"
+                        + " `git diff <reviewed-sha> HEAD` for the change since the previous round.")
+                .contains("When the candidate is not committed, every round reviews the full `git diff <base-sha>`;"
+                        + " first run `git add -N` on new files so the diff shows them.")
+                .contains("Give each finding an id that never changes (`R1`, `R2`, and so on)")
+                .contains("fixed (name the commit), disagree (with evidence), or declined")
+                .containsSubsequence("`blocker`:", "`should`:", "`nit`:")
+                .contains("Round 1 asks for a review of the full diff.")
+                .contains("Record `git rev-parse HEAD` as this round's reviewed SHA, then pass the brief on stdin")
+                .as("later rounds diff against the commit the previous round reviewed, so they see its fixes")
+                .contains("Later rounds add the ledger and `git diff <reviewed-sha> HEAD`, where `<reviewed-sha>` is"
+                        + " the commit the previous round reviewed, and ask the reviewer to review only that change,"
+                        + " which holds the fixes")
+                .contains("Fix a justified finding inside the card's scope with the smallest change that solves it")
+                .contains("Never accept a finding only to end the loop.")
+                .contains("`git commit --fixup` and an autosquash rebase")
+                .contains("Never rewrite the default branch, pushed history")
+                .contains("Use one reviewer, with no subagents or parallel reviews.");
+    }
+
+    @Test
+    void codexReviewLoopStopsAtTheConfiguredLimitsWithoutTreatingThemAsApproval() {
+        // given
+        EffectiveConfig config = configWithRepository(Map.of());
+
+        // when
+        String section = reviewSection(promptPassedToCodex(config, "Card task"));
+
+        // then
+        assertThat(section)
+                .containsSubsequence(
+                        "Stop when a round returns no `blocker` or `should` finding. Declined nits need no further"
+                                + " round.",
+                        "A round whose fixes only change comments, documentation, or formatting needs no further"
+                                + " round.",
+                        "Otherwise start another round while fewer than 3 rounds have run.",
+                        "After round 3, start another round, up to 5 rounds in total, only while a `blocker` or"
+                                + " `should` finding about security, authentication, permissions, data loss, or"
+                                + " concurrency stays open with evidence.",
+                        "Stop when the time budget runs out.",
+                        "A finding you still dispute after two replies with evidence stays unresolved.",
+                        "It does not block the handoff, and it no longer counts for the stop rules above or"
+                                + " for extra rounds.",
+                        "Reaching the round limit or the end of the time budget is not approval.")
+                .contains("List every `blocker` or `should` finding that is still open as a handoff caveat");
+    }
+
+    @Test
+    void codexReviewLoopUsesConfiguredRoundsAndTimeBudget() {
+        // given
+        EffectiveConfig config = configWithRepository(Map.of(
+                "codex_review_max_rounds",
+                2,
+                "codex_review_extended_max_rounds",
+                2,
+                "codex_review_timeout_ms",
+                90_500));
 
         // when
         String section = reviewSection(promptPassedToCodex(config, "Card task"));
@@ -214,10 +338,60 @@ final class LocalAgentRunnerTest {
         // then
         assertThat(section)
                 .contains("`repository.codex_review_max_rounds: 2`")
+                .contains("`repository.codex_review_extended_max_rounds: 2`")
                 .contains("`repository.codex_review_timeout_ms: 90500`")
-                .contains("when the number of rounds run reaches 2")
-                .as("the timeout command takes whole seconds and rounds up")
-                .contains("timeout 91s codex review --base <base-branch> --title");
+                .as("the budget is shown in whole seconds and rounds up")
+                .contains("has 91 seconds")
+                .contains("Otherwise start another round while fewer than 2 rounds have run.")
+                .contains("Never run more than 2 rounds.")
+                .doesNotContain("After round");
+    }
+
+    @MethodSource("codexReviewerSettings")
+    @ParameterizedTest(name = "{0}")
+    void codexReviewerFollowsTheWorkflowModelUnlessTheReviewKeysNameOne(
+            String name, Map<String, Object> codex, Map<String, Object> repository, String expectedCommand) {
+        // given
+        EffectiveConfig config = configWithCodex(repository, codex);
+
+        // when
+        String section = reviewSection(promptPassedToCodex(config, "Card task"));
+
+        // then
+        assertThat(section).contains("`" + expectedCommand + "`");
+    }
+
+    private static Stream<Arguments> codexReviewerSettings() {
+        Map<String, Object> workflowModel = Map.of("model", "gpt-5.5", "reasoning_effort", "medium");
+        return Stream.of(
+                Arguments.of(
+                        "workflow-model-and-effort",
+                        workflowModel,
+                        Map.of(),
+                        "timeout <remaining>s codex review -c 'model=\"gpt-5.5\"' -c"
+                                + " 'model_reasoning_effort=\"medium\"' - < <brief-file>"),
+                Arguments.of(
+                        "review-model-and-effort",
+                        workflowModel,
+                        Map.of("codex_review_model", "gpt-6", "codex_review_reasoning_effort", "high"),
+                        "timeout <remaining>s codex review -c 'model=\"gpt-6\"' -c 'model_reasoning_effort=\"high\"'"
+                                + " - < <brief-file>"),
+                Arguments.of(
+                        "review-model-with-workflow-effort",
+                        workflowModel,
+                        Map.of("codex_review_model", "gpt-6"),
+                        "timeout <remaining>s codex review -c 'model=\"gpt-6\"' -c"
+                                + " 'model_reasoning_effort=\"medium\"' - < <brief-file>"),
+                Arguments.of(
+                        "blank-review-model-uses-workflow-model",
+                        Map.of("model", "gpt-5.5"),
+                        Map.of("codex_review_model", " "),
+                        "timeout <remaining>s codex review -c 'model=\"gpt-5.5\"' - < <brief-file>"),
+                Arguments.of(
+                        "workflow-model-that-is-not-one-word-is-left-to-codex",
+                        Map.of("model", "my model"),
+                        Map.of(),
+                        "timeout <remaining>s codex review - < <brief-file>"));
     }
 
     @Test
@@ -231,11 +405,11 @@ final class LocalAgentRunnerTest {
 
         // then
         assertThat(section)
-                .contains("timeout 3600s codex --dangerously-bypass-approvals-and-sandbox review --base <base-branch>")
-                .contains("timeout 3600s codex --dangerously-bypass-approvals-and-sandbox review --uncommitted")
+                .contains(
+                        "`timeout <remaining>s codex --dangerously-bypass-approvals-and-sandbox review - < <brief-file>`")
                 .contains("This workflow already runs Codex without its sandbox")
                 .doesNotContain("Do not add `--dangerously-bypass-approvals-and-sandbox`")
-                .doesNotContain("timeout 3600s codex review");
+                .doesNotContain("codex review -");
     }
 
     @Test
@@ -251,7 +425,8 @@ final class LocalAgentRunnerTest {
                 .containsSubsequence(
                         "1. Finish the implementation candidate and commit it locally, unless the card or workflow"
                                 + " asks for a patch or uncommitted changes instead. Do not push yet.",
-                        "2. Run the review loop below.",
+                        "2. Run the review loop below. Do not push, open or update a pull request, or move the card"
+                                + " while it runs.",
                         "3. Run the required local validation once on the reviewed candidate.",
                         "CI-equivalent local checks used when CI is unavailable, cannot run, or does not apply"
                                 + " because the handoff has no pull request.",
@@ -263,7 +438,7 @@ final class LocalAgentRunnerTest {
                 .contains("Record the outcome in the Trello workpad and the visible handoff comment");
         assertThat(section)
                 .containsSubsequence(
-                        "If the final local validation fails and the repair changes code, review that repair",
+                        "If the final local validation fails and the repair changes code, review only that repair",
                         "Do the same when a sync after a rejected push changes the candidate",
                         "before you validate and push again.");
     }
@@ -1224,11 +1399,20 @@ final class LocalAgentRunnerTest {
             Map<String, String> environment,
             Path workflowPath) {
         return new ConfigResolver(name -> Optional.ofNullable(environment.get(name)))
-                .resolve(new WorkflowDefinition(workflowPath, workflowConfig(hooks, agent, repository), ""));
+                .resolve(new WorkflowDefinition(workflowPath, workflowConfig(hooks, agent, repository, Map.of()), ""));
+    }
+
+    private EffectiveConfig configWithCodex(Map<String, Object> repository, Map<String, Object> codex) {
+        return new ConfigResolver(ignored -> Optional.empty())
+                .resolve(new WorkflowDefinition(
+                        tempDir.resolve("WORKFLOW.md"), workflowConfig(Map.of(), Map.of(), repository, codex), ""));
     }
 
     private Map<String, Object> workflowConfig(
-            Map<String, String> hooks, Map<String, Object> agent, Map<String, Object> repository) {
+            Map<String, String> hooks,
+            Map<String, Object> agent,
+            Map<String, Object> repository,
+            Map<String, Object> codex) {
         return Map.of(
                 "tracker",
                 Map.of(
@@ -1251,7 +1435,9 @@ final class LocalAgentRunnerTest {
                 "hooks",
                 hooks,
                 "repository",
-                repository);
+                repository,
+                "codex",
+                codex);
     }
 
     private static Stream<Arguments> missingOrBlankUrlDefaults() {

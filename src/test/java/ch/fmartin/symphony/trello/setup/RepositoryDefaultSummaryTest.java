@@ -6,6 +6,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 final class RepositoryDefaultSummaryTest {
@@ -14,7 +15,7 @@ final class RepositoryDefaultSummaryTest {
         // given
         var output = new ByteArrayOutputStream();
         TrelloBoardSetup.RepositoryDefaults defaults =
-                TrelloBoardSetup.RepositoryDefaults.preserved(null, "$SYNTHETIC_REPOSITORY_PATH", null, null);
+                TrelloBoardSetup.RepositoryDefaults.preserved(null, "$SYNTHETIC_REPOSITORY_PATH", Map.of());
 
         // when
         RepositoryDefaultSummary.printDirect(

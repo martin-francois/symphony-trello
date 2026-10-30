@@ -18,9 +18,9 @@ import org.junit.jupiter.api.Test;
 
 final class LocalSetupTutorialOfferTest extends LocalSetupFixtureSupport {
     /// Interactive setup asks for a repository URL, the Codex model, the reasoning effort, the
-    /// per-board concurrency, extra workspace paths, danger-full-access, and follow-up cards before it finishes.
-    /// Blank answers keep each default.
-    private static final String DEFAULT_SETUP_ANSWERS = "\n".repeat(7);
+    /// per-board concurrency, extra workspace paths, danger-full-access, follow-up cards, and the review
+    /// loop before it finishes. Blank answers keep each default.
+    private static final String DEFAULT_SETUP_ANSWERS = "\n".repeat(8);
     private static final String BOARD_NAME = "Tutorial Offer Queue";
     private static final String TUTORIAL_POINTER = "To practice the card flow on a temporary Trello board first, run:";
 
@@ -75,7 +75,7 @@ final class LocalSetupTutorialOfferTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 setup,
-                "\n\ny\nq\n",
+                "\n\n\ny\nq\n",
                 "--endpoint",
                 statefulTrello.endpoint().toString(),
                 "--key",

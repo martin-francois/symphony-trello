@@ -4,6 +4,7 @@ import static ch.fmartin.symphony.trello.TextCharacterMatchers.ISO_CONTROL_CHARA
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
 
 import ch.fmartin.symphony.trello.CliExitCodes;
+import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.GitHubIntegration;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
 import ch.fmartin.symphony.trello.setup.TrelloCredentialResolver.CredentialSelection;
@@ -179,6 +180,7 @@ public final class LocalSetup {
                         out.println("Keeping connected Trello boards.");
                         for (ConnectedBoard board : manifest.boards()) {
                             configureFollowUpCards(options, board.workflowPath(), board.boardName(), terminal);
+                            configureCodexReview(options, board.workflowPath(), board.boardName(), terminal);
                         }
                         startExistingBoards(options, manifest, out);
                         TutorialMention tutorialMention = options.nonInteractive()
@@ -244,6 +246,7 @@ public final class LocalSetup {
             options = configureCodexAccess(options, terminal);
             applyCodexAccess(options, result.workflowPath());
             configureFollowUpCards(options, result.workflowPath(), result.boardName(), terminal);
+            configureCodexReview(options, result.workflowPath(), result.boardName(), terminal);
             ConnectedBoard connectedBoard = ConnectedBoard.from(result, options, githubIntegration);
             List<ConnectedBoard> replacedBoards = manifest.boardsReplacedBy(connectedBoard);
             stopReplacedBoards(options, replacedBoards);
@@ -753,6 +756,36 @@ public final class LocalSetup {
         }
     }
 
+    /// Asks whether Codex reviews changes before handoff. Enter keeps the current setting, Yes
+    /// turns an off loop back on with the default round limit, and No writes `0`; see ADR 0121.
+    private void configureCodexReview(Options options, Path workflowPath, String boardName, Terminal terminal)
+            throws IOException {
+        if (options.nonInteractive()) {
+            return;
+        }
+        Optional<Integer> configured = workflowConfig.codexReviewMaxRounds(workflowPath);
+        boolean enabled = configured.map(value -> value > 0).orElse(true);
+        int rounds = configured.filter(value -> value > 0).orElse(ConfigDefaults.DEFAULT_CODEX_REVIEW_MAX_ROUNDS);
+        PrintStream out = borrowedOut(terminal); // NOPMD - Terminal owns the stream.
+        out.println();
+        out.println("Review before handoff for " + DisplayNames.quotedName(boardName));
+        out.println();
+        out.println("Before Codex hands a change to you, a Codex review checks it and Codex fixes what"
+                + " the review finds, for up to " + rounds + (rounds == 1 ? " round" : " rounds")
+                + ", with extra rounds while a serious finding stays open. Cards take longer and use more Codex"
+                + " time.");
+        out.println();
+        String answer =
+                terminal.readLine("Review changes before handing them to you? " + (enabled ? "[Y/n] " : "[y/N] "));
+        if (answer == null || answer.isBlank()) {
+            return;
+        }
+        boolean yes = answer.strip().equalsIgnoreCase("y") || answer.strip().equalsIgnoreCase("yes");
+        if (yes != enabled || configured.isEmpty()) {
+            workflowConfig.updateCodexReviewMaxRounds(workflowPath, yes ? rounds : 0);
+        }
+    }
+
     private Options configureCodexAccess(Options options, Terminal terminal) throws IOException {
         List<Path> allowedPaths = workspaceAccessFlow.resolve(options, terminal);
         boolean dangerFullAccess = codexSandboxFlow.resolve(options, terminal);
@@ -1000,6 +1033,7 @@ public final class LocalSetup {
                 options.withCodexAccess(updated.additionalWritableRoots(), updated.dangerFullAccess()),
                 board.workflowPath());
         configureFollowUpCards(options, board.workflowPath(), board.boardName(), terminal);
+        configureCodexReview(options, board.workflowPath(), board.boardName(), terminal);
         connectedBoards(options).save(manifest.withBoard(updated));
 
         out.println();
@@ -1254,6 +1288,7 @@ public final class LocalSetup {
                 options.withCodexAccess(access.additionalWritableRoots(), access.dangerFullAccess()),
                 board.workflowPath());
         configureFollowUpCards(options, board.workflowPath(), board.boardName(), terminal);
+        configureCodexReview(options, board.workflowPath(), board.boardName(), terminal);
         var upgraded = new ConnectedBoard(
                 board.boardId(),
                 board.boardKey(),
@@ -1686,6 +1721,7 @@ public final class LocalSetup {
             boolean maxAgentsExplicit,
             Optional<String> codexModel,
             Optional<String> codexReasoningEffort,
+            CodexReviewerOverrides codexReviewer,
             Optional<CodexModelSelectionDefaults> codexModelCatalog,
             Optional<TrelloBoardSetup.CodexModelDefaults> codexModelDefaults,
             Path envPath,
@@ -1763,6 +1799,7 @@ public final class LocalSetup {
                     request.maxAgentsExplicit(),
                     request.codexModel(),
                     request.codexReasoningEffort(),
+                    request.codexReviewer(),
                     Optional.empty(),
                     Optional.empty(),
                     envPath,
@@ -1823,6 +1860,7 @@ public final class LocalSetup {
                     maxAgentsExplicit,
                     codexModel,
                     codexReasoningEffort,
+                    codexReviewer,
                     codexModelCatalog,
                     codexModelDefaults,
                     envPath,
@@ -1867,6 +1905,7 @@ public final class LocalSetup {
                     maxAgentsExplicit,
                     codexModel,
                     codexReasoningEffort,
+                    codexReviewer,
                     codexModelCatalog,
                     codexModelDefaults,
                     envPath,
@@ -1943,7 +1982,8 @@ public final class LocalSetup {
                     || !blank(blockedState)
                     || workflowPathExplicit
                     || workspaceRootExplicit
-                    || serverPort.isPresent();
+                    || serverPort.isPresent()
+                    || codexReviewer.present();
         }
 
         private boolean hasConfigureGithubWorkflowUpdateRequest() {
@@ -1990,6 +2030,7 @@ public final class LocalSetup {
                     maxAgentsExplicit,
                     codexModel,
                     codexReasoningEffort,
+                    codexReviewer,
                     Optional.of(catalog),
                     codexModelDefaults,
                     envPath,
@@ -2034,6 +2075,7 @@ public final class LocalSetup {
                     maxAgentsExplicit,
                     codexModel.or(selected::modelOverride),
                     codexReasoningEffort.or(selected::reasoningEffortOverride),
+                    codexReviewer,
                     codexModelCatalog,
                     Optional.of(selected.defaults()),
                     envPath,

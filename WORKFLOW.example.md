@@ -25,8 +25,15 @@ workspace:
 repository:
   default_url: null
   default_path: null
-  codex_review_max_rounds: 1
+  # Codex reviews repository changes before handoff. codex_review_max_rounds: 0 turns the review off.
+  codex_review_max_rounds: 3
   codex_review_timeout_ms: 3600000
+  # Hard round limit while a finding about security, authentication, permissions, data loss, or concurrency stays open.
+  # Unset, it is 5 or codex_review_max_rounds if higher.
+  # codex_review_extended_max_rounds: 5
+  # Reviewer model and effort. Unset, the review uses codex.model and codex.reasoning_effort.
+  # codex_review_model: gpt-5.5
+  # codex_review_reasoning_effort: high
 github:
   pull_request_mode: create
   no_pr_label: No PR
@@ -460,7 +467,7 @@ or a human explicitly changes the requirement.
 
 Workflow `repository.codex_review_max_rounds` sets how many Codex review rounds run on
 repository-changing work before handoff; `0` turns the loop off. `repository.codex_review_timeout_ms`
-limits each separate `codex review` run. While the round limit is above `0`, Symphony appends a final
+is the time budget for the whole loop. While the round limit is above `0`, Symphony appends a final
 runtime section titled `Codex Review Before Handoff` to this prompt. Follow that section after the
 implementation candidate is committed and before the final local validation, any push, the pull
 request or branch-only handoff, and the move to "Human Review". When that runtime section is absent,
