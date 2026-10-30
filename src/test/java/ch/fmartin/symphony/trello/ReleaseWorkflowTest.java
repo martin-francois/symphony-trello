@@ -145,6 +145,7 @@ final class ReleaseWorkflowTest {
         Path codeQlWorkflow = Path.of(".github/workflows/codeql.yml");
         Path codeRabbitConfig = Path.of(".coderabbit.yaml");
         Path codeRabbitGuard = Path.of(".github/workflows/coderabbit-config-guard.yml");
+        Path codeRabbitGuardScript = Path.of("scripts/coderabbit-config-guard.cjs");
 
         // when
         String releaseSource = Files.readString(releaseConfig);
@@ -154,6 +155,7 @@ final class ReleaseWorkflowTest {
         String codeQlSource = Files.readString(codeQlWorkflow);
         String codeRabbitSource = Files.readString(codeRabbitConfig);
         String codeRabbitGuardSource = Files.readString(codeRabbitGuard);
+        String codeRabbitGuardScriptSource = Files.readString(codeRabbitGuardScript);
 
         // then
         assertThat(releaseSource)
@@ -194,8 +196,9 @@ final class ReleaseWorkflowTest {
                 .doesNotContain("startsWith(github.head_ref, 'release-please--branches--')");
         assertThat(codeQlSource).contains("pull_request:");
         assertThat(codeRabbitGuardSource)
-                .contains("pull_request_target:", "Only martinfrancois may change .coderabbit.yaml.")
+                .contains("pull_request_target:", "require(\"./scripts/coderabbit-config-guard.cjs\")")
                 .doesNotContain("paths:", "paths-ignore:", "if:", "release-please--branches--");
+        assertThat(codeRabbitGuardScriptSource).contains("Only martinfrancois may change .coderabbit.yaml.");
         assertThat(codeRabbitSource)
                 .contains(
                         "commit_status: false",

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import test from "node:test";
 import {parse} from "yaml";
+import {loadWorkflowScript} from "./test-support/workflow-script.ts";
 
 interface PreMergeCheck {
   readonly mode?: string;
@@ -154,14 +155,14 @@ interface GuardWorkflow {
     readonly "coderabbit-config-guard": {
       readonly if?: string;
       readonly permissions: {readonly "pull-requests": string};
-      readonly steps: readonly {readonly uses: string; readonly with: {readonly script: string}}[];
+      readonly steps: readonly {readonly uses: string; readonly with: Readonly<Record<string, unknown>>}[];
     };
   };
 }
 
 const GUARD = parse(readFileSync(new URL("../.github/workflows/coderabbit-config-guard.yml", import.meta.url), "utf8")) as GuardWorkflow;
 
-test("the configuration guard executes trusted base code without a checkout", () => {
+test("the configuration guard executes trusted base code from a sparse base-commit checkout", () => {
   // when
   const job = GUARD.jobs["coderabbit-config-guard"];
 
@@ -172,8 +173,15 @@ test("the configuration guard executes trusted base code without a checkout", ()
   assert.equal(job.if, undefined);
   assert.deepEqual(GUARD.permissions, {});
   assert.deepEqual(job.permissions, {"pull-requests": "read"});
-  assert.equal(job.steps.length, 1);
-  assert.ok(job.steps[0]?.uses.startsWith("actions/github-script@"));
+  assert.equal(job.steps.length, 2);
+  assert.ok(job.steps[0]?.uses.startsWith("actions/checkout@"));
+  assert.deepEqual(job.steps[0]?.with, {
+    "persist-credentials": false,
+    ref: "${{ github.sha }}",
+    "sparse-checkout": "scripts/coderabbit-config-guard.cjs",
+    "sparse-checkout-cone-mode": false,
+  });
+  assert.ok(job.steps[1]?.uses.startsWith("actions/github-script@"));
 });
 
 for (const scenario of [
@@ -188,13 +196,12 @@ for (const scenario of [
   test(`configuration guard: ${scenario.name}`, async () => {
     // given
     const failures: string[] = [];
-    const script = GUARD.jobs["coderabbit-config-guard"].steps[0]?.with.script ?? "";
-    const run = new Function("context", "github", "core", `return (async () => {${script}})();`);
+    const run = loadWorkflowScript("coderabbit-config-guard.yml", "Restrict CodeRabbit configuration changes to the owner");
     const context = {repo: {owner: "martin-francois", repo: "symphony-trello"}, payload: {pull_request: {number: 1, user: {login: scenario.author}}}};
     const github = {rest: {pulls: {listFiles: "listFiles"}}, paginate: async () => scenario.files};
 
     // when
-    await run(context, github, {setFailed: (message: string) => failures.push(message)});
+    await run({context, github, core: {setFailed: (message: string) => failures.push(message)}});
 
     // then
     const expectedFailure = "message" in scenario ? scenario.message : "Only martinfrancois may change .coderabbit.yaml.";
