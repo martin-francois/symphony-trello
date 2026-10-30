@@ -4229,6 +4229,11 @@ that a second formatting pass leaves the source unchanged.
   preservation, LF and CRLF input, confirm, decline, batch, dry-run, and non-interactive runs,
   backup, atomic replacement, validation, rollback, permission preservation, link and path-set
   limits, major-downgrade rejection, provenance recording by setup, and both installer integrations.
+  Setup CLI tests cover reserved provenance-path rejection before side effects for normalized
+  paths, symbolic-link aliases with or without a target, and existing hard links, and they accept
+  valid custom manifests. Store and migration tests preserve collided manifest bytes and workflows
+  while retaining forward-compatible provenance fields. Setup check, port repair, and card
+  commands still work beside an older collided manifest.
   Installer process tests cover unreadable installed versions, tracked and untracked build inputs,
   ignored configuration, retained non-input files, app-directory builds, failed help probes, and
   rejected migrations before restart. They also cover BOM-prefixed root POMs, clean and modified
@@ -4973,7 +4978,11 @@ Version provenance:
   `setup-local configure-github`, `new-board`, and `import-board`), it MUST record the exact
   generated body, the Symphony version that generated it, and the generation inputs in
   `generated-workflows.json` beside the connected-board manifest. A failure to record MUST be
-  reported as a warning and MUST NOT undo the finished setup.
+  reported as a warning and MUST NOT undo the finished setup. Before any requests, worker changes,
+  or file writes, setup MUST reject a manifest path that resolves to the same file as this store
+  and name a valid manifest choice. This covers normalized paths, symbolic-link aliases whose
+  target may not exist yet, and existing hard links. This validation MUST NOT prevent read-only
+  diagnostics or recovery of an older collided manifest.
 - The store keeps one record per workflow path: the latest body that Symphony generated, migrated,
   confirmed as already current, or recorded with `--mark-migrated`. Records remain until that
   workflow is regenerated, migrated, or marked again. The store is local user data, like the
@@ -4986,6 +4995,12 @@ Version provenance:
   records written by a newer version. A newer version MUST give missing input fields defaults that
   render the older body. Removing or renaming a stored field is a breaking change; a future
   incompatible format MUST use a new format version and define its migration contract.
+- A top-level `boards` member identifies connected-board data, not provenance. The store MUST
+  refuse to read or update that file as provenance, including a mixed object already containing
+  provenance fields. Migration MUST report the configuration problem before changing the file or
+  any workflow; recovery MUST preserve the original data and separate the two file roles explicitly.
+  Commands that only read provenance to fill in defaults, such as card commands, MUST treat that
+  file as missing provenance.
 - A workflow without a record is unversioned. Its inputs MAY be read from its current metadata in
   the shape setup writes, but the result MUST only be used to recognize a body that already
   contains the target generated body or to produce a manual-migration preview. Symphony MUST NOT

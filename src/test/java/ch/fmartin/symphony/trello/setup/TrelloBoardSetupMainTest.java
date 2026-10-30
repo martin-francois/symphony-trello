@@ -6,6 +6,7 @@ import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_BYTE_ORDE
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.boardJson;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.createdListJson;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.listsJson;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.memberJson;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.respond;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.trelloList;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.workspaceJson;
@@ -14,6 +15,7 @@ import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.HTTPS;
 import static ch.fmartin.symphony.trello.testsupport.TestWorkflows.CODEX_REASONING_EFFORT_KEY_LINE;
 import static ch.fmartin.symphony.trello.testsupport.WorkflowAssertions.assertThatWorkflow;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.abort;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -23,6 +25,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
@@ -76,6 +79,10 @@ import org.mockito.ArgumentCaptor;
 
 final class TrelloBoardSetupMainTest {
     private static final String PRIVATE_WORKER_PID_FILE = "/home/private-user/.local/state/symphony-trello/board.pid";
+    private static final List<String> MANIFEST_SETUP_COMMANDS = List.of("new-board", "import-board", "setup-local");
+    private static final String RESERVED_MANIFEST = "{ \"boards\" : [] }\r\n";
+    private static final String KEPT_WORKFLOW = "# keep workflow\r\n";
+    private static final String KEPT_ENV = "UNRELATED=keep\r\n";
     private static final String CONFIG_DIR_PROPERTY = "symphony.trello.config.dir";
     private static final String SHELL_PROPERTY = "symphony.trello.shell";
     private static final String CLI_COMMAND_PROPERTY = "symphony.trello.command";
@@ -2822,6 +2829,216 @@ final class TrelloBoardSetupMainTest {
         verify(workerManager, times(2)).canStopRunningWorker(any(LocalWorkerPaths.class), eq(previousBoard));
         verify(workerManager).stop(any(LocalWorkerPaths.class), eq(previousBoard), any(PrintStream.class));
     }
+
+    @MethodSource("setupCommandsWithNewReservedManifestPaths")
+    @ParameterizedTest(name = "{0}: {1}")
+    void setupRejectsANewReservedManifestPathBeforeRequestsOrWrites(String command, NewReservedManifest collision)
+            throws Exception {
+        // given
+        Path reserved = tempDir.resolve(GeneratedWorkflowStore.FILE_NAME);
+        Path manifest = newReservedManifest(collision, reserved);
+        boolean manifestIsSymbolicLink = Files.isSymbolicLink(manifest);
+        ReservedManifestFixture fixture = reservedManifestFixture();
+
+        // when
+        CliRunResult result = runReservedManifestSetup(fixture, command, manifest);
+
+        // then
+        assertRejectedBeforeRequestsOrWrites(result, fixture);
+        assertThat(reserved).doesNotExist();
+        assertThat(Files.isSymbolicLink(manifest))
+                .as("setup must neither replace a symbolic-link manifest alias nor create one")
+                .isEqualTo(manifestIsSymbolicLink);
+    }
+
+    @MethodSource("setupCommandsWithExistingReservedManifests")
+    @ParameterizedTest(name = "{0}: {1}")
+    void setupRejectsAnExistingReservedManifestWithoutChangingIt(String command, ExistingReservedManifest collision)
+            throws Exception {
+        // given
+        Path reserved = Files.writeString(tempDir.resolve(GeneratedWorkflowStore.FILE_NAME), RESERVED_MANIFEST);
+        Path manifest = existingReservedManifest(collision, reserved);
+        boolean manifestIsSymbolicLink = Files.isSymbolicLink(manifest);
+        ReservedManifestFixture fixture = reservedManifestFixture();
+
+        // when
+        CliRunResult result = runReservedManifestSetup(fixture, command, manifest);
+
+        // then
+        assertRejectedBeforeRequestsOrWrites(result, fixture);
+        assertThat(reserved).hasBinaryContent(RESERVED_MANIFEST.getBytes(StandardCharsets.UTF_8));
+        assertThat(Files.isSameFile(manifest, reserved))
+                .as("the manifest alias must still refer to the reserved file")
+                .isTrue();
+        assertThat(Files.isSymbolicLink(manifest))
+                .as("setup must not replace a symbolic-link manifest alias")
+                .isEqualTo(manifestIsSymbolicLink);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"new-board", "import-board"})
+    void setupAllowsCustomManifestAlongsideProvenance(String command) throws Exception {
+        // given
+        Path workflow = tempDir.resolve("custom-manifest.WORKFLOW.md");
+        Path manifest = tempDir.resolve("my-connected-boards.json");
+        Path env = tempDir.resolve(".env.custom-manifest");
+
+        // when
+        CliRunResult result = runCliWithNoBusyPorts(
+                manifestSetupCommand(command, workflow, env, manifest).build());
+
+        // then
+        result.assertSuccess().stdoutDoesNotContain("Could not record");
+        assertThat(new ConnectedBoardRepository(manifest).load().boards())
+                .singleElement()
+                .extracting(ConnectedBoard::workflowPath)
+                .isEqualTo(workflow);
+        assertThat(GeneratedWorkflowStore.inConfigDir(tempDir).records())
+                .singleElement()
+                .extracting(GeneratedWorkflowRecord::workflowPath)
+                .isEqualTo(workflow);
+    }
+
+    private static List<Arguments> setupCommandsWithNewReservedManifestPaths() {
+        return manifestSetupCommandsWith(NewReservedManifest.values());
+    }
+
+    private static List<Arguments> setupCommandsWithExistingReservedManifests() {
+        return manifestSetupCommandsWith(ExistingReservedManifest.values());
+    }
+
+    private static List<Arguments> manifestSetupCommandsWith(Enum<?>... collisions) {
+        List<Arguments> arguments = new ArrayList<>();
+        for (String command : MANIFEST_SETUP_COMMANDS) {
+            for (Enum<?> collision : collisions) {
+                arguments.add(Arguments.of(command, collision));
+            }
+        }
+        return List.copyOf(arguments);
+    }
+
+    private Path newReservedManifest(NewReservedManifest collision, Path reserved) throws IOException {
+        return switch (collision) {
+            case RESERVED_NAME -> reserved;
+            case NORMALIZED ->
+                Files.createDirectory(tempDir.resolve("nested"))
+                        .resolve("..")
+                        .resolve(GeneratedWorkflowStore.FILE_NAME);
+            case DANGLING_SYMLINK -> symbolicLinkAlias(reserved);
+            case DIRECTORY_SYMLINK_PARENT -> {
+                Path targetDirectory = Files.createDirectories(tempDir.resolve("nested/deep"));
+                createSymbolicLinkOrSkip(tempDir.resolve("redirect"), targetDirectory);
+                yield symbolicLinkAlias(Path.of("redirect/../../" + GeneratedWorkflowStore.FILE_NAME));
+            }
+        };
+    }
+
+    private Path existingReservedManifest(ExistingReservedManifest collision, Path reserved) throws IOException {
+        return switch (collision) {
+            case RESERVED_NAME -> reserved;
+            case SYMLINK -> symbolicLinkAlias(reserved);
+            case HARD_LINK -> {
+                Path alias = tempDir.resolve("manifest-hard-link.json");
+                try {
+                    Files.createLink(alias, reserved);
+                } catch (IOException | UnsupportedOperationException e) {
+                    abort("hard links are unavailable");
+                }
+                yield alias;
+            }
+        };
+    }
+
+    private Path symbolicLinkAlias(Path target) throws IOException {
+        Path alias = tempDir.resolve("manifest-alias.json");
+        createSymbolicLinkOrSkip(alias, target);
+        return alias;
+    }
+
+    private ReservedManifestFixture reservedManifestFixture() throws IOException {
+        Path workflow = Files.writeString(tempDir.resolve("collision.WORKFLOW.md"), KEPT_WORKFLOW);
+        Path env = Files.writeString(tempDir.resolve(".env.collision"), KEPT_ENV);
+        var memberLookups = new AtomicInteger();
+        trello.on("/1/members/me", exchange -> {
+            memberLookups.incrementAndGet();
+            respond(exchange, memberJson("member-1", "synthetic", "Synthetic Member"));
+        });
+        return new ReservedManifestFixture(workflow, env, memberLookups, mock());
+    }
+
+    private CliRunResult runReservedManifestSetup(ReservedManifestFixture fixture, String command, Path manifest) {
+        var boardSetup = new TrelloBoardSetup(
+                        new ObjectMapper(),
+                        () -> CodexModelSelectionDefaults.of(TrelloBoardSetup.CodexModelDefaults.fallback()))
+                .withPortProbe(ignoredPort -> false);
+        return runCli(
+                boardSetup,
+                fixture.workerManager(),
+                manifestSetupCommand(command, fixture.workflow(), fixture.env(), manifest)
+                        .build());
+    }
+
+    private void assertRejectedBeforeRequestsOrWrites(CliRunResult result, ReservedManifestFixture fixture) {
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        GeneratedWorkflowStore.FILE_NAME,
+                        "reserved",
+                        ConnectedBoardManifest.FILE_NAME)
+                .stderrDoesNotContain("Troubleshooting report written")
+                .stdoutDoesNotContain("Created Trello board", "Imported Trello board", "Wrote workflow");
+        assertThat(createdBoardName).hasValue(null);
+        assertThat(createdLists).isEmpty();
+        assertThat(boardInfoLookups).hasValue(0);
+        assertThat(workspaceLookups).hasValue(0);
+        assertThat(fixture.memberLookups()).hasValue(0);
+        verifyNoInteractions(fixture.workerManager());
+        assertThat(fixture.workflow()).hasBinaryContent(KEPT_WORKFLOW.getBytes(StandardCharsets.UTF_8));
+        assertThat(fixture.env()).hasBinaryContent(KEPT_ENV.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private SetupCommandBuilder manifestSetupCommand(String command, Path workflow, Path env, Path manifest) {
+        SetupCommandBuilder builder = SetupCommandBuilder.command(command)
+                .endpoint(endpoint())
+                .credentials("key", "token")
+                .workflow(workflow)
+                .env(env)
+                .manifest(manifest)
+                .option("--repository-url", HTTPS)
+                .flag("--force");
+        if ("import-board".equals(command)) {
+            builder.board("input").active("Queue for Codex").terminal("Released");
+        } else if ("new-board".equals(command)) {
+            builder.name("Manifest Collision Queue");
+        }
+        if ("setup-local".equals(command)) {
+            builder.option("--board-name", "Manifest Collision Queue");
+            builder.option("--config-dir", tempDir.toString())
+                    .option("--workspace-root", tempDir.resolve("workspaces").toString())
+                    .flag("--non-interactive")
+                    .flag("--no-start")
+                    .flag("--no-github");
+        }
+        return builder;
+    }
+
+    /// The manifest path names the reserved file, which does not exist yet.
+    enum NewReservedManifest {
+        RESERVED_NAME,
+        NORMALIZED,
+        DANGLING_SYMLINK,
+        DIRECTORY_SYMLINK_PARENT
+    }
+
+    /// The manifest path is, or links to, an existing connected-board manifest at the reserved name.
+    enum ExistingReservedManifest {
+        RESERVED_NAME,
+        SYMLINK,
+        HARD_LINK
+    }
+
+    private record ReservedManifestFixture(
+            Path workflow, Path env, AtomicInteger memberLookups, LocalWorkerManager workerManager) {}
 
     @Test
     void newBoardPreflightsConnectedBoardManifestBeforeCreatingTrelloBoard() throws Exception {
@@ -7535,7 +7752,7 @@ final class TrelloBoardSetupMainTest {
         int exitCode = TrelloBoardSetupMain.run(
                 args,
                 new TrelloBoardSetupService(setup, workerManager, Map.of()),
-                new LocalSetup(setup, new ProcessCommandRunner()),
+                new LocalSetup(setup, new ProcessCommandRunner(), Map.of(), new WorkflowConfigEditor(), workerManager),
                 workerManager,
                 new PrintStream(stdout, true, StandardCharsets.UTF_8),
                 new PrintStream(stderr, true, StandardCharsets.UTF_8));

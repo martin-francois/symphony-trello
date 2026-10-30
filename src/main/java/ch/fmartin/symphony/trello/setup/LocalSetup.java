@@ -1815,16 +1815,15 @@ public final class LocalSetup {
         private static void validateResolvedSetupPaths(
                 Path configDir, Path manifest, boolean manifestPathExplicit, LocalSetupRequest.Action action) {
             CliInputValidation.rejectExistingNonDirectoryPath("--config-dir", configDir);
-            if (!manifestPathExplicit) {
-                return;
-            }
-            // repair-port operates on the existing manifest like the lifecycle commands, so
-            // corrupt manifest content is an expected setup_manifest_unavailable error from the
-            // strict load, not an invalid --manifest argument.
-            if (action == LocalSetupRequest.Action.CHECK || action == LocalSetupRequest.Action.REPAIR_PORT) {
+            if (manifestPathExplicit) {
                 ConnectedBoardRepository.validateManifestPathForCheck(manifest);
-            } else {
-                ConnectedBoardRepository.validateManifestPathForSetup(manifest);
+            }
+            // check and repair-port retain access to existing collided manifests for recovery.
+            if (action != LocalSetupRequest.Action.CHECK && action != LocalSetupRequest.Action.REPAIR_PORT) {
+                GeneratedWorkflowStore.validateManifestPath(manifest);
+                if (manifestPathExplicit) {
+                    ConnectedBoardRepository.validateManifestPathForSetup(manifest);
+                }
             }
         }
 

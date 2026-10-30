@@ -298,8 +298,9 @@ final class BoardCardCommands {
                                     .records(),
                             board.workflowPath())
                     .map(GeneratedWorkflowRecord::inputs);
-        } catch (IOException e) {
-            // Without a readable record the roles fall back to the workflow's own settings.
+        } catch (IOException | TrelloBoardSetupException e) {
+            // Without a readable record the roles fall back to the workflow's own settings. A store
+            // that holds connected-board data from an older setup is unreadable too; migration reports it.
             return Optional.empty();
         }
     }

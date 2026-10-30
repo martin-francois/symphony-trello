@@ -118,6 +118,9 @@ final class WorkflowBodyMigration {
             GeneratedWorkflowStore store, WorkflowMigrationReporter report) {
         try {
             return store.records();
+        } catch (TrelloBoardSetupException e) {
+            // A file-role collision is an actionable configuration error, not missing provenance.
+            throw e;
         } catch (IOException | RuntimeException e) {
             // Without readable provenance every workflow falls back to the manual path, which never
             // writes a workflow, so the check can still report safely.

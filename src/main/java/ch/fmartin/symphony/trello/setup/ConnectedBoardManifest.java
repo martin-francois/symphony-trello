@@ -7,6 +7,8 @@ import java.util.stream.Stream;
 
 record ConnectedBoardManifest(List<ConnectedBoard> boards) {
     static final String FILE_NAME = "connected-boards.json";
+    /// The top-level member that holds the rows; its presence marks a file as connected-board data.
+    static final String BOARDS_FIELD = "boards";
 
     ConnectedBoardManifest {
         boards = boards == null ? List.of() : List.copyOf(boards);

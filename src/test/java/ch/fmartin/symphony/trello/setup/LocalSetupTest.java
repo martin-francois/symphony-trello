@@ -5696,6 +5696,33 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void checkStillReadsAnOlderManifestAtTheReservedProvenanceName() throws Exception {
+        // given
+        Path collided = Files.writeString(tempDir.resolve(GeneratedWorkflowStore.FILE_NAME), "{\"boards\":[]}");
+
+        // when
+        SetupRunResult result = runSetup("check", "--endpoint", endpoint(), "--manifest", collided.toString());
+
+        // then
+        result.assertSuccess().stdoutContains("No Trello boards connected to Symphony");
+    }
+
+    @Test
+    void repairPortStillReadsAnOlderManifestAtTheReservedProvenanceName() throws Exception {
+        // given
+        Path collided = Files.writeString(tempDir.resolve(GeneratedWorkflowStore.FILE_NAME), "{\"boards\":[]}");
+
+        // when
+        SetupRunResult result =
+                runSetup("repair-port", "--board", "anything", "--non-interactive", "--manifest", collided.toString());
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_repair_board_not_found", "No Trello boards are connected to Symphony");
+    }
+
+    @Test
     void repairPortAvoidsPortsReservedByLocalWorkflowFiles() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.repair-avoid.md");

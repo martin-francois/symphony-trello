@@ -105,6 +105,23 @@ final class BoardCardCommandsTest {
     }
 
     @Test
+    void listFallsBackToWorkflowRolesWhenTheProvenanceStoreHoldsConnectedBoards() throws Exception {
+        // given
+        Path configDir = connectBoard(DEFAULT_TRELLO_TOOLS);
+        // An older setup that used the reserved name as its manifest left connected-board data there.
+        Files.copy(
+                configDir.resolve(ConnectedBoardManifest.FILE_NAME),
+                configDir.resolve(GeneratedWorkflowStore.FILE_NAME));
+
+        // when
+        CliRunResult result = runCard(configDir, "list", "--list", "Human Review");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("List \"Human Review\"  roles: human-review  move here: yes  create here: yes");
+    }
+
+    @Test
     void listNamesACardWithoutShortLinkByItsId() throws Exception {
         // given
         String cardId = "SYNTH0000000000000000201";

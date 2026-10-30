@@ -1078,6 +1078,24 @@ unchanged, and writes no preview files. It still records `CURRENT`
 workflows in `generated-workflows.json`, so later checks compare against the prompt they already
 have.
 
+`generated-workflows.json` is reserved for provenance. Use `connected-boards.json` or another
+filename for `--manifest`; setup also rejects symbolic links to the reserved file, even before
+the target exists, and existing hard-link aliases.
+If an older setup used the reserved name, migration stops instead of adding provenance fields to
+that connected-board file. To recover:
+
+1. Stop the affected workers and back up the collided JSON file and its workflows before editing.
+2. Copy the connected-board data into a separate manifest, normally `connected-boards.json`. Do not
+   overwrite another manifest. If the collided file already has `formatVersion` or `workflows`, keep
+   those fields in the backup and include only the `boards` object member in the recovered manifest.
+3. Move the original collided file to a backup name outside `generated-workflows.json`. Keep the
+   backup until the recovered setup and workflows have been verified.
+4. Run `symphony-trello setup-local check --config-dir /path/to/config --manifest /path/to/config/connected-boards.json`
+   against the recovered manifest. Read-only checks can also inspect the original reserved path.
+5. Run `symphony-trello migrate-workflows --config-dir /path/to/config --workflow /path/to/WORKFLOW.my-board.md --dry-run`
+   for each affected workflow. Review the result, then rerun without `--dry-run`. Current bodies get
+   fresh provenance; follow the manual migration instructions above for other bodies.
+
 Downgrading to an older release of the same major version runs the same check in reverse. Symphony
 says that the workflow was made for a newer version. If you keep the newer prompt, it warns that the
 prompt may mention features the older version does not support, which can cause unexpected
