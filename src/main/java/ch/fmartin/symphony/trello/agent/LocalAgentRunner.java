@@ -183,8 +183,7 @@ public class LocalAgentRunner implements AgentRunner {
                 repositorySources.select(request.card(), request.config().repository()),
                 request.config().repository());
         Optional<String> codexReviewContext = CodexReviewPrompt.render(
-                request.config().repository().codexReview(),
-                request.config().codex().bypassesSandbox());
+                request.config().repository().codexReview(), request.config().codex());
         String basePrompt = Strings.nullToEmpty(request.prompt()).stripTrailing();
         String prompt = basePrompt + "\n\n" + repositoryContext;
         return codexReviewContext.map(section -> prompt + "\n\n" + section).orElse(prompt);

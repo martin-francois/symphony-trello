@@ -10,6 +10,10 @@ final class SetupOptionHelp {
     static final String CODEX_MODEL = "Codex model ID to write into generated workflows without prompting. Any model ID"
             + " is accepted. Omit it in guided setup to pick from the installed Codex model list or enter another ID.";
     static final String CODEX_REASONING_EFFORT = "Codex reasoning effort to write into generated workflows.";
+    static final String CODEX_REVIEW_MODEL =
+            "Codex model ID for the review before handoff. Omit it to review with" + " the workflow's Codex model.";
+    static final String CODEX_REVIEW_REASONING_EFFORT = "Codex reasoning effort for the review before handoff. Omit it"
+            + " to review with the workflow's reasoning effort.";
 
     private SetupOptionHelp() {}
 }

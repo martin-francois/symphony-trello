@@ -102,6 +102,10 @@ public final class WorkflowConfigIngestion {
                 repository,
                 EffectiveConfig.CodexReviewConfig.MAX_ROUNDS_KEY,
                 EffectiveConfig.CodexReviewConfig.MAX_ROUNDS_PATH);
+        WorkflowIntegerSetting repositoryCodexReviewExtendedMaxRounds = nonNegativeIntegerSetting(
+                repository,
+                EffectiveConfig.CodexReviewConfig.EXTENDED_MAX_ROUNDS_KEY,
+                EffectiveConfig.CodexReviewConfig.EXTENDED_MAX_ROUNDS_PATH);
         WorkflowIntegerSetting repositoryCodexReviewTimeoutMs = positiveIntegerSetting(
                 repository,
                 EffectiveConfig.CodexReviewConfig.TIMEOUT_MS_KEY,
@@ -121,6 +125,7 @@ public final class WorkflowConfigIngestion {
                 codexReadTimeoutMs,
                 codexStallTimeoutMs,
                 repositoryCodexReviewMaxRounds,
+                repositoryCodexReviewExtendedMaxRounds,
                 repositoryCodexReviewTimeoutMs);
         return new TypedWorkflowConfig(
                 trackerRequestTimeoutMs,
@@ -136,6 +141,7 @@ public final class WorkflowConfigIngestion {
                 codexStallTimeoutMs,
                 serverPort,
                 repositoryCodexReviewMaxRounds,
+                repositoryCodexReviewExtendedMaxRounds,
                 repositoryCodexReviewTimeoutMs,
                 priorityLabels,
                 maxConcurrentAgentsByState,

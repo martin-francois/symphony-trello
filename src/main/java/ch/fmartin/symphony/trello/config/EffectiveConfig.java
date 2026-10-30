@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalInt;
+import java.util.regex.Pattern;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
@@ -121,20 +122,55 @@ public record EffectiveConfig(
     /// Review loop that the agent runs before it hands off repository changes; see ADR 0121.
     ///
     /// @param maxRounds how many review rounds may run; `0` turns the loop off
-    /// @param timeout the limit for one separate `codex review` run
-    public record CodexReviewConfig(int maxRounds, Duration timeout) {
+    /// @param extendedMaxRounds the hard round limit while a high-risk blocker or should finding stays open
+    /// @param timeout the time budget for the whole loop, shared by every `codex review` run
+    /// @param model the reviewer model, or `null` to use the workflow's `codex.model`
+    /// @param reasoningEffort the reviewer reasoning effort, or `null` to use `codex.reasoning_effort`
+    @NullMarked
+    public record CodexReviewConfig(
+            int maxRounds,
+            int extendedMaxRounds,
+            Duration timeout,
+            @Nullable String model,
+            @Nullable String reasoningEffort) {
         public static final CodexReviewConfig DEFAULTS = new CodexReviewConfig(
-                ConfigDefaults.DEFAULT_CODEX_REVIEW_MAX_ROUNDS, ConfigDefaults.DEFAULT_CODEX_REVIEW_TIMEOUT);
+                ConfigDefaults.DEFAULT_CODEX_REVIEW_MAX_ROUNDS,
+                ConfigDefaults.DEFAULT_CODEX_REVIEW_EXTENDED_MAX_ROUNDS,
+                ConfigDefaults.DEFAULT_CODEX_REVIEW_TIMEOUT,
+                null,
+                null);
 
         /// Front-matter keys under `repository`; config parsing, setup, and prompt text all use these.
         public static final String MAX_ROUNDS_KEY = "codex_review_max_rounds";
 
+        public static final String EXTENDED_MAX_ROUNDS_KEY = "codex_review_extended_max_rounds";
         public static final String TIMEOUT_MS_KEY = "codex_review_timeout_ms";
+        public static final String MODEL_KEY = "codex_review_model";
+        public static final String REASONING_EFFORT_KEY = "codex_review_reasoning_effort";
         public static final String MAX_ROUNDS_PATH = "repository." + MAX_ROUNDS_KEY;
+        public static final String EXTENDED_MAX_ROUNDS_PATH = "repository." + EXTENDED_MAX_ROUNDS_KEY;
         public static final String TIMEOUT_MS_PATH = "repository." + TIMEOUT_MS_KEY;
+
+        /// Model ids and reasoning efforts go into a shell command in the prompt, so only plain
+        /// token characters are allowed; this also keeps quotes and line breaks out of the prompt.
+        private static final Pattern COMMAND_TOKEN = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._:/@+-]*");
+
+        /// The findings that may run rounds past the round limit, named the same way in the prompt and in
+        /// the generated workflow comment.
+        public static final String HIGH_RISK_TOPICS =
+                "security, authentication, permissions, data loss, or concurrency";
+
+        /// The allowed command-token characters, in words, for error messages.
+        public static final String COMMAND_TOKEN_DESCRIPTION =
+                "one word of letters, digits, and . _ : / @ + - characters";
 
         public boolean enabled() {
             return maxRounds > 0;
+        }
+
+        /// Whether `value` can appear unquoted in the `codex review -c` option the prompt shows.
+        public static boolean commandToken(String value) {
+            return COMMAND_TOKEN.matcher(value).matches();
         }
     }
 

@@ -395,6 +395,9 @@ Common setup command options:
   without prompting. When the selected model advertises supported efforts, the value must exactly
   match one of them; setup reports the accepted values when it rejects a choice. If the model does
   not advertise an effort list, the value remains a pass-through Codex setting.
+- `--codex-review-model MODEL` and `--codex-review-reasoning-effort EFFORT`: set the model and
+  reasoning effort for the review Codex runs before handoff. Without them the review uses the
+  workflow's own Codex model and effort, and the workflow shows both keys as commented-out lines.
 - `--force`: replace an existing workflow file. Use this only when you are fine losing the current
   generated workflow content.
 - `--key` and `--token`: pass Trello credentials directly for this one command instead of reading
@@ -1803,52 +1806,82 @@ repository's local `git config user.name`, `git config user.email`, and
 
 ### Codex Review Before Handoff
 
-Codex reviews its own changes once before it hands them off, so cards don't have to ask for it. Two
-keys in the workflow file control the loop:
+Codex reviews its own changes before it hands them off, so a change is already reviewed when you
+look at it, and cards don't have to ask for it. These keys in the workflow file control the loop:
 
 ```yaml
 repository:
-  codex_review_max_rounds: 1
+  # Codex reviews repository changes before handoff. codex_review_max_rounds: 0 turns the review off.
+  codex_review_max_rounds: 3
   codex_review_timeout_ms: 3600000
+  # Hard round limit while a finding about security, authentication, permissions, data loss, or concurrency stays open.
+  # Unset, it is 5 or codex_review_max_rounds if higher.
+  # codex_review_extended_max_rounds: 5
+  # Reviewer model and effort. Unset, the review uses codex.model and codex.reasoning_effort.
+  # codex_review_model: gpt-5.5
+  # codex_review_reasoning_effort: high
 ```
 
-`codex_review_max_rounds` is the most review rounds Codex runs per handoff. The default is `1`. Set it
-to `0` to turn the loop off for that board. `codex_review_timeout_ms` stops one separate
-`codex review` run after that many milliseconds. The default is one hour. The next card that starts
-uses the new values; no restart is needed. Workflows that setup generates contain both keys with
-their defaults, and setup keeps edited values when it regenerates the workflow.
+- `codex_review_max_rounds` is the usual number of review rounds per handoff. The default is `3`.
+  Set it to `0` to turn the loop off for that board. Guided `setup-local` asks about this; Enter
+  keeps the current setting.
+- `codex_review_extended_max_rounds` is the hard limit, `5` by default, or the round limit when
+  you set that higher. Codex goes past `codex_review_max_rounds` only while a serious finding
+  about security, authentication, permissions, data loss, or concurrency is still open.
+  It can't be lower than `codex_review_max_rounds`.
+- `codex_review_timeout_ms` is the time for the whole loop, one hour by default. Each review run
+  gets whatever time is left.
+- `codex_review_model` and `codex_review_reasoning_effort` pick the reviewer. Leave them unset to
+  review with the workflow's `codex.model` and `codex.reasoning_effort`. Model names differ between
+  Codex accounts and go out of date, so setup doesn't pick one for you; pass
+  `--codex-review-model` or `--codex-review-reasoning-effort` to setup, or uncomment the lines.
 
-The loop also runs for boards whose workflow doesn't have these keys yet, because Symphony uses the
-defaults when a key is missing. If you upgraded from a version without the review loop, Codex now
-spends one review round on every card that changes a repository. Add
-`codex_review_max_rounds: 0` under `repository` to keep the old behavior.
+The next card that starts uses the new values; no restart is needed. Setup keeps edited values when
+it regenerates the workflow. The loop also runs for boards whose workflow doesn't have these keys
+yet, because Symphony uses the defaults when a key is missing. Add `codex_review_max_rounds: 0`
+under `repository` to turn it off there.
 
 While the round limit is above `0`, Symphony adds a `Codex Review Before Handoff` section at the end
 of the prompt for every card. For cards that change a repository, Codex then works in this order:
 
-1. Finish the change and commit it locally.
-2. Review the whole change against its base branch. Codex fixes justified findings that are inside
-   the card's scope and repeats the review until a round finds nothing worth fixing, or until
-   `codex_review_max_rounds` rounds have run.
+1. Finish the change and commit it locally. Nothing is pushed until the review is done.
+2. Review the change. The first round reviews the whole change against its base branch. Each later
+   round reviews only what changed since the previous round, plus the findings that are still open.
+   Codex fixes justified findings that are inside the card's scope and stops when a round finds
+   nothing above a nit, or when the round limit or the time budget is reached.
 3. Run the repository's local checks once on the reviewed result. This includes the CI-equivalent
    checks Codex runs when CI is not available.
 4. Push, create or update the pull request, or write the branch-only handoff, then move the card to
    `Human Review`.
 
+The review sorts findings into `blocker`, `should`, and `nit`. Codex keeps a list of findings in the
+workpad, each with an id and an outcome: fixed, disagreed with evidence, or declined. It makes the
+smallest fix that solves a finding and argues back with evidence instead of accepting a finding it
+thinks is wrong. If Codex and the reviewer still disagree after two replies, the handoff comment
+shows both sides in a few lines and the card still moves to review. A loop that ends at the round
+limit or the time budget isn't an approval; open `blocker` and `should` findings are listed as
+caveats in the handoff. The card still moves to review the usual way. When the time budget runs out,
+the handoff comment and the workpad say so and suggest raising `repository.codex_review_timeout_ms`,
+with its current value.
+
+A `codex review` run can print nothing for many minutes. Codex waits for it to finish and never
+stops it itself; only the `timeout` wrapper ends a run early, and that counts as the budget running
+out.
+
 Codex puts review fixes into the commit that caused the problem when that is safe. It does not
-rewrite pushed history or the default branch for a review fix. Findings it rejects or leaves out of
-scope get a one-line reason. The workpad and the handoff comment say how many review rounds ran,
-what was fixed, what was rejected, and whether the loop stopped at the limit with findings still
-open.
+rewrite pushed history or the default branch for a review fix.
 
-Codex first tries a separate `codex review` run. Inside the default `workspaceWrite` sandbox that
-command usually fails because it cannot write to the Codex home directory. Codex then reviews the
-same diff in its own session and says so in the handoff. The separate review uses
-`--dangerously-bypass-approvals-and-sandbox` only when the workflow already runs Codex without its
-sandbox (`dangerFullAccess`). Otherwise the prompt tells Codex not to bypass the sandbox.
+Codex first tries a separate `codex review -` run that reads a short brief on stdin: the base
+commit, the diff to review, the card's goal, what is out of scope, and the checks that already ran.
+Inside the default `workspaceWrite` sandbox that command usually fails because it can't write to the
+Codex home directory. Codex then reviews the same diff in its own session and says so in the
+handoff. The separate review uses `--dangerously-bypass-approvals-and-sandbox` only when the
+workflow already runs Codex without its sandbox (`dangerFullAccess`). Otherwise the prompt tells
+Codex not to bypass the sandbox.
 
-The review runs inside the Codex turn, so `codex.turn_timeout_ms` still limits the whole turn. With
-both defaults at one hour, a review that uses its full timeout ends the turn too.
+While a review run is going, Codex checks on it at least every two minutes, or every half of
+`codex.stall_timeout_ms` when that is shorter, so the stall check never mistakes the wait for a
+stuck turn.
 
 Cards that only investigate, call an API, or need no repository change skip the loop.
 

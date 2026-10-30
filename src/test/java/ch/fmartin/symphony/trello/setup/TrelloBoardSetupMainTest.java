@@ -11,6 +11,7 @@ import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.trelloList
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.workspaceJson;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.workspacesJson;
 import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.HTTPS;
+import static ch.fmartin.symphony.trello.testsupport.TestWorkflows.CODEX_REASONING_EFFORT_KEY_LINE;
 import static ch.fmartin.symphony.trello.testsupport.WorkflowAssertions.assertThatWorkflow;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
@@ -25,6 +26,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
+import ch.fmartin.symphony.trello.config.ConfigResolver;
+import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.testsupport.CliRunResult;
 import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
@@ -4407,6 +4410,72 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void newBoardWritesCodexReviewerOverridesInsteadOfTheCommentedOutLines() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("explicit-new-board-reviewer.WORKFLOW.md");
+        isolatedDirectCredentialEnv();
+
+        // when
+        CliRunResult result = runCli(
+                () -> new TrelloBoardSetup.CodexModelDefaults("gpt-default", "medium"),
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "Explicit New Board Reviewer",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                tempDir.resolve(ConnectedBoardManifest.FILE_NAME).toString(),
+                "--codex-review-model",
+                " gpt-reviewer ",
+                "--codex-review-reasoning-effort",
+                "xhigh");
+
+        // then
+        result.assertSuccess();
+        assertThat(new ConfigResolver(ignored -> Optional.empty())
+                        .resolve(new WorkflowLoader().load(workflow))
+                        .repository()
+                        .codexReview())
+                .extracting(
+                        EffectiveConfig.CodexReviewConfig::model, EffectiveConfig.CodexReviewConfig::reasoningEffort)
+                .containsExactly("gpt-reviewer", "xhigh");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .doesNotContain("# codex_review_model:", "# codex_review_reasoning_effort:");
+    }
+
+    @MethodSource("directSetupCodexReviewerOptions")
+    @ParameterizedTest(name = "{0} {1}")
+    void directSetupRejectsCodexReviewerValuesThatAreNotOneWordBeforeTrelloRequest(String command, String optionName) {
+        // given
+        Path workflow = tempDir.resolve("spaced-reviewer-" + command + ".WORKFLOW.md");
+        Path env = tempDir.resolve("missing-spaced-reviewer-env-parent").resolve(".env");
+
+        // when
+        CliRunResult result = runCli(setupCommandWithCodexOverride(command, workflow, env, optionName, "gpt 6"));
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        optionName + " must be one word of letters, digits, and . _ : / @ + - characters.");
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(workflow).doesNotExist();
+    }
+
+    private static Stream<Arguments> directSetupCodexReviewerOptions() {
+        return Stream.of("new-board", "import-board")
+                .flatMap(command -> Stream.of("--codex-review-model", "--codex-review-reasoning-effort")
+                        .map(optionName -> Arguments.of(command, optionName)));
+    }
+
+    @Test
     void newBoardWritesExplicitCodexModelOverrides() {
         // given
         Path workflow = tempDir.resolve("explicit-new-board-model.WORKFLOW.md");
@@ -4514,7 +4583,7 @@ final class TrelloBoardSetupMainTest {
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("model: \"gpt-not-advertised\"")
-                .doesNotContain("reasoning_effort:");
+                .doesNotContain(CODEX_REASONING_EFFORT_KEY_LINE);
     }
 
     @Test
@@ -4562,7 +4631,13 @@ final class TrelloBoardSetupMainTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"--codex-model", "--codex-reasoning-effort"})
+    @ValueSource(
+            strings = {
+                "--codex-model",
+                "--codex-reasoning-effort",
+                "--codex-review-model",
+                "--codex-review-reasoning-effort"
+            })
     void newBoardRejectsBlankCodexModelOverridesBeforeTrelloRequest(String optionName) {
         // given
         Path workflow = tempDir.resolve("blank-codex-new-board.WORKFLOW.md");
@@ -4662,7 +4737,13 @@ final class TrelloBoardSetupMainTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"--codex-model", "--codex-reasoning-effort"})
+    @ValueSource(
+            strings = {
+                "--codex-model",
+                "--codex-reasoning-effort",
+                "--codex-review-model",
+                "--codex-review-reasoning-effort"
+            })
     void importBoardRejectsBlankCodexModelOverridesBeforeTrelloRequest(String optionName) {
         // given
         Path workflow = tempDir.resolve("blank-codex-import-board.WORKFLOW.md");
@@ -4807,9 +4888,12 @@ final class TrelloBoardSetupMainTest {
     }
 
     private static Stream<Arguments> directSetupCodexModelOptions() {
-        return Stream.of("new-board", "import-board")
-                .flatMap(command -> Stream.of("--codex-model", "--codex-reasoning-effort")
-                        .map(optionName -> Arguments.of(command, optionName)));
+        return Stream.of("new-board", "import-board").flatMap(command -> Stream.of(
+                        "--codex-model",
+                        "--codex-reasoning-effort",
+                        "--codex-review-model",
+                        "--codex-review-reasoning-effort")
+                .map(optionName -> Arguments.of(command, optionName)));
     }
 
     @MethodSource("directSetupRepositoryUrlSyntaxes")
@@ -5770,7 +5854,7 @@ final class TrelloBoardSetupMainTest {
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("model: \"gpt-not-advertised\"")
-                .doesNotContain("reasoning_effort:");
+                .doesNotContain(CODEX_REASONING_EFFORT_KEY_LINE);
     }
 
     @Test
@@ -5973,7 +6057,7 @@ final class TrelloBoardSetupMainTest {
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("model: \"gpt-custom\"")
-                .doesNotContain("reasoning_effort:");
+                .doesNotContain(CODEX_REASONING_EFFORT_KEY_LINE);
     }
 
     @MethodSource("invalidCliArgumentScenarios")

@@ -53,7 +53,9 @@ final class TrelloBoardSetupService {
         TrelloBoardSetup.RepositoryDefaults existingDefaults = options.force
                 ? workflowConfig.repositoryDefaults(options.workflowPath)
                 : TrelloBoardSetup.RepositoryDefaults.empty();
-        return existingDefaults.withExplicitDefaultUrl(options.repositoryUrl);
+        return existingDefaults
+                .withExplicitDefaultUrl(options.repositoryUrl)
+                .withExplicitCodexReviewer(options.codexReviewer());
     }
 
     void preflightWorkflowWrite(Path workflowPath, boolean force) {

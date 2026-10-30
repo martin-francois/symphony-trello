@@ -1,6 +1,13 @@
 package ch.fmartin.symphony.trello.testsupport;
 
 public final class TestWorkflows {
+    /// The `codex.model` and `codex.reasoning_effort` lines as generated workflows write them. The
+    /// leading line break and indentation keep the commented-out `repository.codex_review_model`
+    /// and `repository.codex_review_reasoning_effort` examples from matching.
+    public static final String CODEX_MODEL_KEY_LINE = "\n  model:";
+
+    public static final String CODEX_REASONING_EFFORT_KEY_LINE = "\n  reasoning_effort:";
+
     private TestWorkflows() {}
 
     public static String workflowWithBoardAndPort(String boardId, int port) {

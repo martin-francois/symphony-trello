@@ -359,12 +359,7 @@ public class ConfigResolver {
 
     private EffectiveConfig.RepositoryConfig repositoryConfig(
             Path workflowDirectory, Map<String, Object> repository, TypedWorkflowConfig typedWorkflow) {
-        var codexReview = new EffectiveConfig.CodexReviewConfig(
-                integer(typedWorkflow.repositoryCodexReviewMaxRounds(), ConfigDefaults.DEFAULT_CODEX_REVIEW_MAX_ROUNDS),
-                millis(
-                        typedWorkflow.repositoryCodexReviewTimeoutMs(),
-                        EffectiveConfig.CodexReviewConfig.TIMEOUT_MS_PATH,
-                        ConfigDefaults.DEFAULT_CODEX_REVIEW_TIMEOUT_MS));
+        EffectiveConfig.CodexReviewConfig codexReview = codexReviewConfig(repository, typedWorkflow);
         String defaultUrl = optionalEnvironmentString(repository, "default_url");
         if (defaultUrl != null) {
             return new EffectiveConfig.RepositoryConfig(
@@ -372,6 +367,51 @@ public class ConfigResolver {
         }
         return new EffectiveConfig.RepositoryConfig(
                 null, optionalRepositoryPath(workflowDirectory, repository), codexReview);
+    }
+
+    private static EffectiveConfig.CodexReviewConfig codexReviewConfig(
+            Map<String, Object> repository, TypedWorkflowConfig typedWorkflow) {
+        int maxRounds =
+                integer(typedWorkflow.repositoryCodexReviewMaxRounds(), ConfigDefaults.DEFAULT_CODEX_REVIEW_MAX_ROUNDS);
+        // Without its own key the hard limit follows a round limit set above the default.
+        int extendedMaxRounds = integer(
+                typedWorkflow.repositoryCodexReviewExtendedMaxRounds(),
+                Math.max(ConfigDefaults.DEFAULT_CODEX_REVIEW_EXTENDED_MAX_ROUNDS, maxRounds));
+        if (extendedMaxRounds < maxRounds) {
+            throw new ConfigException(
+                    "config_value_error",
+                    "%s (%d) must be at least %s (%d)"
+                            .formatted(
+                                    EffectiveConfig.CodexReviewConfig.EXTENDED_MAX_ROUNDS_PATH,
+                                    extendedMaxRounds,
+                                    EffectiveConfig.CodexReviewConfig.MAX_ROUNDS_PATH,
+                                    maxRounds));
+        }
+        return new EffectiveConfig.CodexReviewConfig(
+                maxRounds,
+                extendedMaxRounds,
+                millis(
+                        typedWorkflow.repositoryCodexReviewTimeoutMs(),
+                        EffectiveConfig.CodexReviewConfig.TIMEOUT_MS_PATH,
+                        ConfigDefaults.DEFAULT_CODEX_REVIEW_TIMEOUT_MS),
+                codexReviewToken(repository, EffectiveConfig.CodexReviewConfig.MODEL_KEY),
+                codexReviewToken(repository, EffectiveConfig.CodexReviewConfig.REASONING_EFFORT_KEY));
+    }
+
+    /// Reads an optional reviewer model or reasoning effort; blank means "use the workflow's own".
+    private static @Nullable String codexReviewToken(Map<String, Object> repository, String key) {
+        String value = optionalString(repository, key);
+        if (value == null) {
+            return null;
+        }
+        String stripped = value.strip();
+        if (!EffectiveConfig.CodexReviewConfig.commandToken(stripped)) {
+            throw new ConfigException(
+                    "config_value_error",
+                    "repository." + key + " must be " + EffectiveConfig.CodexReviewConfig.COMMAND_TOKEN_DESCRIPTION
+                            + ", or blank to use the workflow's codex setting");
+        }
+        return stripped;
     }
 
     private Path optionalLowerPriorityRepositoryPath(Path workflowDirectory, Map<String, Object> repository) {

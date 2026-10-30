@@ -9,6 +9,8 @@ import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.HTTP;
 import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.HTTPS;
 import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.SCP;
 import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.SSH;
+import static ch.fmartin.symphony.trello.testsupport.TestWorkflows.CODEX_MODEL_KEY_LINE;
+import static ch.fmartin.symphony.trello.testsupport.TestWorkflows.CODEX_REASONING_EFFORT_KEY_LINE;
 import static ch.fmartin.symphony.trello.testsupport.WorkflowAssertions.assertThatWorkflow;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.abort;
@@ -318,7 +320,13 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"--codex-model", "--codex-reasoning-effort"})
+    @ValueSource(
+            strings = {
+                "--codex-model",
+                "--codex-reasoning-effort",
+                "--codex-review-model",
+                "--codex-review-reasoning-effort"
+            })
     void dryRunRejectsBlankCodexModelOverridesBeforePlannedSetupOutput(String optionName) {
         // given
 
@@ -570,7 +578,13 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"--codex-model", "--codex-reasoning-effort"})
+    @ValueSource(
+            strings = {
+                "--codex-model",
+                "--codex-reasoning-effort",
+                "--codex-review-model",
+                "--codex-review-reasoning-effort"
+            })
     void dryRunRejectsControlCharactersInCodexModelOverridesBeforePlannedSetupOutput(String optionName) {
         // given
         String invalidValue = "bad\nvalue";
@@ -2754,7 +2768,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                                 .contains("reasoning_effort: \"" + reasoningEffort + "\""),
                         () -> assertThat(workflow)
                                 .content(StandardCharsets.UTF_8)
-                                .doesNotContain("reasoning_effort:"));
+                                .doesNotContain(CODEX_REASONING_EFFORT_KEY_LINE));
     }
 
     @MethodSource("catalogPickerBypassScenarios")
@@ -2955,7 +2969,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("model: \"gpt-5.6-terra\"")
-                .doesNotContain("reasoning_effort:", "model: \"gpt-5.5\"");
+                .doesNotContain(CODEX_REASONING_EFFORT_KEY_LINE, "model: \"gpt-5.5\"");
     }
 
     @Test
@@ -3002,7 +3016,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("model: \"gpt-no-default\"")
-                .doesNotContain("reasoning_effort:");
+                .doesNotContain(CODEX_REASONING_EFFORT_KEY_LINE);
     }
 
     @Test
@@ -3244,7 +3258,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("model: \"gpt-existing\"")
-                .doesNotContain("reasoning_effort:");
+                .doesNotContain(CODEX_REASONING_EFFORT_KEY_LINE);
     }
 
     @Test
@@ -3322,7 +3336,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("model: \"gpt-not-advertised\"")
-                .doesNotContain("reasoning_effort:");
+                .doesNotContain(CODEX_REASONING_EFFORT_KEY_LINE);
     }
 
     @Test
@@ -3528,7 +3542,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // then
         result.assertSuccess().stdoutDoesNotContain("Codex model", "Reasoning effort");
-        assertThat(workflow).content(StandardCharsets.UTF_8).doesNotContain("model:", "reasoning_effort:");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .doesNotContain(CODEX_MODEL_KEY_LINE, CODEX_REASONING_EFFORT_KEY_LINE);
     }
 
     @Test
@@ -3569,7 +3585,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // then
         result.assertSuccess().stdoutDoesNotContain("Codex model", "Model [", "Reasoning effort");
-        assertThat(workflow).content(StandardCharsets.UTF_8).doesNotContain("model:", "reasoning_effort:");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .doesNotContain(CODEX_MODEL_KEY_LINE, CODEX_REASONING_EFFORT_KEY_LINE);
     }
 
     @Test
@@ -3610,7 +3628,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // then
         result.assertSuccess();
-        assertThat(workflow).content(StandardCharsets.UTF_8).doesNotContain("model:", "reasoning_effort:");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .doesNotContain(CODEX_MODEL_KEY_LINE, CODEX_REASONING_EFFORT_KEY_LINE);
     }
 
     @Test
@@ -6987,8 +7007,10 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 Files.readString(workflow)
                         .replace("default_url: null", "default_url: " + REPOSITORY_URL_REFERENCE)
                         .replace("default_path: null", "default_path: " + REPOSITORY_PATH_REFERENCE)
-                        .replace("codex_review_max_rounds: 1", "codex_review_max_rounds: 0")
-                        .replace("codex_review_timeout_ms: 3600000", "codex_review_timeout_ms: 900000"));
+                        .replace("codex_review_max_rounds: 3", "codex_review_max_rounds: 0")
+                        .replace("# codex_review_extended_max_rounds: 5", "codex_review_extended_max_rounds: 4")
+                        .replace("codex_review_timeout_ms: 3600000", "codex_review_timeout_ms: 900000")
+                        .replace("# codex_review_model: gpt-5.5", "codex_review_model: gpt-6"));
         commands.githubAuthenticated = true;
         commands.startedWorkflows.clear();
         commands.startedEnvFiles.clear();
@@ -7008,7 +7030,10 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .containsEntry("default_url", REPOSITORY_URL_REFERENCE)
                 .containsEntry("default_path", REPOSITORY_PATH_REFERENCE)
                 .containsEntry("codex_review_max_rounds", 0)
-                .containsEntry("codex_review_timeout_ms", 900000));
+                .containsEntry("codex_review_extended_max_rounds", 4)
+                .containsEntry("codex_review_timeout_ms", 900000)
+                .containsEntry("codex_review_model", "gpt-6")
+                .doesNotContainKey("codex_review_reasoning_effort"));
         assertThat(trello.createdLists()).containsExactly("Merging");
         assertThat(commands.stoppedWorkflows).containsExactly(workflow.toString());
         assertThat(commands.startedWorkflows).containsExactly(workflow.toString());

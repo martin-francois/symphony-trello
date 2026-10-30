@@ -33,6 +33,7 @@ import java.util.Set;
 import java.util.function.IntPredicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public final class TrelloBoardSetup {
     public static final URI DEFAULT_ENDPOINT = URI.create("https://api.trello.com/1");
@@ -1651,8 +1652,8 @@ public final class TrelloBoardSetup {
                 %s
 
                 Workflow `%s` sets how many Codex review rounds run on repository-changing work
-                before handoff; `0` turns the loop off. `%s` limits each separate
-                `codex review` run. While the round limit is above `0`, Symphony appends a final runtime section titled
+                before handoff; `0` turns the loop off. `%s` is the time budget for the whole
+                loop. While the round limit is above `0`, Symphony appends a final runtime section titled
                 `%s` to this prompt. Follow that section after the implementation candidate is
                 committed and before the final local validation, %s and the move to %s. When
                 that runtime section is absent, run a review loop only when the card asks for one.
@@ -3262,13 +3263,20 @@ public final class TrelloBoardSetup {
         }
 
         /// Keeps an operator's review-loop settings when setup regenerates the workflow.
-        static RepositoryDefaults preserved(
-                String defaultUrl, String defaultPath, Object codexReviewMaxRounds, Object codexReviewTimeoutMs) {
+        static RepositoryDefaults preserved(String defaultUrl, String defaultPath, Map<?, ?> repository) {
+            return new RepositoryDefaults(defaultUrl, defaultPath, true, CodexReviewYaml.preserved(repository));
+        }
+
+        /// Applies `--codex-review-model` and `--codex-review-reasoning-effort` over preserved values.
+        RepositoryDefaults withExplicitCodexReviewer(CodexReviewerOverrides reviewer) {
+            if (!reviewer.present()) {
+                return this;
+            }
             return new RepositoryDefaults(
                     defaultUrl,
                     defaultPath,
                     true,
-                    CodexReviewYaml.preserved(codexReviewMaxRounds, codexReviewTimeoutMs));
+                    codexReview.withReviewer(reviewer.model(), reviewer.reasoningEffort()));
         }
 
         public String defaultUrl() {
@@ -3283,32 +3291,88 @@ public final class TrelloBoardSetup {
             return codexReview.yamlLines();
         }
 
-        /// The review-loop settings as YAML scalars, ready to write under `repository`.
-        private record CodexReviewYaml(String maxRounds, String timeoutMs) {
+        /// The review-loop settings as YAML scalars, ready to write under `repository`. An unset
+        /// extended limit, reviewer model, or effort is written as a commented-out line, so the option
+        /// stays visible and its runtime default applies.
+        private record CodexReviewYaml(
+                String maxRounds,
+                Optional<String> extendedMaxRounds,
+                String timeoutMs,
+                Optional<String> model,
+                Optional<String> reasoningEffort) {
+            private static final String REVIEW_REASONING_EFFORT_EXAMPLE = "high";
             private static final CodexReviewYaml DEFAULTS = new CodexReviewYaml(
                     String.valueOf(ConfigDefaults.DEFAULT_CODEX_REVIEW_MAX_ROUNDS),
-                    String.valueOf(ConfigDefaults.DEFAULT_CODEX_REVIEW_TIMEOUT_MS));
+                    Optional.empty(),
+                    String.valueOf(ConfigDefaults.DEFAULT_CODEX_REVIEW_TIMEOUT_MS),
+                    Optional.empty(),
+                    Optional.empty());
 
             /// Writes values back as they were, so an invalid value still fails at runtime instead of
             /// being silently replaced by the default.
-            static CodexReviewYaml preserved(Object maxRounds, Object timeoutMs) {
+            static CodexReviewYaml preserved(Map<?, ?> repository) {
                 return new CodexReviewYaml(
-                        preservedYamlValue(maxRounds, DEFAULTS.maxRounds()),
-                        preservedYamlValue(timeoutMs, DEFAULTS.timeoutMs()));
+                        preservedYamlValue(repository.get(EffectiveConfig.CodexReviewConfig.MAX_ROUNDS_KEY))
+                                .orElse(DEFAULTS.maxRounds()),
+                        preservedYamlValue(repository.get(EffectiveConfig.CodexReviewConfig.EXTENDED_MAX_ROUNDS_KEY)),
+                        preservedYamlValue(repository.get(EffectiveConfig.CodexReviewConfig.TIMEOUT_MS_KEY))
+                                .orElse(DEFAULTS.timeoutMs()),
+                        preservedYamlValue(repository.get(EffectiveConfig.CodexReviewConfig.MODEL_KEY)),
+                        preservedYamlValue(repository.get(EffectiveConfig.CodexReviewConfig.REASONING_EFFORT_KEY)));
             }
 
-            private static String preservedYamlValue(Object value, String defaultYaml) {
+            CodexReviewYaml withReviewer(Optional<String> explicitModel, Optional<String> explicitReasoningEffort) {
+                return new CodexReviewYaml(
+                        maxRounds,
+                        extendedMaxRounds,
+                        timeoutMs,
+                        explicitModel.map(TrelloBoardSetup::yamlScalar).or(this::model),
+                        explicitReasoningEffort
+                                .map(TrelloBoardSetup::yamlScalar)
+                                .or(this::reasoningEffort));
+            }
+
+            private static Optional<String> preservedYamlValue(Object value) {
                 return switch (value) {
-                    case null -> defaultYaml;
-                    case Boolean flag -> flag.toString();
-                    case Number number -> number.toString();
-                    default -> yamlScalar(value.toString());
+                    case null -> Optional.empty();
+                    case Boolean flag -> Optional.of(flag.toString());
+                    case Number number -> Optional.of(number.toString());
+                    default -> Optional.of(yamlScalar(value.toString()));
                 };
             }
 
             String yamlLines() {
-                return "  " + EffectiveConfig.CodexReviewConfig.MAX_ROUNDS_KEY + ": " + maxRounds + "\n  "
-                        + EffectiveConfig.CodexReviewConfig.TIMEOUT_MS_KEY + ": " + timeoutMs;
+                return Stream.of(
+                                "# Codex reviews repository changes before handoff. "
+                                        + EffectiveConfig.CodexReviewConfig.MAX_ROUNDS_KEY
+                                        + ": 0 turns the review off.",
+                                EffectiveConfig.CodexReviewConfig.MAX_ROUNDS_KEY + ": " + maxRounds,
+                                EffectiveConfig.CodexReviewConfig.TIMEOUT_MS_KEY + ": " + timeoutMs,
+                                "# Hard round limit while a finding about "
+                                        + EffectiveConfig.CodexReviewConfig.HIGH_RISK_TOPICS
+                                        + " stays open.",
+                                "# Unset, it is "
+                                        + ConfigDefaults.DEFAULT_CODEX_REVIEW_EXTENDED_MAX_ROUNDS
+                                        + " or "
+                                        + EffectiveConfig.CodexReviewConfig.MAX_ROUNDS_KEY
+                                        + " if higher.",
+                                optionalLine(
+                                        EffectiveConfig.CodexReviewConfig.EXTENDED_MAX_ROUNDS_KEY,
+                                        extendedMaxRounds,
+                                        String.valueOf(ConfigDefaults.DEFAULT_CODEX_REVIEW_EXTENDED_MAX_ROUNDS)),
+                                "# Reviewer model and effort. Unset, the review uses codex.model and"
+                                        + " codex.reasoning_effort.",
+                                optionalLine(EffectiveConfig.CodexReviewConfig.MODEL_KEY, model, DEFAULT_CODEX_MODEL),
+                                optionalLine(
+                                        EffectiveConfig.CodexReviewConfig.REASONING_EFFORT_KEY,
+                                        reasoningEffort,
+                                        REVIEW_REASONING_EFFORT_EXAMPLE))
+                        .map(line -> "  " + line)
+                        .collect(Collectors.joining("\n"));
+            }
+
+            private static String optionalLine(String key, Optional<String> value, String example) {
+                return value.map(setting -> key + ": " + setting).orElse("# " + key + ": " + example);
             }
         }
     }

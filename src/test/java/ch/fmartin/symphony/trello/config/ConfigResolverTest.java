@@ -464,7 +464,7 @@ final class ConfigResolverTest {
     }
 
     @Test
-    void codexReviewRunsOneRoundWithAnHourTimeoutByDefault() throws Exception {
+    void codexReviewRunsThreeRoundsWithAOneHourBudgetAndTheWorkflowModelByDefault() throws Exception {
         // given
         Path workflow = writeDefaultWorkflow("WORKFLOW.codex-review-default.md", "");
         var resolver = new ConfigResolver(ignored -> Optional.empty());
@@ -474,7 +474,7 @@ final class ConfigResolverTest {
 
         // then
         assertThat(config.repository().codexReview())
-                .isEqualTo(new EffectiveConfig.CodexReviewConfig(1, Duration.ofMinutes(60)))
+                .isEqualTo(new EffectiveConfig.CodexReviewConfig(3, 5, Duration.ofHours(1), null, null))
                 .isEqualTo(EffectiveConfig.CodexReviewConfig.DEFAULTS);
         assertThat(config.repository().codexReview().enabled())
                 .as("the review loop must run when the workflow omits the round limit")
@@ -482,14 +482,17 @@ final class ConfigResolverTest {
     }
 
     @Test
-    void resolvesConfiguredCodexReviewRoundsAndTimeout() throws Exception {
+    void resolvesConfiguredCodexReviewSettings() throws Exception {
         // given
         Path workflow = writeDefaultWorkflow(
                 "WORKFLOW.codex-review-configured.md",
                 """
                 repository:
-                  codex_review_max_rounds: 5
+                  codex_review_max_rounds: 4
+                  codex_review_extended_max_rounds: 6
                   codex_review_timeout_ms: 120000
+                  codex_review_model: " gpt-6 "
+                  codex_review_reasoning_effort: high
                 """);
         var resolver = new ConfigResolver(ignored -> Optional.empty());
 
@@ -498,7 +501,40 @@ final class ConfigResolverTest {
 
         // then
         assertThat(config.repository().codexReview())
-                .isEqualTo(new EffectiveConfig.CodexReviewConfig(5, Duration.ofMinutes(2)));
+                .isEqualTo(new EffectiveConfig.CodexReviewConfig(4, 6, Duration.ofMinutes(2), "gpt-6", "high"));
+    }
+
+    @Test
+    void codexReviewExtendedLimitFollowsARoundLimitAboveItsDefault() throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.codex-review-high-rounds.md",
+                """
+                repository:
+                  codex_review_max_rounds: 7
+                """);
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.repository().codexReview().extendedMaxRounds()).isEqualTo(7);
+    }
+
+    @Test
+    void blankCodexReviewModelAndEffortUseTheWorkflowCodexSettings() throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.codex-review-blank-model.md",
+                "repository:\n  codex_review_model: \"\"\n  codex_review_reasoning_effort: \" \"");
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.repository().codexReview()).isEqualTo(EffectiveConfig.CodexReviewConfig.DEFAULTS);
     }
 
     @Test
@@ -536,7 +572,12 @@ final class ConfigResolverTest {
 
     private static Stream<Arguments> invalidCodexReviewSettings() {
         String roundsMessage = "repository.codex_review_max_rounds must be a whole number";
+        String extendedMessage = "repository.codex_review_extended_max_rounds must be a whole number";
         String timeoutMessage = "repository.codex_review_timeout_ms must be positive";
+        String modelMessage = "repository.codex_review_model must be one word of letters, digits, and . _ : / @ + -"
+                + " characters, or blank to use the workflow's codex setting";
+        String effortMessage = "repository.codex_review_reasoning_effort must be one word of letters, digits, and . _"
+                + " : / @ + - characters, or blank to use the workflow's codex setting";
         return Stream.of(
                 Arguments.of(
                         "review-rounds-negative",
@@ -545,12 +586,27 @@ final class ConfigResolverTest {
                 Arguments.of("review-rounds-fractional", "codex_review_max_rounds: 1.5", roundsMessage),
                 Arguments.of("review-rounds-word", "codex_review_max_rounds: many", roundsMessage),
                 Arguments.of("review-rounds-boolean", "codex_review_max_rounds: true", roundsMessage),
+                Arguments.of(
+                        "review-extended-rounds-negative",
+                        "codex_review_extended_max_rounds: -1",
+                        "repository.codex_review_extended_max_rounds must be non-negative"),
+                Arguments.of(
+                        "review-extended-rounds-fractional", "codex_review_extended_max_rounds: 5.5", extendedMessage),
+                Arguments.of("review-extended-rounds-word", "codex_review_extended_max_rounds: more", extendedMessage),
+                Arguments.of(
+                        "review-extended-rounds-below-max-rounds",
+                        "codex_review_max_rounds: 4\n  codex_review_extended_max_rounds: 3",
+                        "repository.codex_review_extended_max_rounds (3) must be at least"
+                                + " repository.codex_review_max_rounds (4)"),
                 Arguments.of("review-timeout-zero", "codex_review_timeout_ms: 0", timeoutMessage),
                 Arguments.of("review-timeout-negative", "codex_review_timeout_ms: -1000", timeoutMessage),
                 Arguments.of(
                         "review-timeout-fractional",
                         "codex_review_timeout_ms: 1000.5",
-                        "repository.codex_review_timeout_ms must be a whole number"));
+                        "repository.codex_review_timeout_ms must be a whole number"),
+                Arguments.of("review-model-with-space", "codex_review_model: gpt 6", modelMessage),
+                Arguments.of("review-model-with-quote", "codex_review_model: 'gpt\"6'", modelMessage),
+                Arguments.of("review-effort-with-semicolon", "codex_review_reasoning_effort: high;ls", effortMessage));
     }
 
     @MethodSource("codexSandboxBypassCases")

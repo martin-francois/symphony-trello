@@ -10,6 +10,8 @@ import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.trelloList
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.workspaceJson;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.workspacesJson;
 import static ch.fmartin.symphony.trello.testsupport.TestFileContents.INVALID_UTF_8_READ_FAILURE;
+import static ch.fmartin.symphony.trello.testsupport.TestWorkflows.CODEX_MODEL_KEY_LINE;
+import static ch.fmartin.symphony.trello.testsupport.TestWorkflows.CODEX_REASONING_EFFORT_KEY_LINE;
 import static ch.fmartin.symphony.trello.testsupport.WorkflowAssertions.GITHUB_ISSUE_ASSIGNMENT_HEADING;
 import static ch.fmartin.symphony.trello.testsupport.WorkflowAssertions.assertThatWorkflow;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -65,6 +67,19 @@ final class TrelloBoardSetupTest {
     private static final String GENERATED_GITHUB_SECTION =
             "github:\n  pull_request_mode: create\n  no_pr_label: \"No PR\"\n";
 
+    /// The review keys every generated workflow writes; the reviewer lines stay commented out.
+    private static final String DEFAULT_CODEX_REVIEW_YAML =
+            """
+              # Codex reviews repository changes before handoff. codex_review_max_rounds: 0 turns the review off.
+              codex_review_max_rounds: 3
+              codex_review_timeout_ms: 3600000
+              # Hard round limit while a finding about security, authentication, permissions, data loss, or concurrency stays open.
+              # Unset, it is 5 or codex_review_max_rounds if higher.
+              # codex_review_extended_max_rounds: 5
+              # Reviewer model and effort. Unset, the review uses codex.model and codex.reasoning_effort.
+              # codex_review_model: gpt-5.5
+              # codex_review_reasoning_effort: high
+            """;
     private static final String REPOSITORY_POLICY_HEADING = "## Classify Repository Need Before Source Blocking";
     private static final String REPOSITORY_SOURCE_PRECEDENCE_HEADING = "## Repository Source Precedence";
     private static final String MERGE_SECTION_HEADING = "## Merge From ";
@@ -1008,7 +1023,7 @@ final class TrelloBoardSetupTest {
         assertThat(config.repository().codexReview()).isEqualTo(EffectiveConfig.CodexReviewConfig.DEFAULTS);
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
-                .contains("  default_path: null\n  codex_review_max_rounds: 1\n  codex_review_timeout_ms: 3600000\n")
+                .contains("  default_path: null\n" + DEFAULT_CODEX_REVIEW_YAML)
                 .contains(TrelloBoardSetup.REVIEW_LOOP_SETTING_HEADING)
                 .containsIgnoringWhitespaces(
                         "final runtime section titled `" + CodexReviewPrompt.TITLE + "` to this prompt")
@@ -1039,9 +1054,7 @@ final class TrelloBoardSetupTest {
         // then
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
-                .contains(
-                        "  codex_review_max_rounds: 1\n  codex_review_timeout_ms: 3600000\n",
-                        TrelloBoardSetup.REVIEW_LOOP_SETTING_HEADING);
+                .contains(DEFAULT_CODEX_REVIEW_YAML, TrelloBoardSetup.REVIEW_LOOP_SETTING_HEADING);
     }
 
     @Test
@@ -1703,8 +1716,8 @@ final class TrelloBoardSetupTest {
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("command: " + ConfigDefaults.DEFAULT_CODEX_COMMAND)
-                .doesNotContain("model:")
-                .doesNotContain("reasoning_effort:");
+                .doesNotContain(CODEX_MODEL_KEY_LINE)
+                .doesNotContain(CODEX_REASONING_EFFORT_KEY_LINE);
         EffectiveConfig config = resolve(workflow);
         assertThat(config.codex().model()).isNull();
         assertThat(config.codex().reasoningEffort()).isNull();
@@ -1750,7 +1763,7 @@ final class TrelloBoardSetupTest {
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("model: \"gpt-hand-edited\"")
-                .doesNotContain("reasoning_effort:");
+                .doesNotContain(CODEX_REASONING_EFFORT_KEY_LINE);
         EffectiveConfig config = resolve(workflow);
         assertThat(config.codex().model()).isEqualTo("gpt-hand-edited");
         assertThat(config.codex().reasoningEffort()).isNull();
@@ -1771,7 +1784,7 @@ final class TrelloBoardSetupTest {
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("reasoning_effort: \"high\"")
-                .doesNotContain("model:");
+                .doesNotContain(CODEX_MODEL_KEY_LINE);
         EffectiveConfig config = resolve(workflow);
         assertThat(config.codex().model()).isNull();
         assertThat(config.codex().reasoningEffort()).isEqualTo("high");
@@ -1790,8 +1803,8 @@ final class TrelloBoardSetupTest {
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("command: " + ConfigDefaults.DEFAULT_CODEX_COMMAND)
-                .doesNotContain("model:")
-                .doesNotContain("reasoning_effort:");
+                .doesNotContain(CODEX_MODEL_KEY_LINE)
+                .doesNotContain(CODEX_REASONING_EFFORT_KEY_LINE);
         EffectiveConfig config = resolve(workflow);
         assertThat(config.codex().model()).isNull();
         assertThat(config.codex().reasoningEffort()).isNull();
