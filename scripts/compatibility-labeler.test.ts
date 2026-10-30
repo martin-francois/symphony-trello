@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import test from "node:test";
+import {loadWorkflowScript} from "./test-support/workflow-script.ts";
 
 interface LabelChanges {
   readonly added: string[];
@@ -38,10 +39,10 @@ interface RemoveLabelParameters {
   readonly name: string;
 }
 
-type ExecutableAsyncFunction = (...arguments_: readonly unknown[]) => Promise<unknown>;
-type AsyncFunctionConstructor = new (...arguments_: readonly string[]) => ExecutableAsyncFunction;
-
-const AsyncFunction = Object.getPrototypeOf(async function (): Promise<void> {}).constructor as AsyncFunctionConstructor;
+const LABELER = loadWorkflowScript(
+  "compatibility-labeler.yml",
+  "Apply breaking change label from template selection",
+);
 const TEMPLATE = readFileSync(
   new URL("../.github/pull_request_template.md", import.meta.url),
   "utf8",
@@ -66,25 +67,6 @@ function select(decision: string, template = TEMPLATE): string {
 
 function selectHistory(choice: string, template = TEMPLATE): string {
   return replaceExactly(template, `- [ ] ${choice}`, `- [x] ${choice}`);
-}
-
-function labelerScript(): string {
-  const workflow = readFileSync(
-    new URL("../.github/workflows/compatibility-labeler.yml", import.meta.url),
-    "utf8",
-  );
-  const lines = workflow.split("\n");
-  const scriptStart = lines.findIndex((line) => line.trim() === "script: |");
-  assert.notEqual(scriptStart, -1, "compatibility labeler script block must exist");
-
-  const scriptLines: string[] = [];
-  for (const line of lines.slice(scriptStart + 1)) {
-    if (line && !line.startsWith("            ")) {
-      break;
-    }
-    scriptLines.push(line.slice(12));
-  }
-  return scriptLines.join("\n");
 }
 
 async function runLabeler(payload: LabelerPayload, options: RunOptions = {}): Promise<RunResult> {
@@ -125,7 +107,7 @@ async function runLabeler(payload: LabelerPayload, options: RunOptions = {}): Pr
     },
   };
 
-  await new AsyncFunction("context", "github", "core", labelerScript())(context, github, core);
+  await LABELER({context, github, core});
   return {attempts, changes, warnings};
 }
 
