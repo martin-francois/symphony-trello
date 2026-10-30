@@ -109,9 +109,7 @@ final class BoardCardCommands {
             List<CardSummary> inList = new ArrayList<>();
             for (TrelloClient.BoardCard card : cards) {
                 if (list.id().equals(card.listId())) {
-                    String reference = reference(card.id(), card.shortLink());
-                    inList.add(
-                            new CardSummary(card.id(), reference, TrelloCardSelectors.cardUrl(reference), card.name()));
+                    inList.add(summary(card.id(), card.shortLink(), card.name()));
                 }
             }
             listed.add(new ListWithCards(listView(session, list), inList));
@@ -131,11 +129,7 @@ final class BoardCardCommands {
         return new Changed(
                 Change.CARD_CREATED,
                 session.board(),
-                new CardSummary(
-                        created.id(),
-                        created.shortLink(),
-                        TrelloCardSelectors.cardUrl(created.shortLink()),
-                        create.title().strip()),
+                summary(created.id(), created.shortLink(), create.title().strip()),
                 listView(session, list));
     }
 
@@ -268,7 +262,11 @@ final class BoardCardCommands {
     }
 
     private static CardSummary summary(Card card) {
-        return new CardSummary(card.id(), reference(card.id(), card.shortLink()), cardUrl(card), card.title());
+        return summary(card.id(), card.shortLink(), card.title());
+    }
+
+    private static CardSummary summary(String id, @Nullable String shortLink, String title) {
+        return new CardSummary(id, reference(id, shortLink), cardUrl(id, shortLink), title);
     }
 
     /// The card's short link, or its id when Trello sent no short link. `card show` and the other
@@ -277,12 +275,8 @@ final class BoardCardCommands {
         return Strings.isNullOrEmpty(shortLink) ? id : shortLink;
     }
 
-    /// The card URL from its short link, else the URL Trello reported, else a URL from the card id.
-    private static String cardUrl(Card card) {
-        if (!Strings.isNullOrEmpty(card.shortLink())) {
-            return TrelloCardSelectors.cardUrl(card.shortLink());
-        }
-        return Objects.requireNonNullElseGet(card.url(), () -> TrelloCardSelectors.cardUrl(card.id()));
+    private static String cardUrl(String id, @Nullable String shortLink) {
+        return TrelloCardSelectors.cardUrl(reference(id, shortLink));
     }
 
     /// The list roles of the selected workflow. Active, in-progress, blocked, and terminal lists are
@@ -395,7 +389,7 @@ final class BoardCardCommands {
             return new CardDetails(
                     card.id(),
                     card.shortLink(),
-                    cardUrl(card),
+                    cardUrl(card.id(), card.shortLink()),
                     card.title(),
                     Objects.requireNonNullElse(card.description(), ""),
                     list,
