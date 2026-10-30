@@ -6,72 +6,74 @@ import com.google.common.base.CharMatcher;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Stream;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
-/// The list roles one workflow gives the lists of its board, as list names.
+/// The list roles one workflow gives the lists of its board.
 ///
 /// `active` holds the active lists where new work waits for pickup: the workflow's active lists
-/// other than the in-progress and merging lists. The human-review and merging lists are not workflow
-/// settings; setup records them when it generates the workflow, so a hand-written workflow may have
-/// neither.
+/// other than the in-progress and merging lists. Active and terminal lists follow
+/// [TrelloClient#isActiveList] and [TrelloClient#isTerminalList], so a workflow with
+/// `active_list_ids` or `terminal_list_ids` gives those roles by list id, as dispatch does. The other
+/// roles name one list each. The human-review and merging lists are not workflow settings; setup
+/// records them when it generates the workflow, so a hand-written workflow may have neither.
 @NullMarked
-public record TrelloListRoles(
-        List<String> active,
-        @Nullable String inProgress,
-        @Nullable String humanReview,
-        @Nullable String blocked,
-        @Nullable String merging,
-        List<String> terminal) {
+public final class TrelloListRoles {
     /// Every [Role] key in [Role] order, for help text that needs a constant.
     /// `TrelloListRolesTest` checks it against the enum.
     public static final String ROLE_NAMES = "active, in-progress, human-review, blocked, merging, terminal";
 
     private static final CharMatcher ROLE_SEPARATORS = CharMatcher.anyOf(" _").precomputed();
 
-    public TrelloListRoles {
-        active = List.copyOf(active);
-        terminal = List.copyOf(terminal);
+    private final EffectiveConfig config;
+    private final @Nullable String inProgress;
+    private final @Nullable String humanReview;
+    private final @Nullable String blocked;
+    private final @Nullable String merging;
+
+    private TrelloListRoles(
+            EffectiveConfig config,
+            @Nullable String inProgress,
+            @Nullable String humanReview,
+            @Nullable String blocked,
+            @Nullable String merging) {
+        this.config = config;
+        this.inProgress = inProgress;
+        this.humanReview = humanReview;
+        this.blocked = blocked;
+        this.merging = merging;
     }
 
     public static TrelloListRoles of(EffectiveConfig config, @Nullable String humanReview, @Nullable String merging) {
         EffectiveConfig.TrackerConfig tracker = config.tracker();
-        String inProgress = blankToNull(tracker.inProgressState());
-        String mergingList = blankToNull(merging);
-        List<String> waitingForPickup = tracker.activeStates().stream()
-                .filter(list -> !sameList(list, inProgress) && !sameList(list, mergingList))
-                .toList();
         return new TrelloListRoles(
-                waitingForPickup,
-                inProgress,
+                config,
+                blankToNull(tracker.inProgressState()),
                 blankToNull(humanReview),
                 blankToNull(tracker.blockedState()),
-                mergingList,
-                tracker.terminalStates());
+                blankToNull(merging));
     }
 
-    /// The list names that hold `role`, in workflow order.
-    public List<String> listNames(Role role) {
+    /// Every role that `list` has, in [Role] order.
+    public List<Role> rolesOf(TrelloClient.BoardList list) {
+        return Arrays.stream(Role.values()).filter(role -> holds(role, list)).toList();
+    }
+
+    private boolean holds(Role role, TrelloClient.BoardList list) {
         return switch (role) {
-            case ACTIVE -> active;
-            case IN_PROGRESS -> optionalList(inProgress);
-            case HUMAN_REVIEW -> optionalList(humanReview);
-            case BLOCKED -> optionalList(blocked);
-            case MERGING -> optionalList(merging);
-            case TERMINAL -> terminal;
+            case ACTIVE -> waitsForPickup(list);
+            case IN_PROGRESS -> sameList(list.name(), inProgress);
+            case HUMAN_REVIEW -> sameList(list.name(), humanReview);
+            case BLOCKED -> sameList(list.name(), blocked);
+            case MERGING -> sameList(list.name(), merging);
+            case TERMINAL -> TrelloClient.isTerminalList(config, list);
         };
     }
 
-    /// Every role that names `listName`, in [Role] order.
-    public List<Role> rolesOf(String listName) {
-        return Arrays.stream(Role.values())
-                .filter(role -> holds(role, listName))
-                .toList();
-    }
-
-    private boolean holds(Role role, String listName) {
-        return listNames(role).stream().anyMatch(name -> sameList(name, listName));
+    private boolean waitsForPickup(TrelloClient.BoardList list) {
+        return TrelloClient.isActiveList(config, list)
+                && !sameList(list.name(), inProgress)
+                && !sameList(list.name(), merging);
     }
 
     /// Resolves what a user typed as a destination: an open list name, or a role name that names
@@ -90,16 +92,12 @@ public record TrelloListRoles(
 
     private Destination resolveRole(List<TrelloClient.BoardList> openLists, Role role) {
         List<TrelloClient.BoardList> lists =
-                openLists.stream().filter(list -> holds(role, list.name())).toList();
+                openLists.stream().filter(list -> holds(role, list)).toList();
         return switch (lists.size()) {
             case 0 -> new Destination.RoleWithoutList(role);
             case 1 -> new Destination.Found(lists.getFirst());
             default -> new Destination.RoleWithSeveralLists(role, lists);
         };
-    }
-
-    private static List<String> optionalList(@Nullable String listName) {
-        return Stream.ofNullable(listName).toList();
     }
 
     private static boolean sameList(String list, @Nullable String other) {

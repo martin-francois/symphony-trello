@@ -255,7 +255,7 @@ final class BoardCardCommands {
     }
 
     private static ListView listView(Session session, TrelloClient.BoardList list) {
-        List<String> roles = session.roles().rolesOf(list.name()).stream()
+        List<String> roles = session.roles().rolesOf(list).stream()
                 .map(TrelloListRoles.Role::key)
                 .toList();
         boolean open = !list.closed();

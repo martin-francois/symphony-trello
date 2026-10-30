@@ -5402,7 +5402,9 @@ Card and list arguments:
   fail with `setup_card_archived`.
 - `LIST` is an open list name or a list role. An exact list name wins over a role name. Roles are
   `active` (active lists other than the in-progress and merging lists), `in-progress`,
-  `human-review`, `blocked`, `merging`, and `terminal`. The human-review and merging roles come from
+  `human-review`, `blocked`, `merging`, and `terminal`. When the workflow sets `active_list_ids` or
+  `terminal_list_ids`, the active or terminal role follows those list ids, as dispatch does, so a
+  list that only shares the name gets no role. The human-review and merging roles come from
   the inputs setup recorded for the generated workflow, or from the generated workflow's metadata
   when no record exists. A role that names several open lists MUST fail for a write and list every
   matching list for `card list --list`. A list name that matches several open lists MUST fail closed.

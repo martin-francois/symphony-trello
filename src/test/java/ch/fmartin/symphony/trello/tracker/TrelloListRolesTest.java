@@ -37,13 +37,43 @@ final class TrelloListRolesTest {
         TrelloListRoles roles = TrelloListRoles.of(config, "Human Review", "Merging");
 
         // when
-        List<TrelloListRoles.Role> readyRoles = roles.rolesOf("ready for codex");
-        List<TrelloListRoles.Role> mergingRoles = roles.rolesOf("Merging");
+        List<TrelloListRoles.Role> readyRoles = roles.rolesOf(READY);
+        List<TrelloListRoles.Role> progressRoles = roles.rolesOf(PROGRESS);
+        List<TrelloListRoles.Role> mergingRoles = roles.rolesOf(MERGING);
 
         // then
-        assertThat(roles.active()).containsExactly("Ready for Codex");
         assertThat(readyRoles).containsExactly(TrelloListRoles.Role.ACTIVE);
+        assertThat(progressRoles).containsExactly(TrelloListRoles.Role.IN_PROGRESS);
         assertThat(mergingRoles).containsExactly(TrelloListRoles.Role.MERGING);
+    }
+
+    @Test
+    void configuredListIdsDecideTheActiveAndTerminalRoles() {
+        // given
+        var readyNamesake = new TrelloClient.BoardList("list-ready-copy", "Ready for Codex", false);
+        var doneNamesake = new TrelloClient.BoardList("list-done-copy", "Done", false);
+        EffectiveConfig byListId = TrelloTestConfigs.trackerConfig(
+                Path.of("WORKFLOW.md"),
+                "https://api.trello.com/1",
+                "board-1",
+                Map.of(
+                        "active_states", List.of("Ready for Codex", "In Progress"),
+                        "active_list_ids", List.of(READY.id(), PROGRESS.id()),
+                        "in_progress_state", "In Progress",
+                        "terminal_states", List.of("Done"),
+                        "terminal_list_ids", List.of(DONE.id())));
+        TrelloListRoles roles = TrelloListRoles.of(byListId, null, null);
+        List<TrelloClient.BoardList> openLists = List.of(READY, readyNamesake, PROGRESS, DONE, doneNamesake);
+
+        // when
+        TrelloListRoles.Destination active = roles.resolve(openLists, "active");
+        TrelloListRoles.Destination terminal = roles.resolve(openLists, "terminal");
+
+        // then
+        assertThat(active).isEqualTo(new TrelloListRoles.Destination.Found(READY));
+        assertThat(terminal).isEqualTo(new TrelloListRoles.Destination.Found(DONE));
+        assertThat(roles.rolesOf(readyNamesake)).isEmpty();
+        assertThat(roles.rolesOf(doneNamesake)).isEmpty();
     }
 
     @ParameterizedTest
