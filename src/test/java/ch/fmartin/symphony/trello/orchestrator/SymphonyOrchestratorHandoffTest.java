@@ -26,6 +26,7 @@ import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
+import ch.fmartin.symphony.trello.testsupport.BoundedWait;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
@@ -334,7 +335,7 @@ final class SymphonyOrchestratorHandoffTest {
         // given
         try (var run = new HandoffRun(false, false, REVIEW_LIST, DEFAULT_TURN_TIMEOUT_MS, "stall_timeout_ms: 1000")) {
             run.start();
-            run.awaitFinalStarted();
+            run.awaitFinalStartedHandled();
 
             // when
             run.clock.advance(Duration.ofSeconds(2));
@@ -373,7 +374,7 @@ final class SymphonyOrchestratorHandoffTest {
         // given
         try (var run = new HandoffRun(false, false, "Done", DEFAULT_TURN_TIMEOUT_MS)) {
             run.start();
-            run.awaitFinalStarted();
+            run.awaitFinalStartedHandled();
             String worker = run.move().workerIdentity();
             var selected = new CountDownLatch(1);
             var releaseStall = new CountDownLatch(1);
@@ -1045,6 +1046,22 @@ final class SymphonyOrchestratorHandoffTest {
 
         void awaitFinalStarted() throws Exception {
             waitUntil(() -> Files.exists(finalStarted));
+        }
+
+        /// The app server creates the final-started file after it prints `item/started`, but the
+        /// orchestrator stamps that event with the test clock only when its reader handles it. A
+        /// stall test that advances the clock before then would see a fresh event and no stall.
+        void awaitFinalStartedHandled() throws Exception {
+            awaitFinalStarted();
+            BoundedWait.until(
+                    WAIT_TIMEOUT,
+                    () -> orchestrator
+                            .cardDetails(CARD_IDENTIFIER)
+                            .map(CardDebugDetails::running)
+                            .map(RuntimeSnapshot.RunningRow::lastEvent)
+                            .filter("item/started"::equals)
+                            .isPresent(),
+                    "the orchestrator's handling of the final item/started event");
         }
 
         void refresh() throws Exception {
