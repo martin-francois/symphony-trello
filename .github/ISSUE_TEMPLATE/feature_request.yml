@@ -94,7 +94,11 @@ body:
     id: ai-assistance
     attributes:
       label: AI Assistance (if used)
-      description: If an AI agent helped prepare this request, mark the relevant boxes. Otherwise leave this blank.
+      description: |
+        If an AI agent helped prepare this request, tick `AI-assisted issue`. The confirmation is then
+        required: tick it only if you've read and understand this request. An AI agent may tick it for
+        you only after asking whether you read and understand it, getting your explicit yes, and
+        being told it may tick the box (CONTRIBUTING.md, "Understanding box"). If no AI helped, leave both blank.
       options:
         - label: AI-assisted issue
           required: false

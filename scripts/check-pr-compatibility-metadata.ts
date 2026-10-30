@@ -17,6 +17,7 @@ export interface CommitMetadata {
 const COMPATIBILITY_HEADING = "## Compatibility Decision";
 const COMMIT_HISTORY_HEADING = "## Commit History in Main";
 const AI_ASSISTANCE_HEADING = "## AI Assistance (if used)";
+const REVIEW_CHECKLIST_HEADING = "## Review Checklist";
 const NO_AI_ASSISTANCE_CHOICE = "No AI assistance beyond short completion, search, formatting, or typo fixes";
 const AI_ASSISTED_CHOICE = "AI-assisted PR";
 const UNDERSTANDING_CONFIRMATION = "I confirm I understand what the code does";
@@ -38,11 +39,13 @@ const COMMIT_HISTORY_CHOICES = new Map<string, {readonly continuation: string; r
 const SELECTION_ERROR = "Select exactly one current option in the Compatibility Decision section.";
 const AI_ASSISTANCE_SECTION_ERROR = "Provide exactly one visible AI Assistance (if used) section.";
 const AI_ASSISTANCE_CHECKBOXES_ERROR =
-  "Keep the three AI Assistance checkboxes from the pull request template, one line each.";
+  "Keep the two AI Assistance checkboxes from the pull request template, one line each.";
+const REVIEW_CHECKLIST_SECTION_ERROR = "Provide exactly one visible Review Checklist section.";
+const UNDERSTANDING_CHECKBOX_ERROR =
+  `Put the \`- [ ] ${UNDERSTANDING_CONFIRMATION}\` line from the pull request template in the Review Checklist, once; it moved there from the AI Assistance section.`;
 const AI_ASSISTANCE_CHOICE_ERROR =
   `Tick exactly one AI assistance choice: \`${NO_AI_ASSISTANCE_CHOICE}\` or \`${AI_ASSISTED_CHOICE}\`.`;
-const UNDERSTANDING_CONFIRMATION_ERROR =
-  `An AI-assisted pull request merges only after a person ticks \`${UNDERSTANDING_CONFIRMATION}\`.`;
+const UNDERSTANDING_CONFIRMATION_ERROR = `Tick \`${UNDERSTANDING_CONFIRMATION}\`.`;
 const COMMIT_HISTORY_SELECTION_ERROR =
   "Select exactly one current option in the Commit History in Main section.";
 
@@ -142,8 +145,8 @@ function checkboxState(section: readonly string[], label: string): boolean | und
   return states.length === 1 ? states[0] : undefined;
 }
 
-// The "AI assistance disclosed" CodeRabbit check in .coderabbit.yaml is a subset of this (ADR
-// 0085), so a rate-limited CodeRabbit still leaves a check that fails (ADR 0141).
+// The "AI assistance disclosed" CodeRabbit check in .coderabbit.yaml is a subset of these two
+// (ADR 0085), so a rate-limited CodeRabbit still leaves a check that fails (ADR 0141).
 export function evaluateAiAssistanceDisclosure(body: string): string[] {
   const section = visibleSection(visibleMarkdownLines(body), AI_ASSISTANCE_HEADING);
   if (!section) {
@@ -151,14 +154,23 @@ export function evaluateAiAssistanceDisclosure(body: string): string[] {
   }
   const noAssistance = checkboxState(section, NO_AI_ASSISTANCE_CHOICE);
   const assisted = checkboxState(section, AI_ASSISTED_CHOICE);
-  const understood = checkboxState(section, UNDERSTANDING_CONFIRMATION);
-  if (noAssistance === undefined || assisted === undefined || understood === undefined) {
+  if (noAssistance === undefined || assisted === undefined) {
     return [AI_ASSISTANCE_CHECKBOXES_ERROR];
   }
-  if (noAssistance === assisted) {
-    return [AI_ASSISTANCE_CHOICE_ERROR];
+  return noAssistance === assisted ? [AI_ASSISTANCE_CHOICE_ERROR] : [];
+}
+
+// Every author confirms they understand the change, whether or not AI helped (ADR 0144).
+export function evaluateUnderstandingConfirmation(body: string): string[] {
+  const section = visibleSection(visibleMarkdownLines(body), REVIEW_CHECKLIST_HEADING);
+  if (!section) {
+    return [REVIEW_CHECKLIST_SECTION_ERROR];
   }
-  return assisted && !understood ? [UNDERSTANDING_CONFIRMATION_ERROR] : [];
+  const understood = checkboxState(section, UNDERSTANDING_CONFIRMATION);
+  if (understood === undefined) {
+    return [UNDERSTANDING_CHECKBOX_ERROR];
+  }
+  return understood ? [] : [UNDERSTANDING_CONFIRMATION_ERROR];
 }
 
 function selectedDecision(section: readonly string[]): CompatibilityKind | undefined {
@@ -358,6 +370,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const errors = [
     ...evaluateCompatibilityMetadata(title, body),
     ...evaluateAiAssistanceDisclosure(body),
+    ...evaluateUnderstandingConfirmation(body),
     ...evaluatePullRequestBreakingConsistency(title, body, commits),
   ];
   for (const error of errors) {

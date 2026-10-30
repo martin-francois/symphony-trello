@@ -12,6 +12,12 @@ informed: [Contributors, Reviewers, Future maintainers]
 
 # Tick the understanding box on martinfrancois's pull requests
 
+Since [ADR 0144](0144-require-the-understanding-box-on-every-pull-request.md) the box sits in the
+Review Checklist and is required on every pull request, not only with `AI-assisted PR`. His agent
+still ticks it on his pull requests. On anyone else's, the box is still the author's, but their
+agent may now tick it for them after asking whether they read and understand the changes, an
+explicit yes, and permission; the "leaves it for its human" rule below is amended that way.
+
 ## Context and Problem Statement
 
 The AI Assistance section of the pull request template has the box

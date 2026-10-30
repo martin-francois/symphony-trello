@@ -131,7 +131,8 @@ test("assistance disclosure requires exactly one explicit choice", () => {
   assert.equal(check?.mode, "error");
   assert.ok(instructions.includes("Fail when neither disclosure choice is ticked or both choices are ticked."));
   assert.ok(instructions.includes("exactly one must be ticked"));
-  assert.ok(instructions.includes('Fail when "AI-assisted PR" is ticked and the confirmation is not.'));
+  assert.ok(instructions.includes('Fail when "I confirm I understand what the code does" is not ticked.'));
+  assert.ok(instructions.includes("whether or not AI helped"));
   assert.ok(instructions.includes("No AI assistance beyond short completion, search, formatting, or typo fixes"));
 });
 

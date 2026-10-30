@@ -97,7 +97,8 @@ test("renders a complete generated pull request body", () => {
   assert.match(body, /- \[x\] Combine this pull request/);
   assert.match(body, /- \[x\] No AI assistance beyond short completion, search, formatting, or typo fixes/);
   assert.match(body, /- \[ \] AI-assisted PR/);
-  assert.match(body, /- \[ \] I confirm I understand what the code does/);
+  assert.match(body, /## Review Checklist\n\n- \[ \] I confirm I understand what the code does\n/);
+  assert.doesNotMatch(body.split("## AI Assistance (if used)")[1] ?? "", /I confirm I understand/);
 });
 
 test("rejects incomplete generated pull request metadata", () => {

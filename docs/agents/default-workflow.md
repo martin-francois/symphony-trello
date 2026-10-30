@@ -473,26 +473,33 @@ optional verification. Follow this order:
 - CodeRabbit pre-merge checks read the PR description and request changes while one fails
   ([ADR 0085](../adr/0085-enforce-pull-request-template-with-coderabbit.md)). Fix a failed check by
   editing the body, then comment `@coderabbitai run pre-merge checks`. The Commitlint workflow's
-  `Check compatibility metadata` step applies the same AI Assistance rules through
-  `scripts/check-pr-compatibility-metadata.ts`, so a rate-limited CodeRabbit still leaves a
+  `Check compatibility metadata` step applies the same AI Assistance and understanding-box rules
+  through `scripts/check-pr-compatibility-metadata.ts`, so a rate-limited CodeRabbit still leaves a
   failing check ([ADR 0141](../adr/0141-check-the-ai-assistance-disclosure-deterministically.md)).
   It runs locally with `PR_TITLE`, `PR_BODY`, `PR_BASE_SHA` and `PR_HEAD_SHA` set.
-- Who ticks `I confirm I understand what the code does` depends on who authored the pull request
-  ([ADR 0132](../adr/0132-tick-the-understanding-box-on-martinfrancois-pull-requests.md)). The box
-  exists for outside contributors. These rules hold only in `martin-francois/symphony-trello`. In a
-  fork or any other repository, the box belongs to that pull request's human author.
+- `I confirm I understand what the code does` is the first item of the Review Checklist and is
+  required on every pull request, whether or not AI helped
+  ([ADR 0144](../adr/0144-require-the-understanding-box-on-every-pull-request.md)); the metadata
+  script and the CodeRabbit check fail while it is unticked. Who ticks it
+  depends on who authored the pull request
+  ([ADR 0132](../adr/0132-tick-the-understanding-box-on-martinfrancois-pull-requests.md)). These
+  rules hold only in `martin-francois/symphony-trello`. In a fork or any other repository, the
+  box belongs to that pull request's human author.
   - On a pull request authored by martinfrancois in this repository, the agent ticks the box itself,
-    together with `AI-assisted PR`, when it works under his account, which means
+    together with the AI choice that applies, when it works under his account, which means
     `gh api user --jq .login` prints `martinfrancois`. This includes a pull request authored by martinfrancois that an agent opened
     or finished for him. If the AI assistance check had already failed on the empty box, comment
     `@coderabbitai run pre-merge checks` after ticking it.
-  - A Renovate or Release Please pull request that martinfrancois lands counts as his. Their
-    generated bodies have no box today. If one has it, ticking it is the only edit his agent makes
-    to that body, apart from the Commit History in Main checkboxes when the body has them.
+  - A Renovate, Release Please or generated OpenRewrite pull request that martinfrancois lands
+    counts as his. The Renovate and Release Please bodies have no box; the OpenRewrite body has it
+    unticked. Where the box exists, ticking it is the only edit his agent makes to that body,
+    apart from the Commit History in Main checkboxes when the body has them.
   - On a pull request authored by anyone else, the box belongs to that author, even when
     martinfrancois or his agents help finish the pull request. Neither martinfrancois nor his agents
     tick it. An agent working for that author, such as an outside contributor's agent on its own
-    pull request, leaves the box for its human and reports the failing check at handoff.
+    pull request, ticks it only under the rule in the template comment above the box and in
+    [CONTRIBUTING.md](../../CONTRIBUTING.md#understanding-box); otherwise it leaves the box
+    unticked and reports the failing check at handoff.
   - The CodeRabbit check only proves that someone ticked the box. Pull-request review checks who
     did, from the body as first posted and GitHub's edit history of it.
 
