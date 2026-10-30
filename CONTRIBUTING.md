@@ -541,8 +541,8 @@ Create pull requests from a topic branch and fill out the template. Link the iss
 when the PR should close it. Keep the PR focused on one user-visible change or one cleanup.
 
 Contributions are volunteer work. The project doesn't pay for contributions and doesn't offer
-bounties for implemented issues or pull requests. If you want to work on an issue, say so in a
-comment on it.
+bounties for implemented issues or pull requests. [Thank You](#thank-you) covers the thank-you for
+merged pull requests. If you want to work on an issue, say so in a comment on it.
 
 CodeRabbit checks the description against the template, the AI Assistance section, and the
 Compatibility Decision. While one of those checks fails, CodeRabbit requests changes and the PR
@@ -568,6 +568,13 @@ posting a top-level comment whose complete body is `/ready`. The automation then
 Progress comments and replies in inline review threads do not change the labels. Use `/ready` as the
 explicit pull-request-wide signal after resolving inline discussion, including a false-positive
 automated review finding.
+
+## Thank You
+
+**Coffee on me.** If you've had a pull request merged here and we meet in person, at a conference or
+anywhere else, tell me your GitHub handle and I'll buy you a coffee or a drink. It's one per person,
+however many pull requests you've made. It's a thank-you, not payment: the project doesn't pay for
+contributions or offer bounties.
 
 ## Running a Codex live bug bash
 

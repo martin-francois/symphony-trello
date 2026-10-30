@@ -115,8 +115,13 @@ auditing that may create issues lives in
 - When someone offers paid help or asks about a bounty, reply without waiting for the maintainer:
   thank them for the specific work they described, say that the project doesn't pay for
   contributions or offer bounties, say that a regular pull request would be very welcome, and, on an
-  issue the pickup comment rule above covers, offer to assign it to them if they want it.
-  `CONTRIBUTING.md` states the same terms for contributors.
+  issue the pickup comment rule above covers, offer to assign it to them if they want it. Whenever a
+  reply or comment mentions that the project doesn't pay, also link the coffee thank-you with its
+  full URL, https://github.com/martin-francois/symphony-trello/blob/main/CONTRIBUTING.md#thank-you,
+  and say plainly that it is a thank-you once a pull request is merged, not payment. Everyone with a
+  merged pull request qualifies once, including a co-author and people whose pull requests merged
+  before the thank-you existed; bots such as Renovate and Dependabot and martinfrancois's own agents
+  do not. `CONTRIBUTING.md` states the no-pay terms and the coffee offer for contributors.
 - The sweep summary lists every reply posted, with the person and the comment URL, every comment
   that got a 👍 instead of a reply, every spam comment or body with its author, and every comment
   left for the maintainer. No automation checks the replies, reactions, or hidden comments; the
