@@ -40,7 +40,15 @@ this repository.
 ## Review before finalizing
 
 - If a review tool is available, use it before finalizing non-trivial code changes and address
-  justified findings.
+  justified findings. Every pull request an agent works toward merging gets a code review before it
+  merges, whatever its size. This covers martinfrancois's own pull requests, outside contributors'
+  pull requests, and Renovate pull requests. Run the session's code review against the pull
+  request's base: the Codex review/fix loop below in a Codex session, or the agent's code-review
+  skill or tool in any other session. Fix justified findings in the pull request's scope, and
+  justified findings from its review threads, directly on the branch. For a justified finding
+  outside that scope, open a GitHub issue as described in
+  [GitHub issue triage](github-issue-triage.md) and link it in the reply or the handoff. The merge
+  handoff names the review that ran, so pull-request review can check it.
 - When Codex makes repository changes, run the Codex review/fix loop after every completed change
   unless the user explicitly says not to. This requirement is specific to Codex sessions; do not
   impose it on Claude or other AI tools.
@@ -83,7 +91,9 @@ this repository.
   amend the owning commit, or otherwise rewrite the branch so the final history does not leave
   generic "review fixes" commits behind. If a finding spans multiple existing commits, split the
   repair by ownership when practical; otherwise put the fix in the earliest commit that needs the
-  corrected behavior and keep the resulting commit focused.
+  corrected behavior and keep the resulting commit focused. On an outside contributor's pull request,
+  put each fix in a new commit instead; see
+  [Outside contributor pull requests](default-workflow.md#outside-contributor-pull-requests).
 
 ## References
 

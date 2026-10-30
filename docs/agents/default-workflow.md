@@ -305,7 +305,8 @@ optional verification. Follow this order:
 - For feature-branch work in this repository, preserve a single review commit by amending the
   existing branch commit or squashing related local commits before pushing, unless the user
   explicitly asks for multiple commits or the change includes a refactor, which belongs in its own
-  focused commit before the behavior-change commit.
+  focused commit before the behavior-change commit. An outside contributor's pull request is the
+  exception; see [Outside contributor pull requests](#outside-contributor-pull-requests).
 - In the pull request template, choose the intended history result in plain language. **Combine this
   pull request into one final commit** means the branch commits are review steps; maintainers normally
   use GitHub's squash merge. **Keep the individual commits** means each focused commit remains in
@@ -318,6 +319,12 @@ optional verification. Follow this order:
 - Treat Release Please pull request titles and bodies as generated metadata. Do not normalize its
   body to the general pull request template or manually edit version text: Release Please parses that
   body when updating the PR. Put extra review or verification evidence in a comment instead.
+- Merge the Release Please pull request last. First merge every other pull request planned for
+  that release: those the task or martinfrancois names for it, and any pull request the agent is
+  landing in the same session. Release Please rewrites its pull request after each merge to `main`,
+  so a pull request merged after it waits for the next release. No automation checks the order; the
+  merging agent runs `gh pr list --state open` right before the merge and names the pull requests
+  it left for later in its handoff.
 - Synchronize feature branches by rebasing onto the latest default branch. Never create merge
   commits to update a pull request branch; after verifying the rewritten history, push it with
   `--force-with-lease` against the previously fetched remote head.
@@ -413,10 +420,49 @@ optional verification. Follow this order:
   and report if it is still pending after the actual CI checks are green.
 - CodeRabbit pre-merge checks read the PR description and request changes while one fails
   ([ADR 0085](../adr/0085-enforce-pull-request-template-with-coderabbit.md)). Fix a failed check by
-  editing the body, then comment `@coderabbitai run pre-merge checks`. An agent leaves
-  `I confirm I understand what the code does` for the human to tick, so an AI assistance check that
-  fails only on that box is expected at handoff. Report it and do not tick the box. The check only
-  proves that someone ticked it before merge, so pull-request review enforces who did.
+  editing the body, then comment `@coderabbitai run pre-merge checks`.
+- Who ticks `I confirm I understand what the code does` depends on who authored the pull request
+  ([ADR 0132](../adr/0132-tick-the-understanding-box-on-martinfrancois-pull-requests.md)). The box
+  exists for outside contributors. These rules hold only in `martin-francois/symphony-trello`. In a
+  fork or any other repository, the box belongs to that pull request's human author.
+  - On a pull request authored by martinfrancois in this repository, the agent ticks the box itself
+    when it works under his account, which means `gh api user --jq .login` prints
+    `martinfrancois`. This includes a pull request authored by martinfrancois that an agent opened
+    or finished for him. If the AI assistance check had already failed on the empty box, comment
+    `@coderabbitai run pre-merge checks` after ticking it.
+  - A Renovate or Release Please pull request that martinfrancois lands counts as his. Their
+    generated bodies have no box today. If one has it, ticking it is the only edit his agent makes
+    to that body.
+  - On a pull request authored by anyone else, the box belongs to that author, even when
+    martinfrancois or his agents help finish the pull request. Neither martinfrancois nor his agents
+    tick it. An agent working for that author, such as an outside contributor's agent on its own
+    pull request, leaves the box for its human and reports the failing check at handoff.
+  - The CodeRabbit check only proves that someone ticked the box. Pull-request review checks who
+    did, from the body as first posted and GitHub's edit history of it.
+
+## Outside contributor pull requests
+
+An outside contributor's pull request is one whose author is neither martinfrancois nor a bot. These
+rules apply to the agents working for martinfrancois on such a pull request. Pull-request review of
+the posted comments and the branch history is the evidence; no automation checks them.
+
+- Every comment on the pull request thanks the contributor and names what their change fixes, for
+  example "Thanks for fixing the setup crash when the state home is a symlink." This covers review
+  summaries, inline review comments, replies to threads, and status comments.
+- When a draft pull request is ready for review, the agent may mark it ready with `gh pr ready <n>`
+  without asking the contributor first. Ready means the contributor's checklist in
+  `CONTRIBUTING.md` is met, required checks pass, and the code review in
+  [Review before finalizing](autonomy-and-escalation.md#review-before-finalizing) left nothing to
+  fix.
+- Put review fixes in separate commits on top of the contributor's commits. Do not amend, squash, or
+  fix up the contributor's commits, and keep the contributor as their author. Merge with a rebase
+  merge so the separate commits reach `main`. When the body asks to combine the pull request into
+  one commit, ask the contributor in a comment before merging. This overrides the single-commit rule
+  above and the fix-into-the-owning-commit rule in the
+  [Codex review/fix loop](autonomy-and-escalation.md#codex-reviewfix-loop). Pushing to a fork needs
+  maintainer edits enabled; when they are off, ask the contributor to enable them.
+- The `I confirm I understand what the code does` box stays the contributor's; see
+  [Committing and pull requests](#committing-and-pull-requests).
 
 ## References
 

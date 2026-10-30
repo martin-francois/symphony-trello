@@ -18,6 +18,10 @@ informed: [Contributors, Reviewers, Future maintainers]
 
 # Enforce the Pull Request Template with CodeRabbit Pre-Merge Checks
 
+[ADR 0132](0132-tick-the-understanding-box-on-martinfrancois-pull-requests.md) decides who ticks
+`I confirm I understand what the code does`. On a pull request authored by martinfrancois, his agent
+ticks it. The gate in this ADR did not change.
+
 ## Context and Problem Statement
 
 GitHub fills a new pull request body with `.github/pull_request_template.md`, but it cannot require
