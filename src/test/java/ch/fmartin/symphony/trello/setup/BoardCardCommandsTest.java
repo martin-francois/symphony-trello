@@ -30,6 +30,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 final class BoardCardCommandsTest {
     private static final String BOARD_ID = "board-1";
     private static final String TERMINAL_ESCAPE = "\u001B";
+    private static final Path BOARD_CARDS_SKILL = Path.of(".codex/skills/symphony-trello-board-cards/SKILL.md");
     private static final String DEFAULT_TRELLO_TOOLS =
             """
             trello_tools:
@@ -106,7 +107,8 @@ final class BoardCardCommandsTest {
     @Test
     void listNamesACardWithoutShortLinkByItsId() throws Exception {
         // given
-        board.card("SYNTH0000000000000000201", "", "Fix the login redirect", "list-inbox");
+        String cardId = "SYNTH0000000000000000201";
+        board.card(cardId, "", "Fix the login redirect", "list-inbox");
         Path configDir = connectBoard(DEFAULT_TRELLO_TOOLS);
 
         // when
@@ -114,10 +116,9 @@ final class BoardCardCommandsTest {
         CliRunResult json = runCard(configDir, "list", "--list", "Inbox", "--json");
 
         // then
-        text.assertSuccess().stdoutContains("  SYNTH0000000000000000201  \"Fix the login redirect\"");
+        text.assertSuccess().stdoutContains("  " + cardId + "  \"Fix the login redirect\"");
         json.assertSuccess()
-                .stdoutContains(
-                        "\"short_link\":\"SYNTH0000000000000000201\",\"url\":\"https://trello.com/c/SYNTH0000000000000000201\"");
+                .stdoutContains("\"short_link\":\"" + cardId + "\",\"url\":\"https://trello.com/c/" + cardId + "\"");
     }
 
     @Test
@@ -257,7 +258,7 @@ final class BoardCardCommandsTest {
         CliRunResult result = runCard(configDir, "create", "--title", "Start now", "--list", "Ready for Codex");
 
         // then
-        assertFailure(result, "trello_create_list_not_allowed");
+        assertPolicyRefusal(result, "trello_create_list_not_allowed");
         assertThat(board.writeRequests()).isEmpty();
     }
 
@@ -314,6 +315,26 @@ final class BoardCardCommandsTest {
     }
 
     @Test
+    void moveRequiresAMoveAllowlist() throws Exception {
+        // given
+        FakeTrelloBoard.FakeCard card = board.card("card0001", "SYNTH101", "Fix the login redirect", "list-inbox");
+        Path configDir = connectBoard(
+                """
+                trello_tools:
+                  enabled: true
+                  allow_writes: true
+                """);
+
+        // when
+        CliRunResult result = runCard(configDir, "move", "SYNTH101", "--to", "Done");
+
+        // then
+        assertPolicyRefusal(result, "trello_move_allowlist_required");
+        assertThat(card.listId()).isEqualTo("list-inbox");
+        assertThat(board.writeRequests()).isEmpty();
+    }
+
+    @Test
     void moveRefusesAListThatTheWorkflowDoesNotAllow() throws Exception {
         // given
         FakeTrelloBoard.FakeCard card = board.card("card0001", "SYNTH101", "Fix the login redirect", "list-inbox");
@@ -323,7 +344,7 @@ final class BoardCardCommandsTest {
         CliRunResult result = runCard(configDir, "move", "SYNTH101", "--to", "active");
 
         // then
-        assertFailure(result, "trello_move_not_allowed");
+        assertPolicyRefusal(result, "trello_move_not_allowed");
         assertThat(card.listId()).isEqualTo("list-inbox");
         assertThat(board.writeRequests()).isEmpty();
     }
@@ -415,7 +436,7 @@ final class BoardCardCommandsTest {
         CliRunResult result = runCard(configDir, "comment", "SYNTH101", "--text", "Hello");
 
         // then
-        assertFailure(result, "trello_comments_disabled");
+        assertPolicyRefusal(result, "trello_comments_disabled");
         assertThat(board.writeRequests()).isEmpty();
     }
 
@@ -434,7 +455,7 @@ final class BoardCardCommandsTest {
         CliRunResult list = runCard(configDir, "list");
 
         // then
-        assertFailure(archive, code);
+        assertPolicyRefusal(archive, code);
         list.assertSuccess().stdoutContains("List \"Inbox\"  roles: none  move here: no  create here: no");
         assertThat(board.writeRequests()).isEmpty();
     }
@@ -567,6 +588,22 @@ final class BoardCardCommandsTest {
         // then
         assertFailure(result, "setup_card_workflow_not_connected");
         assertThat(foreignBoard.requests()).isEmpty();
+        assertThat(board.requests()).isEmpty();
+    }
+
+    @Test
+    void anUnconnectedWorkflowIsRefusedBeforeTheCredentialsAreRead() throws Exception {
+        // given
+        Path configDir = connectBoard(DEFAULT_TRELLO_TOOLS);
+        Path unconnected = configDir.resolve("WORKFLOW.unconnected.md");
+        Files.writeString(unconnected, workflow(BOARD_ID, DEFAULT_TRELLO_TOOLS, List.of("Done")));
+        Files.delete(configDir.resolve(".env"));
+
+        // when
+        CliRunResult result = runCard(configDir, "list", "--workflow", unconnected.toString());
+
+        // then
+        assertFailure(result, "setup_card_workflow_not_connected");
         assertThat(board.requests()).isEmpty();
     }
 
@@ -743,6 +780,13 @@ final class BoardCardCommandsTest {
 
     private static void assertFailure(CliRunResult result, String code) {
         result.assertFailure(CliExitCodes.SETUP_FAILURE).stderrContains("setup_failed code=" + code + " message=");
+    }
+
+    /// Asserts a refusal by a `trello_tools` setting. The board-cards skill must name the code, so
+    /// Codex tells the user which setting refused the write instead of relaying an unknown failure.
+    private static void assertPolicyRefusal(CliRunResult result, String code) {
+        assertFailure(result, code);
+        assertThat(BOARD_CARDS_SKILL).content(StandardCharsets.UTF_8).contains("`" + code + "`");
     }
 
     private CliRunResult runCard(Path configDir, String... args) {

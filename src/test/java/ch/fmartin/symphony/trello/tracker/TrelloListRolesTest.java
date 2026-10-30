@@ -68,12 +68,14 @@ final class TrelloListRolesTest {
         // when
         TrelloListRoles.Destination active = roles.resolve(openLists, "active");
         TrelloListRoles.Destination terminal = roles.resolve(openLists, "terminal");
+        List<TrelloListRoles.Role> readyNamesakeRoles = roles.rolesOf(readyNamesake);
+        List<TrelloListRoles.Role> doneNamesakeRoles = roles.rolesOf(doneNamesake);
 
         // then
         assertThat(active).isEqualTo(new TrelloListRoles.Destination.Found(READY));
         assertThat(terminal).isEqualTo(new TrelloListRoles.Destination.Found(DONE));
-        assertThat(roles.rolesOf(readyNamesake)).isEmpty();
-        assertThat(roles.rolesOf(doneNamesake)).isEmpty();
+        assertThat(readyNamesakeRoles).isEmpty();
+        assertThat(doneNamesakeRoles).isEmpty();
     }
 
     @ParameterizedTest
