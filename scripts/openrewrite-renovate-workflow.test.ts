@@ -1263,8 +1263,17 @@ test("BetterLeaks image updates automerge only after a scan with the image they 
     assert.equal(step.with?.["persist-credentials"], false);
   }
   assert.equal(trustedScanner?.with?.ref, "${{ github.event.pull_request.base.sha }}");
+  // The comparison script comes from the merge commit, the commit the workflow file is read from.
+  const comparisonCheckout = steps.find(({name}) => name === "Check out the comparison script from the merge commit");
+  assert.equal(comparisonCheckout?.with?.["ref"], undefined);
+  assert.equal(comparisonCheckout?.with?.["sparse-checkout"], "scripts/compare-betterleaks-images");
+  assert.equal(
+    compare?.run,
+    "merge/scripts/compare-betterleaks-images scanner/scripts/betterleaks-docker.sh source/scripts/betterleaks-docker.sh",
+  );
+  const comparison = readFileSync(new URL("compare-betterleaks-images", SCRIPTS), "utf8");
   assert.ok(
-    compare?.run?.includes(
+    comparison.includes(
       String.raw`'ghcr\.io/betterleaks/betterleaks:v[0-9]+\.[0-9]+\.[0-9]+@sha256:[0-9a-f]{64}'`,
     ),
     "only digest-pinned images from the BetterLeaks repository may be scanned",
@@ -1287,7 +1296,7 @@ test("BetterLeaks image updates automerge only after a scan with the image they 
   );
   assert.equal(wrapper.match(/(?:^|[^\w])image\+?=/gmu)?.length, 1);
   assert.ok(wrapper.split("\n").includes(execLine));
-  assert.ok(compare?.run?.includes(`grep -qxF '${execLine}'`));
+  assert.ok(comparison.includes(`grep -qxF '${execLine}'`));
 
   // With the scan in place, a BetterLeaks update follows the ordinary non-major automerge.
   assert.ok(
