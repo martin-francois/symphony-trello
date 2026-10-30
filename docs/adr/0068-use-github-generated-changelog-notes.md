@@ -112,3 +112,7 @@ GitHub-generated release notes include merged pull requests, release contributor
 contributors when present, and a full changelog comparison link. Existing changelog entries remain
 unchanged; the new format applies only to releases generated after this configuration reaches the
 default branch.
+
+GitHub's notes leave out `BREAKING CHANGE:` footers.
+[ADR 0135](0135-add-breaking-change-footers-to-github-release-notes.md) adds them to the release
+pull request, `CHANGELOG.md`, and the GitHub release.
