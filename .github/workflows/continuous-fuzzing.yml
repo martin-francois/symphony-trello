@@ -297,7 +297,8 @@ jobs:
         with:
           distribution: temurin
           java-version: "25.0.4+7.0.LTS"
-          cache: maven
+          # No cache: the next step holds the storage token, so Maven downloads from a clean
+          # runner (docs/agents/github-actions-security.md).
       - name: Generate and publish Java 25 fuzzing coverage
         env:
           GIT_STORE_REPO: https://${{ secrets.CLUSTERFUZZLITE_STORAGE_TOKEN }}@github.com/martin-francois/symphony-trello-fuzzing-storage.git
