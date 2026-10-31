@@ -33,6 +33,9 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
   at most 10 non-blank, non-comment lines and no function; everything else is a file under
   `scripts/` that the step runs, as [GitHub Actions workflows](github-actions.md) specifies.
 
+- When a change adds, updates, or removes a dependency or a tool version pin, apply
+  [Dependency updates](dependency-updates.md#proving-renovate-ownership) before finishing: every
+  declaration needs a Renovate owner, and the local extraction dry run is the proof.
 - Prefer TDD when the behavior can be isolated. If TDD is impractical, make sure the final tests
   would have failed for the bug or missing behavior.
 - When starting implementation work for a specific GitHub issue, assign that issue to the
