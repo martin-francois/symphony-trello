@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.regex.MatchResult;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 final class TrelloCardReferenceParser {
@@ -21,6 +22,7 @@ final class TrelloCardReferenceParser {
             Pattern.compile("^(?:[0-9a-fA-F]{24}|(?=[A-Za-z0-9]{8,24}$)(?=.*\\d)[A-Za-z0-9]+)$");
     private static final Pattern MARKDOWN_CARD_LINK =
             Pattern.compile("(?i)\\[[^\\]\\n]+\\]\\((https://trello\\.com/c/[^\\s)]+)\\)");
+    private static final Pattern LINE_BREAK = Pattern.compile("\\R");
 
     private TrelloCardReferenceParser() {}
 
@@ -37,6 +39,33 @@ final class TrelloCardReferenceParser {
             return List.of();
         }
         return cardUrlRanges(text).stream().map(ReferencedRange::reference).toList();
+    }
+
+    static Optional<ReferencedLine> exactReferenceWithSourceLine(String text) {
+        return exactReference(text)
+                .map(reference -> new ReferencedLine(reference, sourceLineAt(text, text.indexOf(text.strip()))));
+    }
+
+    static List<ReferencedLine> referencesWithSourceLinesIn(String text) {
+        if (text == null || text.isBlank()) {
+            return List.of();
+        }
+        return cardUrlRanges(text).stream()
+                .map(range -> new ReferencedLine(
+                        range.reference(), sourceLineAt(text, range.range().start())))
+                .toList();
+    }
+
+    private static String sourceLineAt(String text, int offset) {
+        Matcher lineBreaks = LINE_BREAK.matcher(text);
+        int lineStart = 0;
+        while (lineBreaks.find()) {
+            if (lineBreaks.start() >= offset) {
+                return text.substring(lineStart, lineBreaks.start());
+            }
+            lineStart = lineBreaks.end();
+        }
+        return text.substring(lineStart);
     }
 
     static boolean containsTrelloCardUrl(String text) {
@@ -117,4 +146,6 @@ final class TrelloCardReferenceParser {
     }
 
     private record ReferencedRange(TrelloCardReference reference, Range range) {}
+
+    record ReferencedLine(TrelloCardReference reference, String text) {}
 }
