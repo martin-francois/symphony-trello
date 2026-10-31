@@ -1,10 +1,8 @@
 package ch.fmartin.symphony.trello.config;
 
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
+import ch.fmartin.symphony.trello.workflow.WorkflowFrontMatterYaml;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -17,8 +15,6 @@ public final class WorkflowConfigIngestion {
     public static final int MIN_LOCAL_SERVER_PORT = 0;
     public static final int MAX_LOCAL_SERVER_PORT = 65_535;
 
-    private static final TypeReference<LinkedHashMap<String, Object>> YAML_MAP_TYPE = new TypeReference<>() {};
-    private static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
     private static final Map<String, Integer> DEFAULT_PRIORITIES = Map.of(
             "p1", 1,
             "p2", 2,
@@ -41,7 +37,7 @@ public final class WorkflowConfigIngestion {
             Function<String, Optional<String>> environmentResolver,
             UnresolvedEnvironmentPolicy unresolvedEnvironmentPolicy) {
         try {
-            LinkedHashMap<String, Object> parsed = YAML.readValue(frontMatter, YAML_MAP_TYPE);
+            Map<String, Object> parsed = WorkflowFrontMatterYaml.readMap(frontMatter);
             return Optional.of(
                     collect(parsed == null ? Map.of() : parsed, environmentResolver, unresolvedEnvironmentPolicy));
         } catch (JsonProcessingException e) {

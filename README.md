@@ -1485,6 +1485,11 @@ override instead, change the override and restart the worker without running `re
 [`WORKFLOW.example.md`](WORKFLOW.example.md) contains a complete starter. YAML front matter
 configures runtime behavior. The Markdown body becomes the prompt template for the card.
 
+The front matter may use YAML anchors and aliases (`&name` and `*name`) to repeat a value. The
+loader rejects merge keys (`<<: *name`) and a key that appears twice in the same map, and names the
+key in the error; write the merged keys out instead. Empty front matter, or front matter with only
+comments, means no settings. `SPEC.md` section 5.2 lists the exact rules.
+
 Minimum example:
 
 ```markdown

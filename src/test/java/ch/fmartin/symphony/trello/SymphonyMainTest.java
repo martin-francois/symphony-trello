@@ -59,6 +59,43 @@ final class SymphonyMainTest {
     }
 
     @Test
+    void readsAnAliasedServerPortBeforeQuarkusStarts() {
+        // given
+        String aliased =
+                """
+                ports:
+                  status: &status 9090
+                server:
+                  port: *status
+                """;
+
+        // when
+        var aliasedPort = SymphonyMain.configuredServerPort(aliased, ignored -> Optional.empty());
+
+        // then
+        assertThat(aliasedPort).hasValue("9090");
+    }
+
+    @Test
+    void ignoresFrontMatterThatBreaksAYamlRuleBeforeQuarkusStarts() {
+        // given
+        String repeated =
+                """
+                server:
+                  port: 9090
+                  port: 9091
+                """;
+
+        // when
+        var repeatedPort = SymphonyMain.configuredServerPort(repeated, ignored -> Optional.empty());
+
+        // then
+        assertThat(repeatedPort)
+                .as("the workflow loader reports the repeated key; startup binds no port from it")
+                .isEmpty();
+    }
+
+    @Test
     void normalizesWholeValuedFloatServerPortBeforeQuarkusStarts() {
         // given
         String literalFloat = """

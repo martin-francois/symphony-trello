@@ -17,8 +17,8 @@ import ch.fmartin.symphony.trello.config.WorkflowServerPortClassification;
 import ch.fmartin.symphony.trello.workflow.CodexSandboxPolicy;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workflow.WorkflowException;
+import ch.fmartin.symphony.trello.workflow.WorkflowFrontMatterYaml;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
@@ -42,7 +42,6 @@ final class WorkflowConfigEditor {
     private static final ObjectMapper YAML = new ObjectMapper(YAMLFactory.builder()
             .disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER)
             .build());
-    private static final TypeReference<SequencedMap<String, Object>> YAML_MAP_TYPE = new TypeReference<>() {};
     private static final Pattern FRONT_MATTER =
             Pattern.compile("\\A---\\R(?<yaml>.*?)\\R---\\R(?<body>.*)\\z", Pattern.DOTALL);
     private static final Set<PosixFilePermission> POSIX_WRITE_PERMISSIONS =
@@ -828,7 +827,7 @@ final class WorkflowConfigEditor {
     }
 
     private static SequencedMap<String, Object> parseYaml(FrontMatter frontMatter) throws IOException {
-        SequencedMap<String, Object> yaml = YAML.readValue(frontMatter.yaml(), YAML_MAP_TYPE);
+        SequencedMap<String, Object> yaml = WorkflowFrontMatterYaml.readMap(frontMatter.yaml());
         if (yaml == null) {
             throw new TrelloBoardSetupException(
                     "setup_workflow_frontmatter_not_map", "Workflow front matter must be a YAML map.");

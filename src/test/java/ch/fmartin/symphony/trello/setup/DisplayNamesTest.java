@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_LINE_SEPARATOR;
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_NEXT_LINE;
 import static ch.fmartin.symphony.trello.setup.TerminalInputFixture.ESCAPE;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -37,6 +39,11 @@ final class DisplayNamesTest {
                 Arguments.of("tab in name", "Tab\tStop", "\"Tab\\tStop\""),
                 Arguments.of("escape control in name", "Esc" + ESCAPE + "Seq", "\"Esc\\u001BSeq\""),
                 Arguments.of("NUL in name", "Null" + NUL_IN_DISPLAY_NAME + "Byte", "\"Null\\u0000Byte\""),
+                Arguments.of("next line in name", "Next" + UNICODE_NEXT_LINE + "Line", "\"Next\\u0085Line\""),
+                Arguments.of(
+                        "line separator in name",
+                        "Line" + UNICODE_LINE_SEPARATOR + "Separator",
+                        "\"Line\\u2028Separator\""),
                 Arguments.of(
                         "non-ASCII display name",
                         "Unicode " + NON_ASCII_DISPLAY_NAME,

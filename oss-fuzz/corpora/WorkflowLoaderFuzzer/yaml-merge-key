@@ -1,0 +1,8 @@
+---
+defaults: &defaults
+  turn_timeout_ms: 5000
+codex:
+  <<: *defaults
+  command: codex app-server
+---
+A merge key is rejected.
