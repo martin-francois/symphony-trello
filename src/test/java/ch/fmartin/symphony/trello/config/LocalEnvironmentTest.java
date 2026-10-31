@@ -94,6 +94,28 @@ final class LocalEnvironmentTest {
     }
 
     @Test
+    void lookupNamesTheSourceThatSuppliedEachValue() throws Exception {
+        // given
+        Path dotenv = dotenvContaining("TRELLO_API_KEY=key-from-dotenv\nTRELLO_API_TOKEN=token-from-dotenv\n");
+        EnvironmentSources sources = LocalEnvironment.sources(Map.of("TRELLO_API_KEY", "key-from-shell"), dotenv);
+
+        // when
+        var apiKey = sources.lookup("TRELLO_API_KEY");
+        var apiToken = sources.lookup("TRELLO_API_TOKEN");
+        var missing = sources.lookup("MISSING");
+
+        // then
+        assertThat(apiKey).hasValueSatisfying(value -> assertThat(value)
+                .returns("key-from-shell", EnvironmentValue::value)
+                .extracting(EnvironmentValue::source)
+                .isInstanceOf(EnvironmentSource.ShellEnvironment.class));
+        assertThat(apiToken)
+                .hasValue(new EnvironmentValue(
+                        "TRELLO_API_TOKEN", "token-from-dotenv", new EnvironmentSource.EnvFile(dotenv)));
+        assertThat(missing).isEmpty();
+    }
+
+    @Test
     void realEnvironmentVariableWinsOverDotenv() throws Exception {
         // given
         Path dotenv = dotenvContaining("TRELLO_API_KEY=key-from-dotenv");

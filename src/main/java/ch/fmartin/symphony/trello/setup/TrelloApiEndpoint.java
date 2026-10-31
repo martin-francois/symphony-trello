@@ -1,87 +1,43 @@
 package ch.fmartin.symphony.trello.setup;
 
-import static ch.fmartin.symphony.trello.TextCharacterMatchers.DOTS;
-import static ch.fmartin.symphony.trello.TextCharacterMatchers.SLASHES;
-
+import ch.fmartin.symphony.trello.config.TrelloCredentialEndpoint;
 import java.net.URI;
-import java.net.URISyntaxException;
-import java.util.Locale;
 import java.util.Objects;
 
+/// Validates the `--endpoint` option: an absolute http(s) URL of a Trello REST API base. The
+/// spelling comes from [TrelloCredentialEndpoint#canonical], the one normalizer every endpoint
+/// comparison uses, so a value setup accepts compares equal to the same value elsewhere.
 final class TrelloApiEndpoint {
     private static final String API_TRELLO_HOST = "api.trello.com";
-    private static final String REST_API_PATH = "/1";
+    private static final String REST_API_PATH = TrelloCredentialEndpoint.REST_API_PATH;
 
     private TrelloApiEndpoint() {}
 
     static URI normalize(URI endpoint) {
         URI value = Objects.requireNonNull(endpoint, "endpoint");
-        String scheme = value.getScheme();
-        String host = value.getHost();
-        if (scheme == null || host == null || value.getUserInfo() != null) {
+        if (value.getUserInfo() != null || value.getQuery() != null || value.getFragment() != null) {
             throw invalidEndpoint();
         }
-        String normalizedScheme = scheme.toLowerCase(Locale.ROOT);
-        String normalizedHost = canonicalHost(host);
-        if (!"http".equals(normalizedScheme) && !"https".equals(normalizedScheme)) {
+        URI canonical =
+                TrelloCredentialEndpoint.canonical(value.toString()).orElseThrow(TrelloApiEndpoint::invalidEndpoint);
+        String scheme = canonical.getScheme();
+        if (!"http".equals(scheme) && !"https".equals(scheme)) {
             throw invalidEndpoint();
         }
-        if (API_TRELLO_HOST.equals(normalizedHost) && !"https".equals(normalizedScheme)) {
+        boolean officialTrelloHost = API_TRELLO_HOST.equals(canonical.getHost());
+        if (officialTrelloHost && !"https".equals(scheme)) {
             throw invalidEndpoint();
         }
-        if (value.getQuery() != null || value.getFragment() != null) {
+        String path = canonical.getPath();
+        if (officialTrelloHost ? !REST_API_PATH.equals(path) : !path.endsWith(REST_API_PATH)) {
             throw invalidEndpoint();
         }
-        String normalizedPath = normalizePath(value.getPath(), API_TRELLO_HOST.equals(normalizedHost));
-        try {
-            return new URI(normalizedScheme, null, normalizedHost, value.getPort(), normalizedPath, null, null);
-        } catch (URISyntaxException exception) {
-            throw invalidEndpoint(exception);
-        }
-    }
-
-    /// Whether a workflow's `tracker.endpoint` names `expected`, comparing both in the form that
-    /// [#normalize] gives them. A value that `normalize` rejects is not a Trello REST API base, so it
-    /// cannot be `expected` either.
-    static boolean sameEndpoint(String configured, URI expected) {
-        try {
-            return normalize(new URI(configured)).equals(normalize(expected));
-        } catch (URISyntaxException | TrelloBoardSetupException notTrelloApiBase) {
-            return false;
-        }
-    }
-
-    private static String canonicalHost(String host) {
-        return DOTS.trimTrailingFrom(host.toLowerCase(Locale.ROOT));
-    }
-
-    private static String normalizePath(String path, boolean officialTrelloHost) {
-        if (path == null || path.isBlank() || "/".equals(path)) {
-            return REST_API_PATH;
-        }
-        String withoutTrailingSlashes = stripTrailingSlashes(path);
-        if (officialTrelloHost && !REST_API_PATH.equals(withoutTrailingSlashes)) {
-            throw invalidEndpoint();
-        }
-        if (withoutTrailingSlashes.endsWith(REST_API_PATH)) {
-            return withoutTrailingSlashes;
-        }
-        throw invalidEndpoint();
-    }
-
-    private static String stripTrailingSlashes(String path) {
-        String stripped = SLASHES.trimTrailingFrom(path);
-        return stripped.isEmpty() ? "/" : stripped;
+        return canonical;
     }
 
     private static TrelloBoardSetupException invalidEndpoint() {
-        return invalidEndpoint(null);
-    }
-
-    private static TrelloBoardSetupException invalidEndpoint(Throwable cause) {
         return new TrelloBoardSetupException(
                 "setup_invalid_arguments",
-                "--endpoint must point to the Trello REST API base, for example https://api.trello.com/1",
-                cause);
+                "--endpoint must point to the Trello REST API base, for example https://api.trello.com/1");
     }
 }

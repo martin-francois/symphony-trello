@@ -191,9 +191,10 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
                 """
                 TRELLO_API_KEY=key
                 TRELLO_API_TOKEN=token
+                TRELLO_API_ENDPOINT=%s
                 SYMPHONY_HTTP_PORT=%d
                 """
-                        .formatted(dotenvPort));
+                        .formatted(endpoint(), dotenvPort));
 
         // when
         SetupRunResult setupResult = runSetup(

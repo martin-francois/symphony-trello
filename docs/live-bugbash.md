@@ -25,6 +25,8 @@ repeatable baseline and then explores beyond it. For the older two-phase live E2
 - For `--codex real`: the `codex` CLI, logged in.
 - For `--trello real`: `TRELLO_API_KEY` and `TRELLO_API_TOKEN` in the environment or in the ignored
   project-root `.env`, and a Trello account where disposable boards can be created and archived.
+  The harness passes the credentials to every command together with `TRELLO_API_ENDPOINT`, so a
+  fake Trello server receives them without a binding step.
 
 The source install builds the committed `HEAD` of the checkout. Commit local changes first, or pass
 `--symphony-command <path>` to test an existing install.

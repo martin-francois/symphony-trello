@@ -1,11 +1,13 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.testsupport.TestEndpointValues.FOREIGN_ENDPOINT_URI;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.setup.TrelloCredentialResolver.CredentialSelection;
 import ch.fmartin.symphony.trello.setup.TrelloCredentialResolver.CredentialValue;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -27,6 +29,7 @@ final class TrelloCredentialResolverTest {
     private static final String BLANK = "  ";
     private static final String FILE_REFERENCE = "${" + NAME + "}";
     private static final Path DESCRIBED_PATH = Path.of(".env.board");
+    private static final URI TRELLO_API = TrelloBoardSetup.DEFAULT_ENDPOINT;
 
     @TempDir
     Path tempDir;
@@ -153,10 +156,64 @@ final class TrelloCredentialResolverTest {
         // when
         TrelloBoardSetupException thrown = catchThrowableOfType(
                 TrelloBoardSetupException.class,
-                () -> resolver.resolveTrelloCredentials(Optional.empty(), Optional.empty()));
+                () -> resolver.resolveTrelloCredentials(Optional.empty(), Optional.empty(), TRELLO_API));
 
         // then
         assertThat(thrown).hasMessageStartingWith(TrelloEnvironment.API_KEY + " in the credential file");
+    }
+
+    @Test
+    void refusesCredentialFileCredentialsForAnEndpointTheFileDoesNotBindThemTo() throws Exception {
+        // given
+        var resolver = new TrelloCredentialResolver(
+                Map.of(), credentialFile(Map.of(TrelloEnvironment.API_KEY, FILE, TrelloEnvironment.API_TOKEN, FILE)));
+
+        // when
+        TrelloBoardSetupException thrown = catchThrowableOfType(
+                TrelloBoardSetupException.class,
+                () -> resolver.resolveTrelloCredentials(Optional.empty(), Optional.empty(), FOREIGN_ENDPOINT_URI));
+
+        // then
+        assertThat(thrown)
+                .isNotNull()
+                .hasMessageContainingAll(
+                        "but --endpoint is " + FOREIGN_ENDPOINT_URI, "TRELLO_API_ENDPOINT=" + FOREIGN_ENDPOINT_URI)
+                .extracting(TrelloBoardSetupException::code)
+                .isEqualTo("setup_credentials_endpoint_mismatch");
+    }
+
+    @Test
+    void acceptsCredentialFileCredentialsBoundToTheEndpoint() throws Exception {
+        // given
+        var resolver = new TrelloCredentialResolver(
+                Map.of(),
+                credentialFile(Map.of(
+                        TrelloEnvironment.API_KEY,
+                        FILE,
+                        TrelloEnvironment.API_TOKEN,
+                        FILE,
+                        TrelloEnvironment.API_ENDPOINT,
+                        FOREIGN_ENDPOINT_URI.toString())));
+
+        // when
+        CredentialSelection selection =
+                resolver.resolveTrelloCredentials(Optional.empty(), Optional.empty(), FOREIGN_ENDPOINT_URI);
+
+        // then
+        assertThat(selection.endpoint()).isEqualTo(FOREIGN_ENDPOINT_URI);
+    }
+
+    @Test
+    void directlyEnteredCredentialsGoWhereTheCommandGoes() throws Exception {
+        // given
+        var resolver = new TrelloCredentialResolver(Map.of(), credentialFile(Map.of()));
+
+        // when
+        CredentialSelection selection =
+                resolver.resolveTrelloCredentials(Optional.of(DIRECT), Optional.of(DIRECT), FOREIGN_ENDPOINT_URI);
+
+        // then
+        assertThat(selection.endpoint()).isEqualTo(FOREIGN_ENDPOINT_URI);
     }
 
     @Test
@@ -166,7 +223,8 @@ final class TrelloCredentialResolverTest {
                 new TrelloCredentialResolver(Map.of(), credentialFile(Map.of(TrelloEnvironment.API_TOKEN, FILE)));
 
         // when
-        CredentialSelection selection = resolver.resolveTrelloCredentials(Optional.of(DIRECT), Optional.empty());
+        CredentialSelection selection =
+                resolver.resolveTrelloCredentials(Optional.of(DIRECT), Optional.empty(), TRELLO_API);
 
         // then
         assertThat(selection)
@@ -184,7 +242,7 @@ final class TrelloCredentialResolverTest {
         var resolver = new TrelloCredentialResolver(environment, credentialFile(fileValues));
 
         // when
-        String description = resolver.resolveTrelloCredentials(Optional.empty(), Optional.empty())
+        String description = resolver.resolveTrelloCredentials(Optional.empty(), Optional.empty(), TRELLO_API)
                 .sourceDescription(DESCRIBED_PATH);
 
         // then

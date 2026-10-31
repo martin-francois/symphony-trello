@@ -207,6 +207,13 @@ Workspace and authorize the API token in the browser.
       TRELLO_API_TOKEN=replace-with-generated-token
       ```
 
+      Symphony sends the key and token of an `.env` file only to `https://api.trello.com/1`. If a
+      workflow uses another Trello API, for example a local test server, add
+      `TRELLO_API_ENDPOINT=<that endpoint>` to the same file. The same holds for `TRELLO_API_KEY`
+      and `TRELLO_API_TOKEN` exported in the shell: export `TRELLO_API_ENDPOINT` next to them.
+      A start, setup, or card command that would send the credentials elsewhere stops and prints
+      the line to add.
+
 ### Fast Path: Create The Recommended Board
 
 Use this path when you are new to Trello or want Symphony to create a clean `Inbox` -> `Ready for
@@ -785,8 +792,9 @@ them, so the agent does not need to see them. Name a card by its id, its short l
 `in-progress`, `human-review`, `blocked`, `merging`, or `terminal`. With one connected board you can
 leave out `--board`. With several, pass the board name, id, short link, or URL, or pass
 `--workflow PATH` with the workflow of a connected board. Add `--json` for output that a script or
-agent can read. The commands send the key and token only to the Trello API at
-`https://api.trello.com/1`, so a workflow with another `tracker.endpoint` fails.
+agent can read. The commands send the key and token only to the endpoint the credentials are bound
+to, like every other command (see the `.env` note under [Trello Setup](#trello-setup)), so a
+workflow with another `tracker.endpoint` fails before any request.
 
 Writes follow the board's workflow, like the worker's Trello tools in
 [Trello Write Controls](#trello-write-controls). The commands write only when
@@ -809,8 +817,9 @@ These failure codes have a fix on your side:
 
 - `setup_card_workflow_not_connected`: the `--workflow` file is not the workflow of a board that
   `symphony-trello status` lists. Pass that workflow, or pass `--board` instead.
-- `setup_card_endpoint_not_trello`: the workflow's `tracker.endpoint` names an address other than
-  `https://api.trello.com/1`. Remove the setting or set it to that address.
+- `setup_credentials_endpoint_mismatch`: the workflow's `tracker.endpoint` is not the endpoint the
+  board's credentials are bound to. The message prints the `TRELLO_API_ENDPOINT` line to add to the
+  `.env` file, or remove the setting.
 - `setup_card_workflow_board_mismatch`: the workflow's `tracker.board_id` names another board than
   the connected one. Fix the setting, or connect the board again.
 - `setup_worker_missing_trello_credentials`, `setup_worker_missing_api_key`,
@@ -2170,6 +2179,13 @@ Important environment variables:
   in real environment variables. The installer wrapper sets this when you start with
   `symphony-trello start --env PATH --workflow WORKFLOW.md`.
 - `TRELLO_API_KEY` and `TRELLO_API_TOKEN`: default Trello credential variable names.
+- `TRELLO_API_ENDPOINT`: the endpoint the `TRELLO_API_KEY` and `TRELLO_API_TOKEN` of the same
+  source belong to, default `https://api.trello.com/1`. Set it in the `.env` file or next to the
+  exported credentials when a workflow's `tracker.endpoint` names another Trello API; a command
+  never sends the key and token anywhere else.
+  Setup refuses to change an existing file's binding when non-empty variables remain unchecked,
+  including custom credential names. Use a separate env file, or check every consumer before
+  changing `TRELLO_API_ENDPOINT` yourself.
 - `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`: path-separated files or folders that are added to
   Codex's `workspaceWrite` sandbox policy for deployments that intentionally expose extra host
   paths.

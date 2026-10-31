@@ -469,6 +469,7 @@ final class TrelloBoardSetupMainSnapshotTest extends LocalSetupFixtureSupport {
     private TranscriptNormalizer normalizer() {
         return TranscriptNormalizer.builder()
                 .temporaryRoot(tempDir, TranscriptNormalizer.TEMPORARY_ROOT)
+                .literal(endpoint(), "<TRELLO_API_ENDPOINT>")
                 .build();
     }
 

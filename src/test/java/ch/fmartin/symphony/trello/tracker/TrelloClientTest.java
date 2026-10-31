@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -230,6 +231,39 @@ final class TrelloClientTest {
             respond(exchange, 429, "{}");
         });
         trello.startEmpty();
+    }
+
+    @Test
+    void doesNotFollowARedirectWithTheCredentials() throws Exception {
+        // given
+        var forwardedRequests = new AtomicInteger();
+        try (var other = new FakeTrelloServer()
+                .on("/", exchange -> {
+                    forwardedRequests.incrementAndGet();
+                    respond(exchange, boardJson("board-1", "Board", false));
+                })
+                .startEmpty()) {
+            trello.remove("/1/boards/input");
+            trello.on("/1/boards/input", exchange -> {
+                exchange.getResponseHeaders().add("Location", other.endpoint() + "/boards/input");
+                respond(exchange, 302, "");
+            });
+            var client = new TrelloClient(new ObjectMapper());
+            var config = config("input", Map.of("active_states", List.of("Todo")));
+
+            // when
+            Throwable thrown = catchThrowable(() -> client.fetchCandidateCards(config));
+
+            // then
+            assertThat(thrown)
+                    .as("a redirect is an error, not a request to the other host")
+                    .isInstanceOfSatisfying(TrelloException.class, exception -> assertThat(exception)
+                            .returns("trello_api_status", TrelloException::code)
+                            .hasMessage("Trello returned HTTP 302"));
+            assertThat(forwardedRequests)
+                    .as("the key and token must not follow a redirect to another host")
+                    .hasValue(0);
+        }
     }
 
     @AfterEach

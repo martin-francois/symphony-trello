@@ -1,7 +1,9 @@
 package ch.fmartin.symphony.trello.setup;
 
 import ch.fmartin.symphony.trello.TrelloEnvironment;
+import ch.fmartin.symphony.trello.config.EnvironmentSource;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
+import ch.fmartin.symphony.trello.config.TrelloCredentialEndpoint;
 import ch.fmartin.symphony.trello.setup.TrelloCredentialResolver.CredentialSelection;
 import ch.fmartin.symphony.trello.setup.TrelloCredentialResolver.CredentialValue;
 import java.io.IOException;
@@ -53,7 +55,7 @@ final class TrelloCredentialStore {
             token = CredentialValue.directInput(
                     TrelloEnvironment.API_TOKEN, password == null ? null : new String(password));
         }
-        return new CredentialSelection(key, token);
+        return new CredentialSelection(key, token, resolved.endpoint());
     }
 
     void write(CredentialSelection credentials, Path envPath, Terminal terminal) throws IOException {
@@ -65,17 +67,21 @@ final class TrelloCredentialStore {
         if (validatePath) {
             validateEnvPath(envPath);
         }
-        writeEnvFile(envPath, updatedEnvLines(credentials, envPath));
+        EnvFileUpdate update = updatedEnvLines(credentials, envPath);
+        writeEnvFile(envPath, update.lines());
         terminal.info("");
         terminal.info("Saving Trello credentials...");
         terminal.info("  OK  Credentials saved: " + envPath);
         terminal.info("  OK  Trello API key: " + redact(credentials.apiKey()));
         terminal.info("  OK  Trello token: " + redact(credentials.apiToken()));
+        if (update.endpointBound()) {
+            terminal.info("  OK  Trello API endpoint: " + credentials.endpoint());
+        }
     }
 
     CredentialSelection loadExisting(LocalSetup.Options options, Path envPath) {
         return new TrelloCredentialResolver(environment, envPath)
-                .resolveTrelloCredentials(options.apiKey(), options.apiToken());
+                .resolveTrelloCredentials(options.apiKey(), options.apiToken(), options.endpoint());
     }
 
     static void validateWritableEnvUpdate(CredentialSelection credentials, Path envPath, boolean validatePath)
@@ -100,7 +106,11 @@ final class TrelloCredentialStore {
         }
     }
 
-    private static List<String> updatedEnvLines(CredentialSelection credentials, Path envPath) throws IOException {
+    /// The saved key and token belong to the endpoint the file names. When the file would bind
+    /// them elsewhere, the same write sets the file's `TRELLO_API_ENDPOINT` line to the command's
+    /// endpoint, unless the file already holds a credential this command did not check: that
+    /// credential belongs to the file's current binding, so rebinding the file is refused instead.
+    private static EnvFileUpdate updatedEnvLines(CredentialSelection credentials, Path envPath) throws IOException {
         List<String> lines = Files.isRegularFile(envPath) ? Files.readAllLines(envPath) : new ArrayList<>();
         if (credentials.persistApiKey()) {
             lines = upsertEnv(lines, TrelloEnvironment.API_KEY, credentials.apiKey());
@@ -108,8 +118,45 @@ final class TrelloCredentialStore {
         if (credentials.persistApiToken()) {
             lines = upsertEnv(lines, TrelloEnvironment.API_TOKEN, credentials.apiToken());
         }
-        return lines;
+        String endpoint = credentials.endpoint().toString();
+        var file = new EnvironmentSource.EnvFile(envPath);
+        String fileEndpoint = file.trelloEndpoint();
+        boolean bindEndpoint = !TrelloCredentialEndpoint.sameEndpoint(fileEndpoint, endpoint);
+        if (bindEndpoint) {
+            uncheckedCredential(credentials, envPath)
+                    .ifPresent(unchecked -> refuseRebinding(envPath, unchecked, fileEndpoint, endpoint));
+            lines = upsertEnv(lines, TrelloEnvironment.API_ENDPOINT, endpoint);
+        }
+        return new EnvFileUpdate(lines, bindEndpoint);
     }
+
+    /// A credential the file holds that this write does not replace, and so never checked against
+    /// the command's endpoint.
+    private static Optional<String> uncheckedCredential(CredentialSelection credentials, Path envPath) {
+        return LocalEnvironment.load(envPath).entrySet().stream()
+                .filter(entry -> !entry.getValue().isBlank())
+                .map(Map.Entry::getKey)
+                .filter(name -> !TrelloEnvironment.API_ENDPOINT.equals(name))
+                .filter(name -> !persists(credentials, name))
+                .findAny();
+    }
+
+    private static void refuseRebinding(Path envPath, String unchecked, String fileEndpoint, String endpoint) {
+        throw new TrelloBoardSetupException(
+                TrelloCredentialResolver.ENDPOINT_MISMATCH_CODE,
+                "cannot change Trello credential binding in \"" + envPath + "\": " + unchecked
+                        + " remains unchecked and belongs to " + TrelloCredentialEndpoint.displaySafe(fileEndpoint)
+                        + " while this command uses " + TrelloCredentialEndpoint.displaySafe(endpoint)
+                        + "; use a separate env file or check every variable's consumers before setting "
+                        + TrelloEnvironment.API_ENDPOINT + " yourself");
+    }
+
+    private static boolean persists(CredentialSelection credentials, String name) {
+        return (TrelloEnvironment.API_KEY.equals(name) && credentials.persistApiKey())
+                || (TrelloEnvironment.API_TOKEN.equals(name) && credentials.persistApiToken());
+    }
+
+    private record EnvFileUpdate(List<String> lines, boolean endpointBound) {}
 
     private static void writeEnvFile(Path envPath, List<String> lines) throws IOException {
         Path parent = envPath.toAbsolutePath().normalize().getParent();

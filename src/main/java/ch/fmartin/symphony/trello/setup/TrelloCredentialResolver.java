@@ -1,11 +1,17 @@
 package ch.fmartin.symphony.trello.setup;
 
 import ch.fmartin.symphony.trello.TrelloEnvironment;
+import ch.fmartin.symphony.trello.config.ConfigException;
 import ch.fmartin.symphony.trello.config.EnvironmentReferences;
-import ch.fmartin.symphony.trello.config.LocalEnvironment;
+import ch.fmartin.symphony.trello.config.EnvironmentSource;
+import ch.fmartin.symphony.trello.config.EnvironmentValue;
+import ch.fmartin.symphony.trello.config.TrelloCredentialEndpoint;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
+import java.net.URI;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
@@ -16,22 +22,36 @@ import org.jspecify.annotations.Nullable;
 /// repository-owned code instead of a SmallRye Config source chain, because keeping this contract
 /// on SmallRye Config takes more glue than the lookup it would replace. See
 /// docs/adr/0101-share-one-trello-credential-resolver.md.
+///
+/// A key and token from the shell environment or the credential file belong to the endpoint that
+/// the same source names in `TRELLO_API_ENDPOINT`, so a command states the endpoint it will send
+/// them to and is refused when they belong elsewhere; see
+/// docs/adr/0151-bind-trello-credentials-to-an-endpoint.md.
 @NullMarked
 final class TrelloCredentialResolver {
-    private final Map<String, String> environment;
-    private final Map<String, String> credentialFile;
+    /// Code of the setup failure for credentials whose source binds them to another endpoint.
+    static final String ENDPOINT_MISMATCH_CODE = "setup_credentials_endpoint_mismatch";
+    private static final String ENDPOINT_OPTION = "--endpoint";
+
+    private final EnvironmentSource shellEnvironment;
+    private final EnvironmentSource credentialFile;
 
     TrelloCredentialResolver(Map<String, String> environment, Path credentialFile) {
-        this.environment = environment;
-        this.credentialFile = LocalEnvironment.load(credentialFile);
+        this.shellEnvironment = EnvironmentSource.shellEnvironment(environment);
+        this.credentialFile = new EnvironmentSource.EnvFile(credentialFile);
     }
 
-    /// Resolves both default Trello variables and rejects a reference-looking value that the
-    /// credential file contributes, key first.
-    CredentialSelection resolveTrelloCredentials(Optional<String> directApiKey, Optional<String> directApiToken) {
-        return new CredentialSelection(
-                resolve(TrelloEnvironment.API_KEY, directApiKey).requireLiteralCredentialFileValue(),
-                resolve(TrelloEnvironment.API_TOKEN, directApiToken).requireLiteralCredentialFileValue());
+    /// Resolves both default Trello variables for a command that sends them to `endpoint`. Rejects
+    /// a reference-looking value that the credential file contributes, key first, then a source
+    /// whose credentials belong to another endpoint.
+    CredentialSelection resolveTrelloCredentials(
+            Optional<String> directApiKey, Optional<String> directApiToken, URI endpoint) {
+        CredentialValue apiKey =
+                resolve(TrelloEnvironment.API_KEY, directApiKey).requireLiteralCredentialFileValue();
+        CredentialValue apiToken =
+                resolve(TrelloEnvironment.API_TOKEN, directApiToken).requireLiteralCredentialFileValue();
+        requireBoundTo(List.of(apiKey, apiToken), endpoint.toString());
+        return new CredentialSelection(apiKey, apiToken, endpoint);
     }
 
     /// Resolves one variable without the credential-file check, for callers such as worker start
@@ -41,20 +61,46 @@ final class TrelloCredentialResolver {
     CredentialValue resolve(String name, Optional<String> directValue) {
         return directValue
                 .map(value -> CredentialValue.directInput(name, value))
-                .or(() -> nonBlankValue(environment, name, TrelloCredentialSource.SHELL_ENVIRONMENT))
-                .or(() -> nonBlankValue(credentialFile, name, TrelloCredentialSource.DOTENV_FILE))
+                .or(() -> credentialValue(shellEnvironment, name, TrelloCredentialSource.SHELL_ENVIRONMENT))
+                .or(() -> credentialValue(credentialFile, name, TrelloCredentialSource.DOTENV_FILE))
                 .orElseGet(() -> CredentialValue.missing(name));
     }
 
-    /// A blank shell or credential-file value counts as unset, so the lookup moves on to the next
-    /// source.
-    private static Optional<CredentialValue> nonBlankValue(
-            Map<String, String> values, String name, TrelloCredentialSource source) {
-        return nonBlank(values.get(name)).map(value -> new CredentialValue(name, value, source));
+    private static Optional<CredentialValue> credentialValue(
+            EnvironmentSource environmentSource, String name, TrelloCredentialSource source) {
+        return environmentSource.value(name).map(value -> new CredentialValue(name, value, source));
     }
 
-    private static Optional<String> nonBlank(@Nullable String value) {
-        return Optional.ofNullable(CliValueNormalizer.nullIfBlank(value));
+    /// Fails for a credential that an environment source supplied for another endpoint than the
+    /// `--endpoint` the command sends to. A direct `--key` or `--token` was entered for this very
+    /// command, so it goes where the command goes.
+    private void requireBoundTo(List<CredentialValue> credentials, String endpoint) {
+        List<EnvironmentValue> environmentCredentials = credentials.stream()
+                .flatMap(credential -> environmentValue(credential).stream())
+                .toList();
+        try {
+            TrelloCredentialEndpoint.requireBoundTo(environmentCredentials, endpoint, ENDPOINT_OPTION);
+        } catch (ConfigException mismatch) {
+            throw endpointMismatch(mismatch);
+        }
+    }
+
+    /// The value as its environment source supplied it, for a shell or credential-file value.
+    private Optional<EnvironmentValue> environmentValue(CredentialValue credential) {
+        return switch (credential.source()) {
+            case SHELL_ENVIRONMENT -> Optional.of(environmentValue(credential, shellEnvironment));
+            case DOTENV_FILE -> Optional.of(environmentValue(credential, credentialFile));
+            case DIRECT_INPUT, WORKFLOW_CONFIG, MISSING -> Optional.empty();
+        };
+    }
+
+    private static EnvironmentValue environmentValue(CredentialValue credential, EnvironmentSource source) {
+        return new EnvironmentValue(credential.name(), Objects.requireNonNull(credential.value()), source);
+    }
+
+    /// The setup failure for the refusal that [TrelloCredentialEndpoint#requireBoundTo] raised.
+    static TrelloBoardSetupException endpointMismatch(ConfigException cause) {
+        return new TrelloBoardSetupException(ENDPOINT_MISMATCH_CODE, cause.getMessage(), cause);
     }
 
     /// One resolved Trello credential. `name` is the environment variable that error messages and
@@ -108,7 +154,9 @@ final class TrelloCredentialResolver {
         }
     }
 
-    record CredentialSelection(CredentialValue apiKeyValue, CredentialValue apiTokenValue) {
+    /// The key and token a command resolved, with the `endpoint` it checked them against and will
+    /// send them to.
+    record CredentialSelection(CredentialValue apiKeyValue, CredentialValue apiTokenValue, URI endpoint) {
         TrelloCredentials credentials() {
             return new TrelloCredentials(apiKeyValue.value(), apiTokenValue.value());
         }

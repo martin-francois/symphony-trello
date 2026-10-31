@@ -8,6 +8,7 @@ import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.config.StateNames;
+import ch.fmartin.symphony.trello.config.TrelloCredentialEndpoint;
 import ch.fmartin.symphony.trello.config.TrelloListRoleValidator;
 import ch.fmartin.symphony.trello.config.WorkflowConfigIngestion;
 import ch.fmartin.symphony.trello.config.WorkflowIntegerSetting;
@@ -36,7 +37,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public final class TrelloBoardSetup {
-    public static final URI DEFAULT_ENDPOINT = URI.create("https://api.trello.com/1");
+    public static final URI DEFAULT_ENDPOINT = URI.create(TrelloCredentialEndpoint.TRELLO_API);
     public static final Path DEFAULT_WORKFLOW_PATH = Path.of("WORKFLOW.md");
     public static final Path DEFAULT_WORKSPACE_ROOT = Path.of("./workspaces");
     public static final int DEFAULT_MAX_CONCURRENT_AGENTS = ConfigDefaults.DEFAULT_SETUP_MAX_CONCURRENT_AGENTS;

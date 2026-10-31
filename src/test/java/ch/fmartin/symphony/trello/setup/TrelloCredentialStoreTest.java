@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_BYTE_ORDER_MARK;
+import static ch.fmartin.symphony.trello.testsupport.TestEndpointValues.FOREIGN_ENDPOINT_URI;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
@@ -9,6 +10,7 @@ import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.setup.TrelloCredentialResolver.CredentialSelection;
 import ch.fmartin.symphony.trello.setup.TrelloCredentialResolver.CredentialValue;
 import ch.fmartin.symphony.trello.testsupport.RecordingTerminal;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -24,6 +26,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 final class TrelloCredentialStoreTest {
+
     @TempDir
     Path tempDir;
 
@@ -46,11 +49,174 @@ final class TrelloCredentialStoreTest {
     }
 
     @Test
+    void savingCredentialsForAnotherEndpointBindsTheDotenvToIt() throws Exception {
+        // given
+        Path env = tempDir.resolve(".env");
+        var terminal = new RecordingTerminal();
+
+        // when
+        new TrelloCredentialStore(Map.of()).write(directCredentials(FOREIGN_ENDPOINT_URI), env, terminal);
+
+        // then
+        assertThat(env)
+                .content(StandardCharsets.UTF_8)
+                .isEqualTo(
+                        "TRELLO_API_KEY=direct-key\nTRELLO_API_TOKEN=direct-token\nTRELLO_API_ENDPOINT=%s\n",
+                        FOREIGN_ENDPOINT_URI);
+        assertThat(terminal.stdout()).contains("  OK  Trello API endpoint: " + FOREIGN_ENDPOINT_URI);
+    }
+
+    @Test
+    void savingCredentialsForTheTrelloApiLeavesAnUnboundDotenvUnbound() throws Exception {
+        // given
+        Path env = tempDir.resolve(".env");
+        var terminal = new RecordingTerminal();
+
+        // when
+        new TrelloCredentialStore(Map.of()).write(directCredentials(TrelloBoardSetup.DEFAULT_ENDPOINT), env, terminal);
+
+        // then
+        assertThat(env).content(StandardCharsets.UTF_8).doesNotContain(TrelloEnvironment.API_ENDPOINT);
+        assertThat(terminal.stdout()).doesNotContain("Trello API endpoint");
+    }
+
+    @Test
+    void savingCredentialsForTheTrelloApiRebindsADotenvBoundElsewhere() throws Exception {
+        // given
+        Path env = tempDir.resolve(".env");
+        Files.writeString(env, "TRELLO_API_ENDPOINT=" + FOREIGN_ENDPOINT_URI + "\n# preserved comment\n");
+
+        // when
+        new TrelloCredentialStore(Map.of())
+                .write(directCredentials(TrelloBoardSetup.DEFAULT_ENDPOINT), env, new RecordingTerminal());
+
+        // then
+        assertThat(env)
+                .content(StandardCharsets.UTF_8)
+                .isEqualTo(
+                        """
+                        TRELLO_API_ENDPOINT=https://api.trello.com/1
+                        # preserved comment
+                        TRELLO_API_KEY=direct-key
+                        TRELLO_API_TOKEN=direct-token
+                        """);
+    }
+
+    @Test
+    void savingCredentialsIntoADotenvAlreadyBoundToTheEndpointLeavesTheBindingAlone() throws Exception {
+        // given
+        Path env = tempDir.resolve(".env");
+        Files.writeString(env, "TRELLO_API_ENDPOINT=HTTPS://Trello.Example.Test:443/1/\n");
+        var terminal = new RecordingTerminal();
+
+        // when
+        new TrelloCredentialStore(Map.of()).write(directCredentials(FOREIGN_ENDPOINT_URI), env, terminal);
+
+        // then
+        assertThat(env)
+                .content(StandardCharsets.UTF_8)
+                .isEqualTo(
+                        """
+                        TRELLO_API_ENDPOINT=HTTPS://Trello.Example.Test:443/1/
+                        TRELLO_API_KEY=direct-key
+                        TRELLO_API_TOKEN=direct-token
+                        """);
+        assertThat(terminal.stdout()).doesNotContain("Trello API endpoint");
+    }
+
+    @Test
+    void savingOneCredentialIntoADotenvBoundElsewhereIsRefusedBeforeTheWrite() throws Exception {
+        // given
+        // the file's own token stays bound to the Trello API, so the file must not be rebound
+        Path env = tempDir.resolve(".env");
+        Files.writeString(env, "TRELLO_API_KEY=file-key\nTRELLO_API_TOKEN=file-token\n");
+        var credentials = new CredentialSelection(
+                CredentialValue.directInput(TrelloEnvironment.API_KEY, "direct-key"),
+                new CredentialValue(
+                        TrelloEnvironment.API_TOKEN, "shell-token", TrelloCredentialSource.SHELL_ENVIRONMENT),
+                FOREIGN_ENDPOINT_URI);
+
+        // when
+        Throwable thrown = catchThrowable(
+                () -> new TrelloCredentialStore(Map.of()).write(credentials, env, new RecordingTerminal()));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_credentials_endpoint_mismatch");
+            assertThat(failure)
+                    .hasMessageContainingAll(
+                            "cannot change Trello credential binding in \"" + env + "\"",
+                            "TRELLO_API_TOKEN remains unchecked and belongs to https://api.trello.com/1",
+                            "this command uses " + FOREIGN_ENDPOINT_URI,
+                            "use a separate env file",
+                            "TRELLO_API_ENDPOINT yourself");
+        });
+        assertThat(env)
+                .content(StandardCharsets.UTF_8)
+                .isEqualTo("TRELLO_API_KEY=file-key\nTRELLO_API_TOKEN=file-token\n");
+    }
+
+    @Test
+    void savingOneCredentialIntoADotenvWithoutCredentialsBindsTheDotenv() throws Exception {
+        // given
+        // nothing in the file is left unchecked, so the file may take the command's binding
+        Path env = tempDir.resolve(".env");
+        Files.writeString(env, "# preserved comment\n");
+        var credentials = new CredentialSelection(
+                new CredentialValue(TrelloEnvironment.API_KEY, "shell-key", TrelloCredentialSource.SHELL_ENVIRONMENT),
+                CredentialValue.directInput(TrelloEnvironment.API_TOKEN, "direct-token"),
+                FOREIGN_ENDPOINT_URI);
+
+        // when
+        new TrelloCredentialStore(Map.of()).write(credentials, env, new RecordingTerminal());
+
+        // then
+        assertThat(env)
+                .content(StandardCharsets.UTF_8)
+                .isEqualTo(
+                        "# preserved comment\nTRELLO_API_TOKEN=direct-token\nTRELLO_API_ENDPOINT=%s\n",
+                        FOREIGN_ENDPOINT_URI);
+    }
+
+    private static CredentialSelection directCredentials(URI endpoint) {
+        return new CredentialSelection(
+                CredentialValue.directInput(TrelloEnvironment.API_KEY, "direct-key"),
+                CredentialValue.directInput(TrelloEnvironment.API_TOKEN, "direct-token"),
+                endpoint);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"CUSTOM_TOKEN", "CUSTOM_KEY", "OTHER"})
+    void savingDefaultCredentialsDoesNotRebindExistingCustomVariables(String variable) throws Exception {
+        // given
+        Path env = tempDir.resolve(".env");
+        String original = variable + "=synthetic-custom-secret\n";
+        Files.writeString(env, original);
+
+        // when
+        Throwable thrown = catchThrowable(() -> new TrelloCredentialStore(Map.of())
+                .write(directCredentials(FOREIGN_ENDPOINT_URI), env, new RecordingTerminal()));
+
+        // then
+        assertThat(thrown)
+                .isInstanceOf(TrelloBoardSetupException.class)
+                .hasMessageContaining(variable)
+                .hasMessageNotContaining("synthetic-custom-secret");
+        assertThat(env).content(StandardCharsets.UTF_8).isEqualTo(original);
+    }
+
+    @Test
     void environmentCredentialsAreNotCopiedIntoDotenv() throws Exception {
         // given
         Path env = tempDir.resolve(".env");
         LocalSetup.Options options = SetupOptionFactory.options(tempDir);
-        var store = new TrelloCredentialStore(Map.of("TRELLO_API_KEY", "env-key", "TRELLO_API_TOKEN", "env-token"));
+        var store = new TrelloCredentialStore(Map.of(
+                "TRELLO_API_KEY",
+                "env-key",
+                "TRELLO_API_TOKEN",
+                "env-token",
+                "TRELLO_API_ENDPOINT",
+                options.endpoint().toString()));
 
         // when
         CredentialSelection credentials = store.loadOrPrompt(options, env, new RecordingTerminal());
@@ -61,7 +227,8 @@ final class TrelloCredentialStoreTest {
                         new CredentialValue(
                                 TrelloEnvironment.API_KEY, "env-key", TrelloCredentialSource.SHELL_ENVIRONMENT),
                         new CredentialValue(
-                                TrelloEnvironment.API_TOKEN, "env-token", TrelloCredentialSource.SHELL_ENVIRONMENT)));
+                                TrelloEnvironment.API_TOKEN, "env-token", TrelloCredentialSource.SHELL_ENVIRONMENT),
+                        options.endpoint()));
         assertThat(env).doesNotExist();
     }
 
@@ -69,8 +236,11 @@ final class TrelloCredentialStoreTest {
     void existingDotenvCredentialsAreNotCopiedIntoAnotherDotenv() throws Exception {
         // given
         Path env = tempDir.resolve(".env");
-        Files.writeString(env, "TRELLO_API_KEY=dotenv-key\nTRELLO_API_TOKEN=dotenv-token\n");
         LocalSetup.Options options = SetupOptionFactory.options(tempDir);
+        Files.writeString(
+                env,
+                "TRELLO_API_KEY=dotenv-key\nTRELLO_API_TOKEN=dotenv-token\nTRELLO_API_ENDPOINT=" + options.endpoint()
+                        + "\n");
 
         // when
         CredentialSelection credentials =
@@ -82,7 +252,8 @@ final class TrelloCredentialStoreTest {
                         new CredentialValue(
                                 TrelloEnvironment.API_KEY, "dotenv-key", TrelloCredentialSource.DOTENV_FILE),
                         new CredentialValue(
-                                TrelloEnvironment.API_TOKEN, "dotenv-token", TrelloCredentialSource.DOTENV_FILE)));
+                                TrelloEnvironment.API_TOKEN, "dotenv-token", TrelloCredentialSource.DOTENV_FILE),
+                        options.endpoint()));
     }
 
     @Test
@@ -139,7 +310,8 @@ final class TrelloCredentialStoreTest {
         var credentials = new CredentialSelection(
                 CredentialValue.directInput(TrelloEnvironment.API_KEY, "new-example-key"),
                 new CredentialValue(
-                        TrelloEnvironment.API_TOKEN, "stored-example-token", TrelloCredentialSource.DOTENV_FILE));
+                        TrelloEnvironment.API_TOKEN, "stored-example-token", TrelloCredentialSource.DOTENV_FILE),
+                TrelloBoardSetup.DEFAULT_ENDPOINT);
 
         // when
         new TrelloCredentialStore(Map.of()).write(credentials, env, new RecordingTerminal());
