@@ -7,6 +7,7 @@ import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.process.ProcessEnvironment;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import ch.fmartin.symphony.trello.repository.RepositorySource;
+import ch.fmartin.symphony.trello.telemetry.TelemetryService;
 import ch.fmartin.symphony.trello.time.ApplicationClock;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workspace.Workspace;
@@ -27,6 +28,7 @@ final class NullnessConventionTest {
                 PromptRenderer.class,
                 RepositorySource.class,
                 SymphonyMain.class,
+                TelemetryService.class,
                 WorkflowDefinition.class,
                 Workspace.class
             })

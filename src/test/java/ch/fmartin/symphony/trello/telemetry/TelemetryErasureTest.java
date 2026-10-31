@@ -1,0 +1,593 @@
+package ch.fmartin.symphony.trello.telemetry;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
+
+import ch.fmartin.symphony.trello.telemetry.TelemetryOwnership.Phase;
+import ch.fmartin.symphony.trello.telemetry.TelemetryStateStore.Update;
+import ch.fmartin.symphony.trello.testsupport.MutableClock;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
+final class TelemetryErasureTest {
+    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final String AUDIENCE = "test:erasure";
+    private static final String ISSUE_REQUEST = "{\"payload\":\"issue-v1\"}";
+    private static final String SIGNED_REQUEST = "h2|";
+    private static final TelemetryCredential CREDENTIAL =
+            new TelemetryCredential(UUID.fromString("5095b32f-dbe1-4704-a625-5a241d331cd6"), "k1", "ab".repeat(32));
+
+    @TempDir
+    Path tempDir;
+
+    private HttpServer server;
+    private TelemetryStateStore store;
+    private TelemetryInstallation installation;
+    private TelemetryErasure erasure;
+    private final MutableClock clock = new MutableClock(TelemetryFixture.NOON);
+    private final AtomicReference<String> status = new AtomicReference<>("pending");
+    private final AtomicReference<Runnable> onIssue = new AtomicReference<>(() -> {});
+    private final AtomicReference<Runnable> onStatus = new AtomicReference<>(() -> {});
+    private final AtomicBoolean issuerDown = new AtomicBoolean();
+    private final AtomicBoolean signatureRejected = new AtomicBoolean();
+    // The fake server records on its own threads while the test reads; a snapshot-safe list avoids
+    // a concurrent modification during assertions.
+    private final List<String> requests = new CopyOnWriteArrayList<>();
+
+    @BeforeEach
+    void setUp() throws IOException {
+        Path stateDir = TelemetryFixture.installedStateDir(tempDir);
+        store = new TelemetryStateStore(stateDir);
+        server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        server.createContext("/", this::respond);
+        server.start();
+        URI base = URI.create("http://127.0.0.1:" + server.getAddress().getPort());
+        var distribution = new TelemetryDistribution(
+                base.resolve("/i/v0/e/"),
+                Optional.of(TelemetryFixture.TEST_TOKEN),
+                Optional.empty(),
+                Optional.of(new TelemetryErasureEndpoint(base.resolve("/ownership"), AUDIENCE)));
+        installation = TelemetryFixture.installation(stateDir, TelemetryEnvironment.none(), distribution);
+        erasure = new TelemetryErasure(installation, clock);
+    }
+
+    @AfterEach
+    void stop() {
+        server.stop(0);
+    }
+
+    @Test
+    void queuedReceiptDoesNotAuthorizeResumeAndCompletedErasurePreservesInstallationWithNewPeriod() {
+        // given
+        erasure.maintain(store);
+        store.update(state -> Update.write(state.withOwnership(state.ownership().markUsed()), null));
+        TelemetryOwnership original = store.read().stateOrInitial().ownership();
+        var output = new ByteArrayOutputStream();
+        var out = new PrintStream(output, true, StandardCharsets.UTF_8);
+        var service = new TelemetryService(installation, TelemetryFixture.snapshots(installation), clock);
+
+        // when
+        int requested = service.erase(out, out);
+        int prematureEnable = service.enable(out, out);
+        TelemetryState pending = store.read().stateOrInitial();
+        status.set("accepted");
+        clock.advance(Duration.ofMinutes(1));
+        erasure.maintain(store);
+        TelemetryState accepted = store.read().stateOrInitial();
+        status.set("complete");
+        clock.advance(Duration.ofMinutes(1));
+        erasure.maintain(store);
+        TelemetryState complete = store.read().stateOrInitial();
+        int enabled = service.enable(out, out);
+        TelemetryState resumed = store.read().stateOrInitial();
+
+        // then
+        assertThat(requested).isZero();
+        assertThat(prematureEnable).isEqualTo(TelemetryService.EXIT_FAILURE);
+        assertThat(pending.mode()).isEqualTo(TelemetryMode.DISABLED);
+        assertThat(pending.ownership().erasure().phase()).isEqualTo(Phase.REQUESTED);
+        assertThat(accepted.ownership().erasure().phase()).isEqualTo(Phase.ACCEPTED);
+        assertThat(complete.ownership().erasure().phase()).isEqualTo(Phase.COMPLETE);
+        assertThat(complete.mode()).isEqualTo(TelemetryMode.DISABLED);
+        assertThat(enabled).isZero();
+        assertThat(resumed.ownership().credential()).isEqualTo(original.credential());
+        assertThat(resumed.ownership().period()).isNotEqualTo(original.period());
+        assertThat(resumed.ownership().erasure()).isNull();
+        assertThat(requests).noneMatch(request -> request.contains(CREDENTIAL.secret()));
+        assertThat(output.toString(StandardCharsets.UTF_8)).doesNotContain(CREDENTIAL.secret());
+    }
+
+    @Test
+    void rejectedSignatureNamesTheClockAndCredentialAndKeepsTheBackoff() {
+        // given
+        erasure.maintain(store);
+        store.update(state -> Update.write(state.withOwnership(state.ownership().markUsed()), null));
+        signatureRejected.set(true);
+        var output = new ByteArrayOutputStream();
+        var out = new PrintStream(output, true, StandardCharsets.UTF_8);
+        var service = new TelemetryService(installation, TelemetryFixture.snapshots(installation), clock);
+
+        // when
+        int requested = service.erase(out, out);
+        int checked = service.erasureStatus(out, out);
+        TelemetryOwnership.Erasure job =
+                store.read().stateOrInitial().ownership().erasure();
+
+        // then
+        assertThat(requested).isEqualTo(TelemetryService.EXIT_FAILURE);
+        assertThat(checked).isEqualTo(TelemetryService.EXIT_FAILURE);
+        assertThat(output.toString(StandardCharsets.UTF_8))
+                .contains("Erasure could not be confirmed: " + TelemetryErasureClient.SIGNATURE_REJECTED)
+                .contains("system clock")
+                .contains("credential");
+        assertThat(job.phase()).isEqualTo(Phase.REQUESTED);
+        assertThat(job.notBefore())
+                .as("a rejected attempt still reserves the next retry instead of spinning")
+                .isAfter(clock.instant());
+    }
+
+    @Test
+    void concurrentDisableWinsOverIssuanceAndNoStateLockIsHeldDuringHttp() {
+        // given
+        onIssue.set(() -> store.update(state -> Update.write(state.withMode(TelemetryMode.DISABLED), null)));
+
+        // when
+        erasure.maintain(store);
+        TelemetryState state = store.read().stateOrInitial();
+
+        // then
+        assertThat(state.mode()).isEqualTo(TelemetryMode.DISABLED);
+        assertThat(state.installation()).isEmpty();
+        assertThat(state.ownership()).isNull();
+    }
+
+    @Test
+    void restartRetriesTheSamePeriodAndOperationWithoutSendingTheSecret() {
+        // given
+        erasure.maintain(store);
+        store.update(state -> Update.write(state.withOwnership(state.ownership().markUsed()), null));
+        erasure.request(store);
+        TelemetryOwnership before = store.read().stateOrInitial().ownership();
+        clock.advance(Duration.ofMinutes(1));
+
+        // when
+        new TelemetryErasure(installation, clock).maintain(store);
+        TelemetryOwnership after = store.read().stateOrInitial().ownership();
+
+        // then
+        assertThat(after.period()).isEqualTo(before.period());
+        assertThat(after.erasure().operation()).isEqualTo(before.erasure().operation());
+        assertThat(requests)
+                .filteredOn(request -> request.contains(SIGNED_REQUEST + "erase|"))
+                .hasSize(2)
+                .allSatisfy(request -> assertThat(request)
+                        .contains(
+                                before.period().toString(),
+                                before.erasure().operation().toString())
+                        .doesNotContain(CREDENTIAL.secret()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"unknown", "", "pending"})
+    void missingOrUnrecognizedStatusNeverCompletesErasure(String providerStatus) {
+        // given
+        erasure.maintain(store);
+        store.update(state -> Update.write(state.withOwnership(state.ownership().markUsed()), null));
+        status.set(providerStatus);
+
+        // when
+        erasure.request(store);
+
+        // then
+        assertThat(store.read().stateOrInitial().ownership().erasure().phase()).isEqualTo(Phase.REQUESTED);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void unavailableErasureDisablesOnlyOnAnEraseRequest(boolean request) {
+        // given
+        store.update(state -> Update.write(state.withIdentity(UUID.randomUUID(), LocalDate.of(2026, 9, 20)), null));
+        var distribution = new TelemetryDistribution(
+                installation.distribution().endpoint(), Optional.of(TelemetryFixture.TEST_TOKEN));
+        TelemetryInstallation unavailable =
+                TelemetryFixture.installation(store.stateFile().getParent(), TelemetryEnvironment.none(), distribution);
+        var service = new TelemetryService(unavailable, TelemetryFixture.snapshots(unavailable), clock);
+        var output = new ByteArrayOutputStream();
+        var out = new PrintStream(output, true, StandardCharsets.UTF_8);
+
+        // when
+        int result = request ? service.erase(out, out) : service.erasureStatus(out, out);
+
+        // then
+        assertThat(result).isEqualTo(TelemetryService.EXIT_FAILURE);
+        assertThat(store.read().stateOrInitial().mode())
+                .isEqualTo(request ? TelemetryMode.DISABLED : TelemetryMode.ENABLED);
+        assertThat(requests).isEmpty();
+    }
+
+    @Test
+    void legacyIdentityCannotBeClaimedThroughTheIssuer() {
+        // given
+        UUID legacy = UUID.randomUUID();
+        store.update(state -> Update.write(state.withIdentity(legacy, LocalDate.of(2026, 9, 22)), null));
+
+        // when
+        ThrowingCallable request = () -> erasure.request(store);
+
+        // then
+        assertThatThrownBy(request)
+                .isInstanceOf(TelemetryStateException.class)
+                .hasMessageContaining("maintainer-assisted");
+        assertThat(requests).isEmpty();
+        assertThat(store.read().stateOrInitial().installation()).hasValue(legacy);
+    }
+
+    @Test
+    void lateStatusCannotReattachAnErasureToANewerReportingPeriod() {
+        // given
+        erasure.maintain(store);
+        store.update(state -> Update.write(state.withOwnership(state.ownership().markUsed()), null));
+        erasure.request(store);
+        UUID oldPeriod = store.read().stateOrInitial().ownership().period();
+        onStatus.set(() -> store.update(state -> {
+            TelemetryOwnership owner = state.ownership();
+            TelemetryOwnership completed = owner.withErasure(owner.erasure().next(Phase.COMPLETE, clock.instant()));
+            return Update.write(state.withMode(TelemetryMode.ENABLED).withOwnership(completed.resume()), null);
+        }));
+        status.set("complete");
+        clock.advance(Duration.ofMinutes(1));
+
+        // when
+        erasure.maintain(store);
+        TelemetryState resumed = store.read().stateOrInitial();
+
+        // then
+        assertThat(resumed.mode()).isEqualTo(TelemetryMode.ENABLED);
+        assertThat(resumed.ownership().period()).isNotEqualTo(oldPeriod);
+        assertThat(resumed.ownership().erasure()).isNull();
+    }
+
+    @Test
+    void workerPersistsOwnershipBeforeFirstHeartbeatAndStopsAfterErase() {
+        // given
+        HeartbeatReporter worker = worker(Runnable::run);
+
+        // when
+        worker.check();
+        List<String> beforeGrace = List.copyOf(requests);
+        clock.advance(TelemetryNotice.FIRST_REPORT_GRACE);
+        worker.check();
+        TelemetryState issued = store.read().stateOrInitial();
+        worker.check();
+        TelemetryState reported = store.read().stateOrInitial();
+        erasure.request(store);
+        int afterErase = requests.size();
+        worker.check();
+
+        // then
+        assertThat(beforeGrace).isEmpty();
+        assertThat(issued.ownership().credential()).isEqualTo(CREDENTIAL);
+        assertThat(reported.lastReportedDate()).isEqualTo(LocalDate.of(2026, 9, 22));
+        assertThat(requests)
+                .filteredOn(request -> request.contains("installation_heartbeat"))
+                .singleElement()
+                .satisfies(body -> assertThat(body)
+                        .contains(reported.analyticsId().orElseThrow())
+                        .doesNotContain(CREDENTIAL.secret(), SIGNED_REQUEST));
+        assertThat(requests).hasSize(afterErase);
+        assertThat(store.read().stateOrInitial().mode()).isEqualTo(TelemetryMode.DISABLED);
+    }
+
+    @Test
+    void disableThenEraseWaitsForTheDispatchedHeartbeatToDrainAndBeIngested() {
+        // given
+        Deque<Runnable> deliveries = deferredDeliveries();
+        HeartbeatReporter worker = worker(deliveries::add);
+        worker.check();
+        clock.advance(TelemetryNotice.FIRST_REPORT_GRACE);
+        worker.check();
+        deliveries.remove().run();
+        worker.check();
+        var drainUntil = store.read().stateOrInitial().claim().expiresAt();
+        store.update(state -> Update.write(state.withMode(TelemetryMode.DISABLED), null));
+
+        // when
+        new TelemetryErasure(installation, clock).request(store);
+
+        // then
+        assertThat(store.read().stateOrInitial().ownership().erasure().notBefore())
+                .isEqualTo(drainUntil.plus(TelemetryOwnership.INGESTION_GRACE));
+        assertThat(requests).containsExactly(ISSUE_REQUEST);
+    }
+
+    @Test
+    void completedErasureMakesNoFurtherBackgroundRequests() {
+        // given
+        erasure.maintain(store);
+        store.update(state -> Update.write(state.withOwnership(state.ownership().markUsed()), null));
+        erasure.request(store);
+        status.set("complete");
+        clock.advance(Duration.ofMinutes(1));
+        erasure.maintain(store);
+        int completedRequests = requests.size();
+        clock.advance(Duration.ofDays(2));
+
+        // when
+        erasure.maintain(store);
+
+        // then
+        assertThat(requests).hasSize(completedRequests);
+        assertThat(store.read().stateOrInitial().ownership().erasure().phase()).isEqualTo(Phase.COMPLETE);
+    }
+
+    @Test
+    void delayedDeliveryDoesNotStartWithoutItsFullTransportBudget() {
+        // given
+        Deque<Runnable> deliveries = deferredDeliveries();
+        HeartbeatReporter worker = worker(deliveries::add);
+        worker.check();
+        clock.advance(TelemetryNotice.FIRST_REPORT_GRACE);
+        worker.check();
+        deliveries.remove().run();
+        worker.check();
+        clock.advance(HeartbeatReporter.CLAIM_LIFETIME.minusSeconds(5));
+
+        // when
+        deliveries.remove().run();
+
+        // then
+        assertThat(requests).containsExactly(ISSUE_REQUEST);
+        assertThat(store.read().stateOrInitial().lastReportedDate()).isNull();
+    }
+
+    @Test
+    void pendingDeletionIsPolledWithGrowingIntervalsInsteadOfEveryMinute() {
+        // given
+        erasure.maintain(store);
+        store.update(state -> Update.write(state.withOwnership(state.ownership().markUsed()), null));
+        erasure.request(store);
+        status.set("accepted");
+
+        // when
+        for (int minute = 0; minute < Duration.ofDays(1).toMinutes(); minute++) {
+            clock.advance(Duration.ofMinutes(1));
+            erasure.maintain(store);
+        }
+        clock.advance(Duration.ofDays(2));
+        erasure.maintain(store);
+
+        // then
+        assertThat(requests)
+                .filteredOn(request -> request.contains(SIGNED_REQUEST))
+                .hasSizeLessThan((int) Duration.ofDays(1).toHours());
+        assertThat(store.read().stateOrInitial().erasure().notBefore())
+                .isEqualTo(clock.instant().plus(TelemetryErasure.RETRY_CEILING));
+    }
+
+    @Test
+    void manualStatusSkipsTheBackgroundBackoffButWaitsForTheHeartbeatToSettle() {
+        // given
+        Deque<Runnable> deliveries = deferredDeliveries();
+        HeartbeatReporter worker = worker(deliveries::add);
+        worker.check();
+        clock.advance(TelemetryNotice.FIRST_REPORT_GRACE);
+        worker.check();
+        deliveries.remove().run();
+        worker.check();
+        var service = new TelemetryService(installation, TelemetryFixture.snapshots(installation), clock);
+        var out = new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8);
+        erasure.request(store);
+
+        // when
+        service.erasureStatus(out, out);
+        long duringDrain = signedRequests();
+        clock.advance(HeartbeatReporter.CLAIM_LIFETIME);
+        service.erasureStatus(out, out);
+        long duringIngestion = signedRequests();
+        clock.advance(TelemetryOwnership.INGESTION_GRACE);
+        service.erasureStatus(out, out);
+        long afterDrain = signedRequests();
+        service.erasureStatus(out, out);
+        long repeated = signedRequests();
+
+        // then
+        assertThat(duringDrain).isZero();
+        assertThat(duringIngestion).isZero();
+        assertThat(afterDrain).isOne();
+        assertThat(repeated).isEqualTo(2);
+    }
+
+    @Test
+    void failedIssuanceBacksOffInsteadOfRetryingEveryMinute() {
+        // given
+        issuerDown.set(true);
+        HeartbeatReporter worker = worker(Runnable::run);
+        worker.check();
+        clock.advance(TelemetryNotice.FIRST_REPORT_GRACE);
+
+        // when
+        for (int minute = 0; minute < Duration.ofHours(1).toMinutes(); minute++) {
+            worker.check();
+            clock.advance(Duration.ofMinutes(1));
+        }
+
+        // then
+        assertThat(requests).containsOnly(ISSUE_REQUEST).hasSameSizeAs(HeartbeatReporter.RETRY_BACKOFF);
+        assertThat(store.read().stateOrInitial().ownership()).isNull();
+    }
+
+    @Test
+    void eraseBeforeAnyReportDisablesAndSucceedsWithoutContactingTheService() {
+        // given
+        var service = new TelemetryService(installation, TelemetryFixture.snapshots(installation), clock);
+        var output = new ByteArrayOutputStream();
+        var out = new PrintStream(output, true, StandardCharsets.UTF_8);
+
+        // when
+        int result = service.erase(out, out);
+
+        // then
+        assertThat(result).isEqualTo(TelemetryService.EXIT_OK);
+        assertThat(output.toString(StandardCharsets.UTF_8)).contains("nothing to erase");
+        assertThat(store.read().stateOrInitial().mode()).isEqualTo(TelemetryMode.DISABLED);
+        assertThat(requests).isEmpty();
+    }
+
+    @Test
+    void eraseThatCannotStoreTheDisabledPreferenceSaysTheOldPreferenceStillApplies() throws IOException {
+        // given
+        Path stateDirectory = store.stateFile().getParent();
+        assumeTrue(Files.getFileStore(stateDirectory).supportsFileAttributeView("posix"));
+        var service = new TelemetryService(installation, TelemetryFixture.snapshots(installation), clock);
+        var output = new ByteArrayOutputStream();
+        var out = new PrintStream(output, true, StandardCharsets.UTF_8);
+        Set<PosixFilePermission> writable = Files.getPosixFilePermissions(stateDirectory);
+        Files.setPosixFilePermissions(stateDirectory, PosixFilePermissions.fromString("r-x------"));
+
+        // when
+        int result;
+        try {
+            result = service.erase(out, out);
+        } finally {
+            Files.setPosixFilePermissions(stateDirectory, writable);
+        }
+
+        // then
+        assertThat(result).isEqualTo(TelemetryService.EXIT_FAILURE);
+        assertThat(output.toString(StandardCharsets.UTF_8))
+                .contains("Erasure could not be confirmed")
+                .contains("The previous preference is unchanged. Set " + TelemetryEnvironment.DISABLED_VARIABLE);
+        assertThat(requests).isEmpty();
+    }
+
+    @Test
+    void enableAfterARefusedErasureResumesUnderANewPeriodAndLeavesTheOldOneToTheMaintainer() {
+        // given
+        erasure.maintain(store);
+        store.update(state -> Update.write(state.withOwnership(state.ownership().markUsed()), null));
+        status.set("refused");
+        erasure.request(store);
+        TelemetryState refused = store.read().stateOrInitial();
+        var service = new TelemetryService(installation, TelemetryFixture.snapshots(installation), clock);
+        var output = new ByteArrayOutputStream();
+        var out = new PrintStream(output, true, StandardCharsets.UTF_8);
+
+        // when
+        int result = service.enable(out, out);
+        TelemetryState resumed = store.read().stateOrInitial();
+
+        // then
+        assertThat(refused.erasure().phase()).isEqualTo(Phase.REFUSED);
+        assertThat(result).isEqualTo(TelemetryService.EXIT_OK);
+        assertThat(resumed.mode()).isEqualTo(TelemetryMode.ENABLED);
+        assertThat(resumed.ownership().credential())
+                .isEqualTo(refused.ownership().credential());
+        assertThat(resumed.ownership().period())
+                .isNotEqualTo(refused.ownership().period());
+        assertThat(resumed.erasure()).isNull();
+        assertThat(output.toString(StandardCharsets.UTF_8)).contains("not deleted yet", "new analytics ID");
+    }
+
+    private long signedRequests() {
+        long signed = 0;
+        for (String request : requests) {
+            if (request.contains(SIGNED_REQUEST)) {
+                signed++;
+            }
+        }
+        return signed;
+    }
+
+    private HeartbeatReporter worker(Executor executor) {
+        return new HeartbeatReporter(
+                installation,
+                TelemetryFixture.snapshots(installation),
+                new PostHogCaptureClient(installation.distribution().endpoint()),
+                clock,
+                executor,
+                () -> 0,
+                TelemetryOutput.none());
+    }
+
+    private void respond(HttpExchange exchange) throws IOException {
+        var body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        requests.add(body);
+        String response;
+        int code = 200;
+        if (exchange.getRequestURI().getPath().equals("/flags")) {
+            onStatus.get().run();
+            String key =
+                    JSON.readTree(body).path("flag_keys_to_evaluate").path(0).asText();
+            response = JSON.createObjectNode()
+                    .put("errorsWhileComputingFlags", false)
+                    .set(
+                            "flags",
+                            JSON.createObjectNode()
+                                    .set(key, JSON.createObjectNode().put("variant", status.get())))
+                    .toString();
+        } else if (exchange.getRequestURI().getPath().equals("/i/v0/e/")) {
+            response = "{\"status\":\"Ok\"}";
+        } else if (body.equals(ISSUE_REQUEST) && issuerDown.get()) {
+            code = 503;
+            response = "{}";
+        } else if (body.equals(ISSUE_REQUEST)) {
+            onIssue.get().run();
+            response = JSON.createObjectNode()
+                    .put("status", "issued")
+                    .put(
+                            TelemetryCredential.INSTALLATION_ID_FIELD,
+                            CREDENTIAL.installationId().toString())
+                    .put(TelemetryCredential.KEY_VERSION_FIELD, CREDENTIAL.keyVersion())
+                    .put(TelemetryCredential.SECRET_FIELD, CREDENTIAL.secret())
+                    .toString();
+        } else if (signatureRejected.get()) {
+            code = 401;
+            response = "{\"status\":\"rejected\"}";
+        } else {
+            code = 201;
+            response = "{\"status\":\"queued\"}";
+        }
+        byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+        exchange.sendResponseHeaders(code, bytes.length);
+        try (var output = exchange.getResponseBody()) {
+            output.write(bytes);
+        }
+    }
+
+    /// Deliveries run later in FIFO order, like the worker executor, so the test controls timing.
+    private static Deque<Runnable> deferredDeliveries() {
+        return new ArrayDeque<>();
+    }
+}

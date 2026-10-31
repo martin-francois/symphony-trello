@@ -11,6 +11,8 @@ import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.SCP;
 import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.SSH;
 import static ch.fmartin.symphony.trello.testsupport.TestWorkflows.CODEX_MODEL_KEY_LINE;
 import static ch.fmartin.symphony.trello.testsupport.TestWorkflows.CODEX_REASONING_EFFORT_KEY_LINE;
+import static ch.fmartin.symphony.trello.testsupport.TypographicCharacters.EM_DASH;
+import static ch.fmartin.symphony.trello.testsupport.TypographicCharacters.RIGHT_SINGLE_QUOTATION_MARK;
 import static ch.fmartin.symphony.trello.testsupport.WorkflowAssertions.assertThatWorkflow;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.abort;
@@ -55,8 +57,6 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     private static final String REPOSITORY_PATH_REFERENCE = "$SYNTHETIC_REPOSITORY_PATH";
     private static final String JAVA_TRIMMED_END_OF_TRANSMISSION = "\u0004";
     private static final String PRESERVED_EN_SPACE = "\u2002";
-    private static final String RIGHT_SINGLE_QUOTATION_MARK = "\u2019";
-    private static final String EM_DASH = "\u2014";
 
     @Test
     void dryRunReportsPlannedWorkflowWithoutChangingTrello() {

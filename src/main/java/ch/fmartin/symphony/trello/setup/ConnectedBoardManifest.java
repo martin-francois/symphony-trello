@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.telemetry.BoardOperation;
+import ch.fmartin.symphony.trello.telemetry.TelemetryService;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
@@ -24,6 +26,26 @@ record ConnectedBoardManifest(List<ConnectedBoard> boards) {
         return boards.stream()
                 .filter(existing -> sameBoardOrWorkflow(existing, board))
                 .toList();
+    }
+
+    /// Adds the board: the resulting manifest, the rows it replaces, and whether the board counts as
+    /// newly connected. A replaced row with the same board id means the board was already connected;
+    /// replacing only a workflow-path collision or nothing at all is a new registration.
+    Registration register(ConnectedBoard board) {
+        List<ConnectedBoard> replacedBoards = boardsReplacedBy(board);
+        boolean newRegistration =
+                replacedBoards.stream().noneMatch(replaced -> replaced.boardId().equals(board.boardId()));
+        return new Registration(withBoard(board), replacedBoards, newRegistration);
+    }
+
+    record Registration(ConnectedBoardManifest manifest, List<ConnectedBoard> replacedBoards, boolean newRegistration) {
+        /// Counts the operation once, for a board that was not connected before. A re-import or a
+        /// regenerated workflow for a connected board counts nothing.
+        void count(TelemetryService telemetry, BoardOperation operation) {
+            if (newRegistration) {
+                telemetry.recordSuccessfulOperation(operation);
+            }
+        }
     }
 
     ConnectedBoardManifest withoutBoard(String boardId) {

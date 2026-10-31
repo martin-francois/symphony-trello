@@ -5,7 +5,7 @@ import static ch.fmartin.symphony.trello.orchestrator.SymphonyOrchestratorTestSu
 import static ch.fmartin.symphony.trello.orchestrator.SymphonyOrchestratorTestSupport.withLargestJitter;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import ch.fmartin.symphony.trello.orchestrator.SymphonyOrchestratorTestSupport.MutableClock;
+import ch.fmartin.symphony.trello.testsupport.MutableClock;
 import ch.fmartin.symphony.trello.tracker.RateLimitPressure;
 import java.time.Duration;
 import java.time.Instant;

@@ -8,6 +8,8 @@ import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.GitHubIntegration;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
 import ch.fmartin.symphony.trello.setup.TrelloCredentialResolver.CredentialSelection;
+import ch.fmartin.symphony.trello.telemetry.BoardOperation;
+import ch.fmartin.symphony.trello.telemetry.TelemetryService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.CharMatcher;
 import java.io.BufferedReader;
@@ -164,6 +166,7 @@ public final class LocalSetup {
                 printDryRun(out, options, prerequisites);
                 return 0;
             }
+            telemetry(options).prepareForSetup(out);
             ConnectedBoardRepository boards = connectedBoards(options);
             ConnectedBoardManifest manifest = boards.loadForLifecycle();
             rejectInvalidUnconnectedBoardSelector(manifest, options);
@@ -248,13 +251,19 @@ public final class LocalSetup {
             configureFollowUpCards(options, result.workflowPath(), result.boardName(), terminal);
             configureCodexReview(options, result.workflowPath(), result.boardName(), terminal);
             ConnectedBoard connectedBoard = ConnectedBoard.from(result, options, githubIntegration);
-            List<ConnectedBoard> replacedBoards = manifest.boardsReplacedBy(connectedBoard);
-            stopReplacedBoards(options, replacedBoards);
-            workerManager.rotateLogsForReplacedBoards(localWorkerPaths(options), connectedBoard, replacedBoards);
-            manifest = manifest.withBoard(connectedBoard);
+            ConnectedBoardManifest.Registration registration = manifest.register(connectedBoard);
+            stopReplacedBoards(options, registration.replacedBoards());
+            workerManager.rotateLogsForReplacedBoards(
+                    localWorkerPaths(options), connectedBoard, registration.replacedBoards());
+            manifest = registration.manifest();
             boards.save(manifest);
             GeneratedWorkflowStore.recordGenerated(options.manifestPath(), result.workflowPath(), result.bodyInputs())
                     .ifPresent(out::println);
+            registration.count(
+                    telemetry(options),
+                    boardSetupChoice == TrelloBoardConnector.BoardSetupChoice.NEW
+                            ? BoardOperation.CREATE
+                            : BoardOperation.IMPORT);
 
             out.println();
             out.println("Trello board");
@@ -359,13 +368,13 @@ public final class LocalSetup {
         }
     }
 
+    private TelemetryService telemetry(Options options) {
+        return TelemetryInstallations.service(
+                localWorkerPaths(options), options.manifestPath(), options.envPath(), environment);
+    }
+
     private LocalWorkerPaths localWorkerPaths(Options options) {
-        return LocalWorkerPaths.from(
-                Optional.empty(),
-                Optional.of(options.configDir()),
-                Optional.of(options.workspaceRoot()),
-                Optional.empty(),
-                environment);
+        return LocalWorkerPaths.fromSetup(options.configDir(), options.workspaceRoot(), environment);
     }
 
     private int runCheck(Options options, Prerequisites prerequisites, PrintStream out) throws IOException {

@@ -3,15 +3,19 @@ package ch.fmartin.symphony.trello;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
+import ch.fmartin.symphony.trello.telemetry.TelemetryDistribution;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.function.UnaryOperator;
+import java.util.jar.JarFile;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -22,6 +26,40 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 final class ReleasePackagingScriptTest {
     private static final String VERSION = "1.2.3";
+
+    private static final String TELEMETRY_PROPERTIES = "src/main/resources/" + TelemetryDistribution.RESOURCE;
+    private static final String PACKAGED_JAR = "target/quarkus-app/app/symphony-trello.jar";
+    private static final String TELEMETRY_PROPERTIES_SOURCE = "# public capture token\n"
+            + TelemetryDistribution.TOKEN_KEY + "=" + TelemetryDistribution.TOKEN_PLACEHOLDER + "\n";
+    private static final String TELEMETRY_TOKEN_VARIABLE = "SYMPHONY_TRELLO_POSTHOG_PROJECT_TOKEN";
+    private static final String ERASURE_ENDPOINT_VARIABLE = "SYMPHONY_TRELLO_ERASURE_ENDPOINT";
+    private static final String ERASURE_AUDIENCE_VARIABLE = "SYMPHONY_TRELLO_ERASURE_AUDIENCE";
+    /// Every variable the packager reads from the release workflow environment.
+    private static final List<String> RELEASE_ASSET_VARIABLES =
+            List.of(TELEMETRY_TOKEN_VARIABLE, ERASURE_ENDPOINT_VARIABLE, ERASURE_AUDIENCE_VARIABLE);
+    private static final String SYNTHETIC_TOKEN = "phc_" + "0".repeat(44);
+    private static final String PRODUCTION_PROJECT_FILE = "infra/posthog/production-project-id";
+    private static final String SYNTHETIC_PRODUCTION_PROJECT = "12345";
+    /// A fake mvnw that packages only the telemetry properties file, so a test can read what the
+    /// packager injected into the jar.
+    private static final String MVNW_PACKAGING_TELEMETRY_PROPERTIES =
+            """
+            #!/usr/bin/env bash
+            set -euo pipefail
+            echo "$*" >> mvnw.log
+            rm -rf target
+            mkdir -p target/quarkus-app/app
+            printf 'app' > target/quarkus-app/application.txt
+            jar --create --file %s --no-manifest -C src/main/resources %s
+            """
+                    .formatted(PACKAGED_JAR, TelemetryDistribution.RESOURCE);
+    private static final Map<String, String> ERASURE_FOR_ANOTHER_PROJECT = Map.of(
+            TELEMETRY_TOKEN_VARIABLE,
+            SYNTHETIC_TOKEN,
+            ERASURE_ENDPOINT_VARIABLE,
+            "https://webhooks.eu.posthog.com/public/webhooks/00000000-0000-4000-8000-000000000001",
+            ERASURE_AUDIENCE_VARIABLE,
+            "symphony:54321");
 
     @TempDir
     Path tempDir;
@@ -38,6 +76,91 @@ final class ReleasePackagingScriptTest {
         assertThat(result.exitCode()).as(result.output()).isZero();
         assertExpectedAssets(project.root().resolve("dist/release-assets"));
         assertThat(project.mvnwLog()).contains("-q -DskipTests clean package");
+    }
+
+    @Test
+    void injectsTheUsageReportingTokenOnlyIntoThePackagedApplication() throws Exception {
+        // given
+        TestProject project = createProject();
+        Path properties = project.writeTelemetryPropertiesSource();
+        project.writeMavenWrapper(MVNW_PACKAGING_TELEMETRY_PROPERTIES);
+
+        // when
+        ProcessResult result = project.run(Map.of(TELEMETRY_TOKEN_VARIABLE, SYNTHETIC_TOKEN), VERSION);
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isZero();
+        assertThat(result.output()).contains("Usage-reporting token injected for this release archive");
+        assertThat(properties).content().isEqualTo(TELEMETRY_PROPERTIES_SOURCE);
+        assertThat(project.packagedTelemetryProperties())
+                .contains(TelemetryDistribution.TOKEN_KEY + "=" + SYNTHETIC_TOKEN)
+                .doesNotContain(TelemetryDistribution.TOKEN_PLACEHOLDER);
+    }
+
+    @Test
+    void refusesAMalformedUsageReportingTokenBeforeBuilding() throws Exception {
+        // given
+        TestProject project = createProject();
+        Path properties = project.writeTelemetryPropertiesSource();
+
+        // when
+        ProcessResult result = project.run(Map.of(TELEMETRY_TOKEN_VARIABLE, "phx_personal-key"), VERSION);
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.output()).contains("is not a PostHog project token");
+        assertThat(project.mvnwLogPath()).doesNotExist();
+        assertThat(properties).content().isEqualTo(TELEMETRY_PROPERTIES_SOURCE);
+    }
+
+    @Test
+    void refusesAnErasureAudienceForAnyProjectButProductionBeforeBuilding() throws Exception {
+        // given
+        TestProject project = createProject();
+        Path properties = project.writeTelemetryPropertiesSource();
+        project.writeProductionProject();
+
+        // when
+        ProcessResult result = project.run(ERASURE_FOR_ANOTHER_PROJECT, VERSION);
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.output())
+                .contains("must name the production project", "symphony:" + SYNTHETIC_PRODUCTION_PROJECT);
+        assertThat(project.mvnwLogPath()).doesNotExist();
+        assertThat(properties).content().isEqualTo(TELEMETRY_PROPERTIES_SOURCE);
+    }
+
+    @Test
+    void packagesTheErasureConfigurationForTheProductionProject() throws Exception {
+        // given
+        TestProject project = createProject();
+        project.writeTelemetryPropertiesSource();
+        project.writeProductionProject();
+        project.writeMavenWrapper(MVNW_PACKAGING_TELEMETRY_PROPERTIES);
+        var environment = new HashMap<>(ERASURE_FOR_ANOTHER_PROJECT);
+        environment.put(ERASURE_AUDIENCE_VARIABLE, "symphony:" + SYNTHETIC_PRODUCTION_PROJECT);
+
+        // when
+        ProcessResult result = project.run(environment, VERSION);
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isZero();
+        assertThat(project.packagedTelemetryProperties())
+                .contains(TelemetryDistribution.ERASURE_AUDIENCE_KEY + "=symphony:" + SYNTHETIC_PRODUCTION_PROJECT);
+    }
+
+    @Test
+    void buildsWithoutATokenAndSaysTheArchiveNeverSends() throws Exception {
+        // given
+        TestProject project = createProject();
+
+        // when
+        ProcessResult result = project.run(VERSION);
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isZero();
+        assertThat(result.output()).contains("this release archive never sends usage reports");
     }
 
     @Test
@@ -645,6 +768,28 @@ final class ReleasePackagingScriptTest {
                     """);
         }
 
+        Path writeTelemetryPropertiesSource() throws IOException {
+            Path properties = root.resolve(TELEMETRY_PROPERTIES);
+            Files.createDirectories(properties.getParent());
+            Files.writeString(properties, TELEMETRY_PROPERTIES_SOURCE);
+            return properties;
+        }
+
+        void writeProductionProject() throws IOException {
+            Path productionProject = root.resolve(PRODUCTION_PROJECT_FILE);
+            Files.createDirectories(productionProject.getParent());
+            Files.writeString(productionProject, SYNTHETIC_PRODUCTION_PROJECT + "\n");
+        }
+
+        String packagedTelemetryProperties() throws IOException {
+            try (var jar = new JarFile(root.resolve(PACKAGED_JAR).toFile())) {
+                return new String(
+                        jar.getInputStream(jar.getEntry(TelemetryDistribution.RESOURCE))
+                                .readAllBytes(),
+                        StandardCharsets.UTF_8);
+            }
+        }
+
         void writeMavenWrapper(String content) throws IOException {
             Path mvnw = root.resolve("mvnw");
             Files.writeString(mvnw, content);
@@ -652,6 +797,11 @@ final class ReleasePackagingScriptTest {
         }
 
         ProcessResult run(String... arguments) throws IOException, InterruptedException {
+            return run(Map.of(), arguments);
+        }
+
+        ProcessResult run(Map<String, String> environment, String... arguments)
+                throws IOException, InterruptedException {
             String[] command = new String[arguments.length + 2];
             command[0] = "bash";
             command[1] = root.resolve("scripts/package-release-assets.sh").toString();
@@ -663,6 +813,9 @@ final class ReleasePackagingScriptTest {
                     .put(
                             "PATH",
                             root.resolve("test-tools") + System.getProperty("path.separator") + System.getenv("PATH"));
+            // The developer shell must not pick the branch under test: only the explicit map decides.
+            processBuilder.environment().keySet().removeAll(RELEASE_ASSET_VARIABLES);
+            processBuilder.environment().putAll(environment);
             Process process = processBuilder.start();
             var output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             return new ProcessResult(process.waitFor(), output);

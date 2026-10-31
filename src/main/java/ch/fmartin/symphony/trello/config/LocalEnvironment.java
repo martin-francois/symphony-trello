@@ -93,8 +93,13 @@ public final class LocalEnvironment {
     }
 
     public static Path defaultDotenv(Map<String, String> environment) {
+        return defaultDotenv(environment, DEFAULT_DOTENV);
+    }
+
+    /// Uses the selected installation's dotenv when no process-level path overrides it.
+    public static Path defaultDotenv(Map<String, String> environment, Path fallback) {
         String configured = environment.get(DOTENV_PATH_ENV);
-        return hasText(configured) ? Path.of(configured) : DEFAULT_DOTENV;
+        return hasText(configured) ? Path.of(configured) : fallback;
     }
 
     public static Optional<Path> configuredDotenv() {
