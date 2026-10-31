@@ -1889,14 +1889,16 @@ public class TrelloClient implements TrackerClient {
             if (blank(text)) {
                 return;
             }
-            TrelloCardReferenceParser.referencesIn(text).forEach(reference -> add(source, text, reference));
+            TrelloCardReferenceParser.referencesWithSourceLinesIn(text)
+                    .forEach(line -> add(source, line.text(), line.reference()));
         }
 
         void addExact(String source, String text) {
             if (blank(text)) {
                 return;
             }
-            TrelloCardReferenceParser.exactReference(text).ifPresent(reference -> add(source, text, reference));
+            TrelloCardReferenceParser.exactReferenceWithSourceLine(text)
+                    .ifPresent(line -> add(source, line.text(), line.reference()));
         }
 
         void addChecklist(Card.Checklist checklist) {
