@@ -10,6 +10,11 @@ informed: [Contributors, Maintainers]
 
 # Authenticated erasure with separate reporting periods
 
+[ADR 0150](0150-report-erasure-complete-only-after-the-events-are-gone.md) amends the completion
+rule below: the service reports `complete` only after its own fresh event count is zero, and
+reports a final `incomplete` otherwise, because PostHog marks deletions verified without proving
+the rows are gone.
+
 ## Context and Problem Statement
 
 An installation must authorize deletion without an account, a retained enrollment event,
@@ -62,8 +67,8 @@ new analytics ID cannot join the merged profile.
 PostHog incoming webhooks return before their first external fetch completes. The client
 therefore treats HTTP acceptance only as receipt. A background invocation writes a per-period
 feature flag, keyed by an HMAC-derived opaque value. Only management credentials write this
-status. Public flag evaluation returns pending, accepted, complete or refused, never credentials
-or installation identifiers. Private flag metadata binds the immutable person UUID before any
+status. Public flag evaluation returns pending, accepted, complete, incomplete or refused, never
+credentials or installation identifiers. Private flag metadata binds the immutable person UUID before any
 delete call. Status refreshes inspect the provider deletion queue and profile absence.
 If a report never arrived or all data expired, no person exists to delete. The service then
 requires a fresh, uncached raw-ID event count of zero before recording completion. This avoids

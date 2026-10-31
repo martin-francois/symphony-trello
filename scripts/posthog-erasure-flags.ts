@@ -14,7 +14,7 @@ export const ERASURE_FLAG_WARNING = 500;
 const RANDOM_UUID = "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
 const PERIOD_ANALYTICS_ID = new RegExp(`^${RANDOM_UUID}\\.${RANDOM_UUID}$`);
 
-export type ErasureFlagAction = "archive" | "late-events" | "refused" | "stale" | "keep";
+export type ErasureFlagAction = "archive" | "late-events" | "incomplete" | "refused" | "stale" | "keep";
 
 export interface ErasureFlagReview {
   readonly id: number;
@@ -43,7 +43,9 @@ function flagVariant(flag: JsonObject): string {
 /** Classifies every status flag and, when asked, archives the ones that are safe to archive:
  * empty results and completed deletions older than a day. An empty result that names its analytics
  * ID is archived only after a fresh query still finds no event for it; a late event is reported
- * for manual deletion instead. Refused and stale operations are reported, never archived. */
+ * for manual deletion instead. Incomplete, refused and stale operations are reported, never
+ * archived: an incomplete one is a deletion PostHog verified with events left behind, which the
+ * maintainer asks PostHog support to delete before archiving the flag. */
 export async function reviewErasureFlags(api: PostHogApi, projectId: number, now: Date, archive: boolean): Promise<readonly ErasureFlagReview[]> {
   const reviews: ErasureFlagReview[] = [];
   for (const flag of await erasureFlagList(api, projectId)) {
@@ -74,6 +76,8 @@ export async function reviewErasureFlags(api: PostHogApi, projectId: number, now
     } else if (kind === "symphony-erasure-v1") {
       if (state === "refused") {
         action = "refused";
+      } else if (state === "incomplete") {
+        action = "incomplete";
       } else if (state === "complete") {
         action = age >= ERASURE_FLAG_MIN_AGE_MS ? "archive" : "keep";
       } else if (age >= ERASURE_FLAG_STALE_MS) {

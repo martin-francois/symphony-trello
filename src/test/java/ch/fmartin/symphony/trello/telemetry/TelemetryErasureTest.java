@@ -520,6 +520,46 @@ final class TelemetryErasureTest {
         assertThat(output.toString(StandardCharsets.UTF_8)).contains("not deleted yet", "new analytics ID");
     }
 
+    @Test
+    void incompleteErasureIsFinalPromisesDeletionWithinThirtyDaysAndIsNeverAcknowledged() {
+        // given
+        erasure.maintain(store);
+        store.update(state -> Update.write(state.withOwnership(state.ownership().markUsed()), null));
+        status.set("incomplete");
+        TelemetryService service = new TelemetryService(installation, TelemetryFixture.snapshots(installation), clock);
+        var output = new ByteArrayOutputStream();
+        var out = new PrintStream(output, true, StandardCharsets.UTF_8);
+
+        // when
+        int requested = service.erase(out, out);
+        TelemetryState incomplete = store.read().stateOrInitial();
+        clock.advance(Duration.ofDays(2));
+        erasure.maintain(store);
+        int checked = service.erasureStatus(out, out);
+        int enabled = service.enable(out, out);
+        TelemetryState resumed = store.read().stateOrInitial();
+
+        // then
+        assertThat(incomplete.erasure().phase()).isEqualTo(Phase.INCOMPLETE);
+        assertThat(incomplete.mode()).isEqualTo(TelemetryMode.DISABLED);
+        assertThat(requested).isEqualTo(TelemetryService.EXIT_OK);
+        assertThat(checked).isEqualTo(TelemetryService.EXIT_OK);
+        assertThat(signedRequests())
+                .as("a final result is neither retried nor acknowledged")
+                .isEqualTo(1);
+        assertThat(requests).noneMatch(request -> request.contains("|ack|"));
+        assertThat(enabled).isEqualTo(TelemetryService.EXIT_OK);
+        assertThat(resumed.ownership().period())
+                .isNotEqualTo(incomplete.ownership().period());
+        assertThat(resumed.erasure()).isNull();
+        assertThat(output.toString(StandardCharsets.UTF_8))
+                .contains("still being processed")
+                .contains("within 30 days of the request")
+                .contains("within 30 days of the erasure request", "new analytics ID")
+                .doesNotContain("Erasure complete")
+                .doesNotContain("maintainer");
+    }
+
     private long signedRequests() {
         long signed = 0;
         for (String request : requests) {

@@ -43,10 +43,16 @@ interface LedgerCheck {
   readonly at: string;
 }
 
+/** What a period saw after PostHog reported its deletion verified. Both are correct handling: the
+ * gate tests this service, not whether PostHog deletes reliably. */
+export type PeriodOutcome = "complete" | "incomplete";
+
 interface Period {
   readonly id: string;
   readonly operation: string;
+  /** The period is settled; `outcome` says how. */
   complete: boolean;
+  outcome?: PeriodOutcome;
   captured?: boolean;
   personId?: string;
   requested?: boolean;
@@ -84,6 +90,7 @@ interface Ledger extends SourceLedger {
   replayVerified?: boolean;
   handlerSha256?: string;
   handlerMixed?: boolean;
+  diagnostics?: Json;
 }
 
 /** The ledger fields that bind a run to one handler version. */
@@ -174,6 +181,33 @@ function uncheckedCast<T>(value: Json | readonly JsonObject[]): T {
 }
 
 const hmac = (key: string, value: string): string => createHmac("sha256", key).update(value).digest("hex");
+
+/** The public status the handler must publish once PostHog reports the deletion verified: `complete`
+ * only when no event of the period remains, `incomplete` otherwise. PostHog has verified a deletion
+ * with an event left behind, and a verified request cannot be queued again. */
+export function expectedPublicStatus(remainingEvents: number): PeriodOutcome {
+  return remainingEvents === 0 ? "complete" : "incomplete";
+}
+
+/** Whether `ack` must leave the status flag in place: an incomplete result stays for monitoring. */
+export function statusRetainedAfterAck(outcome: PeriodOutcome | undefined): boolean {
+  return outcome === "incomplete";
+}
+
+/** What PostHog kept about the run's source when a check failed: its log entries and metrics.
+ * Teardown archives the function and its logs become unreachable, so this runs first. */
+export async function captureSourceDiagnostics(api: Pick<SourceApi, "get">, base: string, sourceId: string): Promise<Json> {
+  const diagnostics: Record<string, Json> = {capturedAt: new Date().toISOString(), sourceId};
+  const reads = {logs: `${base}/hog_functions/${sourceId}/logs/?limit=200`, metrics: `${base}/hog_functions/${sourceId}/metrics/`};
+  for (const [name, path] of Object.entries(reads)) {
+    try {
+      diagnostics[name] = await api.get(path);
+    } catch (error) {
+      diagnostics[name] = {error: String((error as Error).message).slice(0, 400)};
+    }
+  }
+  return diagnostics;
+}
 
 /** The public status flag key of one period, as the native handler derives it. */
 export function mailboxKey(owner: Owner, scope: string, period: string): string {
@@ -417,18 +451,25 @@ export async function main(): Promise<void> {
         // The loop reaches the second period only after the first exists.
         const old = ledger.periods[0]!;
         const oldMailbox = mailboxKey(owner, scope, old.id);
+        const oldOutcome = old.outcome ?? "complete";
         const activeFlags = async (): Promise<FeatureFlagListing["results"]> => uncheckedCast<FeatureFlagListing>(await api.get(`${base}/feature_flags/?search=${oldMailbox}`)).results.filter(flag => flag.key === oldMailbox && !flag.deleted);
-        // Remove the prior completion result, then require a newly completed replay result.
+        // Remove a prior completion result, then require a newly completed replay result. An incomplete
+        // result stays for monitoring, so the replay must leave it unchanged.
         await call(signedOperation(owner, scope, old.id, old.operation, "ack"));
-        for (let attempt = 0; attempt < 60 && (await activeFlags()).length; attempt++) await pause();
-        check("prior status archived before replay", (await activeFlags()).length === 0);
+        if (statusRetainedAfterAck(oldOutcome)) {
+          for (let attempt = 0; attempt < 10; attempt++) await pause();
+          check("incomplete status retained before replay", (await activeFlags()).length === 1);
+        } else {
+          for (let attempt = 0; attempt < 60 && (await activeFlags()).length; attempt++) await pause();
+          check("prior status archived before replay", (await activeFlags()).length === 0);
+        }
         await call(signedOperation(owner, scope, old.id, old.operation, "erase"));
-        let replayComplete = false;
+        let replayed = false;
         for (let attempt = 0; attempt < 60; attempt++) {
-          if ((await activeFlags()).length === 1 && await publicStatus(oldMailbox) === "complete") {replayComplete = true; break;}
+          if (attempt >= 10 && (await activeFlags()).length === 1 && await publicStatus(oldMailbox) === oldOutcome) {replayed = true; break;}
           await pause();
         }
-        check("first-period replay finished processing", replayComplete);
+        check("first-period replay finished processing", replayed);
         const nextDeletion = uncheckedCast<DeletionStatus>(await api.get(`${base}/persons/deletion_status/?person_uuid=${period.personId}&status=all`));
         check("processed replay leaves second period unqueued and present", nextDeletion.results?.length === 0 && (await person(distinct))?.id === period.personId && await rows(distinct) > 0);
         ledger.replayVerified = true; save();
@@ -460,10 +501,10 @@ export async function main(): Promise<void> {
         if (attempt % 10 === 0) await call(proof("status"));
         observed = await publicStatus(mailbox);
         if (observed === "refused") throw new Error("Synthetic erasure refused");
-        if (observed === "accepted" || observed === "complete") break;
+        if (observed === "accepted" || observed === "complete" || observed === "incomplete") break;
         await pause();
       }
-      check(`period ${index + 1}: provider-backed acceptance`, observed === "accepted" || observed === "complete");
+      check(`period ${index + 1}: provider-backed acceptance`, observed === "accepted" || observed === "complete" || observed === "incomplete");
       const status = uncheckedCast<DeletionStatus>(await api.get(`${base}/persons/deletion_status/?person_uuid=${period.personId}&status=all`));
       const deletion = status.results?.[0];
       check(`period ${index + 1}: matching deletion record`, status.results?.length === 1 && deletion!.person_uuid === period.personId);
@@ -475,38 +516,58 @@ export async function main(): Promise<void> {
         return;
       }
       // Refresh the public result from the verified provider state, including a restarted source.
-      for (let attempt = 0; observed !== "complete" && attempt < 40; attempt++) {
+      for (let attempt = 0; observed !== "complete" && observed !== "incomplete" && attempt < 40; attempt++) {
         if (attempt % 10 === 0) await call(proof("status"));
         await pause();
         observed = await publicStatus(mailbox);
       }
-      check(`period ${index + 1}: physical event absence and public completion`, observed === "complete" && await rows(distinct) === 0 && !await person(distinct));
-      period.complete = true; save();
+      // The handler counts the events itself; this read is the runner's own evidence of what it saw.
+      // Either outcome is correct handling: complete with no event left, incomplete with events left.
+      const remaining = await rows(distinct);
+      const outcome = expectedPublicStatus(remaining);
+      check(`period ${index + 1}: public status matches the remaining events`, observed === outcome);
+      check(`period ${index + 1}: profile absent after the verified deletion`, !await person(distinct));
+      period.outcome = outcome; period.complete = true; save();
+      console.log(JSON.stringify({period: index + 1, outcome, remainingEvents: remaining}));
       await call(proof("ack"));
     }
     check("partial provider failure recovered", ledger.partialRecoveryVerified === true);
     check("both periods include hosted lost-response recovery", ledger.periods.length === 2 && ledger.periods.every(period => period.lostResponseVerified));
     check("native admission precedes profile removal", ledger.periods.some(period => period.admissionOrderVerified));
-    // The partial fixture exists once partialRecoveryVerified passed above.
+    // The partial fixture exists once partialRecoveryVerified passed above. Its deletion was queued
+    // by the runner, so its settled status is read here before the acknowledgment.
     for (const operation of [...ledger.periods, ledger.partial!]) {
       const mailbox = mailboxKey(owner, scope, operation.id);
+      let settled = "pending";
+      for (let attempt = 0; attempt < 40 && settled !== "complete" && settled !== "incomplete"; attempt++) {
+        if (attempt % 10 === 0) await call(signedOperation(owner, scope, operation.id, operation.operation, "status"));
+        await pause();
+        settled = await publicStatus(mailbox);
+      }
+      check("settled operation publishes complete or incomplete", settled === "complete" || settled === "incomplete");
+      const retained = statusRetainedAfterAck(settled as PeriodOutcome);
       await call(signedOperation(owner, scope, operation.id, operation.operation, "ack"));
       let archived = false;
-      for (let attempt = 0; attempt < 90; attempt++) {
+      for (let attempt = 0; attempt < (retained ? 10 : 90); attempt++) {
         const flags = uncheckedCast<FeatureFlagListing>(await api.get(`${base}/feature_flags/?search=${mailbox}`));
         if (!flags.results.some(flag => flag.key === mailbox && !flag.deleted)) {archived = true; break;}
         await pause();
       }
-      check("native acknowledgment archives completed status", archived);
+      check(retained ? "native acknowledgment keeps an incomplete status for monitoring" : "native acknowledgment archives completed status", archived !== retained);
     }
     check("canary remains intact before fixture cleanup", await canarySurvives());
     ledger.canaryPersonId = (await person(ledger.canary!))!.id;
     ledger.status = LIFECYCLE_PASS_STATUS; save();
     await cleanupVerifiedCanary(api, base, ledger, save);
-    console.log(JSON.stringify({status: ledger.status}));
+    console.log(JSON.stringify({status: ledger.status, outcomes: ledger.periods.map(period => period.outcome)}));
   } catch (error) {
-    ledger.error = String((error as Error).message).split(ledger.master).join("[master]")
+    const scrub = (text: string): string => text.split(ledger.master).join("[master]")
       .split(ledger.owner?.secret ?? "unissued-placeholder").join("[credential]");
+    ledger.error = scrub(String((error as Error).message));
+    // The finally block archives the source; its logs are the only record of what the invocation did.
+    for (const live of ledger.sources.filter(item => !item.archived)) {
+      ledger.diagnostics = JSON.parse(scrub(JSON.stringify(await captureSourceDiagnostics(api, base, live.id)))) as Json;
+    }
     save();
     throw error;
   } finally {

@@ -105,7 +105,18 @@ if (inconsistent) {
         return;
     }
     state := 'accepted';
-    if (deletion.status == 'completed' and deletion.delete_verified_at != null and person == null) { state := 'complete'; }
+    if (deletion.status == 'completed' and deletion.delete_verified_at != null and person == null) {
+        // A verified deletion can leave an event behind (PostHog/posthog#126750): count by the exact ID and the bound person first.
+        let remainingResponse := fetch('https://eu.posthog.com/api/projects/${project}/query/', {'method': 'POST', 'headers': headers, 'body': jsonStringify({
+            'query': {'kind': 'HogQLQuery', 'query': 'SELECT count() FROM events WHERE distinct_id = {id} OR person_id = {person}', 'values': {'id': target, 'person': personId}}, 'refresh': 'force_blocking'
+        })});
+        if (remainingResponse.status != 200) { return; }
+        let remaining := remainingResponse.body;
+        if (remaining.is_cached == true or typeof(remaining.results) != 'array' or length(remaining.results) != 1) { return; }
+        if (length(remaining.results[1]) != 1) { return; }
+        // Final either way: a verified request cannot be queued again, so leftovers go to the maintainer.
+        if (remaining.results[1][1] == 0) { state := 'complete'; } else { state := 'incomplete'; }
+    }
 } else if (person != null and parts[2] == 'erase') {
     let result := fetch('https://eu.posthog.com/api/projects/${project}/persons/bulk_delete/', {'method': 'POST', 'headers': headers, 'body': jsonStringify({'ids': [personId], 'keep_person': true, 'delete_events': true, 'delete_recordings': true})});
     if (result.status != 202) { return; }

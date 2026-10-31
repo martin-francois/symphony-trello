@@ -196,8 +196,11 @@ export async function main(argv: readonly string[], environment: NodeJS.ProcessE
       for (const review of reviews) {
         const events = review.remainingEvents === undefined ? "" : `, ${review.remainingEvents} event(s) remain`;
         console.log(`${review.action}${review.action === "archive" && !archive ? " (dry run)" : ""} flag ${review.id} ${review.name} [${review.state}, created ${review.createdAt}${events}]`);
+        if (review.action === "incomplete") {
+          console.log(`  ask PostHog support to delete the remaining events of person ${review.name.split("|")[1] ?? "?"}, citing https://github.com/PostHog/posthog/issues/126750; archive the flag once a fresh count is zero`);
+        }
       }
-      const attention = reviews.filter((review) => review.action === "late-events" || review.action === "refused" || review.action === "stale");
+      const attention = reviews.filter((review) => review.action !== "archive" && review.action !== "keep");
       console.log(`erasure-flags: ${reviews.length} flag(s), ${reviews.filter((review) => review.action === "archive").length} ${archive ? "archived" : "archivable"}, ${attention.length} need the maintainer`);
       return attention.length === 0 ? 0 : 1;
     }

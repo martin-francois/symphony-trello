@@ -124,13 +124,17 @@ as the request ages, and at least every six hours. If this installation never se
 `erase` only turns reporting off because there is nothing to erase. If a report left within the
 last hour, the first check waits until an hour after it, so that report is included.
 "Accepted" means PostHog has queued deletion. "Complete" means one of three things. PostHog
-verified event deletion and the person profile is absent. Or a fresh check found no profile and
+reported the event deletion as verified, the person profile is absent, and a fresh check found
+no report left under the analytics ID or its profile. Or a fresh check found no profile and
 no retained events. Or the current reporting period never started sending a report, so the
-command marks erasure complete locally without contacting PostHog. Deletion is asynchronous, so
-completion can take days.
+command marks erasure complete locally without contacting PostHog. Deletion is asynchronous.
+The data is deleted within 30 days of the request. If PostHog has finished its deletion run and
+the fresh check still finds a report, `erase-status` says the erasure is still being processed;
+it never reports completion while a report is stored, and the 30 days still apply.
 Reporting stays off across restarts and updates. Explicit `symphony-trello telemetry enable`
-after completion starts a new reporting period while preserving the installation ID,
-registration date and counters. Ordinary disable/enable keeps the current period.
+after completion, or while the remaining data is still being deleted, starts a new reporting
+period while preserving the installation ID, registration date and counters. Ordinary
+disable/enable keeps the current period.
 
 Ownership uses a secret stored in `telemetry.json`. Keep this file and its backups private.
 The secret is issued over HTTPS before the first report. Erasure requests send a signature,

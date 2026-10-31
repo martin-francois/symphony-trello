@@ -670,6 +670,7 @@ function erasureFlagFixture(): Record<string, Json>[] {
     statusFlag(6, "symphony-erasure-v1|0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c", "refused", "2026-09-24T00:00:00Z"),
     statusFlag(7, "symphony-erasure-v1|0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5d", "accepted", "2026-09-01T00:00:00Z"),
     statusFlag(8, "symphony-erasure-v1|0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5e", "pending", "2026-09-25T11:00:00Z"),
+    statusFlag(9, "symphony-erasure-v1|0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5f", "incomplete", "2026-09-23T00:00:00Z"),
   ];
 }
 
@@ -678,7 +679,7 @@ test("erasure flag review archives only settled results and reports what needs t
   state.eventCounts = {[LATE_ID]: 2};
   const dryRun = await reviewErasureFlags(api(), PROJECT_ID, REVIEWED_AT, false);
   assert.deepEqual(dryRun.map((review) => [review.id, review.action]), [
-    [1, "archive"], [2, "late-events"], [3, "keep"], [4, "archive"], [5, "archive"], [6, "refused"], [7, "stale"], [8, "keep"],
+    [1, "archive"], [2, "late-events"], [3, "keep"], [4, "archive"], [5, "archive"], [6, "refused"], [7, "stale"], [8, "keep"], [9, "incomplete"],
   ]);
   assert.equal(dryRun.find((review) => review.id === 2)?.remainingEvents, 2);
   assert.ok(!state.requests.some((request) => request.startsWith("PATCH")));

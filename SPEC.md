@@ -5771,13 +5771,20 @@ When this profile is used:
   issuance MUST use the heartbeat retry backoff. A webhook receipt MUST NOT mean accepted or
   complete. Acceptance requires a matching provider deletion record. Status retries MUST recover an
   outstanding profile deletion when event deletion was queued but profile deletion failed.
-  Completion requires provider-verified event deletion and profile absence, or a fresh uncached
-  query proving no retained events when no profile exists. A period that never dispatched a
-  heartbeat MAY complete locally without contacting the service, and `telemetry erase` before any
-  identity exists MUST disable reporting and succeed without a request. Missing, invalid or
-  unavailable status MUST preserve the disabled state. Once complete or refused, explicit `telemetry
-  enable` MUST create a new reporting period with the same installation credential; a refused
-  period's data remains for maintainer-assisted erasure. The erased distinct ID MUST NOT be reused
+  Completion requires provider-verified event deletion, profile absence and a fresh uncached
+  query proving no retained events under the period's analytics ID or its bound person UUID, or
+  that query alone when no profile exists. A provider-verified deletion that still leaves events
+  MUST be reported as `incomplete`, a final state: the client MUST present it as still being
+  processed, with the data deleted within 30 days of the request, MUST NOT claim completion, and
+  MUST NOT acknowledge it, so the status flag stays for maintainer monitoring. User-facing text
+  MUST promise only that the data is deleted within 30 days of the request. A period that never
+  dispatched a heartbeat MAY complete locally without contacting the service, and `telemetry
+  erase` before any identity exists MUST disable reporting and succeed without a request.
+  Missing, invalid or unavailable status MUST preserve the disabled state. Once complete,
+  incomplete or refused, explicit `telemetry enable` MUST create a new reporting period with the
+  same installation credential; a refused period's data remains for maintainer-assisted erasure,
+  and an incomplete period's remaining data is deleted through the maintainer's provider support
+  request. The erased distinct ID MUST NOT be reused
   by that state. Existing credentials remain valid independently of event retention. Multi-ID
   persons MUST be refused. The merge filter and pre-delete check mitigate, but do not eliminate, the
   accepted merge race.
@@ -5786,8 +5793,8 @@ When this profile is used:
   target person UUID before deletion. An empty result's private name MUST carry its analytics ID so
   cleanup can count its events again. A `status` request whose flag is missing MUST recreate the
   result as `erase` does, so archiving a settled flag never strands a client. Maintainer tooling
-  MUST archive only empty or complete results and MUST report late events, refused and stale
-  operations. After saving completion, the client SHOULD request flag cleanup; failed cleanup
+  MUST archive only empty or complete results and MUST report late events, incomplete, refused
+  and stale operations. After saving completion, the client SHOULD request flag cleanup; failed cleanup
   retains the flag for an operator to archive after verification. Flag and API quotas MUST fail
   without authorizing additional deletion. Local state backups MUST be protected as credentials.
   Restoring one taken before erasure is unsupported: the client cannot detect it and would report
@@ -5795,8 +5802,11 @@ When this profile is used:
 - legacy installations without credentials MUST use maintainer-assisted erasure. The public issuer
   MUST NOT claim their existing IDs. No disabled period is backfilled and no discarded report is
   replayed. Production deployment and release configuration MUST remain off until two successive
-  reporting-period erasures, lost-response retries and an unrelated canary pass hosted checks.
-  OpenTofu MUST refuse production activation without a lifecycle pass for the exact handler
+  reporting-period erasures, lost-response retries and an unrelated canary pass hosted checks. A
+  reporting period passes those checks on correct handling of either provider outcome: after the
+  provider reports its deletion verified, the public status is `complete` with no event left, or
+  `incomplete` with events left and its flag retained; the pass records which outcome each period
+  saw. OpenTofu MUST refuse production activation without a lifecycle pass for the exact handler
   template, and packaging MUST refuse an erasure audience for any project other than the committed
   production project.
 - reports MAY leave the machine only when the state home contains the installer-written

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {createHash, createHmac} from "node:crypto";
 import {readFileSync} from "node:fs";
 import type {Json} from "./posthog-api.ts";
-import {archiveRunSources, mailboxKey, recordHandler, SIGNATURE_LIFETIME_SECONDS, signedOperation, type HandlerLedger, type Owner, type SourceApi, type SourceLedger} from "./erasure-lifecycle-live.ts";
+import {archiveRunSources, captureSourceDiagnostics, expectedPublicStatus, mailboxKey, recordHandler, SIGNATURE_LIFETIME_SECONDS, signedOperation, statusRetainedAfterAck, type HandlerLedger, type Owner, type SourceApi, type SourceLedger} from "./erasure-lifecycle-live.ts";
 import {handlerTemplateSha256} from "./erasure-service.ts";
 
 type JsonObject = {readonly [key: string]: Json};
@@ -121,4 +121,43 @@ test("the status mailbox key uses the status label the native handler derives it
   // then
   assert.ok(handler.includes("concat('erasure-', sha256HmacChainHex([key, concat('symphony-trello/status/v1|${scope}|', parts[5])]))"));
   assert.equal(mailbox, expected);
+});
+
+test("a verified deletion completes only when the handler's own fresh event count is zero", () => {
+  // given
+  const handler = readFileSync(new URL("../infra/posthog/erasure-service.hog.tftpl", import.meta.url), "utf8");
+  const verified = handler.indexOf("deletion.status == 'completed' and deletion.delete_verified_at != null");
+  const count = handler.indexOf("'query': 'SELECT count() FROM events WHERE distinct_id = {id} OR person_id = {person}'");
+  const decision = handler.indexOf("if (remaining.results[1][1] == 0) { state := 'complete'; } else { state := 'incomplete'; }");
+
+  // when
+  const expected = [0, 1, 7].map(expectedPublicStatus);
+
+  // then
+  assert.deepEqual(expected, ["complete", "incomplete", "incomplete"]);
+  assert.ok(verified >= 0 && count > verified && decision > count, "the count runs after the verified record and decides the state");
+  assert.ok(handler.includes("if (remaining.is_cached == true or typeof(remaining.results) != 'array' or length(remaining.results) != 1) { return; }"), "a cached count never completes an erasure");
+  assert.ok(!handler.includes("if (state == 'incomplete')"), "ack archives complete results only");
+  assert.deepEqual([statusRetainedAfterAck("complete"), statusRetainedAfterAck("incomplete"), statusRetainedAfterAck(undefined)], [false, true, false]);
+});
+
+test("a failed check keeps the source's logs and metrics, and an unreadable endpoint keeps its error", async () => {
+  // given
+  const reads: string[] = [];
+  const api: Pick<SourceApi, "get"> = {
+    get: async path => {
+      reads.push(path);
+      if (path.includes("/metrics/")) throw new Error("GET metrics answered HTTP 404: Not found.");
+      return {results: [{timestamp: "2026-10-31T10:25:32Z", level: "info", message: "Function completed"}]};
+    },
+  };
+
+  // when
+  const diagnostics = await captureSourceDiagnostics(api, "/api/projects/test", "source-id") as {logs: Json; metrics: {error: string}; sourceId: string};
+
+  // then
+  assert.deepEqual(reads, ["/api/projects/test/hog_functions/source-id/logs/?limit=200", "/api/projects/test/hog_functions/source-id/metrics/"]);
+  assert.equal(diagnostics.sourceId, "source-id");
+  assert.deepEqual(diagnostics.logs, {results: [{timestamp: "2026-10-31T10:25:32Z", level: "info", message: "Function completed"}]});
+  assert.match(diagnostics.metrics.error, /HTTP 404/);
 });

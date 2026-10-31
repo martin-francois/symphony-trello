@@ -295,6 +295,34 @@ through the private form described above. Then:
 4. After the case is resolved, archive the refused status flag. Its private name ends with the
    bound profile `uuid`.
 
+### Incomplete automatic erasure
+
+The native service reports an automatic erasure as incomplete when PostHog's deletion record for
+the bound profile reads `completed` with a `delete_verified_at` timestamp, the profile is gone,
+and a fresh uncached count still finds an event under the period's analytics ID or the profile
+`uuid`. PostHog marks a request verified without proving the rows are gone, and a verified request
+cannot be queued again, see
+[PostHog issue 126750](https://github.com/PostHog/posthog/issues/126750). The test project produced
+one such case, verified on 2026-10-09 with its event still readable on 2026-10-31.
+`symphony-trello telemetry erase-status` tells the user that the erasure is still being processed
+and that the remaining data is deleted within 30 days of the request; it does not claim
+completion and does not involve the user. Reporting stays off until the user runs
+`symphony-trello telemetry enable`, which starts a new period under a new analytics ID. The
+maintainer learns of the case from monitoring, not from the user: the status flag stays, and
+`scripts/posthog-infra erasure-flags` reports it as `incomplete` with the bound profile `uuid`
+until the flag is archived. Then:
+
+1. Run step 6 with the profile `uuid` from the flag's private name, substituting
+   `person_id = '<profile uuid>'` for the analytics ID condition, to measure what remains. Step 2
+   returns no profile, because the service removed it once PostHog had queued the event deletion.
+2. Ask PostHog support to delete the remaining events of that person, citing
+   [PostHog issue 126750](https://github.com/PostHog/posthog/issues/126750), with the project id,
+   the profile `uuid` and the request time. `bulk_delete` finds no person to queue for an ID
+   without a profile, and the verified deletion record blocks a second request, so there is no
+   self-service call for this; an automated removal is a later decision, not something to add now.
+3. Archive the incomplete status flag only after step 6 returns zero. The 30 days promised to the
+   user run from the erasure request, so open the support request as soon as the flag appears.
+
 ## Re-enabling after an erasure
 
 The application never rotates or deletes an installation ID. What
@@ -379,10 +407,12 @@ bound to a person; `symphony-erasure-empty-v2|<analytics id>` and the older
 so review the rest with `scripts/posthog-infra erasure-flags production` and archive settled ones
 with `--archive`. The command archives empty and complete results older than a day. Before
 archiving an empty result it counts that analytics ID's events again. It reports, and never
-archives, three cases:
+archives, four cases:
 
 - `late-events`: an event arrived after the empty result. Delete that analytics ID's events with
   the procedure under [Erasure requests](#erasure-requests), then run the command again.
+- `incomplete`: PostHog verified the deletion but an event remained. Follow
+  [Incomplete automatic erasure](#incomplete-automatic-erasure).
 - `refused`: follow [Refused automatic erasure](#refused-automatic-erasure).
 - `stale`: a pending or accepted operation older than 14 days. Check the bound person's
   `persons/deletion_status/` record; escalate to PostHog support if deletion never completed.
