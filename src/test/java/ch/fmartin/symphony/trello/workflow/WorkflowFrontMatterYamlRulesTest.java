@@ -311,9 +311,9 @@ final class WorkflowFrontMatterYamlRulesTest {
                 .isEqualTo(PARSE_ERROR);
     }
 
-    @MethodSource("collectionAliasCases")
+    @MethodSource("collectionAliasesWithinLimit")
     @ParameterizedTest
-    void collectionAliasesLoadUpToTheNodeLimit(String anchored, int copiesWithinLimit, int aliasLine) {
+    void collectionAliasesLoadUpToTheNodeLimit(String anchored, int copiesWithinLimit) {
         // given
         byte[] workflow = workflow(listCopies(anchored, copiesWithinLimit));
 
@@ -336,6 +336,16 @@ final class WorkflowFrontMatterYamlRulesTest {
 
         // then
         assertThat(failure).hasMessage(aliasLimit("l", aliasLine));
+    }
+
+    // The same lists as collectionAliasCases, without the alias line that only a failure reports.
+    private static Stream<Arguments> collectionAliasesWithinLimit() {
+        return collectionAliasCases().map(WorkflowFrontMatterYamlRulesTest::withoutAliasLine);
+    }
+
+    private static Arguments withoutAliasLine(Arguments listAndCopies) {
+        Object[] values = listAndCopies.get();
+        return arguments(values[0], values[1]);
     }
 
     private static Stream<Arguments> collectionAliasCases() {
