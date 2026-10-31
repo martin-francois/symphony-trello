@@ -275,6 +275,8 @@ Fields:
   - Each reference record contains:
     - `source` (string)
     - `text` (string or null)
+      - The source line containing the reference, without its line separator. Whitespace within
+        that line is preserved. When a reference occurs more than once, its first source line wins.
     - `lookup_id` (string)
     - `identifier` (string or null)
     - `title` (string or null)
@@ -4166,6 +4168,10 @@ that a second formatting pass leaves the source unchanged.
   with incomplete activity. Missing or blank last-activity timestamps prevent lookup reuse, and a
   failed status write, including HTTP 429, requires a fresh lookup on the next poll
 - Card state refresh by ID returns minimal normalized cards or typed per-card missing results
+- Selected-card reference context retains each reference's source line across titles, descriptions,
+  comments, checklist items, and attachments. Parser and client tests cover logical line separators,
+  exact checklist references and first-occurrence deduplication; the
+  `relationship-context-deduplication-and-rendering` harness scenario verifies the generated prompt.
 - Card state refresh by ID reports a card whose payload fails normalization as a typed per-card
   failure and still returns the other requested cards
 - Error mapping covers request errors, non-2xx statuses, rate limits, missing list mappings, auth

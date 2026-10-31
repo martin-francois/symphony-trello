@@ -1160,10 +1160,11 @@ scenarios:
       - no prompt line contains more than one card reference marker
       - the repeated reference appears once
       - every line of the reference list is one reference bullet
+      - each reference keeps only its matching source line
     cleanup: Stop the worker; final cleanup archives the board.
-    expected: known-bug
+    expected: covered
     linked_issue: 805
-    notes: "#497 fixed bullets that ran together on one line. #805 tracks multi-line description text that spills between the bullets."
+    notes: "#497 fixed bullets that ran together on one line. #805 keeps multiline reference context on its matching source line."
 
   # ---------------------------------------------------------------------------------------------
   # Trello tools and workpad

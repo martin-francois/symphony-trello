@@ -6,6 +6,7 @@ import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.respond;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.trelloList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -659,6 +660,96 @@ final class TrelloClientTest {
                 .filteredOn(request -> request.startsWith("GET /1/cards/CTXSHARED?"))
                 .hasSize(1);
         assertThat(writeRequests).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"title", "description", "comment", "checklist", "attachment-name", "attachment-url"})
+    void fetchCardStatesForPromptByIdsKeepsEachReferencesSourceLine(String source) throws Exception {
+        // given
+        var mapper = new ObjectMapper();
+        String firstLine = "See [first](" + cardUrl("SYNTH101") + ") for background.";
+        String secondLine = "Also see " + cardUrl("SYNTH102") + ".";
+        String text = firstLine + "\n" + secondLine + "\nAgain: " + cardUrl("SYNTH101");
+        String json = promptReferenceCard(mapper, source, text);
+        trello.on("/1/cards/card-lines", exchange -> respond(exchange, json));
+        trello.on("/1/cards/SYNTH101", exchange -> respond(exchange, 404, "{}"));
+        trello.on("/1/cards/SYNTH102", exchange -> respond(exchange, 404, "{}"));
+        var client = new TrelloClient(mapper);
+        var config = config("lookup-input", Map.of("blocker_enforced_states", List.of()));
+
+        // when
+        var result = client.fetchCardStatesForPromptByIds(config, List.of("card-lines"));
+
+        // then
+        assertThat(result.get("card-lines")).isInstanceOfSatisfying(CardLookupResult.Found.class, found -> assertThat(
+                        found.card().trelloReferences())
+                .extracting(Card.TrelloReference::lookupId, Card.TrelloReference::text)
+                .containsExactly(tuple("SYNTH101", firstLine), tuple("SYNTH102", secondLine)));
+        assertThat(writeRequests).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"SYNTH101", "https://trello.com/c/SYNTH101"})
+    void fetchCardStatesForPromptByIdsKeepsExactChecklistReferencesOnTheirSourceLine(String reference)
+            throws Exception {
+        // given
+        var mapper = new ObjectMapper();
+        String line = "  " + reference + "\t";
+        String json = promptReferenceCard(mapper, "checklist", "\r\n" + line + "\r\n");
+        trello.on("/1/cards/card-lines", exchange -> respond(exchange, json));
+        trello.on("/1/cards/SYNTH101", exchange -> respond(exchange, 404, "{}"));
+        var client = new TrelloClient(mapper);
+        var config = config("lookup-input", Map.of("blocker_enforced_states", List.of()));
+
+        // when
+        var result = client.fetchCardStatesForPromptByIds(config, List.of("card-lines"));
+
+        // then
+        assertThat(result.get("card-lines")).isInstanceOfSatisfying(CardLookupResult.Found.class, found -> assertThat(
+                        found.card().trelloReferences())
+                .extracting(Card.TrelloReference::source, Card.TrelloReference::lookupId, Card.TrelloReference::text)
+                .containsExactly(tuple("checklist:Notes", "SYNTH101", line)));
+        assertThat(writeRequests).isEmpty();
+    }
+
+    private static String promptReferenceCard(ObjectMapper mapper, String source, String text) throws Exception {
+        var payload = mapper.createObjectNode()
+                .put("id", "card-lines")
+                .put("name", "Context")
+                .put("desc", "")
+                .put("idList", "lookup-review")
+                .put("idBoard", "lookup-board")
+                .put("shortLink", "context")
+                .put("closed", false);
+        switch (source) {
+            case "title" -> payload.put("name", text);
+            case "description" -> payload.put("desc", text);
+            case "comment" ->
+                payload.putArray("actions")
+                        .addObject()
+                        .put("id", "comment-lines")
+                        .put("date", "2026-02-25T20:11:12.000Z")
+                        .putObject("data")
+                        .put("text", text);
+            case "checklist" ->
+                payload.putArray("checklists")
+                        .addObject()
+                        .put("id", "checklist-lines")
+                        .put("name", "Notes")
+                        .putArray("checkItems")
+                        .addObject()
+                        .put("id", "item-lines")
+                        .put("name", text)
+                        .put("state", "complete");
+            case "attachment-name", "attachment-url" ->
+                payload.putArray("attachments")
+                        .addObject()
+                        .put("id", "attachment-lines")
+                        .put("name", source.equals("attachment-name") ? text : "Context")
+                        .put("url", source.equals("attachment-url") ? text : "https://example.com/context");
+            default -> throw new IllegalArgumentException(source);
+        }
+        return mapper.writeValueAsString(payload);
     }
 
     @Test
