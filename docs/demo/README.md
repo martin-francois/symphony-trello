@@ -42,9 +42,11 @@ It also compares the new MP4 with the committed one and reports whether the READ
 replacing. See [Updating the inline README video](#updating-the-inline-readme-video).
 
 The normal `pnpm run verify:scripts` CI gate recomputes that manifest. It fails when a composition,
-capture, font, render configuration, render script, HyperFrames version, MP4, or poster changes without
-running the render command and committing all three generated files. It also fails when the committed MP4 is
-not strictly below GitHub's 10,000,000-byte (10 MB) video-attachment limit. This ceiling exists
+capture, font, render configuration, render script, MP4, or poster changes without running the
+render command and committing all three generated files; the HyperFrames version is recorded, not
+hashed, so a newer pin alone keeps the gate green (see [Updating HyperFrames](#updating-hyperframes)). It also fails when the committed MP4 is
+not strictly below GitHub's video-attachment limit, `GITHUB_VIDEO_ATTACHMENT_LIMIT_BYTES` in
+`scripts/readme-demo-manifest.ts`. This ceiling exists
 because [GitHub limits video attachments to 10 MB for repositories owned by users or organizations
 on its free plan](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files),
 and uploading such an attachment supplies the URL used by the inline README player. Documentation
@@ -75,26 +77,40 @@ measured re-render noise, a measured one-word caption change, and why whole-fram
 enough. If the comparison itself fails, the render keeps the new media and asks for an upload.
 
 The comparison reads the video from a commit, not from the working tree, so running the render twice
-before committing compares both runs with the same video. The README attachment shows the video on
-`main`, so compare with `main` when `HEAD` already holds a newer render, for example after
-rebasing a branch that has a render commit:
+before committing compares both runs with the same video. Compare with `main` when `HEAD` already
+holds a newer render, for example after rebasing a branch that has a render commit:
 
 ```bash
 node scripts/render-readme-demo.ts --compare-with origin/main
+```
+
+The README attachment can be older than the video on `main`: every render merged with the `keep`
+verdict leaves the previous attachment in place, so several small steps can add up between the
+attachment and `main`. The HyperFrames Renovate check therefore compares with the attachment
+itself. To run the same comparison by hand, download the URL on the first non-blank line after the
+`<!-- readme-demo-video -->` comment in `README.md` and compare the new render with it:
+
+```bash
+curl -fL --proto =https --proto-redir =https -o /tmp/readme-attachment.mp4 <attachment URL>
+node scripts/readme-demo-compare-videos.ts /tmp/readme-attachment.mp4 docs/assets/demo.mp4
 ```
 
 To replace the attachment:
 
 1. Download `docs/assets/demo.mp4` from the pull-request branch to your computer.
 2. Open `README.md` in GitHub and select the pencil icon to use the inline editor.
-3. Remove the existing demo media block, then drag `demo.mp4` from your computer into that
-   location in the editor and wait for GitHub to insert the new uploaded-attachment URL.
+3. Replace the URL on the line after the `<!-- readme-demo-video -->` comment: delete it, then
+   drag `demo.mp4` from your computer onto that line and wait for GitHub to insert the new
+   uploaded-attachment URL. Keep the comment; the HyperFrames Renovate check reads the first
+   non-blank line after it through `scripts/readme-demo-embed`, `script-tests` fails without it,
+   and the old URL must not stay anywhere in `README.md`.
 4. Preview the README and confirm that GitHub displays the URL as an inline video player and that
    playback works.
-5. Commit the README edit through GitHub.
+5. Commit the README edit through GitHub. For a HyperFrames update, commit it to the Renovate
+   branch, so the `readme-demo-render` check sees the new URL on the pull request.
 
-The uploaded file MUST remain strictly below 10 MB; exactly 10,000,000 bytes fails the render and CI
-checks.
+The uploaded file MUST remain strictly below `GITHUB_VIDEO_ATTACHMENT_LIMIT_BYTES` in
+`scripts/readme-demo-manifest.ts`; a file of exactly that size fails the render and CI checks.
 
 Every scene reserves a reading hold before its visual action. The composition defines the normal
 and reflective reading rates once as named constants in `index.html`. Scenes that ask the viewer to
@@ -133,42 +149,85 @@ committed video.
 script and the CLI wrapper above import it, and the CLI version also selects the Docker renderer
 image. A regex manager in `renovate.json` reads the same line, so Renovate opens an update pull
 request with the `hyperframes` label once a release has passed the repository's seven-day release
-age. That pull request never merges automatically.
+age.
 
-The version file is a render input. Renovate's version-only change therefore fails the
-`script-tests` freshness check until media rendered with the new version is committed. Do not edit
-`render-manifest.json` by hand to make the check pass: the manifest would then claim that media from
-the old renderer came from the new one.
+The version file is hashed as a render input with its version literal normalized:
+`render-manifest.json` records the version that rendered the committed media as
+`hyperframesVersion`, and the freshness check accepts a pinned version that is the recorded one or
+newer. A Renovate update therefore passes `script-tests` without a render commit, and the committed
+media are rendered with an older version than the pin until the next render for a composition
+change. Any other change to the version file, or to any other render input, still fails the check
+until a render is committed. Do not edit `render-manifest.json` by hand to make the check pass: the
+manifest would then claim that media from an older render came from the current inputs.
 
-To finish a HyperFrames update pull request:
+The `readme-demo-render` check of the `HyperFrames Renovate automation` workflow decides the
+update instead ([ADR 0149](../adr/0149-check-hyperframes-updates-by-rendering-in-ci.md)). On a
+same-repository `renovate/hyperframes` pull request by Renovate it renders the README demo with
+the proposed version and discards the result. The baseline is the README attachment, the video
+README readers see, which the check downloads (GitHub serves a public repository's attachments
+without authentication):
+
+- First, the README demo embed: in `README.md` on `main` and on the pull request, the first
+  non-blank line after the `<!-- readme-demo-video -->` comment must be a `user-attachments` URL.
+  Without it on `main`, the check fails before rendering and says so. When the pull request
+  changes that URL, `main`'s URL must be gone from `README.md` and the file GitHub serves at the
+  new URL must be the committed `docs/assets/demo.mp4` byte for byte; that new attachment is then
+  the baseline.
+- While the pull request keeps `main`'s `docs/assets/demo.mp4`, the usual Renovate update, the
+  render is compared with the attachment
+  (`node scripts/readme-demo-compare-videos.ts`, the same tile SSIM). No visible change: the check
+  passes and Renovate merges once every check is green. Nothing is pushed to the branch.
+- Once the pull request commits its own `docs/assets/demo.mp4`, the render must reproduce that
+  committed video, and the committed video is compared with the attachment. If they look the same,
+  no new attachment is needed. If they differ visibly, the check passes only after the committed
+  video is uploaded and its URL is on the embed line.
+
+Every part holds: the check passes. Otherwise it fails and says which part is missing.
+
+A render takes about 15 minutes on a hosted runner, and a newer version or a rebase renders again.
+
+What needs a person:
+
+- **The check fails with `re-upload the README video attachment`.** The new render differs
+  visibly from the README attachment. The workflow adds the `needs-maintainer-review` label and a
+  comment; the run log names the frame and tile position of the lowest score. Render by hand as
+  described next and compare stills around that frame with the attachment, downloaded as shown in
+  [Updating the inline README video](#updating-the-inline-readme-video). If the change is wanted:
+  1. Commit the three generated files to the Renovate branch and push.
+  2. If the new video differs visibly from the attachment, which the check reports, replace the
+     README inline video on that branch as described in
+     [Updating the inline README video](#updating-the-inline-readme-video), committing the
+     `README.md` edit to the Renovate branch, not to `main`. A committed video that looks the same
+     as the attachment, for example after a composition fix with no visible effect, needs no
+     upload.
+  3. Wait for the check to pass on the new head: it requires the reproduced video and, after a
+     visible change, the new attachment, and its comment names whichever part is still missing.
+  4. Merge the pull request by hand. Renovate does not merge a branch a person pushed to, and the
+     metadata check needs the pull request template sections in the body
+     ([GitHub issue #1185](https://github.com/martin-francois/symphony-trello/issues/1185)).
+
+  If the change is not wanted, close the pull request; Renovate then skips that version.
+- **The check fails as incomplete.** The comment says what is missing: the embed line or its
+  marker is gone or holds no `user-attachments` URL, the CI render does not reproduce the
+  committed video, the embed line still holds `main`'s URL although the committed video differs
+  visibly from that attachment, `main`'s URL is still mentioned elsewhere, the new attachment is
+  not the committed file, or its download failed. Finish the missing step from the list above.
+- **The render or one of its checks fails.** The check fails and the comment links the run. If
+  the new version needs a composition change, make it on the Renovate branch, render by hand and
+  commit the three generated files. Otherwise close the pull request. Renovate then skips that
+  version, or the whole major version for a major update, and proposes the next newer release.
+
+To render by hand on the Renovate branch:
 
 1. Read the [HyperFrames release notes](https://github.com/heygen-com/hyperframes/releases) for
    every version between the old and the new pin.
-2. Check out the Renovate branch and run `node scripts/render-readme-demo.ts` from the repository
-   root. It has the same requirements as a normal re-render and runs the same checks.
-3. Read the `README video:` line the render prints. If it reports a visible change, extract a few
-   stills from the new MP4 and from the previous one, for example with
-   `git show origin/main:docs/assets/demo.mp4 > /tmp/demo-before.mp4`, and check that the
-   change is one you want.
-4. Commit `docs/assets/demo.mp4`, `docs/assets/readme-demo-poster.png`, and
-   `docs/demo/render-manifest.json` to the Renovate branch and push.
-5. Only if the render reported a visible change, replace the README inline video as described in
-   [Updating the inline README video](#updating-the-inline-readme-video). Otherwise the pull
-   request merges with the existing attachment.
-6. Merge manually after the required checks pass.
-
-No automation renders or commits these files; [ADR 0093](../adr/0093-renovate-updates-hyperframes.md)
-explains why. If something goes wrong:
-
-- **The render or one of its checks fails.** The pull request stays blocked. If the new version
-  needs a composition change, make it on the same branch and render again. Otherwise close the pull
-  request. Renovate then skips that version, or the whole major version for a major update, and
-  proposes the next newer release.
-- **The branch falls behind `main`.** Renovate stops updating a branch after you push to it, and a
-  newer HyperFrames release does not replace your commit. Rebase the branch yourself. If `main`
-  changed a render input in the meantime, the freshness check fails again, and you render again.
-- **The rebase checkbox was ticked.** Renovate recreates the branch from its own commit and drops
-  the render commit. Run steps 2 to 4 again.
+2. Check out the Renovate branch and run
+   `node scripts/render-readme-demo.ts --compare-with origin/main` from the repository root. It
+   has the same requirements as a normal re-render and runs the same checks.
+3. Read the `README video:` line the render prints and act on it as described above. Renovate
+   stops updating a branch after a person pushes to it, so rebase it yourself if it falls behind
+   `main`, and do not tick the rebase checkbox: Renovate would recreate the branch without the
+   render commit.
 
 ## Structure
 
