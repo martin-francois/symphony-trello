@@ -735,6 +735,77 @@ final class SetupDiagnosticReporterTest {
         assertThat(report).contains("| codex | available | version unavailable |");
     }
 
+    @MethodSource("remoteToolPaths")
+    @ParameterizedTest(name = "{0}")
+    void diagnosticsRedactsRemoteToolPathsAndKeepsExactLookup(String scenario, String privatePath, String quote)
+            throws Exception {
+        // given
+        String suffix =
+                quote.isEmpty() ? " is ready; mode=portable" : " is ready https://example.test/docs/file:///public";
+        String output = "codex-cli 1.2.3 at " + quote + privatePath + quote + suffix;
+        String captured = quote.isEmpty() ? privatePath + suffix : privatePath;
+
+        // when
+        OutsideRootDiagnostics diagnostics = outsideRootDiagnostics(output);
+
+        // then
+        assertThat(diagnostics.report())
+                .as(scenario)
+                .contains(diagnostics.token(), "; login=not-probed |")
+                .doesNotContain(privatePath, "private-server", "Jane Doe", "private-tail");
+        assertThat(diagnostics.lookup())
+                .contains(
+                        "- **lookup_status:** found",
+                        "| tool | codex | \\" + diagnostics.token() + " | " + captured + " |");
+        if (!quote.isEmpty()) {
+            assertThat(diagnostics.report()).contains(suffix);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "file://synthetic-user:synthetic-secret@private-server/share/Jane Doe/private-tail",
+                "\"file://O'Neil:synthetic-secret@private-server/share/Jane Doe/private-tail\"",
+                "\\\\private-server\\share\\Jane Doe\\private-tail token=synthetic-secret"
+            })
+    void privateRemotePathLookupNeverExposesCredentials(String privatePath) throws Exception {
+        // given
+        String output = "codex-cli 1.2.3 at " + privatePath;
+
+        // when
+        OutsideRootDiagnostics diagnostics = outsideRootDiagnostics(output);
+
+        // then
+        assertThat(diagnostics.report())
+                .doesNotContain("synthetic-user", "synthetic-secret", "private-server", "Jane Doe");
+        assertThat(diagnostics.lookup())
+                .contains("- **lookup_status:** found", "private-server", "<redacted>")
+                .doesNotContain("synthetic-user", "synthetic-secret");
+    }
+
+    private static List<Arguments> remoteToolPaths() {
+        return List.of(
+                Arguments.of("apostrophe in quoted UNC", "\\\\private-server\\share\\O'Neil\\private-tail", "\""),
+                Arguments.of("apostrophe in quoted file URL", "file:///srv/O'Neil/private-tail", "\""),
+                Arguments.of("backtick in single-quoted file URL", "file:///srv/Jane`Doe/private-tail", "'"),
+                Arguments.of("apostrophe in unquoted file URL", "file:///srv/O'Neil/private-tail", ""),
+                Arguments.of("extended-length Windows path", "\\\\?\\C:\\Users\\Jane Doe\\private-tail", ""),
+                Arguments.of("Windows device path", "\\\\.\\C:\\Users\\Jane Doe\\private-tail", ""),
+                Arguments.of("unquoted UNC", "\\\\private-server\\share\\Jane Doe\\private-tail", ""),
+                Arguments.of("quoted UNC", "\\\\private-server\\share\\Jane Doe\\private-tail", "\""),
+                Arguments.of("single-quoted UNC", "\\\\private-server\\share\\Jane Doe\\private-tail", "'"),
+                Arguments.of("backtick UNC", "\\\\private-server\\share\\Jane Doe\\private-tail", "`"),
+                Arguments.of("punctuation in UNC", "\\\\private-server\\share\\Jane Doe, private-tail; final", ""),
+                Arguments.of("unquoted file URL", "file:///srv/Jane Doe/private-tail", ""),
+                Arguments.of("quoted file URL", "file:///srv/Jane Doe/private-tail", "\""),
+                Arguments.of("single-quoted file URL", "file:///srv/Jane Doe/private-tail", "'"),
+                Arguments.of("backtick file URL", "file:///srv/Jane Doe/private-tail", "`"),
+                Arguments.of("punctuation in file URL", "file:///srv/Jane Doe, private-tail; final", ""),
+                Arguments.of("file URL authority", "file://private-server/share/Jane Doe/private-tail", "\""),
+                Arguments.of("uppercase file scheme", "FILE:///srv/Jane Doe/private-tail", "\""));
+    }
+
     @Test
     void diagnosticsSkipsNonExecutablePosixPathEntries() throws Exception {
         // given

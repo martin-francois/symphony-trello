@@ -1116,7 +1116,7 @@ When a path under a known local directory, such as the home, config, state, or w
 is followed by a structured `key=value` log field, its `<path:...>` token SHOULD stop before that
 field. Without an explicit boundary, the whole match MUST stay in one token so no fragment of a
 private path is shown. Filesystem existence does not establish a boundary.
-Paths outside those directories MUST keep ambiguous unquoted trailing text hidden. Filesystem
+Paths outside those directories, including UNC paths and file URLs, MUST keep ambiguous unquoted trailing text hidden. Filesystem
 existence and the presence of separators in later words MUST NOT decide which path fragments are
 public. Explicit quotes delimit outside-root paths; structured log-field boundaries apply only to
 known-root paths. The complete Podman shim notice,

@@ -62,6 +62,13 @@ from those mappings when it is deleted. A workflow retained in the connected-boa
 represented by its stored path. Return `not_found` only when the token is absent from current
 context; never substitute a similar path. A deleted explicit workflow selector still fails selection.
 
+UNC paths and file URLs follow the same outside-root boundary rule. The matching opening quote
+delimits the path; other quote characters remain part of its private contents.
+unknown unquoted tails remain hidden even when they contain commas, semicolons, or log-like fields.
+Recognize the complete remote path before known-root replacement so a file URL retains one exact
+lookup mapping. Private lookup redacts file-URL user information and credential assignments inside
+the captured text; permission to reveal a path never grants permission to reveal credentials.
+
 ### Consequences
 
 * Good, because the reported Podman instruction remains readable and its token maps to the path alone.
@@ -76,7 +83,8 @@ context; never substitute a similar path. A deleted explicit workflow selector s
 `SetupDiagnosticReporterTest` covers missing POSIX and Windows final components containing spaces,
 existing files followed by punctuation, slash-containing prose, and token stability after deletion.
 It checks the full Podman notice with existing and missing paths, complete path redaction, exact
-lookup values, preserved suffixes, and adjacent credentials. Quoted paths retain following prose.
+lookup values, preserved suffixes, and adjacent credentials. Quoted paths retain following prose. UNC and file-URL cases cover quotes, punctuation, authority,
+case-insensitive schemes, and credential-free private lookup.
 
 The deleted-workflow regression first proves `found`, then deletes the file and checks `not_found`
 with the same selector-less lookup. A separate case retains the deleted path in the manifest.
