@@ -4,20 +4,11 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    paths:
-      - 'pom.xml'
-      - '.github/workflows/dependency-submission.yml'
-      - '.mvn/jvm.config'
 
 permissions: read-all
 
 jobs:
   dependency-submission:
-    if: >-
-      ${{ !startsWith(github.head_ref, 'release-please--branches--')
-      && github.head_ref != 'renovate/openrewrite-toolchain'
-      && !startsWith(github.head_ref, 'automation/openrewrite/renovate-') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

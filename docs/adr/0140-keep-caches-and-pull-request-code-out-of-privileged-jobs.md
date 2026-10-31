@@ -23,6 +23,10 @@ The audit summary of this decision is amended by
 check out their script files at `github.sha`, sparse and without the token, still with no cache;
 the rules and the audit table on the page carry the current state.
 
+The dependency submission part of this decision is amended by
+[ADR 0148](0148-submit-maven-dependencies-only-from-main.md). `dependency-submission.yml` no longer
+runs on `pull_request`; it submits only on pushes to `main`.
+
 ## Context and Problem Statement
 
 On 2026-05-11 an attacker published 84 malicious versions of 42 `@tanstack/*` packages without

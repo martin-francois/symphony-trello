@@ -165,6 +165,13 @@ test("no cache is restored or saved where it could reach a privileged run, a sec
   }
 });
 
+// Its job holds contents: write and runs Maven on the checkout, so no pull request may start it
+// (ADR 0148).
+test("dependency submission runs only on pushes to main", () => {
+  const workflow = WORKFLOWS.find(({file}) => file === "dependency-submission.yml");
+  assert.deepEqual(workflow?.document.on, {push: {branches: ["main"]}});
+});
+
 test("the audit table covers every workflow", () => {
   const page = readFileSync(new URL("../docs/agents/github-actions-security.md", import.meta.url), "utf8");
   for (const {file} of WORKFLOWS) {
