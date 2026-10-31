@@ -1061,6 +1061,20 @@ it is local-only and not for public issue reports.
 Setup and lifecycle commands that hide a local object such as a workflow file, worker log, managed
 PID/state file, or file-backed secret path SHOULD include the same public-safe token and a
 `diagnostics --show-private-context --lookup` hint so operators can resolve only that object locally.
+The printed hint MUST resolve as printed, without a `--board` or `--workflow` selector, in a
+`diagnostics` run with the same config directory and state home as the failed command. `start`
+therefore records the workflow file it was asked to start in the state home, next to the managed
+PID and log files, under the per-workflow process lock, once the path checks have passed and before
+it resolves the workflow configuration. The record keeps the effective workflow path used for configuration
+resolution, preserving symbolic links in that spelling, because the printed tokens use it too. A `diagnostics` run without a selector
+maps the recorded workflow files that still exist, and their file-backed secret paths, in its
+private context; a state home it cannot list contributes nothing. A run with a selector maps only
+the selected workflows. Private mappings preserve distinct symlink spellings even when the public
+report already includes the real path. Stored path whitespace is part of the filename. `stop`
+removes the record together with the PID file. Without connected boards, selector-less `stop` also
+cleans up record-only attempts under their process locks. Failed stops and unresolved worker
+ownership preserve the record.
+[ADR 0154](docs/adr/0154-record-start-attempts-in-the-state-home.md) records the decision.
 
 When a Java setup or lifecycle command turns an I/O or transport failure into a setup failure or a
 warning, the message SHOULD keep its actionable text and append a cause summary in the form
@@ -4266,6 +4280,11 @@ that a second formatting pass leaves the source unchanged.
   failure names its cause type and detail without file-system exception paths or parser content, and
   the setup failure troubleshooting report redacts that message under the public-safe diagnostics
   contract
+- If Java setup and lifecycle commands are implemented, the `--lookup` hint that `start` prints for
+  a missing or oversized file-backed secret resolves as printed, without a selector, for a workflow
+  outside the connected-board manifest and for a workflow reached through a symbolic link; a state
+  home that cannot be listed does not fail `diagnostics`; `stop` removes the recorded start attempt
+  with the PID file; and a recorded workflow that no longer exists is skipped
 - If the board card commands of Section 19.8 are implemented, deterministic tests drive them against
   a stateful fake Trello API and cover board selection with one board, several boards, `--board`,
   `--workflow`, and an unknown board; an unconnected workflow, refused before its credentials are

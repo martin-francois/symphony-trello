@@ -320,6 +320,8 @@ final class LocalWorkerManager {
             Function<String, Optional<String>> workflowEnvironment)
             throws IOException {
         try (var ignored = acquireProcessLock(files)) {
+            // Recorded before the workflow is resolved, so a failed start can still be looked up.
+            store.recordWorkflowPath(board.workflowPath());
             startLocked(paths, board, envPath, explicitEnvOverride, out, store, files, workflowEnvironment);
         }
     }
@@ -1023,7 +1025,7 @@ final class LocalWorkerManager {
                 Optional<Long> verifiedPid = verifiedManagedWorkerPid(paths, board, health);
                 // Plain branching because the present branch stops the worker with checked IO.
                 if (verifiedPid.isPresent()) {
-                    stopPid(store, files, verifiedPid.get());
+                    stopAndForget(store, files, verifiedPid.get());
                     out.println("Stopped untracked managed worker for " + DisplayNames.quotedName(board.boardName())
                             + " pid=" + verifiedPid.get());
                     return;
@@ -1037,6 +1039,7 @@ final class LocalWorkerManager {
                                         .map(reportedPid -> " Reported worker pid=" + reportedPid)
                                         .orElse(""));
             }
+            store.deleteWorkflowPathRecord(files);
             out.println("Symphony for Trello is already stopped for " + DisplayNames.quotedName(board.boardName()));
             return;
         }
@@ -1045,11 +1048,17 @@ final class LocalWorkerManager {
             // process; remove it so repeated stops do not keep reporting the same stale pid.
             out.println("Skipped unmanaged stale pid for " + DisplayNames.quotedName(board.boardName()) + " pid=" + pid
                     + " pid_file_token=" + pathToken(paths, files.pidFile()));
-            removeStalePidFile(paths, store, files.pidFile(), out);
+            removeStaleProcessState(paths, store, files.pidFile(), out);
             return;
         }
-        stopPid(store, files, pid);
+        stopAndForget(store, files, pid);
         out.println("Stopped Symphony for Trello for " + DisplayNames.quotedName(board.boardName()));
+    }
+
+    private void stopAndForget(ManagedProcessStore store, ManagedProcessStore.ManagedProcessFiles files, long pid)
+            throws IOException {
+        stopPid(store, files, pid);
+        store.deleteWorkflowPathRecord(files);
     }
 
     private void stopPid(ManagedProcessStore store, ManagedProcessStore.ManagedProcessFiles files, long pid)
@@ -1120,24 +1129,36 @@ final class LocalWorkerManager {
     }
 
     private void stopPidFiles(LocalWorkerPaths paths, ManagedProcessStore store, PrintStream out) throws IOException {
-        List<Path> pidFiles = store.pidFiles();
-        if (pidFiles.isEmpty()) {
+        List<ManagedProcessStore.ManagedProcessFiles> candidates = store.stoppableFiles();
+        if (candidates.isEmpty()) {
             out.println("No managed Symphony process found");
             return;
         }
-        for (Path pidFile : pidFiles) {
-            Long pid = store.readPid(pidFile);
-            String label = stateFileLabel(pidFile);
-            if (pid != null && platform.isAlive(pid) && platform.isManaged(pid, paths.appHome())) {
-                stopPid(store, store.filesFromPidFile(pidFile), pid);
-                out.println("Stopped " + label);
-            } else if (pid != null && platform.isAlive(pid)) {
-                out.println("Skipped unmanaged stale pid " + label + " pid=" + pid + " pid_file_token="
-                        + pathToken(paths, pidFile));
-                removeStalePidFile(paths, store, pidFile, out);
-            } else {
-                store.deletePid(pidFile);
+        for (ManagedProcessStore.ManagedProcessFiles files : candidates) {
+            try (var ignored = acquireProcessLock(files)) {
+                stopStateFiles(paths, store, out, files);
             }
+        }
+    }
+
+    private void stopStateFiles(
+            LocalWorkerPaths paths,
+            ManagedProcessStore store,
+            PrintStream out,
+            ManagedProcessStore.ManagedProcessFiles files)
+            throws IOException {
+        Path pidFile = files.pidFile();
+        Long pid = store.readPid(pidFile);
+        String label = stateFileLabel(pidFile);
+        if (pid != null && platform.isAlive(pid) && platform.isManaged(pid, paths.appHome())) {
+            stopAndForget(store, files, pid);
+            out.println("Stopped " + label);
+        } else if (pid != null && platform.isAlive(pid)) {
+            out.println("Skipped unmanaged stale pid " + label + " pid=" + pid + " pid_file_token="
+                    + pathToken(paths, pidFile));
+            removeStaleProcessState(paths, store, pidFile, out);
+        } else {
+            store.deleteStoppedProcessFiles(files);
         }
     }
 
@@ -1148,22 +1169,24 @@ final class LocalWorkerManager {
         return name.replaceFirst("\\.[0-9a-f]{12}$", "");
     }
 
-    /// Refusing to kill the unrelated process is the safety contract; the pid file cleanup is only
-    /// best effort on top. A failed or already-done removal must say so instead of claiming the
-    /// file was removed.
-    private void removeStalePidFile(LocalWorkerPaths paths, ManagedProcessStore store, Path pidFile, PrintStream out) {
+    /// Refusing to kill the unrelated process is the safety contract; state cleanup is best effort.
+    /// A record deletion can fail after the PID file was removed, so failure output names the
+    /// state home where either remaining file needs attention.
+    private void removeStaleProcessState(
+            LocalWorkerPaths paths, ManagedProcessStore store, Path pidFile, PrintStream out) {
         try {
-            if (store.deletePid(pidFile)) {
+            if (store.deleteStoppedProcessFiles(store.filesFromPidFile(pidFile))) {
                 out.println("Removed the stale managed pid file. The unrelated process was not stopped.");
             } else {
                 out.println("The stale managed pid file was already removed. The unrelated process was not stopped.");
             }
         } catch (IOException e) {
             out.println(SetupFailureCauses.withCause(
-                    "Could not remove the stale managed pid file. The unrelated process was not stopped.", e));
-            String pidToken = pathToken(paths, pidFile);
-            out.println("Remove the stale managed pid file manually, then rerun stop. pid_file_token=" + pidToken
-                    + lookupHint(pidToken));
+                    "cannot remove stale managed process state: cleanup failed; the unrelated process was not stopped",
+                    e));
+            String stateToken = pathToken(paths, paths.stateHome());
+            out.println("Check permissions in the state home, then rerun stop. state_home_token=" + stateToken
+                    + lookupHint(stateToken));
         }
     }
 

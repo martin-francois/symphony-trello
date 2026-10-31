@@ -2147,7 +2147,10 @@ your Trello identifiers or local paths. These tokens are created with a random k
 machine, so they are stable for your installation but are not meant to be guessed by other people.
 If a maintainer asks which local board, workflow, or log one of those tokens refers to, run
 `symphony-trello diagnostics --show-private-context` on your machine. Add `--lookup <token>` to
-resolve only one token instead of printing the full private-context report. Private context maps
+resolve only one token instead of printing the full private-context report. A lookup command that a
+failed `start` printed resolves as printed when you run it with the same config directory and state
+directory as the failed command, also for a workflow that is not connected: `start` records the
+workflow file it was asked to start in the state directory, and `stop` removes that record. Private context maps
 tokens back to your local Trello board ids, board URLs, workflow paths, env file path, workspace
 root, state directory, worker log files, managed PID/state files, file-backed secret paths, and
 paths that a tool printed in its version line in the tool table. To find those tool paths, it runs

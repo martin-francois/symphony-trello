@@ -1384,9 +1384,7 @@ scenarios:
       - the printed lookup resolves the token as secret_file
       - no diagnostics key is created in the workflow directory
     cleanup: None.
-    expected: known-bug
-    linked_issue: 804
-    notes: The printed lookup resolves only with an added --workflow selector when the workflow is not connected.
+    expected: covered
 
   - id: oversized-secret-file-launch-diagnostics
     family: diagnostics
@@ -1402,9 +1400,7 @@ scenarios:
       - the printed lookup resolves the token as secret_file
       - no diagnostics key is created in the workflow directory
     cleanup: None.
-    expected: known-bug
-    linked_issue: 804
-    notes: The printed lookup resolves only with an added --workflow selector when the workflow is not connected.
+    expected: covered
 
   - id: stale-pid-lookup-hints
     family: diagnostics

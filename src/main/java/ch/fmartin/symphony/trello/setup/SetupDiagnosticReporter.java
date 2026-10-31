@@ -19,6 +19,7 @@ import com.google.common.base.Splitter;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -729,8 +730,8 @@ final class SetupDiagnosticReporter {
                                     context.paths().defaultEnvPath());
 
                             section(body, "Workflow Identifiers");
-                            appendLocalWorkflowIdentifiers(body, context.selectedWorkflowPaths());
-                            appendLocalSecretFileIdentifiers(body, context.selectedWorkflowPaths());
+                            appendLocalWorkflowIdentifiers(body, context.privateContextWorkflowPaths());
+                            appendLocalSecretFileIdentifiers(body, context.privateContextWorkflowPaths());
 
                             section(body, "Log Identifiers");
                             appendLocalLogIdentifiers(
@@ -801,8 +802,8 @@ final class SetupDiagnosticReporter {
                 context.selectedManifest(),
                 context.manifestSnapshot().status(),
                 context.paths().defaultEnvPath());
-        addWorkflowMappings(mappings, context.selectedWorkflowPaths());
-        addSecretFileMappings(mappings, context.selectedWorkflowPaths());
+        addWorkflowMappings(mappings, context.privateContextWorkflowPaths());
+        addSecretFileMappings(mappings, context.privateContextWorkflowPaths());
         addLogMappings(mappings, context.paths().stateHome(), context.selectedWorkflowPaths(), context.selected());
         addProcessStateMappings(
                 mappings, context.paths().stateHome(), context.selectedWorkflowPaths(), context.selected());
@@ -1031,11 +1032,9 @@ final class SetupDiagnosticReporter {
         SequencedSet<Path> selectedWorkflowPaths = reportWorkflowPaths(
                 selectedManifest, selection.workflow(), paths.configDir(), unconnectedFilesArePrimaryContext);
         SequencedSet<Path> unconnectedWorkflowPaths = separateUnconnectedWorkflows
-                ? reportWorkflowPaths(selectedManifest, selection.workflow(), paths.configDir(), true).stream()
-                        .filter(workflow -> selectedWorkflowPaths.stream()
-                                .noneMatch(connected -> PathsEqual.samePath(connected, workflow)))
-                        // Diagnostics should de-duplicate paths while preserving encounter order.
-                        .collect(Collectors.toCollection(LinkedHashSet::new))
+                ? workflowsNotIn(
+                        reportWorkflowPaths(selectedManifest, selection.workflow(), paths.configDir(), true).stream(),
+                        selectedWorkflowPaths)
                 : new LinkedHashSet<>();
         return new DiagnosticsContext(
                 paths,
@@ -1045,7 +1044,36 @@ final class SetupDiagnosticReporter {
                 selection,
                 selectedManifest,
                 selectedWorkflowPaths,
-                unconnectedWorkflowPaths);
+                unconnectedWorkflowPaths,
+                selected
+                        ? new LinkedHashSet<>()
+                        : recordedWorkflowsOutsideReport(paths.stateHome(), selectedWorkflowPaths));
+    }
+
+    /// The workflow files that start attempts recorded in the state home and that still exist,
+    /// without those the report already covers. A broad run maps them in its private context, so
+    /// the lookup hint printed by a failed start of an unconnected workflow resolves as printed.
+    /// A state home that cannot be listed contributes nothing, like the pid files it holds.
+    private static SequencedSet<Path> recordedWorkflowsOutsideReport(
+            Path stateHome, SequencedSet<Path> reportedWorkflowPaths) {
+        List<Path> recorded;
+        try {
+            recorded = new ManagedProcessStore(stateHome).recordedWorkflowPaths();
+        } catch (IOException | UncheckedIOException unreadableStateHome) {
+            return new LinkedHashSet<>();
+        }
+        // Private tokens depend on lexical spelling, including symlinks, rather than file identity.
+        return recorded.stream()
+                .filter(Files::isRegularFile)
+                .filter(workflow -> !reportedWorkflowPaths.contains(workflow))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /// Diagnostics de-duplicates paths while preserving encounter order.
+    private static SequencedSet<Path> workflowsNotIn(Stream<Path> workflows, SequencedSet<Path> excluded) {
+        return workflows
+                .filter(workflow -> excluded.stream().noneMatch(other -> PathsEqual.samePath(other, workflow)))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     private void appendSelectionMetadata(StringBuilder body, DiagnosticsContext context) {
@@ -3028,9 +3056,18 @@ final class SetupDiagnosticReporter {
             DiagnosticsSelection selection,
             ConnectedBoardManifest selectedManifest,
             SequencedSet<Path> selectedWorkflowPaths,
-            SequencedSet<Path> unconnectedWorkflowPaths) {
+            SequencedSet<Path> unconnectedWorkflowPaths,
+            SequencedSet<Path> extraPrivateContextWorkflows) {
         private boolean selected() {
             return selection.kind() != DiagnosticsSelectorKind.NONE;
+        }
+
+        /// The workflows whose identifiers the private context maps: the reported ones, plus the
+        /// recorded start attempts of a broad run. Encounter order keeps the report's order first.
+        private SequencedSet<Path> privateContextWorkflowPaths() {
+            SequencedSet<Path> workflows = new LinkedHashSet<>(selectedWorkflowPaths);
+            workflows.addAll(extraPrivateContextWorkflows);
+            return workflows;
         }
     }
 
