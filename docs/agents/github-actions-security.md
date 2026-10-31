@@ -135,7 +135,7 @@ The script test keeps the table complete; update a row when its workflow changes
 | `private-context.yml` | `pull_request`, push `main` | PR head plus base scanner, plus the merge commit's comparison script, no token | none | none, `contents: read` | OK |
 | `pull-request-author-handoff.yml` | `pull_request_target`, `issue_comment` | `github.sha`, sparse: its script, no token | none | `issues: write` | OK, metadata only |
 | `pull-request-disclosure.yml` | `pull_request_target`, schedule, dispatch | `github.sha`, sparse: its script, no token | none | `issues`, `pull-requests: write` | OK, metadata only |
-| `release-please.yml` | push `main` | `main` and the release tag, token kept | none | `id-token: write`, Maven Central secrets in a separate job | OK |
+| `release-please.yml` | push `main` | `main` and the release tag, token kept | none | `id-token: write`, the PostHog capture token and erasure variables in the asset build step, Maven Central secrets in a separate job | OK |
 | `scorecard.yml` | `branch_protection_rule`, schedule, push `main` | `main`, no token | none | `id-token: write` | OK |
 | `semgrep.yml` | `pull_request`, push `main` | PR head, no token | none | none, `contents: read` | OK |
 | `size-labeler.yml` | `pull_request_target`, `workflow_run`, schedule | `github.sha`, sparse: its script, no token | none | `pull-requests: write` | OK, metadata only |

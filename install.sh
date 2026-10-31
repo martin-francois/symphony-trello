@@ -333,6 +333,32 @@ offer_installer_tutorial() {
   fi
 }
 
+# Honor a disable request from the beginning of an unattended installation: the stored preference
+# covers every later worker, not only processes that inherit the variable. The truthy values repeat
+# TelemetryEnvironment in Java because the installer must decide whether to run Java at all, also in
+# dry runs and before Java is verified.
+apply_telemetry_environment_preference() {
+  # Java strips surrounding whitespace, so a value such as "1\r" from a CRLF .env file disables
+  # every Java process; trimming here keeps the stored preference in step with that.
+  local requested="${SYMPHONY_TRELLO_TELEMETRY_DISABLED:-}"
+  requested="${requested#"${requested%%[![:space:]]*}"}"
+  requested="${requested%"${requested##*[![:space:]]}"}"
+  # Case patterns instead of a lowercase expansion: macOS ships Bash 3, which lacks case conversion.
+  case "$requested" in
+  1 | [Tt][Rr][Uu][Ee] | [Yy][Ee][Ss] | [Oo][Nn]) ;;
+  *) return ;;
+  esac
+  if [[ "$DRY_RUN" == true ]]; then
+    print_status WOULD " run: $BIN_DIR/symphony-trello telemetry disable --yes"
+    return
+  fi
+  if "$BIN_DIR/symphony-trello" telemetry disable --yes </dev/null >/dev/null 2>&1; then
+    print_status OK "  Usage reporting disabled (SYMPHONY_TRELLO_TELEMETRY_DISABLED)"
+  else
+    print_status WARN "  Could not store the usage-reporting preference; processes that inherit SYMPHONY_TRELLO_TELEMETRY_DISABLED stay disabled."
+  fi
+}
+
 write_install_context() {
   if [[ "$DRY_RUN" == true ]]; then
     return
@@ -3212,6 +3238,7 @@ if [[ "$DRY_RUN" == true ]]; then
   if [[ -d "$APP_DIR" ]]; then
     print_status WOULD " check generated workflows after the update: symphony-trello migrate-workflows"
   fi
+  apply_telemetry_environment_preference
   offer_path_setup
   if [[ "$SETUP_PHASE_PLANNED" == true ]]; then
     begin_phase "$SETUP_PHASE_TITLE" "$SETUP_RECOVERY"
@@ -3337,7 +3364,7 @@ exec_setup_cli() {
     echo "  \$BIN_DIR/symphony-trello" >&2
     exit 2
   fi
-  exec java -Dsymphony.trello.app.home="\$APP_HOME" -Dsymphony.trello.config.dir="\$CONFIG_DIR" -Dsymphony.trello.installed.app.home="\$INSTALLED_APP_HOME" -Dsymphony.trello.installed.config.dir="\$INSTALLED_CONFIG_DIR" -Dsymphony.trello.installed.workspace.root="\$INSTALLED_WORKSPACE_ROOT" -Dsymphony.trello.installed.state.home="\$INSTALLED_STATE_HOME" -Dsymphony.trello.shell=posix -Dsymphony.trello.command="\$SYMPHONY_TRELLO_COMMAND" -cp "\$classpath" ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain "\$@"
+  exec java --enable-native-access=ALL-UNNAMED -Dsymphony.trello.app.home="\$APP_HOME" -Dsymphony.trello.config.dir="\$CONFIG_DIR" -Dsymphony.trello.installed.app.home="\$INSTALLED_APP_HOME" -Dsymphony.trello.installed.config.dir="\$INSTALLED_CONFIG_DIR" -Dsymphony.trello.installed.workspace.root="\$INSTALLED_WORKSPACE_ROOT" -Dsymphony.trello.installed.state.home="\$INSTALLED_STATE_HOME" -Dsymphony.trello.shell=posix -Dsymphony.trello.command="\$SYMPHONY_TRELLO_COMMAND" -cp "\$classpath" ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain "\$@"
 }
 exec_setup_cli "\$@"
 EOF
@@ -3346,6 +3373,7 @@ fi
 print_status OK "  Command installed"
 install_codex_skill
 write_install_context
+apply_telemetry_environment_preference
 check_generated_workflows
 
 offer_path_setup

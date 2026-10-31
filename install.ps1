@@ -871,6 +871,31 @@ function Get-InstalledSourceCommit {
   return ""
 }
 
+# Honor a disable request from the beginning of an unattended installation: the stored preference
+# covers every later worker, not only processes that inherit the variable. The truthy values repeat
+# TelemetryEnvironment in Java because the installer must decide whether to run Java at all, also in
+# dry runs and before Java is verified.
+function Set-TelemetryEnvironmentPreference {
+  $requested = "$env:SYMPHONY_TRELLO_TELEMETRY_DISABLED".Trim().ToLowerInvariant()
+  if ($requested -notin @("1", "true", "yes", "on")) {
+    return
+  }
+  if ($DryRun) {
+    Write-Status "WOULD" " run: $BinDir\symphony-trello.ps1 telemetry disable --yes"
+    return
+  }
+  try {
+    & "$BinDir\symphony-trello.ps1" telemetry disable --yes 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+      Write-Status "OK" "  Usage reporting disabled (SYMPHONY_TRELLO_TELEMETRY_DISABLED)"
+      return
+    }
+  } catch {
+    # fall through to the warning below
+  }
+  Write-Status "WARN" "  Could not store the usage-reporting preference; processes that inherit SYMPHONY_TRELLO_TELEMETRY_DISABLED stay disabled."
+}
+
 function Write-InstallContext {
   if ($DryRun) {
     return
@@ -1950,6 +1975,7 @@ if ($DryRun) {
   if (Test-Path -LiteralPath $Prefix) {
     Write-Status "WOULD" " check generated workflows after the update: symphony-trello migrate-workflows"
   }
+  Set-TelemetryEnvironmentPreference
   Offer-PathSetup
   if ($SetupPhasePlanned) {
     Start-InstallerPhase $SetupPhaseTitle $SetupRecovery
@@ -2083,7 +2109,7 @@ function Invoke-SetupCli {
     [Console]::Error.WriteLine("  `$commandPath")
     exit 2
   }
-  & java "-Dsymphony.trello.app.home=`$AppHome" "-Dsymphony.trello.config.dir=`$ConfigDir" "-Dsymphony.trello.installed.app.home=`$InstalledAppHome" "-Dsymphony.trello.installed.config.dir=`$InstalledConfigDir" "-Dsymphony.trello.installed.workspace.root=`$InstalledWorkspaceRoot" "-Dsymphony.trello.installed.state.home=`$InstalledStateHome" "-Dsymphony.trello.shell=`$shell" "-Dsymphony.trello.command=`$commandPath" -cp `$classpath ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain @CliArgs
+  & java "--enable-native-access=ALL-UNNAMED" "-Dsymphony.trello.app.home=`$AppHome" "-Dsymphony.trello.config.dir=`$ConfigDir" "-Dsymphony.trello.installed.app.home=`$InstalledAppHome" "-Dsymphony.trello.installed.config.dir=`$InstalledConfigDir" "-Dsymphony.trello.installed.workspace.root=`$InstalledWorkspaceRoot" "-Dsymphony.trello.installed.state.home=`$InstalledStateHome" "-Dsymphony.trello.shell=`$shell" "-Dsymphony.trello.command=`$commandPath" -cp `$classpath ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain @CliArgs
   exit `$LASTEXITCODE
 }
 Invoke-SetupCli `$ScriptArgs
@@ -2098,6 +2124,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0symphony-trello.ps
 Write-Status "OK" "  Command installed"
 Install-CodexSkill
 Write-InstallContext
+Set-TelemetryEnvironmentPreference
 Invoke-GeneratedWorkflowCheck
 
 Offer-PathSetup

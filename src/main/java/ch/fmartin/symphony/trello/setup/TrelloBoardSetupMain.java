@@ -9,6 +9,7 @@ import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.ImportBoardRequest;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.NewBoardRequest;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.WorkspaceListRequest;
+import ch.fmartin.symphony.trello.telemetry.TelemetryService;
 import ch.fmartin.symphony.trello.time.ApplicationClock;
 import ch.fmartin.symphony.trello.tracker.TrelloListRoles;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -58,7 +59,8 @@ import picocli.CommandLine.Spec;
             TrelloBoardSetupMain.DiagnosticsCommand.class,
             TrelloBoardSetupMain.MigrateWorkflowsCommand.class,
             TrelloBoardSetupMain.TutorialCommand.class,
-            TrelloBoardSetupMain.CardCommand.class
+            TrelloBoardSetupMain.CardCommand.class,
+            TrelloBoardSetupMain.TelemetryCommand.class
         })
 public final class TrelloBoardSetupMain implements Callable<Integer> {
     private static final String CONFIG_DIR_PROPERTY = "symphony.trello.config.dir";
@@ -255,6 +257,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                         options.manifestPath(parent.boardSetup.environment()));
                 NewBoardRequest request =
                         options.newBoardRequest(boardName, workspaceId, parent.boardSetup.repositoryDefaults(options));
+                parent.boardSetup.prepareTelemetry(
+                        options.manifestPath(parent.boardSetup.environment()), options.workspaceRoot, parent.out);
                 TrelloBoardSetup.NewBoardResult result = parent.boardSetup.createRecommendedBoard(request, options);
                 options.persistRuntimeCredentials(parent.input, parent.out, parent.err);
                 parent.boardSetup.persistConnectedBoard(
@@ -351,6 +355,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                         !noInProgress && inProgressState == null,
                         blockedState,
                         parent.boardSetup.repositoryDefaults(options));
+                parent.boardSetup.prepareTelemetry(
+                        options.manifestPath(parent.boardSetup.environment()), options.workspaceRoot, parent.out);
                 TrelloBoardSetup.ImportBoardResult result = parent.boardSetup.importExistingBoard(request, options);
                 options.persistRuntimeCredentials(parent.input, parent.out, parent.err);
                 parent.boardSetup.persistConnectedBoard(
@@ -1074,6 +1080,204 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         }
     }
 
+    @Command(
+            name = "telemetry",
+            description = "Show, preview, or change optional usage reporting.",
+            versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
+            mixinStandardHelpOptions = true,
+            subcommands = {
+                TelemetryStatusCommand.class,
+                TelemetryPreviewCommand.class,
+                TelemetryPrivacyCommand.class,
+                TelemetryEnableCommand.class,
+                TelemetryDisableCommand.class,
+                TelemetryDebugCommand.class,
+                TelemetryEraseCommand.class,
+                TelemetryEraseStatusCommand.class
+            })
+    static final class TelemetryCommand implements Callable<Integer> {
+        @ParentCommand
+        TrelloBoardSetupMain parent;
+
+        @Mixin
+        TelemetryOptions options = new TelemetryOptions();
+
+        @Spec
+        CommandSpec spec;
+
+        @Override
+        public Integer call() {
+            spec.commandLine().usage(parent.out);
+            return 0;
+        }
+
+        TelemetryService service() {
+            options.validateCliPaths();
+            return parent.boardSetup.telemetry(LocalWorkerPaths.from(
+                    options.appHome,
+                    options.configDir,
+                    options.workspaceRoot,
+                    options.stateHome,
+                    parent.boardSetup.environment()));
+        }
+
+        /// The disable review is shown only to a human terminal; piped input disables directly.
+        static boolean interactiveTerminal() {
+            Console console = SystemConsole.current();
+            return console != null && console.isTerminal();
+        }
+    }
+
+    @Command(
+            name = "status",
+            description = "Show the effective and stored reporting mode, identity, and schedule.",
+            versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
+            mixinStandardHelpOptions = true)
+    static final class TelemetryStatusCommand implements Callable<Integer> {
+        @ParentCommand
+        TelemetryCommand telemetry;
+
+        @Override
+        public Integer call() {
+            return telemetry.service().status(telemetry.parent.out);
+        }
+    }
+
+    @Command(
+            name = "preview",
+            description = "Print the complete JSON body of a report built now. Nothing is sent or stored.",
+            versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
+            mixinStandardHelpOptions = true)
+    static final class TelemetryPreviewCommand implements Callable<Integer> {
+        @ParentCommand
+        TelemetryCommand telemetry;
+
+        @Override
+        public Integer call() {
+            return telemetry.service().preview(telemetry.parent.out);
+        }
+    }
+
+    @Command(
+            name = "privacy",
+            description = "Print the bundled privacy information for usage reporting.",
+            versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
+            mixinStandardHelpOptions = true)
+    static final class TelemetryPrivacyCommand implements Callable<Integer> {
+        @ParentCommand
+        TelemetryCommand telemetry;
+
+        @Override
+        public Integer call() {
+            return telemetry.service().privacy(telemetry.parent.out);
+        }
+    }
+
+    @Command(
+            name = "enable",
+            description = "Turn daily usage reporting on for this installation.",
+            versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
+            mixinStandardHelpOptions = true)
+    static final class TelemetryEnableCommand implements Callable<Integer> {
+        @ParentCommand
+        TelemetryCommand telemetry;
+
+        @Override
+        public Integer call() {
+            return telemetry.service().enable(telemetry.parent.out, telemetry.parent.err);
+        }
+    }
+
+    @Command(
+            name = "disable",
+            description = "Turn usage reporting off for this installation after showing what a report contains.",
+            versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
+            mixinStandardHelpOptions = true)
+    static final class TelemetryDisableCommand implements Callable<Integer> {
+        @ParentCommand
+        TelemetryCommand telemetry;
+
+        @Option(names = "--yes", description = "Disable without the interactive review.")
+        boolean yes;
+
+        @Override
+        public Integer call() {
+            TrelloBoardSetupMain parent = telemetry.parent;
+            return telemetry
+                    .service()
+                    .disable(
+                            new TelemetryService.DisableRequest(
+                                    yes,
+                                    TelemetryCommand.interactiveTerminal(),
+                                    TelemetryService.lines(parent.input::readLine)),
+                            parent.out,
+                            parent.err);
+        }
+    }
+
+    @Command(
+            name = "debug",
+            description = "Switch this installation to local-only mode: workers print reports instead of sending them.",
+            versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
+            mixinStandardHelpOptions = true)
+    static final class TelemetryDebugCommand implements Callable<Integer> {
+        @ParentCommand
+        TelemetryCommand telemetry;
+
+        @Override
+        public Integer call() {
+            return telemetry.service().debug(telemetry.parent.out, telemetry.parent.err);
+        }
+    }
+
+    @Command(
+            name = "erase",
+            description = "Disable reporting and request deletion of this installation's analytics.",
+            versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
+            mixinStandardHelpOptions = true)
+    static final class TelemetryEraseCommand implements Callable<Integer> {
+        @ParentCommand
+        TelemetryCommand telemetry;
+
+        @Override
+        public Integer call() {
+            return telemetry.service().erase(telemetry.parent.out, telemetry.parent.err);
+        }
+    }
+
+    @Command(
+            name = "erase-status",
+            description = "Check or retry a pending analytics deletion.",
+            versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
+            mixinStandardHelpOptions = true)
+    static final class TelemetryEraseStatusCommand implements Callable<Integer> {
+        @ParentCommand
+        TelemetryCommand telemetry;
+
+        @Override
+        public Integer call() {
+            return telemetry.service().erasureStatus(telemetry.parent.out, telemetry.parent.err);
+        }
+    }
+
+    static final class TelemetryOptions {
+        @Option(names = "--config-dir", description = "Directory for local .env, workflows, and board manifest.")
+        Optional<Path> configDir = Optional.empty();
+
+        @Option(names = "--state-home", description = "Directory for managed worker state, including telemetry.json.")
+        Optional<Path> stateHome = Optional.empty();
+
+        @Option(names = "--workspace-root", hidden = true)
+        Optional<Path> workspaceRoot = Optional.empty();
+
+        @Option(names = "--app-home", hidden = true)
+        Optional<Path> appHome = Optional.empty();
+
+        private void validateCliPaths() {
+            validateLocationPaths(configDir, workspaceRoot, stateHome, appHome);
+        }
+    }
+
     static final class LifecycleOptions {
         @Option(names = "--board", description = "Connected Trello board name, id, or short link.")
         Optional<String> board = Optional.empty();
@@ -1098,16 +1302,23 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             CliInputValidation.rejectBlankWorkflowSelector(workflow);
             CliInputValidation.rejectControlCharactersInText("--board", board);
             CliInputValidation.rejectControlCharacters("--workflow", workflow);
-            CliInputValidation.rejectBlankPath("--config-dir", configDir, "--config-dir must not be empty.");
-            CliInputValidation.rejectBlankPath(
-                    "--workspace-root", workspaceRoot, "--workspace-root must not be empty.");
-            CliInputValidation.rejectBlankPath("--state-home", stateHome, "--state-home must not be empty.");
-            CliInputValidation.rejectBlankPath("--app-home", appHome, "--app-home must not be empty.");
-            CliInputValidation.rejectControlCharacters("--config-dir", configDir);
-            CliInputValidation.rejectControlCharacters("--workspace-root", workspaceRoot);
-            CliInputValidation.rejectControlCharacters("--state-home", stateHome);
-            CliInputValidation.rejectControlCharacters("--app-home", appHome);
+            validateLocationPaths(configDir, workspaceRoot, stateHome, appHome);
         }
+    }
+
+    /// The installation location options that lifecycle and telemetry commands share. Their option
+    /// declarations stay separate because the help differs: telemetry hides `--workspace-root` and
+    /// describes `--state-home` by the telemetry file it holds.
+    private static void validateLocationPaths(
+            Optional<Path> configDir, Optional<Path> workspaceRoot, Optional<Path> stateHome, Optional<Path> appHome) {
+        CliInputValidation.rejectBlankPath("--config-dir", configDir, "--config-dir must not be empty.");
+        CliInputValidation.rejectBlankPath("--workspace-root", workspaceRoot, "--workspace-root must not be empty.");
+        CliInputValidation.rejectBlankPath("--state-home", stateHome, "--state-home must not be empty.");
+        CliInputValidation.rejectBlankPath("--app-home", appHome, "--app-home must not be empty.");
+        CliInputValidation.rejectControlCharacters("--config-dir", configDir);
+        CliInputValidation.rejectControlCharacters("--workspace-root", workspaceRoot);
+        CliInputValidation.rejectControlCharacters("--state-home", stateHome);
+        CliInputValidation.rejectControlCharacters("--app-home", appHome);
     }
 
     static final class DiagnosticsOptions {

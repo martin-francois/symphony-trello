@@ -11,6 +11,8 @@ import static org.junit.jupiter.api.Named.named;
 
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.PseudoTerminalResult;
+import ch.fmartin.symphony.trello.telemetry.TelemetryEnvironment;
+import ch.fmartin.symphony.trello.telemetry.TelemetryNotice;
 import com.google.common.collect.ImmutableList;
 import com.google.errorprone.annotations.Immutable;
 import com.sun.net.httpserver.HttpServer;
@@ -23,6 +25,7 @@ import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
@@ -574,6 +577,53 @@ final class InstallerScriptTest {
         // then
         result.assertSuccess();
         assertThat(result.output()).isEqualTo(System.getProperty("java.io.tmpdir"));
+    }
+
+    /// Every value the installers must read as "on", with the case and surrounding whitespace a CRLF
+    /// .env file or a shell can add, which Java strips too.
+    private static List<String> telemetryDisableTrueValues() {
+        List<String> values = new ArrayList<>();
+        for (String value : TelemetryEnvironment.TRUE_VALUES) {
+            values.add(value);
+            values.add(" " + value.toUpperCase(Locale.ROOT) + "\r");
+        }
+        return values;
+    }
+
+    @MethodSource("telemetryDisableTrueValues")
+    @ParameterizedTest(name = "value {0}")
+    void posixInstallerDryRunPlansTheTelemetryDisableWhenTheVariableIsSet(String value) throws Exception {
+        // given
+        assumeFalse(isWindows());
+        assumeTrue(commandExists("bash"));
+        var processBuilder = new ProcessBuilder("bash", "install.sh", "--dry-run", "--no-onboard");
+
+        // when
+        ProcessResult result = run(Map.of(TelemetryEnvironment.DISABLED_VARIABLE, value), processBuilder);
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output()).contains("WOULD run: ").contains(TelemetryNotice.DISABLE_COMMAND + " --yes");
+        assertThat(regularFilesUnder(temporaryDirectory)).isEmpty();
+    }
+
+    @CsvSource({"unset,", "false,0", "off,off"})
+    @ParameterizedTest(name = "{0}")
+    void posixInstallerDryRunSkipsTheTelemetryDisableWhenTheVariableIsUnsetOrFalse(String label, String value)
+            throws Exception {
+        // given
+        assumeFalse(isWindows());
+        assumeTrue(commandExists("bash"));
+        var processBuilder = new ProcessBuilder("bash", "install.sh", "--dry-run", "--no-onboard");
+        Map<String, String> environment =
+                value == null ? Map.of() : Map.of(TelemetryEnvironment.DISABLED_VARIABLE, value);
+
+        // when
+        ProcessResult result = run(environment, processBuilder);
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output()).doesNotContain(TelemetryNotice.DISABLE_ARGUMENTS);
     }
 
     @Test
@@ -5007,7 +5057,9 @@ final class InstallerScriptTest {
 
         // when
         int javaGuard = installer.indexOf("if (-not (Get-Command java -ErrorAction SilentlyContinue))");
-        int javaLaunch = installer.indexOf("& java \"-Dsymphony.trello.app.home=", javaGuard);
+        int javaLaunch = installer.indexOf(
+                "& java \"" + LocalWorkerManager.ENABLE_NATIVE_ACCESS_FLAG + "\" \"-Dsymphony.trello.app.home=",
+                javaGuard);
 
         // then
         assertThat(javaGuard)
@@ -6061,6 +6113,29 @@ final class InstallerScriptTest {
                 STYLE_ACCENT + heading + STYLE_RESET,
                 STYLE_ACCENT + "Dry run: no files changed." + STYLE_RESET,
                 "  " + STYLE_ACCENT + "WOULD" + STYLE_RESET + " ");
+    }
+
+    @MethodSource("telemetryDisableTrueValues")
+    @ParameterizedTest(name = "value {0}")
+    void powershellInstallerDryRunPlansTheTelemetryDisableWhenTheVariableIsSetWhenAvailable(String value)
+            throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
+        environment.put(TelemetryEnvironment.DISABLED_VARIABLE, value);
+
+        // when
+        ProcessResult result = run(
+                environment,
+                command(pwsh, "-NoProfile", "-File", "./install.ps1", "--dry-run", "--no-onboard")
+                        .toArray(String[]::new));
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains("WOULD run: ")
+                .contains("symphony-trello.ps1 " + TelemetryNotice.DISABLE_ARGUMENTS + " --yes");
     }
 
     @Test

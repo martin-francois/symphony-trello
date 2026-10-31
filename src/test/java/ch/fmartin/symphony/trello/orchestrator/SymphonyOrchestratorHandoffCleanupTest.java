@@ -20,6 +20,7 @@ import ch.fmartin.symphony.trello.agent.CardHandoffMove;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
+import ch.fmartin.symphony.trello.testsupport.MutableClock;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;

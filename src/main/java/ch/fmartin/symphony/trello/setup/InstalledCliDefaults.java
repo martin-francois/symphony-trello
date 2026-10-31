@@ -56,7 +56,7 @@ final class InstalledCliDefaults {
         return switch (command) {
             case "setup-local" -> setupLocal(args, paths);
             case "new-board", "import-board" -> boardSetup(args, paths);
-            case "start", "stop", "status", "logs", "diagnostics" -> lifecycle(args, paths);
+            case "start", "stop", "status", "logs", "diagnostics", "telemetry" -> lifecycle(args, paths);
             case "migrate-workflows" -> configDirOnly(args, paths);
             case CardCommandRequest.COMMAND -> cardCommand(args, paths);
             default -> args;

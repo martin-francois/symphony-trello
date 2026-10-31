@@ -20,5 +20,6 @@ Commands:
                        board.
   card               List, show, create, move, comment on, and archive cards on
                        a connected Trello board.
+  telemetry          Show, preview, or change optional usage reporting.
   setup-local        Set up local Trello-driven Codex automation.
 --- stderr ---
