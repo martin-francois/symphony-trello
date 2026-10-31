@@ -69,9 +69,10 @@ The labeler reads the changed files from the `pulls/{number}/files` endpoint, 10
 request. GitHub lists at most 3000 files. When the list holds fewer files than the pull request's
 `changed_files`, the labeler cannot see every path, so it counts all lines from the pull request's
 `additions` and `deletions`, as before this ADR. A pull request with that many files is almost
-always `size XL` anyway. When the file list cannot be read or holds an entry without a path or
-with an invalid line count, the labeler warns and also counts all lines from the pull request
-totals. When the list is complete, the listed files decide the count, also if a push between the
+always `size XL` anyway, and the log then gives the ADR lines as "at least" the listed ones. When
+the file list cannot be read, holds an entry without a path or with an invalid line count, or lists
+one path twice (the list can shift between page reads and then miss another file), the labeler
+warns and also counts all lines from the pull request totals. When the list is complete, the listed files decide the count, also if a push between the
 two API reads left the pull request totals out of step.
 
 Issues follow the same rule: the estimate leaves out expected ADR lines unless the rest of the

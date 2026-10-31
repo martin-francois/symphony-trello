@@ -901,7 +901,7 @@ test("every line counts when GitHub lists fewer files than the pull request chan
   assertChanges(result, {added: ["size XL"], removed: []});
   assert.deepEqual(result.infos, [
     "#42: GitHub listed 3000 of 3001 changed files, so every line counts",
-    "#42: size XL from 1000 of 1000 changed lines, 600 in docs/adr/",
+    "#42: size XL from 1000 of 1000 changed lines, at least 600 in docs/adr/",
   ]);
 });
 
@@ -937,6 +937,19 @@ for (const [name, file] of [
   });
 }
 
+test("a repeated changed-file entry warns and labels from the pull request totals", async () => {
+  const result = await runLabeler(DEFAULT_PAYLOAD, {
+    additions: 200,
+    changedFiles: 3,
+    deletions: 0,
+    files: [sourceFile(30), sourceFile(30), adrFile(300)],
+  });
+
+  assert.deepEqual(result.changes, {added: ["size M"], removed: []});
+  assert.deepEqual(result.warnings, ["Repeated changed-file entry for #42, so every line counts"]);
+  assert.deepEqual(result.infos, ["#42: size M from 200 of 200 changed lines, an unknown number in docs/adr/"]);
+});
+
 test("an invalid changed-file count warns and does not list files", async () => {
   const result = await runLabeler(DEFAULT_PAYLOAD, {additions: 1, changedFiles: -1});
 
@@ -949,7 +962,10 @@ test("an unsafe sum of listed lines warns and does not inspect or mutate labels"
   const result = await runLabeler(DEFAULT_PAYLOAD, {
     additions: 1,
     deletions: 0,
-    files: [sourceFile(Number.MAX_SAFE_INTEGER), sourceFile(Number.MAX_SAFE_INTEGER)],
+    files: [
+      sourceFile(Number.MAX_SAFE_INTEGER),
+      {...sourceFile(Number.MAX_SAFE_INTEGER), filename: "src/main/java/Other.java"},
+    ],
   });
 
   assert.deepEqual(result.attempts, {added: [], removed: []});

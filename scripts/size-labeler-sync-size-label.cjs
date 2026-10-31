@@ -13,6 +13,8 @@ const isValidFile = (file) =>
   && isOptionalPath(file.previous_filename)
   && isCount(file.additions)
   && isCount(file.deletions);
+// A list that shifted between page reads can show one file twice and miss another.
+const hasRepeatedFilename = (files) => new Set(files.map(({ filename }) => filename)).size !== files.length;
 const linesOf = ({ additions, deletions }) => additions + deletions;
 const sumOf = (counts) => counts.reduce((total, count) => total + count, 0);
 // A renamed or copied file is an ADR only when both its old and its new path are.
@@ -80,6 +82,9 @@ module.exports = async ({ github, context, core }) => {
   if (files !== undefined && !files.every(isValidFile)) {
     core.warning(`Invalid changed-file entry for #${issueNumber}, so every line counts`);
     files = undefined;
+  } else if (files !== undefined && hasRepeatedFilename(files)) {
+    core.warning(`Repeated changed-file entry for #${issueNumber}, so every line counts`);
+    files = undefined;
   }
 
   const listed = files === undefined ? undefined : countListedLines(files);
@@ -102,7 +107,9 @@ module.exports = async ({ github, context, core }) => {
     core.warning(`Unable to classify ${changedLines} changed lines for #${issueNumber}`);
     return;
   }
-  const adrLines = listed?.adrLines ?? "an unknown number";
+  const adrLines = listed === undefined
+    ? "an unknown number"
+    : listIsComplete ? `${listed.adrLines}` : `at least ${listed.adrLines}`;
   core.info(
     `#${issueNumber}: ${targetLabel} from ${changedLines} of ${totalLines} changed lines, ${adrLines} in ${ADR_DIRECTORY}`,
   );
