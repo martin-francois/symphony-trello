@@ -230,8 +230,10 @@ This decision remains implemented when:
   job that runs pnpm installs the exact `packageManager` version with a SHA-pinned
   `pnpm/action-setup` step after `actions/setup-node`, which the script test `pnpm keeps GitHub's
   dependency graph readable while every CI job installs its exact pin` checks;
-* `CONTRIBUTING.md` installs pnpm locally from the `packageManager` value, which the same script test
-  keeps a bare `pnpm@<version>` that npm accepts; and
+* `CONTRIBUTING.md` installs pnpm locally from the `packageManager` value, and
+  `scripts/commitlint-local` prints the same command when pnpm is missing. The script tests in
+  `scripts/pnpm-local-install.test.ts` check both, and the script test named above keeps the value a
+  bare `pnpm@<version>` that npm accepts; and
 * the script test `The lockfile refresh path enforces the same seven-day cooldown` derives that
   value from `renovate.json` and fails if either side moves alone.
 
@@ -322,7 +324,7 @@ The workflows stay as they were before
 A maintainer runs `npm install --global` with the `packageManager` value, `pnpm@<version>`.
 
 * Good, because the version stays in one place that Renovate already updates.
-* Good, because local and CI use install the same pnpm from the same field.
+* Good, because local machines and CI install the same pnpm from the same field.
 * Bad, because the maintainer must repeat the install after each `packageManager` update.
 * Neutral, because npm 11 skips pnpm's install scripts unless allowed and warns about it. pnpm then
   starts through Node.js instead of its native binary.

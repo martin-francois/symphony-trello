@@ -33,7 +33,8 @@ command="$1"
 shift
 
 if ! command -v pnpm >/dev/null 2>&1; then
-  die "pnpm is required; install the pinned pnpm version as CONTRIBUTING.md, Development Setup, describes"
+  die "pnpm is required. Install the version package.json pins (CONTRIBUTING.md, Development Setup):
+  cd '$repo_root' && npm install --global \"\$(node -p \"require('./package.json').packageManager\")\""
 fi
 
 if [[ -e "$cache_root" && ! -O "$cache_root" ]]; then
