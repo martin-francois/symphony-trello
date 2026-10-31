@@ -1,5 +1,5 @@
 variable "erasure_enabled" {
-  description = "Enable native erasure only after the hosted lifecycle gate passes for this role."
+  description = "Enable native erasure with configured project-scoped credentials and versioned master keys."
   type        = bool
   default     = false
 }

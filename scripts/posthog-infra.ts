@@ -17,7 +17,7 @@ import {asObject, DEFAULT_CAPTURE_ENDPOINT, DEFAULT_HOST, InfraError, keyFilePat
 import {reviewErasureFlags} from "./posthog-erasure-flags.ts";
 import {runFixture} from "./posthog-fixture.ts";
 import {probeHogRuntime, verifyProbeTarget} from "./posthog-hog-probe.ts";
-import {boundStatePath, infraDir, lifecyclePassArguments, managesProject, productionCaptureToken, productionProjectId, projectIdFromShow, readJson, readProductionProjectId, readRoles, tofuVersion, type Role} from "./posthog-state-files.ts";
+import {boundStatePath, infraDir, managesProject, productionCaptureToken, productionProjectId, projectIdFromShow, readJson, readProductionProjectId, readRoles, tofuVersion, type Role} from "./posthog-state-files.ts";
 import {findGeoipFunction, gapApply, gapDiff, markdownTableCell, outcomeOf, renderReport, verify} from "./posthog-verify.ts";
 
 // Command line.
@@ -74,11 +74,6 @@ function runLocalCommand(options: Options): number | undefined {
       return 0;
     case "project-id-from-show":
       console.log(projectIdFromShow(readJson("-"), requireFlag(options, "role")));
-      return 0;
-    case "lifecycle-pass-args":
-      for (const argument of lifecyclePassArguments(readJson(requireFlag(options, "ledger")))) {
-        console.log(argument);
-      }
       return 0;
     case "tofu-version":
       process.stdout.write(tofuVersion(readJson("-")));
@@ -196,8 +191,11 @@ export async function main(argv: readonly string[], environment: NodeJS.ProcessE
       for (const review of reviews) {
         const events = review.remainingEvents === undefined ? "" : `, ${review.remainingEvents} event(s) remain`;
         console.log(`${review.action}${review.action === "archive" && !archive ? " (dry run)" : ""} flag ${review.id} ${review.name} [${review.state}, created ${review.createdAt}${events}]`);
+        if (review.action === "incomplete") {
+          console.log(`  ask PostHog support to delete the remaining events of person ${review.name.split("|")[1] ?? "?"}, citing https://github.com/PostHog/posthog/issues/126750; archive the flag once a fresh count is zero`);
+        }
       }
-      const attention = reviews.filter((review) => review.action === "late-events" || review.action === "refused" || review.action === "stale");
+      const attention = reviews.filter((review) => review.action !== "archive" && review.action !== "keep");
       console.log(`erasure-flags: ${reviews.length} flag(s), ${reviews.filter((review) => review.action === "archive").length} ${archive ? "archived" : "archivable"}, ${attention.length} need the maintainer`);
       return attention.length === 0 ? 0 : 1;
     }

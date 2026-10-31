@@ -83,6 +83,9 @@ public record TelemetryOwnership(
         REQUESTED("pending"),
         ACCEPTED("accepted"),
         COMPLETE("complete"),
+        /// PostHog reported the deletion verified, yet the service still counted a report. A verified
+        /// request cannot be queued again, so the leftover goes to the maintainer, not to a retry.
+        INCOMPLETE("incomplete"),
         REFUSED("refused");
 
         private final String wireName;
@@ -98,7 +101,8 @@ public record TelemetryOwnership(
             return wireName;
         }
 
-        /// Whether the provider may still act on the request; complete and refused are final.
+        /// Whether the provider may still act on the request; complete, incomplete and refused are
+        /// final.
         public boolean inProgress() {
             return this == REQUESTED || this == ACCEPTED;
         }

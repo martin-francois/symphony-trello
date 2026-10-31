@@ -10,6 +10,11 @@ informed: [Contributors, Maintainers]
 
 # Authenticated erasure with separate reporting periods
 
+[ADR 0150](0150-report-erasure-complete-only-after-the-events-are-gone.md) amends the completion
+rule below: the service reports `complete` only after its own fresh event count is zero, and
+reports a final `incomplete` otherwise, because PostHog marks deletions verified without proving
+the rows are gone.
+
 ## Context and Problem Statement
 
 An installation must authorize deletion without an account, a retained enrollment event,
@@ -62,8 +67,8 @@ new analytics ID cannot join the merged profile.
 PostHog incoming webhooks return before their first external fetch completes. The client
 therefore treats HTTP acceptance only as receipt. A background invocation writes a per-period
 feature flag, keyed by an HMAC-derived opaque value. Only management credentials write this
-status. Public flag evaluation returns pending, accepted, complete or refused, never credentials
-or installation identifiers. Private flag metadata binds the immutable person UUID before any
+status. Public flag evaluation returns pending, accepted, complete, incomplete or refused, never
+credentials or installation identifiers. Private flag metadata binds the immutable person UUID before any
 delete call. Status refreshes inspect the provider deletion queue and profile absence.
 If a report never arrived or all data expired, no person exists to delete. The service then
 requires a fresh, uncached raw-ID event count of zero before recording completion. This avoids
@@ -93,9 +98,10 @@ ID. The code calls this case LEGACY because such an identity predates its owners
 because any release shipped without this decision.
 
 This decision supersedes the same-analytics-ID requirement in ADR 0079 and the corresponding
-investigation gate in ADR 0081. Production activation still requires passing hosted lifecycle
-checks. Implementation and deployment evidence must distinguish accepted work from physically
-verified event deletion.
+investigation gate in ADR 0081. The original hosted activation prerequisite is superseded by the
+2026-11-01 decision in [ADR 0150](0150-report-erasure-complete-only-after-the-events-are-gone.md).
+Implementation and deployment evidence must distinguish accepted work from physically verified
+event deletion; provider completion does not block production activation.
 
 ### Consequences
 
@@ -127,10 +133,10 @@ has the details.
 - Late ingestion. The client waits an hour after a heartbeat's drain deadline before its first
   lookup. Empty results name their analytics ID, and `erasure-flags` counts its events again
   before archiving and reports any late event for manual deletion.
-- Unchecked activation. A validation on `erasure_enabled` refuses production unless
-  `erasure_lifecycle_pass` matches the current handler template's hash, which the wrapper reads
-  only from a passing lifecycle ledger bound to that handler. Release packaging requires the
-  production project's audience from `infra/posthog/production-project-id`.
+- Deployment configuration. Enabled erasure requires valid scoped credentials and versioned keys.
+  Deployment readback checks the canonical handler and identity merge filter. ADR 0150 removes
+  the former lifecycle-ledger activation lock. Release packaging requires the production project's
+  audience from `infra/posthog/production-project-id`.
 
 ### Confirmation
 

@@ -157,7 +157,8 @@ public final class TelemetryService {
     private enum Enabling {
         ALREADY_ENABLED,
         ENABLED,
-        AFTER_REFUSAL
+        AFTER_REFUSAL,
+        AFTER_INCOMPLETE
     }
 
     private int enable(TelemetryStateStore store, PrintStream out, PrintStream err) {
@@ -171,6 +172,9 @@ public final class TelemetryService {
             if (outcome == Enabling.AFTER_REFUSAL) {
                 out.println("The refused erasure's reports are not deleted yet; the maintainer handles them"
                         + " on request. New reports use a new analytics ID.");
+            } else if (outcome == Enabling.AFTER_INCOMPLETE) {
+                out.println("The previous period's remaining data is deleted within 30 days of the erasure"
+                        + " request. New reports use a new analytics ID.");
             }
             TelemetryNotice.lines(readState().stateOrInitial().firstWorkerDeadlineAt(), clock.instant())
                     .forEach(out::println);
@@ -342,16 +346,22 @@ public final class TelemetryService {
                         "Erasure is not yet confirmed as accepted. Reporting is off. Retry with `"
                                 + TelemetryNotice.ERASE_STATUS_COMMAND + "`; running workers also retry.";
                     case ACCEPTED ->
-                        "Erasure accepted. PostHog continues deletion after this command exits. Physical deletion is still pending.";
+                        "Erasure accepted: the data is deleted within 30 days of the request, without this command"
+                                + " running. Reporting is off.";
                     case COMPLETE ->
                         "Erasure complete. Reporting remains off until you run `" + TelemetryNotice.ENABLE_COMMAND
                                 + "`.";
+                    case INCOMPLETE ->
+                        "Erasure is still being processed: the remaining data is deleted within 30 days of the"
+                                + " request. Reporting is off. `" + TelemetryNotice.ENABLE_COMMAND
+                                + "` resumes reporting under a new analytics ID.";
                     case REFUSED ->
                         "Automatic erasure refused because the provider identity is inconsistent. Reporting is off; contact"
                                 + " the maintainer for manual deletion. `" + TelemetryNotice.ENABLE_COMMAND
                                 + "` resumes reporting under a new analytics ID.";
                 };
         out.println(message);
+        // Only a refusal needs the user to act; an incomplete erasure finishes on the maintainer's side.
         return erasure.phase() == TelemetryOwnership.Phase.REFUSED ? EXIT_FAILURE : EXIT_OK;
     }
 
@@ -429,15 +439,22 @@ public final class TelemetryService {
                 // Explicit enabling is an affirmative action; no further grace period applies.
                 .withFirstWorkerDeadline(now);
         if (ownership != null) {
-            // A refused period stays with the maintainer; a new period cannot join its profile.
+            // A refused or incomplete period stays with the maintainer; a new period cannot join its profile.
             enabled = enabled.withOwnership(ownership.resume());
         }
         // Register only where a report can ever leave; an unconfigured build keeps no identity.
-        return Update.write(
-                installation.networkEligible() ? registered(enabled) : enabled,
-                erasure != null && erasure.phase() == TelemetryOwnership.Phase.REFUSED
-                        ? Enabling.AFTER_REFUSAL
-                        : Enabling.ENABLED);
+        return Update.write(installation.networkEligible() ? registered(enabled) : enabled, enabling(erasure));
+    }
+
+    private static Enabling enabling(TelemetryOwnership.@Nullable Erasure erasure) {
+        if (erasure == null) {
+            return Enabling.ENABLED;
+        }
+        return switch (erasure.phase()) {
+            case REFUSED -> Enabling.AFTER_REFUSAL;
+            case INCOMPLETE -> Enabling.AFTER_INCOMPLETE;
+            case REQUESTED, ACCEPTED, COMPLETE -> Enabling.ENABLED;
+        };
     }
 
     private void prepareForSetup(TelemetryStateStore store, PrintStream out) {

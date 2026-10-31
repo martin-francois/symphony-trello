@@ -48,22 +48,9 @@ variable "release_date" {
 }
 
 variable "erasure_enabled" {
-  description = "Per-role activation. Production remains false until the hosted lifecycle gate passes."
+  description = "Enable the managed erasure service per role after configuring its credentials. Provider completion does not gate activation."
   type        = object({ production = bool, test = bool })
   default     = { production = false, test = false }
-
-  # Production serves real installations, so it needs a hosted lifecycle pass for this exact
-  # handler; the test role is where that lifecycle runs.
-  validation {
-    condition     = !var.erasure_enabled.production || var.erasure_lifecycle_pass == filesha256("${path.module}/erasure-service.hog.tftpl")
-    error_message = "Production erasure needs a hosted TWO_PERIOD_LIFECYCLE_PASS for the current erasure handler; see docs/telemetry-erasure-implementation.md."
-  }
-}
-
-variable "erasure_lifecycle_pass" {
-  description = "SHA-256 of erasure-service.hog.tftpl from a hosted TWO_PERIOD_LIFECYCLE_PASS ledger. scripts/posthog-infra reads it from the ledger; production erasure does not deploy without a match."
-  type        = string
-  default     = ""
 }
 
 variable "erasure_secrets" {

@@ -55,7 +55,7 @@ test("the erasure lifecycle runner refuses without opt-in when launched through 
 
   // then
   assert.equal(result.status, 1, result.stderr);
-  assert.match(result.stderr, /Lifecycle gate failed/);
+  assert.match(result.stderr, /cannot complete erasure lifecycle verification: inspect the protected ledger/);
 });
 
 test("every script decides whether it is the entry point through entry-point.ts", () => {

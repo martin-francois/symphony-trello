@@ -137,6 +137,7 @@ function resumedLifecycle(t: TestContext, kind: FlagKind, outcome: Outcome, beha
 
 const scenarios = [
   {name: "resumed completed lifecycle passes with replay-created empty flags retained", kind: "symphony-erasure-empty-v2", outcome: "complete", archived: false},
+  {name: "resumed incomplete lifecycle passes with status flags retained for monitoring", kind: "symphony-erasure-v1", outcome: "incomplete", archived: false},
   {name: "resumed completed lifecycle archives person-bound request flags", kind: "symphony-erasure-v1", outcome: "complete", archived: true},
 ] as const;
 
