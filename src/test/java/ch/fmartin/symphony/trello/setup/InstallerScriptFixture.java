@@ -739,11 +739,14 @@ final class InstallerScriptFixture {
     }
 
     static List<String> powershellCommand() {
-        String configured = System.getenv("SYMPHONY_TRELLO_TEST_PWSH");
+        return powershellCommand(System.getenv("SYMPHONY_TRELLO_TEST_PWSH"));
+    }
+
+    static List<String> powershellCommand(String configured) {
         if (configured != null && !configured.isBlank()) {
             Path command = Path.of(configured);
             if (Files.isExecutable(command)) {
-                return List.of(command.toString());
+                return List.of(command.toAbsolutePath().toString());
             }
         }
         if (!isWindows()) {
