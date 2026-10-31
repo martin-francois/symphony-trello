@@ -1,0 +1,17 @@
+---
+tracker:
+  kind: trello
+  board_id: &board board-1
+  active_states: &active [Todo, In Progress]
+agent:
+  max_concurrent_agents_by_state:
+    todo: &limit 2
+    in progress: *limit
+repository:
+  default_url: *board
+custom:
+  active_copy: *active
+  nested: &nested {list: [*limit, *board]}
+  again: *nested
+---
+Aliases copy anchored values.

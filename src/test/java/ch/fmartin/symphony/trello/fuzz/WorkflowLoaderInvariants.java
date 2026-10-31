@@ -4,21 +4,42 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workflow.WorkflowException;
+import ch.fmartin.symphony.trello.workflow.WorkflowFrontMatterYaml;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.google.common.base.Splitter;
+import java.io.StringReader;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.file.Path;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.composer.Composer;
+import org.yaml.snakeyaml.events.Event;
+import org.yaml.snakeyaml.events.ImplicitTuple;
+import org.yaml.snakeyaml.events.ScalarEvent;
+import org.yaml.snakeyaml.nodes.MappingNode;
+import org.yaml.snakeyaml.nodes.Node;
+import org.yaml.snakeyaml.nodes.NodeTuple;
+import org.yaml.snakeyaml.nodes.ScalarNode;
+import org.yaml.snakeyaml.nodes.SequenceNode;
+import org.yaml.snakeyaml.nodes.Tag;
+import org.yaml.snakeyaml.parser.Parser;
+import org.yaml.snakeyaml.parser.ParserImpl;
+import org.yaml.snakeyaml.reader.StreamReader;
+import org.yaml.snakeyaml.resolver.Resolver;
 
 /// Domain properties of [WorkflowLoader] shared by the standalone `WorkflowLoaderFuzzer` and the
 /// JUnit `WorkflowLoaderFuzzTest`. It throws [AssertionError] instead of using AssertJ because the
@@ -40,8 +61,8 @@ public final class WorkflowLoaderInvariants {
     private static final Pattern WORKFLOW_LINE_END = Pattern.compile("\r\n|\r|\n");
     private static final Splitter WORKFLOW_LINES = Splitter.on(WORKFLOW_LINE_END);
     // An explicit empty key, "?," in a flow sequence, becomes {"": null}: three nodes for two bytes. The
-    // factor leaves headroom for denser forms while still failing on alias expansion, which grows
-    // exponentially.
+    // factor leaves headroom for denser forms. Aliases may add at most the alias limit on top, so
+    // nested aliases that grow exponentially still fail the bound.
     private static final int MAX_NODES_PER_INPUT_BYTE = 4;
     private static final ObjectMapper CANONICAL_JSON =
             new ObjectMapper().enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS);
@@ -85,20 +106,136 @@ public final class WorkflowLoaderInvariants {
                                     .replaceAll(System.lineSeparator())
                                     .trim()),
                     "markdown without front matter becomes the whole trimmed prompt");
-        } else if (!hasClosingDelimiter(lines)) {
-            check(
-                    PARSE_ERROR_CODE.equals(result.failureCode()),
-                    "front matter without a closing delimiter is a parse error");
+        } else {
+            OptionalInt closing = closingDelimiter(lines);
+            if (closing.isEmpty()) {
+                check(
+                        PARSE_ERROR_CODE.equals(result.failureCode()),
+                        "front matter without a closing delimiter is a parse error");
+            } else {
+                String frontMatter = String.join("\n", lines.subList(1, closing.getAsInt()));
+                assertYamlRules(frontMatter, result);
+                WorkflowConfigInvariants.assertStartupReadAgrees(frontMatter, result);
+            }
         }
     }
 
-    private static boolean hasClosingDelimiter(List<String> lines) {
-        for (String line : lines.subList(1, lines.size())) {
-            if (isFrontMatterDelimiter(line)) {
-                return true;
+    private static OptionalInt closingDelimiter(List<String> lines) {
+        for (int i = 1; i < lines.size(); i++) {
+            if (isFrontMatterDelimiter(lines.get(i))) {
+                return OptionalInt.of(i);
+            }
+        }
+        return OptionalInt.empty();
+    }
+
+    /// Checks the YAML rules of `SPEC.md` section 5.2 against SnakeYAML's composer, a YAML reader
+    /// independent of the loader. It resolves aliases into shared nodes, keeps merge keys as keys
+    /// tagged `!!merge`, and keeps repeated keys, so each rule is visible in its node graph.
+    private static void assertYamlRules(String frontMatter, LoadResult result) {
+        Node root;
+        try {
+            root = compose(frontMatter);
+        } catch (RuntimeException notComposable) {
+            // Invalid YAML, several documents, or one of SnakeYAML's own limits: no oracle.
+            return;
+        }
+        WorkflowDefinition definition = result.definition();
+        if (root == null) {
+            check(
+                    definition != null && definition.config().isEmpty(),
+                    "front matter without content is an empty config");
+            return;
+        }
+        if (hasMergeOrRepeatedKey(root)) {
+            check(definition == null, "front matter with a merge key or a repeated key is rejected");
+            return;
+        }
+        if (definition != null && root instanceof MappingNode) {
+            check(
+                    hasShape(root, definition.config()),
+                    "an accepted config has the structure of the YAML with every alias resolved");
+        }
+    }
+
+    /// Composes front matter with SnakeYAML, reading a scalar with the non-specific tag `!` as a
+    /// string the way YAML and the loader read it. SnakeYAML's composer resolves `! <<` like a plain
+    /// `<<`, which would make the oracle see a merge key where the loader correctly sees the string
+    /// key "<<".
+    public static @Nullable Node compose(String frontMatter) {
+        var options = new LoaderOptions();
+        Parser parser = new NonSpecificScalarsAsStrings(
+                new ParserImpl(new StreamReader(new StringReader(frontMatter)), options));
+        return new Composer(parser, new Resolver(), options).getSingleNode();
+    }
+
+    /// Whether a node that SnakeYAML's composer built holds a merge key or a key repeated in one map,
+    /// the two keys that `SPEC.md` section 5.2 rejects.
+    public static boolean hasMergeOrRepeatedKey(Node root) {
+        return hasMergeOrRepeatedKey(root, Collections.newSetFromMap(new IdentityHashMap<>()));
+    }
+
+    // Aliases make the graph share nodes and may make it cyclic, so each node is visited once.
+    private static boolean hasMergeOrRepeatedKey(Node node, Set<Node> visited) {
+        if (!visited.add(node)) {
+            return false;
+        }
+        if (node instanceof SequenceNode sequence) {
+            for (Node element : sequence.getValue()) {
+                if (hasMergeOrRepeatedKey(element, visited)) {
+                    return true;
+                }
+            }
+        } else if (node instanceof MappingNode mapping) {
+            Set<String> keys = new HashSet<>();
+            for (NodeTuple entry : mapping.getValue()) {
+                if (entry.getKeyNode() instanceof ScalarNode key
+                        && (Tag.MERGE.equals(key.getTag()) || !keys.add(key.getValue()))) {
+                    return true;
+                }
+                if (hasMergeOrRepeatedKey(entry.getKeyNode(), visited)
+                        || hasMergeOrRepeatedKey(entry.getValueNode(), visited)) {
+                    return true;
+                }
             }
         }
         return false;
+    }
+
+    // Compares maps, lists and their keys; scalar values may differ in type between the readers.
+    private static boolean hasShape(Node node, @Nullable Object value) {
+        return switch (node) {
+            case MappingNode mapping -> value instanceof Map<?, ?> map && hasMappingShape(mapping, map);
+            case SequenceNode sequence -> value instanceof List<?> list && hasSequenceShape(sequence, list);
+            default -> !(value instanceof Map<?, ?>) && !(value instanceof List<?>);
+        };
+    }
+
+    private static boolean hasMappingShape(MappingNode mapping, Map<?, ?> map) {
+        if (mapping.getValue().size() != map.size()) {
+            return false;
+        }
+        for (NodeTuple entry : mapping.getValue()) {
+            if (!(entry.getKeyNode() instanceof ScalarNode key)
+                    || !map.containsKey(key.getValue())
+                    || !hasShape(entry.getValueNode(), map.get(key.getValue()))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean hasSequenceShape(SequenceNode sequence, List<?> list) {
+        List<Node> elements = sequence.getValue();
+        if (elements.size() != list.size()) {
+            return false;
+        }
+        for (int i = 0; i < elements.size(); i++) {
+            if (!hasShape(elements.get(i), list.get(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static boolean isFrontMatterDelimiter(String line) {
@@ -118,12 +255,14 @@ public final class WorkflowLoaderInvariants {
         check(WORKFLOW_PATH.equals(definition.path()), "definition keeps the normalized workflow path");
         String prompt = definition.promptTemplate();
         check(prompt.equals(prompt.trim()), "prompt template is trimmed");
-        // Jackson turns a YAML alias into its anchor name instead of expanding it. A parser change that
-        // starts expanding aliases could turn a few kilobytes into an exponential config, which this catches.
+        // Aliases copy anchored nodes, but never more than the alias limit, so a few kilobytes of
+        // nested aliases cannot turn into an exponential config.
         long nodesBelowRoot = nodeCount(definition.config()) - 1;
         check(
-                nodesBelowRoot <= (long) MAX_NODES_PER_INPUT_BYTE * markdown.length,
-                "config size stays linear in the input size");
+                nodesBelowRoot
+                        <= (long) MAX_NODES_PER_INPUT_BYTE * markdown.length
+                                + WorkflowFrontMatterYaml.MAX_ALIAS_EXPANDED_NODES,
+                "config size stays linear in the input size plus the alias limit");
 
         WorkflowDefinition reparsed = loader.parse(WORKFLOW_PATH, (EMPTY_FRONT_MATTER + prompt).getBytes(UTF_8));
         check(reparsed.config().isEmpty(), "re-wrapped prompt adds no config");
@@ -193,6 +332,39 @@ public final class WorkflowLoaderInvariants {
             } catch (JsonProcessingException e) {
                 throw new AssertionError("workflow config cannot be compared", e);
             }
+        }
+    }
+
+    private record NonSpecificScalarsAsStrings(Parser parser) implements Parser {
+        private static final String NON_SPECIFIC_TAG = "!";
+
+        @Override
+        public boolean checkEvent(Event.ID choice) {
+            return parser.checkEvent(choice);
+        }
+
+        @Override
+        public Event peekEvent() {
+            return asString(parser.peekEvent());
+        }
+
+        @Override
+        public Event getEvent() {
+            return asString(parser.getEvent());
+        }
+
+        private static Event asString(Event event) {
+            if (event instanceof ScalarEvent scalar && NON_SPECIFIC_TAG.equals(scalar.getTag())) {
+                return new ScalarEvent(
+                        scalar.getAnchor(),
+                        Tag.STR.getValue(),
+                        new ImplicitTuple(false, false),
+                        scalar.getValue(),
+                        scalar.getStartMark(),
+                        scalar.getEndMark(),
+                        scalar.getScalarStyle());
+            }
+            return event;
         }
     }
 }

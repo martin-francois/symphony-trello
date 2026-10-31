@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.setup;
 
 import static java.util.function.Predicate.not;
 
+import ch.fmartin.symphony.trello.workflow.WorkflowFrontMatterYaml;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Iterables;
@@ -71,11 +72,13 @@ final class SetupFailureCauses {
 
     /// A [FileSystemException] message repeats the affected paths, which the wrapping message
     /// already identifies, so only its path-free reason is kept. Parser messages quote the parsed
-    /// content, which can hold credentials or board names, so they are dropped.
+    /// content, which can hold credentials or board names, so they are dropped. A front matter rule
+    /// violation names only a key path or an alias and how to fix it, never a value, so it is kept.
     private static Optional<String> detail(Throwable throwable) {
         String detail =
                 switch (throwable) {
                     case FileSystemException fileSystemFailure -> fileSystemFailure.getReason();
+                    case WorkflowFrontMatterYaml.RuleViolation violation -> violation.getOriginalMessage();
                     case JsonProcessingException _ -> null;
                     default -> throwable.getMessage();
                 };

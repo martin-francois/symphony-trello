@@ -252,5 +252,7 @@ While checking the properties, three YAML front matter behaviors turned out to b
 rejected without a clear contract: an alias becomes its anchor name instead of the anchored value,
 a duplicate key keeps the last value, and comment-only front matter is a parse error while `null`
 front matter is an empty config. The properties do not pin these behaviors.
-[GitHub issue #786](https://github.com/martin-francois/symphony-trello/issues/786) asks the
+[GitHub issue #786](https://github.com/martin-francois/symphony-trello/issues/786) asked the
 maintainer to decide each one.
+[ADR 0147](0147-resolve-yaml-aliases-and-reject-merge-and-duplicate-keys.md) records the decision,
+and the `WorkflowLoaderFuzzer` properties now check the decided rules.

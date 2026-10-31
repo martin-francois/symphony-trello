@@ -1,0 +1,5 @@
+---
+codex:
+  ! <<: {turn_timeout_ms: 5000}
+---
+A key with the non-specific tag is the string "<<", not a merge key.

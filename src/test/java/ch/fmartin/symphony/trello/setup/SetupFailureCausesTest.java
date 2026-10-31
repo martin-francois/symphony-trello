@@ -4,7 +4,9 @@ import static ch.fmartin.symphony.trello.testsupport.TestFileContents.INVALID_UT
 import static ch.fmartin.symphony.trello.testsupport.TestFileContents.INVALID_YAML_QUOTING_PRIVATE_VALUE;
 import static ch.fmartin.symphony.trello.testsupport.TestFileContents.PRIVATE_YAML_VALUE;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchException;
 
+import ch.fmartin.symphony.trello.workflow.WorkflowFrontMatterYaml;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import java.io.IOException;
@@ -79,6 +81,22 @@ final class SetupFailureCausesTest {
         // then
         assertThat(parserFailure).hasMessageContaining(PRIVATE_YAML_VALUE);
         assertThat(summary).isEqualTo(parserFailure.getClass().getSimpleName()).doesNotContain(PRIVATE_YAML_VALUE);
+    }
+
+    @Test
+    void summaryKeepsAFrontMatterRuleViolationBecauseItNamesOnlyTheKeyAndTheFix() {
+        // given
+        Exception violation = catchException(() -> WorkflowFrontMatterYaml.readMap(
+                "tracker:\n  api_key: " + PRIVATE_YAML_VALUE + "\n  api_key: " + PRIVATE_YAML_VALUE + "\n"));
+
+        // when
+        String summary = SetupFailureCauses.summary(violation);
+
+        // then
+        assertThat(summary)
+                .isEqualTo("RuleViolation: Workflow front matter has the key tracker.api_key more than once"
+                        + " (front matter line 3); keep one entry and remove the others")
+                .doesNotContain(PRIVATE_YAML_VALUE);
     }
 
     @Test
