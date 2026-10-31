@@ -1,0 +1,59 @@
+name: pull-request-disclosure
+# Runs from the base branch on trusted event metadata only: the one checkout takes this
+# workflow's own module from the commit the workflow file came from, with no token; no cache, no
+# secret beyond the automatic token (docs/agents/github-actions-security.md, ADR 0142). A pull
+# request whose description is incomplete gets one comment and the waiting labels at once, before
+# any maintainer approves its pull_request runs; the first daily run 14 days after the flag closes
+# it, and the workflow reopens it once the description is fixed.
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+  schedule:
+    # 13:17 UTC, away from the 04:00 to 05:00 UTC maintenance window. The script's
+    # sweepHourUtc and sweepMinuteUtc give the same time in the close date; its test compares them.
+    - cron: "17 13 * * *"
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  disclosure:
+    # Bots (Renovate, Release Please) and martinfrancois never see this check: their bodies are
+    # generated or his agent ticks the box (ADR 0132). Every other author is handled, collaborators
+    # included, because the box is required on every pull request (ADR 0144). The base-repository
+    # comparison matches openrewrite-renovate.yml; on pull_request_target it is always true, so it
+    # is not a guard. The script repeats the author skips for the scheduled run. Branch names are
+    # no guard either: a fork can reuse any of them.
+    if: >-
+      ${{
+        github.event_name != 'pull_request_target' ||
+        (github.event.pull_request.base.repo.full_name == github.repository &&
+         !endsWith(github.event.pull_request.user.login, '[bot]') &&
+         github.event.pull_request.user.login != 'martinfrancois')
+      }}
+    concurrency:
+      # One run per pull request; a newer event for the same pull request replaces a queued one
+      # and re-reads everything. The daily sweep has its own group and re-reads before acting.
+      group: pull-request-disclosure-${{ github.event.pull_request.number || 'sweep' }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Check out the workflow script from the base commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The commit this workflow file was read from: the base branch tip on pull_request_target,
+          # the default branch tip on schedule and workflow_dispatch.
+          ref: ${{ github.sha }}
+          sparse-checkout: scripts/pull-request-disclosure.cjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Flag, resolve, close, or reopen pull requests with an incomplete description
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            await require("./scripts/pull-request-disclosure.cjs")({ github, context, core });

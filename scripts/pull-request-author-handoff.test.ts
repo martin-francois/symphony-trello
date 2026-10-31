@@ -95,6 +95,7 @@ const HANDOFF = loadWorkflowScript("pull-request-author-handoff.yml", "Synchroni
 const AUTHOR = {login: "octocat"};
 const WAITING_LABEL = "waiting-for-author";
 const REVIEW_LABEL = "needs-maintainer-review";
+const MISSING_LABEL = "missing-confirmation";
 const LABEL_TIMESTAMP = "2026-07-22T18:00:00Z";
 const WAITING_CYCLE_TOKEN = "LE_waiting_cycle";
 const PUSH_SHA = "abc123";
@@ -370,6 +371,28 @@ test("a force-push back to an existing commit returns waiting work for review", 
   );
 
   assertTransition(result);
+});
+
+test("an author signal is inert while the description is still incomplete", async () => {
+  for (const action of ["synchronize", "ready_for_review", "review_requested"]) {
+    const result = await runHandoff("pull_request_target", authorEvent(action), {
+      existingLabels: [WAITING_LABEL, MISSING_LABEL],
+    });
+    assert.deepEqual(result.added, [], action);
+    assert.deepEqual(result.removed, [], action);
+    assert.equal(result.timelineReads, 0, action);
+  }
+  const ready = await runHandoff(
+    "issue_comment",
+    {
+      action: "created",
+      comment: {body: "/ready", created_at: LABEL_TIMESTAMP, id: READY_COMMENT_ID, user: AUTHOR},
+      issue: {labels: [{name: WAITING_LABEL}], number: 42, pull_request: {}},
+    },
+    {existingLabels: [WAITING_LABEL, MISSING_LABEL]},
+  );
+  assert.deepEqual(ready.added, []);
+  assert.deepEqual(ready.removed, []);
 });
 
 test("a maintainer or bot event does not return waiting work for review", async () => {

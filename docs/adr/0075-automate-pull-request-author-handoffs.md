@@ -13,6 +13,11 @@ informed: [Future maintainers, Contributors]
 
 # Automate Pull Request Author Handoffs With Explicit Signals
 
+[ADR 0142](0142-flag-and-close-pull-requests-with-an-incomplete-ai-disclosure.md) adds one rule to
+the handoff: while a pull request carries `missing-confirmation`, an author signal does not move it
+to `needs-maintainer-review`. The disclosure workflow owns the waiting state until the description
+is complete.
+
 ## Context and Problem Statement
 
 [GitHub issue #618](https://github.com/martin-francois/symphony-trello/issues/618) requires a durable
