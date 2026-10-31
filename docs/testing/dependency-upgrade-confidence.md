@@ -40,6 +40,9 @@ image a pull request pins: `pinned-betterleaks-image` for BetterLeaks
 ([ADR 0092](../adr/0092-approvaltests-terminal-output-snapshots.md)). The snapshot check runs the
 wrapper on each pull request, including Renovate image updates. It fails if no snapshot tests run.
 
-HyperFrames, the README demo renderer, changes the committed video and poster. Its updates never
-merge automatically, and the README demo freshness script test blocks them until a maintainer
-commits media rendered with the new version.
+HyperFrames, the README demo renderer, changes what a render produces. The `readme-demo-render`
+check of the `HyperFrames Renovate automation` workflow renders the demo with the proposed version
+on the pull request and fails when the result differs visibly from the README video attachment; the README
+demo freshness script test keeps the committed media bound to every other render input, with the
+rendering version recorded in the manifest
+([ADR 0149](../adr/0149-check-hyperframes-updates-by-rendering-in-ci.md)).

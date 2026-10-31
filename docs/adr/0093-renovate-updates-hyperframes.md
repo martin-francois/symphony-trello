@@ -17,7 +17,12 @@ informed: [Future maintainers, Contributors]
 
 [ADR 0133](0133-re-upload-the-readme-video-only-after-a-visible-change.md) narrows the README
 attachment step below: the maintainer replaces the attachment only when the render reports a
-visible change.
+visible change. The render-by-hand part of this decision is amended by
+[ADR 0149](0149-check-hyperframes-updates-by-rendering-in-ci.md): the manifest records the
+version that rendered the committed media and the pin is hashed with its version literal
+normalized, so a version-only update no longer fails the freshness check, and a CI job renders the
+demo with the proposed version and compares it with the README video attachment instead of anyone
+committing a render. The version location and discovery below still stand.
 
 ## Context and Problem Statement
 
