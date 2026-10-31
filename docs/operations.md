@@ -209,6 +209,10 @@ that context, the lookup reports `lookup_status: not_found` instead of guessing 
 Deleting a discovered workflow removes it from that context, but a manifest entry still maps its
 stored path after the file is deleted. A `--workflow` selector that names a deleted workflow fails, so run the lookup without it.
 
+The report file is Markdown, so outside code it writes each `<` as `\<`. A GitHub issue shows
+`<redacted>` and `<path:...>`, while the raw file shows `\<redacted>` and `\<path:...>`. Lookup
+accepts a token copied from either one.
+
 Some `start`, `stop`, or `status` failures also include a `<path:...>` token and the same lookup
 command when they need to hide a local workflow, log, managed PID/state path, or file-backed secret
 path.

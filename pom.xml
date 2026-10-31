@@ -40,6 +40,7 @@
     <argLine/>
     <approvaltests.version>31.0.0</approvaltests.version>
     <archunit.version>1.5.1</archunit.version>
+    <commonmark.version>0.31.0</commonmark.version>
     <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
     <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
     <quarkus.platform.version>3.40.1.1</quarkus.platform.version>
@@ -203,6 +204,18 @@
       <groupId>com.approvaltests</groupId>
       <artifactId>approvaltests</artifactId>
       <version>${approvaltests.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.commonmark</groupId>
+      <artifactId>commonmark</artifactId>
+      <version>${commonmark.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.commonmark</groupId>
+      <artifactId>commonmark-ext-gfm-tables</artifactId>
+      <version>${commonmark.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

@@ -1766,7 +1766,7 @@ final class SetupDiagnosticReporterTest {
         String report = renderGlobalDiagnostics(reporter, configDir, Path.of("Jane Doe/state"));
 
         // then
-        assertThat(report).contains("--state-home <redacted>").doesNotContain("Jane Doe", "Jane Doe/state");
+        assertThat(report).contains("--state-home \\<redacted>").doesNotContain("Jane Doe", "Jane Doe/state");
     }
 
     @Test
@@ -1794,7 +1794,7 @@ final class SetupDiagnosticReporterTest {
         // then
         assertThat(report)
                 .contains(
-                        "command:** diagnostics --config-dir <redacted> --deep",
+                        "command:** diagnostics --config-dir \\<redacted> --deep",
                         "deep:** enabled",
                         "codex-cli 1.2.3; login=ok",
                         "gh version 2.70.0; auth=ok")
@@ -1908,8 +1908,10 @@ final class SetupDiagnosticReporterTest {
                 .doesNotContain("secret-token", "secret log content", diagnosticsKeyHex);
     }
 
-    @Test
-    void privateContextLookupResolvesOneDiagnosticsToken() throws Exception {
+    /// The rendered report shows `<path:...>`, and the raw Markdown report text shows `\<path:...>`.
+    @ParameterizedTest
+    @ValueSource(strings = {"", "\\"})
+    void privateContextLookupResolvesOneDiagnosticsToken(String copiedPrefix) throws Exception {
         // given
         Path configDir = tempDir.resolve("lookup-config");
         Path workspaceRoot = tempDir.resolve("lookup-workspaces");
@@ -1948,7 +1950,7 @@ final class SetupDiagnosticReporterTest {
                         Optional.of(stateHome),
                         Optional.empty(),
                         Optional.empty(),
-                        Optional.of(lookupToken)),
+                        Optional.of(copiedPrefix + lookupToken)),
                 true);
 
         // then
@@ -1956,10 +1958,10 @@ final class SetupDiagnosticReporterTest {
                 .contains(
                         "# Symphony for Trello Private Context",
                         "## Lookup",
-                        "- **lookup_token:** " + lookupToken,
+                        "- **lookup_token:** \\" + lookupToken,
                         "- **lookup_status:** found",
-                        "| connected_board | workflow_path | " + lookupToken + " | " + workflow + " |",
-                        "| workflow | workflow_path | " + lookupToken + " | " + workflow + " |")
+                        "| connected_board | workflow_path | \\" + lookupToken + " | " + workflow + " |",
+                        "| workflow | workflow_path | \\" + lookupToken + " | " + workflow + " |")
                 .doesNotContain("lookup-key", "https://trello.com/b/lookup-key/lookup-board");
     }
 
@@ -2001,8 +2003,8 @@ final class SetupDiagnosticReporterTest {
         // then
         assertThat(report)
                 .contains(
-                        "- **shell:** " + pathToken(diagnosticsKey, shell),
-                        "- **wrapper_shell:** " + pathToken(diagnosticsKey, wrapperShell),
+                        "- **shell:** \\" + pathToken(diagnosticsKey, shell),
+                        "- **wrapper_shell:** \\" + pathToken(diagnosticsKey, wrapperShell),
                         "bin_dir=" + pathToken(diagnosticsKey, binDir),
                         "codex_npm_prefix=" + pathToken(diagnosticsKey, codexNpmPrefix),
                         "workspace_root=" + pathToken(diagnosticsKey, installedWorkspaceRoot))
@@ -2031,9 +2033,9 @@ final class SetupDiagnosticReporterTest {
             assertThat(lookup)
                     .contains(
                             "## Lookup",
-                            "- **lookup_token:** " + emittedToken.getKey(),
+                            "- **lookup_token:** \\" + emittedToken.getKey(),
                             "- **lookup_status:** found",
-                            "| " + emittedToken.getKey() + " | " + emittedToken.getValue() + " |")
+                            "| \\" + emittedToken.getKey() + " | " + emittedToken.getValue() + " |")
                     .doesNotContain("lookup_status:** not_found");
         }
     }
@@ -2085,9 +2087,9 @@ final class SetupDiagnosticReporterTest {
         assertThat(report)
                 .contains(
                         "## Lookup",
-                        "- **lookup_token:** " + lookupToken,
+                        "- **lookup_token:** \\" + lookupToken,
                         "- **lookup_status:** found",
-                        "| process_state | pid_file | " + lookupToken + " | " + pidFile + " |")
+                        "| process_state | pid_file | \\" + lookupToken + " | " + pidFile + " |")
                 .doesNotContain("pid-key", "https://trello.com/b/pid-key/lookup-pid-board");
     }
 
@@ -2130,7 +2132,7 @@ final class SetupDiagnosticReporterTest {
         assertThat(lookup)
                 .contains(
                         "- **lookup_status:** found",
-                        "| workflow | workflow_path | " + emittedToken + " | " + workflow + " |");
+                        "| workflow | workflow_path | \\" + emittedToken + " | " + workflow + " |");
     }
 
     @Test
@@ -2161,9 +2163,10 @@ final class SetupDiagnosticReporterTest {
         String dockerToken = firstMatch(
                 report,
                 Pattern.compile("\\| docker \\| available \\| Emulate Docker CLI using podman\\. Create "
-                        + "(<path:[0-9a-f]{12}>)"));
+                        + "\\\\(<path:[0-9a-f]{12}>)"));
         String codexToken = firstMatch(
-                report, Pattern.compile("\\| codex \\| available \\| codex-cli 1\\.2\\.3 at (<path:[0-9a-f]{12}>)"));
+                report,
+                Pattern.compile("\\| codex \\| available \\| codex-cli 1\\.2\\.3 at \\\\(<path:[0-9a-f]{12}>)"));
         String dockerLookup = lookupDiagnostics(
                 new SetupDiagnosticReporter(environment, commands),
                 configDir,
@@ -2192,9 +2195,10 @@ final class SetupDiagnosticReporterTest {
         assertThat(dockerLookup)
                 .contains(
                         "- **lookup_status:** found",
-                        "| tool | docker | " + dockerToken + " | /etc/containers/nodocker |");
+                        "| tool | docker | \\" + dockerToken + " | /etc/containers/nodocker |");
         assertThat(codexLookup)
-                .contains("- **lookup_status:** found", "| tool | codex | " + codexToken + " | /opt/codex/bin/codex |");
+                .contains(
+                        "- **lookup_status:** found", "| tool | codex | \\" + codexToken + " | /opt/codex/bin/codex |");
         assertThat(privateReport)
                 .contains("Tool Path Identifiers", dockerToken, codexToken, "/opt/codex/bin/codex")
                 .doesNotContain("Logged in using ChatGPT", "login=ok");
@@ -2217,18 +2221,18 @@ final class SetupDiagnosticReporterTest {
 
         // then
         assertThat(diagnostics.report())
-                .contains("codex-cli 1.2.3 at " + diagnostics.token() + "; login=not-probed |")
+                .contains("codex-cli 1.2.3 at \\" + diagnostics.token() + "; login=not-probed |")
                 .doesNotContain(privatePath)
                 .doesNotContain(pathCase.privateFragments());
         assertThat(diagnostics.lookup())
                 .contains(
                         "- **lookup_status:** found",
-                        "| tool | codex | " + diagnostics.token() + " | " + captured + " |");
+                        "| tool | codex | \\" + diagnostics.token() + " | " + captured + " |");
         assertThat(afterDeletion.token()).isEqualTo(diagnostics.token());
         assertThat(afterDeletion.lookup())
                 .contains(
                         "- **lookup_status:** found",
-                        "| tool | codex | " + afterDeletion.token() + " | " + captured + " |");
+                        "| tool | codex | \\" + afterDeletion.token() + " | " + captured + " |");
     }
 
     @MethodSource("pathsOutsideKnownRoots")
@@ -2244,13 +2248,13 @@ final class SetupDiagnosticReporterTest {
 
         // then
         assertThat(diagnostics.report())
-                .contains("Create " + diagnostics.token() + " to quiet msg. See podman/docs; token=<redacted>")
+                .contains("Create \\" + diagnostics.token() + " to quiet msg. See podman/docs; token=\\<redacted>")
                 .doesNotContain(privatePath, "synthetic-adjacent-secret")
                 .doesNotContain(pathCase.privateFragments());
         assertThat(diagnostics.lookup())
                 .contains(
                         "- **lookup_status:** found",
-                        "| tool | codex | " + diagnostics.token() + " | " + privatePath + " |")
+                        "| tool | codex | \\" + diagnostics.token() + " | " + privatePath + " |")
                 .doesNotContain("synthetic-adjacent-secret");
     }
 
@@ -2265,10 +2269,10 @@ final class SetupDiagnosticReporterTest {
 
         // then
         assertThat(diagnostics.report())
-                .contains("'" + diagnostics.token() + "' is ready; see https://example.invalid/help")
+                .contains("'\\" + diagnostics.token() + "' is ready; see https://example.invalid/help")
                 .doesNotContain("Client", "Tools");
         assertThat(diagnostics.lookup())
-                .contains("| tool | codex | " + diagnostics.token() + " | " + privatePath + " |");
+                .contains("| tool | codex | \\" + diagnostics.token() + " | " + privatePath + " |");
     }
 
     @Test
@@ -2284,10 +2288,10 @@ final class SetupDiagnosticReporterTest {
 
         // then
         assertThat(diagnostics.report())
-                .contains("Create " + diagnostics.token() + " to quiet msg. token=<redacted>")
+                .contains("Create \\" + diagnostics.token() + " to quiet msg. token=\\<redacted>")
                 .doesNotContain(privatePath, "synthetic-private", "notice marker", "synthetic-adjacent-secret");
         assertThat(diagnostics.lookup())
-                .contains("| tool | codex | " + diagnostics.token() + " | " + privatePath + " |")
+                .contains("| tool | codex | \\" + diagnostics.token() + " | " + privatePath + " |")
                 .doesNotContain("synthetic-adjacent-secret");
     }
 
@@ -2394,7 +2398,7 @@ final class SetupDiagnosticReporterTest {
         String report = renderWorkflowDiagnostics(
                 new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner()), configDir, stateHome, workflow);
         String emittedToken =
-                firstMatch(report, Pattern.compile("\\| (<path:[0-9a-f]{12}>) \\| [0-9a-f]{12} \\| 19207 \\|"));
+                firstMatch(report, Pattern.compile("\\| \\\\(<path:[0-9a-f]{12}>) \\| [0-9a-f]{12} \\| 19207 \\|"));
         String beforeDeletion = lookupDiagnostics(
                 new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner()),
                 configDir,
@@ -2415,7 +2419,7 @@ final class SetupDiagnosticReporterTest {
         // then
         assertThat(emittedToken).isEqualTo(pathToken(diagnosticsKey(configDir), workflow));
         assertThat(lookup)
-                .contains("- **lookup_token:** " + emittedToken)
+                .contains("- **lookup_token:** \\" + emittedToken)
                 .doesNotContain("## Local Paths", "## Workflow Identifiers");
         if (retainedInManifest) {
             assertThat(lookup).contains("- **lookup_status:** found", workflow.toString());
@@ -2469,7 +2473,7 @@ final class SetupDiagnosticReporterTest {
         assertThat(report)
                 .doesNotContain(privatePath.toString(), "client/lib", "tenant=customer/repo", "fixture-secret");
         assertThat(lookup)
-                .contains("- **lookup_status:** found", "| tool | codex | " + emittedToken + " | " + privatePath)
+                .contains("- **lookup_status:** found", "| tool | codex | \\" + emittedToken + " | " + privatePath)
                 .doesNotContain("fixture-secret");
         assertThat(commands).containsExactly(List.of(codex.toString(), "--version"));
     }
@@ -2635,9 +2639,9 @@ final class SetupDiagnosticReporterTest {
         assertThat(report)
                 .contains(
                         "## Lookup",
-                        "- **lookup_token:** " + lookupToken,
+                        "- **lookup_token:** \\" + lookupToken,
                         "- **lookup_status:** found",
-                        "| secret_file | tracker.api_key | " + lookupToken + " | " + secretFile + " |")
+                        "| secret_file | tracker.api_key | \\" + lookupToken + " | " + secretFile + " |")
                 .doesNotContain(
                         "literal-secret-token",
                         "lookup-secret-key",
@@ -2672,7 +2676,7 @@ final class SetupDiagnosticReporterTest {
         assertThat(report)
                 .contains(
                         "## Lookup",
-                        "- **lookup_token:** <path:000000000000>",
+                        "- **lookup_token:** \\<path:000000000000>",
                         "- **lookup_status:** not_found",
                         "No private-context mapping matched this token")
                 .doesNotContain("## Local Paths", "## Connected Board Identifiers");
@@ -2836,7 +2840,7 @@ final class SetupDiagnosticReporterTest {
         // then
         String workflowToken = firstMatch(
                 report,
-                Pattern.compile("\\| (<path:[0-9a-f]{12}>) \\| " + Pattern.quote(workflow.toString()) + " \\|"));
+                Pattern.compile("\\| \\\\(<path:[0-9a-f]{12}>) \\| " + Pattern.quote(workflow.toString()) + " \\|"));
         assertThat(report)
                 .contains(
                         "# Symphony for Trello Private Context",
@@ -2845,7 +2849,7 @@ final class SetupDiagnosticReporterTest {
                         "Diagnostics tokens are stable only for this run because the local diagnostics key could not be read or written.",
                         workflow.toString())
                 .contains(workflowToken)
-                .contains("| " + workflowToken + " | " + workflow + " |")
+                .contains("| \\" + workflowToken + " | " + workflow + " |")
                 .doesNotContain("# Symphony for Trello Diagnostics");
     }
 
@@ -2875,7 +2879,7 @@ final class SetupDiagnosticReporterTest {
         // then
         assertThat(report)
                 .content(StandardCharsets.UTF_8)
-                .contains("command:** card move <redacted> --to <redacted> --json --config-dir <redacted>")
+                .contains("command:** card move \\<redacted> --to \\<redacted> --json --config-dir \\<redacted>")
                 .doesNotContain("SYNTH101");
     }
 
@@ -3105,7 +3109,7 @@ final class SetupDiagnosticReporterTest {
 
         // when
         String report = renderDeepDiagnostics(new SetupDiagnosticReporter(environment, commands), configDir, stateHome);
-        String emittedToken = firstMatch(report, Pattern.compile("using (<path:[0-9a-f]{12}>)"));
+        String emittedToken = firstMatch(report, Pattern.compile("using \\\\(<path:[0-9a-f]{12}>)"));
         String lookup = lookupDiagnostics(
                 new SetupDiagnosticReporter(environment, commands),
                 configDir,
@@ -3115,11 +3119,12 @@ final class SetupDiagnosticReporterTest {
 
         // then
         assertThat(report)
-                .contains("using " + pathToken(diagnosticsKey(configDir), privatePath) + " outcome=ready")
+                .contains("using \\" + pathToken(diagnosticsKey(configDir), privatePath) + " outcome=ready")
                 .doesNotContain("client [archived]/repo", configDir.toString());
         assertThat(lookup)
                 .contains(
-                        "- **lookup_status:** found", "| tool | docker | " + emittedToken + " | " + privatePath + " |");
+                        "- **lookup_status:** found",
+                        "| tool | docker | \\" + emittedToken + " | " + privatePath + " |");
     }
 
     @Test
@@ -4305,7 +4310,7 @@ final class SetupDiagnosticReporterTest {
                 .content(StandardCharsets.UTF_8)
                 .contains(
                         "error_code:** setup_start_failed",
-                        "(IOException: Cannot run program \"<path:",
+                        "(IOException: Cannot run program \"\\<path:",
                         "error=13, Permission denied)")
                 .doesNotContain(
                         "Private Cause Board",
@@ -4313,6 +4318,35 @@ final class SetupDiagnosticReporterTest {
                         "SYNTH001",
                         privateJava.toString(),
                         tempDir.toString()));
+    }
+
+    @Test
+    void setupFailureReportEscapesEveryHtmlStartOutsideCodeSoGitHubShowsTheMarkers() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("markdown-markers-config");
+        Path workspaceRoot = tempDir.resolve("markdown-markers-workspaces");
+        Path manifest = configDir.resolve(ConnectedBoardManifest.FILE_NAME);
+        Path workflow = configDir.resolve("WORKFLOW.markers.md");
+        Path env = configDir.resolve(".env");
+        Files.createDirectories(configDir);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19094));
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        Optional<Path> report = reporter.reportFailure(
+                new TrelloBoardSetupException("setup_workflow_write_failed", "Could not write " + workflow),
+                request(configDir, workspaceRoot, manifest, workflow, env),
+                new RecordingTerminal());
+
+        // then
+        String content = Files.readString(report.orElseThrow());
+        String rendered = MarkdownRendering.render(content);
+        assertThat(rendered)
+                .as("rendered setup reports retain visible redaction and path markers")
+                .contains("--board-name &lt;redacted&gt; --active &lt;redacted&gt;", "Could not write &lt;path:")
+                .doesNotContainPattern("<(?:redacted|path:|value:|id:)")
+                .doesNotContain("Request Board", "Private Queue", tempDir.toString());
+        assertThat(content).doesNotContain("Request Board", "Private Queue", tempDir.toString());
     }
 
     @Test
@@ -4404,7 +4438,7 @@ final class SetupDiagnosticReporterTest {
         List<String> tokens = reportedCommandTokens(Files.readString(report.orElseThrow()));
         assertThat(tokens)
                 .startsWith(commandPrefix(subcommand).toArray(String[]::new))
-                .containsSubsequence("--board", "<redacted>")
+                .containsSubsequence("--board", "\\<redacted>")
                 .doesNotContain(SYNTHETIC_BOARD_ID, configDir.toString())
                 .filteredOn(token -> token.startsWith("--"))
                 .extracting(acceptedOptions::get)
@@ -5043,7 +5077,7 @@ final class SetupDiagnosticReporterTest {
                 .as("a run without a selector maps the recorded workflow's secret file")
                 .contains(
                         "- **lookup_status:** found",
-                        "| secret_file | tracker.api_token | " + secretFileToken + " | " + secretPath + " |");
+                        "| secret_file | tracker.api_token | \\" + secretFileToken + " | " + secretPath + " |");
         assertThat(selectedLookup)
                 .as("the selected workflow still maps its own secret file")
                 .contains("- **lookup_status:** found");

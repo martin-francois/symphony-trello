@@ -65,7 +65,7 @@ async function emittedTokensResolve(context: ScenarioContext): Promise<string> {
   const text = existsSync(output) ? readFileSync(output, "utf8") : "";
   const tokens = [...new Set(text.match(PATH_TOKEN) ?? [])];
   context.check.that(tokens.length > 0, "the diagnostics report emits path tokens");
-  const noticeToken = new RegExp(`Create (<path:[0-9a-f]{12}>) ${DOCKER_NOTICE_SUFFIX.replaceAll(".", "\\.")}`).exec(text)?.[1];
+  const noticeToken = new RegExp(`Create \\\\(<path:[0-9a-f]{12}>) ${DOCKER_NOTICE_SUFFIX.replaceAll(".", "\\.")}`).exec(text)?.[1];
   context.check.that(noticeToken !== undefined, "the docker notice keeps the text after its outside-root path");
   for (const fragment of ["outside root", "synthetic-container-dir", "synthetic-nodocker", "marker"]) {
     context.check.excludes(text, fragment, "the report hides each distinctive outside-root path component");
@@ -79,7 +79,7 @@ async function emittedTokensResolve(context: ScenarioContext): Promise<string> {
     if (status !== "found") {
       unresolved.push(`${token} -> ${status}`);
     } else if (token === noticeToken) {
-      context.check.contains(resolved, `| tool | docker | ${token} | ${noticePath} |`, "the docker notice token resolves to the path alone");
+      context.check.contains(resolved, `| tool | docker | \\${token} | ${noticePath} |`, "the docker notice token resolves to the path alone");
     }
   }
   context.evidence("unresolved-tokens.txt", unresolved.join("\n"));

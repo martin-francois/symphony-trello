@@ -3323,7 +3323,7 @@ final class LocalWorkerManagerTest {
         assertThat(privateLookup)
                 .contains(
                         "- **lookup_status:** found",
-                        "| secret_file | tracker.api_key | " + secretFileToken + " | " + secretPath + " |")
+                        "| secret_file | tracker.api_key | \\" + secretFileToken + " | " + secretPath + " |")
                 .doesNotContain("test-key", "test-token");
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
@@ -3359,7 +3359,7 @@ final class LocalWorkerManagerTest {
                 .as("the lookup command printed by start must resolve as printed, without --workflow")
                 .contains(
                         "- **lookup_status:** found",
-                        "| secret_file | tracker.api_token | " + secretFileToken + " | " + secretPath + " |");
+                        "| secret_file | tracker.api_token | \\" + secretFileToken + " | " + secretPath + " |");
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
 
@@ -3399,7 +3399,7 @@ final class LocalWorkerManagerTest {
                 .as("the token comes from the symlinked spelling, so the record must keep that spelling")
                 .contains(
                         "- **lookup_status:** found",
-                        "| secret_file | tracker.api_token | " + secretFileToken + " | " + secretPath + " |");
+                        "| secret_file | tracker.api_token | \\" + secretFileToken + " | " + secretPath + " |");
     }
 
     @Test
