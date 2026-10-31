@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.testsupport.SetupRunResult;
@@ -128,7 +129,9 @@ final class LocalSetupFollowUpCardsTest extends LocalSetupFixtureSupport {
         // given
         runSetup(arguments(true, true)).assertSuccess();
         configureExistingFollowUps(true);
-        Files.writeString(tempDir.resolve(".env.follow-ups"), "SAVED_FOLLOW_UP_BOARD=board-1\n");
+        Files.writeString(
+                tempDir.resolve(".env.follow-ups"),
+                "TRELLO_API_ENDPOINT=" + endpoint() + "\nSAVED_FOLLOW_UP_BOARD=board-1\n");
         Files.writeString(
                 workflow(),
                 Files.readString(workflow())
@@ -253,7 +256,8 @@ final class LocalSetupFollowUpCardsTest extends LocalSetupFixtureSupport {
     }
 
     private EffectiveConfig config() {
-        return new ConfigResolver(name -> Optional.of("synthetic-value"))
+        return new ConfigResolver(name ->
+                        TrelloEnvironment.API_ENDPOINT.equals(name) ? Optional.empty() : Optional.of("synthetic-value"))
                 .resolve(new WorkflowLoader().load(workflow()));
     }
 

@@ -151,6 +151,35 @@ final class TrelloBoardSetupTest {
         trello.startEmpty();
     }
 
+    @Test
+    void doesNotFollowARedirectWithTheCredentials() throws Exception {
+        // given
+        var forwardedRequests = new AtomicInteger();
+        try (var other = new FakeTrelloServer()
+                .on("/", exchange -> {
+                    forwardedRequests.incrementAndGet();
+                    respond(exchange, memberJson("member-1", "alex", "Alex Example"));
+                })
+                .startEmpty()) {
+            trello.on("/1/members/me", exchange -> {
+                exchange.getResponseHeaders().add("Location", other.endpoint() + "/members/me");
+                respond(exchange, 302, "");
+            });
+
+            // when
+            Throwable thrown = catchThrowable(() -> setup.getMemberInfo(new TrelloBoardSetup.MemberInfoRequest(
+                    trello.endpointUri(), new TrelloBoardSetup.TrelloCredentials("key", "token"))));
+
+            // then
+            assertThat(thrown)
+                    .isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> assertThat(failure.code())
+                            .isEqualTo("trello_api_status"));
+            assertThat(forwardedRequests)
+                    .as("the key and token must not follow a redirect to another host")
+                    .hasValue(0);
+        }
+    }
+
     @AfterEach
     void stopServer() {
         trello.stop();

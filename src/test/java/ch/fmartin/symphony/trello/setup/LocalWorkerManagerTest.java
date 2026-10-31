@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.testsupport.TestEndpointValues.FOREIGN_ENDPOINT;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -19,8 +20,13 @@ import static org.mockito.Mockito.when;
 
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.testsupport.BoundedWait;
+import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
 import ch.fmartin.symphony.trello.testsupport.JavaLauncherEnvironment;
+import ch.fmartin.symphony.trello.testsupport.TestEnv;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintStream;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
@@ -47,6 +53,8 @@ import org.mockito.MockedConstruction;
 
 final class LocalWorkerManagerTest {
     private static final long MISSING_WORKFLOW_STATE_PID = 42L;
+    /// The same endpoint as [#FOREIGN_ENDPOINT] in a spelling the binding check must normalize.
+    private static final String FOREIGN_ENDPOINT_RESPELLED = "HTTPS://Trello.Example.Test:443/1/";
     private static final Duration SECOND_CALLER_WAIT_TIMEOUT = Duration.ofSeconds(5);
 
     @TempDir
@@ -753,6 +761,151 @@ final class LocalWorkerManagerTest {
         });
         verify(fixture.credentialPreflight, never()).verify(any(), any(), any());
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void startRefusesAnUnconnectedWorkflowWithAForeignEndpointBeforeAnyRequestReachesIt() throws Exception {
+        // given
+        var foreignRequests = new AtomicInteger();
+        try (var foreign = new FakeTrelloServer()
+                .on("/", exchange -> {
+                    foreignRequests.incrementAndGet();
+                    FakeTrelloServer.respond(exchange, "{}");
+                })
+                .startEmpty()) {
+            var fixture = new LocalWorkerManagerTestFixture(tempDir);
+            Path workflow = fixture.paths.configDir().resolve("WORKFLOW.other.md");
+            Path env = fixture.paths.defaultEnvPath().toAbsolutePath().normalize();
+            Files.createDirectories(fixture.paths.configDir());
+            fixture.writeEnv(env);
+            Files.writeString(workflow, workflowWithEndpoint(foreign.endpoint(), "other-board"));
+            // The real manager keeps the real credential preflight, so the fake server is the proof.
+            var manager = new LocalWorkerManager(Map.of(), new WorkflowConfigEditor());
+
+            // when
+            Throwable thrown = catchThrowable(() -> manager.start(
+                    fixture.startWorkflowRequest(workflow),
+                    new PrintStream(OutputStream.nullOutputStream(), true, StandardCharsets.UTF_8)));
+
+            // then
+            assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+                assertThat(failure.code()).isEqualTo("setup_credentials_endpoint_mismatch");
+                assertThat(failure)
+                        .hasMessageContainingAll(
+                                "TRELLO_API_KEY and TRELLO_API_TOKEN from the env file " + env + " belong to "
+                                        + "https://api.trello.com/1",
+                                "the workflow's tracker.endpoint is " + foreign.endpoint(),
+                                "add or replace this line in " + env + ":\n  TRELLO_API_ENDPOINT="
+                                        + foreign.endpoint());
+            });
+            assertThat(foreignRequests)
+                    .as("no request may reach the foreign endpoint")
+                    .hasValue(0);
+        }
+    }
+
+    @Test
+    void startRefusesAConnectedWorkflowEditedToAForeignEndpoint() throws Exception {
+        // given
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Files.writeString(board.workflowPath(), workflowWithEndpoint(FOREIGN_ENDPOINT, "board-1"));
+        fixture.save(board);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> assertThat(failure.code())
+                .isEqualTo("setup_credentials_endpoint_mismatch"));
+        verify(fixture.credentialPreflight, never()).verify(any(), any(), any());
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void startSendsCredentialsToTheEndpointTheirEnvFileBindsThemTo() throws Exception {
+        // given
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Files.writeString(board.workflowPath(), workflowWithEndpoint(FOREIGN_ENDPOINT, "board-1"));
+        Files.writeString(
+                board.envPath(), TestEnv.trelloCredentials("test-key", "test-token", FOREIGN_ENDPOINT_RESPELLED));
+        fixture.save(board);
+        fixture.stubHealthyStartedWorker(board, 42);
+
+        // when
+        WorkerRunResult result = fixture.start(fixture.startRequest("Queue"));
+
+        // then
+        result.assertSuccess();
+        verify(fixture.credentialPreflight).verify(URI.create(FOREIGN_ENDPOINT), "test-key", "test-token");
+    }
+
+    @Test
+    void startRefusesShellEnvironmentCredentialsThatOnlyAnEnvFileBindsToTheEndpoint() throws Exception {
+        // given
+        var fixture = new LocalWorkerManagerTestFixture(
+                tempDir, Map.of("TRELLO_API_KEY", "shell-key", "TRELLO_API_TOKEN", "shell-token"));
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Files.writeString(board.workflowPath(), workflowWithEndpoint(FOREIGN_ENDPOINT, "board-1"));
+        Files.writeString(board.envPath(), TestEnv.trelloApiEndpoint(FOREIGN_ENDPOINT));
+        fixture.save(board);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_credentials_endpoint_mismatch");
+            assertThat(failure)
+                    .hasMessageContainingAll(
+                            "TRELLO_API_KEY and TRELLO_API_TOKEN from the shell environment belong to "
+                                    + "https://api.trello.com/1",
+                            "set this variable in the shell environment:\n  TRELLO_API_ENDPOINT=" + FOREIGN_ENDPOINT);
+        });
+        verify(fixture.credentialPreflight, never()).verify(any(), any(), any());
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void startSendsShellEnvironmentCredentialsToTheEndpointTheShellBindsThemTo() throws Exception {
+        // given
+        var fixture = new LocalWorkerManagerTestFixture(
+                tempDir,
+                Map.of(
+                        "TRELLO_API_KEY",
+                        "shell-key",
+                        "TRELLO_API_TOKEN",
+                        "shell-token",
+                        "TRELLO_API_ENDPOINT",
+                        FOREIGN_ENDPOINT_RESPELLED));
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Files.writeString(board.workflowPath(), workflowWithEndpoint(FOREIGN_ENDPOINT, "board-1"));
+        Files.delete(board.envPath());
+        fixture.save(board);
+        fixture.stubHealthyStartedWorker(board, 42);
+
+        // when
+        WorkerRunResult result = fixture.start(fixture.startRequest("Queue"));
+
+        // then
+        result.assertSuccess();
+        verify(fixture.credentialPreflight).verify(URI.create(FOREIGN_ENDPOINT), "shell-key", "shell-token");
+    }
+
+    private static String workflowWithEndpoint(String endpoint, String boardId) {
+        return """
+                ---
+                tracker:
+                  kind: trello
+                  endpoint: %s
+                  board_id: %s
+                server:
+                  port: %d
+                ---
+                # Queue
+                """
+                .formatted(endpoint, boardId, ConfigDefaults.DEFAULT_SERVER_PORT);
     }
 
     @Test

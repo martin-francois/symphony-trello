@@ -1,9 +1,15 @@
 package ch.fmartin.symphony.trello.testsupport;
 
+import java.net.URI;
 import java.util.stream.Stream;
 import org.junit.jupiter.params.provider.Arguments;
 
 public final class TestEndpointValues {
+    /// A Trello-shaped endpoint that is not the Trello API, for tests of the credential binding.
+    public static final String FOREIGN_ENDPOINT = "https://trello.example.test/1";
+
+    public static final URI FOREIGN_ENDPOINT_URI = URI.create(FOREIGN_ENDPOINT);
+
     private TestEndpointValues() {}
 
     public static Stream<Arguments> invalidTrelloApiBaseEndpoints() {
