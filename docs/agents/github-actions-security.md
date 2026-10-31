@@ -137,7 +137,7 @@ The script test keeps the table complete; update a row when its workflow changes
 
 | Workflow | Triggers | Checkout | Cache | Secrets or write token | Verdict |
 | --- | --- | --- | --- | --- | --- |
-| `ci.yml` | `pull_request`, push `main` | PR head, no token | `maven`, PR-scoped | none, `contents: read` | OK |
+| `ci.yml` | `pull_request`, push `main` | PR head, no token | `maven`, PR-scoped; none in `posthog-infra` | none, `contents: read` | OK |
 | `codeql.yml` | `pull_request`, push `main`, schedule | PR head, no token | `maven`, PR-scoped | `security-events: write`, read-only in fork runs | OK |
 | `coderabbit-config-guard.yml` | `pull_request_target` | `github.sha`, sparse: its script, no token | none | `pull-requests: read` | OK, metadata only |
 | `commitlint.yml` | `pull_request` | PR head, no token | none | none, read | OK |

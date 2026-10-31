@@ -13,8 +13,10 @@ function throughSymlink(script: string, args: readonly string[]) {
   const directory = mkdtempSync(join(tmpdir(), "entry-point-"));
   const link = join(directory, "scripts");
   symlinkSync(SCRIPTS, link);
+  // The PostHog scripts must fail on the missing key and the missing opt-in, whatever the shell has.
+  const {POSTHOG_API_KEY: _key, SYMPHONY_TRELLO_ERASURE_LIFECYCLE: _optIn, ...env} = process.env;
   try {
-    return spawnSync(process.execPath, [join(link, script), ...args], {encoding: "utf8"});
+    return spawnSync(process.execPath, [join(link, script), ...args], {encoding: "utf8", env});
   } finally {
     rmSync(directory, {recursive: true, force: true});
   }
@@ -30,6 +32,30 @@ test("a repaired script runs its main when launched through a symlinked director
   // then
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /usage: node scripts\/audit-issue-labels\.ts/);
+});
+
+test("posthog-infra runs its command when launched through a symlinked directory", () => {
+  // given
+  const script = "posthog-infra.ts";
+
+  // when
+  const result = throughSymlink(script, ["verify", "--key-file", "/nonexistent/key"]);
+
+  // then
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /personal API key file not readable/);
+});
+
+test("the erasure lifecycle runner refuses without opt-in when launched through a symlinked directory", () => {
+  // given
+  const script = "erasure-lifecycle-live.ts";
+
+  // when
+  const result = throughSymlink(script, []);
+
+  // then
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /Lifecycle gate failed/);
 });
 
 test("every script decides whether it is the entry point through entry-point.ts", () => {

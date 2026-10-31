@@ -1,0 +1,3 @@
+
+if (event.event == '$identify' or event.event == '$create_alias' or event.event == '$merge_dangerously') { return null; }
+return event;
