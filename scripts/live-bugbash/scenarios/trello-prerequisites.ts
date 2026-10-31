@@ -150,15 +150,19 @@ async function relationshipContext(context: ScenarioContext, repeated: boolean):
     related.push({where, ...(await cardUrl(context, service, id, LIST_NAMES.done, `related via ${where}`))});
   }
   const byWhere = (where: string) => related.find((entry) => entry.where === where) as {id: string; url: string};
+  const descriptionLine = `See [the description reference](${byWhere("description").url}) for background.`;
+  const repeatedLine = `The comment card is also relevant: [again](${byWhere("comment").url}).`;
+  const commentLine = `Related: ${byWhere("comment").url}`;
+  const checklistLine = `[checklist reference](${byWhere("checklist").url})`;
   const description = [
-    `See [the description reference](${byWhere("description").url}) for background.`,
-    repeated ? `The comment card is also relevant: [again](${byWhere("comment").url}).` : "",
+    descriptionLine,
+    repeated ? repeatedLine : "",
     "",
     QUESTION,
   ].join("\n");
   const target = await addCard(context, service, id, description, LIST_NAMES.ready, "target");
-  await context.trello().request("POST", `cards/${target}/actions/comments`, {text: `Related: ${byWhere("comment").url}`});
-  await context.trello().addChecklist(service.board, target, "Notes", [`[checklist reference](${byWhere("checklist").url})`]);
+  await context.trello().request("POST", `cards/${target}/actions/comments`, {text: commentLine});
+  await context.trello().addChecklist(service.board, target, "Notes", [checklistLine]);
   await context.trello().request("POST", `cards/${target}/attachments`, {url: byWhere("attachment").url, name: "attachment reference"});
   await startWorker(context, service);
   let prompt: string;
@@ -171,9 +175,19 @@ async function relationshipContext(context: ScenarioContext, repeated: boolean):
   const block = referenceBlock(prompt);
   const referenceLines = block.filter((line) => line.startsWith("- source="));
   const expectedSource: Readonly<Record<string, string>> = {description: "description", comment: "comment", checklist: "checklist:Notes", attachment: "attachment"};
+  const expectedText: Readonly<Record<string, string>> = {
+    description: descriptionLine,
+    comment: repeated ? repeatedLine : commentLine,
+    checklist: checklistLine,
+    attachment: byWhere("attachment").url,
+  };
   for (const entry of related) {
     const shortLink = entry.url.split("/")[4] ?? entry.id;
     const lines = referenceLines.filter((line) => line.includes(`url=https://trello.com/c/${shortLink} `));
+    context.check.that(
+      lines.some((line) => line.endsWith(` text=${expectedText[entry.where]}`)),
+      `the ${entry.where} reference retains its own source line`,
+    );
     if (repeated) {
       // The comment card is also linked from the description; the first source wins and the
       // duplicate collapses into one line.
