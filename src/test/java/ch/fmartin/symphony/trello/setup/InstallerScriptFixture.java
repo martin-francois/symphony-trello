@@ -887,7 +887,9 @@ final class InstallerScriptFixture {
     }
 
     static void addSourceRepositoryCommit(Path repository, String relativePath, String content) throws Exception {
-        Files.writeString(repository.resolve(relativePath), content);
+        Path file = repository.resolve(relativePath);
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, content);
         run(Map.of(), "git", "-C", repository.toString(), "add", relativePath).assertSuccess();
         run(Map.of(), "git", "-C", repository.toString(), "commit", "-m", "Update test source")
                 .assertSuccess();
