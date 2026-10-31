@@ -47,6 +47,7 @@ import org.mockito.MockedConstruction;
 
 final class LocalWorkerManagerTest {
     private static final long MISSING_WORKFLOW_STATE_PID = 42L;
+    private static final String SECRET_FILE_NAME = "token.txt";
     private static final Duration SECOND_CALLER_WAIT_TIMEOUT = Duration.ofSeconds(5);
 
     @TempDir
@@ -2285,6 +2286,9 @@ final class LocalWorkerManagerTest {
         var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
+        Files.createDirectories(fixture.paths.stateHome());
+        var store = new ManagedProcessStore(fixture.paths.stateHome());
+        store.recordWorkflowPath(board.workflowPath());
         when(fixture.healthChecker.boardHealth(board)).thenReturn(fixture.sameWorkflow(board));
 
         // when
@@ -2292,6 +2296,7 @@ final class LocalWorkerManagerTest {
 
         // then
         assertThat(thrown).isInstanceOf(TrelloBoardSetupException.class).hasMessageContaining("no managed pid");
+        assertThat(store.recordedWorkflowPaths()).containsExactly(board.workflowPath());
         verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
     }
 
@@ -3170,6 +3175,166 @@ final class LocalWorkerManagerTest {
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
 
+    @MethodSource("unresolvableSecretFiles")
+    @ParameterizedTest(name = "{0}")
+    void startOfAnUnconnectedWorkflowPrintsALookupHintThatResolvesWithoutASelector(
+            String scenario, UnresolvableSecretFile secretFile) throws Exception {
+        // given
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
+        Files.createDirectories(fixture.paths.configDir());
+        fixture.writeEnv(fixture.paths.defaultEnvPath());
+        Path workflowDir = tempDir.resolve("Users").resolve("Jane Doe").resolve("External Workflow");
+        Path workflow = workflowDir.resolve("WORKFLOW.secret.md");
+        Path secretPath = workflowDir.resolve(SECRET_FILE_NAME);
+        String secretFileToken = PrivateContextTokens.pathToken(fixture.paths.configDir(), secretPath);
+        Files.createDirectories(workflowDir);
+        secretFile.create(secretPath);
+        Files.writeString(workflow, workflowWithRelativeSecretFile());
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startWorkflowRequest(workflow)));
+
+        // then
+        assertThat(thrown).as(scenario).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> assertThat(
+                        failure.getMessage())
+                .contains(
+                        secretFile.publicProblem(),
+                        "secret_file_token=" + secretFileToken,
+                        PrivateContextTokens.lookupCommand(secretFileToken))
+                .doesNotContain(secretPath.toString(), workflow.toString()));
+        assertThat(lookupWithoutSelector(fixture, secretFileToken))
+                .as("the lookup command printed by start must resolve as printed, without --workflow")
+                .contains(
+                        "- **lookup_status:** found",
+                        "| secret_file | tracker.api_token | " + secretFileToken + " | " + secretPath + " |");
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    static Stream<Arguments> unresolvableSecretFiles() {
+        return Stream.of(
+                Arguments.of("missing secret file", UnresolvableSecretFile.MISSING),
+                Arguments.of("oversized secret file", UnresolvableSecretFile.OVERSIZED));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void startThroughASymlinkedWorkflowDirectoryPrintsALookupHintThatResolvesWithoutASelector(boolean connected)
+            throws Exception {
+        // given
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
+        Files.createDirectories(fixture.paths.configDir());
+        fixture.writeEnv(fixture.paths.defaultEnvPath());
+        Path realDir = fixture.paths.configDir();
+        Path linkDir = tempDir.resolve("link");
+        Files.createDirectories(realDir);
+        Files.createSymbolicLink(linkDir, realDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Files.writeString(board.workflowPath(), workflowWithRelativeSecretFile());
+        Path workflow = linkDir.resolve(board.workflowPath().getFileName());
+        Path secretPath = linkDir.resolve(SECRET_FILE_NAME);
+        String secretFileToken = PrivateContextTokens.pathToken(fixture.paths.configDir(), secretPath);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startWorkflowRequest(workflow)));
+        if (connected) {
+            fixture.save(board);
+        }
+
+        // then
+        assertThat(thrown).hasMessageContaining("secret_file_token=%s", secretFileToken);
+        assertThat(lookupWithoutSelector(fixture, secretFileToken))
+                .as("the token comes from the symlinked spelling, so the record must keep that spelling")
+                .contains(
+                        "- **lookup_status:** found",
+                        "| secret_file | tracker.api_token | " + secretFileToken + " | " + secretPath + " |");
+    }
+
+    @Test
+    void stopWithoutConnectedBoardsForgetsRecordedAttemptsWithoutPids() throws Exception {
+        // given
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
+        Files.createDirectories(fixture.paths.stateHome());
+        Path workflow = tempDir.resolve("WORKFLOW.failed-start.md");
+        var store = new ManagedProcessStore(fixture.paths.stateHome());
+        store.recordWorkflowPath(workflow);
+
+        // when
+        WorkerRunResult result = fixture.stop(fixture.stopAllRequest());
+
+        // then
+        result.assertSuccess();
+        assertThat(store.recordedWorkflowPaths()).isEmpty();
+        verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
+    }
+
+    @Test
+    void stopForgetsTheRecordedStartAttemptOfAStoppedWorker() throws Exception {
+        // given
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        fixture.stubHealthyStartedWorker(board, 42);
+        fixture.start(fixture.startRequest("Queue")).assertSuccess();
+        var store = new ManagedProcessStore(fixture.paths.stateHome());
+        assertThat(store.recordedWorkflowPaths())
+                .as("start records the workflow it was asked to start")
+                .containsExactly(board.workflowPath());
+        fixture.stubStoppableManagedPid(board, 42);
+
+        // when
+        WorkerRunResult stop = fixture.stop(fixture.stopRequest("Queue"));
+
+        // then
+        stop.assertSuccess();
+        assertThat(store.recordedWorkflowPaths())
+                .as("stop removes the record with the pid file")
+                .isEmpty();
+    }
+
+    private static String lookupWithoutSelector(LocalWorkerManagerTestFixture fixture, String token)
+            throws IOException {
+        return new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner())
+                .renderReport(DiagnosticsRequests.lookupWithoutSelector(fixture.paths, token), true);
+    }
+
+    private static String workflowWithRelativeSecretFile() {
+        return """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: board-1
+                  api_key: "$TRELLO_API_KEY"
+                  api_token: "file:./%s"
+                server:
+                  port: 18080
+                ---
+                Body
+                """
+                .formatted(SECRET_FILE_NAME);
+    }
+
+    /// A file-backed secret that `start` must refuse with a public token instead of its path.
+    enum UnresolvableSecretFile {
+        MISSING("secret file cannot be read."),
+        OVERSIZED("secret file is too large.");
+
+        private final String publicProblem;
+
+        UnresolvableSecretFile(String publicProblem) {
+            this.publicProblem = publicProblem;
+        }
+
+        String publicProblem() {
+            return publicProblem;
+        }
+
+        void create(Path secretPath) throws IOException {
+            if (this == OVERSIZED) {
+                Files.writeString(secretPath, "x".repeat(70_000));
+            }
+        }
+    }
+
     @Test
     void startAllDoesNotLeakOversizedSecretFilePathFromInvalidWorkflow() throws Exception {
         // given
@@ -3578,9 +3743,12 @@ final class LocalWorkerManagerTest {
         // given
         var fixture = new LocalWorkerManagerTestFixture(tempDir);
         StalePidScenario scenario = stalePidScenario(fixture);
+        var store = new ManagedProcessStore(fixture.paths.stateHome());
+        store.recordWorkflowPath(scenario.board().workflowPath());
 
         // when
         WorkerRunResult firstStop = fixture.stop(fixture.stopRequest("Queue"));
+        List<Path> recordsAfterFirstStop = store.recordedWorkflowPaths();
         WorkerRunResult secondStop = fixture.stop(fixture.stopRequest("Queue"));
 
         // then
@@ -3592,7 +3760,7 @@ final class LocalWorkerManagerTest {
                         "Removed the stale managed pid file.")
                 .stdoutDoesNotContain("Skipped unmanaged stale pid WORKFLOW");
         secondStop.assertSuccess().stdoutDoesNotContain("Skipped unmanaged stale pid");
-        var store = new ManagedProcessStore(fixture.paths.stateHome());
+        assertThat(recordsAfterFirstStop).isEmpty();
         assertThat(store.readPid(store.files(scenario.board().workflowPath()).pidFile()))
                 .isNull();
         verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
@@ -3608,32 +3776,36 @@ final class LocalWorkerManagerTest {
         Files.writeString(pidFile, "42", StandardCharsets.US_ASCII);
         assertThat(pidFile).exists();
         var deleteFailure = new AccessDeniedException(pidFile.toString());
+        var processFiles = new ManagedProcessStore(fixture.paths.stateHome()).filesFromPidFile(pidFile);
         when(fixture.platform.isAlive(42L)).thenReturn(true);
         when(fixture.platform.isManaged(42L, fixture.paths.appHome())).thenReturn(false);
         String pidToken = PrivateContextTokens.pathToken(fixture.paths.configDir(), pidFile);
+        String stateToken = PrivateContextTokens.pathToken(fixture.paths.configDir(), fixture.paths.stateHome());
 
         // when
         WorkerRunResult result;
         try (MockedConstruction<ManagedProcessStore> mockedStores =
                 mockConstruction(ManagedProcessStore.class, (store, ignored) -> {
-                    when(store.pidFiles()).thenReturn(List.of(pidFile));
+                    when(store.stoppableFiles()).thenReturn(List.of(processFiles));
+                    when(store.filesFromPidFile(pidFile)).thenReturn(processFiles);
                     when(store.readPid(pidFile)).thenReturn(42L);
-                    when(store.deletePid(pidFile)).thenThrow(deleteFailure);
+                    when(store.deleteStoppedProcessFiles(processFiles)).thenThrow(deleteFailure);
                 })) {
             result = fixture.stop(fixture.stopAllRequest());
 
             // then
             ManagedProcessStore store = mockedStores.constructed().getFirst();
-            verify(store).deletePid(pidFile);
+            verify(store).deleteStoppedProcessFiles(processFiles);
         }
         result.assertSuccess()
                 .stdoutContains(
                         "Skipped unmanaged stale pid WORKFLOW.private.abc123 pid=42",
-                        "Could not remove the stale managed pid file. The unrelated process was not stopped."
+                        "cannot remove stale managed process state: cleanup failed; the unrelated process was not stopped"
                                 + " (AccessDeniedException)",
-                        "Remove the stale managed pid file manually, then rerun stop.",
+                        "Check permissions in the state home, then rerun stop.",
                         "pid_file_token=" + pidToken,
-                        PrivateContextTokens.lookupCommand(pidToken))
+                        "state_home_token=" + stateToken,
+                        PrivateContextTokens.lookupCommand(stateToken))
                 .stdoutDoesNotContain(
                         "Removed the stale managed pid file.",
                         pidFile.toString(),
@@ -3655,6 +3827,8 @@ final class LocalWorkerManagerTest {
         Path staleWorkflow = fixture.paths.configDir().resolve("WORKFLOW.stale.md");
         store.writePid(store.files(managedWorkflow).pidFile(), 41);
         store.writePid(store.files(staleWorkflow).pidFile(), 42);
+        store.recordWorkflowPath(managedWorkflow);
+        store.recordWorkflowPath(staleWorkflow);
         when(fixture.platform.isAlive(41L)).thenReturn(true);
         when(fixture.platform.isAlive(42L)).thenReturn(true);
         when(fixture.platform.isManaged(41L, fixture.paths.appHome())).thenReturn(true);
@@ -3672,6 +3846,7 @@ final class LocalWorkerManagerTest {
                         "Skipped unmanaged stale pid WORKFLOW.stale.md pid=42",
                         "Removed the stale managed pid file.")
                 .stdoutDoesNotContain("WORKFLOW.managed.md.", "WORKFLOW.stale.md.");
+        assertThat(store.recordedWorkflowPaths()).isEmpty();
         verify(fixture.platform, never()).stop(eq(42L), any(Duration.class), any(Duration.class));
     }
 

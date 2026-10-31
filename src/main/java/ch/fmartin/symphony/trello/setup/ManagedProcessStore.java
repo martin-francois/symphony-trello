@@ -4,12 +4,17 @@ import ch.fmartin.symphony.trello.Sha3;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 final class ManagedProcessStore {
+    private static final String WORKFLOW_PATH_SUFFIX = ".workflow";
+
     private final Path stateHome;
 
     ManagedProcessStore(Path stateHome) {
@@ -30,6 +35,37 @@ final class ManagedProcessStore {
                     .sorted()
                     .toList();
         }
+    }
+
+    /// Includes failed-start records without a PID so stop can finish their lifecycle too.
+    List<ManagedProcessFiles> stoppableFiles() throws IOException {
+        if (!Files.isDirectory(stateHome)) {
+            return List.of();
+        }
+        try (var stream = Files.list(stateHome)) {
+            return stream.filter(ManagedProcessStore::isProcessStateFile)
+                    .sorted()
+                    .map(this::filesFromStateFile)
+                    .distinct()
+                    .toList();
+        }
+    }
+
+    private static boolean isProcessStateFile(Path path) {
+        String name = PathNames.fileName(path);
+        return name.endsWith(".pid") || name.endsWith(WORKFLOW_PATH_SUFFIX);
+    }
+
+    private ManagedProcessFiles filesFromStateFile(Path path) {
+        String name = PathNames.fileName(path);
+        String stem = name.substring(0, name.lastIndexOf('.'));
+        return filesFor(stateHome, stem);
+    }
+
+    boolean deleteStoppedProcessFiles(ManagedProcessFiles files) throws IOException {
+        boolean deletedPid = deletePid(files.pidFile());
+        deleteWorkflowPathRecord(files);
+        return deletedPid;
     }
 
     ManagedProcessFiles filesFromPidFile(Path pidFile) {
@@ -112,8 +148,69 @@ final class ManagedProcessStore {
 
     private static ManagedProcessFiles filesFor(Path parent, String name, Path pidFile) {
         return new ManagedProcessFiles(
-                pidFile, parent.resolve(name + ".log"), parent.resolve(name + ".err"), parent.resolve(name + ".lock"));
+                pidFile,
+                parent.resolve(name + ".log"),
+                parent.resolve(name + ".err"),
+                parent.resolve(name + ".lock"),
+                parent.resolve(name + WORKFLOW_PATH_SUFFIX));
     }
 
-    record ManagedProcessFiles(Path pidFile, Path stdoutLog, Path stderrLog, Path processLockFile) {}
+    /// Remembers which workflow file a start attempt was for, next to the pid and log files whose
+    /// names hash that path. Diagnostics without a selector reads the record back, so the lookup
+    /// hint that a failed start of an unconnected workflow prints resolves as printed. The record
+    /// keeps the path as the start was given it, absolute and normalized but with symbolic links
+    /// in place, because the tokens in that hint come from the same spelling. The write is atomic,
+    /// so a reader never sees a half-written record; see
+    /// docs/adr/0154-record-start-attempts-in-the-state-home.md.
+    void recordWorkflowPath(Path workflowPath) throws IOException {
+        Path record = files(workflowPath).workflowPathFile();
+        Path temporary = AtomicFiles.siblingTemporaryFile(record);
+        try {
+            Files.writeString(
+                    temporary, workflowPath.toAbsolutePath().normalize().toString());
+            AtomicFiles.replace(temporary, record);
+        } finally {
+            AtomicFiles.deleteQuietly(temporary);
+        }
+    }
+
+    /// Forgets a start attempt once its worker is stopped, so the state home does not keep
+    /// records of workflows nobody runs any more.
+    boolean deleteWorkflowPathRecord(ManagedProcessFiles files) throws IOException {
+        return Files.deleteIfExists(files.workflowPathFile());
+    }
+
+    /// Every workflow file a start attempt recorded, in file name order, missing files included.
+    List<Path> recordedWorkflowPaths() throws IOException {
+        if (!Files.isDirectory(stateHome)) {
+            return List.of();
+        }
+        List<Path> recorded = new ArrayList<>();
+        try (var stream = Files.list(stateHome)) {
+            for (Path record : stream.filter(path -> PathNames.fileName(path).endsWith(WORKFLOW_PATH_SUFFIX))
+                    .sorted()
+                    .toList()) {
+                recordedWorkflowPath(record).ifPresent(recorded::add);
+            }
+        }
+        return List.copyOf(recorded);
+    }
+
+    /// A record that cannot be read or does not hold a path is skipped: it is a hint for
+    /// diagnostics, not state the worker depends on.
+    private static Optional<Path> recordedWorkflowPath(Path record) {
+        try {
+            String text = Files.readString(record);
+            if (text.isEmpty()) {
+                return Optional.empty();
+            }
+            Path path = Path.of(text);
+            return path.isAbsolute() ? Optional.of(path) : Optional.empty();
+        } catch (IOException | InvalidPathException unreadable) {
+            return Optional.empty();
+        }
+    }
+
+    record ManagedProcessFiles(
+            Path pidFile, Path stdoutLog, Path stderrLog, Path processLockFile, Path workflowPathFile) {}
 }

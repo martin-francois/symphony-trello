@@ -5,9 +5,13 @@ import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.SSH;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.api.Assumptions.abort;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockConstruction;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import ch.fmartin.symphony.trello.testsupport.RecordingTerminal;
 import ch.fmartin.symphony.trello.testsupport.TestWorkflows;
@@ -19,12 +23,15 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.io.StringReader;
+import java.io.UncheckedIOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
@@ -4770,6 +4777,136 @@ final class SetupDiagnosticReporterTest {
             executable.toFile().setExecutable(true);
         }
         return toolDirectory;
+    }
+
+    @Test
+    void broadPrivateContextMapsTheSecretFileOfAWorkflowThatAStartAttemptRecorded() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("config");
+        Path stateHome = tempDir.resolve("state");
+        Path workflowDir = tempDir.resolve("outside");
+        Path workflow = workflowDir.resolve("WORKFLOW.recorded.md");
+        Path secretPath = workflowDir.resolve("token.txt");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.createDirectories(workflowDir);
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: board-1
+                  api_token: "file:./token.txt"
+                ---
+                Body
+                """);
+        new ManagedProcessStore(stateHome).recordWorkflowPath(workflow);
+        DiagnosticsTokenHasher.load(configDir);
+        String secretFileToken = pathToken(diagnosticsKey(configDir), secretPath);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String broadLookup = reporter.renderReport(
+                privateContextRequest(configDir, stateHome, Optional.empty(), secretFileToken), true);
+        String selectedLookup = reporter.renderReport(
+                privateContextRequest(configDir, stateHome, Optional.of(workflow), secretFileToken), true);
+
+        // then
+        assertThat(broadLookup)
+                .as("a run without a selector maps the recorded workflow's secret file")
+                .contains(
+                        "- **lookup_status:** found",
+                        "| secret_file | tracker.api_token | " + secretFileToken + " | " + secretPath + " |");
+        assertThat(selectedLookup)
+                .as("the selected workflow still maps its own secret file")
+                .contains("- **lookup_status:** found");
+    }
+
+    @Test
+    void privateContextSkipsRecordedWorkflowsThatNoLongerExist() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("config");
+        Path stateHome = tempDir.resolve("state");
+        Path workflow = tempDir.resolve("outside").resolve("WORKFLOW.deleted.md");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        new ManagedProcessStore(stateHome).recordWorkflowPath(workflow);
+        DiagnosticsTokenHasher.load(configDir);
+        String workflowToken = pathToken(diagnosticsKey(configDir), workflow);
+
+        // when
+        String report = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner())
+                .renderReport(privateContextRequest(configDir, stateHome, Optional.empty(), workflowToken), true);
+
+        // then
+        assertThat(report).contains("- **lookup_status:** not_found").doesNotContain(workflow.toString());
+    }
+
+    @Test
+    void diagnosticsSkipRecordedWorkflowsWhenDirectoryIterationFails() throws Exception {
+        // given
+        Path configDir = Files.createDirectories(tempDir.resolve("config"));
+        Path stateHome = Files.createDirectories(tempDir.resolve("state"));
+        String token = PrivateContextTokens.pathToken(configDir, tempDir.resolve("secret.txt"));
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+        var request = privateContextRequest(configDir, stateHome, Optional.empty(), token);
+        var failure = new UncheckedIOException(new IOException("synthetic directory iteration failure"));
+
+        // when
+        String report;
+        try (var ignored =
+                mockConstruction(ManagedProcessStore.class, (store, context) -> when(store.recordedWorkflowPaths())
+                        .thenThrow(failure))) {
+            report = reporter.renderReport(request, true);
+        }
+
+        // then
+        assertThat(report).contains("- **lookup_status:** not_found");
+    }
+
+    @Test
+    void publicDiagnosticsStillRenderWhenTheStateHomeCannotBeListed() throws Exception {
+        // given
+        assumeTrue(FileSystems.getDefault().supportedFileAttributeViews().contains("posix"));
+        assumeFalse("root".equals(System.getProperty("user.name")), "root reads every directory");
+        Path configDir = tempDir.resolve("config");
+        Path stateHome = tempDir.resolve("state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.setPosixFilePermissions(stateHome, PosixFilePermissions.fromString("---------"));
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+        var request = new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.of(tempDir.resolve("workspaces")),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty());
+
+        // when
+        Throwable thrown;
+        try {
+            thrown = catchThrowable(() -> reporter.renderReport(request, false));
+        } finally {
+            Files.setPosixFilePermissions(stateHome, PosixFilePermissions.fromString("rwx------"));
+        }
+
+        // then
+        assertThat(thrown)
+                .as("an unreadable state home must not fail diagnostics")
+                .isNull();
+    }
+
+    private SetupDiagnosticReporter.DiagnosticsRequest privateContextRequest(
+            Path configDir, Path stateHome, Optional<Path> workflow, String lookupToken) {
+        return DiagnosticsRequests.lookup(
+                Optional.empty(), workflow, configDir, tempDir.resolve("workspaces"), stateHome, lookupToken);
     }
 
     private static String pathToken(byte[] key, Path path) {
