@@ -13,7 +13,7 @@
 
 import {runRenderStep} from "./readme-demo-process.ts";
 
-export const HYPERFRAMES_VERSION = "0.8.192";
+export const HYPERFRAMES_VERSION = "0.8.193";
 
 export const HYPERFRAMES_PACKAGE = `hyperframes@${HYPERFRAMES_VERSION}`;
 
