@@ -56,7 +56,7 @@ final class InstalledCliDefaults {
         return switch (command) {
             case "setup-local" -> setupLocal(args, paths);
             case "new-board", "import-board" -> boardSetup(args, paths);
-            case "start", "stop", "status", "logs", "diagnostics" -> lifecycle(args, paths);
+            case "start", "stop", "status", "logs", "diagnostics", "telemetry" -> lifecycle(args, paths);
             case "migrate-workflows" -> configDirOnly(args, paths);
             case CardCommandRequest.COMMAND -> cardCommand(args, paths);
             default -> args;
@@ -225,7 +225,7 @@ final class InstalledCliDefaults {
             Optional<String> installedWorkspaceRoot,
             Optional<String> installedStateHome) {
         static InstalledPaths from(Map<String, String> environment) {
-            return from(environment, System::getProperty);
+            return from(environment, SetupSystemProperties::get);
         }
 
         static InstalledPaths from(Map<String, String> environment, Map<String, String> properties) {

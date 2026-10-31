@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.PseudoTerminalResult;
+import ch.fmartin.symphony.trello.telemetry.TelemetryEnvironment;
+import ch.fmartin.symphony.trello.telemetry.TelemetryNotice;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
@@ -70,6 +72,7 @@ final class InstallerScriptLifecycleTest {
                 "TRELLO_API_TOKEN",
                 "runtime-token"));
         environment.put("SYMPHONY_TRELLO_INSTALLER_COMPLETION", "preexisting");
+        environment.put(TelemetryEnvironment.DISABLED_VARIABLE, "1");
 
         // when
         PseudoTerminalResult install = runWithPseudoTerminal(
@@ -79,6 +82,7 @@ final class InstallerScriptLifecycleTest {
         String userServiceContentAfterInstall = Files.readString(userService);
         String autostartEnvironmentAfterInstall = Files.readString(autostartEnvironment);
         Path installedCommand = binDirectory.resolve("symphony-trello");
+        String installedCommandContent = Files.readString(installedCommand);
         Path callerDirectory = temporaryDirectory.resolve("posix caller");
         Files.createDirectories(callerDirectory);
         List<ProcessResult> picocliHelpResults = new ArrayList<>();
@@ -158,6 +162,9 @@ final class InstallerScriptLifecycleTest {
                 "status",
                 "--config-dir",
                 isolatedConfigArgument.toString());
+        Path telemetryState = stateHome.resolve("telemetry.json");
+        String telemetryPreference = "{\"format_version\":1,\"mode\":\"DISABLED\",\"preference_revision\":1}\n";
+        Files.writeString(telemetryState, telemetryPreference);
         ProcessResult update = run(
                 environment, "bash", installScript.toString(), "--no-onboard", "--bin-dir", binDirectory.toString());
         addSourceRepositoryCommit(sourceRepository, "UPGRADE_MARKER", "updated\n");
@@ -183,6 +190,10 @@ final class InstallerScriptLifecycleTest {
 
         // then
         assertThat(install.exitCode()).isZero();
+        assertThat(installedCommandContent).contains("exec java " + LocalWorkerManager.ENABLE_NATIVE_ACCESS_FLAG + " ");
+        assertThat(install.transcript())
+                .contains("Usage reporting disabled (" + TelemetryEnvironment.DISABLED_VARIABLE + ")");
+        assertThat(fakeLog).content(StandardCharsets.UTF_8).contains(TelemetryNotice.DISABLE_ARGUMENTS + " --yes");
         assertThat(install.transcript())
                 .containsSubsequence(
                         "Install plan",
@@ -264,6 +275,10 @@ final class InstallerScriptLifecycleTest {
                 .content()
                 .contains("TrelloBoardSetupMain migrate-workflows --from-version " + FAKE_APP_VERSION
                         + " --non-interactive");
+        assertThat(telemetryState)
+                .as("an installer rerun leaves the stored usage-reporting preference untouched")
+                .content()
+                .isEqualTo(telemetryPreference);
         assertThat(markerContentAfterUpdate).isEqualTo("updated\n");
         assertThat(statusWhileRunning.output())
                 .contains("running WORKFLOW.lifecycle-board.md pid=")

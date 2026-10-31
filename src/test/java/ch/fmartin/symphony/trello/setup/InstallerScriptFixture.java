@@ -1207,6 +1207,10 @@ final class InstallerScriptFixture {
                         ;;
                     esac
                   fi
+	                if [[ "${effective_cli_args[0]:-}" == "telemetry" ]]; then
+	                  echo "telemetry ${effective_cli_args[*]:1}" >> "${SYMPHONY_FAKE_LOG:?}"
+	                  exit 0
+	                fi
 	                if [[ -n "${SYMPHONY_FAKE_START_ALL_FAILURE:-}" && "${effective_cli_args[0]:-}" == "start" && " ${effective_cli_args[*]} " == *" --all "* ]]; then
 	                  echo "managed start --all failed" >&2
 	                  exit 29
@@ -1756,7 +1760,16 @@ final class InstallerScriptFixture {
                 new String[] {"status", "--help"},
                 new String[] {"logs", "--help"},
                 new String[] {"diagnostics", "--help"},
-                new String[] {"migrate-workflows", "--help"});
+                new String[] {"migrate-workflows", "--help"},
+                new String[] {"telemetry", "--help"},
+                new String[] {"telemetry", "status", "--help"},
+                new String[] {"telemetry", "preview", "--help"},
+                new String[] {"telemetry", "privacy", "--help"},
+                new String[] {"telemetry", "enable", "--help"},
+                new String[] {"telemetry", "disable", "--help"},
+                new String[] {"telemetry", "debug", "--help"},
+                new String[] {"telemetry", "erase", "--help"},
+                new String[] {"telemetry", "erase-status", "--help"});
     }
 
     static String[] commandWithPrefix(String executable, String[] arguments) {

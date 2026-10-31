@@ -1043,6 +1043,12 @@ This Java implementation provides:
   public issue reports.
 - `tutorial [--offer] [--github | --no-github] [--no-cleanup] [--workspace-id ID]`: optional guided tutorial on
   a temporary Trello board, as defined in Section 19.4
+- `telemetry status|preview|privacy|enable|disable [--yes]|debug|erase|erase-status`: shows,
+  previews, or changes the optional installation usage reporting defined in Section 19.9.
+  `preview`, `status`, and `privacy` are read-only; `disable` reviews the exact report body in an
+  interactive terminal before changing the stored preference. `erase` persistently disables
+  reporting and requests deletion of the installation's analytics; `erase-status` checks or retries
+  a pending deletion. Section 19.9 defines both.
 
 During guided `setup-local` board creation or import, when `--max-agents` is omitted, the Java
 implementation prompts for the per-board concurrency value before writing the workflow. A blank
@@ -1065,7 +1071,7 @@ later.
 
 The installed Bash and PowerShell wrappers dispatch `--help`, `-h`, `--version`, `setup-local`,
 `new-board`, `import-board`, `list-workspaces`, `start`, `stop`, `status`, `logs`, `diagnostics`,
-`migrate-workflows`, `tutorial`, and unknown commands to this Java command boundary. The wrappers bootstrap paths, classpath, managed
+`migrate-workflows`, `tutorial`, `telemetry`, and unknown commands to this Java command boundary. The wrappers bootstrap paths, classpath, managed
 Codex/npm paths, dotenv defaults, config/workspace/state locations, and caller directory context;
 Java owns managed worker process selection, PID/log files, health checks, start/stop/status/logs,
 diagnostics behavior, and usage errors. Unknown commands MUST fail through Java command usage
@@ -1626,6 +1632,12 @@ as a checkout candidate instead of failing.
   file loaded for local runs instead of the project-root `.env`
 - `TRELLO_API_ENDPOINT`: implementation environment extension that names the endpoint the Trello
   key and token of the same source belong to, default `https://api.trello.com/1` (Section 6.1)
+- `SYMPHONY_TRELLO_TELEMETRY_DISABLED`: implementation environment extension that turns off
+  installation usage reporting and its counters for the inheriting process (Section 19.9)
+- `SYMPHONY_TRELLO_TELEMETRY_DEBUG`: implementation environment extension that switches the
+  inheriting process to local-only reporting; it cannot override a stored disable (Section 19.9)
+- `SYMPHONY_TRELLO_TELEMETRY_LOG`: implementation environment extension that logs actual report
+  requests and outcomes; it affects output only (Section 19.9)
 - `codex.turn_timeout_ms`: integer, default `3600000`; maximum silence interval while a turn runs,
   not a total runtime cap (Section 5.3.6)
 - `codex.read_timeout_ms`: integer, default `5000`
@@ -4501,6 +4513,118 @@ network access, or external service permissions are unavailable.
   probes MUST use run-scoped HOME and configuration paths. GitHub authentication MUST remain absent
   unless the GitHub sandbox integration was explicitly enabled.
 
+### 17.10 Installation Telemetry (Extension Conformance)
+
+These checks are REQUIRED only when the installation telemetry profile in Section 19.9 is shipped.
+
+- If installation telemetry is implemented, the serialized report contains exactly the allowlisted
+  envelope fields and properties of Section 19.9, in a stable order, with the fixed protocol flags,
+  and representative Windows, macOS, Linux, and unknown-platform fixtures serialize to the
+  documented vocabulary; `null` stays distinct from `0`, installed-version strings that are not a
+  plain release become `null`, and contaminated fixture inputs never appear in the output
+- If installation telemetry is implemented, `preview` prints the complete report body immediately,
+  before and after an identity exists, and performs no request, creates no identity, and changes no
+  schedule or preference
+- If installation telemetry is implemented, debug mode prints a preview immediately and again only
+  when a field other than the report ID or timestamp changes, including a new reporting-period
+  identity after erasure and resumption, sends nothing, and the environment
+  precedence rules of Section 19.9 hold for every combination of stored mode and override
+- If installation telemetry is implemented, disable, debug and log overrides resolve from the
+  selected dotenv file with non-blank process environment values taking precedence; setup honors
+  its explicit env path, and managed workers honor their configured dotenv path
+- If installation telemetry is implemented, the first successful import or create during setup is
+  counted before the first heartbeat; failed, cancelled, validation-only, and re-persisted
+  operations are not counted; repeated persistence of the same board is not counted twice;
+  disconnecting keeps the totals; and no counter accrues while reporting is disabled
+- If installation telemetry is implemented, the notice is shown before the first eligible operation,
+  the shared five-minute deadline starts once at the first ready worker and survives restarts,
+  concurrent first workers create one identity and one deadline, explicit `enable` needs no new
+  grace period, the disable environment variable is honored from unattended installation on, an
+  installer rerun leaves the stored preference untouched, and shutdown sends nothing
+- If installation telemetry is implemented, at most one report is accepted per active UTC day,
+  brief sessions report on eligible startup, the recurring check attempts promptly once the
+  deadline has passed, transient failures use
+  bounded backoff with a valid bounded `Retry-After`, a report pending across midnight is replaced
+  by a fresh observation, retries keep the report ID and timestamp, and no offline backlog exists
+- If installation telemetry is implemented, separate JVM processes create one identity, share one
+  daily claim and the counters, recover from a dead claim owner, ignore late completions after a
+  preference change, tolerate lock contention, refuse to report on invalid state, and preserve the
+  preference across upgrades
+- If installation telemetry is implemented, the interactive disable review accepts `yes`, `no`,
+  Enter, `privacy`, `y`, `n`, and `p`, defaults to No, repeats on invalid input, returns to the
+  question after `privacy`, leaves the preference unchanged on Enter, end of input, cancellation,
+  or a crash before confirmation, keeps a persisted disable across a later crash, does not
+  overwrite a concurrent preference change on cancellation and reports that change in its outcome,
+  succeeds without a review when already disabled, disables directly for non-interactive input and
+  `--yes`, reports overrides truthfully, stays disabled across restarts and checks beyond the grace
+  period, and `enable` resumes with the existing identity and counters
+- If installation telemetry is implemented, a confirmed disable discards pending work and blocks
+  later attempts, an in-flight request is described as not retractable, and a failed preference
+  write is reported as an error instead of success
+- If installation telemetry is implemented, transport tests cover acceptance, quota-limited
+  responses recorded as deferrals rather than acceptance, validation failures, transient errors,
+  header and body timeouts within one budget, bounded response reading, refused redirects, the
+  absence of leaked headers, credentials, and host metadata, a missing token, an invalid endpoint
+  override that leaves preference commands working, and no test contacts the production endpoint
+- If installation telemetry is implemented, platform normalization distinguishes Windows 10, 11,
+  and Server releases by build, macOS product releases from Darwin versions, fixed and rolling Linux
+  releases, and runtime architectures, and treats malformed local strings and detector failures as
+  unknown
+- If installation telemetry is implemented, the installed wrappers dispatch the `telemetry`
+  commands with documented help and exit codes on the supported platforms, the dashboard fixture
+  produces the documented results, the bundled privacy text is readable offline, and the field list
+  in the schema, the notice, and the privacy text stay synchronized by test
+
+Automated erasure is an activation-gated extension of the installed profile. The authorization-only
+PoC MUST NOT capture or delete events. The lifecycle runner MAY delete its own synthetic TEST data.
+Ordinary validation MUST remain offline. A live capability probe MUST require explicit opt-in,
+verify its test target against selected infrastructure state and live metadata, and record results
+without credentials. Local signature verification and authenticated test invocations MUST NOT be
+reported as successful public ingress, durable admission, or unattended erasure. The trial evidence
+and remaining gates are recorded in [native erasure verification](docs/telemetry-erasure-research.md#es256-and-jose-rejected).
+
+Offline contract checks MUST verify that acknowledgment retains empty-result flags. Maintainer
+cleanup tests MUST verify that delayed event counts retain and report flags with late events and
+archive only empty results whose fresh count remains zero.
+
+Before a future automated-erasure implementation is accepted, ownership verification MUST work
+when no enrollment event exists and when every event older than one year is unavailable. Public
+capture events and mutable person properties MUST NOT establish or replace erasure authority.
+Any required credential binding and operation state MUST have a lifetime independent of analytics
+retention and person deletion. Enrollment MUST recover from a lost request, a lost response and a
+client restart without allowing knowledge of an installation ID to recover or replace its secret.
+For a design requiring enrollment, the client MUST persist its credential and confirm durable
+enrollment before reporting under that identity. A lost acknowledgment MUST NOT strand reported
+data or permit a second owner to claim the identity. These are release gates. Production activation MUST remain off until hosted lifecycle verification passes.
+
+Prefer supported PostHog-native proof of possession without revealing the credential on each
+erasure request when it is simple to implement and maintain. Otherwise, within the same constraints,
+a fallback trial MAY use a per-installation bearer secret over HTTPS, with the public
+installation ID derived from a domain-separated SHA-256 hash of that secret. The client MUST
+generate 32 random bytes using a cryptographically secure generator and persist them before
+reporting. Routine analytics MUST contain only the derived ID. The erasure service MUST derive
+the target from the credential and MUST NOT accept caller-selected deletion scopes. Knowledge of
+the public ID alone MUST NOT authorize erasure. Missing or malformed credentials MUST NOT produce
+an unfiltered deletion. The service MUST remain entirely PostHog-hosted. Accepting this credential
+model does not waive the scoped-deletion, retry, retention or unattended-completion gates.
+Both designs MUST preserve ownership verification beyond the one-year analytics window without
+requiring periodic credential or public-key retransmission.
+
+The development-only [ownership PoC](docs/telemetry-erasure-research.md#ownership-proof-options) demonstrates public native
+HMAC and bearer authentication. HMAC is the selected ownership component for implementation.
+Its live runner MUST require explicit opt-in, verify the managed TEST binding, and create only
+authorization-only functions with no capture or deletion capability. It MUST record cleanup
+results. Its stateless verification and accepted concurrent replays MUST NOT be reported as durable
+job admission or completed erasure. Lost HMAC issuance responses MAY be abandoned before any client
+report uses that ID; the client MUST persist the replacement credential before reporting.
+
+Automated erasure validation MUST cover concurrent disable during issuance, atomic credential
+persistence, secret redaction, pending/accepted/complete/refused status, restart retries, prevention
+of enable before completion, stable installation identity after resumption and fresh reporting
+periods. Ordinary CI uses loopback endpoints. The hosted TEST lifecycle runner MUST record physical
+completion separately from acceptance, verify exact old-period event absence and unrelated canary
+survival, then repeat under a second period and replay the first request.
+
 ## 18. Implementation Checklist (Definition of Done)
 
 Use the same validation profiles as Section 17:
@@ -4585,6 +4709,8 @@ Required when the workflow expects the agent to perform Trello handoff transitio
 - Java repository quality gates follow Section 19.5 for this repository's maintained implementation.
 - The pre-handoff Codex review loop follows Section 19.7 unless a workflow sets its round limit to
   `0`.
+- Installation usage reporting follows Section 19.9 when this repository's installed copies report
+  daily heartbeats.
 - `trello_rest` client-side tool extension exposes scoped Trello REST access through the app-server
   session using configured Symphony auth.
 - `trello_rest` client-side tool extension disallows destructive operations by default.
@@ -5719,6 +5845,140 @@ Codex skill:
   `CODEX_HOME` or the user profile when the context has none.
 - Workspace skill installation (Section 19.1) MUST NOT copy this skill into card workspaces. A worker
   run handles its own card through the worker's Trello tools.
+
+### 19.9 Installation Telemetry Profile (OPTIONAL)
+
+This Java repository ships optional installation usage reporting so the maintainer can see how many
+installations report, which releases and platforms are in use, and whether the board import and
+create flows are used. It is not a runtime conformance requirement for other implementations.
+
+When this profile is used:
+
+- reporting is enabled by default for installed copies and MUST be persistently switched off by
+  `telemetry disable`; the choice MUST survive updates and restarts
+- there MUST be exactly one event type, `installation_heartbeat`, delivered as one HTTPS `POST` to
+  the dedicated PostHog EU project endpoint with the body fields `api_key`, `event`, `distinct_id`,
+  `uuid`, and `timestamp`, and a `properties` object containing exactly
+  `telemetry_schema_version`, `registered_on`, `app_version`, `os_family`, `os_release`,
+  `linux_distribution`, `runtime_arch`, `connected_board_count`, `board_imports_total`,
+  `board_creations_total`, `$geoip_disable`, and `$process_person_profile`. No other event type,
+  property, SDK metadata, identifier, name, path, credential, prompt, or error text MAY be sent, in
+  plain or hashed form
+- when automated erasure is configured, `distinct_id` MUST contain an issuer-selected random
+  installation UUID, a dot, and a locally generated random reporting-period UUID. The client MUST
+  persist its ownership credential before the first heartbeat. Lost issuance responses MAY be
+  abandoned before reporting. Unconfigured and pre-existing installations retain the original
+  locally generated UUID profile. Neither identity MAY be derived from hardware, hostname,
+  user name, machine identifiers, or Trello identity. Workers MUST share the stored identity.
+  Help, status, privacy, preview and disabled runs MUST NOT create an identity
+- `registered_on` MUST be the UTC date the identity was created and MUST be repeated in every
+  report. `app_version` MUST come from the installer's `install-context.properties` in the state
+  home and MUST be `null` when that value is not a plain release. `connected_board_count` MUST be
+  the number of distinct boards in a readable manifest and `null` otherwise. The counters MUST
+  count only successful import or create operations that register a board that was not connected
+  before, MUST be frozen while reporting is disabled, and MUST NOT decrease on disconnect
+- `os_family` MUST be one of `windows`, `macos`, `linux`, `other`, `unknown`; `os_release` MUST be
+  a coarse product release (`10`, `11`, `server_YYYY`; the macOS major release; a support-relevant
+  Linux release or `rolling`) or `unknown`; `linux_distribution` MUST be an allowlisted ID,
+  `other`, or `unknown` on Linux and `null` elsewhere; `runtime_arch` MUST be `x64`, `arm64`,
+  `x86`, `other`, or `unknown`. Detection failures MUST degrade to `unknown` and MUST NOT affect
+  startup
+- a short notice MUST be printed during guided setup, before a direct `new-board` or `import-board`
+  operation, and by the first ready worker; the shared five-minute first-report deadline MUST start
+  once at the first ready worker, MUST be persisted, and MUST NOT be reset by later restarts. No
+  report MAY be sent before that deadline. `telemetry enable` MUST print the notice, MUST remove
+  the need for a new grace period, and MUST NOT send anything itself
+- workers MUST check on readiness and about once per minute, MUST accept at most one report per
+  active UTC calendar day for the installation, MUST keep at most one immutable pending report
+  whose UUID, timestamp, and properties are reused on retries, MUST retry transient failures with
+  bounded backoff and honor a bounded `Retry-After`, MUST NOT retry permanent failures or
+  quota-limited responses before the next UTC day, MUST record only a documented success response
+  as an accepted report, MUST bound every delivery attempt in time and response size including the
+  response body, MUST keep at most one delivery attempt in flight per worker, MUST replace a
+  pending report from an earlier UTC day with a fresh observation, MUST NOT send a second report
+  for a day already covered when the clock moves backwards, and MUST NOT send at shutdown, backfill
+  missed days, or run a process only for reporting
+- state MUST live in `telemetry.json` next to a stable `telemetry.lock` in the state home. Changes
+  MUST be short transactions under an OS file lock plus a same-process lock, followed by atomic
+  replacement. The lock MUST NOT be held across a network request or a console prompt. A report
+  MUST be claimed with an expiring owner entry carrying a per-attempt token, sent asynchronously,
+  and recorded only when the claim, its attempt token, and the preference revision still match.
+  Claiming a report MUST persist its UTC dispatch date separately from pending work. That date
+  MUST survive preference changes so an in-flight success cannot be followed by a new report for
+  the same day after disabling and re-enabling. Retries of the same pending event remain allowed.
+  Waiting for either lock MUST share one bounded time budget. Unreadable, corrupt, newer-format, or
+  inconsistent state (an id without a registration date, negative counters, a claim without its
+  pending report, or a pending report outside the field contract) MUST turn reporting off without
+  regenerating an identity or re-enabling reporting, and MUST leave the file untouched. The
+  `$geoip_disable` and `$process_person_profile` flags are not stored state: reading a pending
+  report MUST ignore them, and every sent body MUST set both to `true`
+- `SYMPHONY_TRELLO_TELEMETRY_DISABLED` MUST turn off reporting and counting for the inheriting
+  process and MUST NOT be defeated by `telemetry enable`; `SYMPHONY_TRELLO_TELEMETRY_DEBUG` MUST
+  switch the inheriting process to local-only mode and MUST NOT override a stored disable;
+  `SYMPHONY_TRELLO_TELEMETRY_LOG` MUST affect output only. `status` MUST show both the stored and
+  the effective mode when they differ. `enable`, `disable`, and `debug` MUST change nothing outside
+  an installed context, and `debug` MUST refuse to replace a stored disable
+- `preview` MUST print the complete pretty-printed body built by the same serializer as transmission
+  and MUST NOT send, create an identity, or change any preference, counter, or deadline. `debug` MUST
+  persistently switch the installation to local-only mode and print a preview; debug workers MUST
+  print a preview at startup and on a meaningful change, and MUST NOT send or queue anything
+- in an interactive terminal, `disable` without `--yes` MUST show the complete report body and ask
+  `Disable telemetry? [yes/No/privacy]`, accepting full words and `y`, `n`, `p`. Enter, `no`, end
+  of input, and any exit before confirmation MUST leave the stored preference unchanged; `privacy`
+  MUST print the bundled text and return to the same question without a change; `yes` MUST
+  atomically store the disabled mode, increment the preference revision, and discard pending work.
+  Non-interactive input and `--yes` MUST disable directly. An already disabled installation MUST
+  succeed without a review. A failed write MUST be reported as an error. The outcome printed after
+  No or cancellation MUST describe the mode that applies at that moment, including a concurrent
+  change or an environment override
+- the application MUST preserve the installation ID, registration date and counters across disable
+  and enable. Ordinary disable/enable MUST preserve the reporting period. `telemetry erase` MUST
+  persistently disable reporting and save the erasure operation before network IO. It MUST wait for
+  a dispatched heartbeat's drain deadline plus one hour for provider ingestion before its first
+  profile lookup. Disable MUST preserve that deadline. A delayed delivery MUST NOT start without
+  enough remaining time for its bounded transport attempt. The ownership HMAC MUST bind action,
+  audience, installation, reporting period, operation and a bounded validity window. Known
+  installation IDs, capture events and mutable person properties MUST NOT authorize erasure.
+- `telemetry erase-status` and existing workers MUST retry pending requests with the same period and
+  operation. Workers MUST space these retries by half the time since the request, at least one
+  minute and at most six hours; `erase-status` MAY check at once after that wait. Failed credential
+  issuance MUST use the heartbeat retry backoff. A webhook receipt MUST NOT mean accepted or
+  complete. Acceptance requires a matching provider deletion record. Status retries MUST recover an
+  outstanding profile deletion when event deletion was queued but profile deletion failed.
+  Completion requires provider-verified event deletion and profile absence, or a fresh uncached
+  query proving no retained events when no profile exists. A period that never dispatched a
+  heartbeat MAY complete locally without contacting the service, and `telemetry erase` before any
+  identity exists MUST disable reporting and succeed without a request. Missing, invalid or
+  unavailable status MUST preserve the disabled state. Once complete or refused, explicit `telemetry
+  enable` MUST create a new reporting period with the same installation credential; a refused
+  period's data remains for maintainer-assisted erasure. The erased distinct ID MUST NOT be reused
+  by that state. Existing credentials remain valid independently of event retention. Multi-ID
+  persons MUST be refused. The merge filter and pre-delete check mitigate, but do not eliminate, the
+  accepted merge race.
+- server status MUST use HMAC-derived opaque feature flag keys and management-only writes. Public
+  flag evaluation MUST expose no credential or installation ID. Private metadata MUST bind the
+  target person UUID before deletion. An empty result's private name MUST carry its analytics ID so
+  cleanup can count its events again. Acknowledgment MUST retain empty-result flags until the
+  maintainer's delayed fresh count finds no events. A `status` request whose flag is missing MUST
+  recreate the result as `erase` does, so archiving a settled flag never strands a client. Maintainer tooling
+  MUST archive only empty or complete results and MUST report late events, refused and stale
+  operations. After saving completion, the client SHOULD request flag cleanup; failed cleanup
+  retains the flag for an operator to archive after verification. Flag and API quotas MUST fail
+  without authorizing additional deletion. Local state backups MUST be protected as credentials.
+  Restoring one taken before erasure is unsupported: the client cannot detect it and would report
+  under the erased ID again, so it needs maintainer-assisted erasure.
+- legacy installations without credentials MUST use maintainer-assisted erasure. The public issuer
+  MUST NOT claim their existing IDs. No disabled period is backfilled and no discarded report is
+  replayed. Production deployment and release configuration MUST remain off until two successive
+  reporting-period erasures, lost-response retries and an unrelated canary pass hosted checks.
+  OpenTofu MUST refuse production activation without a lifecycle pass for the exact handler
+  template, and packaging MUST refuse an erasure audience for any project other than the committed
+  production project.
+- reports MAY leave the machine only when the state home contains the installer-written
+  `install-context.properties` and the build carries a configured project token. Source
+  checkouts, tests, CI, and development runs MUST NOT send production telemetry, and tests MUST use
+  a local endpoint
+- telemetry failures MUST NOT fail setup, worker startup, or any Trello or Codex operation
 
 ## Appendix A. SSH Worker Extension (OPTIONAL)
 

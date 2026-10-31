@@ -1,0 +1,210 @@
+package ch.fmartin.symphony.trello.telemetry;
+
+import ch.fmartin.symphony.trello.telemetry.TelemetryErasureClient.Action;
+import ch.fmartin.symphony.trello.telemetry.TelemetryOwnership.Erasure;
+import ch.fmartin.symphony.trello.telemetry.TelemetryOwnership.Phase;
+import ch.fmartin.symphony.trello.telemetry.TelemetryStateStore.Update;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.function.Predicate;
+import org.jspecify.annotations.Nullable;
+
+/// Coordinates local durable state and the native service without holding a state lock during IO.
+final class TelemetryErasure {
+    // Provider deletion can take days. Waiting half the time since the request grows the interval
+    // geometrically without persisting an attempt count, and the ceiling keeps status reasonably fresh.
+    static final Duration RETRY_FLOOR = Duration.ofMinutes(1);
+    static final Duration RETRY_CEILING = Duration.ofHours(6);
+    private static final int RETRY_DIVISOR = 2;
+
+    private final TelemetryInstallation installation;
+    private final Clock clock;
+
+    TelemetryErasure(TelemetryInstallation installation, Clock clock) {
+        this.installation = installation;
+        this.clock = clock;
+    }
+
+    /// Outcome of an erase request that did not fail.
+    enum Request {
+        /// No report ever left this installation, so there is nothing to erase.
+        NOTHING_SENT,
+        /// The operation is saved and the service was contacted if it was due.
+        SUBMITTED
+    }
+
+    boolean needsMaintenance(TelemetryState state) {
+        if (installation.distribution().erasure().isEmpty()) {
+            return false;
+        }
+        Erasure job = state.erasure();
+        if (job != null) {
+            return job.phase().inProgress() && !job.notBefore().isAfter(clock.instant());
+        }
+        return !state.hasIdentity() && installation.effective(state.mode()).sendsReports();
+    }
+
+    /// Background retry by workers, bounded by the stored retry time.
+    void maintain(TelemetryStateStore store) {
+        run(store, this::needsMaintenance);
+    }
+
+    /// Status check a person asked for. It skips the background backoff but still waits until a
+    /// dispatched heartbeat has settled.
+    void refresh(TelemetryStateStore store) {
+        run(store, this::refreshDue);
+    }
+
+    private boolean refreshDue(TelemetryState state) {
+        Erasure job = state.erasure();
+        TelemetryOwnership ownership = state.ownership();
+        return job != null && ownership != null && job.phase().inProgress() && ownership.settled(clock.instant());
+    }
+
+    private void run(TelemetryStateStore store, Predicate<TelemetryState> due) {
+        installation.distribution().erasure().ifPresent(endpoint -> run(store, endpoint, due));
+    }
+
+    private void run(TelemetryStateStore store, TelemetryErasureEndpoint endpoint, Predicate<TelemetryState> due) {
+        try (var client = new TelemetryErasureClient(endpoint, installation.distribution())) {
+            run(store, client, due);
+        }
+    }
+
+    private void run(TelemetryStateStore store, TelemetryErasureClient client, Predicate<TelemetryState> due) {
+        TelemetryState state = readable(store);
+        if (!due.test(state)) {
+            return;
+        }
+        if (!state.hasIdentity()) {
+            TelemetryCredential credential = client.issue();
+            store.update(current -> adoptCredential(current, state, credential));
+            return;
+        }
+        TelemetryOwnership ownership = Objects.requireNonNull(state.ownership());
+        Erasure job = Objects.requireNonNull(ownership.erasure());
+        // Reserve the next attempt before IO. A failed or interrupted process cannot spin on every tick.
+        Erasure attempt = job.next(job.phase(), retryAt(job));
+        if (!replace(store, ownership, job, attempt)) {
+            return;
+        }
+        client.request(
+                attempt.phase() == Phase.REQUESTED ? Action.ERASE : Action.STATUS, ownership, attempt, clock.instant());
+        Phase phase = client.status(ownership).orElse(attempt.phase());
+        boolean saved = replace(store, ownership, attempt, attempt.next(phase, retryAt(attempt)));
+        if (saved && phase == Phase.COMPLETE) {
+            // Completion is already durable, so a lost acknowledgment is not retried. The operator
+            // archives a status flag that stays behind.
+            client.acknowledge(ownership, attempt, clock.instant());
+        }
+    }
+
+    /// Adopts the issued credential unless the state moved on while the issuer was called: an
+    /// identity that appeared meanwhile, a changed preference, or reporting turned off.
+    private Update<@Nullable Void> adoptCredential(
+            TelemetryState current, TelemetryState observed, TelemetryCredential credential) {
+        if (current.hasIdentity()
+                || current.preferenceRevision() != observed.preferenceRevision()
+                || !installation.effective(current.mode()).sendsReports()) {
+            return Update.unchanged(null);
+        }
+        return Update.write(
+                current.withIdentity(credential.installationId(), LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC))
+                        .withOwnership(TelemetryOwnership.issued(credential)),
+                null);
+    }
+
+    /// @throws NotDisabledException when the disabled preference could not be written
+    Request request(TelemetryStateStore store) {
+        OwnershipCase ownershipCase;
+        try {
+            ownershipCase = store.update(this::disableAndRequestTransaction);
+        } catch (TelemetryStateException exception) {
+            throw new NotDisabledException(exception);
+        }
+        return switch (ownershipCase) {
+            case LEGACY ->
+                throw new TelemetryStateException(
+                        "reporting is off; this installation has no ownership credential; use maintainer-assisted erasure");
+            case NOTHING_SENT -> Request.NOTHING_SENT;
+            case OWNED -> {
+                maintain(store);
+                yield Request.SUBMITTED;
+            }
+        };
+    }
+
+    /// The erase request could not store the disabled preference, so the previous preference,
+    /// possibly enabled, still applies. The cause carries the state-store problem.
+    static final class NotDisabledException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
+        NotDisabledException(TelemetryStateException cause) {
+            super(cause.getMessage(), cause);
+        }
+    }
+
+    /// What the installation can prove about its reports when erasure is requested.
+    private enum OwnershipCase {
+        LEGACY,
+        NOTHING_SENT,
+        OWNED
+    }
+
+    static TelemetryState readable(TelemetryStateStore store) {
+        TelemetryStateStore.StateRead read = store.read();
+        if (read instanceof TelemetryStateStore.StateRead.Unreadable) {
+            throw new TelemetryStateException("telemetry state is unreadable; reporting remains off");
+        }
+        return read.stateOrInitial();
+    }
+
+    private Instant retryAt(Erasure job) {
+        Instant now = clock.instant();
+        Duration waited = Duration.between(job.requestedAt(), now).dividedBy(RETRY_DIVISOR);
+        Duration delay = waited.compareTo(RETRY_FLOOR) < 0
+                ? RETRY_FLOOR
+                : waited.compareTo(RETRY_CEILING) > 0 ? RETRY_CEILING : waited;
+        return now.plus(delay);
+    }
+
+    /// Stores the disabled preference and, for an owned period, the deletion request itself.
+    private Update<OwnershipCase> disableAndRequestTransaction(TelemetryState state) {
+        TelemetryOwnership owner = state.ownership();
+        TelemetryState disabled = state.withMode(TelemetryMode.DISABLED);
+        if (owner == null) {
+            return Update.write(disabled, state.hasIdentity() ? OwnershipCase.LEGACY : OwnershipCase.NOTHING_SENT);
+        }
+        if (owner.erasure() != null) {
+            return Update.write(disabled, OwnershipCase.OWNED);
+        }
+        Instant now = clock.instant();
+        // Let a dispatched heartbeat finish its transport and ingestion before looking up its profile.
+        Instant notBefore = owner.settledAt(now);
+        Phase phase = owner.used() ? Phase.REQUESTED : Phase.COMPLETE;
+        var job = new Erasure(UUID.randomUUID(), now, notBefore, phase);
+        return Update.write(disabled.withOwnership(owner.withErasure(job)), OwnershipCase.OWNED);
+    }
+
+    private static boolean replace(
+            TelemetryStateStore store, TelemetryOwnership owner, Erasure expected, Erasure next) {
+        return store.update(state -> replaceTransaction(state, owner, expected, next));
+    }
+
+    /// Replaces the erasure job only while the period and the job the caller saw are still current.
+    private static Update<Boolean> replaceTransaction(
+            TelemetryState state, TelemetryOwnership owner, Erasure expected, Erasure next) {
+        TelemetryOwnership current = state.ownership();
+        if (current == null
+                || !current.period().equals(owner.period())
+                || !Objects.equals(current.erasure(), expected)) {
+            return Update.unchanged(false);
+        }
+        return Update.write(state.withOwnership(current.withErasure(next)), true);
+    }
+}

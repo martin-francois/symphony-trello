@@ -34,6 +34,8 @@ final class LocalWorkerManager {
     /// How long stop waits for a worker to exit after KILL before it reports the stop as failed.
     static final Duration WORKER_KILL_WAIT = Duration.ofSeconds(5);
 
+    static final String ENABLE_NATIVE_ACCESS_FLAG = "--enable-native-access=ALL-UNNAMED";
+
     private final Map<String, String> environment;
     private final WorkflowConfigEditor workflowConfig;
     private final LocalHealthChecker healthChecker;
@@ -391,6 +393,9 @@ final class LocalWorkerManager {
 
         List<String> command = List.of(
                 javaExecutable(),
+                // Telemetry platform detection uses the Foreign Function and Memory API; without this
+                // flag the JDK prints a restricted-method warning into the worker log.
+                ENABLE_NATIVE_ACCESS_FLAG,
                 "-Dsymphony.trello.managed.app_home=" + paths.appHome(),
                 "-jar",
                 paths.appHome().resolve("target/quarkus-app/quarkus-run.jar").toString(),

@@ -4,6 +4,8 @@ import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.GitHubIntegration;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.ImportBoardRequest;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.NewBoardRequest;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.WorkspaceListRequest;
+import ch.fmartin.symphony.trello.telemetry.BoardOperation;
+import ch.fmartin.symphony.trello.telemetry.TelemetryService;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
@@ -12,6 +14,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 final class TrelloBoardSetupService {
@@ -137,9 +140,13 @@ final class TrelloBoardSetupService {
             PrintStream out)
             throws IOException {
         persistConnectedBoard(
-                ConnectedBoard.from(result, envPath, workspaceRoot, githubIntegration), manifestPath, out);
-        GeneratedWorkflowStore.recordGenerated(manifestPath, result.workflowPath(), result.bodyInputs())
-                .ifPresent(out::println);
+                ConnectedBoard.from(result, envPath, workspaceRoot, githubIntegration),
+                result.workflowPath(),
+                result.bodyInputs(),
+                manifestPath,
+                workspaceRoot,
+                out,
+                BoardOperation.CREATE);
     }
 
     void persistConnectedBoard(
@@ -151,9 +158,47 @@ final class TrelloBoardSetupService {
             PrintStream out)
             throws IOException {
         persistConnectedBoard(
-                ConnectedBoard.from(result, envPath, workspaceRoot, githubIntegration), manifestPath, out);
-        GeneratedWorkflowStore.recordGenerated(manifestPath, result.workflowPath(), result.bodyInputs())
+                ConnectedBoard.from(result, envPath, workspaceRoot, githubIntegration),
+                result.workflowPath(),
+                result.bodyInputs(),
+                manifestPath,
+                workspaceRoot,
+                out,
+                BoardOperation.IMPORT);
+    }
+
+    /// Counts the operation only for a board that was not connected before.
+    private void persistConnectedBoard(
+            ConnectedBoard board,
+            Path workflowPath,
+            GeneratedWorkflowBodyInputs bodyInputs,
+            Path manifestPath,
+            Path workspaceRoot,
+            PrintStream out,
+            BoardOperation operation)
+            throws IOException {
+        ConnectedBoardManifest.Registration registration = persistConnectedBoard(board, manifestPath, out);
+        GeneratedWorkflowStore.recordGenerated(manifestPath, workflowPath, bodyInputs)
                 .ifPresent(out::println);
+        registration.count(telemetry(manifestPath, workspaceRoot, board.envPath()), operation);
+    }
+
+    /// Prints the one-time usage-reporting notice and registers the installation before a board
+    /// operation, so the operation's success can be counted.
+    void prepareTelemetry(Path manifestPath, Path workspaceRoot, Path envPath, PrintStream out) {
+        telemetry(manifestPath, workspaceRoot, envPath).prepareForSetup(out);
+    }
+
+    TelemetryService telemetry(LocalWorkerPaths paths) {
+        return TelemetryInstallations.service(paths, environment);
+    }
+
+    private TelemetryService telemetry(Path manifestPath, Path workspaceRoot, Path envPath) {
+        return TelemetryInstallations.service(
+                localWorkerPaths(manifestPath, workspaceRoot),
+                manifestPath.toAbsolutePath().normalize(),
+                envPath,
+                environment);
     }
 
     Map<String, String> environment() {
@@ -164,18 +209,20 @@ final class TrelloBoardSetupService {
         printWorkspaces(out, setup.listWorkspaces(request));
     }
 
-    private void persistConnectedBoard(ConnectedBoard board, Path manifestPath, PrintStream out) throws IOException {
+    private ConnectedBoardManifest.Registration persistConnectedBoard(
+            ConnectedBoard board, Path manifestPath, PrintStream out) throws IOException {
         boolean restartReplacedWorker;
+        ConnectedBoardManifest.Registration registration;
         var boards = new ConnectedBoardRepository(manifestPath);
         try {
-            ConnectedBoardManifest manifest = boards.loadForLifecycle();
-            List<ConnectedBoard> replacedBoards = manifest.boardsReplacedBy(board);
+            registration = boards.loadForLifecycle().register(board);
+            List<ConnectedBoard> replacedBoards = registration.replacedBoards();
             restartReplacedWorker = replacedBoards.stream()
                     .anyMatch(replacedBoard -> canStopRunningWorker(manifestPath, replacedBoard));
             stopReplacedBoards(manifestPath, board.workspaceRoot(), replacedBoards);
             workerManager.rotateLogsForReplacedBoards(
                     localWorkerPaths(manifestPath, board.workspaceRoot()), board, replacedBoards);
-            boards.save(manifest.withBoard(board));
+            boards.save(registration.manifest());
         } catch (IOException exception) {
             throw SetupFailureCauses.setupFailure(
                     "setup_manifest_write_failed",
@@ -185,6 +232,7 @@ final class TrelloBoardSetupService {
         if (restartReplacedWorker) {
             restartUpdatedBoardWorker(board, manifestPath, out);
         }
+        return registration;
     }
 
     private void restartUpdatedBoardWorker(ConnectedBoard board, Path manifestPath, PrintStream out) {
@@ -240,13 +288,9 @@ final class TrelloBoardSetupService {
     }
 
     private LocalWorkerPaths localWorkerPaths(Path manifestPath, Path workspaceRoot) {
-        Path configDir = manifestPath.toAbsolutePath().normalize().getParent();
-        return LocalWorkerPaths.from(
-                Optional.empty(),
-                Optional.ofNullable(configDir),
-                Optional.of(workspaceRoot),
-                Optional.empty(),
-                environment);
+        Path configDir = Objects.requireNonNullElseGet(
+                manifestPath.toAbsolutePath().normalize().getParent(), () -> Path.of("."));
+        return LocalWorkerPaths.fromSetup(configDir, workspaceRoot, environment);
     }
 
     private TrelloBoardSetup setup(TrelloBoardSetupMain.BoardSetupOptions options) {
