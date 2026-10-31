@@ -7,6 +7,7 @@ import test from "node:test";
 import {fileURLToPath} from "node:url";
 import {VIDEO_RELATIVE_PATH} from "./readme-demo-manifest.ts";
 import {
+  attachmentVerdictOf,
   classifyTileSimilarity,
   compareRenderWithBaseline,
   compareWithBaselineVideo,
@@ -21,6 +22,8 @@ import {
   ssimTiles,
   type Tile,
   type VideoShape,
+  VERDICT_LINE_PREFIX,
+  verdictLineOf,
   type VisualComparison,
   writeBaselineVideo,
 } from "./readme-demo-visual-change.ts";
@@ -175,6 +178,30 @@ test("only an unchanged comparison keeps the existing README attachment", () => 
       `the ${kind} message must state the verdict the guide quotes: ${message}`,
     );
   }
+});
+
+test("a log's verdict reads back from the line the comparison printed", () => {
+  // given
+  const lowest = {frame: 1, tile: TILE, ssim: 1};
+  const keepLine = describeVisualComparison({kind: "no visible change", lowest});
+  const reuploadLine = describeVisualComparison({kind: "visible change", lowest});
+  const logs = [
+    `Comparing the new video\n${keepLine}\nDone.\n`,
+    `${reuploadLine}\n${keepLine}\n`,
+    "Done.\n",
+    `${VERDICT_LINE_PREFIX}something else\n`,
+  ];
+
+  // when
+  const read = logs.map((log) => ({verdict: attachmentVerdictOf(log), line: verdictLineOf(log)}));
+
+  // then
+  assert.deepEqual(read, [
+    {verdict: "keep", line: keepLine},
+    {verdict: "re-upload", line: reuploadLine},
+    {verdict: undefined, line: undefined},
+    {verdict: undefined, line: `${VERDICT_LINE_PREFIX}something else`},
+  ]);
 });
 
 /** A repository whose first commit has `firstVideo` and whose HEAD has `headVideo`. */

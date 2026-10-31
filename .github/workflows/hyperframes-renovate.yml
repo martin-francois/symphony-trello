@@ -1,0 +1,85 @@
+name: HyperFrames Renovate automation
+
+# Renders the README demo with the HyperFrames version a Renovate pull request proposes and
+# compares it with the README video attachment, the video README readers see. No visible change:
+# the check passes and nothing is committed. A visible change: the check fails, and the report job
+# labels and comments what the owner has to do. See docs/adr/0149-check-hyperframes-updates-by-rendering-in-ci.md.
+
+on:
+  pull_request:
+
+permissions: read-all
+
+jobs:
+  readme-demo-render:
+    if: >-
+      ${{
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        github.event.pull_request.user.login == 'renovate[bot]' &&
+        startsWith(github.head_ref, 'renovate/hyperframes')
+      }}
+    concurrency:
+      # A newer Renovate push makes the running render obsolete.
+      group: hyperframes-renovate-render-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    runs-on: ubuntu-26.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    outputs:
+      detail: ${{ steps.render.outputs.detail }}
+      verdict: ${{ steps.render.outputs.verdict }}
+      version: ${{ steps.render.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The merge commit and both parents: the script reads main's README and video from the first parent.
+          fetch-depth: 2
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Render the README demo and compare it with the README video attachment
+        id: render
+        run: scripts/render-hyperframes-update
+
+  report:
+    needs: readme-demo-render
+    if: >-
+      ${{
+        always() &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        github.event.pull_request.user.login == 'renovate[bot]' &&
+        startsWith(github.head_ref, 'renovate/hyperframes') &&
+        (needs.readme-demo-render.result == 'success' || needs.readme-demo-render.result == 'failure')
+      }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Check out the report script from the base commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The base branch's script, so nothing from the pull request runs with the write grant.
+          ref: ${{ github.event.pull_request.base.sha }}
+          sparse-checkout: scripts/report-hyperframes-render
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Label and comment the verdict
+        env:
+          DETAIL: ${{ needs.readme-demo-render.outputs.detail }}
+          GH_TOKEN: ${{ github.token }}
+          HYPERFRAMES_VERSION: ${{ needs.readme-demo-render.outputs.version }}
+          OUTCOME: ${{ needs.readme-demo-render.outputs.verdict || 'failed' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SOURCE_PULL_REQUEST: ${{ github.event.pull_request.number }}
+        run: scripts/report-hyperframes-render

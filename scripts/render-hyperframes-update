@@ -1,0 +1,170 @@
+#!/bin/bash
+# The readme-demo-render job in .github/workflows/hyperframes-renovate.yml.
+#
+# Renders the README demo with the HyperFrames version the checkout pins and decides whether the
+# README's video attachment can stay. The checkout is the pull request's merge commit, so HEAD^1
+# is main. The baseline is the attachment README.md embeds, the video README readers see; it can be
+# an older render than the video committed on main (ADR 0149).
+#
+# The embed is checked first, on every run: README.md on main and on the pull request must each
+# hold a user-attachments URL on the first non-blank line after the readme-demo-video marker. When
+# the pull request changes that URL, main's URL must be gone from README.md and the new attachment
+# must be the committed video byte for byte; that attachment is then the baseline.
+#
+# - Pull request media equal to main's (the usual Renovate update): compare the render with the
+#   attachment. No visible change passes; a visible change fails and points to the guide.
+# - Pull request media that differ from main's (a person committed a render): the CI render must
+#   reproduce the committed video, and the committed video must look the same as the attachment,
+#   so a visible change passes only once the person uploaded the committed video.
+#
+# Any other missing part fails the check and is named. Nothing is committed either way; the
+# manifest records the version the committed media were rendered with, so a newer version alone
+# does not make them stale.
+
+set -euo pipefail
+
+pin="scripts/readme-demo-hyperframes.ts"
+video="docs/assets/demo.mp4"
+embed="$(dirname "${BASH_SOURCE[0]}")/readme-demo-embed"
+embed_marker="$("$embed" --marker)"
+guide='follow "What needs a person" under "Updating HyperFrames" in docs/demo/README.md'
+
+version="$(sed -n -E 's/^export const HYPERFRAMES_VERSION = "([0-9]+\.[0-9]+\.[0-9]+)";$/\1/p' "$pin")"
+if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "$pin must contain exactly one HyperFrames version line" >&2
+  exit 1
+fi
+echo "version=$version" >>"$GITHUB_OUTPUT"
+echo "verdict=failed" >>"$GITHUB_OUTPUT"
+
+# GitHub refuses larger video attachments and the render keeps demo.mp4 below this limit, so a
+# larger download can never be the committed video.
+attachment_limit="$(node scripts/readme-demo-values.ts attachment-limit-bytes)"
+
+# Downloads an attachment URL to a file. On failure prints the end of "the attachment at <url> ..."
+# and returns 1. The URL redirects to a signed S3 URL, so the redirect must stay on HTTPS too.
+download() {
+  local status=0
+  curl --fail --silent --show-error --location --proto =https --proto-redir =https \
+    --max-filesize "$attachment_limit" --max-time 120 --output "$2" "$1" || status=$?
+  case "$status" in
+  0) return 0 ;;
+  63) echo "is larger than GitHub's $attachment_limit-byte video attachment limit" ;;
+  *) echo "could not be downloaded (curl exit $status)" ;;
+  esac
+  return 1
+}
+
+main_readme="$RUNNER_TEMP/readme-main.md"
+head_readme="$RUNNER_TEMP/readme-head.md"
+committed_video="$RUNNER_TEMP/readme-demo-committed.mp4"
+git show "HEAD^1:README.md" >"$main_readme"
+git show "HEAD:README.md" >"$head_readme"
+git show "HEAD:$video" >"$committed_video"
+
+if ! main_embed="$("$embed" "$main_readme")"; then
+  cat >&2 <<MESSAGE
+README.md on main has no user-attachments URL on the first non-blank line after the
+$embed_marker marker${main_embed:+ (found: $main_embed)}, so this check cannot tell which video
+README readers see. Restore the marker and the attachment URL on main, then rerun this check.
+MESSAGE
+  exit 1
+fi
+
+missing=()
+baseline_url="$main_embed"
+attachment="$RUNNER_TEMP/readme-demo-attachment.mp4"
+head_status=0
+head_embed="$("$embed" "$head_readme")" || head_status=$?
+if ((head_status == 1)); then
+  missing+=("README.md has no $embed_marker marker followed by the demo embed")
+elif ((head_status != 0)); then
+  missing+=("README.md's demo embed after the $embed_marker marker is not a user-attachments URL: $head_embed")
+elif [[ "$head_embed" != "$main_embed" ]]; then
+  if grep -q -F -- "$main_embed" "$head_readme"; then
+    missing+=("README.md still mentions main's attachment URL $main_embed outside the demo embed")
+  fi
+  if ! problem="$(download "$head_embed" "$attachment")"; then
+    missing+=("the attachment at $head_embed $problem")
+  elif ! cmp -s "$attachment" "$committed_video"; then
+    missing+=("the attachment at $head_embed is not the committed $video byte for byte")
+  else
+    baseline_url="$head_embed"
+  fi
+fi
+if [[ "$baseline_url" == "$main_embed" ]] && ! problem="$(download "$main_embed" "$attachment")"; then
+  echo "The README attachment at $main_embed, which the render is compared with, $problem" >&2
+  exit 1
+fi
+echo "Baseline: the README attachment at $baseline_url"
+
+main_video="$(git rev-parse --verify --quiet "HEAD^1:$video" || true)"
+head_video="$(git rev-parse --verify --quiet "HEAD:$video" || true)"
+if [[ "$head_video" == "$main_video" ]]; then
+  commits_render=false
+  # The render below writes its video here.
+  compared="$video"
+  echo "The pull request keeps main's demo video; the render is compared with the README attachment."
+else
+  commits_render=true
+  compared="$committed_video"
+  echo "The pull request commits its own demo video; the render must reproduce it, and the committed video is compared with the README attachment."
+fi
+
+# The render compares its video with the one committed in HEAD; only a committed render needs that.
+render_log="$RUNNER_TEMP/readme-demo-render.log"
+node scripts/render-readme-demo.ts --compare-with HEAD 2>&1 | tee "$render_log"
+rendered="$(node scripts/readme-demo-values.ts verdict "$render_log")"
+if [[ "$rendered" == "none" ]]; then
+  echo "The render printed no README video verdict" >&2
+  exit 1
+fi
+if [[ "$commits_render" == true && "$rendered" != "keep" ]]; then
+  missing+=("the CI render does not reproduce the committed $video ($(node scripts/readme-demo-values.ts verdict-line "$render_log"))")
+fi
+
+comparison_log="$RUNNER_TEMP/readme-demo-attachment-comparison.log"
+node scripts/readme-demo-compare-videos.ts "$attachment" "$compared" 2>&1 | tee "$comparison_log"
+visual="$(node scripts/readme-demo-values.ts verdict "$comparison_log")"
+if [[ "$visual" == "none" ]]; then
+  echo "The comparison with the README attachment printed no README video verdict" >&2
+  exit 1
+fi
+visual_line="$(node scripts/readme-demo-values.ts verdict-line "$comparison_log")"
+
+if [[ "$commits_render" == false && "$visual" == "re-upload" ]]; then
+  also=""
+  if ((${#missing[@]} > 0)); then
+    also="$(printf -- '- %s\n' "${missing[@]}")"
+    also=$'\nAlso missing:\n'"$also"
+  fi
+  echo "verdict=re-upload" >>"$GITHUB_OUTPUT"
+  cat >&2 <<MESSAGE
+HyperFrames $version renders the README demo with a visible change against the README attachment
+at $baseline_url, the video README readers see:
+$visual_line$also
+
+This update needs the owner: $guide.
+MESSAGE
+  exit 1
+fi
+if [[ "$visual" == "re-upload" && "$head_embed" == "$main_embed" ]]; then
+  missing+=("README.md's demo embed still holds main's attachment URL, but the committed video differs visibly from that attachment ($visual_line)")
+fi
+
+if ((${#missing[@]} == 0)); then
+  echo "verdict=keep" >>"$GITHUB_OUTPUT"
+  echo "HyperFrames $version: the demo looks the same as the README attachment at $baseline_url, and the README embed is in order."
+  exit 0
+fi
+detail="$(printf '%s; ' "${missing[@]}")"
+detail="${detail%; }"
+echo "verdict=incomplete" >>"$GITHUB_OUTPUT"
+echo "detail=$detail" >>"$GITHUB_OUTPUT"
+cat >&2 <<MESSAGE
+The README demo update is incomplete:
+$(printf -- '- %s\n' "${missing[@]}")
+
+To finish it, $guide.
+MESSAGE
+exit 1

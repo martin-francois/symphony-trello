@@ -3,9 +3,12 @@
  * selects its Docker renderer image, so this value decides how the committed video is rendered.
  *
  * A Renovate regex manager in renovate.json reads and updates the version literal below, so keep
- * it an exact `x.y.z` string on this one line. This file is a render input: changing the version
- * makes the README demo freshness test fail until `node scripts/render-readme-demo.ts` commits
- * fresh media rendered with that version. See docs/adr/0093-renovate-updates-hyperframes.md.
+ * it an exact `x.y.z` string on this one line. This file is hashed as a render input with that
+ * literal normalized: a new version alone keeps the committed media fresh, because the render
+ * manifest records the version that rendered them, while any other change here makes the README
+ * demo freshness test fail until `node scripts/render-readme-demo.ts` commits fresh media. See
+ * docs/adr/0093-renovate-updates-hyperframes.md and
+ * docs/adr/0149-check-hyperframes-updates-by-rendering-in-ci.md.
  */
 
 import {runRenderStep} from "./readme-demo-process.ts";

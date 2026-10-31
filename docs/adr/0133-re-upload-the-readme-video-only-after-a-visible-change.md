@@ -12,6 +12,12 @@ informed: [Future maintainers, Contributors]
 
 # Re-upload the README video only after a visible change
 
+[ADR 0149](0149-check-hyperframes-updates-by-rendering-in-ci.md) amends the baseline for the
+HyperFrames Renovate check: that check compares with the README attachment it downloads, the
+"Compare with the downloaded attachment" option below, because the attachment had fallen behind
+the video on `main`. The tile SSIM, its threshold and the render's comparison with a commit still
+stand.
+
 ## Context and Problem Statement
 
 GitHub plays the README demo from an uploaded attachment URL, not from `docs/assets/demo.mp4`. A

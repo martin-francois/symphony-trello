@@ -1,0 +1,34 @@
+#!/bin/bash
+# Reads the README demo embed: the first non-blank line after the readme-demo-video marker in a
+# README file. Blank lines are skipped because an editor can insert one on drag and drop.
+#
+# Usage: scripts/readme-demo-embed <readme>    prints the embed URL
+#        scripts/readme-demo-embed --marker    prints the marker
+#
+# Exit status: 0 when the line is a user-attachments URL, 1 when the file has no marker or nothing
+# after it, 2 when the line is something else (printed), 3 on a usage error. The HyperFrames
+# Renovate check (scripts/render-hyperframes-update) and a script test on README.md use it.
+
+set -euo pipefail
+
+marker="<!-- readme-demo-video -->"
+attachment_pattern='^https://github\.com/user-attachments/assets/[0-9a-f-]+$'
+
+if [[ $# -ne 1 ]]; then
+  echo "Usage: scripts/readme-demo-embed <readme> | --marker" >&2
+  exit 3
+fi
+if [[ "$1" == "--marker" ]]; then
+  echo "$marker"
+  exit 0
+fi
+
+embed="$(awk -v marker="$marker" '
+  found && NF { sub(/^[ \t\r]+/, ""); sub(/[ \t\r]+$/, ""); print; exit }
+  $0 == marker { found = 1 }
+' "$1")"
+if [[ -z "$embed" ]]; then
+  exit 1
+fi
+echo "$embed"
+[[ "$embed" =~ $attachment_pattern ]] || exit 2

@@ -17,7 +17,8 @@ informed: [Future maintainers, Contributors]
 
 How the HyperFrames version is pinned and updated is amended by
 [ADR 0093](0093-renovate-updates-hyperframes.md). The version lives in one Renovate-managed file,
-`scripts/readme-demo-hyperframes.ts`, which is a render input. The rest of this decision is
+`scripts/readme-demo-hyperframes.ts`, which is hashed with its version literal normalized
+([ADR 0149](0149-check-hyperframes-updates-by-rendering-in-ci.md)). The rest of this decision is
 unchanged.
 
 ## Context and Problem Statement

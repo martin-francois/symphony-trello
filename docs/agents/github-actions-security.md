@@ -114,6 +114,20 @@ job through `pnpm run verify:scripts`; CodeQL scans the `actions` language on pu
   the change meets them. Check: pull-request review; the Validation section of the template is
   where it goes.
 
+## Workflows added after the audit
+
+`hyperframes-renovate.yml` (2026-10-31,
+[ADR 0149](../adr/0149-check-hyperframes-updates-by-rendering-in-ci.md)). Both jobs are gated to
+`head.repo.full_name == github.repository`, then author `renovate[bot]`, then a
+`renovate/hyperframes` branch, so a fork never reaches them. `readme-demo-render` is an ordinary
+`pull_request` job: it checks out the merge commit without a token, holds `contents: read` and no
+secret, runs the HyperFrames CLI from npm, downloads the README video attachment over HTTPS
+and discards the render; it pushes nothing. `report`
+checks out only `scripts/report-hyperframes-render` from `github.event.pull_request.base.sha`
+without a token, so no pull request code runs with its `pull-requests: write`, which a
+same-repository author already has; it adds a label and edits one comment that it recognizes by
+author `github-actions[bot]` and a marker.
+
 ## Audit of 2026-10-30
 
 Repository settings at the time: fork-run approval `all_external_contributors`; the `Required
@@ -131,6 +145,7 @@ The script test keeps the table complete; update a row when its workflow changes
 | `continuous-fuzzing-watchdog.yml` | push `main`, `workflow_run` of `Continuous Fuzzing`, dispatch | default branch, no token | none | `actions: write` | OK; `workflow_run` is gated to dispatch runs on `main` and checks out `main` |
 | `continuous-fuzzing.yml` | `pull_request`, push `main`, dispatch | default branch or PR head, no token | none | `security-events: write` in `code-change`, read-only in fork runs; `CLUSTERFUZZLITE_STORAGE_TOKEN`, `issues`, `security-events` and `actions: write` in jobs gated to `refs/heads/main` and dispatch | OK |
 | `dependency-submission.yml` | push `main` | `main`, no token | `maven`, `main` scope | `contents: write` | OK; no pull request trigger, see [ADR 0148](../adr/0148-submit-maven-dependencies-only-from-main.md) |
+| `hyperframes-renovate.yml` | `pull_request` by `renovate[bot]` on same-repository `renovate/hyperframes` branches, skipped for forks | PR merge commit in the render, `base.sha` in `report`, no token | none | `contents: read` in the render; `pull-requests: write` in `report` | OK, see [Workflows added after the audit](#workflows-added-after-the-audit) |
 | `openrewrite-renovate.yml` | `pull_request_target`, schedule, dispatch | `github.sha` for its scripts, `base_sha` for the recipe run, no token outside `publish` | none | `statuses: write` in six jobs; App token in `publish` only | OK, see below |
 | `private-context.yml` | `pull_request`, push `main` | PR head plus base scanner, plus the merge commit's comparison script, no token | none | none, `contents: read` | OK |
 | `pull-request-author-handoff.yml` | `pull_request_target`, `issue_comment` | `github.sha`, sparse: its script, no token | none | `issues: write` | OK, metadata only |
@@ -170,6 +185,7 @@ Release Please checkouts can drop the token.
 - [Dependency updates](dependency-updates.md)
 - [Default workflow](default-workflow.md)
 - [ADR 0140](../adr/0140-keep-caches-and-pull-request-code-out-of-privileged-jobs.md)
+- [ADR 0149](../adr/0149-check-hyperframes-updates-by-rendering-in-ci.md)
 - [ADR 0069](../adr/0069-repository-owned-pull-request-size-labeling.md),
   [ADR 0071](../adr/0071-automate-openrewrite-renovate-updates.md),
   [ADR 0075](../adr/0075-automate-pull-request-author-handoffs.md),

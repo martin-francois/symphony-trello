@@ -1,0 +1,106 @@
+#!/bin/bash
+# The report job in .github/workflows/hyperframes-renovate.yml.
+#
+# Records the outcome of one render on the pull request: the needs-maintainer-review label while
+# the owner has to act, and one comment that is edited in place instead of repeated. The check
+# itself is the readme-demo-render job. OUTCOME is one of:
+#   keep        the demo looks the same as the README attachment and the embed is in order; the
+#               label comes off only if this script added it
+#   re-upload   the render differs visibly from the README attachment; the owner follows the guide
+#   incomplete  DETAIL names what is still missing, such as an upload or a broken embed
+#   failed      the render or one of its checks failed; the run log says why
+
+set -euo pipefail
+
+: "${SOURCE_PULL_REQUEST:?}" "${OUTCOME:?}" "${RUN_URL:?}" "${GH_TOKEN:?}"
+
+LABEL="needs-maintainer-review"
+MARKER="<!-- hyperframes-renovate-automation -->"
+# Written into the comment when this script added the label, so a keep verdict removes only a
+# label this script set. A label that was already there stays, whoever set it.
+LABEL_MARKER="<!-- hyperframes-renovate-automation added needs-maintainer-review -->"
+PREEXISTING_MARKER="<!-- hyperframes-renovate-automation found needs-maintainer-review already set -->"
+GUIDE="https://github.com/$GITHUB_REPOSITORY/blob/main/docs/demo/README.md#updating-hyperframes"
+version="${HYPERFRAMES_VERSION:-unknown}"
+issue="repos/$GITHUB_REPOSITORY/issues/$SOURCE_PULL_REQUEST"
+
+case "$OUTCOME" in
+keep | re-upload | incomplete | failed) ;;
+*)
+  echo "Unknown outcome: $OUTCOME" >&2
+  exit 1
+  ;;
+esac
+
+# Only this workflow's own comment counts: the marker is public text anyone could paste.
+existing="$(
+  gh api --paginate --slurp "$issue/comments?per_page=100" |
+    jq -c --arg marker "$MARKER" '
+      [.[][] | select(.user.login == "github-actions[bot]" and (.body | startswith($marker)))]
+      | first // empty | {id, body}
+    '
+)"
+existing_id="$(jq -r '.id // empty' <<<"${existing:-null}")"
+existing_has() {
+  [[ -n "$existing_id" ]] && jq -e --arg text "$1" '.body | contains($text)' <<<"$existing" >/dev/null
+}
+
+label_marker=""
+if [[ "$OUTCOME" != "keep" ]]; then
+  if gh api "$issue/labels?per_page=100" | jq -e --arg label "$LABEL" 'any(.[]; .name == $label)' >/dev/null; then
+    # Keep whatever an earlier run recorded; a label a person set before any run is never ours.
+    if existing_has "$LABEL_MARKER"; then label_marker="$LABEL_MARKER"; else label_marker="$PREEXISTING_MARKER"; fi
+  else
+    gh api --method POST "$issue/labels" -f "labels[]=$LABEL" >/dev/null
+    label_marker="$LABEL_MARKER"
+  fi
+fi
+
+comment_body() {
+  echo "$MARKER"
+  [[ -n "$label_marker" ]] && echo "$label_marker"
+  case "$OUTCOME" in
+  keep)
+    echo "The README demo check passed with HyperFrames $version: the demo shows no visible change against the README video attachment, and the README embed is in order. This pull request merges once its checks pass."
+    ;;
+  re-upload)
+    echo "The README demo rendered with HyperFrames $version differs visibly from the README video attachment, the video README readers see. The \`readme-demo-render\` check fails until a person finishes this update: follow [What needs a person]($GUIDE) in the README demo guide. The run log at $RUN_URL names the frame and tile with the lowest score."
+    ;;
+  incomplete)
+    echo "The \`readme-demo-render\` check still fails: ${DETAIL:-see the run log}. Follow [What needs a person]($GUIDE) in the README demo guide for the remaining step; a committed video that looks the same as the README attachment needs no new upload."
+    ;;
+  failed)
+    echo "The README demo render with HyperFrames $version failed, so the \`readme-demo-render\` check blocks this pull request. Read the run log at $RUN_URL, then follow [What needs a person]($GUIDE) in the README demo guide."
+    ;;
+  esac
+  echo
+  echo "Workflow run: $RUN_URL"
+}
+
+remove_label_added_by_this_workflow() {
+  if ! existing_has "$LABEL_MARKER"; then
+    return 0
+  fi
+  local errors
+  if errors="$(gh api --method DELETE "$issue/labels/$LABEL" 2>&1 >/dev/null)"; then
+    return 0
+  fi
+  if [[ "$errors" == *"HTTP 404"* ]]; then
+    echo "The $LABEL label was already gone."
+    return 0
+  fi
+  echo "Could not remove the $LABEL label: $errors" >&2
+  return 1
+}
+
+if [[ "$OUTCOME" == "keep" ]]; then
+  remove_label_added_by_this_workflow
+fi
+
+body="$(comment_body)"
+if [[ -n "$existing_id" ]]; then
+  gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing_id" -f body="$body" >/dev/null
+elif [[ "$OUTCOME" != "keep" ]]; then
+  # A clean first render needs no comment; the passing check carries the verdict.
+  gh api --method POST "$issue/comments" -f body="$body" >/dev/null
+fi
