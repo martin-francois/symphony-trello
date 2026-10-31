@@ -197,3 +197,69 @@ test("Renovate holds json-schema-validator on 2.x while Quarkus is on Jackson 2"
     "restore the (,3.0) json-schema-validator hold in renovate.json: 3.x requires Jackson 3, which Quarkus 3 does not use",
   );
 });
+
+test("the OpenTofu version is pinned once per owner and the owners agree", () => {
+  // given
+  const ciWorkflow = parse(CI_WORKFLOW) as {
+    jobs?: {"posthog-infra"?: {steps?: Array<{uses?: unknown; with?: {tofu_version?: unknown}}>}};
+  };
+  const miseConfig = readFileSync("infra/posthog/mise.toml", "utf8");
+  const renovateConfig = JSON.parse(readFileSync("renovate.json", "utf8")) as {
+    customManagers?: Array<{depNameTemplate?: string; matchStrings?: string[]; datasourceTemplate?: string}>;
+  };
+
+  // when
+  const workflowVersion = ciWorkflow.jobs?.["posthog-infra"]?.steps?.find(
+    ({uses}) => typeof uses === "string" && uses.startsWith("opentofu/setup-opentofu@"),
+  )?.with?.tofu_version;
+  const miseVersion = /opentofu\s*=\s*"([^"]+)"/.exec(miseConfig)?.[1];
+  const manager = renovateConfig.customManagers?.find(({depNameTemplate}) => depNameTemplate === "opentofu/opentofu");
+
+  const registryRule = (renovateConfig as {packageRules?: Array<{matchDatasources?: string[]; registryUrls?: string[]}>}).packageRules?.find(
+    ({matchDatasources}) => matchDatasources?.includes("terraform-provider"),
+  );
+
+  // then
+  assert.deepEqual(registryRule?.registryUrls, ["https://registry.opentofu.org"]);
+  assert.equal(workflowVersion, miseVersion);
+  assert.equal(manager?.datasourceTemplate, "github-releases");
+  assert.ok(manager?.matchStrings?.some((pattern) => new RegExp(pattern).test(`tofu_version: ${String(workflowVersion)}`)));
+});
+
+test("one Renovate group moves both OpenTofu pins, since each alone would fail the agreement test", () => {
+  // given
+  const miseConfig = readFileSync("infra/posthog/mise.toml", "utf8");
+  const renovateConfig = JSON.parse(readFileSync("renovate.json", "utf8")) as {
+    customManagers?: Array<{depNameTemplate?: string; datasourceTemplate?: string}>;
+    packageRules?: Array<Record<string, unknown>>;
+  };
+  // Renovate's mise manager reports the `opentofu` tool as package opentofu/opentofu from GitHub
+  // releases; the custom manager's depName doubles as its package name.
+  const pins = [
+    {source: "infra/posthog/mise.toml", present: /^opentofu\s*=/m.test(miseConfig), packageName: "opentofu/opentofu", datasource: "github-releases"},
+    ...(renovateConfig.customManagers ?? [])
+      .filter(({depNameTemplate}) => depNameTemplate === "opentofu/opentofu")
+      .map(({depNameTemplate, datasourceTemplate}) => ({source: "ci.yml custom manager", present: true, packageName: String(depNameTemplate), datasource: String(datasourceTemplate)})),
+  ];
+
+  // when
+  const groupOf = (pin: (typeof pins)[number]) => {
+    let group: unknown;
+    for (const rule of renovateConfig.packageRules ?? []) {
+      const names = rule["matchPackageNames"] as string[] | undefined;
+      const datasources = rule["matchDatasources"] as string[] | undefined;
+      const otherMatchers = Object.keys(rule).filter((key) => key.startsWith("match") && key !== "matchPackageNames" && key !== "matchDatasources");
+      if (names?.includes(pin.packageName) && (datasources === undefined || datasources.includes(pin.datasource)) && otherMatchers.length === 0 && "groupName" in rule) {
+        group = rule["groupName"];
+      }
+    }
+    return group;
+  };
+  const groups = pins.map(groupOf);
+
+  // then
+  assert.equal(pins.length, 2);
+  assert.ok(pins.every(({present}) => present));
+  assert.equal(typeof groups[0], "string");
+  assert.equal(groups[1], groups[0]);
+});

@@ -179,6 +179,20 @@
       "depNameTemplate": "hyperframes",
       "versioningTemplate": "semver",
       "description": "The HyperFrames CLI that renders the README demo. The repository has no package.json for the demo, so no built-in manager sees this pin. The version file is a render input, so an update stays blocked by the README demo freshness check until media rendered with it is committed."
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/ci\\.yml$/"
+      ],
+      "matchStrings": [
+        "tofu_version:\\s*(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "opentofu/opentofu",
+      "extractVersionTemplate": "^v(?<version>.+)$",
+      "versioningTemplate": "semver",
+      "description": "The OpenTofu version the CI validation job installs through setup-opentofu. The action input is not read by any built-in manager; the mise manager owns the same version in infra/posthog/mise.toml, and both must move together so CI validates with the tested release."
     }
   ],
   "customDatasources": {
@@ -361,6 +375,26 @@
       "enabled": false
     },
     {
+      "description": "infra/posthog is applied with OpenTofu, so provider lookups and lock-file hashes must come from the OpenTofu registry, not registry.terraform.io.",
+      "matchDatasources": [
+        "terraform-provider",
+        "terraform-module"
+      ],
+      "registryUrls": [
+        "https://registry.opentofu.org"
+      ]
+    },
+    {
+      "description": "required_version in infra/posthog is an OpenTofu floor; Renovate would otherwise propose Terraform releases for it. The mise pin and the CI action pin (both OpenTofu releases) carry the tested version.",
+      "matchManagers": [
+        "terraform"
+      ],
+      "matchDepTypes": [
+        "required_version"
+      ],
+      "enabled": false
+    },
+    {
       "description": "A new OSS-Fuzz v1 build turns seven days old every day, so without a window each of these two images would get an automerged digest pull request every day. They use the Friday window of lockFileMaintenance instead, one pull request per image per week. The seven-day wait and automerge apply as to every digest update. See ADR 0126.",
       "matchDatasources": [
         "custom.oss-fuzz-base-builder-jvm",
@@ -369,6 +403,16 @@
       "schedule": [
         "* * * * 5"
       ]
+    },
+    {
+      "description": "The mise pin in infra/posthog/mise.toml and the tofu_version input in the posthog-infra CI job carry the same OpenTofu release, and a governance test requires them to match, so one pull request must move both.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "opentofu/opentofu"
+      ],
+      "groupName": "OpenTofu"
     }
   ]
 }
