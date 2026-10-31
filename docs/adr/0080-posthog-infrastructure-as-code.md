@@ -33,27 +33,27 @@ organization, and so that every later change goes through a reviewable definitio
 
 ## Decision Drivers
 
-* The maintainer prefers open-source infrastructure tooling.
-* A fork must be able to create an equivalent setup from its own account without our state, ids,
+- The maintainer prefers open-source infrastructure tooling.
+- A fork must be able to create an equivalent setup from its own account without our state, ids,
   tokens, or transcript.
-* The privacy-minimizing design of ADR 0079 must be the deployed state, not a documented wish:
+- The privacy-minimizing design of ADR 0079 must be the deployed state, not a documented wish:
   IP discarding on, GeoIP off, every browser-side capture off, no destinations or sharing.
-* One owner per setting; drift must be visible in a plan or an explicit diff, never hidden.
-* Small: two projects do not justify a reconciliation framework, a hosted state service, or a
+- One owner per setting; drift must be visible in a plan or an explicit diff, never hidden.
+- Small: two projects do not justify a reconciliation framework, a hosted state service, or a
   second application.
-* Evidence must say what was observed and when, without implying that published configuration
+- Evidence must say what was observed and when, without implying that published configuration
   proves permanent server behavior.
-* Real data must not become destroyable by routine automation after the first release.
+- Real data must not become destroyable by routine automation after the first release.
 
 ## Considered Options
 
-* OpenTofu with the official `PostHog/posthog` provider, plus narrow API supplements
-* Terraform CLI with the same provider
-* Chronological API-call scripts (replay the setup)
-* UI-only setup with a written runbook
-* A custom provider or a generic REST reconciler
-* Import-only adoption of the existing projects versus rebuild-first verification
-* Hosted state and credentialed auto-apply in CI versus private local state and explicit apply
+- OpenTofu with the official `PostHog/posthog` provider, plus narrow API supplements
+- Terraform CLI with the same provider
+- Chronological API-call scripts (replay the setup)
+- UI-only setup with a written runbook
+- A custom provider or a generic REST reconciler
+- Import-only adoption of the existing projects versus rebuild-first verification
+- Hosted state and credentialed auto-apply in CI versus private local state and explicit apply
 
 ## Decision Outcome
 
