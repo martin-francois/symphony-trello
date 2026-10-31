@@ -998,7 +998,8 @@ This Java implementation provides:
   state directories, worker logs, managed PID/state files, and file-backed secret paths when a
   maintainer asks for clarification. It MUST NOT print the secret values stored in those files.
   `--lookup TOKEN` filters private context to one public diagnostics token, such as a 12-hex value
-  shown in a `board_hash` or `key_hash` row, or a `<path:...>` token. It is valid only with
+  shown in a `board_hash` or `key_hash` row, or a `<path:...>` token. It also accepts the escaped
+  `\<path:...>` form that the Markdown report text contains. It is valid only with
   `--show-private-context`. That output is for local troubleshooting only and MUST NOT be pasted into
   public issue reports.
 - `tutorial [--offer] [--github | --no-github] [--no-cleanup] [--workspace-id ID]`: optional guided tutorial on
@@ -1030,6 +1031,11 @@ Codex/npm paths, dotenv defaults, config/workspace/state locations, and caller d
 Java owns managed worker process selection, PID/log files, health checks, start/stop/status/logs,
 diagnostics behavior, and usage errors. Unknown commands MUST fail through Java command usage
 handling instead of being treated as workflow paths.
+
+The diagnostics report and the setup-failure report are GitHub-flavored Markdown. Outside code
+spans and fenced code blocks, they MUST write each `<` as `\<`, so a Markdown renderer such as a
+GitHub issue shows redaction markers like `<redacted>` and `<path:...>` instead of dropping them as
+HTML tags or autolinks. Code spans and fenced blocks keep their bytes.
 
 The diagnostics command MUST be safe for public issue reports by default. It MUST redact Trello API
 keys and tokens, Codex auth files or session data, GitHub tokens, private Trello board/card URLs,

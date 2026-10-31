@@ -3165,7 +3165,7 @@ final class LocalWorkerManagerTest {
         assertThat(privateLookup)
                 .contains(
                         "- **lookup_status:** found",
-                        "| secret_file | tracker.api_key | " + secretFileToken + " | " + secretPath + " |")
+                        "| secret_file | tracker.api_key | \\" + secretFileToken + " | " + secretPath + " |")
                 .doesNotContain("test-key", "test-token");
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }

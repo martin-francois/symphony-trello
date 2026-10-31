@@ -204,6 +204,10 @@ Lookup accepts the public diagnostics token values shown in sanitized output, su
 value in a `board_hash` or `key_hash` row, or a `<path:...>` token. It does not search arbitrary
 private strings.
 
+The report file is Markdown, so outside code it writes each `<` as `\<`. A GitHub issue shows
+`<redacted>` and `<path:...>`, while the raw file shows `\<redacted>` and `\<path:...>`. Lookup
+accepts a token copied from either one.
+
 Some `start`, `stop`, or `status` failures also include a `<path:...>` token and the same lookup
 command when they need to hide a local workflow, log, managed PID/state path, or file-backed secret
 path.
