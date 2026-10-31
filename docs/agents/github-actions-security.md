@@ -162,9 +162,7 @@ that `attest-source` sets only when the webhook sender is `renovate[bot]`.
 Nothing exploitable was found. No workflow could write `main`'s cache scope from a pull request.
 [ADR 0140](../adr/0140-keep-caches-and-pull-request-code-out-of-privileged-jobs.md) records what
 the audit changed. Open for the owner, with issue drafts handed over with the audit: whether the
-Release Please checkouts can drop the token. The audit also left open whether dependency submission
-should run on `pull_request`;
-[ADR 0148](../adr/0148-submit-maven-dependencies-only-from-main.md) dropped that trigger.
+Release Please checkouts can drop the token.
 
 ## References
 

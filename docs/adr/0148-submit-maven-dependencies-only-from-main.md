@@ -3,6 +3,7 @@ status: accepted
 date: 2026-10-31
 decision-makers: [François Martin]
 consulted:
+  - "[ADR 0071](0071-automate-openrewrite-renovate-updates.md)"
   - "[ADR 0140](0140-keep-caches-and-pull-request-code-out-of-privileged-jobs.md)"
   - "[GitHub Actions security](../agents/github-actions-security.md)"
   - "[GitHub issue #1176](https://github.com/martin-francois/symphony-trello/issues/1176)"
@@ -73,8 +74,8 @@ push, so the guard could no longer skip anything.
 
 ### Confirmation
 
-`scripts/openrewrite-renovate-workflow.test.ts` asserts that the workflow's only trigger is a push
-to `main`. Run:
+`scripts/github-actions-security.test.ts` asserts that the workflow's only trigger is a push to
+`main`. Run:
 
 ```bash
 pnpm run verify:scripts
@@ -87,11 +88,17 @@ carries the workflow's current row.
 
 ### Submit only on pushes to main
 
+Remove the `pull_request` trigger. The existing job runs only after a push to `main`, builds the
+snapshot with the pinned action and submits it with `contents: write`.
+
 * Good, because the workflow gets smaller and has no pull request path to guard.
 * Good, because it needs no new action, artifact or permission.
 * Bad, because pull requests lose the early warning that the snapshot fails to build.
 
 ### Build on pull requests, submit on main
+
+Split the workflow into two jobs. On pull requests a job with `contents: read` builds the snapshot
+and uploads it as an artifact; on pushes to `main` a second job builds and submits it.
 
 * Good, because a pull request would still run the depgraph plugin.
 * Bad, because the pinned action always submits, so a read-only job fails with 403. Making it pass
@@ -105,6 +112,9 @@ carries the workflow's current row.
 
 ### Keep the workflow as it was
 
+Leave one job with `contents: write` that builds and submits the snapshot both on pushes to `main`
+and on pull requests that change `pom.xml`, `.mvn/jvm.config` or the workflow.
+
 * Good, because nothing changes, and GitHub drops the write token for fork runs.
 * Bad, because fork pull requests that change `pom.xml` keep a red check.
 * Bad, because same-repository pull request code keeps running with `contents: write`.
@@ -112,5 +122,7 @@ carries the workflow's current row.
 ## More Information
 
 [ADR 0140](0140-keep-caches-and-pull-request-code-out-of-privileged-jobs.md) left this choice open
-in its audit. [ADR 0007](0007-java-maven-toolchain-and-warning-handling.md) explains why the
+in its audit. [ADR 0071](0071-automate-openrewrite-renovate-updates.md) kept dependency submission
+off the OpenRewrite Renovate branches; with no pull request trigger, that exception is no longer
+needed. [ADR 0007](0007-java-maven-toolchain-and-warning-handling.md) explains why the
 repository owns this workflow instead of GitHub's generated Automatic Dependency Submission.

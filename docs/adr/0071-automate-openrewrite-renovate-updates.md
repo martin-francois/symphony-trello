@@ -19,6 +19,11 @@ The dashboard-approval part of this decision is amended by
 dependency pull request without a Dependency Dashboard approval step. Major OpenRewrite updates
 still require human pull-request approval and manual merge.
 
+The dependency submission part of this decision is amended by
+[ADR 0148](0148-submit-maven-dependencies-only-from-main.md). Dependency submission no longer runs
+on pull requests at all, so it needs no exception for the Renovate source and generated branches.
+It runs only on pushes to `main`.
+
 ## Context and Problem Statement
 
 ADR 0070 requires a maintainer to approve every OpenRewrite update in Renovate's dependency

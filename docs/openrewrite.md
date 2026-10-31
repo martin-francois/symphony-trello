@@ -118,8 +118,8 @@ status-write token.
 Regular pull-request CI recognizes both the Renovate source branch and its generated branch. It
 keeps the existing required `test` job name but runs every Maven and updated-artifact invocation in
 the same pinned isolation model, with the checkout credentials disabled and `.git` mounted
-read-only. Native Windows Maven tests do not execute for these branches, and dependency submission
-runs only on pushes to `main`; both run once the validated or reviewed update reaches `main`. This prevents
+read-only. Native Windows Maven tests do not execute for these branches; they resume after the
+validated or reviewed update reaches `main`. This prevents
 another workflow from exposing runner command files, a reusable Maven cache, or a repository
 credential to the pre-merge artifacts.
 

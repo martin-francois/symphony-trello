@@ -56,10 +56,6 @@ const WORKFLOW = readFileSync(
   "utf8",
 );
 const CI_WORKFLOW = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
-const DEPENDENCY_SUBMISSION_WORKFLOW = readFileSync(
-  new URL("../.github/workflows/dependency-submission.yml", import.meta.url),
-  "utf8",
-);
 const PRIVATE_CONTEXT_WORKFLOW = readFileSync(
   new URL("../.github/workflows/private-context.yml", import.meta.url),
   "utf8",
@@ -903,8 +899,6 @@ test("updated OpenRewrite artifacts remain isolated in pull request CI", () => {
   assert.match(CI_OPENREWRITE, /--volume "\$PWD\/\.git:\/workspace\/\.git:ro"/);
   assert.doesNotMatch(CI_OPENREWRITE, /--volume "\$RUNNER_TEMP:/);
   assert.doesNotMatch(CI_OPENREWRITE, /\/var\/run\/docker\.sock/);
-  // Dependency submission holds contents: write, so it runs on main only (ADR 0148).
-  assert.deepEqual(parse(DEPENDENCY_SUBMISSION_WORKFLOW).on, {push: {branches: ["main"]}});
 });
 
 test("Blacksmith runners are reserved for the critical-path test jobs", () => {
