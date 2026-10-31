@@ -1,0 +1,7 @@
+---
+tracker:
+  kind: trello
+  board_id: board-1
+  board_id: board-2
+---
+A repeated key is rejected.

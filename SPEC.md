@@ -472,7 +472,35 @@ Parsing rules:
 - Remaining lines become the prompt body.
 - If front matter is absent, treat the entire file as prompt body and use an empty config map.
 - YAML front matter MUST decode to a map/object; non-map YAML is an error.
+- Front matter that is empty, or whose lines hold only spaces and comments, decodes to an empty
+  config map, the same as front matter that is the YAML value `null`. A tab that starts a line,
+  alone or before a comment, is a YAML syntax error and so a `workflow_parse_error`.
 - Prompt body is trimmed before use.
+
+YAML rules for front matter:
+
+These rules go beyond the upstream Symphony specification, which leaves them open. They apply in
+block and flow style, at every nesting level, and inside sequences.
+
+- An alias (`*name`) resolves to the value of the node whose anchor `&name` is the last one before
+  the alias, whether that value is a scalar, a sequence, or a map. An alias with no earlier anchor
+  of that name, or an alias inside the node that this last anchor marks, is a
+  `workflow_parse_error`.
+- Alias expansion is bounded. All aliases in one front matter MUST NOT copy more than 10,000 YAML
+  nodes in total (each scalar, sequence, and map counts as one node), and MUST NOT copy more than
+  1,000,000 characters of scalars in total (every character of every copied scalar, keys
+  included); beyond either limit, loading fails with `workflow_parse_error`. A copy keeps the value
+  an inner alias had where the anchor was defined, even if an anchor of the same name is defined
+  again later.
+- A setup write that rewrites the front matter stores each alias as a written-out copy of its
+  value and drops the anchors.
+- A YAML merge key is a `workflow_parse_error` whose message names the key's path. A merge key is
+  the plain scalar `<<` or a key tagged `!!merge`; YAML 1.2 has no merge keys. A quoted `"<<"` or
+  `'<<'` is an ordinary string key.
+- A map that contains the same key twice is a `workflow_parse_error` whose message names the key's
+  path. Keys compare by their text, so `a`, `"a"`, and `'a'` are the same key, and so are `1` and
+  `"1"`. A key that an alias supplies counts the same way, and the message names it by the alias,
+  such as `*name`, so that it never shows a value.
 
 Returned workflow object:
 
@@ -3967,6 +3995,12 @@ that a second formatting pass leaves the source unchanged.
 - Missing `WORKFLOW.md` returns typed error
 - Invalid YAML front matter returns typed error
 - Front matter non-map returns typed error
+- Empty and comment-only front matter loads as an empty config
+- Front matter aliases resolve to the anchored scalar, sequence, or map; an undefined alias, an
+  alias inside its own anchored node, and alias expansion past the node or character limit return
+  `workflow_parse_error`
+- A front matter merge key or a key repeated in one map returns `workflow_parse_error` naming the
+  key's path
 - Config defaults apply when OPTIONAL values are missing
 - `tracker.kind` validation enforces currently supported kind (`trello`)
 - `tracker.api_key` works, including `$VAR` indirection

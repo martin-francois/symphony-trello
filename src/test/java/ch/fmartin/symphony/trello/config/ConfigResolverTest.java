@@ -683,7 +683,8 @@ final class ConfigResolverTest {
                         "max_concurrent_agents must be a whole number"),
                 Arguments.of(
                         "non-numeric-retries",
-                        "tracker:\n  max_api_retries: not-a-number",
+                        // Indented, so the setting joins the tracker map the default workflow opens.
+                        "  max_api_retries: not-a-number",
                         "max_api_retries must be a whole number"),
                 Arguments.of("overflowing-float-port", "server:\n  port: 1e400", "server.port must be a whole number"));
     }
