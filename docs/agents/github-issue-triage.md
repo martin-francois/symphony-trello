@@ -245,7 +245,7 @@ and apply triage labels. Spec-alignment auditing that may create issues lives in
 - Every open or closed issue MUST have exactly one of `size XS`, `size S`, `size M`, `size L`, or
   `size XL`. The label estimates the complete repository change needed to satisfy the issue's current
   scope, including implementation, tests, documentation, configuration, and tracked generated
-  output:
+  output, except ADR lines, which count only as the ADR rule below says:
 
   | Label | Expected changed lines |
   | --- | ---: |
@@ -259,13 +259,20 @@ and apply triage labels. Spec-alignment auditing that may create issues lives in
   pull requests when an issue deliberately requires more than one. Choose the smallest label whose
   upper bound contains the reasonable estimate. When the reasonable range crosses a label boundary,
   use the larger label. Re-evaluate the size whenever the accepted scope changes.
+- Leave expected lines under `docs/adr/` out of the estimate, unless the rest of the issue's change
+  has no lines, such as an ADR-only issue or an ADR plus an image; then count them all. Other
+  documentation and tests count. For an issue split across several pull requests, apply this to the
+  issue's whole change, even if one of its pull requests is ADR-only. Pull request labels follow
+  the same rule, so an issue and the pull request that resolves it measure the same thing; see
+  [ADR 0145](../adr/0145-leave-adr-lines-out-of-pull-request-size-labels.md).
 - Size labels measure expected review volume. They MUST NOT substitute for priority, implementation
   effort, cognitive complexity, risk, readiness, or `good first issue` evaluation. Keep those
   classifications independent.
 - Pull requests use the same labels, but `.github/workflows/size-labeler.yml` measures their current
-  GitHub additions plus deletions instead of copying the linked issue's estimate. Maintainers SHOULD
-  let that workflow own pull-request size labels; a manual override is appropriate only while the
-  workflow is unavailable, because the next pull-request update recalculates the label.
+  GitHub additions plus deletions, under the ADR rule above, instead of copying the linked issue's
+  estimate. Maintainers SHOULD let that workflow own pull-request size labels; a manual override is
+  appropriate only while the workflow is unavailable, because the next pull-request update
+  recalculates the label.
   Metadata-only `pull_request_target` runs handle normal updates, conflicts, skip directives, and
   forks without executing pull-request code. Trusted Commitlint completions cover ordinary pull
   requests whose paths match the Release Please exclusions. A scheduled default-branch
