@@ -2187,17 +2187,243 @@ final class SetupDiagnosticReporterTest {
 
         // then
         assertThat(report)
-                .contains(codexToken + "; login=ok |")
+                .contains(codexToken + "; login=ok |", dockerToken + " to quiet msg.")
                 .doesNotContain("/etc/containers/nodocker", "/opt/codex/bin/codex", toolDirectory.toString());
         assertThat(dockerLookup)
                 .contains(
                         "- **lookup_status:** found",
-                        "| tool | docker | " + dockerToken + " | /etc/containers/nodocker");
+                        "| tool | docker | " + dockerToken + " | /etc/containers/nodocker |");
         assertThat(codexLookup)
                 .contains("- **lookup_status:** found", "| tool | codex | " + codexToken + " | /opt/codex/bin/codex |");
         assertThat(privateReport)
                 .contains("Tool Path Identifiers", dockerToken, codexToken, "/opt/codex/bin/codex")
                 .doesNotContain("Logged in using ChatGPT", "login=ok");
+    }
+
+    @MethodSource("pathsOutsideKnownRoots")
+    @ParameterizedTest
+    void privateContextKeepsAmbiguousOutsideRootPathTailsHidden(OutsideRootPathCase pathCase) throws Exception {
+        // given
+        String privatePath = pathCase.privatePath(tempDir);
+        String captured = privatePath + pathCase.suffix();
+        String output = "codex-cli 1.2.3 at " + captured;
+
+        // when
+        OutsideRootDiagnostics diagnostics = outsideRootDiagnostics(output);
+        if (pathCase.underTempDir()) {
+            Files.delete(Path.of(privatePath));
+        }
+        OutsideRootDiagnostics afterDeletion = outsideRootDiagnostics(output);
+
+        // then
+        assertThat(diagnostics.report())
+                .contains("codex-cli 1.2.3 at " + diagnostics.token() + "; login=not-probed |")
+                .doesNotContain(privatePath)
+                .doesNotContain(pathCase.privateFragments());
+        assertThat(diagnostics.lookup())
+                .contains(
+                        "- **lookup_status:** found",
+                        "| tool | codex | " + diagnostics.token() + " | " + captured + " |");
+        assertThat(afterDeletion.token()).isEqualTo(diagnostics.token());
+        assertThat(afterDeletion.lookup())
+                .contains(
+                        "- **lookup_status:** found",
+                        "| tool | codex | " + afterDeletion.token() + " | " + captured + " |");
+    }
+
+    @MethodSource("pathsOutsideKnownRoots")
+    @ParameterizedTest
+    void completePodmanNoticeKeepsItsFixedSuffixAndMapsOnlyThePath(OutsideRootPathCase pathCase) throws Exception {
+        // given
+        String privatePath = pathCase.privatePath(tempDir);
+        String suffix = " to quiet msg. See podman/docs; token=synthetic-adjacent-secret";
+        String output = "Emulate Docker CLI using podman. Create " + privatePath + suffix;
+
+        // when
+        OutsideRootDiagnostics diagnostics = outsideRootDiagnostics(output);
+
+        // then
+        assertThat(diagnostics.report())
+                .contains("Create " + diagnostics.token() + " to quiet msg. See podman/docs; token=<redacted>")
+                .doesNotContain(privatePath, "synthetic-adjacent-secret")
+                .doesNotContain(pathCase.privateFragments());
+        assertThat(diagnostics.lookup())
+                .contains(
+                        "- **lookup_status:** found",
+                        "| tool | codex | " + diagnostics.token() + " | " + privatePath + " |")
+                .doesNotContain("synthetic-adjacent-secret");
+    }
+
+    @Test
+    void quotedOutsideRootPathKeepsFollowingProseAndUrl() throws Exception {
+        // given
+        String privatePath = "/srv/Client Tools";
+        String output = "codex-cli at '" + privatePath + "' is ready; see https://example.invalid/help";
+
+        // when
+        OutsideRootDiagnostics diagnostics = outsideRootDiagnostics(output);
+
+        // then
+        assertThat(diagnostics.report())
+                .contains("'" + diagnostics.token() + "' is ready; see https://example.invalid/help")
+                .doesNotContain("Client", "Tools");
+        assertThat(diagnostics.lookup())
+                .contains("| tool | codex | " + diagnostics.token() + " | " + privatePath + " |");
+    }
+
+    @Test
+    void completePodmanNoticeUnderHomeKeepsItsInstruction() throws Exception {
+        // given
+        String privatePath = Path.of(System.getProperty("user.home"), "synthetic-private", "notice marker")
+                .toString();
+        String output = "Emulate Docker CLI using podman. Create " + privatePath
+                + " to quiet msg. token=synthetic-adjacent-secret";
+
+        // when
+        OutsideRootDiagnostics diagnostics = outsideRootDiagnostics(output);
+
+        // then
+        assertThat(diagnostics.report())
+                .contains("Create " + diagnostics.token() + " to quiet msg. token=<redacted>")
+                .doesNotContain(privatePath, "synthetic-private", "notice marker", "synthetic-adjacent-secret");
+        assertThat(diagnostics.lookup())
+                .contains("| tool | codex | " + diagnostics.token() + " | " + privatePath + " |")
+                .doesNotContain("synthetic-adjacent-secret");
+    }
+
+    private OutsideRootDiagnostics outsideRootDiagnostics(String output) throws Exception {
+        Path configDir = tempDir.resolve("outside-root-config");
+        Path stateHome = tempDir.resolve("outside-root-state");
+        Path toolDirectory = fakeToolDirectory(tempDir, "codex");
+        Path codex = toolDirectory.resolve("codex");
+        Files.createDirectories(configDir);
+        FakeCommandRunner commands = new FakeCommandRunner().returns(0, output + "\n", codex.toString(), "--version");
+        Map<String, String> environment = Map.of("PATH", toolDirectory.toString());
+        String report = renderDiagnostics(
+                new SetupDiagnosticReporter(environment, commands),
+                Optional.empty(),
+                configDir,
+                Optional.empty(),
+                stateHome,
+                Optional.empty());
+        String token =
+                firstMatch(report, Pattern.compile("\\| codex \\| available \\| [^\\r\\n]*?(<path:[0-9a-f]{12}>)"));
+        String lookup = lookupDiagnostics(
+                new SetupDiagnosticReporter(environment, commands), configDir, stateHome, Optional.empty(), token);
+        return new OutsideRootDiagnostics(report, lookup, token);
+    }
+
+    private static Stream<OutsideRootPathCase> pathsOutsideKnownRoots() {
+        return Stream.of(
+                new OutsideRootPathCase(
+                        "POSIX assignment in filename",
+                        "/srv/private tenant=customer/repo",
+                        false,
+                        "",
+                        List.of("tenant=customer", "customer/repo")),
+                new OutsideRootPathCase(
+                        "Windows assignment in filename",
+                        "C:\\Private tenant=customer\\repo",
+                        false,
+                        "",
+                        List.of("tenant=customer", "customer\\repo")),
+                new OutsideRootPathCase(
+                        "notice suffix in filename", "/srv/Client to quiet msg.", false, "", List.of("Client")),
+                new OutsideRootPathCase(
+                        "missing Windows final component", "C:\\Users\\Jane Doe", false, "", List.of("Jane", "Doe")),
+                new OutsideRootPathCase(
+                        "missing POSIX final component", "/srv/Client Tools", false, "", List.of("Client", "Tools")),
+                new OutsideRootPathCase(
+                        "missing directory with spaces",
+                        "/opt/Synthetic Tools/bin/codex",
+                        false,
+                        " is ready 1/2 done",
+                        List.of("Synthetic", "Tools", "ready")),
+                new OutsideRootPathCase(
+                        "existing filename with spaces",
+                        "outside tools/codex launcher",
+                        true,
+                        ". Retrying",
+                        List.of("outside", "launcher", "Retrying")),
+                new OutsideRootPathCase(
+                        "missing Windows path with spaces",
+                        "C:\\Synthetic Tools\\Codex CLI\\codex.exe",
+                        false,
+                        " is ready",
+                        List.of("Synthetic", "Tools", "Codex CLI")));
+    }
+
+    private record OutsideRootDiagnostics(String report, String lookup, String token) {}
+
+    /// A synthetic path outside the diagnostic roots. Existing fixtures are created below the test directory.
+    private record OutsideRootPathCase(
+            String description, String path, boolean underTempDir, String suffix, List<String> privateFragments) {
+        String privatePath(Path tempDir) throws IOException {
+            if (!underTempDir) {
+                return path;
+            }
+            Path file = tempDir.resolve(path);
+            Files.createDirectories(file.getParent());
+            Files.writeString(file, "launcher");
+            return file.toString();
+        }
+
+        @Override
+        public String toString() {
+            return description;
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void privateContextLookupAfterDeletionUsesRemainingManifestContext(boolean retainedInManifest) throws Exception {
+        // given
+        Path configDir = tempDir.resolve("deleted-workflow-config");
+        Path stateHome = tempDir.resolve("deleted-workflow-state");
+        Path workflow = configDir.resolve("WORKFLOW.temporary.md");
+        Files.createDirectories(configDir);
+        Files.createDirectories(workflow.getParent());
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19207));
+        if (retainedInManifest) {
+            ConnectedBoard board = ConnectedBoardBuilder.connectedBoard(workflow)
+                    .withServerPort(19207)
+                    .build();
+            new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
+                    .save(new ConnectedBoardManifest(List.of(board)));
+        }
+        String report = renderWorkflowDiagnostics(
+                new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner()), configDir, stateHome, workflow);
+        String emittedToken =
+                firstMatch(report, Pattern.compile("\\| (<path:[0-9a-f]{12}>) \\| [0-9a-f]{12} \\| 19207 \\|"));
+        String beforeDeletion = lookupDiagnostics(
+                new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner()),
+                configDir,
+                stateHome,
+                Optional.empty(),
+                emittedToken);
+        assertThat(beforeDeletion).contains("- **lookup_status:** found");
+
+        // when
+        Files.delete(workflow);
+        String lookup = lookupDiagnostics(
+                new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner()),
+                configDir,
+                stateHome,
+                Optional.empty(),
+                emittedToken);
+
+        // then
+        assertThat(emittedToken).isEqualTo(pathToken(diagnosticsKey(configDir), workflow));
+        assertThat(lookup)
+                .contains("- **lookup_token:** " + emittedToken)
+                .doesNotContain("## Local Paths", "## Workflow Identifiers");
+        if (retainedInManifest) {
+            assertThat(lookup).contains("- **lookup_status:** found", workflow.toString());
+        } else {
+            assertThat(lookup)
+                    .contains("- **lookup_status:** not_found", "moved or deleted since the report")
+                    .doesNotContain(workflow.toString());
+        }
     }
 
     @ParameterizedTest

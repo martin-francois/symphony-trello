@@ -204,6 +204,11 @@ Lookup accepts the public diagnostics token values shown in sanitized output, su
 value in a `board_hash` or `key_hash` row, or a `<path:...>` token. It does not search arbitrary
 private strings.
 
+Lookup rebuilds its mappings from the current local state. If a path is no longer represented in
+that context, the lookup reports `lookup_status: not_found` instead of guessing another path.
+Deleting a discovered workflow removes it from that context, but a manifest entry still maps its
+stored path after the file is deleted. A `--workflow` selector that names a deleted workflow fails, so run the lookup without it.
+
 Some `start`, `stop`, or `status` failures also include a `<path:...>` token and the same lookup
 command when they need to hide a local workflow, log, managed PID/state path, or file-backed secret
 path.
