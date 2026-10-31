@@ -1697,6 +1697,87 @@ prepare_source_checkout() {
     echo "Choose a source ref with a resolved project version, then rerun the installer." >&2
     exit 2
   fi
+  if [[ -d "$APP_DIR/.git" ]]; then
+    assert_source_checkout_target_applies
+  fi
+}
+
+print_git_lines() {
+  local line
+  [[ -n "$1" ]] || return 0
+  while IFS= read -r line; do
+    printf '  git: %s\n' "$line" >&2
+  done <<<"$1"
+}
+
+# Git before 2.34 reads only per-directory .gitignore files in read-tree, while git checkout also
+# replaces files ignored through .git/info/exclude or core.excludesFile. A refusal over such a path
+# proves no collision, so the checkout after the worker stop decides, as it did before preflight.
+checkout_collision_ignored() {
+  local kind="$1" path="$2" untracked
+  if [[ "$kind" == directory ]]; then
+    untracked="$(git --literal-pathspecs -C "$APP_DIR" ls-files --others --exclude-standard -- "$path")" || return 1
+    [[ -z "$untracked" ]]
+  else
+    git -C "$APP_DIR" check-ignore -q -- "$path"
+  fi
+}
+
+# Git reads this environment variable as a path list, with C-style quoting for each entry.
+git_object_directory_entry() {
+  local path="$1"
+  path="${path//\\/\\\\}"
+  path="${path//\"/\\\"}"
+  path="${path//$'\a'/\\a}"
+  path="${path//$'\b'/\\b}"
+  path="${path//$'\t'/\\t}"
+  path="${path//$'\n'/\\n}"
+  path="${path//$'\v'/\\v}"
+  path="${path//$'\f'/\\f}"
+  path="${path//$'\r'/\\r}"
+  printf '"%s"' "$path"
+}
+
+assert_source_checkout_target_applies() {
+  local refusal status=0 kind="" path="" alternates
+  local file_refusal="^error: Untracked working tree file '(.+)' would be (overwritten|removed) by merge\.$"
+  local directory_refusal="^error: Updating '(.+)' would lose untracked files in it$"
+  local -a trees=("$SOURCE_COMMIT")
+  # A checkout without commits switches from no tree, so Git checks the target tree alone.
+  if git -C "$APP_DIR" rev-parse --verify -q HEAD >/dev/null; then
+    trees=(HEAD "$SOURCE_COMMIT")
+  fi
+  # A dry-run merge makes the same overwrite checks as the later git checkout, including its
+  # permission to replace ignored files. Reading objects from the staged clone keeps the installed
+  # checkout unchanged until workers have stopped. LC_ALL=C keeps the refusal text parseable.
+  alternates="$(git_object_directory_entry "$SOURCE_CHECKOUT/.git/objects")"
+  if [[ -n "${GIT_ALTERNATE_OBJECT_DIRECTORIES:-}" ]]; then
+    alternates+=":$GIT_ALTERNATE_OBJECT_DIRECTORIES"
+  fi
+  refusal="$(LC_ALL=C GIT_ALTERNATE_OBJECT_DIRECTORIES="$alternates" \
+    git -C "$APP_DIR" read-tree -n -m -u --exclude-per-directory=.gitignore "${trees[@]}" 2>&1)" || status=$?
+  if ((status == 0)); then
+    return
+  fi
+  if [[ "$refusal" =~ $file_refusal ]]; then
+    kind="file"
+    path="${BASH_REMATCH[1]}"
+  elif [[ "$refusal" =~ $directory_refusal ]]; then
+    kind="directory"
+    path="${BASH_REMATCH[1]}"
+  fi
+  if [[ -z "$kind" ]]; then
+    echo 'cannot check source checkout "local files": Git could not compare the requested version with the app checkout; fix the problem Git reports below, then rerun the installer; if Git names an index.lock file, make sure no other Git command runs in the app checkout before you delete that file; no local files were changed' >&2
+    print_git_lines "$refusal"
+    exit 2
+  fi
+  if checkout_collision_ignored "$kind" "$path"; then
+    print_status NOTE "  This Git version cannot check ignored local files before workers stop; the checkout after the stop reports any collision. Git 2.34 or later checks this first."
+    return
+  fi
+  echo 'cannot update source checkout "local files": the requested version would overwrite or remove an untracked local path; move or back up the path Git names below, and any other path a rerun reports, outside the app checkout before retrying; no local files were changed' >&2
+  print_git_lines "$refusal"
+  exit 2
 }
 
 install_or_update_checkout() {

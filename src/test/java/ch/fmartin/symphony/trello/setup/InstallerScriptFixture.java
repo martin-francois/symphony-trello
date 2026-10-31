@@ -875,10 +875,7 @@ final class InstallerScriptFixture {
 
     private static void initializeSourceRepository(Path repository) throws Exception {
         run(Map.of(), "git", "-C", repository.toString(), "init", "-b", "main").assertSuccess();
-        run(Map.of(), "git", "-C", repository.toString(), "config", "user.name", "Test User")
-                .assertSuccess();
-        run(Map.of(), "git", "-C", repository.toString(), "config", "user.email", "test@example.invalid")
-                .assertSuccess();
+        configureSourceRepositoryAuthor(repository);
         run(Map.of(), "git", "-C", repository.toString(), "add", ".").assertSuccess();
         run(Map.of(), "git", "-C", repository.toString(), "commit", "-m", "Initial test source")
                 .assertSuccess();
@@ -886,8 +883,17 @@ final class InstallerScriptFixture {
                 .assertSuccess();
     }
 
+    static void configureSourceRepositoryAuthor(Path repository) throws Exception {
+        run(Map.of(), "git", "-C", repository.toString(), "config", "user.name", "Test User")
+                .assertSuccess();
+        run(Map.of(), "git", "-C", repository.toString(), "config", "user.email", "test@example.invalid")
+                .assertSuccess();
+    }
+
     static void addSourceRepositoryCommit(Path repository, String relativePath, String content) throws Exception {
-        Files.writeString(repository.resolve(relativePath), content);
+        Path file = repository.resolve(relativePath);
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, content);
         run(Map.of(), "git", "-C", repository.toString(), "add", relativePath).assertSuccess();
         run(Map.of(), "git", "-C", repository.toString(), "commit", "-m", "Update test source")
                 .assertSuccess();

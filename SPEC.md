@@ -4341,8 +4341,13 @@ that a second formatting pass leaves the source unchanged.
   while retaining forward-compatible provenance fields. Setup check, port repair, and card
   commands still work beside an older collided manifest.
   Installer process tests cover unreadable installed versions, tracked and untracked build inputs,
-  ignored configuration, retained non-input files, app-directory builds, failed help probes, and
-  rejected migrations before restart. They also cover BOM-prefixed root POMs, clean and modified
+  ignored configuration, retained non-input files, untracked file and directory collisions with the
+  checked commit refused before worker stop, other Git failures in that check, ignored files
+  replaced at newly tracked paths, the older-Git fallback, a collision-free update beside untracked
+  files with worker stop and restart, temporary directories containing path-list separators or
+  quoting characters, inherited alternate object directories, filenames containing blank lines,
+  app-directory builds, failed help probes, and rejected
+  migrations before restart. They also cover BOM-prefixed root POMs, clean and modified
   index-flagged paths, failed index inspection, and sibling staging for archive replacement.
   PowerShell POM tests use real Git output under non-UTF-8 console encodings and verify encoding
   restoration after successful and failed reads. Literal mojibake prefixes remain invalid XML.
@@ -5238,7 +5243,8 @@ Installers:
   `config/application*.properties`. Maven wrapper distribution caches, `maven-wrapper.jar`,
   generated `tessl__*` and `tessl:*` skills, `target/` output, and the installer marker MUST remain
   allowed. Untracked link ancestors at `config`, `oss-fuzz`, `.codex`, `.codex/skills`, and direct
-  non-Tessl skill directories MUST also stop preflight. Other non-input files MUST remain allowed.
+  non-Tessl skill directories MUST also stop preflight. Other non-input files MUST remain allowed,
+  except for the checkout collisions described below.
   This inventory MUST include nested Git repositories and filesystem aliases of fixed input paths.
   Bundled skill include and Tessl exclusion patterns MUST remain case-sensitive, matching Maven.
   Selected inputs MUST retain their exact index spelling; an unrecorded case-only rename MUST stop
@@ -5246,6 +5252,17 @@ Installers:
   MUST stop preflight. Unchanged tracked links remain part of the selected repository's input
   contract. Preflight MUST NOT remove local files. Source builds MUST run from the app checkout,
   and PowerShell MUST restore the caller's location after the build.
+  Source preflight MUST detect, against the checked commit and before workers stop or files
+  change, every untracked local path over which Git would refuse the checkout, including file and
+  directory collisions. It MUST name a conflicting path and tell the operator to move or back up
+  the conflicting paths before retrying. It MUST NOT delete or overwrite them to make the checkout
+  succeed. Ignored non-input files at a tracked path MUST remain replaceable, as `git checkout`
+  replaces them. Ignored build inputs retain the stricter rejection rule above. When Git cannot
+  compare the checkout for another reason, such as a stale `index.lock`,
+  preflight MUST stop with Git's message and MUST NOT call that failure a collision. Git before
+  2.34 checks only `.gitignore` files in this comparison; when its refusal names a path that is
+  ignored through `.git/info/exclude` or `core.excludesFile`, the installer MAY leave the decision
+  to the checkout after workers stop and MUST print a note that says so.
 - Installer `--dry-run` MUST only say that the workflow check would run after an update. Only
   `migrate-workflows --dry-run` shows classifications and planned workflow changes; classifying
   against a target version requires that version to be installed.
