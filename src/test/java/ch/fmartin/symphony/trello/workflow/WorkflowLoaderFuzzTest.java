@@ -165,6 +165,11 @@ final class WorkflowLoaderFuzzTest {
                 named("binary scalar", bytes("---\nseed: !!binary aGVsbG8=\n---\nBody\n")),
                 named("alias chain", bytes("---\na: &a [x, x, x]\nb: &b [*a, *a, *a]\nc: [*b, *b, *b]\n---\nBody\n")),
                 named("nesting beyond the parser depth limit", deeplyNestedFrontMatter()),
+                named("key with the non-specific tag", bytes("---\na:\n  ! <<: {b: 1}\n---\nBody\n")),
+                named("repeated key with a line break", bytes("---\n\"a\\nb\": 1\n\"a\\nb\": 2\n---\nBody\n")),
+                named(
+                        "repeated nested key with a next-line character",
+                        bytes("---\nc:\n  \"a\\Nb\": 1\n  \"a\\Nb\": 2\n---\nBody\n")),
                 named("invalid UTF-8", new byte[] {(byte) 0xC3, 0x28}));
     }
 

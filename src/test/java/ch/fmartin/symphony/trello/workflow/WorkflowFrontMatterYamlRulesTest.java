@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.workflow;
 
+import static ch.fmartin.symphony.trello.workflow.FrontMatterWorkflows.WORKFLOW;
+import static ch.fmartin.symphony.trello.workflow.FrontMatterWorkflows.workflow;
 import static ch.fmartin.symphony.trello.workflow.WorkflowFrontMatterYaml.MAX_ALIAS_COPIED_CHARACTERS;
 import static ch.fmartin.symphony.trello.workflow.WorkflowFrontMatterYaml.MAX_ALIAS_EXPANDED_NODES;
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -9,7 +11,6 @@ import static org.assertj.core.api.InstanceOfAssertFactories.LIST;
 import static org.junit.jupiter.api.Named.named;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
-import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,8 +25,9 @@ import org.junit.jupiter.params.provider.ValueSource;
 /// repeated keys fail with a `workflow_parse_error` that names the key, and front matter without
 /// content is an empty config.
 final class WorkflowFrontMatterYamlRulesTest {
-    private static final Path WORKFLOW = Path.of("WORKFLOW.md");
     private static final String PARSE_ERROR = "workflow_parse_error";
+    // The message shows a next-line character in a key as its escape, so the message stays one line.
+    private static final String ESCAPED_NEXT_LINE = "\\u0085";
     // Long enough that the character limit, not the node limit, stops the copies.
     private static final String LONG_SCALAR = "x".repeat(1_000);
 
@@ -41,7 +43,7 @@ final class WorkflowFrontMatterYamlRulesTest {
         WorkflowDefinition loaded = loader.parse(WORKFLOW, workflow);
 
         // then
-        assertThat(loaded.config()).isEqualTo(expectedConfig);
+        assertThat(loaded.config()).containsExactlyInAnyOrderEntriesOf(expectedConfig);
     }
 
     private static Stream<Arguments> aliasCases() {
@@ -171,26 +173,26 @@ final class WorkflowFrontMatterYamlRulesTest {
                         named("duplicate under a key that an alias supplies", "a: &k v\n*k : {y: 1, y: 2}\n"),
                         duplicateKey("*k.y", 2)),
                 arguments(named("duplicate with different value types", "a: {x: 1}\na: [1]\n"), duplicateKey("a", 2)),
-                arguments(
-                        named("undefined alias", "a: *missing\n"),
-                        "Workflow front matter uses the alias *missing (front matter line 1) before an anchor &missing"
-                                + " defines it; define the anchor earlier or write the value instead"),
-                arguments(
-                        named("alias before its anchor", "a: *x\nb: &x 1\n"),
-                        "Workflow front matter uses the alias *x (front matter line 1) before an anchor &x defines it;"
-                                + " define the anchor earlier or write the value instead"),
+                arguments(named("undefined alias", "a: *missing\n"), undefinedAlias("missing", 1)),
+                arguments(named("alias before its anchor", "a: *x\nb: &x 1\n"), undefinedAlias("x", 1)),
                 arguments(
                         named("alias inside the node its anchor marks", "a: &x\n  b: *x\n"),
-                        "Workflow front matter uses the alias *x (front matter line 2) inside the node its anchor &x"
-                                + " marks; replace the alias with a value"),
+                        aliasInsideItsAnchor("x", 2)),
                 arguments(
                         named("alias inside a node that redefines an earlier anchor", "a: &x 1\nb: &x [*x]\n"),
-                        "Workflow front matter uses the alias *x (front matter line 2) inside the node its anchor &x"
-                                + " marks; replace the alias with a value"),
+                        aliasInsideItsAnchor("x", 2)),
                 arguments(
                         named("alias inside the flow sequence its anchor marks", "a: &x [1, *x]\n"),
-                        "Workflow front matter uses the alias *x (front matter line 1) inside the node its anchor &x"
-                                + " marks; replace the alias with a value"));
+                        aliasInsideItsAnchor("x", 1)),
+                arguments(
+                        named("repeated key with a line break", "\"a\\nb\": 1\n\"a\\nb\": 2\n"),
+                        duplicateKey("a\\nb", 2)),
+                arguments(
+                        named("repeated nested key with a next-line character", "c:\n  \"a\\Nb\": 1\n  \"a\\Nb\": 2\n"),
+                        duplicateKey("c.a" + ESCAPED_NEXT_LINE + "b", 3)),
+                arguments(
+                        named("merge key under a key with a line break", "\"a\\nb\":\n  <<: {t: 5}\n"),
+                        mergeKey("a\\nb.<<", 2)));
     }
 
     @Test
@@ -217,7 +219,22 @@ final class WorkflowFrontMatterYamlRulesTest {
         WorkflowDefinition loaded = loader.parse(WORKFLOW, workflow);
 
         // then
-        assertThat(loaded.config()).isEqualTo(Map.of("a", Map.of("<<", 1), "b", "<<", "c", "<<", "d", "<<"));
+        assertThat(loaded.config())
+                .containsExactlyInAnyOrderEntriesOf(Map.of("a", Map.of("<<", 1), "b", "<<", "c", "<<", "d", "<<"));
+    }
+
+    @Test
+    void aMergeKeyWithTheNonSpecificTagLoadsAsAStringKey() {
+        // given
+        byte[] workflow = workflow("c:\n  ! <<: {a: 1}\n");
+
+        // when
+        WorkflowDefinition loaded = loader.parse(WORKFLOW, workflow);
+
+        // then
+        assertThat(loaded.config())
+                .as("YAML reads a scalar tagged ! as a string, so ! << is the key \"<<\"")
+                .containsExactlyInAnyOrderEntriesOf(Map.of("c", Map.of("<<", Map.of("a", 1))));
     }
 
     @Test
@@ -230,7 +247,7 @@ final class WorkflowFrontMatterYamlRulesTest {
 
         // then
         assertThat(loaded.config())
-                .isEqualTo(Map.of(
+                .containsExactlyInAnyOrderEntriesOf(Map.of(
                         "x", Map.of("x", 1),
                         "y", Map.of("x", 2),
                         "l", List.of(Map.of("x", 1), Map.of("x", 2)),
@@ -296,18 +313,28 @@ final class WorkflowFrontMatterYamlRulesTest {
 
     @MethodSource("collectionAliasCases")
     @ParameterizedTest
-    void collectionAliasesCountEveryCopiedNode(String anchored, int copiesWithinLimit, int aliasLine) {
+    void collectionAliasesLoadUpToTheNodeLimit(String anchored, int copiesWithinLimit, int aliasLine) {
         // given
-        byte[] withinLimit = workflow(anchored + "copies: [" + "*l, ".repeat(copiesWithinLimit) + "]\n");
-        byte[] overLimit = workflow(anchored + "copies: [" + "*l, ".repeat(copiesWithinLimit + 1) + "]\n");
+        byte[] workflow = workflow(listCopies(anchored, copiesWithinLimit));
 
         // when
-        WorkflowDefinition loaded = loader.parse(WORKFLOW, withinLimit);
-        WorkflowException failure =
-                catchThrowableOfType(WorkflowException.class, () -> loader.parse(WORKFLOW, overLimit));
+        WorkflowDefinition loaded = loader.parse(WORKFLOW, workflow);
 
         // then
         assertThat(loaded.config().get("copies")).asInstanceOf(LIST).hasSize(copiesWithinLimit);
+    }
+
+    @MethodSource("collectionAliasCases")
+    @ParameterizedTest
+    void collectionAliasesFailOneCopyPastTheNodeLimit(String anchored, int copiesWithinLimit, int aliasLine) {
+        // given
+        byte[] workflow = workflow(listCopies(anchored, copiesWithinLimit + 1));
+
+        // when
+        WorkflowException failure =
+                catchThrowableOfType(WorkflowException.class, () -> loader.parse(WORKFLOW, workflow));
+
+        // then
         assertThat(failure).hasMessage(aliasLimit("l", aliasLine));
     }
 
@@ -332,7 +359,7 @@ final class WorkflowFrontMatterYamlRulesTest {
         // The definition of the list copies the scalar once, so the last copy of the list passes the limit.
         String anchored = "s: &s " + LONG_SCALAR + "\nlist: &l [*s]\n";
         int copies = MAX_ALIAS_COPIED_CHARACTERS / LONG_SCALAR.length();
-        byte[] workflow = workflow(anchored + "copies: [" + "*l, ".repeat(copies) + "]\n");
+        byte[] workflow = workflow(listCopies(anchored, copies));
 
         // when
         WorkflowException failure =
@@ -386,7 +413,14 @@ final class WorkflowFrontMatterYamlRulesTest {
                 catchThrowableOfType(WorkflowException.class, () -> loader.parse(WORKFLOW, workflow));
 
         // then
-        assertThat(failure.code()).isEqualTo(PARSE_ERROR);
+        assertThat(failure)
+                .as("a tab that starts a line is a YAML syntax error")
+                .extracting(WorkflowException::code)
+                .isEqualTo(PARSE_ERROR);
+    }
+
+    private static String listCopies(String anchored, int copies) {
+        return anchored + "copies: [" + "*l, ".repeat(copies) + "]\n";
     }
 
     private static String longScalarAliases(int copies) {
@@ -410,6 +444,16 @@ final class WorkflowFrontMatterYamlRulesTest {
                 + "), which is not supported; repeat the keys of the merged mapping there instead";
     }
 
+    private static String undefinedAlias(String alias, int line) {
+        return "Workflow front matter uses the alias *" + alias + " (front matter line " + line + ") before an anchor &"
+                + alias + " defines it; define the anchor earlier or write the value instead";
+    }
+
+    private static String aliasInsideItsAnchor(String alias, int line) {
+        return "Workflow front matter uses the alias *" + alias + " (front matter line " + line
+                + ") inside the node its anchor &" + alias + " marks; replace the alias with a value";
+    }
+
     private static String duplicateKey(String path, int line) {
         return "Workflow front matter has the key " + path + " more than once (front matter line " + line
                 + "); keep one entry and remove the others";
@@ -424,9 +468,5 @@ final class WorkflowFrontMatterYamlRulesTest {
         return "Workflow front matter aliases copy more than " + MAX_ALIAS_COPIED_CHARACTERS
                 + " characters of scalars (alias *" + alias + ", front matter line " + line
                 + "); use fewer aliases or shorter anchored values";
-    }
-
-    private static byte[] workflow(String frontMatter) {
-        return ("---\n" + frontMatter + "---\nBody\n").getBytes(UTF_8);
     }
 }

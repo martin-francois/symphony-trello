@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.workflow;
 
+import ch.fmartin.symphony.trello.SingleLineText;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.JsonStreamContext;
@@ -123,6 +124,8 @@ public final class WorkflowFrontMatterYaml {
         // The keys read so far in each open mapping; the innermost is first.
         private final Deque<OpenMapping> openMappings = new ArrayDeque<>();
         private long aliasExpandedNodes;
+        // Collections Jackson has been handed and not yet closed, copies included.
+        private int deliveredDepth;
         private long aliasCopiedCharacters;
 
         FrontMatterParser(
@@ -139,7 +142,7 @@ public final class WorkflowFrontMatterYaml {
         protected @Nullable Event getEvent() throws IOException {
             Event copied = nextCopiedEvent();
             if (copied != null) {
-                return copied;
+                return delivered(copied);
             }
             copyingAlias = null;
             Event event = super.getEvent();
@@ -154,6 +157,26 @@ public final class WorkflowFrontMatterYaml {
             }
             if (event != null) {
                 read(event);
+                delivered(event);
+            }
+            return event;
+        }
+
+        // Jackson stops at its nesting limit with a generic parse error. A copy can push valid YAML
+        // past that limit, so the copy fails with a message that names the alias instead.
+        private Event delivered(Event event) throws RuleViolation {
+            if (event instanceof CollectionStartEvent) {
+                deliveredDepth++;
+                AliasEvent alias = copyingAlias;
+                int maxDepth = streamReadConstraints().getMaxNestingDepth();
+                if (alias != null && deliveredDepth > maxDepth) {
+                    throw violation(
+                            "aliases nest the front matter deeper than %d levels (alias *%s, front matter line %d); "
+                                    + "use the alias at a shallower level or write the value instead",
+                            maxDepth, SingleLineText.escaped(alias.getAnchor()), line(alias.getStartMark()));
+                }
+            } else if (event instanceof CollectionEndEvent) {
+                deliveredDepth--;
             }
             return event;
         }
@@ -193,7 +216,7 @@ public final class WorkflowFrontMatterYaml {
         }
 
         private Anchored resolve(AliasEvent alias) throws RuleViolation {
-            String name = alias.getAnchor();
+            String name = SingleLineText.escaped(alias.getAnchor());
             int line = line(alias.getStartMark());
             Anchored anchored = anchors.get(name);
             if (anchored == null && latestDeclarations.containsKey(name)) {
@@ -295,11 +318,11 @@ public final class WorkflowFrontMatterYaml {
         }
 
         // A key that an alias supplies is named by the alias, so the message shows no anchored value,
-        // and its line is the line of the alias.
+        // and its line is the line of the alias. Key text is escaped so the message stays one line.
         private void checkKey() throws IOException {
             String key = currentName();
             AliasEvent alias = copyingAlias;
-            String label = alias == null ? key : "*" + alias.getAnchor();
+            String label = SingleLineText.escaped(alias == null ? key : "*" + alias.getAnchor());
             int line = alias == null ? currentTokenLocation().getLineNr() : line(alias.getStartMark());
             OpenMapping mapping = openMappings.peek();
             if (mapping != null) {
@@ -319,8 +342,8 @@ public final class WorkflowFrontMatterYaml {
             }
         }
 
-        // A merge key is the plain scalar `<<` or a key tagged `!!merge`, the same scalars SnakeYAML
-        // resolves to the merge tag. A quoted "<<" is an ordinary string key.
+        // A merge key is the plain scalar `<<` or a key tagged `!!merge`. A quoted "<<", or one with
+        // the non-specific tag `!`, which YAML reads as a string, is an ordinary string key.
         private boolean isMergeKey(String key) {
             if (!(_lastEvent instanceof ScalarEvent scalar)) {
                 return false;

@@ -23,6 +23,9 @@ informed: [Operators, Contributors, Future maintainers]
 matter with Jackson's YAML reader (`jackson-dataformat-yaml` 2.21 on SnakeYAML 2.6). That reader
 returns an alias as its anchor name and does not apply merge keys
 ([FasterXML/jackson-dataformats-text issue #98](https://github.com/FasterXML/jackson-dataformats-text/issues/98)).
+The setup editor built its reader with `YAMLFactory.builder()`, which leaves out Jackson's default
+`EMPTY_STRING_AS_NULL` feature, so it read a key without a value as `""` where the loader and the
+startup read gave `null`.
 [GitHub issue #786](https://github.com/martin-francois/symphony-trello/issues/786) lists what an
 operator got before this decision:
 
@@ -85,7 +88,8 @@ Chosen rules, as `SPEC.md` section 5.2 states them:
    copy keeps the value an inner alias had where the anchor was defined.
 2. A merge key is a `workflow_parse_error` that names the key's path, anywhere in the document. A
    merge key is the plain scalar `<<` or a key tagged `!!merge`, the scalars YAML 1.1 resolves to
-   the merge type. A quoted `"<<"` stays an ordinary string key, as it loaded before.
+   the merge type. A quoted `"<<"`, or `! <<` with the non-specific tag, stays an ordinary string
+   key, as it loaded before.
 3. A key that appears twice in one map is a `workflow_parse_error` that names the key's path. Keys
    compare by their text, which is how the config map stores them, so `a` and `"a"`, or `1` and
    `"1"`, are the same key.
@@ -127,6 +131,10 @@ node limit.
   `WORKFLOW.example.md` is 2,231 characters, so a workflow could copy that front matter 448 times
   and stay below the limit. Every character of a copied scalar counts, keys included.
 
+A copy also counts toward Jackson's nesting limit of 1,000 levels. Front matter that nests deeper
+without aliases was already a parse error; a copy that goes past the limit now fails with a message
+that names the alias instead of the generic invalid-YAML message.
+
 Alternatives for the limits:
 
 * Count aliases instead of copied nodes, as SnakeYAML's `maxAliasesForCollections` does. Rejected,
@@ -142,18 +150,23 @@ Alternatives for the limits:
   Boot read them.
 * Good, because a merge key or a repeated key fails at load time with the key's path and the line,
   instead of running with values the author did not intend.
-* Good, because every other front matter keeps its values and types; a differential test compares
-  the old and the new reader on the repository's workflows, fixtures and hand-made YAML.
+* Good, because every other front matter keeps its values and types in the loader and the startup
+  read; a differential test compares the old and the new reader on the repository's workflows,
+  fixtures and hand-made YAML. Setup differs only for a key without a value, as described below.
 * Good, because one class owns front matter reading, so the startup port check and setup cannot
   disagree with the loader.
 * Bad, because this is a breaking change. A workflow that loaded before now fails when it has a
-  repeated key, a merge key, an alias without an earlier anchor, an alias inside its own anchored
-  node, or aliases past either limit; the old reader loaded those aliases as their anchor names.
+  repeated key, a merge key (`<<` or a key tagged `!!merge`), an alias without an earlier anchor, an
+  alias inside its own anchored node, aliases past either limit, or an alias whose copy nests the
+  front matter deeper than 1,000 levels; the old reader loaded those aliases as their anchor names.
   The operator must remove the repeated key, write the merged keys out, and replace each failing
   alias with its value.
 * Bad, because the replay and key checks are about 250 lines of code on Jackson 2.x internals
   (`getEvent()`, `_lastEvent`, `_yamlResolver`). A move to Jackson 3 must port them.
 * Bad, because a setup write that rewrites the front matter turns aliases into copies.
+* Neutral, because setup now reads a key without a value as `null`, as the loader always did.
+  Regeneration writes such a Trello tool setting as `null` instead of `""`, and an empty
+  `trello_tools:` section as `{}` where setup used to fail with `setup_workflow_invalid`.
 * Neutral, because SnakeYAML 2.6 was already on the classpath through Jackson's YAML module. The
   reader imports SnakeYAML's event classes, so `pom.xml` now declares it directly, at the version
   the Quarkus BOM manages.

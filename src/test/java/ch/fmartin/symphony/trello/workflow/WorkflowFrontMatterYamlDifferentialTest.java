@@ -1,5 +1,8 @@
 package ch.fmartin.symphony.trello.workflow;
 
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_BYTE_ORDER_MARK;
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_LINE_SEPARATOR;
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_PARAGRAPH_SEPARATOR;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.fuzz.WorkflowLoaderInvariants;
@@ -9,9 +12,7 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import java.io.IOException;
 import java.io.StringReader;
 import java.io.UncheckedIOException;
-import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -56,6 +57,9 @@ final class WorkflowFrontMatterYamlDifferentialTest {
     private static final String DELIMITER = "---";
     // A corpus this small would mean the harvest silently stopped finding the repository's workflows.
     private static final int MIN_REPOSITORY_FRONT_MATTERS = 100;
+    // Keeps parameterized case names readable in test reports.
+    private static final int MAX_CASE_NAME_LENGTH = 80;
+    private static final String LATIN_SMALL_E_WITH_ACUTE = "\u00E9";
 
     private static final List<String> SCALARS = List.of(
             // YAML 1.1 and 1.2 booleans and near misses
@@ -232,12 +236,14 @@ final class WorkflowFrontMatterYamlDifferentialTest {
             "%YAML 1.1\n--- \na: 1\n",
             "\"quoted key\": 1\n'single key': 2\n",
             "\"\": empty quoted key\n",
+            "! <<: 1\n",
+            "a:\n  ! <<: {b: 1}\n",
             "a b c: spaced key\n",
             "\"k\\u00e9y\": unicode escape\n",
-            "k\u00e9y: unicode\n",
-            "a: \u2028\n",
-            "a: x\u2029y\n",
-            "\ufeffa: bom\n",
+            "k" + LATIN_SMALL_E_WITH_ACUTE + "y: unicode\n",
+            "a: " + UNICODE_LINE_SEPARATOR + "\n",
+            "a: x" + UNICODE_PARAGRAPH_SEPARATOR + "y\n",
+            UNICODE_BYTE_ORDER_MARK + "a: bom\n",
             "a:    \n",
             "a: &anchor-only 1\n",
             "a: &x 1\n",
@@ -352,14 +358,14 @@ final class WorkflowFrontMatterYamlDifferentialTest {
     // differently on purpose; WorkflowFrontMatterYamlRulesTest owns them. SnakeYAML's own parser and
     // composer find them, independently of the code under test.
     private static boolean outsideTheDecidedRules(String yaml) {
-        Yaml snakeYaml = new Yaml();
+        var snakeYaml = new Yaml();
         try {
             for (Event event : snakeYaml.parse(new StringReader(yaml))) {
                 if (event instanceof AliasEvent) {
                     return false;
                 }
             }
-            Node root = snakeYaml.compose(new StringReader(yaml));
+            Node root = WorkflowLoaderInvariants.compose(yaml);
             return root != null && !WorkflowLoaderInvariants.hasMergeOrRepeatedKey(root);
         } catch (YAMLException notOneValidDocument) {
             return true;
@@ -465,10 +471,7 @@ final class WorkflowFrontMatterYamlDifferentialTest {
 
     private static Optional<String> readUtf8(Path file) {
         try {
-            return Optional.of(StandardCharsets.UTF_8
-                    .newDecoder()
-                    .decode(ByteBuffer.wrap(Files.readAllBytes(file)))
-                    .toString());
+            return Optional.of(Files.readString(file));
         } catch (CharacterCodingException binarySeed) {
             return Optional.empty();
         } catch (IOException e) {
@@ -478,6 +481,6 @@ final class WorkflowFrontMatterYamlDifferentialTest {
 
     private static String abbreviate(String yaml) {
         String oneLine = yaml.replace("\n", "\\n");
-        return oneLine.length() <= 80 ? oneLine : oneLine.substring(0, 80) + "...";
+        return oneLine.length() <= MAX_CASE_NAME_LENGTH ? oneLine : oneLine.substring(0, MAX_CASE_NAME_LENGTH) + "...";
     }
 }

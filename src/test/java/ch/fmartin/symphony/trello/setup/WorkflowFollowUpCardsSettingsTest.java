@@ -17,6 +17,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 final class WorkflowFollowUpCardsSettingsTest {
+    private static final String REGENERATED_WORKFLOW =
+            "---\ntracker:\n  kind: trello\n  board_id: existing-board\n---\nRegenerated prompt\n";
+
     @TempDir
     Path tempDir;
 
@@ -118,7 +121,7 @@ final class WorkflowFollowUpCardsSettingsTest {
                 ---
                 Existing prompt
                 """);
-        String generated = "---\ntracker:\n  kind: trello\n  board_id: existing-board\n---\nRegenerated prompt\n";
+        String generated = REGENERATED_WORKFLOW;
 
         // when
         Files.writeString(
@@ -139,6 +142,62 @@ final class WorkflowFollowUpCardsSettingsTest {
                         followUps,
                         "copied_follow_ups",
                         followUps));
+    }
+
+    @Test
+    void explicitRegenerationKeepsAnEmptyToolSettingAsNullLikeTheLoader() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: existing-board
+                trello_tools:
+                  follow_up_cards:
+                    enabled: true
+                    list_name:
+                ---
+                Existing prompt
+                """);
+
+        // when
+        String regenerated = WorkflowConfigEditor.preserveTrelloTools(
+                workflow, REGENERATED_WORKFLOW, Set.of("existing-board"), ignored -> Optional.empty());
+
+        // then
+        assertThat(regenerated)
+                .as("a key without a value is null, as the workflow loader reads it, not an empty string")
+                .contains("list_name: null")
+                .doesNotContain("list_name: \"\"");
+    }
+
+    @Test
+    void explicitRegenerationKeepsAnEmptyToolsSectionAsAnEmptyMap() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: existing-board
+                trello_tools:
+                ---
+                Existing prompt
+                """);
+
+        // when
+        String regenerated = WorkflowConfigEditor.preserveTrelloTools(
+                workflow, REGENERATED_WORKFLOW, Set.of("existing-board"), ignored -> Optional.empty());
+
+        // then
+        assertThat(regenerated)
+                .as("an empty trello_tools section is null, which regeneration keeps as an empty map")
+                .contains("trello_tools: {}");
     }
 
     @ParameterizedTest

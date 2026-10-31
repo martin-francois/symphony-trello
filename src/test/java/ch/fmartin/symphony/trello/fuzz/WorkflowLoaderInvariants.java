@@ -20,17 +20,26 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
-import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.composer.Composer;
+import org.yaml.snakeyaml.events.Event;
+import org.yaml.snakeyaml.events.ImplicitTuple;
+import org.yaml.snakeyaml.events.ScalarEvent;
 import org.yaml.snakeyaml.nodes.MappingNode;
 import org.yaml.snakeyaml.nodes.Node;
 import org.yaml.snakeyaml.nodes.NodeTuple;
 import org.yaml.snakeyaml.nodes.ScalarNode;
 import org.yaml.snakeyaml.nodes.SequenceNode;
 import org.yaml.snakeyaml.nodes.Tag;
+import org.yaml.snakeyaml.parser.Parser;
+import org.yaml.snakeyaml.parser.ParserImpl;
+import org.yaml.snakeyaml.reader.StreamReader;
+import org.yaml.snakeyaml.resolver.Resolver;
 
 /// Domain properties of [WorkflowLoader] shared by the standalone `WorkflowLoaderFuzzer` and the
 /// JUnit `WorkflowLoaderFuzzTest`. It throws [AssertionError] instead of using AssertJ because the
@@ -98,26 +107,26 @@ public final class WorkflowLoaderInvariants {
                                     .trim()),
                     "markdown without front matter becomes the whole trimmed prompt");
         } else {
-            int closing = closingDelimiter(lines);
-            if (closing < 0) {
+            OptionalInt closing = closingDelimiter(lines);
+            if (closing.isEmpty()) {
                 check(
                         PARSE_ERROR_CODE.equals(result.failureCode()),
                         "front matter without a closing delimiter is a parse error");
             } else {
-                String frontMatter = String.join("\n", lines.subList(1, closing));
+                String frontMatter = String.join("\n", lines.subList(1, closing.getAsInt()));
                 assertYamlRules(frontMatter, result);
                 WorkflowConfigInvariants.assertStartupReadAgrees(frontMatter, result);
             }
         }
     }
 
-    private static int closingDelimiter(List<String> lines) {
+    private static OptionalInt closingDelimiter(List<String> lines) {
         for (int i = 1; i < lines.size(); i++) {
             if (isFrontMatterDelimiter(lines.get(i))) {
-                return i;
+                return OptionalInt.of(i);
             }
         }
-        return -1;
+        return OptionalInt.empty();
     }
 
     /// Checks the YAML rules of `SPEC.md` section 5.2 against SnakeYAML's composer, a YAML reader
@@ -126,7 +135,7 @@ public final class WorkflowLoaderInvariants {
     private static void assertYamlRules(String frontMatter, LoadResult result) {
         Node root;
         try {
-            root = new Yaml().compose(new StringReader(frontMatter));
+            root = compose(frontMatter);
         } catch (RuntimeException notComposable) {
             // Invalid YAML, several documents, or one of SnakeYAML's own limits: no oracle.
             return;
@@ -147,6 +156,17 @@ public final class WorkflowLoaderInvariants {
                     hasShape(root, definition.config()),
                     "an accepted config has the structure of the YAML with every alias resolved");
         }
+    }
+
+    /// Composes front matter with SnakeYAML, reading a scalar with the non-specific tag `!` as a
+    /// string the way YAML and the loader read it. SnakeYAML's composer resolves `! <<` like a plain
+    /// `<<`, which would make the oracle see a merge key where the loader correctly sees the string
+    /// key "<<".
+    public static @Nullable Node compose(String frontMatter) {
+        var options = new LoaderOptions();
+        Parser parser = new NonSpecificScalarsAsStrings(
+                new ParserImpl(new StreamReader(new StringReader(frontMatter)), options));
+        return new Composer(parser, new Resolver(), options).getSingleNode();
     }
 
     /// Whether a node that SnakeYAML's composer built holds a merge key or a key repeated in one map,
@@ -312,6 +332,39 @@ public final class WorkflowLoaderInvariants {
             } catch (JsonProcessingException e) {
                 throw new AssertionError("workflow config cannot be compared", e);
             }
+        }
+    }
+
+    private record NonSpecificScalarsAsStrings(Parser parser) implements Parser {
+        private static final String NON_SPECIFIC_TAG = "!";
+
+        @Override
+        public boolean checkEvent(Event.ID choice) {
+            return parser.checkEvent(choice);
+        }
+
+        @Override
+        public Event peekEvent() {
+            return asString(parser.peekEvent());
+        }
+
+        @Override
+        public Event getEvent() {
+            return asString(parser.getEvent());
+        }
+
+        private static Event asString(Event event) {
+            if (event instanceof ScalarEvent scalar && NON_SPECIFIC_TAG.equals(scalar.getTag())) {
+                return new ScalarEvent(
+                        scalar.getAnchor(),
+                        Tag.STR.getValue(),
+                        new ImplicitTuple(false, false),
+                        scalar.getValue(),
+                        scalar.getStartMark(),
+                        scalar.getEndMark(),
+                        scalar.getScalarStyle());
+            }
+            return event;
         }
     }
 }

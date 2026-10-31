@@ -489,14 +489,16 @@ block and flow style, at every nesting level, and inside sequences.
 - Alias expansion is bounded. All aliases in one front matter MUST NOT copy more than 10,000 YAML
   nodes in total (each scalar, sequence, and map counts as one node), and MUST NOT copy more than
   1,000,000 characters of scalars in total (every character of every copied scalar, keys
-  included); beyond either limit, loading fails with `workflow_parse_error`. A copy keeps the value
-  an inner alias had where the anchor was defined, even if an anchor of the same name is defined
-  again later.
+  included); beyond either limit, loading fails with `workflow_parse_error`. Copies MUST NOT nest the
+  front matter deeper than the 1,000 levels the YAML reader allows; deeper copies fail with
+  `workflow_parse_error` naming the alias. A copy keeps the value an inner alias had where the
+  anchor was defined, even if an anchor of the same name is defined again later.
 - A setup write that rewrites the front matter stores each alias as a written-out copy of its
-  value and drops the anchors.
+  value and drops the anchors. It reads a key without a value as `null`, as the loader does, and
+  writes it back as `null`.
 - A YAML merge key is a `workflow_parse_error` whose message names the key's path. A merge key is
   the plain scalar `<<` or a key tagged `!!merge`; YAML 1.2 has no merge keys. A quoted `"<<"` or
-  `'<<'` is an ordinary string key.
+  `'<<'`, or `! <<` with the non-specific tag, is an ordinary string key.
 - A map that contains the same key twice is a `workflow_parse_error` whose message names the key's
   path. Keys compare by their text, so `a`, `"a"`, and `'a'` are the same key, and so are `1` and
   `"1"`. A key that an alias supplies counts the same way, and the message names it by the alias,
