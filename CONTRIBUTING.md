@@ -24,9 +24,17 @@ requests, reviews, and other project spaces.
    when SDKMAN's environment feature is enabled.
 
 3. Use the Maven wrapper: `./mvnw -q spotless:check verify`.
-4. Install Codex CLI if you want to run real worker sessions.
-5. Create a local `WORKFLOW.md` from `WORKFLOW.example.md`.
-6. Copy `.env.example` to `.env`, set Trello credentials there, and keep `.env` uncommitted:
+4. Install Node.js 26, then install the pnpm version that `packageManager` in `package.json` pins.
+   Run this from the repository root:
+
+   ```bash
+   npm install --global "$(node -p "require('./package.json').packageManager")"
+   ```
+
+   Run it again after each pnpm update in `packageManager`.
+5. Install Codex CLI if you want to run real worker sessions.
+6. Create a local `WORKFLOW.md` from `WORKFLOW.example.md`.
+7. Copy `.env.example` to `.env`, set Trello credentials there, and keep `.env` uncommitted:
 
    ```bash
    cp .env.example .env

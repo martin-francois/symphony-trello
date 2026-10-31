@@ -107,7 +107,7 @@ Run these checks before changing this behavior:
 
 ```bash
 ./mvnw -q -Dtest=DiagnosticsTokenHasherTest,SetupDiagnosticReporterTest,TrelloBoardSetupMainTest test
-corepack pnpm dlx markdownlint-cli2 README.md SPEC.md docs/operations.md AGENTS.md \
+pnpm dlx markdownlint-cli2 README.md SPEC.md docs/operations.md AGENTS.md \
   docs/adr/0031-keyed-diagnostics-tokens.md
 ./mvnw -q spotless:check verify
 ```

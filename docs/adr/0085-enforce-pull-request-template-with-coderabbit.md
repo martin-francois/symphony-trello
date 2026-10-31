@@ -160,7 +160,7 @@ pull request body selects the no-assistance choice because that workflow runs de
 Run the configuration tests:
 
 ```bash
-corepack pnpm run verify:scripts
+pnpm run verify:scripts
 ./mvnw -q -Dtest=ReleaseWorkflowTest test
 ```
 

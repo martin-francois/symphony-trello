@@ -8,7 +8,8 @@ implements the adapted Symphony-for-Trello specification in `SPEC.md`; work as a
 engineer driven by that spec.
 
 **Package manager:** Maven via `./mvnw` (do not invoke a system Maven). The few Node-based tools
-use pnpm via Corepack; do not add a `package.json` only to run a JavaScript CLI.
+use pnpm at the exact `packageManager` version, installed as `CONTRIBUTING.md` Development Setup
+says; do not add a `package.json` only to run a JavaScript CLI.
 
 Before creating any commit that may be pushed, verify the configured author against the
 authenticated GitHub account even when the checkout already carries an author-verification marker.

@@ -229,7 +229,7 @@ label the workflow manages and describes the opt-out.
 Run the script tests:
 
 ```bash
-corepack pnpm run verify:scripts
+pnpm run verify:scripts
 ```
 
 `scripts/pull-request-disclosure.test.ts` must pass, and removing the confirmation rule, the

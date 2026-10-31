@@ -12,6 +12,7 @@ consulted:
   - "[pnpm issue 13805](https://github.com/pnpm/pnpm/issues/13805)"
   - "[dependabot-core issue 15904](https://github.com/dependabot/dependabot-core/issues/15904)"
   - "[GitHub issue #1118](https://github.com/martin-francois/symphony-trello/issues/1118)"
+  - "[GitHub issue #1121](https://github.com/martin-francois/symphony-trello/issues/1121)"
   - "[pnpm/action-setup](https://github.com/pnpm/action-setup)"
 informed: [Future maintainers, Contributors]
 ---
@@ -86,6 +87,11 @@ Installing the exact pnpm version in CI had these options:
 * Install Corepack at an exact version with npm, then run `corepack enable`.
 * Keep `corepack enable` and rely on the runner image for Corepack.
 
+Installing the exact pnpm version on a maintainer's machine had these options:
+
+* Install pnpm with npm at the version `packageManager` names.
+* Install Corepack at an exact version with npm, then run `corepack enable pnpm`.
+
 ## Decision Outcome
 
 Chosen option: "Enable `lockFileMaintenance` on a weekly schedule with automatic merge, and enforce
@@ -122,8 +128,8 @@ the pnpm minutes from the Renovate days rather than asserting them independently
 `pnpm-workspace.yaml` also sets `pmOnFail: ignore`. This keeps the project dependency graph in one
 YAML document until GitHub's static parser supports pnpm's stream format. The repository does not
 accept an unpinned package manager in exchange: `package.json` keeps an exact `packageManager` value,
-Corepack can select it for local use, and every CI job that runs pnpm installs that same exact
-version first. `pmOnFail: download`, `warn`, and `error` were rejected because they retain the
+maintainers install it locally, and every CI job that runs pnpm installs that same exact version
+first. `pmOnFail: download`, `warn`, and `error` were rejected because they retain the
 two-document lockfile; leaving `pmOnFail` unset has the same result.
 
 For CI, chosen option: "Install pnpm with `pnpm/action-setup`, which reads the version from
@@ -139,6 +145,16 @@ on `PATH`. Before `actions/setup-node` runs, that npm belongs to the runner imag
 is the hidden runner dependency this change removes. The jobs do not use `actions/setup-node`'s
 `cache: pnpm`, which would need pnpm before `actions/setup-node`. A job that wants a pnpm store
 cache should use the action's own `cache: true` input, which keeps this order.
+
+For local use, chosen option: "Install pnpm with npm at the version `packageManager` names"
+([GitHub issue #1121](https://github.com/martin-francois/symphony-trello/issues/1121)).
+`CONTRIBUTING.md` gives `npm install --global "$(node -p "require('./package.json').packageManager")"`,
+which passes the `pnpm@<version>` value straight to npm. The version still lives only in
+`package.json`, so the command adds no declaration for Renovate to own, and a maintainer gets the
+same pnpm that `pnpm/action-setup` installs in CI. On 2026-10-31 this installed pnpm 12.15.0 in a
+`node:26.13.0` container, which then ran `pnpm install --frozen-lockfile`, the
+`pnpm run check:scripts` type check, and `scripts/commitlint-local`. The ADR examples run plain
+`pnpm`, which works for this install and for a maintainer who keeps Corepack.
 
 A script test checks the setting, the lockfile shape, the manifest pin, and every workflow: no
 workflow mentions Corepack, every `pnpm/action-setup` reference is SHA-pinned with a version
@@ -183,8 +199,9 @@ value of the rule is that it is in place before the first transitive advisory, n
   until it has one.
 * Good, because CI no longer depends on a Node.js install that the runner image ships beside the
   one `actions/setup-node` selects.
-* Bad, because a maintainer who runs `corepack pnpm` locally on Node.js 26 must install Corepack
-  first. CI no longer exercises that path.
+* Bad, because a maintainer's npm-installed pnpm does not follow a `packageManager` update. With
+  `pmOnFail: ignore`, pnpm does not warn either, so `CONTRIBUTING.md` tells the maintainer to run the
+  install again after each update.
 * Neutral, because a refresh can resolve a slightly older version than the newest published one.
   That is the cooldown working, not the refresh failing; the newer version arrives the following
   week.
@@ -212,7 +229,11 @@ This decision remains implemented when:
 * `pnpm-workspace.yaml` sets `pmOnFail: ignore`, `pnpm-lock.yaml` has one YAML document, and every CI
   job that runs pnpm installs the exact `packageManager` version with a SHA-pinned
   `pnpm/action-setup` step after `actions/setup-node`, which the script test `pnpm keeps GitHub's
-  dependency graph readable while every CI job installs its exact pin` checks; and
+  dependency graph readable while every CI job installs its exact pin` checks;
+* `CONTRIBUTING.md` installs pnpm locally from the `packageManager` value, and
+  `scripts/commitlint-local` prints the same command when pnpm is missing. The script tests in
+  `scripts/pnpm-local-install.test.ts` check both, and the script test named above keeps the value a
+  bare `pnpm@<version>` that npm accepts; and
 * the script test `The lockfile refresh path enforces the same seven-day cooldown` derives that
   value from `renovate.json` and fails if either side moves alone.
 
@@ -297,6 +318,25 @@ The workflows stay as they were before
 * Good, because nothing changes.
 * Bad, because the jobs work only while the runner image ships an older Node.js that still has
   Corepack, and nothing in the repository declares, pins, or tests that.
+
+### Install pnpm With npm At The Version `packageManager` Names
+
+A maintainer runs `npm install --global` with the `packageManager` value, `pnpm@<version>`.
+
+* Good, because the version stays in one place that Renovate already updates.
+* Good, because local machines and CI install the same pnpm from the same field.
+* Bad, because the maintainer must repeat the install after each `packageManager` update.
+* Neutral, because npm 11 skips pnpm's install scripts unless allowed and warns about it. pnpm then
+  starts through Node.js instead of its native binary.
+
+### Install Corepack At An Exact Version With npm, Then Run `corepack enable pnpm`
+
+A maintainer runs `npm install --global corepack@<x.y.z>`, then `corepack enable pnpm`. Corepack
+reads `packageManager` on every call.
+
+* Good, because pnpm follows a `packageManager` update with no extra step.
+* Bad, because the Corepack version in `CONTRIBUTING.md` is a new nonstandard declaration that needs
+  a Renovate regex manager and a script test, the cost that already ruled this option out for CI.
 
 ## More Information
 
