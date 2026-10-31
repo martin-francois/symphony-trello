@@ -75,7 +75,7 @@ Run these checks before changing this behavior:
 
 ```bash
 ./mvnw -q -Dtest=SetupDiagnosticReporterTest,TrelloBoardSetupMainTest test
-corepack pnpm dlx markdownlint-cli2 README.md SPEC.md docs/operations.md AGENTS.md \
+pnpm dlx markdownlint-cli2 README.md SPEC.md docs/operations.md AGENTS.md \
   .codex/skills/debug/SKILL.md docs/adr/0030-private-diagnostics-context-flag.md
 ./mvnw -q spotless:check verify
 ```

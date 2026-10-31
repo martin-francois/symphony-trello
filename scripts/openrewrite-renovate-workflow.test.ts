@@ -1501,7 +1501,11 @@ test("pnpm keeps GitHub's dependency graph readable while every CI job installs 
   );
   // pmOnFail: ignore turns off pnpm's own version switch, so packageManager is the only pin and
   // pnpm/action-setup must read it rather than carry a second version (ADR 0077).
-  assert.match(PACKAGE.packageManager ?? "", /^pnpm@\d+\.\d+\.\d+$/u);
+  assert.match(
+    PACKAGE.packageManager ?? "",
+    /^pnpm@\d+\.\d+\.\d+$/u,
+    "packageManager must stay a bare pnpm@<version>: CONTRIBUTING.md passes it to npm install --global",
+  );
 
   const pnpmJobs: string[] = [];
   for (const {fileName, text} of readWorkflows()) {

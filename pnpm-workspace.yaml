@@ -23,5 +23,5 @@ minimumReleaseAgeIgnoreMissingTime: false
 # static dependency-graph parser currently reads that document instead of the project graph and can
 # silently stop reporting vulnerable project dependencies. That also turns off pnpm's own version
 # switch, so the exact packageManager version in package.json is the only pin: pnpm/action-setup
-# reads it in CI and Corepack can read it locally. See ADR 0077.
+# reads it in CI, and the CONTRIBUTING.md setup installs it locally. See ADR 0077.
 pmOnFail: ignore

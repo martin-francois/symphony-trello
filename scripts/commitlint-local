@@ -33,7 +33,7 @@ command="$1"
 shift
 
 if ! command -v pnpm >/dev/null 2>&1; then
-  die "pnpm is required; enable Corepack and prepare the pinned pnpm version first"
+  die "pnpm is required; install the pinned pnpm version as CONTRIBUTING.md, Development Setup, describes"
 fi
 
 if [[ -e "$cache_root" && ! -O "$cache_root" ]]; then

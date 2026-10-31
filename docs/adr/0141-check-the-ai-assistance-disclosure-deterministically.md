@@ -107,7 +107,7 @@ nothing by itself; it shows red on the pull request, and pull-request review sto
 Run the script tests:
 
 ```bash
-corepack pnpm run verify:scripts
+pnpm run verify:scripts
 ```
 
 The AI Assistance tests in `scripts/check-pr-compatibility-metadata.test.ts` must pass, and removing

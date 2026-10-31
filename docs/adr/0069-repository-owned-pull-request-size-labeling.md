@@ -154,7 +154,7 @@ pinning, and local-test contracts with less repository-owned glue.
 Run the exact-script and repository workflow tests:
 
 ```bash
-corepack pnpm run verify:scripts
+pnpm run verify:scripts
 ./mvnw -q -Dtest=AdrConformanceTest,ReleaseWorkflowTest test
 ```
 
@@ -162,7 +162,7 @@ Run the full project and documentation checks:
 
 ```bash
 ./mvnw -q clean spotless:check verify
-corepack pnpm dlx markdownlint-cli2 "**/*.md" "#node_modules"
+pnpm dlx markdownlint-cli2 "**/*.md" "#node_modules"
 ```
 
 Run `actionlint` on `.github/workflows/size-labeler.yml`. Inspect that every `uses:` reference is a

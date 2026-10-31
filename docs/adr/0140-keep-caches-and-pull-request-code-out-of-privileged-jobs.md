@@ -104,7 +104,7 @@ the owner, because the release workflow runs only on `main` and cannot be tried 
 Run the script tests:
 
 ```bash
-corepack pnpm run verify:scripts
+pnpm run verify:scripts
 ```
 
 `scripts/github-actions-security.test.ts` must pass, and reverting any of the four workflow fixes

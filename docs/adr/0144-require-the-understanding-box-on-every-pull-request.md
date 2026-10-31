@@ -115,7 +115,7 @@ decision keep their bodies.
 Run the script tests:
 
 ```bash
-corepack pnpm run verify:scripts
+pnpm run verify:scripts
 ```
 
 The Review Checklist tests in `scripts/check-pr-compatibility-metadata.test.ts` must pass, and

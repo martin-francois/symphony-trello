@@ -39,7 +39,7 @@
 ## What may be added to AGENTS.md (allowlist)
 
 - One-sentence project description.
-- Package manager (here Maven via `./mvnw`; pnpm via Corepack for the few Node tools).
+- Package manager (here Maven via `./mvnw`; pnpm at the exact `packageManager` version for the few Node tools).
 - Non-standard build/verify commands (here `./mvnw -q spotless:check verify`).
 - Anything truly relevant to every single task.
 
