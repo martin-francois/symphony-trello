@@ -110,6 +110,10 @@ final class SetupDiagnosticReporter {
     private static final Pattern QUOTED_POSIX_PATH = Pattern.compile("([\"'`])(/[^\"'`\\r\\n]+)\\1");
     private static final Pattern QUOTED_WINDOWS_PATH = Pattern.compile("(?i)([\"'`])([A-Z]:\\\\[^\"'`\\r\\n]+)\\1");
     private static final Pattern WINDOWS_PATH = Pattern.compile("(?i)\\b[A-Z]:\\\\[^\\r\\n:'\"<>|]+");
+    private static final Pattern UNC_PATH = Pattern.compile(
+            "(?i)(?<![A-Za-z0-9])\\\\\\\\\\\\\\\\[^\\r\\n:'\"<>|]+?(?=\\s+is\\s+ready(?:;|$)|[;,\\r\\n]|$)");
+    private static final Pattern FILE_URL_PATH = Pattern.compile(
+            "(?i)\\bfile://[^\\r\\n'\"<>|]+?(?=\\s+is\\s+ready(?:;|$)|[;,\\r\\n]|$)");
     private static final Pattern PRIVATE_CONTEXT_LOOKUP_TOKEN = Pattern.compile("(?:[0-9a-f]{12}|<path:[0-9a-f]{12}>)");
     private static final Pattern TRELLO_OBJECT_ID = Pattern.compile("\\b[0-9a-f]{24}\\b", Pattern.CASE_INSENSITIVE);
     private static final Splitter LINE_BREAK_SPLITTER = Splitter.onPattern("\\R");
@@ -2355,6 +2359,8 @@ final class SetupDiagnosticReporter {
         sanitized = PATH_ASSIGNMENT
                 .matcher(sanitized)
                 .replaceAll(match -> match.group(1) + pathToken(match.group(2), pathTokens));
+        sanitized = UNC_PATH.matcher(sanitized).replaceAll(match -> pathToken(match.group(), pathTokens));
+        sanitized = FILE_URL_PATH.matcher(sanitized).replaceAll(match -> pathToken(match.group(), pathTokens));
         sanitized = WINDOWS_PATH.matcher(sanitized).replaceAll(match -> pathToken(match.group(), pathTokens));
         return CliInputValidation.safeDiagnosticsText(redactAbsolutePosixPaths(sanitized, pathTokens));
     }

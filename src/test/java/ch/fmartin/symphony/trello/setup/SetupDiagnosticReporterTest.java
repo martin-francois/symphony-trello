@@ -708,6 +708,36 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void diagnosticsRedactsUncPathsFromToolVersionOutput() throws Exception {
+        // given
+        String privatePath = "\\\\fileserver\\share\\Jane Doe\\tools\\codex.exe";
+
+        // when
+        String report = renderDiagnosticsWithCodexVersion(
+                "codex-cli 1.2.3 at " + privatePath + " is ready; login=not-probed", "unc-redaction");
+
+        // then
+        assertThat(report)
+                .contains("codex-cli 1.2.3 at <path:", "is ready; login=not-probed")
+                .doesNotContain(privatePath, "fileserver", "Jane Doe");
+    }
+
+    @Test
+    void diagnosticsRedactsFileUrlPathsFromToolVersionOutput() throws Exception {
+        // given
+        String privatePath = "file:///srv/Jane Doe/x";
+
+        // when
+        String report = renderDiagnosticsWithCodexVersion(
+                "codex-cli 1.2.3 at " + privatePath + " is ready; login=not-probed", "file-url-redaction");
+
+        // then
+        assertThat(report)
+                .contains("codex-cli 1.2.3 at <path:", "is ready; login=not-probed")
+                .doesNotContain(privatePath, "/srv/Jane Doe/x", "Jane Doe");
+    }
+
+    @Test
     void diagnosticsSkipsNonExecutablePosixPathEntries() throws Exception {
         // given
         if (System.getProperty("os.name").startsWith("Windows")) {
@@ -4481,6 +4511,18 @@ final class SetupDiagnosticReporterTest {
     /// Fixes `time_utc` to an instant whose fraction of a second contains the port digits. A check
     /// that looks for the bare port number then fails on every run, not only on the rare run where
     /// the live clock happens to contain those digits.
+    private String renderDiagnosticsWithCodexVersion(String version, String prefix) throws Exception {
+        Path configDir = tempDir.resolve(prefix + "-config");
+        Path stateHome = tempDir.resolve(prefix + "-state");
+        Path toolDirectory = fakeToolDirectory(tempDir, prefix + "-tools", "codex");
+        Path codex = toolDirectory.resolve("codex");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        FakeCommandRunner commands = new FakeCommandRunner().returns(0, version + "\n", codex.toString(), "--version");
+        var reporter = new SetupDiagnosticReporter(Map.of("PATH", toolDirectory.toString()), commands);
+        return renderGlobalDiagnostics(reporter, configDir, stateHome);
+    }
+
     private static Clock clockWithPortInTimeUtc(int port) {
         return Clock.fixed(Instant.parse("2026-10-29T00:00:00Z").plus(port, ChronoUnit.MICROS), ZoneOffset.UTC);
     }
