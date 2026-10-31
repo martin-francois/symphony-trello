@@ -36,6 +36,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 import java.util.logging.Handler;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
@@ -455,17 +456,16 @@ final class SymphonyOrchestratorShutdownTest {
         SymphonyOrchestrator orchestrator = orchestrator(workflow, new FakeTracker(List.of()), mock());
         var watcherBeforeWait = new PausePoint("the workflow watcher before it waits for a change");
         orchestrator.workflowWatcherWaitHookForTests = watcherBeforeWait::pause;
-        orchestrator.start();
-        watcherBeforeWait.awaitPaused();
-        Thread watcher = watcherBeforeWait.pausedThread();
+        try (var watcherLogs = new ThreadLogs(watcherBeforeWait::pausedThread)) {
+            orchestrator.start();
+            watcherBeforeWait.awaitPaused();
 
-        try (var watcherLogs = new ThreadLogs(watcher)) {
             // when
             orchestrator.stop();
             watcherBeforeWait.resume();
 
             // then
-            assertThat(watcher.join(WAIT_TIMEOUT))
+            assertThat(watcherBeforeWait.pausedThread().join(WAIT_TIMEOUT))
                     .as(
                             "the workflow watcher should end within %d seconds after stop closed its watch service",
                             WAIT_TIMEOUT.toSeconds())
@@ -476,21 +476,22 @@ final class SymphonyOrchestratorShutdownTest {
         }
     }
 
-    // Records only what one thread logs, so orchestrators in parallel tests cannot add records.
+    // Records only what the watched thread logs, so orchestrators in parallel tests cannot add
+    // records. The thread is looked up per record because the test learns it only after start().
     // Keeps level, message and parameters as text so a failure shows the unexpected log line.
     private static final class ThreadLogs extends Handler implements AutoCloseable {
         private final Logger logger = Logger.getLogger(SymphonyOrchestrator.class.getName());
-        private final Thread thread;
+        private final Supplier<Thread> thread;
         private final List<String> records = new CopyOnWriteArrayList<>();
 
-        ThreadLogs(Thread thread) {
+        ThreadLogs(Supplier<Thread> thread) {
             this.thread = thread;
             logger.addHandler(this);
         }
 
         @Override
         public void publish(LogRecord record) {
-            if (Thread.currentThread().equals(thread)) {
+            if (Thread.currentThread().equals(thread.get())) {
                 records.add(
                         record.getLevel() + " " + record.getMessage() + " " + Arrays.toString(record.getParameters()));
             }
