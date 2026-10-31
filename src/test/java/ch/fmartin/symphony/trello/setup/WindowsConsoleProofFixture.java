@@ -5,6 +5,7 @@ import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.createWind
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.run;
 
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
+import ch.fmartin.symphony.trello.testsupport.JavaLauncherEnvironment;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.File;
@@ -60,9 +61,7 @@ final class WindowsConsoleProofFixture {
         process.directory(directory.toFile());
         Map<String, String> environment = process.environment();
         environment.keySet().removeIf(InstallerScriptFixture::isRepositoryEnvironmentControl);
-        for (String name : List.of("JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_JAVA_OPTIONS")) {
-            environment.remove(name);
-        }
+        JavaLauncherEnvironment.removeLauncherOptions(environment);
         environment.put("PATH", tools + File.pathSeparator + System.getenv("PATH"));
         environment.put("HOME", home.toString());
         environment.put("USERPROFILE", home.toString());

@@ -19,6 +19,7 @@ import static org.mockito.Mockito.when;
 
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.testsupport.BoundedWait;
+import ch.fmartin.symphony.trello.testsupport.JavaLauncherEnvironment;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AccessDeniedException;
@@ -608,14 +609,15 @@ final class LocalWorkerManagerTest {
                 });
         Path processLockFile = fixture.managedFiles(board).processLockFile();
         Files.createDirectories(processLockFile.getParent());
-        Process lockHolder = new ProcessBuilder(
+        var processBuilder = new ProcessBuilder(
                         Path.of(System.getProperty("java.home"), "bin", "java").toString(),
                         "-cp",
                         System.getProperty("java.class.path"),
                         ExternalFileLockHolder.class.getName(),
                         processLockFile.toString())
-                .redirectErrorStream(true)
-                .start();
+                .redirectErrorStream(true);
+        JavaLauncherEnvironment.removeLauncherOptions(processBuilder.environment());
+        Process lockHolder = processBuilder.start();
         try {
             assertThat(lockHolder.inputReader().readLine()).isEqualTo("locked");
             var startResult = new AtomicReference<WorkerRunResult>();

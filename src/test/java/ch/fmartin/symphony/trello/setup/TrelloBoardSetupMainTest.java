@@ -34,6 +34,7 @@ import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.testsupport.CliRunResult;
 import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
+import ch.fmartin.symphony.trello.testsupport.JavaLauncherEnvironment;
 import ch.fmartin.symphony.trello.testsupport.SetupCommandBuilder;
 import ch.fmartin.symphony.trello.testsupport.TestEnv;
 import ch.fmartin.symphony.trello.testsupport.TestFileContents;
@@ -7940,6 +7941,7 @@ final class TrelloBoardSetupMainTest {
                 TrelloBoardSetupMain.class.getName()));
         command.addAll(Arrays.asList(arguments));
         ProcessBuilder processBuilder = new ProcessBuilder(command).directory(workingDir.toFile());
+        JavaLauncherEnvironment.removeLauncherOptions(processBuilder.environment());
         processBuilder.environment().putAll(environment);
         environmentToRemove.forEach(processBuilder.environment()::remove);
         Process process = processBuilder.start();

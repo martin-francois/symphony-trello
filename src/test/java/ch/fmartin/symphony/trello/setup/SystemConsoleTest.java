@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.fmartin.symphony.trello.testsupport.JavaLauncherEnvironment;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -31,9 +32,11 @@ final class SystemConsoleTest {
             command.add("-D" + SystemConsole.PROVIDER_PROPERTY + "=" + chosenProvider);
         }
         command.addAll(List.of("-cp", System.getProperty("java.class.path"), ProviderProbe.class.getName()));
+        var processBuilder = new ProcessBuilder(command).redirectErrorStream(true);
+        JavaLauncherEnvironment.removeLauncherOptions(processBuilder.environment());
 
         // when
-        Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+        Process process = processBuilder.start();
         try {
             boolean exited = process.waitFor(TIMEOUT);
 

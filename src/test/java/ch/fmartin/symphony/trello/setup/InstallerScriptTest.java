@@ -11,6 +11,7 @@ import static org.junit.jupiter.api.Named.named;
 
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.PseudoTerminalResult;
+import ch.fmartin.symphony.trello.testsupport.JavaLauncherEnvironment;
 import com.google.common.collect.ImmutableList;
 import com.google.errorprone.annotations.Immutable;
 import com.sun.net.httpserver.HttpServer;
@@ -139,9 +140,7 @@ final class InstallerScriptTest {
                 """);
         Path java = Path.of(System.getProperty("java.home"), "bin", isWindows() ? "java.exe" : "java");
         var processBuilder = new ProcessBuilder(java.toString(), source.toString());
-        for (String launcherOption : List.of("JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_JAVA_OPTIONS")) {
-            processBuilder.environment().remove(launcherOption);
-        }
+        JavaLauncherEnvironment.removeLauncherOptions(processBuilder.environment());
 
         // when
         ProcessResult result = run(processBuilder, "", 60);
@@ -170,9 +169,7 @@ final class InstallerScriptTest {
                 """);
         Path java = Path.of(System.getProperty("java.home"), "bin", isWindows() ? "java.exe" : "java");
         var processBuilder = new ProcessBuilder(java.toString(), source.toString());
-        for (String launcherOption : List.of("JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_JAVA_OPTIONS")) {
-            processBuilder.environment().remove(launcherOption);
-        }
+        JavaLauncherEnvironment.removeLauncherOptions(processBuilder.environment());
 
         // when
         Throwable failure = catchThrowable(() -> run(processBuilder, "i".repeat(1_048_576), 1));
@@ -197,9 +194,7 @@ final class InstallerScriptTest {
                 """);
         Path java = Path.of(System.getProperty("java.home"), "bin", isWindows() ? "java.exe" : "java");
         var processBuilder = new ProcessBuilder(java.toString(), source.toString());
-        for (String launcherOption : List.of("JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_JAVA_OPTIONS")) {
-            processBuilder.environment().remove(launcherOption);
-        }
+        JavaLauncherEnvironment.removeLauncherOptions(processBuilder.environment());
 
         // when
         ProcessResult result = run(processBuilder, "", 60);
