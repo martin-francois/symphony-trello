@@ -204,6 +204,19 @@ test("a log's verdict reads back from the line the comparison printed", () => {
   ]);
 });
 
+test("a failed comparison reads back as failed, not as a re-upload, though the line asks for one", () => {
+  // given
+  const failedLine = describeVisualComparison({kind: "comparison failed", error: "ffprobe failed for demo.mp4"});
+  const shapeLine = describeVisualComparison({kind: "different shape", baseline: SHAPE, rendered: {...SHAPE, frameCount: 4096}});
+
+  // when
+  const verdicts = [failedLine, shapeLine].map((line) => attachmentVerdictOf(`Comparing\n${line}\n`));
+
+  // then
+  assert.ok(failedLine.includes(REUPLOAD_ATTACHMENT_VERDICT), "a person rendering locally still sees the re-upload advice");
+  assert.deepEqual(verdicts, ["failed", "re-upload"]);
+});
+
 /** A repository whose first commit has `firstVideo` and whose HEAD has `headVideo`. */
 function createBaselineRepository(
   t: test.TestContext,

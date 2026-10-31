@@ -119,6 +119,12 @@ if [[ "$rendered" == "none" ]]; then
   echo "The render printed no README video verdict" >&2
   exit 1
 fi
+# A failed comparison measured nothing, so it is neither a visible change nor a missing step.
+if [[ "$commits_render" == true && "$rendered" == "failed" ]]; then
+  echo "The render's comparison with the committed $video failed, so CI cannot tell whether it reproduces that video:" >&2
+  node scripts/readme-demo-values.ts verdict-line "$render_log" >&2
+  exit 1
+fi
 if [[ "$commits_render" == true && "$rendered" != "keep" ]]; then
   missing+=("the CI render does not reproduce the committed $video ($(node scripts/readme-demo-values.ts verdict-line "$render_log"))")
 fi
@@ -131,6 +137,11 @@ if [[ "$visual" == "none" ]]; then
   exit 1
 fi
 visual_line="$(node scripts/readme-demo-values.ts verdict-line "$comparison_log")"
+if [[ "$visual" == "failed" ]]; then
+  echo "The comparison with the README attachment at $baseline_url failed, so CI cannot tell whether the demo changed:" >&2
+  echo "$visual_line" >&2
+  exit 1
+fi
 
 if [[ "$commits_render" == false && "$visual" == "re-upload" ]]; then
   also=""

@@ -313,7 +313,7 @@ function describeReason(comparison: VisualComparison): string {
       return `baseline ${describeShape(comparison.baseline)}, `
         + `rendered ${describeShape(comparison.rendered)}`;
     case "comparison failed":
-      return `the comparison failed: ${comparison.error}`;
+      return `${COMPARISON_FAILED_REASON}${comparison.error}`;
     case "visible change":
     case "no visible change":
       return `${comparison.kind}, ${describeLowest(comparison.lowest)}`;
@@ -325,11 +325,11 @@ export const REUPLOAD_ATTACHMENT_VERDICT = "re-upload the README video attachmen
 export const KEEP_ATTACHMENT_VERDICT = "keep the existing README video attachment";
 /** Starts the one line that carries the verdict, so a caller can find it in a longer log. */
 export const VERDICT_LINE_PREFIX = "README video: ";
+const REUPLOAD_VERDICT_TEXT = `${REUPLOAD_ATTACHMENT_VERDICT} as docs/demo/README.md describes`;
+const COMPARISON_FAILED_REASON = "the comparison failed: ";
 
 export function describeVisualComparison(comparison: VisualComparison): string {
-  const verdict = needsAttachmentReupload(comparison)
-    ? `${REUPLOAD_ATTACHMENT_VERDICT} as docs/demo/README.md describes`
-    : KEEP_ATTACHMENT_VERDICT;
+  const verdict = needsAttachmentReupload(comparison) ? REUPLOAD_VERDICT_TEXT : KEEP_ATTACHMENT_VERDICT;
   return `${VERDICT_LINE_PREFIX}${verdict} (${describeReason(comparison)})`;
 }
 
@@ -338,11 +338,18 @@ export function verdictLineOf(log: string): string | undefined {
   return log.split("\n").find((line) => line.startsWith(VERDICT_LINE_PREFIX));
 }
 
-/** Reads the verdict back from such a log: `keep`, `re-upload`, or undefined when it has none. */
-export function attachmentVerdictOf(log: string): "keep" | "re-upload" | undefined {
+/**
+ * Reads the verdict back from such a log: `keep`, `re-upload`, `failed`, or undefined when it has
+ * none. A failed comparison prints the re-upload advice, the safe step for a person rendering
+ * locally, but it measured nothing, so it reads back as `failed` and never as a visible change.
+ */
+export function attachmentVerdictOf(log: string): "keep" | "re-upload" | "failed" | undefined {
   const verdict = verdictLineOf(log)?.slice(VERDICT_LINE_PREFIX.length);
   if (verdict?.startsWith(KEEP_ATTACHMENT_VERDICT)) {
     return "keep";
+  }
+  if (verdict?.startsWith(`${REUPLOAD_VERDICT_TEXT} (${COMPARISON_FAILED_REASON}`)) {
+    return "failed";
   }
   return verdict?.startsWith(REUPLOAD_ATTACHMENT_VERDICT) ? "re-upload" : undefined;
 }

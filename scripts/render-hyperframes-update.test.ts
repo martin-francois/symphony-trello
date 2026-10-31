@@ -20,6 +20,7 @@ const NEW_URL = "https://github.com/user-attachments/assets/5c2f1e0a-1111-4222-8
 const LOWEST = {frame: 3040, tile: {x: 240, y: 480, width: 120, height: 120}, ssim: 0.97};
 const KEEP = describeVisualComparison({kind: "no visible change", lowest: LOWEST});
 const REUPLOAD = describeVisualComparison({kind: "visible change", lowest: {...LOWEST, ssim: 0.9}});
+const FAILED = describeVisualComparison({kind: "comparison failed", error: "ffprobe failed for demo.mp4"});
 const MAIN_VIDEO = "video rendered on main";
 const BRANCH_VIDEO = "video rendered on the branch";
 const CI_RENDER = "video the CI render wrote";
@@ -359,4 +360,27 @@ test("a render or comparison that dies or prints no verdict leaves the failed ve
   assert.equal(silentComparison.status, 1);
   assert.equal(silentComparison.outputs["verdict"], "failed");
   assert.match(silentComparison.stderr, /comparison with the README attachment printed no README video verdict/);
+});
+
+test("a comparison that failed fails the check as a failed render, never as a visible change or a missing step", () => {
+  const attachmentFailed = run(createMergeCommitFixture({}), {render: KEEP, attachment: FAILED});
+  const renderFailed = run(createMergeCommitFixture({newVideo: true, readme: readme(NEW_URL)}), {render: FAILED});
+
+  for (const outcome of [attachmentFailed, renderFailed]) {
+    assert.equal(outcome.status, 1);
+    assert.equal(outcome.outputs["verdict"], "failed");
+    assert.equal(outcome.outputs["detail"], undefined);
+    assert.ok(outcome.stderr.includes(FAILED));
+    assert.doesNotMatch(outcome.stderr, /visible change against|does not reproduce/);
+  }
+  assert.match(attachmentFailed.stderr, /comparison with the README attachment at \S+ failed, so CI cannot tell whether the demo changed/);
+  assert.match(renderFailed.stderr, /comparison with the committed docs\/assets\/demo\.mp4 failed, so CI cannot tell whether it reproduces/);
+  assert.equal(renderFailed.nodeCalls.length, 1, "nothing is compared with the attachment once the render's comparison failed");
+});
+
+test("a failed comparison of the render with main's own video is not used when the pull request keeps that video", () => {
+  const {outputs, status} = run(createMergeCommitFixture({}), {render: FAILED, attachment: KEEP});
+
+  assert.equal(status, 0);
+  assert.equal(outputs["verdict"], "keep");
 });

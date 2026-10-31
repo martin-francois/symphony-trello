@@ -4,7 +4,8 @@
  *
  * Usage:
  *   node scripts/readme-demo-values.ts verdict <log>
- *     `keep`, `re-upload`, or `none`: the README video verdict a render or comparison log holds.
+ *     `keep`, `re-upload`, `failed`, or `none`: the README video verdict a render or comparison
+ *     log holds; `failed` is a comparison that could not measure anything.
  *   node scripts/readme-demo-values.ts verdict-line <log>
  *     The whole verdict line of such a log, for messages; nothing when it has none.
  *   node scripts/readme-demo-values.ts attachment-limit-bytes

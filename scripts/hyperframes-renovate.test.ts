@@ -26,6 +26,7 @@ const SAME_REPOSITORY_RENOVATE_BRANCH =
   /github\.event\.pull_request\.head\.repo\.full_name == github\.repository &&\s*github\.event\.pull_request\.user\.login == 'renovate\[bot\]' &&\s*startsWith\(github\.head_ref, 'renovate\/hyperframes'\)/;
 
 interface Job {
+  readonly concurrency?: unknown;
   readonly if?: string;
   readonly timeout?: number;
   readonly outputs?: Readonly<Record<string, string>>;
@@ -85,7 +86,13 @@ test("the report job labels and comments from the render's outputs with a pull-r
     HYPERFRAMES_VERSION: "${{ needs.readme-demo-render.outputs.version }}",
     OUTCOME: "${{ needs.readme-demo-render.outputs.verdict || 'failed' }}",
     RUN_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+    SOURCE_HEAD_SHA: "${{ github.event.pull_request.head.sha }}",
     SOURCE_PULL_REQUEST: "${{ github.event.pull_request.number }}",
+  });
+  // One report per pull request at a time; a cancelled report could leave a write half done.
+  assert.deepEqual(report.concurrency, {
+    group: "hyperframes-renovate-report-${{ github.event.pull_request.number }}",
+    "cancel-in-progress": false,
   });
 });
 

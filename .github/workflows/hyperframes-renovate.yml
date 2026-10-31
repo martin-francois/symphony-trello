@@ -60,6 +60,11 @@ jobs:
         startsWith(github.head_ref, 'renovate/hyperframes') &&
         (needs.readme-demo-render.result == 'success' || needs.readme-demo-render.result == 'failure')
       }}
+    concurrency:
+      # One report per pull request at a time, so the script's head check still holds when it
+      # writes. Cancelling a running report could stop it between its label and comment writes.
+      group: hyperframes-renovate-report-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
@@ -81,5 +86,6 @@ jobs:
           HYPERFRAMES_VERSION: ${{ needs.readme-demo-render.outputs.version }}
           OUTCOME: ${{ needs.readme-demo-render.outputs.verdict || 'failed' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           SOURCE_PULL_REQUEST: ${{ github.event.pull_request.number }}
         run: scripts/report-hyperframes-render

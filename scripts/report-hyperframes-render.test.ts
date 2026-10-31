@@ -24,6 +24,8 @@ interface Scenario {
   readonly commentPages?: readonly (readonly Comment[])[];
   readonly deleteResponse?: "ok" | "404" | "403";
   readonly detail?: string;
+  /** The pull request's head when the script asks; the run's own head when undefined. */
+  readonly currentHead?: string;
   readonly labelPresent?: boolean;
   readonly outcome: string;
 }
@@ -39,7 +41,10 @@ function ownComment(body: string, id = 7): Comment {
   return {body: `${MARKER}\n${body}`, id, user: {login: "github-actions[bot]"}};
 }
 
-function run({commentPages = [[]], deleteResponse = "ok", detail, labelPresent = false, outcome}: Scenario): Run {
+const RUN_HEAD = "1111111111111111111111111111111111111111";
+const NEWER_HEAD = "2222222222222222222222222222222222222222";
+
+function run({commentPages = [[]], currentHead = RUN_HEAD, deleteResponse = "ok", detail, labelPresent = false, outcome}: Scenario): Run {
   const root = mkdtempSync(join(tmpdir(), "hyperframes-report-"));
   const bin = join(root, "bin");
   mkdirSync(bin);
@@ -56,6 +61,7 @@ done
 case "$*" in
 *--slurp*comments*) printf '%s\\n' "$FAKE_COMMENT_PAGES" ;;
 "api $FAKE_ISSUE/labels?per_page=100") printf '%s\\n' "$FAKE_LABELS" ;;
+"api $FAKE_PULL --jq .head.sha") printf '%s\\n' "$FAKE_CURRENT_HEAD" ;;
 *"--method DELETE"*)
   case "$FAKE_DELETE" in
   ok) ;;
@@ -76,9 +82,11 @@ esac
       ...(detail === undefined ? {} : {DETAIL: detail}),
       FAKE_BODIES: bodies,
       FAKE_COMMENT_PAGES: JSON.stringify(commentPages),
+      FAKE_CURRENT_HEAD: currentHead,
       FAKE_DELETE: deleteResponse,
       FAKE_GH_LOG: log,
       FAKE_ISSUE: ISSUE,
+      FAKE_PULL: "repos/martin-francois/symphony-trello/pulls/1200",
       FAKE_LABELS: JSON.stringify(labelPresent ? [{name: "needs-maintainer-review"}] : [{name: "hyperframes"}]),
       GH_TOKEN: "token",
       GITHUB_REPOSITORY: "martin-francois/symphony-trello",
@@ -86,6 +94,7 @@ esac
       OUTCOME: outcome,
       PATH: `${bin}:${process.env["PATH"] ?? ""}`,
       RUN_URL: "https://github.com/martin-francois/symphony-trello/actions/runs/1",
+      SOURCE_HEAD_SHA: RUN_HEAD,
       SOURCE_PULL_REQUEST: "1200",
     },
   });
@@ -186,4 +195,25 @@ test("an unknown outcome fails before any API call", () => {
 
   assert.notEqual(status, 0);
   assert.deepEqual(calls, []);
+});
+
+test("a report for a head that a newer push replaced writes nothing", () => {
+  for (const scenario of [
+    {outcome: "re-upload"},
+    {outcome: "keep", commentPages: [[ownComment(`${LABEL_MARKER}\ndiffers visibly`)]], labelPresent: true},
+  ]) {
+    const {bodies, calls, status, stderr} = run({...scenario, currentHead: NEWER_HEAD});
+
+    assert.equal(status, 0);
+    assert.deepEqual(calls, ["api repos/martin-francois/symphony-trello/pulls/1200 --jq .head.sha"]);
+    assert.deepEqual(bodies, []);
+    assert.ok(stderr.includes(`moved from ${RUN_HEAD} to ${NEWER_HEAD}`));
+  }
+});
+
+test("the head check comes before every write", () => {
+  const {calls} = run({outcome: "failed"});
+
+  assert.equal(calls[0], "api repos/martin-francois/symphony-trello/pulls/1200 --jq .head.sha");
+  assert.ok(calls.includes(ADD_LABEL_CALL));
 });

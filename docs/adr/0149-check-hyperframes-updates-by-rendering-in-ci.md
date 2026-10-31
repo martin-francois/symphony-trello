@@ -146,7 +146,9 @@ attachment is needed. When they differ visibly, the check passes only once the c
 uploaded and its URL is on the embed line. Every part holds: the check passes. Otherwise it fails
 and names the missing parts, so the re-upload path can turn green and merge by hand, and later
 through the required check. A failed download of the baseline fails the check, since nothing can
-be compared. The render's outputs are discarded.
+be compared, and so does a comparison that fails: it prints the re-upload verdict, the safe advice
+for a local render, but measured nothing, so the check reports it as a failed render and never as
+a visible change or a missing step. The render's outputs are discarded.
 
 The verdict text lives only in `scripts/readme-demo-visual-change.ts`. The Bash script reads a
 log's verdict and the attachment size limit through `scripts/readme-demo-values.ts`, and the
@@ -155,7 +157,9 @@ tests import the constants.
 The `report` job, with `pull-requests: write` only, checks out its script from the pull request's
 base commit, then adds the `needs-maintainer-review` label and one comment, edited in place on
 later runs, that links the guide section; it recognizes its own comment by author `github-actions[bot]` plus a marker, and a
-`keep` verdict removes the label only when that comment says the workflow added it. Both jobs run
+`keep` verdict removes the label only when that comment says the workflow added it. Reports for
+one pull request run one at a time, and a report whose head a newer push replaced writes nothing,
+so a slow or re-run report for an older push never overwrites the newer verdict. Both jobs run
 only for a same-repository pull request whose author is `renovate[bot]` on a `renovate/hyperframes`
 branch, in that order, as the OpenRewrite workflow guards.
 
@@ -220,16 +224,20 @@ describes.
   baseline that cannot be downloaded, a committed render that looks like the attachment and needs
   no upload, one that differs and is uploaded, and the incomplete outcomes (not reproduced, embed
   unchanged, `main`'s URL left elsewhere, attachment bytes differ, download failed, file over the
-  size cap), plus a render or comparison that dies or prints no verdict.
+  size cap), plus a render or comparison that dies, prints no verdict, or reports a failed
+  comparison.
   `scripts/readme-demo-compare-videos.test.ts` covers the comparison command's argument errors,
-  and `scripts/readme-demo-visual-change.test.ts` reads both verdicts back from a log.
+  and `scripts/readme-demo-visual-change.test.ts` reads both verdicts and a failed comparison back
+  from a log.
 * `scripts/report-hyperframes-render.test.ts` runs the report script against a fake `gh`: no
   comments, a spoofed marker comment from another user, a comment on a second page, a label the
   workflow added and removes, a label a person set that stays, the incomplete and failed texts,
-  a tolerated 404 and a fatal 403 on the label removal, and an unknown outcome.
+  a tolerated 404 and a fatal 403 on the label removal, an unknown outcome, and a head that a
+  newer push moved, which writes nothing.
 * `scripts/hyperframes-renovate.test.ts` requires the workflow to run on `pull_request` only with
   no secret, the render job to hold `contents: read` and to check out the merge commit without a
-  token, the report job to hold `pull-requests: write` only, both jobs to be gated to
+  token, the report job to hold `pull-requests: write` only, to run one at a time per pull request
+  without cancelling, and to pass the run's head SHA, both jobs to be gated to
   same-repository `renovate/hyperframes` branches by `renovate[bot]`, the render script to read
   verdicts through `scripts/readme-demo-values.ts` instead of repeating their text, to compare
   with the downloaded attachment over HTTPS only, never to commit or push, and to point to the

@@ -9,10 +9,12 @@
 #   re-upload   the render differs visibly from the README attachment; the owner follows the guide
 #   incomplete  DETAIL names what is still missing, such as an upload or a broken embed
 #   failed      the render or one of its checks failed; the run log says why
+# SOURCE_HEAD_SHA is the pull request head the render ran for. When a newer push has moved the
+# head, the run for that push reports instead and this one writes nothing.
 
 set -euo pipefail
 
-: "${SOURCE_PULL_REQUEST:?}" "${OUTCOME:?}" "${RUN_URL:?}" "${GH_TOKEN:?}"
+: "${SOURCE_PULL_REQUEST:?}" "${SOURCE_HEAD_SHA:?}" "${OUTCOME:?}" "${RUN_URL:?}" "${GH_TOKEN:?}"
 
 LABEL="needs-maintainer-review"
 MARKER="<!-- hyperframes-renovate-automation -->"
@@ -31,6 +33,14 @@ keep | re-upload | incomplete | failed) ;;
   exit 1
   ;;
 esac
+
+# The workflow runs one report per pull request at a time, so no newer report can write between
+# this check and the writes below; a push after the check queues a report that corrects them.
+current_head="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$SOURCE_PULL_REQUEST" --jq .head.sha)"
+if [[ "$current_head" != "$SOURCE_HEAD_SHA" ]]; then
+  echo "The pull request head moved from $SOURCE_HEAD_SHA to $current_head since this run started; the run for the newer head reports instead." >&2
+  exit 0
+fi
 
 # Only this workflow's own comment counts: the marker is public text anyone could paste.
 existing="$(
