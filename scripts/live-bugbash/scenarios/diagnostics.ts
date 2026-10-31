@@ -1,12 +1,15 @@
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
-import {join} from "node:path";
+import {homedir, userInfo} from "node:os";
+import {delimiter, join, parse, sep} from "node:path";
 import {freePort} from "../lib/ports.ts";
 import {outputOf, type ScenarioContext, type ScenarioRegistry} from "../lib/scenario.ts";
-import type {CliPaths} from "../lib/symphony.ts";
+import {sandboxEnvironment, type CliPaths} from "../lib/symphony.ts";
 import {LIST_NAMES} from "../lib/trello.ts";
 import {addCard, cli, filesIn, serviceBoard, startWorker, stopWorker, waitForCardIn, type ServiceBoard} from "./support.ts";
 
 const PATH_TOKEN = /<path:[0-9a-f]{12}>/g;
+const DOCKER_NOTICE_SUFFIX = "to quiet msg.";
+const DIAGNOSTICS_SECRET_SENTINEL = "synthetic-diagnostics-adjacent-secret";
 const DIAGNOSTICS_KEY = ".symphony-trello-diagnostics-key";
 
 function lookupStatus(output: string): string {
@@ -17,8 +20,24 @@ function selectorArgs(paths: CliPaths, workflow: string | null): string[] {
   return [...(workflow === null ? [] : ["--workflow", workflow]), "--config-dir", paths.configDir, "--state-home", paths.stateHome];
 }
 
-async function lookup(context: ScenarioContext, name: string, token: string, paths: CliPaths, workflow: string | null) {
-  return cli(context, name, ["diagnostics", "--show-private-context", "--lookup", token, ...selectorArgs(paths, workflow)], {paths});
+async function lookup(context: ScenarioContext, name: string, token: string, paths: CliPaths, workflow: string | null, env: Record<string, string> = {}) {
+  return cli(context, name, ["diagnostics", "--show-private-context", "--lookup", token, ...selectorArgs(paths, workflow)], {paths, env});
+}
+
+/**
+ * A `docker` on PATH that prints the Podman shim notice, whose path is outside every known private
+ * root, does not exist, and has a space in a directory name. The text after it must stay visible.
+ */
+function dockerNoticeEnvironment(context: ScenarioContext, paths: CliPaths): {env: Record<string, string>; noticePath: string} {
+  const bin = context.run.dir("fakes", "docker-notice", "bin");
+  const noticePath = join(parse(context.run.root).root, "synthetic-container-dir", context.run.runId, "outside root", "synthetic-nodocker marker");
+  const roots = [homedir(), userInfo().homedir, context.run.root, ...Object.values(paths)];
+  context.check.that(roots.every((root) => noticePath !== root && !noticePath.startsWith(root.endsWith(sep) ? root : root + sep)), "the notice path is outside every private root");
+  context.check.that(!existsSync(noticePath), "the notice path does not exist");
+  const quote = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`;
+  const lines = [`Emulate Docker CLI using podman. Create ${noticePath} ${DOCKER_NOTICE_SUFFIX} token=${DIAGNOSTICS_SECRET_SENTINEL}`, "podman version 0.0.0-live-bugbash"];
+  writeFileSync(join(bin, "docker"), `#!/usr/bin/env bash\nprintf '%s\\n' ${lines.map(quote).join(" ")}\n`, {mode: 0o755});
+  return {env: {PATH: `${bin}${delimiter}${sandboxEnvironment(context.run)["PATH"] ?? ""}`}, noticePath};
 }
 
 /** A board whose worker ran one card, so diagnostics include worker logs and process state. */
@@ -38,22 +57,34 @@ async function workedBoard(context: ScenarioContext): Promise<ServiceBoard> {
 
 async function emittedTokensResolve(context: ScenarioContext): Promise<string> {
   const service = await workedBoard(context);
+  const {env, noticePath} = dockerNoticeEnvironment(context, service.paths);
   const output = context.run.path("private-evidence", context.scenario.id, "diagnostics.md");
   mkdirSync(context.run.path("private-evidence", context.scenario.id), {recursive: true});
-  const report = await cli(context, "diagnostics", ["diagnostics", ...selectorArgs(service.paths, service.workflow), "--output", output], {paths: service.paths});
+  const report = await cli(context, "diagnostics", ["diagnostics", ...selectorArgs(service.paths, service.workflow), "--output", output], {paths: service.paths, env});
   context.check.exitCode(report, 0, "diagnostics exits 0");
-  const tokens = existsSync(output) ? [...new Set(readFileSync(output, "utf8").match(PATH_TOKEN) ?? [])] : [];
+  const text = existsSync(output) ? readFileSync(output, "utf8") : "";
+  const tokens = [...new Set(text.match(PATH_TOKEN) ?? [])];
   context.check.that(tokens.length > 0, "the diagnostics report emits path tokens");
+  const noticeToken = new RegExp(`Create (<path:[0-9a-f]{12}>) ${DOCKER_NOTICE_SUFFIX.replaceAll(".", "\\.")}`).exec(text)?.[1];
+  context.check.that(noticeToken !== undefined, "the docker notice keeps the text after its outside-root path");
+  for (const fragment of ["outside root", "synthetic-container-dir", "synthetic-nodocker", "marker"]) {
+    context.check.excludes(text, fragment, "the report hides each distinctive outside-root path component");
+  }
+  context.check.excludes(text, DIAGNOSTICS_SECRET_SENTINEL, "public diagnostics redact the adjacent credential");
   const unresolved: string[] = [];
   for (const [index, token] of tokens.entries()) {
-    const status = lookupStatus(outputOf(await lookup(context, `lookup-${index}`, token, service.paths, service.workflow)));
+    const resolved = outputOf(await lookup(context, `lookup-${index}`, token, service.paths, service.workflow, env));
+    context.check.excludes(resolved, DIAGNOSTICS_SECRET_SENTINEL, "private lookup excludes credential contents");
+    const status = lookupStatus(resolved);
     if (status !== "found") {
       unresolved.push(`${token} -> ${status}`);
+    } else if (token === noticeToken) {
+      context.check.contains(resolved, `| tool | docker | ${token} | ${noticePath} |`, "the docker notice token resolves to the path alone");
     }
   }
   context.evidence("unresolved-tokens.txt", unresolved.join("\n"));
   context.check.that(unresolved.length === 0, `every emitted path token resolves (${unresolved.length} of ${tokens.length} did not)`);
-  return `${tokens.length - unresolved.length} of ${tokens.length} emitted path tokens resolved through a focused lookup`;
+  return `${tokens.length - unresolved.length} of ${tokens.length} emitted path tokens resolved through a focused lookup, and the outside-root docker notice kept its trailing text`;
 }
 
 async function negativeLookups(context: ScenarioContext): Promise<string> {

@@ -1318,13 +1318,15 @@ scenarios:
     mode: service-fake-codex
     description: Every <path:...> token in a diagnostics report resolves through a focused lookup.
     setup: A connected board whose worker ran once, so the report includes worker log excerpts.
-    action: Run diagnostics --workflow, then diagnostics --show-private-context --lookup for every emitted path token.
+    action: With a docker on PATH that prints the Podman notice for a missing path outside the known roots, run diagnostics --workflow, then diagnostics --show-private-context --lookup for every emitted path token.
     assertions:
       - every emitted path token returns lookup_status found
+      - the docker notice keeps the text after its outside-root path, and the report hides every part of that path
+      - the docker notice token resolves to the path alone
     cleanup: Stop the worker; final cleanup archives the board.
-    expected: known-bug
+    expected: covered
     linked_issue: 1030
-    notes: "#825 fixes the original #803 emitted-token lookup failures, and installed replay resolves all emitted tokens. This row does not yet assert #1030's outside-root trailing-text or deleted-path behavior. #1030 owns that coverage and final classification after #809 merges."
+    notes: "#825 fixed the original #803 lookup failures, and #1030 keeps the text after paths outside the known roots. Deleted-path lookups report not_found; SetupDiagnosticReporterTest covers that case."
 
   - id: diagnostics-lookup-negative-paths
     family: diagnostics
