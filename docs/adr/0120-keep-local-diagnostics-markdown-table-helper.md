@@ -72,13 +72,15 @@ text, which is the same code the helper already has, plus a dependency. The clas
   `<redacted>` disappears and `<path:...>` loses its angle brackets.
   [GitHub issue #846](https://github.com/martin-francois/symphony-trello/issues/846) tracks that.
   The problem also affects report lines outside tables, so moving tables to commonmark-java would
-  not fix it.
+  not fix it. [ADR 0155](0155-escape-angle-brackets-in-diagnostics-markdown-text.md) fixed it: the
+  helper and the report's list lines now also escape `<` outside code spans.
 
 ### Confirmation
 
 * `MarkdownTableTest` covers alignment markers, pipe escaping, CR and LF handling, empty and `null`
-  cells, verbatim Markdown characters other than pipes, and row-length failures.
-* `pom.xml` has no `org.commonmark` dependency.
+  cells, verbatim Markdown characters other than pipes and `<`, and row-length failures.
+* `pom.xml` has no runtime `org.commonmark` dependency. ADR 0155 uses the parser and GFM tables
+  extension only in tests to check rendered output independently of the local writer.
 * Run:
 
   ```bash
@@ -99,6 +101,7 @@ and pipe and line-break escaping.
 * Bad, because the project maintains its own small Markdown writer.
 * Bad, because it does not escape other Markdown characters, so a rendered report can lose markers
   (see [GitHub issue #846](https://github.com/martin-francois/symphony-trello/issues/846)).
+  [ADR 0155](0155-escape-angle-brackets-in-diagnostics-markdown-text.md) added `<` escaping.
 
 ### Build a commonmark-java AST and Render It With MarkdownRenderer
 

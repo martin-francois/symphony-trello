@@ -77,11 +77,10 @@ final class MarkdownTableTest {
     }
 
     @Test
-    void keepsMarkdownCharactersOtherThanPipesVerbatim() {
+    void keepsMarkdownCharactersOtherThanPipesAndHtmlStartsVerbatim() {
         // given
-        String cell = "Bearer <redacted> `corepack` *_draft_* [x] & C:\\work";
         MarkdownTable table = MarkdownTable.leftAligned(List.of("danger_full_access", "detail"))
-                .row(false, cell);
+                .row(false, "Bearer <redacted> `corepack <x>` *_draft_* [x] & C:\\work");
         var body = new StringBuilder();
 
         // when
@@ -89,14 +88,13 @@ final class MarkdownTableTest {
 
         // then
         assertThat(body)
-                .as("diagnostics reports are pasted as plain text, so only table syntax may be escaped")
+                .as("diagnostics reports are pasted as plain text, so only table syntax and HTML starts are escaped")
                 .hasToString(
                         """
                 | danger_full_access | detail |
                 | --- | --- |
-                | false | %s |
-                """
-                                .formatted(cell));
+                | false | Bearer \\<redacted> `corepack <x>` *_draft_* [x] & C:\\work |
+                """);
     }
 
     @Test

@@ -210,8 +210,9 @@ final class SetupFailureFollowUp {
 
                 The troubleshooting report below replaces private values with tokens: `<path:...>` for local \
                 paths, `<id:...>`, `board_hash`, and `key_hash` for Trello identifiers, `<value:...>` for \
-                other private values, and `<redacted>` for secrets. To map one token to its local value, run \
-                `%s`. Use mapped values only for your local work.
+                other private values, and `<redacted>` for secrets. Outside code, the Markdown report writes \
+                each `<` as `\\<`. To map one token to its local value, run `%s`. Use mapped values only for \
+                your local work.
 
                 Your final answer may be shown in a public GitHub issue. It must not contain credentials, \
                 tokens, Codex auth or session data, Trello URLs, board names, board or card ids, account \

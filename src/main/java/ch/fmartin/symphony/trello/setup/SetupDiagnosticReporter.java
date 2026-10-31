@@ -759,7 +759,7 @@ final class SetupDiagnosticReporter {
     }
 
     private void appendPrivateContextLookup(StringBuilder body, DiagnosticsContext context, String rawLookup) {
-        String lookup = rawLookup.strip();
+        String lookup = withoutMarkdownEscape(rawLookup.strip());
         line(body, "lookup_token", lookup);
         if (!PRIVATE_CONTEXT_LOOKUP_TOKEN.matcher(lookup).matches()) {
             line(body, "lookup_status", "invalid_token");
@@ -787,6 +787,12 @@ final class SetupDiagnosticReporter {
                     "Multiple private-context values matched this token. Review the rows below instead of choosing silently.\n");
         }
         appendPrivateContextMappings(body, matches);
+    }
+
+    /// The Markdown report writes a path token as `\<path:...>`, so a token copied from the raw report
+    /// text carries the escape that the rendered report hides.
+    private static String withoutMarkdownEscape(String lookup) {
+        return lookup.startsWith("\\<") ? lookup.substring(1) : lookup;
     }
 
     private static void appendPrivateContextMappings(StringBuilder body, List<PrivateContextMapping> mappings) {

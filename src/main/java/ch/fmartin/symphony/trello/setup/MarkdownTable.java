@@ -8,12 +8,14 @@ import java.util.List;
 
 /// Renders the GitHub-flavored Markdown tables in diagnostics reports.
 ///
-/// Cell values get only the table-syntax escaping in [#escape(Object)], and headers are fixed
-/// literals written as given, because users paste the report as plain text and readers and tests
-/// match column names and redaction markers literally. Callers redact values before adding a row,
-/// except in the private-context tables that `diagnostics --show-private-context` prints, which
-/// show raw values on purpose. commonmark-java's renderer changes those bytes, so it was rejected;
-/// see docs/adr/0120-keep-local-diagnostics-markdown-table-helper.md.
+/// Cell values get the table-syntax escaping in [#escape(Object)] plus the `<` escaping from
+/// [SetupReportMarkdown#escapeHtmlStart(String)], and headers are fixed literals written as given.
+/// Users paste the report as plain text, and GitHub renders it as Markdown, so the cells keep every
+/// other character as written. Callers redact values before adding a row, except in the
+/// private-context tables that `diagnostics --show-private-context` prints, which show raw values on
+/// purpose. commonmark-java's renderer changes those bytes, so it was rejected; see
+/// docs/adr/0120-keep-local-diagnostics-markdown-table-helper.md and
+/// docs/adr/0155-escape-angle-brackets-in-diagnostics-markdown-text.md.
 final class MarkdownTable {
     private final List<String> headers;
     private final List<Alignment> alignments;
@@ -64,7 +66,8 @@ final class MarkdownTable {
         if (cell == null) {
             return "";
         }
-        return cell.toString().replace("|", "\\|").replace('\r', ' ').replace('\n', ' ');
+        return SetupReportMarkdown.escapeHtmlStart(
+                cell.toString().replace("|", "\\|").replace('\r', ' ').replace('\n', ' '));
     }
 
     enum Alignment {
