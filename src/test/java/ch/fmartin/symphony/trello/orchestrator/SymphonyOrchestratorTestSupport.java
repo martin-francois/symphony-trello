@@ -768,6 +768,15 @@ final class SymphonyOrchestratorTestSupport {
                 resume.countDown();
             }
         }
+
+        /// Resumes the paused operation at once, for a competing operation that already returned.
+        void resume() {
+            resume.countDown();
+        }
+
+        Thread pausedThread() {
+            return pausedThread.get();
+        }
     }
 
     static boolean containsRetryingCard(RuntimeSnapshot snapshot, String cardIdentifier) {
