@@ -510,6 +510,16 @@ rules apply to the agents working for martinfrancois on such a pull request. Pul
 the posted comments, the branch history, and the description's edit history is the evidence; no
 automation checks them.
 
+- Until the contributor ticks `I confirm I understand what the code does` themselves, as the body
+  as first posted or GitHub's edit history of it shows, leave the pull request alone: no review,
+  comment, reaction, label, push, description edit, ready, or merge. Start once the box is ticked.
+  If it gets unticked again, stop until it is ticked again.
+- Once the box is ticked, and before approving a fork workflow run or running any of its code
+  locally, read every changed file for malicious content, including workflows, scripts, build
+  files, dependency changes, and test fixtures: code that sends data or secrets anywhere, downloads
+  and runs code, weakens a permission or a check, or is obfuscated. If any of it looks malicious,
+  stop there: no review, push, ready, or merge, whatever else holds. Tell martinfrancois in the
+  handoff without discussing it on the pull request.
 - Every comment on the pull request thanks the contributor and names what their change fixes, for
   example "Thanks for fixing the setup crash when the state home is a symlink." This covers review
   summaries, inline review comments, replies to threads, and status comments.
@@ -534,6 +544,30 @@ automation checks them.
   - Ask the author in the pull request comment only when the correct text isn't obvious.
   - Before posting a review comment, re-read the live description and comments, because the author
     may have changed them since you drafted it.
+- Once review fixes, if any, are pushed and the final head meets the ready definition above, mark
+  it ready with `gh pr ready <n>` and merge it as
+  [Committing and pull requests](#committing-and-pull-requests) says, without waiting for
+  martinfrancois or the contributor. Merge only when you are at least 80% confident of all of these,
+  meaning you would expect martinfrancois to merge it as it stands after your fixes, without further
+  changes, in at least four of five such cases:
+  - It causes no regression in existing behavior.
+  - It does what its linked issue or intended fix needs, not only what its description promises.
+  - It is a good change that is useful to users. Fulfilling a description is not enough when the
+    feature itself is unwanted.
+  - It contradicts no ADR, no issue's requirements, no specification, and no rule in `AGENTS.md`,
+    `CONTRIBUTING.md`, or `docs/agents/`.
+  - It doesn't make the product worse overall, for example slower, harder to use, less secure, or
+    harder to maintain without a benefit that outweighs it.
+  - It contains nothing malicious, checked again on the final head as the bullet on malicious
+    content above describes.
+
+  Don't ask the contributor to re-review the agent's changes. Before merging, post a pull request
+  comment that states the confidence and the evidence for it, such as the review, the checks, and
+  the issue it matches. Below 80%, or when the Compatibility Decision is `Breaking` or `Unsure`,
+  leave it unmerged and ask martinfrancois to look at the code, naming what makes you unsure, in a
+  pull request comment that mentions `@martinfrancois` and in the handoff. This rule is the standing
+  decision that [Deciding versus asking](autonomy-and-escalation.md#deciding-versus-asking) needs
+  for these merges.
 - The `I confirm I understand what the code does` box stays the contributor's, even though the
   agent may change the Commit History in Main checkboxes and fix the description in the same body;
   see [Committing and pull requests](#committing-and-pull-requests).

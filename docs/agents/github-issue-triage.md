@@ -87,7 +87,9 @@ and apply triage labels. Spec-alignment auditing that may create issues lives in
   maintainer account's 👍 reaction or is hidden (GraphQL `isMinimized`), for example as spam. Read
   both in the same GraphQL query that lists the comments:
   `reactionGroups { content viewerHasReacted }` shows whether the authenticated account has reacted
-  with `THUMBS_UP`, and works for issue, pull request, and Discussion comments and bodies.
+  with `THUMBS_UP`, and works for issue, pull request, and Discussion comments and bodies. Skip an
+  outside contributor's pull request whose understanding box is unticked; see
+  [Outside contributor pull requests](default-workflow.md#outside-contributor-pull-requests).
 - Reply where the comment asks a question, offers help, gives a status update, points to a fix, or
   reports a new problem. The reply becomes the maintainer account's last comment in the thread, so
   it must answer every comment above it that needs a reply, and those comments need no reaction.
