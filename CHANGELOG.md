@@ -2,6 +2,14 @@
 
 ## 2.0.0 (2026-10-31)
 
+## Breaking Changes
+
+* **workflow:** Generated or migrated workflows use the No PR label for branch-only handoff. Rename the label, configure github.no_pr_label to a different name, or disable it with an empty string to keep prior behavior. A top-level github value must now be an object with valid fields. Remove or rename unrelated values, or replace them with documented settings. ([7ec1cf0](https://github.com/martin-francois/symphony-trello/commit/7ec1cf05810bdeae1768e192dc52ec58eeb04d26))
+* **installer:** Source updates reject staged or unstaged tracked edits. Commit edits on a separate branch, or save a patch and restore the files, before rerunning the installer. Untracked build output remains allowed. ([3dc25b7](https://github.com/martin-francois/symphony-trello/commit/3dc25b73f658f159dc22a067c55b287ff522a149))
+* **installer:** Existing installs with unreadable versions and source updates with local build inputs now stop before replacement. Repair Java or the existing app classes, and move local build inputs outside the app checkout before retrying. Restore recorded Git casing for selected inputs after an unrecorded case-only rename. Source builds no longer read caller-directory configuration. Migration help failures stop setup and worker restart; repair the installed command before continuing. ([e2a3433](https://github.com/martin-francois/symphony-trello/commit/e2a3433d373f0c0a89783ae84bf9102960e87a33))
+* **installer:** source updates now refuse any tracked path marked assume-unchanged or skip-worktree, including unchanged paths and sparse checkouts. Back up local edits, clear those flags, disable sparse checkout, and save or restore the resulting changes before retrying. ([3999abd](https://github.com/martin-francois/symphony-trello/commit/3999abdfb8b59489cb9e0c8c6bea67566746713d))
+* **workflow:** Repository-changing cards now run up to 3 Codex review rounds before handoff by default, which takes longer and uses more tokens. Set `repository.codex_review_max_rounds: 0` to keep the earlier behavior. ([2831f14](https://github.com/martin-francois/symphony-trello/commit/2831f14732343da45c950425aee6337b10ca2dba))
+
 ## What's Changed
 * test(concurrency): audit production guards by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/583
 * test(orchestrator): synchronize command request publication by @martinfrancois in https://github.com/martin-francois/symphony-trello/pull/595
