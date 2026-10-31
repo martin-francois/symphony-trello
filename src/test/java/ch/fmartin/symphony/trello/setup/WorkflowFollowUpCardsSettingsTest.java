@@ -17,6 +17,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 final class WorkflowFollowUpCardsSettingsTest {
+    private static final String REGENERATED_WORKFLOW =
+            "---\ntracker:\n  kind: trello\n  board_id: existing-board\n---\nRegenerated prompt\n";
+
     @TempDir
     Path tempDir;
 
@@ -94,6 +97,107 @@ final class WorkflowFollowUpCardsSettingsTest {
         assertThat(configuration(workflow))
                 .containsEntry("tracker", Map.of("kind", "trello", "board_id", "existing-board"));
         assertThat(new WorkflowLoader().load(workflow).promptTemplate()).isEqualTo("Regenerated prompt");
+    }
+
+    @Test
+    void explicitRegenerationKeepsAliasedToolSettingsAsTheirAnchoredValues() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: existing-board
+                review_lists: &review_lists [Custom review, Done]
+                trello_tools:
+                  enabled: false
+                  allowed_move_list_names: *review_lists
+                  follow_up_cards: &follow_ups
+                    enabled: true
+                    list_name: Later findings
+                  copied_follow_ups: *follow_ups
+                ---
+                Existing prompt
+                """);
+        String generated = REGENERATED_WORKFLOW;
+
+        // when
+        Files.writeString(
+                workflow,
+                WorkflowConfigEditor.preserveTrelloTools(
+                        workflow, generated, Set.of("existing-board"), ignored -> Optional.empty()));
+
+        // then
+        Map<String, Object> followUps = Map.of("enabled", true, "list_name", "Later findings");
+        assertThat(tools(workflow))
+                .as("the rewritten file holds the anchored values, not the anchor names")
+                .isEqualTo(Map.of(
+                        "enabled",
+                        false,
+                        "allowed_move_list_names",
+                        List.of("Custom review", "Done"),
+                        "follow_up_cards",
+                        followUps,
+                        "copied_follow_ups",
+                        followUps));
+    }
+
+    @Test
+    void explicitRegenerationKeepsAnEmptyToolSettingAsNullLikeTheLoader() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: existing-board
+                trello_tools:
+                  follow_up_cards:
+                    enabled: true
+                    list_name:
+                ---
+                Existing prompt
+                """);
+
+        // when
+        String regenerated = WorkflowConfigEditor.preserveTrelloTools(
+                workflow, REGENERATED_WORKFLOW, Set.of("existing-board"), ignored -> Optional.empty());
+
+        // then
+        assertThat(regenerated)
+                .as("a key without a value is null, as the workflow loader reads it, not an empty string")
+                .contains("list_name: null")
+                .doesNotContain("list_name: \"\"");
+    }
+
+    @Test
+    void explicitRegenerationKeepsAnEmptyToolsSectionAsAnEmptyMap() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: existing-board
+                trello_tools:
+                ---
+                Existing prompt
+                """);
+
+        // when
+        String regenerated = WorkflowConfigEditor.preserveTrelloTools(
+                workflow, REGENERATED_WORKFLOW, Set.of("existing-board"), ignored -> Optional.empty());
+
+        // then
+        assertThat(regenerated)
+                .as("an empty trello_tools section is null, which regeneration keeps as an empty map")
+                .contains("trello_tools: {}");
     }
 
     @ParameterizedTest

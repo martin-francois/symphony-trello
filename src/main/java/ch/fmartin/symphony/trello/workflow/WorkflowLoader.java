@@ -3,16 +3,12 @@ package ch.fmartin.symphony.trello.workflow;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.NullMarked;
@@ -21,10 +17,6 @@ import org.jspecify.annotations.Nullable;
 @ApplicationScoped
 @NullMarked
 public class WorkflowLoader {
-    private static final TypeReference<LinkedHashMap<String, Object>> YAML_MAP_TYPE = new TypeReference<>() {};
-
-    private final ObjectMapper yaml = new ObjectMapper(new YAMLFactory());
-
     public WorkflowDefinition load(Path path) {
         Path absolute = path.toAbsolutePath().normalize();
         byte[] content;
@@ -58,17 +50,19 @@ public class WorkflowLoader {
         return new WorkflowException("missing_workflow_file", "Workflow file cannot be read: " + absolute, cause);
     }
 
-    private Map<String, Object> parseYamlMap(@Nullable String frontMatter) {
+    private static Map<String, Object> parseYamlMap(@Nullable String frontMatter) {
         if (frontMatter == null) {
             return Map.of();
         }
         try {
-            LinkedHashMap<String, Object> parsed = yaml.readValue(frontMatter, YAML_MAP_TYPE);
+            Map<String, Object> parsed = WorkflowFrontMatterYaml.readMap(frontMatter);
             if (parsed == null) {
                 return Map.of();
             }
             rejectNullTopLevelEntries(parsed);
             return parsed;
+        } catch (WorkflowFrontMatterYaml.RuleViolation e) {
+            throw new WorkflowException("workflow_parse_error", e.getOriginalMessage(), e);
         } catch (JsonProcessingException e) {
             if (e.getMessage() != null && e.getMessage().contains("Cannot deserialize")) {
                 throw new WorkflowException(

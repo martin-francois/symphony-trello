@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.SingleLineText;
 import com.google.common.base.Strings;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -26,24 +27,6 @@ final class DisplayNames {
     }
 
     private static String escape(String name) {
-        var safe = new StringBuilder(name.length());
-        for (int index = 0; index < name.length(); index++) {
-            char current = name.charAt(index);
-            switch (current) {
-                case '\\' -> safe.append("\\\\");
-                case '"' -> safe.append("\\\"");
-                case '\n' -> safe.append("\\n");
-                case '\r' -> safe.append("\\r");
-                case '\t' -> safe.append("\\t");
-                default -> {
-                    if (Character.isISOControl(current)) {
-                        safe.append("\\u%04X".formatted((int) current));
-                    } else {
-                        safe.append(current);
-                    }
-                }
-            }
-        }
-        return safe.toString();
+        return SingleLineText.escaped(name);
     }
 }

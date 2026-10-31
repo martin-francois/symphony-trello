@@ -12,6 +12,8 @@ import ch.fmartin.symphony.trello.config.WorkflowIntegerSetting;
 import ch.fmartin.symphony.trello.config.WorkflowServerPortClassification;
 import ch.fmartin.symphony.trello.workflow.CodexSandboxPolicy;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
+import ch.fmartin.symphony.trello.workflow.WorkflowException;
+import ch.fmartin.symphony.trello.workflow.WorkflowFrontMatterYaml;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.File;
@@ -86,6 +88,24 @@ public final class WorkflowConfigInvariants {
     public static void assertResolutionProperties(WorkflowDefinition workflow) {
         for (Map<String, String> environment : ENVIRONMENTS) {
             assertResolutionProperties(workflow, environment);
+        }
+    }
+
+    /// Startup reads `server.port` from the raw front matter before the loader runs. It must see the
+    /// config the loader sees, including resolved aliases, and must reject front matter that breaks
+    /// one of the YAML rules in `SPEC.md` section 5.2.
+    public static void assertStartupReadAgrees(String frontMatter, WorkflowLoaderInvariants.LoadResult loaded) {
+        Function<String, Optional<String>> lookup = name -> Optional.ofNullable(BASE_ENVIRONMENT.get(name));
+        Optional<TypedWorkflowConfig> startupRead = WorkflowConfigIngestion.collectFrontMatter(
+                frontMatter, lookup, WorkflowConfigIngestion.UnresolvedEnvironmentPolicy.OMIT);
+        WorkflowDefinition definition = loaded.definition();
+        WorkflowException failure = loaded.failure();
+        if (definition != null) {
+            check(
+                    startupRead.equals(Optional.of(WorkflowConfigIngestion.collect(definition, lookup))),
+                    "the startup read of the front matter types the config the loader loaded");
+        } else if (failure != null && failure.getCause() instanceof WorkflowFrontMatterYaml.RuleViolation) {
+            check(startupRead.isEmpty(), "the startup read rejects front matter that breaks a YAML rule");
         }
     }
 
