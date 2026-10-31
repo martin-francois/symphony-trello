@@ -259,6 +259,9 @@ and apply triage labels. Spec-alignment auditing that may create issues lives in
   pull requests when an issue deliberately requires more than one. Choose the smallest label whose
   upper bound contains the reasonable estimate. When the reasonable range crosses a label boundary,
   use the larger label. Re-evaluate the size whenever the accepted scope changes.
+- A closed issue keeps the size label it had when it closed. Don't relabel it to the size of the
+  pull request that closed it: the label is the estimate, and comparing estimates with pull request
+  sizes is how ADR 0146 measures and improves estimating.
 - Estimates here have been too small about three times as often as too large, mostly in test
   lines. Estimate the whole change directly as above; a code-lines-times-a-factor formula did not
   match better in a blind test. Then apply these rules for the kinds of work that missed most
