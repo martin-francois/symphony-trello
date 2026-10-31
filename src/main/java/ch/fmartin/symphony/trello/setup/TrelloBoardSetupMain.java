@@ -396,7 +396,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             Path dotenv = credentialDotenv(envPath, configDir);
             URI normalizedEndpoint = TrelloApiEndpoint.normalize(endpoint);
             parent.boardSetup.listWorkspaces(
-                    new WorkspaceListRequest(normalizedEndpoint, credentialsFrom(auth, dotenv)), parent.out);
+                    new WorkspaceListRequest(normalizedEndpoint, credentialsFrom(auth, dotenv, normalizedEndpoint)),
+                    parent.out);
             return 0;
         }
     }
@@ -413,10 +414,11 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 .orElseGet(LocalEnvironment::defaultDotenv);
     }
 
-    /// Reads the Trello credentials. A missing-credentials error names the dotenv file to fill in.
-    private static TrelloCredentials credentialsFrom(TrelloAuthOptions auth, Path dotenv) {
+    /// Reads the Trello credentials for a command that sends them to `endpoint`. A
+    /// missing-credentials error names the dotenv file to fill in.
+    private static TrelloCredentials credentialsFrom(TrelloAuthOptions auth, Path dotenv, URI endpoint) {
         try {
-            return auth.credentials(dotenv);
+            return auth.credentials(dotenv, endpoint);
         } catch (TrelloBoardSetupException exception) {
             throw withCredentialEnvHint(exception, dotenv);
         }
@@ -811,14 +813,14 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             CliInputValidation.rejectBlankText("--workspace-id", workspaceId);
             CliInputValidation.rejectControlCharactersInText("--workspace-id", workspaceId);
             CliInputValidation.rejectWorkspaceIdReference("--workspace-id", workspaceId);
-            TrelloCredentials credentials = credentialsFrom(auth, dotenv);
+            URI tutorialEndpoint = TrelloApiEndpoint.normalize(endpoint);
+            TrelloCredentials credentials = credentialsFrom(auth, dotenv, tutorialEndpoint);
             var options = new GuidedTutorial.Options(
                     github || (!noGithub && connectedBoardUsesGithub()),
                     noCleanup ? GuidedTutorial.BoardCleanup.KEEP : GuidedTutorial.BoardCleanup.ARCHIVE_BY_DEFAULT,
                     workspaceId.map(String::strip),
                     shellCommand(installedCliCommand()));
-            GuidedTutorial.forCli(TrelloApiEndpoint.normalize(endpoint), credentials, terminal)
-                    .run(options);
+            GuidedTutorial.forCli(tutorialEndpoint, credentials, terminal).run(options);
         }
 
         private boolean connectedBoardUsesGithub() throws IOException {
@@ -1229,7 +1231,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             validate();
             return new NewBoardRequest(
                     endpoint,
-                    auth.credentials(runtimeEnvPath()),
+                    auth.credentials(runtimeEnvPath(), endpoint),
                     boardName,
                     workspaceId,
                     workflowPath,
@@ -1256,7 +1258,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             validate();
             return new ImportBoardRequest(
                     endpoint,
-                    auth.credentials(runtimeEnvPath()),
+                    auth.credentials(runtimeEnvPath(), endpoint),
                     boardId,
                     CliValueNormalizer.nonBlank(activeStates),
                     CliValueNormalizer.nonBlank(terminalStates),
@@ -1284,7 +1286,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 return;
             }
             TrelloCredentialStore.validateEnvPath(runtimeEnvPath());
-            TrelloCredentialResolver.CredentialSelection credentials = auth.credentialSelection(runtimeEnvPath());
+            TrelloCredentialResolver.CredentialSelection credentials =
+                    auth.credentialSelection(runtimeEnvPath(), TrelloApiEndpoint.normalize(endpoint));
             if (credentials.persist()) {
                 try {
                     TrelloCredentialStore.validateWritableEnvUpdate(credentials, runtimeEnvPath(), true);
@@ -1299,7 +1302,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             if (!shouldUseRuntimeEnvTarget()) {
                 return;
             }
-            TrelloCredentialResolver.CredentialSelection credentials = auth.credentialSelection(runtimeEnvPath());
+            TrelloCredentialResolver.CredentialSelection credentials =
+                    auth.credentialSelection(runtimeEnvPath(), TrelloApiEndpoint.normalize(endpoint));
             if (!credentials.persist()) {
                 return;
             }
@@ -1414,22 +1418,14 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                         + " or the configured credential file.")
         String token;
 
-        TrelloCredentials credentials() {
-            return credentials(LocalEnvironment.defaultDotenv());
+        /// The credentials for a command that sends them to `endpoint`.
+        TrelloCredentials credentials(Path dotenv, URI endpoint) {
+            return credentialSelection(dotenv, endpoint).credentials();
         }
 
-        TrelloCredentials credentials(Path dotenv) {
-            TrelloCredentialResolver.CredentialSelection selection = credentialSelection(dotenv);
-            return selection.credentials();
-        }
-
-        TrelloCredentialResolver.CredentialSelection credentialSelection() {
-            return credentialSelection(LocalEnvironment.defaultDotenv());
-        }
-
-        TrelloCredentialResolver.CredentialSelection credentialSelection(Path dotenv) {
+        TrelloCredentialResolver.CredentialSelection credentialSelection(Path dotenv, URI endpoint) {
             return new TrelloCredentialResolver(System.getenv(), dotenv)
-                    .resolveTrelloCredentials(Optional.ofNullable(key), Optional.ofNullable(token));
+                    .resolveTrelloCredentials(Optional.ofNullable(key), Optional.ofNullable(token), endpoint);
         }
 
         /// A blank `--key` or `--token` counts as absent here even though the resolver lets it win.

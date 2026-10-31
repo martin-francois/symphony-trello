@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.setup;
 import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.EnvironmentReferences;
+import ch.fmartin.symphony.trello.config.EnvironmentSources;
 import ch.fmartin.symphony.trello.process.PlatformEnvironment;
 import ch.fmartin.symphony.trello.setup.TrelloCredentialResolver.CredentialValue;
 import com.google.common.util.concurrent.Striped;
@@ -24,7 +25,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.locks.Lock;
-import java.util.function.Function;
 
 final class LocalWorkerManager {
     private static final int STARTUP_LOG_BYTE_LIMIT = 128 * 1024;
@@ -119,14 +119,14 @@ final class LocalWorkerManager {
 
     /// The board, workflow configuration, and Trello credentials that a `symphony-trello card`
     /// command uses. Board selection, the credential file, and the credential checks match
-    /// `start`, so the card commands read the same key and token as the worker. Unlike `start`,
-    /// the workflow must belong to a connected board and must use `trelloApi` as its Trello
-    /// endpoint: an agent that runs card commands can write files, so a workflow it wrote must not
-    /// receive the board's credentials. The workflow must also name the selected board, so the
-    /// output never shows one board while the command works on another. The managed worker itself
-    /// is neither inspected nor changed.
+    /// `start`, so the card commands read the same key and token as the worker and send them only
+    /// to the endpoint those credentials are bound to, which `prepareLaunchWorkflow` enforces.
+    /// Unlike `start`, the workflow must belong to a connected board: that limits which boards an
+    /// agent may change, not where the credentials go. The workflow must also name the selected
+    /// board, so the output never shows one board while the command works on another. The managed
+    /// worker itself is neither inspected nor changed.
     CardCommandTarget cardCommandTarget(
-            LocalWorkerPaths paths, Optional<String> board, Optional<Path> workflow, String command, URI trelloApi)
+            LocalWorkerPaths paths, Optional<String> board, Optional<Path> workflow, String command)
             throws IOException {
         ConnectedBoardManifest manifest = loadLifecycleManifest(paths, workflow);
         workflow.ifPresent(path -> requireConnectedWorkflow(manifest, path));
@@ -144,7 +144,6 @@ final class LocalWorkerManager {
                 WorkflowEnvironmentResolver.resolver(environment, envPath),
                 false,
                 paths.configDir());
-        requireCardCommandEndpoint(config, trelloApi);
         requireSelectedBoard(selected, config);
         credentialUsage.ifPresent(usage -> validateWorkerCredentials(usage, command));
         return new CardCommandTarget(selected, config, failure -> withCredentialContext(failure, credentialUsage));
@@ -157,15 +156,6 @@ final class LocalWorkerManager {
                     "--workflow must name the workflow of a connected board. Card commands use only the workflows"
                             + " in " + ConnectedBoardManifest.FILE_NAME
                             + "; run symphony-trello status to list them.");
-        }
-    }
-
-    private static void requireCardCommandEndpoint(EffectiveConfig config, URI trelloApi) {
-        if (!TrelloApiEndpoint.sameEndpoint(config.tracker().endpoint(), trelloApi)) {
-            throw new TrelloBoardSetupException(
-                    "setup_card_endpoint_not_trello",
-                    "The workflow sets tracker.endpoint to an address other than " + trelloApi
-                            + ". Card commands send the Trello key and token only to that Trello API.");
         }
     }
 
@@ -287,8 +277,7 @@ final class LocalWorkerManager {
         validateWorkerWorkflowPath(board.workflowPath());
         validateWorkerEnvPath(envPath);
         workflowConfig.requireLaunchableWorkflowFile(board.workflowPath());
-        Function<String, Optional<String>> workflowEnvironment =
-                WorkflowEnvironmentResolver.resolver(environment, envPath);
+        EnvironmentSources workflowEnvironment = WorkflowEnvironmentResolver.resolver(environment, envPath);
         var store = new ManagedProcessStore(paths.stateHome());
         ManagedProcessStore.ManagedProcessFiles files = store.files(board.workflowPath());
         Files.createDirectories(paths.stateHome());
@@ -317,7 +306,7 @@ final class LocalWorkerManager {
             PrintStream out,
             ManagedProcessStore store,
             ManagedProcessStore.ManagedProcessFiles files,
-            Function<String, Optional<String>> workflowEnvironment)
+            EnvironmentSources workflowEnvironment)
             throws IOException {
         try (var ignored = acquireProcessLock(files)) {
             // Recorded before the workflow is resolved, so a failed start can still be looked up.
@@ -334,7 +323,7 @@ final class LocalWorkerManager {
             PrintStream out,
             ManagedProcessStore store,
             ManagedProcessStore.ManagedProcessFiles files,
-            Function<String, Optional<String>> workflowEnvironment)
+            EnvironmentSources workflowEnvironment)
             throws IOException {
         int healthPort = healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), envPath);
         Optional<WorkerCredentialUsage> credentialUsage = workerCredentialUsage(board.workflowPath(), envPath);

@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.testsupport.SetupRunResult;
@@ -144,7 +145,8 @@ final class LocalSetupCodexReviewTest extends LocalSetupFixtureSupport {
     }
 
     private EffectiveConfig config() {
-        return new ConfigResolver(name -> Optional.of("synthetic-value"))
+        return new ConfigResolver(name ->
+                        TrelloEnvironment.API_ENDPOINT.equals(name) ? Optional.empty() : Optional.of("synthetic-value"))
                 .resolve(new WorkflowLoader().load(workflow()));
     }
 

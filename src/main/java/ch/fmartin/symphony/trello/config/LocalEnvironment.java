@@ -31,12 +31,14 @@ public final class LocalEnvironment {
     }
 
     static Optional<String> get(String name, Path dotenv, Map<String, String> environment) {
-        String value = environment.get(name);
-        if (hasText(value)) {
-            return Optional.of(value);
-        }
-        value = load(dotenv).get(name);
-        return hasText(value) ? Optional.of(value) : Optional.empty();
+        return sources(environment, dotenv).apply(name);
+    }
+
+    /// The shell environment first, then `dotenv`, each remembering that it supplied a value. The
+    /// file is read at every lookup, so a running worker sees an edited file on its next reload.
+    public static EnvironmentSources sources(Map<String, String> environment, Path dotenv) {
+        return EnvironmentSources.of(
+                EnvironmentSource.shellEnvironment(environment), new EnvironmentSource.EnvFile(dotenv));
     }
 
     public static Optional<String> firstPresent(String... names) {

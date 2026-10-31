@@ -8,6 +8,8 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
+import ch.fmartin.symphony.trello.config.EnvironmentSource;
+import ch.fmartin.symphony.trello.config.EnvironmentSources;
 import ch.fmartin.symphony.trello.config.WorkflowServerPortClassification;
 import ch.fmartin.symphony.trello.testsupport.TestFileContents;
 import ch.fmartin.symphony.trello.workflow.CodexSandboxPolicy;
@@ -583,7 +585,7 @@ final class WorkflowConfigEditorTest {
         var editor = new WorkflowConfigEditor();
 
         // when
-        EffectiveConfig config = editor.prepareLaunchWorkflow(workflow, ignored -> Optional.empty(), true);
+        EffectiveConfig config = editor.prepareLaunchWorkflow(workflow, EnvironmentSources.of(), true);
 
         // then
         assertThat(config.codex().turnSandboxPolicy()).isNull();
@@ -812,21 +814,25 @@ final class WorkflowConfigEditorTest {
                 .formatted(codexYaml.stripTrailing(), body);
     }
 
-    private static Function<String, Optional<String>> trelloCredentials() {
-        return name -> switch (name) {
+    private static EnvironmentSources trelloCredentials() {
+        return shellEnvironment(name -> switch (name) {
             case "TRELLO_API_KEY" -> Optional.of("test-key");
             case "TRELLO_API_TOKEN" -> Optional.of("test-token");
             default -> Optional.empty();
-        };
+        });
     }
 
-    private static Function<String, Optional<String>> trelloCredentialsAndForcedDanger() {
-        return name -> switch (name) {
+    private static EnvironmentSources trelloCredentialsAndForcedDanger() {
+        return shellEnvironment(name -> switch (name) {
             case "TRELLO_API_KEY" -> Optional.of("test-key");
             case "TRELLO_API_TOKEN" -> Optional.of("test-token");
             case "SYMPHONY_CODEX_DANGER_FULL_ACCESS" -> Optional.of("true");
             default -> Optional.empty();
-        };
+        });
+    }
+
+    private static EnvironmentSources shellEnvironment(Function<String, Optional<String>> values) {
+        return EnvironmentSources.of(new EnvironmentSource.ShellEnvironment(values));
     }
 
     private static String currentWorkflowBody() {

@@ -1386,6 +1386,32 @@ and real environment variables still take precedence. `.env` loading is not a
 portable core Symphony requirement, and production deployments SHOULD use the host secret mechanism
 documented for that deployment rather than relying on project-local files.
 
+A Trello key and token read from the shell environment or from a dotenv file belong to one
+endpoint: the one that the same source names in `TRELLO_API_ENDPOINT`, or `https://api.trello.com/1`
+when it names none. Only that source binds its own credentials; a workflow file, another dotenv
+file, or a command-line option never supplies or overrides the binding for credentials it did not
+supply. A key or token given as a literal or `file:` value in the workflow belongs to the
+workflow's own `tracker.endpoint`. Before any command sends the key and token, it MUST compare the
+endpoint it would send them to with the endpoint they belong to, after normalizing scheme and host
+case, a trailing dot in the host, the scheme's default port, and trailing slashes, and MUST refuse
+a mismatch before any request. Encoded path separators MUST remain encoded during comparison.
+Each resolution MUST read a dotenv source's values and endpoint binding from one snapshot and
+refresh that snapshot on the next resolution. Requests MUST use the canonical endpoint checked
+by the binding rule, including the `/1` default for an empty or root path.
+The refusal names both endpoints, the source, and the
+`TRELLO_API_ENDPOINT=...` line to add to that source. This holds for `start`, the worker it
+launches, including every reload, the setup commands, and the board card commands, for connected
+and unconnected workflows alike. It is the one mechanism for this concern: no command has its own
+variant of it. The worker fails such a configuration with `credentials_endpoint_mismatch`; the CLI
+commands fail with `setup_credentials_endpoint_mismatch`.
+Refusal messages MUST hide malformed endpoint values and endpoint values containing user
+information, a query, or a fragment. Setup MUST NOT change a dotenv file's binding while any
+non-empty variable other than `TRELLO_API_ENDPOINT` remains unreplaced by the checked credentials.
+Arbitrary variable names are valid credential references, so setup cannot infer that an unchanged
+variable is unrelated. Operators can use a separate dotenv file or explicitly set its binding
+after checking its consumers.
+[ADR 0151](docs/adr/0151-bind-trello-credentials-to-an-endpoint.md) records the decision.
+
 Value coercion semantics:
 
 - Path/command fields support:
@@ -1450,6 +1476,8 @@ Validation checks:
 - `tracker.kind` is present and supported.
 - `tracker.api_key` is present after `$` resolution.
 - `tracker.api_token` is present after `$` resolution.
+- A key or token that the shell environment or a dotenv file supplied belongs to
+  `tracker.endpoint` (Section 6.1).
 - Path values whose leading `$VAR` or `${VAR}` is unset or blank follow Section 6.1 and are never
   used as literal paths.
 - `tracker.board_id` is present when REQUIRED by the selected tracker kind.
@@ -1549,6 +1577,8 @@ as a checkout candidate instead of failing.
   turn sandbox policy to `dangerFullAccess`
 - `SYMPHONY_TRELLO_DOTENV`: implementation environment extension that selects the ignored dotenv
   file loaded for local runs instead of the project-root `.env`
+- `TRELLO_API_ENDPOINT`: implementation environment extension that names the endpoint the Trello
+  key and token of the same source belong to, default `https://api.trello.com/1` (Section 6.1)
 - `codex.turn_timeout_ms`: integer, default `3600000`; maximum silence interval while a turn runs,
   not a total runtime cap (Section 5.3.6)
 - `codex.read_timeout_ms`: integer, default `5000`
@@ -3995,6 +4025,9 @@ that a second formatting pass leaves the source unchanged.
 - `tracker.api_key` works, including `$VAR` indirection
 - `tracker.api_token` works, including `$VAR` indirection
 - `$VAR` resolution works for tracker API key, tracker API token, and path values
+- A key or token from the shell environment or a dotenv file is refused for a `tracker.endpoint`
+  other than the one the same source binds it to, a literal workflow value needs no binding, the
+  binding compares after normalization, and the refusal names the source and the line to add
 - A path value whose leading `$VAR` or `${VAR}` is unset or blank is never kept as literal text
 - If fail-fast path variables are implemented, an unset or blank leading `$VAR` or `${VAR}` in
   `workspace.root`, `codex.additional_writable_roots`, `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`,
@@ -4294,10 +4327,23 @@ that a second formatting pass leaves the source unchanged.
   outside the connected-board manifest and for a workflow reached through a symbolic link; a state
   home that cannot be listed does not fail `diagnostics`; `stop` removes the recorded start attempt
   with the PID file; and a recorded workflow that no longer exists is skipped
+- If Java setup and lifecycle commands are implemented, `start` refuses an unconnected workflow
+  whose `tracker.endpoint` the default dotenv credentials do not belong to before any request
+  reaches a fake server, refuses a connected workflow edited to such an endpoint before the
+  credential preflight and the launch, starts a workflow whose endpoint `TRELLO_API_ENDPOINT` in
+  the dotenv file or the shell environment binds the credentials to, refuses shell credentials that
+  only a dotenv file binds, the setup commands refuse and bind their credentials the same way, and
+  the board card commands send the credentials to a bound custom endpoint and refuse an unbound or
+  mismatched one before any request, whatever `tracker.kind` says.
+  Neither the setup Trello client nor the worker's Trello client follows a redirect with the key
+  and token. Credential binding tests distinguish encoded path separators from literal separators,
+  exclude credential-bearing endpoint values from errors, and refuse automatic dotenv rebinding
+  when custom variables remain unchecked.
 - If the board card commands of Section 19.8 are implemented, deterministic tests drive them against
   a stateful fake Trello API and cover board selection with one board, several boards, `--board`,
   `--workflow`, and an unknown board; an unconnected workflow, refused before its credentials are
-  read, and a workflow with another `tracker.endpoint` or another board, each refused before any
+  read, and a workflow with a `tracker.endpoint` the credentials are not bound to, whatever
+  `tracker.kind` says, or another board, each refused before any
   Trello request; credentials that never appear in output or failures; moves by list name and by
   role, including ambiguous and unset roles, and active and terminal roles taken from configured
   list ids; `trello_tools` refusals for moves, new cards, comments, and archiving; refusal of a card
@@ -4853,6 +4899,10 @@ When this profile is used:
 - setup MUST write ignored local Trello credentials after the user provides them directly and MUST
   redact secret values in terminal output. Credentials already supplied through real environment
   variables or an existing dotenv file MUST NOT be copied into another dotenv file.
+- when setup writes directly provided credentials to a dotenv file whose `TRELLO_API_ENDPOINT`, or
+  its absence, would bind them to another endpoint than the `--endpoint` setup used, it MUST write
+  `TRELLO_API_ENDPOINT=<that endpoint>` to the same file and say so, so the worker it starts can
+  send them there (Section 6.1)
 - when standard input and output are an interactive terminal on Linux, setup prompts SHOULD support
   basic line editing, such as moving the cursor with the left and right arrow keys. Other platforms
   keep the JDK default until issue #817 verifies their terminal behavior. Setup MUST keep secret
@@ -5518,9 +5568,11 @@ Board selection:
 - The command MUST read the selected board's Trello credentials the same way a worker start does,
   including the board's `.env` file and the workflow's credential settings. It MUST NOT print the
   key, the token, or a credential file's content, including in failure output.
-- The command MUST send the key and token only to the Trello REST API at `https://api.trello.com/1`.
-  A workflow whose `tracker.endpoint` names another address MUST fail with
-  `setup_card_endpoint_not_trello` before any Trello request.
+- The command MUST send the key and token only to the endpoint they are bound to (Section 6.1),
+  exactly as `start`, the worker, and the setup commands do; it has no endpoint rule of its own. A
+  workflow whose `tracker.endpoint` is not that endpoint MUST fail with
+  `setup_credentials_endpoint_mismatch` before any Trello request. The connected-workflows rule
+  above limits which boards an agent may change; it does not decide where the credentials go.
 
 Card and list arguments:
 
