@@ -1655,6 +1655,42 @@ function Prepare-SourceCheckout {
     throw "cannot read source project/version: expected an explicit semantic version in the root pom.xml Choose a source ref with a resolved project version, then rerun the installer."
   }
   $script:Version = $versions[0].InnerText.Trim()
+  if (Test-Path -LiteralPath (Join-Path $Prefix ".git")) {
+    Assert-SourceCheckoutTargetApplies
+  }
+}
+
+function Assert-SourceCheckoutTargetApplies {
+  # Windows PowerShell turns native stderr into a terminating error under "Stop"; keep Git's output.
+  $ErrorActionPreference = "Continue"
+  $trees = @($SourceCommit)
+  # A checkout without commits switches from no tree, so Git checks the target tree alone.
+  & git -C $Prefix rev-parse --verify -q HEAD *> $null
+  if ($LASTEXITCODE -eq 0) {
+    $trees = @("HEAD", $SourceCommit)
+  }
+  # A dry-run merge makes the same overwrite checks as the later git checkout, including its
+  # permission to replace ignored files. Reading objects from the staged clone keeps the installed
+  # checkout unchanged until workers have stopped.
+  $previousAlternates = $env:GIT_ALTERNATE_OBJECT_DIRECTORIES
+  $env:GIT_ALTERNATE_OBJECT_DIRECTORIES = Join-Path (Join-Path $SourceCheckout ".git") "objects"
+  try {
+    $output = & git -C $Prefix read-tree -n -m -u --exclude-per-directory=.gitignore @trees 2>&1
+    $applies = $LASTEXITCODE -eq 0
+  } finally {
+    $env:GIT_ALTERNATE_OBJECT_DIRECTORIES = $previousAlternates
+  }
+  if (-not $applies) {
+    # Native stderr lines arrive as ErrorRecords; an empty line renders as the exception type name.
+    $gitLines = @(
+      $output |
+        ForEach-Object { if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { "$_" } } |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        ForEach-Object { "  git: $_" }
+    )
+    $message = @('cannot update source checkout "local files": the requested version would overwrite or remove an untracked local path; move or back up the path Git names below, and any other path a rerun reports, outside the app checkout before retrying; no local files were changed') + $gitLines
+    throw ($message -join "`n")
+  }
 }
 
 function Install-SourceCheckout {

@@ -1697,6 +1697,29 @@ prepare_source_checkout() {
     echo "Choose a source ref with a resolved project version, then rerun the installer." >&2
     exit 2
   fi
+  if [[ -d "$APP_DIR/.git" ]]; then
+    assert_source_checkout_target_applies
+  fi
+}
+
+assert_source_checkout_target_applies() {
+  local refusal line
+  local -a trees=("$SOURCE_COMMIT")
+  # A checkout without commits switches from no tree, so Git checks the target tree alone.
+  if git -C "$APP_DIR" rev-parse --verify -q HEAD >/dev/null; then
+    trees=(HEAD "$SOURCE_COMMIT")
+  fi
+  # A dry-run merge makes the same overwrite checks as the later git checkout, including its
+  # permission to replace ignored files. Reading objects from the staged clone keeps the installed
+  # checkout unchanged until workers have stopped.
+  if ! refusal="$(GIT_ALTERNATE_OBJECT_DIRECTORIES="$SOURCE_CHECKOUT/.git/objects" \
+    git -C "$APP_DIR" read-tree -n -m -u --exclude-per-directory=.gitignore "${trees[@]}" 2>&1)"; then
+    echo 'cannot update source checkout "local files": the requested version would overwrite or remove an untracked local path; move or back up the path Git names below, and any other path a rerun reports, outside the app checkout before retrying; no local files were changed' >&2
+    while IFS= read -r line; do
+      printf '  git: %s\n' "$line" >&2
+    done <<<"$refusal"
+    exit 2
+  fi
 }
 
 install_or_update_checkout() {

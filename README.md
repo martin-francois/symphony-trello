@@ -1123,6 +1123,10 @@ Untracked links at `config`, `oss-fuzz`, `.codex`, `.codex/skills`, or a direct 
 directory also block the update. The installer never deletes them. Build output under `target/`,
 the installer marker, Maven wrapper caches under `.mvn/wrapper/dists/`,
 `.mvn/wrapper/maven-wrapper.jar`, and generated `tessl__*` or `tessl:*` skills remain allowed.
+Other untracked files can stay, unless the requested version tracks the same path, or needs a file
+where you have a directory or the other way around. Then the update stops before it stops workers,
+names the conflicting path, and leaves your files in place. Move or back up that path outside the
+app checkout and rerun the installer. Git names one path per run, so a rerun can name another.
 The check includes files inside nested Git repositories. On case-insensitive filesystems, it also
 checks configuration aliases such as `.ENV`. Bundled skill names still follow Maven's case-sensitive
 patterns: `SKILL.md` is an input, `skill.md` is not, and `TESSL__*` is not an exemption.

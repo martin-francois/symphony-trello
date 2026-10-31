@@ -4235,8 +4235,9 @@ that a second formatting pass leaves the source unchanged.
   while retaining forward-compatible provenance fields. Setup check, port repair, and card
   commands still work beside an older collided manifest.
   Installer process tests cover unreadable installed versions, tracked and untracked build inputs,
-  ignored configuration, retained non-input files, app-directory builds, failed help probes, and
-  rejected migrations before restart. They also cover BOM-prefixed root POMs, clean and modified
+  ignored configuration, retained non-input files, untracked file and directory collisions with the
+  checked commit refused before worker stop, a collision-free update beside untracked files,
+  app-directory builds, failed help probes, and rejected migrations before restart. They also cover BOM-prefixed root POMs, clean and modified
   index-flagged paths, failed index inspection, and sibling staging for archive replacement.
   PowerShell POM tests use real Git output under non-UTF-8 console encodings and verify encoding
   restoration after successful and failed reads. Literal mojibake prefixes remain invalid XML.
@@ -5110,7 +5111,12 @@ Installers:
   `config/application*.properties`. Maven wrapper distribution caches, `maven-wrapper.jar`,
   generated `tessl__*` and `tessl:*` skills, `target/` output, and the installer marker MUST remain
   allowed. Untracked link ancestors at `config`, `oss-fuzz`, `.codex`, `.codex/skills`, and direct
-  non-Tessl skill directories MUST also stop preflight. Other non-input files MUST remain allowed.
+  non-Tessl skill directories MUST also stop preflight. Other non-input files MUST remain allowed
+  unless Git would refuse to check out the checked commit over them. Source preflight MUST detect
+  that refusal against the checked commit, including file and directory collisions, before
+  workers stop or files change, MUST name a conflicting path, and MUST tell the operator to move or
+  back up the conflicting paths before retrying. It MUST NOT delete or overwrite them to make the
+  checkout succeed.
   This inventory MUST include nested Git repositories and filesystem aliases of fixed input paths.
   Bundled skill include and Tessl exclusion patterns MUST remain case-sensitive, matching Maven.
   Selected inputs MUST retain their exact index spelling; an unrecorded case-only rename MUST stop

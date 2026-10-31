@@ -8509,6 +8509,67 @@ final class InstallerScriptTest {
     }
 
     @CsvSource({
+        "false, docs/collision.txt, docs/collision.txt, docs/collision.txt",
+        "true, docs/collision.txt, docs/collision.txt, docs/collision.txt",
+        "false, docs, docs/local-note.md, docs",
+        "true, docs, docs/local-note.md, docs",
+        "false, docs/collision.txt, docs, docs",
+        "true, docs/collision.txt, docs, docs"
+    })
+    @ParameterizedTest
+    void installersRefuseCheckoutCollisionsBeforeStoppingWorkers(
+            boolean powershell, String targetPath, String localPath, String reportedPath) throws Exception {
+        // given
+        List<String> launcher = installerLauncher(powershell);
+        SourceDowngrade source = sourceDowngrade(true);
+        source.recordWorkerStopRequests();
+        source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
+        addSourceRepositoryCommit(source.source(), targetPath, "tracked target file\n");
+        Path local = source.installed().appHome().resolve(localPath);
+        Files.createDirectories(local.getParent());
+        byte[] localBytes = "local untracked file\n".getBytes(StandardCharsets.UTF_8);
+        Files.write(local, localBytes);
+
+        // when
+        ProcessResult result = source.run(launcher);
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isNotZero();
+        assertThat(normalizedWhitespace(result.output()))
+                .contains(
+                        "cannot update source checkout \"local files\"",
+                        "move or back up the path Git names below",
+                        "'" + reportedPath + "'");
+        assertThat(local).hasBinaryContent(localBytes);
+        assertThat(Path.of(source.installed().environment().get("SYMPHONY_FAKE_LOG")))
+                .content(StandardCharsets.UTF_8)
+                .doesNotContain("build-cwd=", "migrate-workflows", "\"start\"");
+        source.assertAppUntouched();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void installersUpdateBesideUntrackedFilesThatDoNotCollide(boolean powershell) throws Exception {
+        // given
+        List<String> launcher = installerLauncher(powershell);
+        SourceDowngrade source = sourceDowngrade(true);
+        source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
+        addSourceRepositoryCommit(source.source(), "docs/collision.txt", "tracked target file\n");
+        Path local = source.installed().appHome().resolve("docs/local-note.md");
+        Files.createDirectories(local.getParent());
+        byte[] localBytes = "local untracked file\n".getBytes(StandardCharsets.UTF_8);
+        Files.write(local, localBytes);
+
+        // when
+        ProcessResult result = source.run(launcher);
+
+        // then
+        result.assertSuccess();
+        assertThat(source.installed().appHome().resolve("docs/collision.txt")).hasContent("tracked target file\n");
+        assertThat(local).hasBinaryContent(localBytes);
+    }
+
+    @CsvSource({
         "false, .codex/skills/extra, SKILL.md",
         "true, .codex/skills/extra, SKILL.md",
         "false, .codex/skills/.hidden, SKILL.md",
