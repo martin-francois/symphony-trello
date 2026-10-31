@@ -19,6 +19,7 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -33,6 +34,56 @@ final class WorkflowFrontMatterYamlRulesTest {
     private static final String LONG_SCALAR = "x".repeat(1_000);
 
     private final WorkflowLoader loader = new WorkflowLoader();
+
+    @CsvSource(
+            textBlock =
+                    """
+            a: 1, '--- # second', 'b: 2', 2
+            null, '--- # second', 'b: 2', 2
+            {}, '--- # second', 'b: 2', 2
+            '--- # empty first', '--- # second', 'b: 2', 2
+            a: 1, '...\n--- # second', 'b: 2', 3
+            a: 1, '...', 'b: 2', 3
+            a: 1, '--- # second', '', 2
+            a: 1, '--- # second', 'private-value: [', 2
+            a: 1, '...', 'private-value: [', 3
+            a: 1, '...', '%YAML 1.1', 3
+            a: 1, '...', '...', 3
+            a: 1, '...', '"unfinished\nprivate-value', 3
+            a: 1, '...\n# comment\n', '%YAML 1.1\n--- # second', 5
+            'a: "\uD83D\uDE00"', '...', '%YAML 1.1', 3
+            """)
+    @ParameterizedTest
+    void aSecondYamlDocumentFailsInsteadOfDroppingItsSettings(
+            String firstDocument, String separator, String secondDocument, int line) {
+        // given
+        byte[] workflow = workflow(firstDocument + "\n" + separator + "\n" + secondDocument + "\n");
+
+        // when
+        WorkflowException failure =
+                catchThrowableOfType(WorkflowException.class, () -> loader.parse(WORKFLOW, workflow));
+
+        // then
+        assertThat(failure)
+                .hasMessageContaining("single YAML document")
+                .hasMessageContaining("front matter line %s", line)
+                .hasMessageNotContaining("private-value")
+                .extracting(WorkflowException::code)
+                .isEqualTo(PARSE_ERROR);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"a: 1\n...\n# end\n", "--- # first\na: 1\n...\n", "a: |\n  --- # literal\n  ...\n"})
+    void singleDocumentMarkersAndLiteralBlockContentRemainValid(String frontMatter) {
+        // given
+        byte[] workflow = workflow(frontMatter);
+
+        // when
+        WorkflowDefinition loaded = loader.parse(WORKFLOW, workflow);
+
+        // then
+        assertThat(loaded.config()).containsOnlyKeys("a");
+    }
 
     @MethodSource("aliasCases")
     @ParameterizedTest

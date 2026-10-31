@@ -13,6 +13,7 @@ import ch.fmartin.symphony.trello.config.EnvironmentSources;
 import ch.fmartin.symphony.trello.config.WorkflowServerPortClassification;
 import ch.fmartin.symphony.trello.testsupport.TestFileContents;
 import ch.fmartin.symphony.trello.workflow.CodexSandboxPolicy;
+import ch.fmartin.symphony.trello.workflow.WorkflowFrontMatterYaml;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -28,10 +29,31 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 final class WorkflowConfigEditorTest {
     @TempDir
     Path tempDir;
+
+    @ParameterizedTest
+    @ValueSource(strings = {"--- # second", "..."})
+    void portUpdateRefusesMultipleDocumentsWithoutLosingTheirContents(String separator) throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        String content = "---\nserver: {port: 18080}\n" + separator + "\nprivate-value: keep-me\n---\n# Body\n";
+        Files.writeString(workflow, content);
+        var editor = new WorkflowConfigEditor();
+
+        // when
+        Throwable failure = catchThrowable(() -> editor.updateServerPort(workflow, 18082));
+
+        // then
+        assertThat(failure)
+                .isInstanceOf(WorkflowFrontMatterYaml.RuleViolation.class)
+                .hasMessageContaining("single YAML document")
+                .hasMessageNotContaining("keep-me");
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(content);
+    }
 
     @Test
     void readsAndUpdatesCrLfWorkflowFrontMatter() throws Exception {

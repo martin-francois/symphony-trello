@@ -8,12 +8,14 @@ import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.ObjectCodec;
 import com.fasterxml.jackson.core.io.IOContext;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.dataformat.yaml.YAMLParser;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Serial;
+import java.io.StringReader;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -24,12 +26,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.error.Mark;
 import org.yaml.snakeyaml.events.AliasEvent;
 import org.yaml.snakeyaml.events.CollectionEndEvent;
 import org.yaml.snakeyaml.events.CollectionStartEvent;
+import org.yaml.snakeyaml.events.DocumentEndEvent;
 import org.yaml.snakeyaml.events.Event;
 import org.yaml.snakeyaml.events.NodeEvent;
 import org.yaml.snakeyaml.events.ScalarEvent;
@@ -39,7 +43,7 @@ import org.yaml.snakeyaml.nodes.Tag;
 /// Reads `WORKFLOW.md` front matter into the map that the workflow loader, the startup port check,
 /// and setup share. Scalars decode exactly as Jackson's YAML reader decodes them; on top of that the
 /// reader applies the YAML rules of `SPEC.md` section 5.2: aliases resolve to their anchored value,
-/// merge keys and repeated keys fail, and front matter without content is an empty map. ADR 0147
+/// merge keys, repeated keys and multiple documents fail, and front matter without content is an empty map. ADR 0147
 /// explains why the rules sit on Jackson's event hook instead of another YAML library.
 public final class WorkflowFrontMatterYaml {
     /// The most YAML nodes that all aliases in one front matter may copy, so a few lines of nested
@@ -54,7 +58,8 @@ public final class WorkflowFrontMatterYaml {
     public static final int MAX_ALIAS_COPIED_CHARACTERS = 1_000_000;
 
     private static final TypeReference<LinkedHashMap<String, Object>> MAP_TYPE = new TypeReference<>() {};
-    private static final ObjectMapper MAPPER = new ObjectMapper(new Factory());
+    private static final ObjectMapper MAPPER =
+            new ObjectMapper(new Factory()).enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
 
     private WorkflowFrontMatterYaml() {}
 
@@ -65,9 +70,9 @@ public final class WorkflowFrontMatterYaml {
         return MAPPER.readValue(frontMatter, MAP_TYPE);
     }
 
-    /// A front matter that is valid YAML but breaks a section 5.2 rule.
-    /// [JsonProcessingException#getOriginalMessage()] is one line that names the offending key or
-    /// alias and says how to fix it, without any value from the front matter.
+    /// Front matter that breaks a section 5.2 rule.
+    /// [JsonProcessingException#getOriginalMessage()] is one line that names the offending key,
+    /// alias or document line and says how to fix it, without any value from the front matter.
     public static final class RuleViolation extends JsonParseException {
         @Serial
         private static final long serialVersionUID = 1L;
@@ -77,8 +82,8 @@ public final class WorkflowFrontMatterYaml {
         }
     }
 
-    /// Creates [FrontMatterParser] for the [Reader] that `YAMLFactory.createParser(String)` opens,
-    /// the only entry point [#readMap(String)] uses. [YAMLParser.Feature#EMPTY_DOCUMENT_AS_EMPTY_OBJECT]
+    /// Creates [FrontMatterParser] for the string entry point that [#readMap(String)] uses, retaining
+    /// the source for the document-tail check. [YAMLParser.Feature#EMPTY_DOCUMENT_AS_EMPTY_OBJECT]
     /// turns empty and comment-only front matter into an empty map. It enables the feature on top of
     /// the defaults, because `YAMLFactory.builder()` starts without them and would then read `key:` as
     /// `""` instead of null.
@@ -91,9 +96,11 @@ public final class WorkflowFrontMatterYaml {
         }
 
         @Override
-        protected YAMLParser _createParser(Reader reader, IOContext ctxt) {
+        public YAMLParser createParser(String content) {
+            var reader = new StringReader(content);
+            IOContext ctxt = _createContext(_createContentReference(reader), false);
             return new FrontMatterParser(
-                    ctxt, _parserFeatures, _yamlParserFeatures, _loaderOptions, _objectCodec, reader);
+                    ctxt, _parserFeatures, _yamlParserFeatures, _loaderOptions, _objectCodec, reader, content);
         }
     }
 
@@ -127,6 +134,9 @@ public final class WorkflowFrontMatterYaml {
         // Collections Jackson has been handed and not yet closed, copies included.
         private int deliveredDepth;
         private long aliasCopiedCharacters;
+        private static final Pattern YAML_LINE_BREAK = Pattern.compile("\r\n|[\r\n\u0085\u2028\u2029]");
+        private static final Pattern BLANK_OR_COMMENT = Pattern.compile("[ \t]*(?:#.*)?");
+        private final String source;
 
         FrontMatterParser(
                 IOContext ctxt,
@@ -134,8 +144,10 @@ public final class WorkflowFrontMatterYaml {
                 int formatFeatures,
                 LoaderOptions loaderOptions,
                 @Nullable ObjectCodec codec,
-                Reader reader) {
+                Reader reader,
+                String source) {
             super(ctxt, parserFeatures, formatFeatures, loaderOptions, codec, reader);
+            this.source = source;
         }
 
         @Override
@@ -146,6 +158,9 @@ public final class WorkflowFrontMatterYaml {
             }
             copyingAlias = null;
             Event event = super.getEvent();
+            if (event instanceof DocumentEndEvent end) {
+                rejectTrailingContent(end.getEndMark());
+            }
             if (event instanceof AliasEvent alias) {
                 Anchored anchored = resolve(alias);
                 if (!openRecordings.isEmpty()) {
@@ -160,6 +175,25 @@ public final class WorkflowFrontMatterYaml {
                 delivered(event);
             }
             return event;
+        }
+
+        private void rejectTrailingContent(Mark end) throws RuleViolation {
+            int offset = source.offsetByCodePoints(0, end.getIndex());
+            int line = line(end);
+            for (String trailingLine : YAML_LINE_BREAK.split(source.substring(offset), -1)) {
+                if (!BLANK_OR_COMMENT.matcher(trailingLine).matches()) {
+                    throw secondDocument(line);
+                }
+                line++;
+            }
+        }
+
+        private RuleViolation secondDocument(int line) {
+            return new RuleViolation(
+                    this,
+                    ("cannot parse workflow front matter \"document at front matter line %d\": "
+                                    + "expected a single YAML document; remove inner document markers and combine the settings")
+                            .formatted(line));
         }
 
         // Jackson stops at its nesting limit with a generic parse error. A copy can push valid YAML

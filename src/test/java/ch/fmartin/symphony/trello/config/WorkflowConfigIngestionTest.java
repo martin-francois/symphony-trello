@@ -6,8 +6,24 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 final class WorkflowConfigIngestionTest {
+    @ParameterizedTest
+    @ValueSource(strings = {"--- # second", "..."})
+    void startupPortReadRejectsSettingsFromMultipleDocuments(String separator) {
+        // given
+        String frontMatter = "server: {port: 18080}\n" + separator + "\nserver: {port: 18081}\n";
+
+        // when
+        Optional<TypedWorkflowConfig> config = WorkflowConfigIngestion.collectFrontMatter(
+                frontMatter, ignored -> Optional.empty(), WorkflowConfigIngestion.UnresolvedEnvironmentPolicy.OMIT);
+
+        // then
+        assertThat(config).isEmpty();
+    }
+
     @Test
     void appliesSharedWholeNumberPolicyToLiteralAndEnvironmentBackedServerPort() {
         // given

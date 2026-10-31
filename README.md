@@ -1500,6 +1500,11 @@ loader rejects merge keys (`<<: *name`) and a key that appears twice in the same
 key in the error; write the merged keys out instead. Empty front matter, or front matter with only
 comments, means no settings. `SPEC.md` section 5.2 lists the exact rules.
 
+Front matter must contain a single YAML document. An inner `--- # comment` starts another document;
+older releases silently ignored its settings. Remove inner document markers and combine those
+settings into one map before upgrading. A final `...` is allowed when only whitespace or comments
+follow it. Text inside an indented scalar block remains ordinary text.
+
 Minimum example:
 
 ```markdown
