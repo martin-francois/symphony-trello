@@ -6435,7 +6435,7 @@ final class InstallerScriptTest {
     @Test
     void powershellInstallerAllowsDefaultCommandDirectoryWhenRunFromThatDirectoryWhenAvailable() throws Exception {
         // given
-        List<String> pwsh = powershellCommandForDifferentWorkingDirectory();
+        List<String> pwsh = powershellCommand();
         assumeFalse(pwsh.isEmpty());
         Path installScript = Path.of("install.ps1").toAbsolutePath();
         Path home = temporaryDirectory.resolve("ps-install-run-from-bin-home");
@@ -7189,7 +7189,7 @@ final class InstallerScriptTest {
     @Test
     void powershellUninstallerAllowsDefaultCommandDirectoryWhenRunFromThatDirectoryWhenAvailable() throws Exception {
         // given
-        List<String> pwsh = powershellCommandForDifferentWorkingDirectory();
+        List<String> pwsh = powershellCommand();
         assumeFalse(pwsh.isEmpty());
         Path uninstallScript = Path.of("uninstall.ps1").toAbsolutePath();
         Path home = temporaryDirectory.resolve("ps-uninstall-run-from-bin-home");
@@ -11367,15 +11367,6 @@ final class InstallerScriptTest {
     }
 
     private record CustomPrefixUninstallFixture(Path defaultSymphonyHome, Path app, Path bin) {}
-
-    private static List<String> powershellCommandForDifferentWorkingDirectory() {
-        return powershellCommand().stream()
-                .map(command ->
-                        command.contains(File.separator) && !Path.of(command).isAbsolute()
-                                ? Path.of(command).toAbsolutePath().toString()
-                                : command)
-                .toList();
-    }
 
     private PosixDryRunPair runPosixInstallAndUninstallDryRunWithPrefix(
             Map<String, String> environment, Path app, Path bin) throws Exception {
