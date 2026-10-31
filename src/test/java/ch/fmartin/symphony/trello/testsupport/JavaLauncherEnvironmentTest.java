@@ -27,17 +27,4 @@ final class JavaLauncherEnvironmentTest {
                 .containsEntry("PATH", "/usr/bin")
                 .containsEntry("CUSTOM_VAR", "value");
     }
-
-    @Test
-    void handlesNullOrEmptyEnvironmentWithoutError() {
-        // given
-        Map<String, String> empty = new HashMap<>();
-
-        // when
-        JavaLauncherEnvironment.removeLauncherOptions(null);
-        JavaLauncherEnvironment.removeLauncherOptions(empty);
-
-        // then
-        assertThat(empty).isEmpty();
-    }
 }

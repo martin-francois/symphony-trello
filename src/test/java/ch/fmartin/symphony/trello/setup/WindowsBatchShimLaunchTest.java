@@ -6,6 +6,7 @@ import static java.nio.file.Files.readAllLines;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.process.ExecutableResolver;
+import ch.fmartin.symphony.trello.testsupport.JavaLauncherEnvironment;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
@@ -151,6 +152,7 @@ final class WindowsBatchShimLaunchTest {
                         "status")
                 .redirectErrorStream(true)
                 .redirectOutput(output.toFile());
+        JavaLauncherEnvironment.removeLauncherOptions(builder.environment());
         // Windows names the variable Path; drop every spelling so the shim directory is the only entry.
         builder.environment().keySet().removeIf(name -> name.equalsIgnoreCase("PATH"));
         builder.environment().put("PATH", shimDirectory.toString());
