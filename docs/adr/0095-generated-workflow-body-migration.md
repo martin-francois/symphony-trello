@@ -6,6 +6,7 @@ consulted:
   - "[GitHub issue #566](https://github.com/martin-francois/symphony-trello/issues/566)"
   - "[GitHub issue #567](https://github.com/martin-francois/symphony-trello/issues/567)"
   - "[GitHub issue #545](https://github.com/martin-francois/symphony-trello/issues/545)"
+  - "[GitHub issue #1066](https://github.com/martin-francois/symphony-trello/issues/1066)"
   - "[SPEC.md](../../SPEC.md)"
 informed: [Future maintainers, Contributors, Operators]
 ---
@@ -68,8 +69,25 @@ body text. Readers ignore unknown fields, so an older version can read records f
 New input fields must have defaults that render the older body. Writers preserve unknown fields
 in untouched records and at the top level. Rebuilding every record from typed Java objects would
 discard newer inputs during a downgrade and separate a stored body from the inputs that made it.
-A custom manifest named `generated-workflows.json` cannot share this store path, so setup leaves
-that manifest intact and reports the provenance warning.
+File roles. A connected-board manifest cannot share the provenance store path. This covers
+normalized paths, symbolic-link aliases whose target may not exist yet, and existing hard links.
+Setup rejects that configuration before requests, worker changes, or file writes. The earlier
+warning-only collision handling let setup succeed without provenance and let migration add
+provenance fields to the manifest later
+([GitHub issue #1066](https://github.com/martin-francois/symphony-trello/issues/1066)). Genuine late
+provenance I/O failures still warn without undoing completed setup. Resolve existing directory
+symlinks before interpreting parent traversal in a missing target; lexical normalization first
+would compare a different path from the one the filesystem writes.
+
+The store rejects an object with a top-level `boards` member as connected-board data, including
+mixed objects already containing provenance fields. Migration propagates that configuration error
+before classification or writes; it does not turn it into missing provenance. Unknown provenance
+fields otherwise remain supported and preserved. An empty-store fallback would conceal the role
+collision and could write into the wrong file again. Automatically moving or splitting the file
+would guess which manifest the operator intended and could disturb an existing destination, so
+recovery is explicit and preserves the original bytes. Read-only diagnostics and existing recovery
+commands may still read a manifest at the reserved name. Card commands read provenance only to fill
+in list roles, so they treat such a file as missing provenance and use the workflow settings.
 
 Retention. A record holds only the latest body that Symphony generated, migrated, confirmed as
 already current, or recorded through `--mark-migrated`. It is replaced on the next of these events.
@@ -229,6 +247,11 @@ This decision remains implemented when:
   limits, unknown store fields, and major-downgrade rejection;
 * `TrelloBoardSetupMainTest` and `LocalSetupGithubConfigurationTest` prove that generated workflows
   are recorded and that a freshly generated workflow is reported as unchanged;
+* `TrelloBoardSetupMainTest` rejects a manifest that resolves to `generated-workflows.json` before
+  any Trello request or file write, `GeneratedWorkflowStoreTest` and `WorkflowBodyMigrationTest`
+  refuse a store that holds connected-board data without changing it, and `LocalSetupTest` and
+  `BoardCardCommandsTest` show that setup check, port repair, and card commands still work beside
+  such a file;
 * the POSIX and PowerShell installer tests show the `migrate-workflows` call on update, refuse an
   older major release or source ref before the app is replaced, reject unreadable versions and
   untracked build inputs and index-flagged tracked paths before worker shutdown, accept a BOM in

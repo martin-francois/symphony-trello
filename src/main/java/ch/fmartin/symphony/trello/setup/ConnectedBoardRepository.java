@@ -69,7 +69,9 @@ final class ConnectedBoardRepository {
                     false);
         }
         List<String> warnings = manifestShapeWarnings(root);
-        if (root == null || !root.isObject() || !root.path("boards").isArray()) {
+        if (root == null
+                || !root.isObject()
+                || !root.path(ConnectedBoardManifest.BOARDS_FIELD).isArray()) {
             return new ManifestLoadResult(new ConnectedBoardManifest(List.of()), warnings, false);
         }
         // Reject non-object rows before treeToValue: Jackson maps a null row to a null list
@@ -184,7 +186,7 @@ final class ConnectedBoardRepository {
     }
 
     private static boolean hasNonObjectBoardRow(JsonNode root) {
-        JsonNode boards = root.path("boards");
+        JsonNode boards = root.path(ConnectedBoardManifest.BOARDS_FIELD);
         return StreamSupport.stream(boards.spliterator(), false).anyMatch(board -> !board.isObject());
     }
 
@@ -192,7 +194,7 @@ final class ConnectedBoardRepository {
         if (root == null || !root.isObject()) {
             return List.of("Connected-board manifest must be a JSON object.");
         }
-        JsonNode boards = root.path("boards");
+        JsonNode boards = root.path(ConnectedBoardManifest.BOARDS_FIELD);
         if (!boards.isArray()) {
             return List.of("Connected-board manifest field boards must be an array.");
         }

@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.api.Assumptions.abort;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -10,6 +11,8 @@ import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 final class GeneratedWorkflowStoreTest {
     @TempDir
@@ -132,6 +135,47 @@ final class GeneratedWorkflowStoreTest {
         var saved = json.readTree(store.storePath().toFile());
         assertThat(saved.get("futureStoreField")).isEqualTo(document.get("futureStoreField"));
         assertThat(saved.get("workflows").get(0)).isEqualTo(stored);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{\"boards\":[]}", "{\"boards\":[],\"formatVersion\":1,\"workflows\":[]}"})
+    void refusesToAddProvenanceToAConnectedBoardManifest(String content) throws IOException {
+        // given
+        var store = GeneratedWorkflowStore.inConfigDir(directory);
+        Files.writeString(store.storePath(), content);
+        byte[] original = Files.readAllBytes(store.storePath());
+
+        // when
+        Throwable thrown = catchThrowable(() -> store.put(record(directory.resolve("workflow.md"), "body")));
+
+        // then
+        assertThat(thrown)
+                .isInstanceOf(TrelloBoardSetupException.class)
+                .hasMessageContaining("connected-board manifest")
+                .hasMessageContaining(store.storePath().toString())
+                .hasMessageContaining(ConnectedBoardManifest.FILE_NAME);
+        assertThat(store.storePath()).hasBinaryContent(original);
+    }
+
+    @Test
+    void acceptsAManifestLinkWhoseParentTraversalReachesAnotherDirectory() throws IOException {
+        // given
+        Path nested = Files.createDirectories(directory.resolve("nested/deep"));
+        Path manifest = directory.resolve("boards.json");
+        try {
+            Files.createSymbolicLink(directory.resolve("redirect"), nested);
+            Files.createSymbolicLink(manifest, Path.of("redirect/../" + GeneratedWorkflowStore.FILE_NAME));
+        } catch (IOException | UnsupportedOperationException e) {
+            abort("symbolic links are unavailable");
+        }
+
+        // when
+        var store = GeneratedWorkflowStore.besideManifest(manifest);
+
+        // then
+        assertThat(store.storePath()).isEqualTo(directory.resolve(GeneratedWorkflowStore.FILE_NAME));
+        assertThat(directory.resolve("nested").resolve(GeneratedWorkflowStore.FILE_NAME))
+                .doesNotExist();
     }
 
     private static GeneratedWorkflowRecord record(Path workflow, String body) {

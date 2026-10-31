@@ -8,9 +8,12 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.jspecify.annotations.NullMarked;
 
 /// Version provenance for generated workflow bodies (ADR 0095). The store keeps one record per
@@ -37,13 +40,55 @@ final class GeneratedWorkflowStore {
     }
 
     static GeneratedWorkflowStore besideManifest(Path manifestPath) {
+        validateManifestPath(manifestPath);
         Path manifest = manifestPath.toAbsolutePath().normalize();
-        Path store = manifest.resolveSibling(FILE_NAME);
-        if (PathsEqual.samePath(store, manifest)) {
-            throw new IllegalArgumentException(
-                    "cannot record generated workflows: use a manifest filename other than generated-workflows.json");
+        return new GeneratedWorkflowStore(manifest.resolveSibling(FILE_NAME));
+    }
+
+    static void validateManifestPath(Path manifestPath) {
+        Path manifest = manifestPath.toAbsolutePath();
+        Path store = manifest.normalize().resolveSibling(FILE_NAME);
+        boolean collision;
+        try {
+            collision =
+                    prospectiveRealPath(manifest, new HashSet<>()).equals(prospectiveRealPath(store, new HashSet<>()))
+                            || (Files.exists(manifest) && Files.exists(store) && Files.isSameFile(manifest, store));
+        } catch (IOException e) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_arguments",
+                    "Cannot resolve the connected-board manifest path safely. Pass --manifest with a different path.",
+                    e);
         }
-        return new GeneratedWorkflowStore(store);
+        if (collision) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_arguments",
+                    "The connected-board manifest resolves to " + FILE_NAME
+                            + " and that file is reserved for generated workflow provenance. Pass --manifest with "
+                            + ConnectedBoardManifest.FILE_NAME + " or another filename instead.");
+        }
+    }
+
+    /// Resolve aliases before setup creates either file, including a link to a missing target.
+    private static Path prospectiveRealPath(Path path, Set<Path> visitedLinks) throws IOException {
+        try {
+            return path.toRealPath();
+        } catch (NoSuchFileException e) {
+            Path absolute = path.toAbsolutePath();
+            Path parent = absolute.getParent();
+            if (parent == null) {
+                throw e;
+            }
+            // Resolve parents before interpreting "..": a directory symlink can change its meaning.
+            Path prospective = prospectiveRealPath(parent, visitedLinks).resolve(absolute.getFileName());
+            if (Files.isSymbolicLink(prospective)) {
+                if (!visitedLinks.add(prospective)) {
+                    throw new IOException("symbolic link cycle in manifest path", e);
+                }
+                return prospectiveRealPath(
+                        prospective.resolveSibling(Files.readSymbolicLink(prospective)), visitedLinks);
+            }
+            return prospective;
+        }
     }
 
     /// Records the body that setup just generated with the running Symphony version. A failure here
@@ -104,6 +149,14 @@ final class GeneratedWorkflowStore {
             JsonNode document = json.readTree(storePath.toFile());
             if (!(document instanceof ObjectNode object)) {
                 throw new IOException("cannot read generated workflow store: expected a JSON object");
+            }
+            if (object.has(ConnectedBoardManifest.BOARDS_FIELD)) {
+                throw new TrelloBoardSetupException(
+                        "setup_manifest_unavailable",
+                        storePath + " contains a connected-board manifest, not generated workflow provenance. "
+                                + "Back up this file and the workflows, then move the connected-board data to "
+                                + ConnectedBoardManifest.FILE_NAME + " or another manifest filename before retrying. "
+                                + "Keep the original backup and separate any provenance fields; no files were changed.");
             }
             return object;
         } catch (JsonProcessingException e) {

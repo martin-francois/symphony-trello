@@ -63,6 +63,7 @@ final class TrelloBoardSetupService {
     }
 
     void preflightConnectedBoardManifest(Path manifestPath) {
+        GeneratedWorkflowStore.validateManifestPath(manifestPath);
         var boards = new ConnectedBoardRepository(manifestPath);
         try {
             boards.loadForLifecycle();

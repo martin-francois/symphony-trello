@@ -699,6 +699,33 @@ final class WorkflowBodyMigrationTest {
         assertThat(workflow.path().resolve("keep.txt")).hasContent("concurrent content");
     }
 
+    @CsvSource({"false, false", "true, false", "false, true"})
+    @ParameterizedTest
+    void refusesACollidedManifestBeforeRecordingOrChangingWorkflows(boolean dryRun, boolean markMigrated)
+            throws Exception {
+        // given
+        String content = workflowFile(GITHUB_INPUTS, targetBody(GITHUB_INPUTS));
+        Path workflow = fixture.connectedWorkflow("Collided Board", GITHUB_INPUTS, content);
+        Path manifest = configDir.resolve(GeneratedWorkflowStore.FILE_NAME);
+        Files.move(configDir.resolve(ConnectedBoardManifest.FILE_NAME), manifest);
+        byte[] original = Files.readAllBytes(manifest);
+        var request = new WorkflowMigrationRequest(
+                configDir, Optional.empty(), Optional.of(workflow), dryRun, true, Optional.empty(), markMigrated);
+
+        // when
+        MigrationRun run = fixture.run(request);
+
+        // then
+        assertThat(run.exitCode()).as(run.output()).isEqualTo(SETUP_FAILURE);
+        assertThat(run.failureCode()).hasValue("setup_manifest_unavailable");
+        assertThat(manifest).hasBinaryContent(original);
+        assertThat(new ConnectedBoardRepository(manifest).loadForLifecycle().boards())
+                .hasSize(1);
+        assertThat(workflow).hasContent(content);
+        assertThat(backupOf(workflow)).doesNotExist();
+        assertThat(fixture.targetBodyPath(workflow)).doesNotExist();
+    }
+
     @Test
     void marksAManualMigrationSoLaterChecksCompareAgainstTheCurrentBody() throws Exception {
         // given
