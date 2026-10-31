@@ -23,6 +23,9 @@ The audit summary of this decision is amended by
 check out their script files at `github.sha`, sparse and without the token, still with no cache;
 the rules and the audit table on the page carry the current state.
 
+[ADR 0148](0148-submit-maven-dependencies-only-from-main.md) settled the dependency submission
+question this audit left open: the workflow no longer runs on `pull_request`.
+
 ## Context and Problem Statement
 
 On 2026-05-11 an attacker published 84 malicious versions of 42 `@tanstack/*` packages without
@@ -93,7 +96,8 @@ the owner, because the release workflow runs only on `main` and cannot be tried 
   beside each rule so a change to one reaches the other.
 * Neutral, because `dependency-submission.yml` keeps `contents: write` on `pull_request`. GitHub
   drops the write for fork runs, and a same-repository author already holds write access, so the
-  audit records it rather than changing it.
+  audit records it rather than changing it. [ADR 0148](0148-submit-maven-dependencies-only-from-main.md)
+  later removed the `pull_request` trigger.
 
 ### Confirmation
 

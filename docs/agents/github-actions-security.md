@@ -130,7 +130,7 @@ The script test keeps the table complete; update a row when its workflow changes
 | `compatibility-labeler.yml` | `pull_request_target`, `issues` | `github.sha`, sparse: its script, no token | none | `issues`, `pull-requests: write` | OK, metadata only |
 | `continuous-fuzzing-watchdog.yml` | push `main`, `workflow_run` of `Continuous Fuzzing`, dispatch | default branch, no token | none | `actions: write` | OK; `workflow_run` is gated to dispatch runs on `main` and checks out `main` |
 | `continuous-fuzzing.yml` | `pull_request`, push `main`, dispatch | default branch or PR head, no token | none | `security-events: write` in `code-change`, read-only in fork runs; `CLUSTERFUZZLITE_STORAGE_TOKEN`, `issues`, `security-events` and `actions: write` in jobs gated to `refs/heads/main` and dispatch | OK |
-| `dependency-submission.yml` | `pull_request` on `pom.xml`, push `main` | PR head, no token | `maven`, PR-scoped | `contents: write` | OK; GitHub drops the write for fork runs, and a same-repository author already has write |
+| `dependency-submission.yml` | push `main` | `main`, no token | `maven`, `main` scope | `contents: write` | OK; no pull request trigger, see [ADR 0148](../adr/0148-submit-maven-dependencies-only-from-main.md) |
 | `openrewrite-renovate.yml` | `pull_request_target`, schedule, dispatch | `github.sha` for its scripts, `base_sha` for the recipe run, no token outside `publish` | none | `statuses: write` in six jobs; App token in `publish` only | OK, see below |
 | `private-context.yml` | `pull_request`, push `main` | PR head plus base scanner, plus the merge commit's comparison script, no token | none | none, `contents: read` | OK |
 | `pull-request-author-handoff.yml` | `pull_request_target`, `issue_comment` | `github.sha`, sparse: its script, no token | none | `issues: write` | OK, metadata only |
@@ -162,8 +162,9 @@ that `attest-source` sets only when the webhook sender is `renovate[bot]`.
 Nothing exploitable was found. No workflow could write `main`'s cache scope from a pull request.
 [ADR 0140](../adr/0140-keep-caches-and-pull-request-code-out-of-privileged-jobs.md) records what
 the audit changed. Open for the owner, with issue drafts handed over with the audit: whether the
-Release Please checkouts can drop the token, and whether dependency submission should run on
-`pull_request` at all.
+Release Please checkouts can drop the token. The audit also left open whether dependency submission
+should run on `pull_request`;
+[ADR 0148](../adr/0148-submit-maven-dependencies-only-from-main.md) dropped that trigger.
 
 ## References
 

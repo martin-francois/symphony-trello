@@ -903,14 +903,8 @@ test("updated OpenRewrite artifacts remain isolated in pull request CI", () => {
   assert.match(CI_OPENREWRITE, /--volume "\$PWD\/\.git:\/workspace\/\.git:ro"/);
   assert.doesNotMatch(CI_OPENREWRITE, /--volume "\$RUNNER_TEMP:/);
   assert.doesNotMatch(CI_OPENREWRITE, /\/var\/run\/docker\.sock/);
-  assert.match(
-    DEPENDENCY_SUBMISSION_WORKFLOW,
-    /github\.head_ref != 'renovate\/openrewrite-toolchain'/,
-  );
-  assert.match(
-    DEPENDENCY_SUBMISSION_WORKFLOW,
-    /!startsWith\(github\.head_ref, 'automation\/openrewrite\/renovate-'\)/,
-  );
+  // Dependency submission holds contents: write, so it runs on main only (ADR 0148).
+  assert.deepEqual(parse(DEPENDENCY_SUBMISSION_WORKFLOW).on, {push: {branches: ["main"]}});
 });
 
 test("Blacksmith runners are reserved for the critical-path test jobs", () => {
