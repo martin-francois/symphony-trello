@@ -286,6 +286,7 @@ ${fileList(input.generatedFiles)}
 
 ## Review Checklist
 
+- [ ] I confirm I understand what the code does
 - [x] Docs updated, or N/A
 - [x] ADR updated for architecture decisions or tradeoffs, or N/A
 - [x] PR title and every commit that will remain in \`main\` use Conventional Commits and are release-note ready
@@ -297,7 +298,6 @@ ${fileList(input.generatedFiles)}
 
 - [x] No AI assistance beyond short completion, search, formatting, or typo fixes
 - [ ] AI-assisted PR
-- [ ] I confirm I understand what the code does
 `;
 }
 

@@ -164,12 +164,17 @@ and apply triage labels. Spec-alignment auditing that may create issues lives in
 - Never invent a version, OS, or other fact to fill a field. A required text field the issue doesn't
   depend on says how the issue was found instead, for example
   `Not OS-specific (found by reading the code on main at <sha>)`.
-- Check `AI-assisted issue` and leave the `I confirm I understand and reviewed this ...` box
-  unticked; only a human who reviewed the issue ticks it. Then apply the
-  [Triage labels](#triage-labels) policy and run the [label audit](#label-audit) before finishing.
-- No automation checks issue bodies. The read-back that [Triage labels](#triage-labels) requires
-  after each create or edit also confirms the headings, required fields, and checkboxes against the
-  form, and the task or sweep summary reports it.
+- Check `AI-assisted issue`. The `I confirm I understand and reviewed this ...` box is then
+  required, and it is the user's statement: tick it only after asking the user, martinfrancois
+  included, whether they read the issue and understand it, getting an explicit yes in the same
+  conversation, and being told you may tick it. Without all three, leave it unticked and tell the
+  user to review the issue and tick it ([ADR 0144](../adr/0144-require-the-understanding-box-on-every-pull-request.md)).
+  Then apply the [Triage labels](#triage-labels) policy and run the [label audit](#label-audit)
+  before finishing.
+- No automation checks issue bodies, and none can tell who ticked a box. The read-back that
+  [Triage labels](#triage-labels) requires after each create or edit also confirms the headings,
+  required fields, and checkboxes against the form, and the task or sweep summary reports it and
+  says whether the user confirmed before the box was ticked.
 
 ## Triage labels
 

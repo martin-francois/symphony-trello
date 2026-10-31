@@ -7,6 +7,7 @@ import {
   evaluateAiAssistanceDisclosure,
   evaluateCompatibilityMetadata,
   evaluatePullRequestBreakingConsistency,
+  evaluateUnderstandingConfirmation,
 } from "./check-pr-compatibility-metadata.ts";
 
 const TEMPLATE = readFileSync(
@@ -24,9 +25,12 @@ const NO_AI_ASSISTANCE = "No AI assistance beyond short completion, search, form
 const AI_ASSISTED = "AI-assisted PR";
 const UNDERSTOOD = "I confirm I understand what the code does";
 const AI_SECTION_ERROR = "Provide exactly one visible AI Assistance (if used) section.";
-const AI_CHECKBOXES_ERROR = "Keep the three AI Assistance checkboxes from the pull request template, one line each.";
+const AI_CHECKBOXES_ERROR = "Keep the two AI Assistance checkboxes from the pull request template, one line each.";
+const REVIEW_SECTION_ERROR = "Provide exactly one visible Review Checklist section.";
+const UNDERSTOOD_CHECKBOX_ERROR =
+  `Put the \`- [ ] ${UNDERSTOOD}\` line from the pull request template in the Review Checklist, once; it moved there from the AI Assistance section.`;
 const AI_CHOICE_ERROR = `Tick exactly one AI assistance choice: \`${NO_AI_ASSISTANCE}\` or \`${AI_ASSISTED}\`.`;
-const UNDERSTOOD_ERROR = `An AI-assisted pull request merges only after a person ticks \`${UNDERSTOOD}\`.`;
+const UNDERSTOOD_ERROR = `Tick \`${UNDERSTOOD}\`.`;
 const RATIONALE_ERROR = "Provide a non-placeholder `Because ...` compatibility rationale.";
 const SELECTION_ERROR = "Select exactly one current option in the Compatibility Decision section.";
 const HISTORY_SELECTION_ERROR = "Select exactly one current option in the Commit History in Main section.";
@@ -538,19 +542,10 @@ test("accepts the literal template with the no-assistance choice ticked", () => 
   assert.deepEqual(evaluateAiAssistanceDisclosure(select(TEMPLATE, NO_AI_ASSISTANCE)), []);
 });
 
-test("accepts an AI-assisted pull request once a person ticks the confirmation", () => {
-  const body = select(select(TEMPLATE, AI_ASSISTED), UNDERSTOOD)
-    .replace(`- [x] ${UNDERSTOOD}`, `- [X] ${UNDERSTOOD}  `);
+test("accepts an AI-assisted pull request with the AI-assisted choice ticked", () => {
+  const body = select(TEMPLATE, AI_ASSISTED).replace(`- [x] ${AI_ASSISTED}`, `- [X] ${AI_ASSISTED}  `);
 
   assert.deepEqual(evaluateAiAssistanceDisclosure(body), []);
-});
-
-test("an AI-assisted pull request without the confirmation says a person has to tick it", () => {
-  assert.deepEqual(evaluateAiAssistanceDisclosure(select(TEMPLATE, AI_ASSISTED)), [UNDERSTOOD_ERROR]);
-});
-
-test("the confirmation is required only for the AI-assisted choice", () => {
-  assert.deepEqual(evaluateAiAssistanceDisclosure(select(select(TEMPLATE, NO_AI_ASSISTANCE), UNDERSTOOD)), []);
 });
 
 test("rejects an untouched AI Assistance section", () => {
@@ -558,7 +553,7 @@ test("rejects an untouched AI Assistance section", () => {
 });
 
 test("rejects both disclosure choices ticked", () => {
-  const both = select(select(select(TEMPLATE, NO_AI_ASSISTANCE), AI_ASSISTED), UNDERSTOOD);
+  const both = select(select(TEMPLATE, NO_AI_ASSISTANCE), AI_ASSISTED);
   assert.deepEqual(evaluateAiAssistanceDisclosure(both), [AI_CHOICE_ERROR]);
 });
 
@@ -576,7 +571,7 @@ test("rejects a missing, duplicated, or fenced AI Assistance section", () => {
 
 test("rejects a removed, reworded, duplicated, or commented-out AI Assistance checkbox", () => {
   const valid = select(TEMPLATE, AI_ASSISTED);
-  for (const line of [`- [ ] ${NO_AI_ASSISTANCE}`, `- [x] ${AI_ASSISTED}`, `- [ ] ${UNDERSTOOD}`]) {
+  for (const line of [`- [ ] ${NO_AI_ASSISTANCE}`, `- [x] ${AI_ASSISTED}`]) {
     for (const [change, replacement] of [["removed", ""], ["duplicated", `${line}\n${line}`], ["commented out", `<!-- ${line} -->`]]) {
       assert.deepEqual(
         evaluateAiAssistanceDisclosure(replaceExactly(valid, line, replacement ?? "")),
@@ -586,13 +581,78 @@ test("rejects a removed, reworded, duplicated, or commented-out AI Assistance ch
     }
   }
   assert.deepEqual(
-    evaluateAiAssistanceDisclosure(replaceExactly(valid, `- [ ] ${UNDERSTOOD}`, "- [x] I understand the code")),
+    evaluateAiAssistanceDisclosure(replaceExactly(valid, `- [x] ${AI_ASSISTED}`, "- [x] AI helped")),
     [AI_CHECKBOXES_ERROR],
   );
 });
 
+test("treats CRLF and LF AI Assistance sections identically", () => {
+  const lf = TEMPLATE;
+  assert.deepEqual(evaluateAiAssistanceDisclosure(lf.replaceAll("\n", "\r\n")), [AI_CHOICE_ERROR]);
+  assert.deepEqual(evaluateAiAssistanceDisclosure(lf), [AI_CHOICE_ERROR]);
+});
+
+test("accepts a ticked understanding confirmation in the Review Checklist", () => {
+  const body = select(TEMPLATE, UNDERSTOOD).replace(`- [x] ${UNDERSTOOD}`, `- [X] ${UNDERSTOOD}  `);
+
+  assert.deepEqual(evaluateUnderstandingConfirmation(body), []);
+});
+
+test("the confirmation is required whether or not AI helped", () => {
+  assert.deepEqual(evaluateUnderstandingConfirmation(select(TEMPLATE, NO_AI_ASSISTANCE)), [UNDERSTOOD_ERROR]);
+  assert.deepEqual(evaluateUnderstandingConfirmation(select(TEMPLATE, AI_ASSISTED)), [UNDERSTOOD_ERROR]);
+  assert.deepEqual(evaluateUnderstandingConfirmation(TEMPLATE), [UNDERSTOOD_ERROR]);
+});
+
+test("the confirmation line lives in the Review Checklist, not in the AI Assistance section", () => {
+  const moved = replaceExactly(
+    replaceExactly(TEMPLATE, `- [ ] ${UNDERSTOOD}\n`, ""),
+    `- [ ] ${AI_ASSISTED}`,
+    `- [ ] ${AI_ASSISTED}\n- [x] ${UNDERSTOOD}`,
+  );
+  assert.deepEqual(evaluateUnderstandingConfirmation(moved), [UNDERSTOOD_CHECKBOX_ERROR]);
+  assert.deepEqual(evaluateAiAssistanceDisclosure(select(moved, NO_AI_ASSISTANCE)), []);
+});
+
+test("rejects a missing or duplicated Review Checklist section", () => {
+  const valid = select(TEMPLATE, UNDERSTOOD);
+  const [beforeSection, rest] = valid.split("## Review Checklist");
+  assert.deepEqual(evaluateUnderstandingConfirmation(beforeSection ?? ""), [REVIEW_SECTION_ERROR]);
+  assert.deepEqual(
+    evaluateUnderstandingConfirmation(`${valid}\n\n## Review Checklist\n\n- [x] ${UNDERSTOOD}\n`),
+    [REVIEW_SECTION_ERROR],
+  );
+  assert.ok(rest?.includes(UNDERSTOOD), "the template keeps the box in the checklist");
+  const fenced = `${beforeSection}\`\`\`markdown\n## Review Checklist\n\n- [x] ${UNDERSTOOD}\n\`\`\`\n`;
+  assert.deepEqual(evaluateUnderstandingConfirmation(fenced), [REVIEW_SECTION_ERROR]);
+});
+
+test("the template comment above the box carries the rule and a ticked copy inside it does not count", () => {
+  assert.ok(TEMPLATE.includes("An AI agent may\ntick it for you only after asking"), "the template carries the rule");
+  const tickedInComment = replaceExactly(TEMPLATE, `-->\n\n- [ ] ${UNDERSTOOD}`, `- [x] ${UNDERSTOOD}\n-->\n\n- [ ] ${UNDERSTOOD}`);
+  assert.deepEqual(evaluateUnderstandingConfirmation(tickedInComment), [UNDERSTOOD_ERROR]);
+  assert.deepEqual(evaluateUnderstandingConfirmation(select(TEMPLATE, UNDERSTOOD)), []);
+});
+
+test("rejects a removed, reworded, duplicated, or commented-out confirmation checkbox", () => {
+  const valid = select(TEMPLATE, UNDERSTOOD);
+  const line = `- [x] ${UNDERSTOOD}`;
+  const changes: readonly (readonly [string, string])[] = [
+    ["removed", ""],
+    ["duplicated", `${line}\n${line}`],
+    ["commented out", `<!-- ${line} -->`],
+    ["reworded", "- [x] I understand the code"],
+  ];
+  for (const [change, replacement] of changes) {
+    assert.deepEqual(
+      evaluateUnderstandingConfirmation(replaceExactly(valid, line, replacement)),
+      [UNDERSTOOD_CHECKBOX_ERROR],
+      change,
+    );
+  }
+});
+
 test("a ticked confirmation inside a fence, a comment, a blockquote, or a nested list does not count", () => {
-  const assisted = select(TEMPLATE, AI_ASSISTED);
   for (const hidden of [
     `\`\`\`text\n- [x] ${UNDERSTOOD}\n\`\`\`\n- [ ] ${UNDERSTOOD}`,
     `<!-- - [x] ${UNDERSTOOD} -->\n- [ ] ${UNDERSTOOD}`,
@@ -600,22 +660,21 @@ test("a ticked confirmation inside a fence, a comment, a blockquote, or a nested
     `  - [x] ${UNDERSTOOD}\n- [ ] ${UNDERSTOOD}`,
   ]) {
     assert.deepEqual(
-      evaluateAiAssistanceDisclosure(replaceExactly(assisted, `- [ ] ${UNDERSTOOD}`, hidden)),
+      evaluateUnderstandingConfirmation(replaceExactly(TEMPLATE, `- [ ] ${UNDERSTOOD}`, hidden)),
       [UNDERSTOOD_ERROR],
       JSON.stringify(hidden),
     );
   }
 });
 
-test("treats CRLF and LF AI Assistance sections identically", () => {
-  const lf = select(TEMPLATE, AI_ASSISTED);
-  assert.deepEqual(evaluateAiAssistanceDisclosure(lf.replaceAll("\n", "\r\n")), [UNDERSTOOD_ERROR]);
-  assert.deepEqual(evaluateAiAssistanceDisclosure(lf), [UNDERSTOOD_ERROR]);
+test("treats CRLF and LF Review Checklist sections identically", () => {
+  assert.deepEqual(evaluateUnderstandingConfirmation(TEMPLATE.replaceAll("\n", "\r\n")), [UNDERSTOOD_ERROR]);
+  assert.deepEqual(evaluateUnderstandingConfirmation(TEMPLATE), [UNDERSTOOD_ERROR]);
 });
 
 test("the script and the CodeRabbit check quote the same AI Assistance lines", () => {
   const coderabbit = readFileSync(new URL("../.coderabbit.yaml", import.meta.url), "utf8");
-  for (const text of ["## AI Assistance (if used)", NO_AI_ASSISTANCE, AI_ASSISTED, UNDERSTOOD]) {
+  for (const text of ["## AI Assistance (if used)", "## Review Checklist", NO_AI_ASSISTANCE, AI_ASSISTED, UNDERSTOOD]) {
     assert.ok(TEMPLATE.includes(text), `template must contain ${JSON.stringify(text)}`);
     assert.ok(coderabbit.includes(text), `.coderabbit.yaml must quote ${JSON.stringify(text)}`);
   }

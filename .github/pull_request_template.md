@@ -97,6 +97,13 @@ explain why.
 
 ## Review Checklist
 
+<!--
+Tick the first box only if you've read and understand every change in this PR. An AI agent may
+tick it for you only after asking whether you read the code changes and understand them, getting
+your explicit yes, and being told it may tick the box. See CONTRIBUTING.md, "Understanding box".
+-->
+
+- [ ] I confirm I understand what the code does
 - [ ] Docs updated, or N/A
 - [ ] ADR updated for architecture decisions or tradeoffs, or N/A
 - [ ] PR title and every commit that will remain in `main` use Conventional Commits and are
@@ -117,7 +124,6 @@ AI PRs are first-class citizens here. We just want transparency so reviewers kno
 
 - [ ] No AI assistance beyond short completion, search, formatting, or typo fixes
 - [ ] AI-assisted PR
-- [ ] I confirm I understand what the code does
 
 <details>
 <summary>AI prompts / session logs (optional, but super helpful)</summary>

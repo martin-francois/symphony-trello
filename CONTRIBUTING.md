@@ -544,9 +544,11 @@ Contributions are volunteer work. The project doesn't pay for contributions and 
 bounties for implemented issues or pull requests. [Thank You](#thank-you) covers the thank-you for
 merged pull requests. If you want to work on an issue, say so in a comment on it.
 
-CodeRabbit checks the description against the template, the AI Assistance section, and the
-Compatibility Decision. While one of those checks fails, CodeRabbit requests changes and the PR
-cannot merge. Fix the description, then comment `@coderabbitai run pre-merge checks` to rerun them.
+CodeRabbit checks the description against the template, the AI Assistance section, the
+`I confirm I understand what the code does` box in the Review Checklist, and the Compatibility
+Decision. Tick that box on every PR, whether or not AI helped: you're saying you understand what
+your change does. While one of those checks fails, CodeRabbit requests changes and the PR cannot
+merge. Fix the description, then comment `@coderabbitai run pre-merge checks` to rerun them.
 
 Before marking a PR ready for review:
 
@@ -724,6 +726,18 @@ paths out of public reports.
 AI-assisted contributions are allowed when a human owns the result. Follow
 [AI_CONTRIBUTION_POLICY.md](AI_CONTRIBUTION_POLICY.md) and disclose material AI assistance in the
 pull request body.
+
+### Understanding box
+
+`I confirm I understand what the code does` in the Review Checklist is your personal statement,
+whether or not AI helped. Tick it only after you've read every change in the PR and understand
+what it does. An AI agent may tick it for you only after it asked you whether you read the code
+changes and understand them, you said yes explicitly in that conversation, and you told it that it
+may tick the box. Silence, "looks good", or approving a plan isn't that yes. Without all three,
+the agent leaves the box unticked and asks you to review the change and tick it. The same holds
+for `I confirm I understand and reviewed this ...` in the issue forms, which is required whenever
+`AI-assisted issue` is ticked. No check can tell who ticked a box; the maintainer's review is the
+check.
 
 ## AI Agent Setup
 

@@ -27,6 +27,10 @@ Assistance rules to `scripts/check-pr-compatibility-metadata.ts`, which the Comm
 runs on `pull_request`. When a rate-limited CodeRabbit posts nothing, the script's check still
 fails. The CodeRabbit check stays the merge gate.
 
+[ADR 0144](0144-require-the-understanding-box-on-every-pull-request.md) moves `I confirm I
+understand what the code does` to the Review Checklist and requires it on every pull request since
+2026-10-31, not only with `AI-assisted PR`. The AI Assistance section keeps its two choices.
+
 ## Context and Problem Statement
 
 GitHub fills a new pull request body with `.github/pull_request_template.md`, but it cannot require
@@ -66,8 +70,11 @@ CodeRabbit output. How should the template become a merge requirement?
 Chosen option: CodeRabbit pre-merge checks through the request changes workflow.
 
 `.coderabbit.yaml` sets the built-in description check to `error`. It adds three custom checks in
-`error` mode. "AI assistance disclosed" fails when the AI Assistance heading or any of the three checkboxes is
-missing, when neither or both disclosure choices are ticked, and when `AI-assisted PR` is ticked without `I confirm I understand what the code does`.
+`error` mode. "AI assistance disclosed" fails when the AI Assistance heading, the Review Checklist
+heading or any of their three checkbox lines is missing, when neither or both disclosure choices
+are ticked, and when `I confirm I understand what the code does` is not ticked, whether or not AI
+helped (since [ADR 0144](0144-require-the-understanding-box-on-every-pull-request.md); before it,
+the box sat in the AI Assistance section and was required only with `AI-assisted PR`).
 "Compatibility decision complete" fails when the Compatibility Decision section is missing, when
 not exactly one option is ticked, and when Breaking is ticked without non-placeholder `Breaks:`,
 `Migration:`, and `Alternative:` values. "Redaction checked" requires the redaction checkbox in the Review Checklist to be ticked.

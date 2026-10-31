@@ -16,6 +16,11 @@ informed: [Contributors, Reviewers, Future maintainers]
 
 # Check the AI assistance disclosure deterministically
 
+[ADR 0144](0144-require-the-understanding-box-on-every-pull-request.md) changed the rule on
+2026-10-31: the confirmation is required on every pull request and lives in the Review Checklist.
+The script now has two evaluations, one for the AI choice and one for the box; the trigger decision
+here stands.
+
 ## Context and Problem Statement
 
 [ADR 0085](0085-enforce-pull-request-template-with-coderabbit.md) makes the AI Assistance section
@@ -51,14 +56,17 @@ on which trigger should it run?
 Chosen option: "The rules in the metadata script on `pull_request`".
 
 `evaluateAiAssistanceDisclosure` finds the `## AI Assistance (if used)` section in the visible
-Markdown, outside HTML comments and fenced code, and reads the three checkbox lines the template
-provides. It fails when the section is missing or appears twice, when any of the three lines is
-missing, reworded or duplicated, when neither or both disclosure choices are ticked, and when
-`AI-assisted PR` is ticked without the confirmation. The confirmation is required only for the
-AI-assisted choice. The CodeRabbit check in `.coderabbit.yaml` has the same four failure rules and
-is a subset of the script, as the Compatibility check already is: the script also rejects a
-duplicated section or line, a reworded line, and a checkbox line whose spacing differs from the
-template, the way it treats the Compatibility Decision and Commit History sections. A ticked line
+Markdown, outside HTML comments and fenced code, and reads the two choice lines the template
+provides. It fails when the section is missing or appears twice, when either line is missing,
+reworded or duplicated, and when neither or both choices are ticked.
+`evaluateUnderstandingConfirmation` does the same for the `## Review Checklist` section and its
+`I confirm I understand what the code does` line, and fails when the box is not ticked, on every
+pull request ([ADR 0144](0144-require-the-understanding-box-on-every-pull-request.md); as first
+written, the box sat in the AI section and one evaluation required it only with `AI-assisted
+PR`). The CodeRabbit check in `.coderabbit.yaml` has the same failure rules and is a subset of the
+script, as the Compatibility check already is: the script also rejects a duplicated section or
+line, a reworded line, and a checkbox line whose spacing differs from the template, the way it
+treats the Compatibility Decision and Commit History sections. A ticked line
 in a blockquote, a nested list, a comment or a fence does not count in either check. A body
 written from the template gets the same answer from both; a body the script accepts passes
 CodeRabbit.
@@ -102,9 +110,10 @@ Run the script tests:
 corepack pnpm run verify:scripts
 ```
 
-The AI Assistance tests in `scripts/check-pr-compatibility-metadata.test.ts` must pass, and
-removing the section rule, the three-lines rule, the one-choice rule or the confirmation rule from
-`evaluateAiAssistanceDisclosure` must fail at least one of them. `.github/workflows/commitlint.yml` must keep the `Check compatibility metadata` step on
+The AI Assistance tests in `scripts/check-pr-compatibility-metadata.test.ts` must pass, and removing
+the section rule, the two-lines rule or the one-choice rule from `evaluateAiAssistanceDisclosure`,
+or any rule of `evaluateUnderstandingConfirmation`, must fail at least one of them.
+`.github/workflows/commitlint.yml` must keep the `Check compatibility metadata` step on
 `pull_request` with read-only permissions, `persist-credentials: false` and the bot skip.
 
 ## Pros and Cons of the Options
