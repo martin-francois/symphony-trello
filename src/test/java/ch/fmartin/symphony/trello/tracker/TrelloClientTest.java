@@ -10,9 +10,13 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
+import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
+import ch.fmartin.symphony.trello.config.EnvironmentSource;
+import ch.fmartin.symphony.trello.config.EnvironmentSources;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
+import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Splitter;
 import java.math.BigDecimal;
@@ -28,6 +32,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -232,9 +237,75 @@ final class TrelloClientTest {
         trello.startEmpty();
     }
 
+    @Test
+    void doesNotFollowARedirectWithTheCredentials() throws Exception {
+        // given
+        var forwardedRequests = new AtomicInteger();
+        try (var other = new FakeTrelloServer()
+                .on("/", exchange -> {
+                    forwardedRequests.incrementAndGet();
+                    respond(exchange, boardJson("board-1", "Board", false));
+                })
+                .startEmpty()) {
+            trello.remove("/1/boards/input");
+            trello.on("/1/boards/input", exchange -> {
+                exchange.getResponseHeaders().add("Location", other.endpoint() + "/boards/input");
+                respond(exchange, 302, "");
+            });
+            var client = new TrelloClient(new ObjectMapper());
+            var config = config("input", Map.of("active_states", List.of("Todo")));
+
+            // when
+            Throwable thrown = catchThrowable(() -> client.fetchCandidateCards(config));
+
+            // then
+            assertThat(thrown)
+                    .as("a redirect is an error, not a request to the other host")
+                    .isInstanceOfSatisfying(TrelloException.class, exception -> assertThat(exception)
+                            .returns("trello_api_status", TrelloException::code)
+                            .hasMessage("Trello returned HTTP 302"));
+            assertThat(forwardedRequests)
+                    .as("the key and token must not follow a redirect to another host")
+                    .hasValue(0);
+        }
+    }
+
     @AfterEach
     void stopServer() {
         trello.close();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "/", "///"})
+    void rootEndpointRequestsUseTheBoundRestApiPath(String rootPath) {
+        // given
+        String authority = trello.endpoint().substring(0, trello.endpoint().length() - 2);
+        var environment = EnvironmentSources.of(EnvironmentSource.shellEnvironment(Map.of(
+                "TRELLO_API_KEY", "key", "TRELLO_API_TOKEN", "token", "TRELLO_API_ENDPOINT", trello.endpoint())));
+        var workflow = new WorkflowDefinition(
+                tempDir.resolve("WORKFLOW.md"),
+                Map.of(
+                        "tracker",
+                        Map.of(
+                                "kind",
+                                "trello",
+                                "endpoint",
+                                authority + rootPath,
+                                "board_id",
+                                "input",
+                                "active_states",
+                                List.of("Todo"))),
+                "");
+        var config = new ConfigResolver(environment).resolve(workflow).withResolvedBoardId("board-1");
+        var client = new TrelloClient(new ObjectMapper());
+
+        // when
+        List<Card> cards = client.fetchCandidateCards(config);
+
+        // then
+        assertThat(cards).extracting(Card::identifier).containsExactly("TRELLO-abc");
+        assertThat(readRequests)
+                .anySatisfy(request -> assertThat(request).startsWith("GET /1/boards/board-1/cards/open"));
     }
 
     @Test

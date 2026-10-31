@@ -2,14 +2,18 @@ package ch.fmartin.symphony.trello.config;
 
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_LINE_SEPARATOR;
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_NEXT_LINE;
+import static ch.fmartin.symphony.trello.testsupport.TestEndpointValues.FOREIGN_ENDPOINT;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -18,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -1536,8 +1541,8 @@ final class ConfigResolverTest {
         var resolver = new ConfigResolver(name -> Optional.empty());
 
         // when
-        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
-        ConfigException error = catchThrowableOfType(ConfigException.class, () -> resolver.validateForDispatch(config));
+        ConfigException error = catchThrowableOfType(
+                ConfigException.class, () -> resolver.resolve(new WorkflowLoader().load(workflow)));
 
         // then
         assertThat(error).hasMessageContaining("tracker.endpoint must be an absolute http(s) URL");
@@ -1594,7 +1599,7 @@ final class ConfigResolverTest {
         resolver.validateForDispatch(config);
 
         // then
-        assertThat(config.tracker().endpoint()).isEqualTo("HTTPS://api.trello.com/1");
+        assertThat(config.tracker().endpoint()).isEqualTo(TrelloCredentialEndpoint.TRELLO_API);
     }
 
     @Test
@@ -1625,6 +1630,165 @@ final class ConfigResolverTest {
         // then
         assertThat(config.tracker().apiKey()).isEqualTo("resolved-key");
         assertThat(config.tracker().apiToken()).isEqualTo("resolved-token");
+    }
+
+    @Test
+    void refusesEnvironmentCredentialsForAnEndpointTheyDoNotBelongTo() throws Exception {
+        // given
+        Path workflow = writeWorkflow("WORKFLOW.md", trelloTrackerWithEndpoint(FOREIGN_ENDPOINT));
+        var resolver = new ConfigResolver(shellCredentials(Map.of()));
+
+        // when
+        ConfigException thrown = catchThrowableOfType(
+                ConfigException.class, () -> resolver.resolve(new WorkflowLoader().load(workflow)));
+
+        // then
+        assertThat(thrown)
+                .isNotNull()
+                .hasMessageContainingAll(
+                        "TRELLO_API_KEY and TRELLO_API_TOKEN from the shell environment belong to "
+                                + "https://api.trello.com/1",
+                        "the workflow's tracker.endpoint is " + FOREIGN_ENDPOINT,
+                        "TRELLO_API_ENDPOINT=" + FOREIGN_ENDPOINT)
+                .extracting(ConfigException::code)
+                .isEqualTo("credentials_endpoint_mismatch");
+    }
+
+    @Test
+    void resolvesEnvironmentCredentialsBoundToTheWorkflowEndpoint() throws Exception {
+        // given
+        Path workflow = writeWorkflow("WORKFLOW.md", trelloTrackerWithEndpoint(FOREIGN_ENDPOINT));
+        var resolver = new ConfigResolver(
+                shellCredentials(Map.of("TRELLO_API_ENDPOINT", "HTTPS://Trello.Example.Test:443/1/")));
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.tracker())
+                .returns(FOREIGN_ENDPOINT, EffectiveConfig.TrackerConfig::endpoint)
+                .returns("shell-key", EffectiveConfig.TrackerConfig::apiKey)
+                .returns("shell-token", EffectiveConfig.TrackerConfig::apiToken);
+    }
+
+    @Test
+    void workflowSuppliedCredentialsBelongToTheWorkflowEndpoint() throws Exception {
+        // given
+        Path workflow = writeTrelloWorkflow("WORKFLOW.md", "board-1", "  endpoint: " + FOREIGN_ENDPOINT);
+        var resolver = new ConfigResolver(shellCredentials(Map.of()));
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.tracker())
+                .returns("literal-key", EffectiveConfig.TrackerConfig::apiKey)
+                .returns("literal-token", EffectiveConfig.TrackerConfig::apiToken);
+    }
+
+    @Test
+    void namesBothUnboundSourcesWhenTheKeyAndTheTokenComeFromDifferentOnes() throws Exception {
+        // given
+        Path workflow = writeWorkflow("WORKFLOW.md", trelloTrackerWithEndpoint(FOREIGN_ENDPOINT));
+        Path dotenv = tempDir.resolve(".env");
+        Files.writeString(dotenv, "TRELLO_API_KEY=file-key\nTRELLO_API_TOKEN=file-token\n");
+        var resolver = new ConfigResolver(LocalEnvironment.sources(Map.of("TRELLO_API_KEY", "shell-key"), dotenv));
+
+        // when
+        ConfigException thrown = catchThrowableOfType(
+                ConfigException.class, () -> resolver.resolve(new WorkflowLoader().load(workflow)));
+
+        // then
+        assertThat(thrown)
+                .isNotNull()
+                .hasMessageStartingWith("TRELLO_API_KEY from the shell environment belongs to")
+                .hasMessageContainingAll(
+                        "and TRELLO_API_TOKEN from the env file %s belongs to".formatted(dotenv),
+                        "set this variable in the shell environment:\n  TRELLO_API_ENDPOINT=" + FOREIGN_ENDPOINT,
+                        "and add or replace this line in %s:\n  TRELLO_API_ENDPOINT=%s"
+                                .formatted(dotenv, FOREIGN_ENDPOINT));
+    }
+
+    @Test
+    void namesOnlyTheEnvFileCredentialWhenTheShellCredentialIsBound() throws Exception {
+        // given
+        Path workflow = writeWorkflow("WORKFLOW.md", trelloTrackerWithEndpoint(FOREIGN_ENDPOINT));
+        Path dotenv = tempDir.resolve(".env");
+        Files.writeString(dotenv, "TRELLO_API_TOKEN=file-token\n");
+        var resolver = new ConfigResolver(LocalEnvironment.sources(
+                Map.of("TRELLO_API_KEY", "shell-key", "TRELLO_API_ENDPOINT", FOREIGN_ENDPOINT), dotenv));
+
+        // when
+        ConfigException thrown = catchThrowableOfType(
+                ConfigException.class, () -> resolver.resolve(new WorkflowLoader().load(workflow)));
+
+        // then
+        assertThat(thrown)
+                .isNotNull()
+                .hasMessageStartingWith("TRELLO_API_TOKEN from the env file %s belongs to", dotenv)
+                .hasMessageContaining(
+                        "add or replace this line in %s:\n  TRELLO_API_ENDPOINT=%s", dotenv, FOREIGN_ENDPOINT);
+    }
+
+    private static String trelloTrackerWithEndpoint(String endpoint) {
+        return """
+                tracker:
+                  kind: trello
+                  endpoint: %s
+                  board_id: board-1
+                """
+                .formatted(endpoint);
+    }
+
+    @Test
+    void credentialFileReplacementCannotRebindValuesAlreadyRead() throws Exception {
+        // given
+        Path workflow = writeWorkflow("WORKFLOW.md", trelloTrackerWithEndpoint(FOREIGN_ENDPOINT));
+        Path dotenv = tempDir.resolve(".env");
+        Path replacement = tempDir.resolve("replacement.env");
+        Files.writeString(dotenv, "TRELLO_API_KEY=original-key\nTRELLO_API_TOKEN=original-token\n");
+        Files.writeString(
+                replacement,
+                "TRELLO_API_KEY=replacement-key\nTRELLO_API_TOKEN=replacement-token\nTRELLO_API_ENDPOINT="
+                        + FOREIGN_ENDPOINT + "\n");
+        var shell =
+                new EnvironmentSource.ShellEnvironment(name -> replaceDotenvOnTokenLookup(name, dotenv, replacement));
+        var resolver = new ConfigResolver(EnvironmentSources.of(shell, new EnvironmentSource.EnvFile(dotenv)));
+        WorkflowDefinition definition = new WorkflowLoader().load(workflow);
+
+        // when
+        ConfigException refusal = catchThrowableOfType(ConfigException.class, () -> resolver.resolve(definition));
+        EffectiveConfig reloaded = resolver.resolve(definition);
+
+        // then
+        assertThat(refusal)
+                .isNotNull()
+                .extracting(ConfigException::code)
+                .isEqualTo(TrelloCredentialEndpoint.MISMATCH_CODE);
+        assertThat(reloaded.tracker())
+                .returns("replacement-key", EffectiveConfig.TrackerConfig::apiKey)
+                .returns("replacement-token", EffectiveConfig.TrackerConfig::apiToken);
+    }
+
+    private static Optional<String> replaceDotenvOnTokenLookup(String name, Path dotenv, Path replacement) {
+        if ("TRELLO_API_TOKEN".equals(name) && Files.exists(replacement)) {
+            try {
+                Files.move(replacement, dotenv, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException failure) {
+                throw new UncheckedIOException(
+                        "cannot replace test credentials \"" + dotenv + "\": expected an atomic file replacement",
+                        failure);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /// The shell environment with both default credential variables plus `extra`.
+    private static Function<String, Optional<String>> shellCredentials(Map<String, String> extra) {
+        Map<String, String> environment = new HashMap<>(extra);
+        environment.put("TRELLO_API_KEY", "shell-key");
+        environment.put("TRELLO_API_TOKEN", "shell-token");
+        return name -> Optional.ofNullable(environment.get(name));
     }
 
     @Test

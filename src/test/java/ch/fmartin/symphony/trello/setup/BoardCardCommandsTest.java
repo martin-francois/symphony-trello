@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 final class BoardCardCommandsTest {
     private static final String BOARD_ID = "board-1";
@@ -624,20 +625,45 @@ final class BoardCardCommandsTest {
         assertThat(board.requests()).isEmpty();
     }
 
-    @Test
-    void aConnectedWorkflowWithAnotherEndpointIsRefusedBeforeAnyRequest() throws Exception {
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"trello", "Trello"})
+    void aConnectedWorkflowWithAnEndpointTheCredentialsAreNotBoundToIsRefusedBeforeAnyRequest(String kind)
+            throws Exception {
         // given
+        // the env file binds the credentials to the connected fake server, not to the other one
         Path configDir = connectBoard(DEFAULT_TRELLO_TOOLS);
+        String foreignEndpoint = startForeignServer();
         Files.writeString(
                 workflowPath(configDir),
-                workflow(startForeignServer(), BOARD_ID, DEFAULT_TRELLO_TOOLS, List.of("Done")));
+                workflow(foreignEndpoint, BOARD_ID, DEFAULT_TRELLO_TOOLS, List.of("Done"))
+                        .replace("kind: trello", "kind: " + kind));
 
         // when
         CliRunResult result = runCard(configDir, "list");
 
         // then
-        assertFailure(result, "setup_card_endpoint_not_trello");
+        assertFailure(result, "setup_credentials_endpoint_mismatch");
+        assertThat(result.stderr())
+                .contains("belong to " + server.endpoint(), "the workflow's tracker.endpoint is " + foreignEndpoint);
         assertThat(foreignBoard.requests()).isEmpty();
+        assertThat(board.requests()).isEmpty();
+    }
+
+    @Test
+    void aConnectedWorkflowWithAnEndpointNobodyBoundTheCredentialsToIsRefusedBeforeAnyRequest() throws Exception {
+        // given
+        // an env file without TRELLO_API_ENDPOINT binds its credentials to the Trello API
+        Path configDir = connectBoard(DEFAULT_TRELLO_TOOLS);
+        Files.writeString(
+                configDir.resolve(".env"),
+                TestEnv.trelloCredentials(CredentialSentinels.TRELLO_API_KEY, CredentialSentinels.TRELLO_API_TOKEN));
+
+        // when
+        CliRunResult result = runCard(configDir, "list");
+
+        // then
+        assertFailure(result, "setup_credentials_endpoint_mismatch");
+        assertThat(result.stderr()).contains("belong to https://api.trello.com/1");
         assertThat(board.requests()).isEmpty();
     }
 
@@ -732,7 +758,8 @@ final class BoardCardCommandsTest {
         Path env = configDir.resolve(".env");
         Files.writeString(
                 env,
-                TestEnv.trelloCredentials(CredentialSentinels.TRELLO_API_KEY, CredentialSentinels.TRELLO_API_TOKEN));
+                TestEnv.trelloCredentials(
+                        CredentialSentinels.TRELLO_API_KEY, CredentialSentinels.TRELLO_API_TOKEN, server.endpoint()));
         List<ConnectedBoard> boards = new ArrayList<>();
         for (int index = 0; index < boardNames.length; index++) {
             String name = boardNames[index];
@@ -824,7 +851,7 @@ final class BoardCardCommandsTest {
                 new TrelloBoardSetupService(setup, workerManager, environment),
                 new LocalSetup(setup, new ProcessCommandRunner()),
                 workerManager,
-                new BoardCardCommands(workerManager, environment, server.endpointUri()),
+                new BoardCardCommands(workerManager, environment),
                 new PrintStream(stdout, true, StandardCharsets.UTF_8),
                 new PrintStream(stderr, true, StandardCharsets.UTF_8));
         return new CliRunResult(

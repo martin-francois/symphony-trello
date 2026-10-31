@@ -54,6 +54,7 @@ const SCRUBBED_VARIABLES = [
   "SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS",
   "TRELLO_API_KEY",
   "TRELLO_API_TOKEN",
+  "TRELLO_API_ENDPOINT",
 ];
 
 /**
@@ -93,6 +94,10 @@ export class SymphonyCli {
       SYMPHONY_TRELLO_DOTENV: paths.envFile,
       TRELLO_API_KEY: this.trello.credentials.key,
       TRELLO_API_TOKEN: this.trello.credentials.token,
+      // Symphony sends a key and token only to the endpoint their source binds them to, so the
+      // fake Trello server needs the binding next to the credentials, in the environment and in
+      // the env file alike.
+      TRELLO_API_ENDPOINT: this.trello.endpoint,
       ...extra,
     };
   }
@@ -115,7 +120,12 @@ export class SymphonyCli {
 
   /** Writes the run-scoped dotenv file that generated workers read for Trello credentials. */
   writeEnvFile(paths: CliPaths = this.defaultPaths, extra: Record<string, string> = {}): void {
-    const values = {TRELLO_API_KEY: this.trello.credentials.key, TRELLO_API_TOKEN: this.trello.credentials.token, ...extra};
+    const values = {
+      TRELLO_API_KEY: this.trello.credentials.key,
+      TRELLO_API_TOKEN: this.trello.credentials.token,
+      TRELLO_API_ENDPOINT: this.trello.endpoint,
+      ...extra,
+    };
     writeFileSync(
       paths.envFile,
       Object.entries(values)

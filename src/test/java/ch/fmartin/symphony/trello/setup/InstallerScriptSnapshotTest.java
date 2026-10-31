@@ -192,6 +192,7 @@ final class InstallerScriptSnapshotTest {
                     TranscriptNormalizer.builder()
                             .temporaryRoot(temporaryDirectory, TranscriptNormalizer.TEMPORARY_ROOT)
                             .literal("HTTP status port: " + serverPort, "HTTP status port: <SERVER_PORT>")
+                            .literal(trello.endpoint(), "<TRELLO_API_ENDPOINT>")
                             .build());
             assertThat(trello.createdLists()).isNotEmpty();
             assertThat(installedConfig().resolve(".env"))

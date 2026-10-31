@@ -2424,9 +2424,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void sameBoardAndCardIdsOnDifferentEndpointsKeepIndependentCleanupOwnership() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        String endpointA = "https://api-a.example.test/1/";
+        String endpointA = "https://api-a.example.test/1";
         String endpointB = "https://api-b.example.test/1";
-        writeWorkflowWithTarget(workflow, endpointA, "shared-board", "token-a", "command-a", "work-a");
+        writeWorkflowWithTarget(workflow, endpointA + "/", "shared-board", "token-a", "command-a", "work-a");
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
         var clock = new MutableClock(now);
         Card cardA = cardOnBoard("shared-card", "TRELLO-endpoint-a", "Todo", "shared-board");

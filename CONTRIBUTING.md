@@ -64,6 +64,9 @@ TRELLO_API_TOKEN=replace-with-generated-token
 ```
 
 Exported environment variables with the same names also work and take precedence over `.env`.
+Either source sends its key and token only to `https://api.trello.com/1`. To run a workflow
+against another Trello API, such as a fake server, add `TRELLO_API_ENDPOINT=<that endpoint>` to the
+same `.env` file, or export it next to the exported credentials.
 
 Start the service from the checkout:
 

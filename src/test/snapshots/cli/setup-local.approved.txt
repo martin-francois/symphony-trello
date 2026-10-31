@@ -22,6 +22,7 @@ Saving Trello credentials...
   OK  Credentials saved: <TEMP>/config/.env
   OK  Trello API key: sent***************************************
   OK  Trello token: sent*****************************************
+  OK  Trello API endpoint: <TRELLO_API_ENDPOINT>
 
 Trello board
   OK  Board connected: "Snapshot Queue"

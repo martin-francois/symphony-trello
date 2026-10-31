@@ -3683,7 +3683,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.custom-env.md");
         Path env = tempDir.resolve(".env.custom");
-        Files.writeString(env, TestEnv.trelloCredentials());
+        Files.writeString(env, TestEnv.trelloCredentials("key", "token", endpoint()));
 
         // when
         SetupRunResult result = runSetup(
@@ -3720,7 +3720,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "TRELLO_API_KEY",
                 "real-key",
                 "TRELLO_API_TOKEN",
-                "real-token"));
+                "real-token",
+                "TRELLO_API_ENDPOINT",
+                endpoint()));
 
         // when
         SetupRunResult result = runSetup(
@@ -3794,7 +3796,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "SYMPHONY_TRELLO_COMMAND",
                 "symphony-trello",
                 "TRELLO_API_KEY",
-                "real-key"));
+                "real-key",
+                "TRELLO_API_ENDPOINT",
+                endpoint()));
 
         // when
         SetupRunResult result = runSetupWithInput(
@@ -4160,9 +4164,10 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 """
                 TRELLO_API_KEY=key
                 TRELLO_API_TOKEN=token
+                TRELLO_API_ENDPOINT=%s
                 SYMPHONY_HTTP_PORT=%d
                 """
-                        .formatted(overridePort));
+                        .formatted(endpoint(), overridePort));
 
         // when
         SetupRunResult setupResult = runSetup(
@@ -4489,8 +4494,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 TRELLO_API_KEY=key
                 TRELLO_API_TOKEN=token
                 SIBLING_WORKFLOW_PORT=%d
+                TRELLO_API_ENDPOINT=%s
                 """
-                        .formatted(ConfigDefaults.DEFAULT_SERVER_PORT));
+                        .formatted(ConfigDefaults.DEFAULT_SERVER_PORT, endpoint()));
         // The scan runs in the production 18080+ range where live workers bind and release ports,
         // so the probe fakes every port as free; skipping the default port must come from the
         // sibling workflow's environment-backed reservation alone.
@@ -5278,8 +5284,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 TRELLO_API_KEY=key
                 TRELLO_API_TOKEN=token
                 ENV_BACKED_IMPORT_PORT=%d
+                TRELLO_API_ENDPOINT=%s
                 """
-                        .formatted(configuredPort));
+                        .formatted(configuredPort, endpoint()));
 
         // when
         SetupRunResult result = runSetupWithProductionDefaultPort(
@@ -5909,7 +5916,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path manifest = tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME);
         int workflowPort = availablePort();
         writeWorkflow(workflow, "board-1", workflowPort);
-        Files.writeString(env, TestEnv.trelloCredentials());
+        Files.writeString(env, TestEnv.trelloCredentials("key", "token", endpoint()));
         writeConnectedBoardManifest(manifest, "Stale Check Queue", workflow, env, ConfigDefaults.DEFAULT_SERVER_PORT);
         commands.startHealthServer(workflow);
 

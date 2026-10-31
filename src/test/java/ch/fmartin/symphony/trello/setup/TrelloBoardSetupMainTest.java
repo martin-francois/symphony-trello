@@ -2956,9 +2956,13 @@ final class TrelloBoardSetupMainTest {
         return alias;
     }
 
+    private String keptEnvironment() {
+        return KEPT_ENV + "TRELLO_API_ENDPOINT=" + endpoint() + "\r\n";
+    }
+
     private ReservedManifestFixture reservedManifestFixture() throws IOException {
         Path workflow = Files.writeString(tempDir.resolve("collision.WORKFLOW.md"), KEPT_WORKFLOW);
-        Path env = Files.writeString(tempDir.resolve(".env.collision"), KEPT_ENV);
+        Path env = Files.writeString(tempDir.resolve(".env.collision"), keptEnvironment());
         var memberLookups = new AtomicInteger();
         trello.on("/1/members/me", exchange -> {
             memberLookups.incrementAndGet();
@@ -2995,7 +2999,7 @@ final class TrelloBoardSetupMainTest {
         assertThat(fixture.memberLookups()).hasValue(0);
         verifyNoInteractions(fixture.workerManager());
         assertThat(fixture.workflow()).hasBinaryContent(KEPT_WORKFLOW.getBytes(StandardCharsets.UTF_8));
-        assertThat(fixture.env()).hasBinaryContent(KEPT_ENV.getBytes(StandardCharsets.UTF_8));
+        assertThat(fixture.env()).hasBinaryContent(keptEnvironment().getBytes(StandardCharsets.UTF_8));
     }
 
     private SetupCommandBuilder manifestSetupCommand(String command, Path workflow, Path env, Path manifest) {
@@ -3430,7 +3434,7 @@ final class TrelloBoardSetupMainTest {
         // given
         Path env = tempDir.resolve("custom-env-dir").resolve(".env.custom");
         Files.createDirectories(env.getParent());
-        Files.writeString(env, TestEnv.trelloCredentials("env-key", "env-token"));
+        Files.writeString(env, TestEnv.trelloCredentials("env-key", "env-token", endpoint()));
 
         // when
         CliRunResult result =
@@ -3475,7 +3479,7 @@ final class TrelloBoardSetupMainTest {
     void listWorkspacesReadsCredentialsBehindAByteOrderMark() throws Exception {
         // given
         Path env = tempDir.resolve(".env.bom");
-        Files.writeString(env, UNICODE_BYTE_ORDER_MARK + "TRELLO_API_KEY=bom-key\nTRELLO_API_TOKEN=bom-token\n");
+        Files.writeString(env, UNICODE_BYTE_ORDER_MARK + TestEnv.trelloCredentials("bom-key", "bom-token", endpoint()));
 
         // when
         CliRunResult result =
@@ -3655,7 +3659,7 @@ final class TrelloBoardSetupMainTest {
         Path configDir = tempDir.resolve("installed-config-dir");
         Files.createDirectories(configDir);
         Files.writeString(
-                configDir.resolve(".env"), "TRELLO_API_KEY=config-dir-key\nTRELLO_API_TOKEN=config-dir-token\n");
+                configDir.resolve(".env"), TestEnv.trelloCredentials("config-dir-key", "config-dir-token", endpoint()));
 
         // when
         CliRunResult result = runCliWithoutTrelloCredentials(
@@ -3698,9 +3702,9 @@ final class TrelloBoardSetupMainTest {
         Path configDir = tempDir.resolve("losing-config-dir");
         Files.createDirectories(configDir);
         Files.writeString(
-                configDir.resolve(".env"), "TRELLO_API_KEY=config-dir-key\nTRELLO_API_TOKEN=config-dir-token\n");
+                configDir.resolve(".env"), TestEnv.trelloCredentials("config-dir-key", "config-dir-token", endpoint()));
         Path env = tempDir.resolve(".env.winning");
-        Files.writeString(env, TestEnv.trelloCredentials("env-key", "env-token"));
+        Files.writeString(env, TestEnv.trelloCredentials("env-key", "env-token", endpoint()));
 
         // when
         CliRunResult result = runCliWithoutTrelloCredentials(
@@ -4067,7 +4071,7 @@ final class TrelloBoardSetupMainTest {
         // given
         Path workflow = tempDir.resolve("runtime-env-source.WORKFLOW.md");
         Path env = tempDir.resolve(".env.runtime");
-        Files.writeString(env, "TRELLO_API_KEY=dotenv-key\nTRELLO_API_TOKEN=dotenv-token\n");
+        Files.writeString(env, TestEnv.trelloCredentials("dotenv-key", "dotenv-token", endpoint()));
 
         // when
         CliRunResult result = runCli(
@@ -4088,7 +4092,7 @@ final class TrelloBoardSetupMainTest {
         assertThat(createdBoardName).hasValue("Runtime Env Source Queue");
         assertThat(env)
                 .content(StandardCharsets.UTF_8)
-                .isEqualTo("TRELLO_API_KEY=dotenv-key\nTRELLO_API_TOKEN=dotenv-token\n");
+                .isEqualTo(TestEnv.trelloCredentials("dotenv-key", "dotenv-token", endpoint()));
         assertThat(result.stdout())
                 .contains("symphony-trello start --env "
                         + shellQuote(env.toAbsolutePath().normalize().toString()))
@@ -5821,7 +5825,7 @@ final class TrelloBoardSetupMainTest {
                 Existing body
                 """);
         Path env = tempDir.resolve(".env.imported-port");
-        Files.writeString(env, "SYNTHETIC_IMPORT_STATUS_PORT=19091\n");
+        Files.writeString(env, "TRELLO_API_ENDPOINT=" + endpoint() + "\nSYNTHETIC_IMPORT_STATUS_PORT=19091\n");
 
         // when
         CliRunResult result = runCli(
@@ -5880,7 +5884,10 @@ final class TrelloBoardSetupMainTest {
                 """);
         Path workflow = tempDir.resolve("new-import.WORKFLOW.md");
         Path env = tempDir.resolve(".env.import-port-scan");
-        Files.writeString(env, "SYNTHETIC_IMPORT_STATUS_PORT=" + ConfigDefaults.DEFAULT_SERVER_PORT + "\n");
+        Files.writeString(
+                env,
+                "TRELLO_API_ENDPOINT=" + endpoint() + "\nSYNTHETIC_IMPORT_STATUS_PORT="
+                        + ConfigDefaults.DEFAULT_SERVER_PORT + "\n");
 
         // when
         CliRunResult result = runCliWithNoBusyPorts(
@@ -5926,7 +5933,10 @@ final class TrelloBoardSetupMainTest {
                 """);
         Path workflow = tempDir.resolve("new-board-env-port.WORKFLOW.md");
         Path env = tempDir.resolve(".env.new-board-port-scan");
-        Files.writeString(env, "SYNTHETIC_NEW_BOARD_STATUS_PORT=" + ConfigDefaults.DEFAULT_SERVER_PORT + "\n");
+        Files.writeString(
+                env,
+                "TRELLO_API_ENDPOINT=" + endpoint() + "\nSYNTHETIC_NEW_BOARD_STATUS_PORT="
+                        + ConfigDefaults.DEFAULT_SERVER_PORT + "\n");
 
         // when
         CliRunResult result = runCliWithNoBusyPorts(

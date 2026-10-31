@@ -258,10 +258,6 @@ skill's advice.
   itself is the clearest boolean domain predicate and no value is read. Check this issue state at most
   once per turn before applying this override, and remove the override when the issue is closed.
 - Optional issue
-  [#71](https://github.com/martinfrancois/java-optionals-skill/issues/71): when an Optional fallback
-  performs non-trivial work, preserve lazy fallback behavior and capture missed-trigger cases where
-  the installed Optional skill should have activated during the original implementation prompt.
-- Optional issue
   [#72](https://github.com/martinfrancois/java-optionals-skill/issues/72): choose `findFirst()` or
   `findAny()` by the encounter-order contract, not by habit. Use `findAny()` for equivalent matches,
   and keep `findFirst()` when first-match behavior is meaningful even if a sequential-stream test
@@ -388,6 +384,13 @@ skill's advice.
   a named constant at the narrowest sensible scope. When fixing one magic number, search for the same
   concept nearby and update matching occurrences; create or suggest a follow-up issue for broader
   unrelated magic-number cleanup.
+- One mechanism per concern across commands. When several commands share a concern, above all a
+  security rule such as where credentials may be sent, they share one implementation and one
+  user-facing behavior. Do not add a command-specific variant of a security rule, a stricter
+  special case, or a second check with its own error code without a documented reason in an ADR;
+  the principle of least surprise applies to the people who read the code and to the people who
+  run the commands. [ADR 0151](../adr/0151-bind-trello-credentials-to-an-endpoint.md) records the
+  decision that removed such a variant from the board card commands.
 
 ## JDK APIs and platform
 

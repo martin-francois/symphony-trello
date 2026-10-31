@@ -354,7 +354,7 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
         Path env = config.resolve(".env.custom");
         Path manifest = config.resolve(ConnectedBoardManifest.FILE_NAME);
         int port = availablePort();
-        Files.writeString(env, TestEnv.trelloCredentials());
+        Files.writeString(env, TestEnv.trelloCredentials("key", "token", endpoint()));
         Files.writeString(
                 workflow,
                 """
@@ -445,7 +445,7 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
         Path env = config.resolve(".env.no-progress");
         Path manifest = config.resolve(ConnectedBoardManifest.FILE_NAME);
         int port = availablePort();
-        Files.writeString(env, TestEnv.trelloCredentials());
+        Files.writeString(env, TestEnv.trelloCredentials("key", "token", endpoint()));
         Files.writeString(
                 workflow,
                 """

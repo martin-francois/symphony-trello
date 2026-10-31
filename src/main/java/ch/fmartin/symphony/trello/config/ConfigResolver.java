@@ -42,13 +42,20 @@ public class ConfigResolver {
             EffectiveConfig.GitHubConfig.qualifiedKey(EffectiveConfig.GitHubConfig.NO_PR_LABEL_KEY)
                     + " must be a Trello label name, or \"\" to disable the label";
 
+    private final EnvironmentSources environment;
     private final Function<String, Optional<String>> environmentResolver;
     private final SecretFiles secretFiles;
 
+    /// Resolves environment references from this process: the real environment, then the default
+    /// dotenv file, which is read once for each resolution.
     public ConfigResolver() {
-        this(LocalEnvironment::get);
+        this(LocalEnvironment.sources(System.getenv(), LocalEnvironment.defaultDotenv()));
     }
 
+    /// Treats `environmentResolver` as the shell environment, so a Trello key or token it supplies
+    /// belongs to the endpoint it names in `TRELLO_API_ENDPOINT`: the binding check runs the same
+    /// way as for [#ConfigResolver(EnvironmentSources)]. Tests use this form; production code
+    /// passes its real sources.
     public ConfigResolver(Function<String, Optional<String>> environmentResolver) {
         this(environmentResolver, SecretFiles.HOST);
     }
@@ -56,11 +63,24 @@ public class ConfigResolver {
     /// Callers that resolve untrusted front matter pass in-memory [SecretFiles] so resolution never
     /// reads host files.
     public ConfigResolver(Function<String, Optional<String>> environmentResolver, SecretFiles secretFiles) {
-        this.environmentResolver = environmentResolver;
+        this(EnvironmentSources.of(new EnvironmentSource.ShellEnvironment(environmentResolver)), secretFiles);
+    }
+
+    public ConfigResolver(EnvironmentSources environment) {
+        this(environment, SecretFiles.HOST);
+    }
+
+    private ConfigResolver(EnvironmentSources environment, SecretFiles secretFiles) {
+        this.environment = environment;
+        this.environmentResolver = environment;
         this.secretFiles = secretFiles;
     }
 
     public EffectiveConfig resolve(WorkflowDefinition workflow) {
+        return new ConfigResolver(environment.snapshot(), secretFiles).resolveSnapshot(workflow);
+    }
+
+    private EffectiveConfig resolveSnapshot(WorkflowDefinition workflow) {
         Map<String, Object> root = workflow.config();
         Map<String, Object> tracker = object(root, "tracker");
         Map<String, Object> workspace = object(root, "workspace");
@@ -85,11 +105,15 @@ public class ConfigResolver {
         TypedWorkflowConfig typedWorkflow = WorkflowConfigIngestion.collect(workflow, environmentResolver);
 
         String trackerKind = string(tracker, "kind", null);
-        String endpoint = string(tracker, "endpoint", "https://api.trello.com/1");
-        String apiKey =
+        String endpoint = string(tracker, "endpoint", TrelloCredentialEndpoint.TRELLO_API);
+        validateEndpoint(endpoint);
+        endpoint = TrelloCredentialEndpoint.canonical(endpoint).orElseThrow().toString();
+        Secret apiKey =
                 secret(workflow.path().getParent(), tracker, "api_key", "tracker.api_key", TrelloEnvironment.API_KEY);
-        String apiToken = secret(
+        Secret apiToken = secret(
                 workflow.path().getParent(), tracker, "api_token", "tracker.api_token", TrelloEnvironment.API_TOKEN);
+        TrelloCredentialEndpoint.requireBoundTo(
+                environmentCredentials(apiKey, apiToken), endpoint, "the workflow's tracker.endpoint");
         String boardId = environmentString(tracker, "board_id", null);
         String resolvedBoardId = environmentString(tracker, "resolved_board_id", boardId);
         List<Path> codexAdditionalWritableRoots = codexDangerFullAccess
@@ -108,8 +132,8 @@ public class ConfigResolver {
                 new EffectiveConfig.TrackerConfig(
                         trackerKind,
                         endpoint,
-                        apiKey,
-                        apiToken,
+                        apiKey.value(),
+                        apiToken.value(),
                         boardId,
                         resolvedBoardId,
                         list(tracker, "active_states", List.of("Todo", "In Progress")),
@@ -424,17 +448,47 @@ public class ConfigResolver {
         }
     }
 
-    private String secret(
+    private Secret secret(
             Path workflowDirectory, Map<String, Object> root, String key, String displayName, String defaultEnv) {
         String configured = string(root, key, "$" + defaultEnv);
-        Optional<String> reference = EnvironmentReferences.referenceName(configured);
-        if (reference.isPresent()) {
-            return environmentValueOrDefault(reference.get(), null);
-        }
+        return EnvironmentReferences.referenceName(configured)
+                .map(this::environmentSecret)
+                .orElseGet(() -> configuredSecret(workflowDirectory, displayName, configured));
+    }
+
+    private Secret environmentSecret(String name) {
+        return environment.lookup(name).map(Secret::fromEnvironment).orElse(Secret.NONE);
+    }
+
+    private Secret configuredSecret(Path workflowDirectory, String displayName, @Nullable String configured) {
         if (configured != null && configured.startsWith(FILE_SECRET_PREFIX)) {
-            return fileSecret(workflowDirectory, displayName, configured.substring(FILE_SECRET_PREFIX.length()));
+            return new Secret(
+                    fileSecret(workflowDirectory, displayName, configured.substring(FILE_SECRET_PREFIX.length())),
+                    null);
         }
-        return configured;
+        return new Secret(configured, null);
+    }
+
+    /// The credentials an environment source supplied, which the endpoint binding covers. A literal
+    /// or `file:` value came from the workflow itself, so the workflow's endpoint is its endpoint.
+    private static List<EnvironmentValue> environmentCredentials(Secret apiKey, Secret apiToken) {
+        return Stream.of(apiKey.environmentValue(), apiToken.environmentValue())
+                .flatMap(Optional::stream)
+                .toList();
+    }
+
+    /// A resolved `tracker.api_key` or `tracker.api_token`, with the environment value behind it
+    /// when the setting referenced one.
+    private record Secret(@Nullable String value, @Nullable EnvironmentValue origin) {
+        static final Secret NONE = new Secret(null, null);
+
+        static Secret fromEnvironment(EnvironmentValue environmentValue) {
+            return new Secret(environmentValue.value(), environmentValue);
+        }
+
+        Optional<EnvironmentValue> environmentValue() {
+            return Optional.ofNullable(origin);
+        }
     }
 
     private String environmentValueOrDefault(String environmentName, String defaultValue) {

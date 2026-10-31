@@ -5,7 +5,9 @@ import ch.fmartin.symphony.trello.config.ConfigException;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.EnvironmentReferences;
+import ch.fmartin.symphony.trello.config.EnvironmentSources;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
+import ch.fmartin.symphony.trello.config.TrelloCredentialEndpoint;
 import ch.fmartin.symphony.trello.config.TrelloListRoleValidator;
 import ch.fmartin.symphony.trello.config.TypedWorkflowConfig;
 import ch.fmartin.symphony.trello.config.WholeNumbers;
@@ -305,18 +307,18 @@ final class WorkflowConfigEditor {
         return diagnosticsValidation(workflowPath, environmentResolver, true);
     }
 
-    EffectiveConfig resolveLaunchConfig(Path workflowPath, Function<String, Optional<String>> environmentResolver) {
+    EffectiveConfig resolveLaunchConfig(Path workflowPath, EnvironmentSources environmentResolver) {
         return prepareLaunchWorkflow(workflowPath, environmentResolver, true);
     }
 
     EffectiveConfig prepareLaunchWorkflow(
-            Path workflowPath, Function<String, Optional<String>> environmentResolver, boolean validateServerPort) {
+            Path workflowPath, EnvironmentSources environmentResolver, boolean validateServerPort) {
         return prepareLaunchWorkflow(workflowPath, environmentResolver, validateServerPort, Optional.empty());
     }
 
     EffectiveConfig prepareLaunchWorkflow(
             Path workflowPath,
-            Function<String, Optional<String>> environmentResolver,
+            EnvironmentSources environmentResolver,
             boolean validateServerPort,
             Path diagnosticsConfigDir) {
         return prepareLaunchWorkflow(
@@ -326,9 +328,12 @@ final class WorkflowConfigEditor {
                 Optional.of(diagnosticsConfigDir.toAbsolutePath().normalize()));
     }
 
+    /// Fails with `setup_credentials_endpoint_mismatch` when the workflow's `tracker.endpoint` is
+    /// not the endpoint the resolved key and token belong to, and with `setup_workflow_invalid` for
+    /// any other unusable workflow.
     private EffectiveConfig prepareLaunchWorkflow(
             Path workflowPath,
-            Function<String, Optional<String>> environmentResolver,
+            EnvironmentSources environmentResolver,
             boolean validateServerPort,
             Optional<Path> diagnosticsConfigDir) {
         requireLaunchableWorkflowFile(workflowPath);
@@ -347,11 +352,14 @@ final class WorkflowConfigEditor {
                     new TrelloBoardSetupException(
                             "setup_workflow_yaml_invalid", "Workflow front matter is invalid YAML.", e),
                     diagnosticsConfigDir);
-        } catch (WorkflowException
-                | ConfigException
-                | TrelloBoardSetupException
-                | IllegalArgumentException
-                | ClassCastException e) {
+        } catch (ConfigException e) {
+            if (TrelloCredentialEndpoint.MISMATCH_CODE.equals(e.code())) {
+                // The message names the endpoints and the env file, which the user needs to fix
+                // the binding; it holds no secret and no other workflow text.
+                throw TrelloCredentialResolver.endpointMismatch(e);
+            }
+            throw invalidWorkflowForLaunch(e, diagnosticsConfigDir);
+        } catch (WorkflowException | TrelloBoardSetupException | IllegalArgumentException | ClassCastException e) {
             throw invalidWorkflowForLaunch(e, diagnosticsConfigDir);
         }
     }

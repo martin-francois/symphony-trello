@@ -166,6 +166,12 @@ A skill documents the Trello REST API, and the agent reads the key and token fro
 
 ## More Information
 
+The rule that the card commands send the key and token only to `https://api.trello.com/1`, with
+the code `setup_card_endpoint_not_trello`, is gone:
+[ADR 0151](0151-bind-trello-credentials-to-an-endpoint.md) binds every command's credentials to
+the endpoint their source names, the card commands included. The connected-workflows-only rule
+stays.
+
 [SPEC.md section 19.8](../../SPEC.md#198-board-card-command-profile) holds the command contract. The
 README section [Manage Cards From An Agent](../../README.md#manage-cards-from-an-agent) explains the
 commands for users.
