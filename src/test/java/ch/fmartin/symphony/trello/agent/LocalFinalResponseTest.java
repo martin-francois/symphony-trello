@@ -16,6 +16,7 @@ import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
+import ch.fmartin.symphony.trello.testsupport.ThreadLogRecords;
 import ch.fmartin.symphony.trello.tracker.TrackerClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workspace.HookRunner;
@@ -35,9 +36,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Handler;
-import java.util.logging.LogRecord;
-import java.util.logging.Logger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
@@ -597,7 +595,7 @@ final class LocalFinalResponseTest {
         EffectiveConfig config = config();
         String privateResponse = "synthetic-sensitive-response";
         complete(store, request(config, WORKER), "old-sensitive-response");
-        try (var logs = new AttemptLogs();
+        try (var logs = ThreadLogRecords.onCurrentThread(FinalResponseStore.class);
                 var recording = store.begin(request(config, WORKER)).orElseThrow()) {
             successfulAnswer(recording.listener(event -> {}), WORKER, privateResponse);
             Path path = records(config).getFirst();
@@ -622,7 +620,7 @@ final class LocalFinalResponseTest {
             assertThat(record.has("response"))
                     .as("a failed save after accepted completion must not expose the old or new answer")
                     .isFalse();
-            assertThat(logs.records).singleElement().satisfies(log -> {
+            assertThat(logs.records()).singleElement().satisfies(log -> {
                 assertThat(log.getMessage())
                         .startsWith("cannot save local final response:")
                         .contains("attempt=" + Sha3.sha3_256(WORKER))
@@ -639,7 +637,7 @@ final class LocalFinalResponseTest {
         EffectiveConfig config = config();
         complete(store, request(config, WORKER), RESPONSE);
         Files.writeString(records(config).getFirst(), "synthetic-sensitive-malformed-json");
-        try (var logs = new AttemptLogs()) {
+        try (var logs = ThreadLogRecords.onCurrentThread(FinalResponseStore.class)) {
 
             // when
             assertThatThrownBy(() -> store.begin(request(config, WORKER)))
@@ -647,7 +645,7 @@ final class LocalFinalResponseTest {
                     .hasMessageStartingWith("cannot prepare local final response");
 
             // then
-            assertThat(logs.records).singleElement().satisfies(log -> {
+            assertThat(logs.records()).singleElement().satisfies(log -> {
                 assertThat(log.getMessage())
                         .startsWith("cannot prepare local final response:")
                         .contains("attempt=" + Sha3.sha3_256(WORKER))
@@ -662,7 +660,7 @@ final class LocalFinalResponseTest {
         // given
         var store = new FinalResponseStore();
         EffectiveConfig config = config();
-        try (var logs = new AttemptLogs();
+        try (var logs = ThreadLogRecords.onCurrentThread(FinalResponseStore.class);
                 var recording = store.begin(request(config, WORKER)).orElseThrow()) {
 
             // when
@@ -672,7 +670,7 @@ final class LocalFinalResponseTest {
             assertThat(result.success())
                     .as("successful protocol completion without a final answer must fail local delivery")
                     .isFalse();
-            assertThat(logs.records).singleElement().satisfies(log -> {
+            assertThat(logs.records()).singleElement().satisfies(log -> {
                 assertThat(log.getMessage())
                         .startsWith("cannot save local final response:")
                         .contains("expected an accepted complete final answer", "attempt=" + Sha3.sha3_256(WORKER))
@@ -757,32 +755,6 @@ final class LocalFinalResponseTest {
 
         // then
         assertThat(readOnlyRecord(config).path("response").asText()).isEqualTo(exactLimit);
-    }
-
-    // Observe this test thread without changing logger levels, filters or other handlers.
-    private static final class AttemptLogs extends Handler implements AutoCloseable {
-        private final long ownerThreadId = Thread.currentThread().threadId();
-        private final Logger logger = Logger.getLogger(FinalResponseStore.class.getName());
-        private final List<LogRecord> records = new ArrayList<>();
-
-        AttemptLogs() {
-            logger.addHandler(this);
-        }
-
-        @Override
-        public void publish(LogRecord record) {
-            if (Thread.currentThread().threadId() == ownerThreadId) {
-                records.add(record);
-            }
-        }
-
-        @Override
-        public void flush() {}
-
-        @Override
-        public void close() {
-            logger.removeHandler(this);
-        }
     }
 
     private CompletedResponse completedResponse() throws IOException {

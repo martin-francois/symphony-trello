@@ -600,14 +600,13 @@ public class SymphonyOrchestrator {
             return;
         }
         try {
-            WatchService watchService = parent.getFileSystem().newWatchService(); // NOPMD - the field owns it.
-            workflowWatchService = watchService;
+            workflowWatchService = parent.getFileSystem().newWatchService();
             parent.register(
-                    watchService,
+                    workflowWatchService,
                     StandardWatchEventKinds.ENTRY_CREATE,
                     StandardWatchEventKinds.ENTRY_MODIFY,
                     StandardWatchEventKinds.ENTRY_DELETE);
-            Thread.ofVirtual().name("symphony-workflow-watch").start(() -> watchWorkflowChanges(watchService));
+            startWorkflowWatcherThread(workflowWatchService);
         } catch (IOException e) {
             LOG.warnf("workflow=%s watcher=disabled reason=%s", config.workflowPath(), e.getMessage());
         }
@@ -624,9 +623,17 @@ public class SymphonyOrchestrator {
         }
     }
 
+    /// Starts the watcher thread on the service the caller passes, so the thread never reads the
+    /// workflowWatchService field that stop() clears.
+    private void startWorkflowWatcherThread(WatchService watchService) {
+        Thread.ofVirtual().name("symphony-workflow-watch").start(() -> watchWorkflowChanges(watchService));
+    }
+
     /// Runs until stopWorkflowWatcher() closes `watchService`, which makes take() throw
-    /// ClosedWatchServiceException. The thread never reads the workflowWatchService field, so a
-    /// stop or restart that replaces the field cannot hand it a null or another watcher's service.
+    /// ClosedWatchServiceException. An interrupt or a RuntimeException also ends the loop; only
+    /// the RuntimeException logs `workflow_watcher outcome=failed`. The thread never reads the workflowWatchService
+    /// field, so a stop or restart that replaces the field cannot hand it a null or another
+    /// watcher's service.
     private void watchWorkflowChanges(WatchService watchService) {
         Path fileName = config.workflowPath().getFileName();
         while (true) {

@@ -17,6 +17,7 @@ import ch.fmartin.symphony.trello.agent.LocalAgentRunner;
 import ch.fmartin.symphony.trello.agent.TrelloHandoffToolHandler;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import ch.fmartin.symphony.trello.testsupport.ShutdownAppServer;
+import ch.fmartin.symphony.trello.testsupport.ThreadLogRecords;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import ch.fmartin.symphony.trello.workspace.HookRunner;
@@ -28,7 +29,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -36,10 +36,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Supplier;
-import java.util.logging.Handler;
 import java.util.logging.LogRecord;
-import java.util.logging.Logger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -456,7 +453,8 @@ final class SymphonyOrchestratorShutdownTest {
         SymphonyOrchestrator orchestrator = orchestrator(workflow, new FakeTracker(List.of()), mock());
         var watcherBeforeWait = new PausePoint("the workflow watcher before it waits for a change");
         orchestrator.workflowWatcherWaitHookForTests = watcherBeforeWait::pause;
-        try (var watcherLogs = new ThreadLogs(watcherBeforeWait::pausedThread)) {
+        try (var watcherLogs = new ThreadLogRecords(
+                SymphonyOrchestrator.class, thread -> thread.equals(watcherBeforeWait.pausedThread()))) {
             orchestrator.start();
             watcherBeforeWait.awaitPaused();
 
@@ -470,39 +468,13 @@ final class SymphonyOrchestratorShutdownTest {
                             "the workflow watcher should end within %d seconds after stop closed its watch service",
                             WAIT_TIMEOUT.toSeconds())
                     .isTrue();
-            assertThat(watcherLogs.records)
+            assertThat(watcherLogs.records())
                     .as("stop must end the workflow watcher without logging a failure")
+                    .extracting(LogRecord::getMessage, LogRecord::getParameters)
                     .isEmpty();
-        }
-    }
-
-    // Records only what the watched thread logs, so orchestrators in parallel tests cannot add
-    // records. The thread is looked up per record because the test learns it only after start().
-    // Keeps level, message and parameters as text so a failure shows the unexpected log line.
-    private static final class ThreadLogs extends Handler implements AutoCloseable {
-        private final Logger logger = Logger.getLogger(SymphonyOrchestrator.class.getName());
-        private final Supplier<Thread> thread;
-        private final List<String> records = new CopyOnWriteArrayList<>();
-
-        ThreadLogs(Supplier<Thread> thread) {
-            this.thread = thread;
-            logger.addHandler(this);
-        }
-
-        @Override
-        public void publish(LogRecord record) {
-            if (Thread.currentThread().equals(thread.get())) {
-                records.add(
-                        record.getLevel() + " " + record.getMessage() + " " + Arrays.toString(record.getParameters()));
-            }
-        }
-
-        @Override
-        public void flush() {}
-
-        @Override
-        public void close() {
-            logger.removeHandler(this);
+        } finally {
+            watcherBeforeWait.resume();
+            orchestrator.stop();
         }
     }
 }

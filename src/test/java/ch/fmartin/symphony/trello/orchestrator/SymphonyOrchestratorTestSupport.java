@@ -735,7 +735,9 @@ final class SymphonyOrchestratorTestSupport {
     }
 
     /// Pauses an operation inside a test hook until the test resumes it, and remembers the paused
-    /// thread so the test can resume it only once a competing operation is blocked behind it.
+    /// thread. The test resumes it either once a competing operation is blocked behind it
+    /// ([#resumeWhenContendedOr(BooleanSupplier)]) or right away when the competitor has already
+    /// returned ([#resume()]).
     static final class PausePoint {
         private final String pausedOperation;
         private final CountDownLatch paused = new CountDownLatch(1);
