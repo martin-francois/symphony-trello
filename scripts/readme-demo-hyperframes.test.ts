@@ -133,7 +133,8 @@ test("no file other than the canonical pin names a HyperFrames version", () => {
       // Tracked files only, so an uncommitted local note cannot fail the suite.
       "grep", "-I", "-n", "-i", "-E",
       ...versionMentions.flatMap((pattern) => ["-e", pattern]),
-      "--", ".", `:!${HYPERFRAMES_VERSION_PATH}`,
+      // The manifest records the version the media were rendered with (ADR 0149).
+      "--", ".", `:!${HYPERFRAMES_VERSION_PATH}`, `:!${MANIFEST_RELATIVE_PATH}`,
     ],
     {cwd: repoRoot, encoding: "utf8"},
   );
@@ -147,7 +148,7 @@ test("no file other than the canonical pin names a HyperFrames version", () => {
   );
 });
 
-test("HyperFrames updates require a re-render, a re-upload verdict, and manual merge", () => {
+test("HyperFrames updates automerge through the render workflow, never through GitHub's native auto-merge", () => {
   // given
   const hyperframesRules = PACKAGE_RULES.filter(
     ({matchPackageNames}) => matchPackageNames?.includes("hyperframes"),
@@ -173,7 +174,10 @@ test("HyperFrames updates require a re-render, a re-upload verdict, and manual m
   assert.equal(hyperframesRules.length, 1);
   const [rule] = hyperframesRules;
   assert.equal(nonMajorAutomergeDecision, rule, "the HyperFrames rule must decide automerge last");
-  assert.equal(rule?.automerge, false);
+  assert.equal(rule?.automerge, true);
+  // GitHub's native auto-merge waits only for required checks, and readme-demo-render is not one
+  // until the owner adds it to the ruleset (ADR 0149).
+  assert.equal(rule?.platformAutomerge, false);
   assert.equal(rule?.groupName, null);
   assert.deepEqual(rule?.addLabels, ["hyperframes"]);
   assert.ok(
@@ -182,11 +186,14 @@ test("HyperFrames updates require a re-render, a re-upload verdict, and manual m
   );
   const notes = rule?.prBodyNotes?.join("\n") ?? "";
   const instructions = [
-    "node scripts/render-readme-demo.ts",
+    "HyperFrames Renovate automation workflow",
+    "`readme-demo-render` check",
+    "needs-maintainer-review",
     ...RENDERED_ARTIFACTS,
     REUPLOAD_ATTACHMENT_VERDICT,
     KEEP_ATTACHMENT_VERDICT,
-    "node scripts/render-readme-demo.ts --compare-with origin/main",
+    // The owner's steps live in one guide section; the notes point there instead of repeating them.
+    "\"What needs a person\" under \"Updating HyperFrames\" in `docs/demo/README.md`",
   ];
   for (const instruction of instructions) {
     assert.ok(notes.includes(instruction), `pull request notes must mention ${instruction}`);

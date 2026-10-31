@@ -82,24 +82,35 @@ requirements.
   their owning rules. The `Required merge checks` ruleset on the default branch enforces the
   required checks, linear history, and thread resolution, and the script test `major update pull
   requests require manual merge` asserts the major-update policy.
-- HyperFrames, which renders the README demo, is review-required at every update type. Its exact
-  version lives only in `scripts/readme-demo-hyperframes.ts`, which a Renovate regex manager owns
-  and the render manifest hashes. A Renovate update stays blocked by the README demo freshness check
-  until a maintainer renders, reviews, and commits the media. Never refresh
-  `docs/demo/render-manifest.json` without that render. See
+- HyperFrames, which renders the README demo, merges through Renovate's own automerge after the
+  `readme-demo-render` check of the `HyperFrames Renovate automation` workflow passes. Its exact
+  version lives only in `scripts/readme-demo-hyperframes.ts`, which a Renovate regex manager owns;
+  the render manifest records the version that rendered the committed media and hashes the pin
+  with that version normalized, so a version-only update passes the freshness check, and the check renders the demo with
+  the proposed version in CI and compares it with the README video attachment without committing. Never
+  refresh `docs/demo/render-manifest.json` without a render. The HyperFrames package rule keeps
+  `platformAutomerge: false` until the owner makes `readme-demo-render` a required check, because
+  GitHub's native auto-merge waits only for required checks; `scripts/readme-demo-hyperframes.test.ts`
+  asserts it. Majors keep the `major update` label and manual merge. See
+  [ADR 0149](../adr/0149-check-hyperframes-updates-by-rendering-in-ci.md),
   [ADR 0093](../adr/0093-renovate-updates-hyperframes.md) and
   [docs/demo/README.md](../demo/README.md#updating-hyperframes).
-- Replace the README's uploaded demo video only when the render's `README video:` line says
-  `re-upload the README video attachment`. When it says `keep the existing README video
-  attachment`, merge the HyperFrames update with the existing attachment and do not ask for an
-  upload. The upload happens in GitHub's web editor, so an agent that gets the re-upload verdict
-  stops before merging and asks the maintainer. If `HEAD` already holds a render newer than `main`,
-  run the render with `--compare-with origin/main`. `scripts/readme-demo-visual-change.test.ts`
-  checks the threshold against the measured noise and a one-word caption change, and
-  `scripts/readme-demo-hyperframes.test.ts` requires the Renovate notes to quote both verdicts and
-  the `--compare-with` command. Pull-request review checks that the PR states the verdict, that it
-  compared with `main`, and that no agent merged past a re-upload verdict or asked for an upload
-  after a keep verdict. See
+- Replace the README's uploaded demo video only when the `readme-demo-render` check, or a manual
+  render's `README video:` line, says `re-upload the README video attachment`. The workflow then
+  labels the pull request `needs-maintainer-review`, and the steps live in one place,
+  [What needs a person](../demo/README.md#updating-hyperframes). The upload happens in GitHub's
+  web editor, so only the maintainer can finish that update, and an agent asks instead of merging.
+  When a version-only CI render says `keep the existing README video attachment`, it commits no
+  generated media. Eligible Renovate updates merge with the existing attachment; major updates
+  still require manual merge. A manual render with that verdict needs no upload, but composition
+  changes still require fresh committed media and a render manifest.
+  `scripts/readme-demo-visual-change.test.ts` checks the threshold
+  against the measured noise and a one-word caption change; `scripts/readme-demo-hyperframes.test.ts`
+  requires the Renovate notes to quote both verdicts, the check, the label, the three generated
+  files and the guide section; `scripts/render-hyperframes-update.test.ts` covers the embed
+  checks, both comparisons with the attachment and the incomplete outcomes. Pull-request review of a manual render checks that the
+  PR states the verdict, that it compared with `main`, and that no agent merged past a re-upload
+  verdict or asked for an upload after a keep verdict. See
   [ADR 0133](../adr/0133-re-upload-the-readme-video-only-after-a-visible-change.md).
 - `com.networknt:json-schema-validator` stays on 2.x through a Renovate `allowedVersions` hold,
   because 3.x requires Jackson 3 and Quarkus 3 runs on Jackson 2. The script test `Renovate holds

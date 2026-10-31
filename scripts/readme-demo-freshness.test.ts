@@ -11,9 +11,11 @@ import {
   createReadmeDemoSourceSnapshot,
   GITHUB_VIDEO_ATTACHMENT_LIMIT_BYTES,
   HYPERFRAMES_VERSION_PATH,
+  readHyperframesVersion,
   readReadmeDemoManifest,
   writeReadmeDemoManifest,
 } from "./readme-demo-manifest.ts";
+import {HYPERFRAMES_VERSION} from "./readme-demo-hyperframes.ts";
 import {applyRegexUpdate, extractRegexDependencies} from "./test-support/renovate-regex-manager.ts";
 
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
@@ -54,9 +56,16 @@ function createManifestFixture(t: test.TestContext): string {
   return fixtureRoot;
 }
 
+/** Numeric comparison of two x.y.z versions: negative, zero or positive. */
+function compareVersions(left: string, right: string): number {
+  const parts = (version: string): number[] => version.split(".").map(Number);
+  const [leftParts, rightParts] = [parts(left), parts(right)];
+  return leftParts.map((part, index) => part - (rightParts[index] ?? 0)).find((delta) => delta !== 0) ?? 0;
+}
+
 test("committed README demo artifacts match every render input", () => {
-  const expected = readReadmeDemoManifest(repoRoot);
-  const actual = buildReadmeDemoManifest(repoRoot);
+  const {hyperframesVersion: renderedWith, ...expected} = readReadmeDemoManifest(repoRoot);
+  const {hyperframesVersion: pinned, ...actual} = buildReadmeDemoManifest(repoRoot);
 
   assert.deepEqual(
     actual,
@@ -64,9 +73,28 @@ test("committed README demo artifacts match every render input", () => {
     "README demo sources or artifacts changed without a successful render; "
       + "run `node scripts/render-readme-demo.ts` and commit all generated files",
   );
+  // The pin is hashed with its version normalized: a Renovate update must not make the media
+  // stale (ADR 0149). The media may be older than the pin, never newer.
+  assert.match(renderedWith, /^\d+\.\d+\.\d+$/u, "the manifest must record the rendering HyperFrames version");
+  assert.ok(
+    compareVersions(pinned, renderedWith) >= 0,
+    `the pinned HyperFrames ${pinned} is older than the ${renderedWith} that rendered the media`,
+  );
 });
 
-test("a version-only HyperFrames update leaves the committed README demo stale", (t) => {
+test("the manifest records the version the pin names", () => {
+  assert.equal(readHyperframesVersion(repoRoot), HYPERFRAMES_VERSION);
+  assert.equal(buildReadmeDemoManifest(repoRoot).hyperframesVersion, HYPERFRAMES_VERSION);
+});
+
+test("the version comparison is numeric", () => {
+  assert.ok(compareVersions("0.8.191", "0.8.191") === 0);
+  assert.ok(compareVersions("0.8.200", "0.8.191") > 0);
+  assert.ok(compareVersions("0.9.0", "0.8.191") > 0);
+  assert.ok(compareVersions("0.8.19", "0.8.191") < 0);
+});
+
+test("a version-only HyperFrames update keeps the committed README demo fresh", (t) => {
   // given
   const fixtureRoot = createManifestFixture(t);
   const renderedManifest = buildReadmeDemoManifest(fixtureRoot);
@@ -80,13 +108,44 @@ test("a version-only HyperFrames update leaves the committed README demo stale",
   const updatedManifest = buildReadmeDemoManifest(fixtureRoot);
 
   // then
-  assert.notEqual(
+  assert.equal(
     updatedManifest.sourceSha256,
     renderedManifest.sourceSha256,
-    "a renderer update must invalidate media rendered with the previous version",
+    "a newer HyperFrames version alone must not invalidate the committed media",
   );
+  assert.equal(renderedManifest.hyperframesVersion, "1.2.3");
+  assert.equal(updatedManifest.hyperframesVersion, "1.2.4");
   assert.equal(updatedManifest.videoSha256, renderedManifest.videoSha256);
   assert.equal(updatedManifest.posterSha256, renderedManifest.posterSha256);
+});
+
+test("a change to the pin outside its version line invalidates the committed README demo", (t) => {
+  // given
+  const fixtureRoot = createManifestFixture(t);
+  const renderedManifest = buildReadmeDemoManifest(fixtureRoot);
+  const pinPath = join(fixtureRoot, HYPERFRAMES_VERSION_PATH);
+
+  // when
+  writeFileSync(pinPath, `${readFileSync(pinPath, "utf8")}export const EXTRA_CLI_ARGS = ["--quality", "low"];\n`);
+
+  // then
+  assert.notEqual(
+    buildReadmeDemoManifest(fixtureRoot).sourceSha256,
+    renderedManifest.sourceSha256,
+    "only the version literal is normalized; every other byte of the pin stays a render input",
+  );
+});
+
+test("a change to a render script still invalidates the committed README demo", (t) => {
+  // given
+  const fixtureRoot = createManifestFixture(t);
+  const renderedManifest = buildReadmeDemoManifest(fixtureRoot);
+
+  // when
+  writeFileSync(join(fixtureRoot, "scripts", "readme-demo-timing.ts"), "export const timing = false;\n");
+
+  // then
+  assert.notEqual(buildReadmeDemoManifest(fixtureRoot).sourceSha256, renderedManifest.sourceSha256);
 });
 
 test("committed README demo video stays below GitHub's 10 MB attachment limit", () => {
@@ -150,6 +209,27 @@ test("manifest writer rejects render inputs changed after preflight", (t) => {
       writeReadmeDemoManifest(fixtureRoot, sourceBeforeRender);
     },
     /README demo inputs changed during rendering/,
+  );
+});
+
+test("manifest writer rejects a HyperFrames version changed after preflight", (t) => {
+  // given
+  const fixtureRoot = createManifestFixture(t);
+  const sourceBeforeRender = buildReadmeDemoManifest(fixtureRoot);
+  const pinPath = join(fixtureRoot, HYPERFRAMES_VERSION_PATH);
+  const pinSource = readFileSync(pinPath, "utf8");
+  const [pin] = extractRegexDependencies(HYPERFRAMES_VERSION_PATH, pinSource);
+  assert.ok(pin);
+
+  // when
+  writeFileSync(pinPath, applyRegexUpdate(pinSource, pin, "1.2.4"));
+
+  // then
+  assert.throws(
+    () => {
+      writeReadmeDemoManifest(fixtureRoot, sourceBeforeRender);
+    },
+    /HyperFrames version changed during rendering/,
   );
 });
 
