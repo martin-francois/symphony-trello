@@ -17,6 +17,7 @@ import ch.fmartin.symphony.trello.agent.LocalAgentRunner;
 import ch.fmartin.symphony.trello.agent.TrelloHandoffToolHandler;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import ch.fmartin.symphony.trello.testsupport.ShutdownAppServer;
+import ch.fmartin.symphony.trello.testsupport.ThreadLogRecords;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import ch.fmartin.symphony.trello.workspace.HookRunner;
@@ -35,6 +36,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.LogRecord;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -441,5 +444,47 @@ final class SymphonyOrchestratorShutdownTest {
             release.countDown();
             orchestrator.stop();
         }
+    }
+
+    @Test
+    void stopWhileTheWorkflowWatcherIsAboutToWaitEndsTheWatcherWithoutAFailure() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "60000");
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, new FakeTracker(List.of()), mock());
+        var watcherBeforeWait = new PausePoint("the workflow watcher before it waits for a change");
+        var watcherFailure = new AtomicReference<Throwable>();
+        orchestrator.workflowWatcherWaitHookForTests = () -> pauseWatcher(watcherBeforeWait, watcherFailure);
+        try (var watcherLogs = new ThreadLogRecords(
+                SymphonyOrchestrator.class, thread -> thread.equals(watcherBeforeWait.pausedThread()))) {
+            orchestrator.start();
+            watcherBeforeWait.awaitPaused();
+
+            // when
+            orchestrator.stop();
+            watcherBeforeWait.resume();
+
+            // then
+            assertThat(watcherBeforeWait.pausedThread().join(WAIT_TIMEOUT))
+                    .as(
+                            "the workflow watcher should end within %d seconds after stop closed its watch service",
+                            WAIT_TIMEOUT.toSeconds())
+                    .isTrue();
+            assertThat(watcherFailure)
+                    .as("the watcher must not exit through an uncaught pause-hook or thread failure")
+                    .hasNullValue();
+            assertThat(watcherLogs.records())
+                    .as("stop must end the workflow watcher without logging a failure")
+                    .extracting(LogRecord::getMessage, LogRecord::getParameters)
+                    .isEmpty();
+        } finally {
+            watcherBeforeWait.resume();
+            orchestrator.stop();
+        }
+    }
+
+    private static void pauseWatcher(PausePoint pausePoint, AtomicReference<Throwable> failure) {
+        Thread.currentThread().setUncaughtExceptionHandler((thread, thrown) -> failure.set(thrown));
+        pausePoint.pause();
     }
 }
