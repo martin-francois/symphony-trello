@@ -107,8 +107,8 @@ public class SymphonyOrchestrator {
     /// Serializes the long-running operations (start, stop, tick, worker exit, worker task stop,
     /// retry timers, usage deadlines, handoff moves, agent events) against each other. Trello and
     /// filesystem I/O run while holding this lock. Every field below except the tick schedule, the
-    /// status view, workflowPath, the workflow watcher's reload flag and the watch service is read
-    /// and written only by holders of this lock, so it needs no other synchronization. The one
+    /// status view, workflowPath and the workflow watcher's reload flag is read and written only by
+    /// holders of this lock, so it needs no other synchronization. The one
     /// exception is the handoff deadline: it claims its captured running entry through that
     /// entry's own atomic, without this lock (ADR 0119).
     /// Operations take it only through [#runOperation(Runnable)] or [#callOperation(Supplier)].
@@ -177,6 +177,10 @@ public class SymphonyOrchestrator {
     /// Runs in TickSchedule.requestRefresh between the started/idle check and scheduling the
     /// tick, the window in which a concurrent stop() could shut the scheduler down.
     Runnable refreshScheduleHookForTests = () -> {};
+
+    /// Runs on the workflow watcher thread right before it waits for the next change, the window in
+    /// which a concurrent stop() can close the watch service.
+    Runnable workflowWatcherWaitHookForTests = () -> {};
 
     @ConfigProperty(name = "symphony.workflow.path")
     volatile Path workflowPath;
@@ -378,7 +382,7 @@ public class SymphonyOrchestrator {
     }
 
     void stopWorkflowWatcherForTests() {
-        stopWorkflowWatcher();
+        runOperation(this::stopWorkflowWatcher);
     }
 
     void retryNowForTests(String cardId) {
@@ -602,7 +606,7 @@ public class SymphonyOrchestrator {
                     StandardWatchEventKinds.ENTRY_CREATE,
                     StandardWatchEventKinds.ENTRY_MODIFY,
                     StandardWatchEventKinds.ENTRY_DELETE);
-            Thread.ofVirtual().name("symphony-workflow-watch").start(this::watchWorkflowChanges);
+            startWorkflowWatcherThread(workflowWatchService);
         } catch (IOException e) {
             LOG.warnf("workflow=%s watcher=disabled reason=%s", config.workflowPath(), e.getMessage());
         }
@@ -619,11 +623,23 @@ public class SymphonyOrchestrator {
         }
     }
 
-    private void watchWorkflowChanges() {
+    /// Starts the watcher thread on the service the caller passes, so the thread never reads the
+    /// workflowWatchService field that stop() clears.
+    private void startWorkflowWatcherThread(WatchService watchService) {
+        Thread.ofVirtual().name("symphony-workflow-watch").start(() -> watchWorkflowChanges(watchService));
+    }
+
+    /// Runs until stopWorkflowWatcher() closes `watchService`, which makes take() throw
+    /// ClosedWatchServiceException. An interrupt or a RuntimeException also ends the loop; only
+    /// the RuntimeException logs `workflow_watcher outcome=failed`. The thread never reads the workflowWatchService
+    /// field, so a stop or restart that replaces the field cannot hand it a null or another
+    /// watcher's service.
+    private void watchWorkflowChanges(WatchService watchService) {
         Path fileName = config.workflowPath().getFileName();
-        while (workflowWatchService != null) {
+        while (true) {
+            workflowWatcherWaitHookForTests.run();
             try {
-                WatchKey key = workflowWatchService.take();
+                WatchKey key = watchService.take();
                 boolean changed = false;
                 for (WatchEvent<?> event : key.pollEvents()) {
                     if (event.context() instanceof Path changedPath && changedPath.equals(fileName)) {
