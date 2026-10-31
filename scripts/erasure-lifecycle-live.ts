@@ -43,10 +43,16 @@ interface LedgerCheck {
   readonly at: string;
 }
 
+/** What a period saw after PostHog reported its deletion verified. Both are correct handling: the
+ * gate tests this service, not whether PostHog deletes reliably. */
+export type PeriodOutcome = "complete" | "incomplete";
+
 interface Period {
   readonly id: string;
   readonly operation: string;
+  /** The period is settled; `outcome` says how. */
   complete: boolean;
+  outcome?: PeriodOutcome;
   captured?: boolean;
   personId?: string;
   requested?: boolean;
@@ -84,6 +90,7 @@ interface Ledger extends SourceLedger {
   replayVerified?: boolean;
   handlerSha256?: string;
   handlerMixed?: boolean;
+  diagnostics?: Json;
 }
 
 /** The ledger fields that bind a run to one handler version. */
@@ -92,9 +99,8 @@ export interface HandlerLedger {
   handlerMixed?: boolean;
 }
 
-/** A pass authorizes production only for the handler that ran every stage: the activation
- * precondition in infra/posthog/modules/project/erasure.tf compares this hash with the template.
- * A resumed run on another handler, or a ledger from before this field, can never authorize one. */
+/** Bind evidence to the handler that ran. A resumed run on another handler, or a ledger from
+ * before this field, does not establish complete coverage of one handler. */
 export function recordHandler(ledger: HandlerLedger, sha256: string, fresh: boolean): void {
   if (fresh) {
     ledger.handlerSha256 = sha256;
@@ -176,10 +182,32 @@ function uncheckedCast<T>(value: Json | readonly JsonObject[]): T {
 
 const hmac = (key: string, value: string): string => createHmac("sha256", key).update(value).digest("hex");
 
-/** Empty results stay for the delayed event recount. */
-export function statusRetainedAfterAck(flagName?: string): boolean {
+/** The public status the handler must publish once PostHog reports the deletion verified: `complete`
+ * only when no event of the period remains, `incomplete` otherwise. PostHog has verified a deletion
+ * with an event left behind, and a verified request cannot be queued again. */
+export function expectedPublicStatus(remainingEvents: number): PeriodOutcome {
+  return remainingEvents === 0 ? "complete" : "incomplete";
+}
+
+/** Incomplete results stay for monitoring; empty results stay for the delayed event recount. */
+export function statusRetainedAfterAck(outcome: PeriodOutcome | undefined, flagName?: string): boolean {
   const kind = flagName?.split("|")[0];
-  return kind === "symphony-erasure-empty-v1" || kind === "symphony-erasure-empty-v2";
+  return outcome === "incomplete" || kind === "symphony-erasure-empty-v1" || kind === "symphony-erasure-empty-v2";
+}
+
+/** What PostHog kept about the run's source when a check failed: its log entries and metrics.
+ * Teardown archives the function and its logs become unreachable, so this runs first. */
+export async function captureSourceDiagnostics(api: Pick<SourceApi, "get">, base: string, sourceId: string): Promise<Json> {
+  const diagnostics: Record<string, Json> = {capturedAt: new Date().toISOString(), sourceId};
+  const reads = {logs: `${base}/hog_functions/${sourceId}/logs/?limit=200`, metrics: `${base}/hog_functions/${sourceId}/metrics/`};
+  for (const [name, path] of Object.entries(reads)) {
+    try {
+      diagnostics[name] = await api.get(path);
+    } catch (error) {
+      diagnostics[name] = {error: String((error as Error).message).slice(0, 400)};
+    }
+  }
+  return diagnostics;
 }
 
 /** The public status flag key of one period, as the native handler derives it. */
@@ -431,9 +459,10 @@ export async function main(): Promise<void> {
         // The loop reaches the second period only after the first exists.
         const old = ledger.periods[0]!;
         const oldMailbox = mailboxKey(owner, scope, old.id);
+        const oldOutcome = old.outcome ?? "complete";
         const priorFlag = (await activeFlags(oldMailbox))[0];
-        const retained = statusRetainedAfterAck(priorFlag?.name);
-        // Person-bound completions are archived before replay. Empty results stay,
+        const retained = statusRetainedAfterAck(oldOutcome, priorFlag?.name);
+        // Person-bound completions are archived before replay. Empty and incomplete results stay,
         // so a resumed replay must leave those results unchanged.
         await call(signedOperation(owner, scope, old.id, old.operation, "ack"));
         if (retained) {
@@ -446,7 +475,7 @@ export async function main(): Promise<void> {
         await call(signedOperation(owner, scope, old.id, old.operation, "erase"));
         let replayed = false;
         for (let attempt = 0; attempt < 60; attempt++) {
-          if (attempt >= 10 && (await activeFlags(oldMailbox)).length === 1 && await publicStatus(oldMailbox) === "complete") {replayed = true; break;}
+          if (attempt >= 10 && (await activeFlags(oldMailbox)).length === 1 && await publicStatus(oldMailbox) === oldOutcome) {replayed = true; break;}
           await pause();
         }
         check("first-period replay finished processing", replayed);
@@ -481,10 +510,10 @@ export async function main(): Promise<void> {
         if (attempt % 10 === 0) await call(proof("status"));
         observed = await publicStatus(mailbox);
         if (observed === "refused") throw new Error("Synthetic erasure refused");
-        if (observed === "accepted" || observed === "complete") break;
+        if (observed === "accepted" || observed === "complete" || observed === "incomplete") break;
         await pause();
       }
-      check(`period ${index + 1}: provider-backed acceptance`, observed === "accepted" || observed === "complete");
+      check(`period ${index + 1}: provider-backed acceptance`, observed === "accepted" || observed === "complete" || observed === "incomplete");
       const status = uncheckedCast<DeletionStatus>(await api.get(`${base}/persons/deletion_status/?person_uuid=${period.personId}&status=all`));
       const deletion = status.results?.[0];
       check(`period ${index + 1}: matching deletion record`, status.results?.length === 1 && deletion!.person_uuid === period.personId);
@@ -496,13 +525,19 @@ export async function main(): Promise<void> {
         return;
       }
       // Refresh the public result from the verified provider state, including a restarted source.
-      for (let attempt = 0; observed !== "complete" && attempt < 40; attempt++) {
+      for (let attempt = 0; observed !== "complete" && observed !== "incomplete" && attempt < 40; attempt++) {
         if (attempt % 10 === 0) await call(proof("status"));
         await pause();
         observed = await publicStatus(mailbox);
       }
-      check(`period ${index + 1}: physical event absence and public completion`, observed === "complete" && await rows(distinct) === 0 && !await person(distinct));
-      period.complete = true; save();
+      // The handler counts the events itself; this read is the runner's own evidence of what it saw.
+      // Either outcome is correct handling: complete with no event left, incomplete with events left.
+      const remaining = await rows(distinct);
+      const outcome = expectedPublicStatus(remaining);
+      check(`period ${index + 1}: public status matches the remaining events`, observed === outcome);
+      check(`period ${index + 1}: profile absent after the verified deletion`, !await person(distinct));
+      period.outcome = outcome; period.complete = true; save();
+      console.log(JSON.stringify({period: index + 1, outcome, remainingEvents: remaining}));
       await call(proof("ack"));
     }
     check("partial provider failure recovered", ledger.partialRecoveryVerified === true);
@@ -514,15 +549,15 @@ export async function main(): Promise<void> {
       const mailbox = mailboxKey(owner, scope, operation.id);
       let settled = "pending";
       let flag: FeatureFlagListing["results"][number] | undefined;
-      for (let attempt = 0; attempt < 40 && (flag === undefined || settled !== "complete"); attempt++) {
+      for (let attempt = 0; attempt < 40 && (flag === undefined || (settled !== "complete" && settled !== "incomplete")); attempt++) {
         if (attempt % 10 === 0) await call(signedOperation(owner, scope, operation.id, operation.operation, "status"));
         await pause();
         settled = await publicStatus(mailbox);
         flag = (await activeFlags(mailbox))[0];
       }
-      check("settled operation publishes complete", settled === "complete");
+      check("settled operation publishes complete or incomplete", settled === "complete" || settled === "incomplete");
       check("settled operation has one active status flag", flag !== undefined);
-      const retained = statusRetainedAfterAck(flag!.name);
+      const retained = statusRetainedAfterAck(settled as PeriodOutcome, flag!.name);
       await call(signedOperation(owner, scope, operation.id, operation.operation, "ack"));
       let archived = false;
       for (let attempt = 0; attempt < (retained ? 10 : 90); attempt++) {
@@ -535,10 +570,15 @@ export async function main(): Promise<void> {
     ledger.canaryPersonId = (await person(ledger.canary!))!.id;
     ledger.status = LIFECYCLE_PASS_STATUS; save();
     await cleanupVerifiedCanary(api, base, ledger, save);
-    console.log(JSON.stringify({status: ledger.status}));
+    console.log(JSON.stringify({status: ledger.status, outcomes: ledger.periods.map(period => period.outcome)}));
   } catch (error) {
-    ledger.error = String((error as Error).message).split(ledger.master).join("[master]")
+    const scrub = (text: string): string => text.split(ledger.master).join("[master]")
       .split(ledger.owner?.secret ?? "unissued-placeholder").join("[credential]");
+    ledger.error = scrub(String((error as Error).message));
+    // The finally block archives the source; its logs are the only record of what the invocation did.
+    for (const live of ledger.sources.filter(item => !item.archived)) {
+      ledger.diagnostics = JSON.parse(scrub(JSON.stringify(await captureSourceDiagnostics(api, base, live.id)))) as Json;
+    }
     save();
     throw error;
   } finally {
@@ -551,5 +591,5 @@ function checkNoIdentifiers(body: string, owner: Owner, distinct: string): void 
 }
 
 if (isEntryPoint(import.meta.url)) {
-  main().catch(() => {console.error("Lifecycle gate failed; inspect the protected ledger. Production remains disabled."); process.exitCode = 1;});
+  main().catch(() => {console.error("cannot complete erasure lifecycle verification: inspect the protected ledger"); process.exitCode = 1;});
 }

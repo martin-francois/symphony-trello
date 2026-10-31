@@ -21,7 +21,6 @@ OUTPUTS_FILE="$STATE_DIR/outputs.json"
 DATA_DIR="${TF_DATA_DIR:-$STATE_DIR/.terraform}"
 BACKEND_RECORD="$DATA_DIR/terraform.tfstate"
 ROLES=(production test)
-LIFECYCLE_LEDGER="${SYMPHONY_TRELLO_ERASURE_LIFECYCLE_DIR:-$HOME/.local/state/symphony-trello/erasure-lifecycle}/ledger.json"
 
 usage() {
   cat <<'USAGE'
@@ -173,26 +172,17 @@ project_id_from_state() {
   tofu_cmd show -json | local_files project-id-from-show --role "$1"
 }
 
-# The hosted lifecycle ledger is the only source of the production activation pass. OpenTofu
-# compares it with the current handler template, so a changed handler needs a new pass.
-lifecycle_pass_args() {
-  if [[ -r "$LIFECYCLE_LEDGER" ]]; then
-    local_files lifecycle-pass-args --ledger "$LIFECYCLE_LEDGER"
-  fi
-}
-
 cmd_apply() {
   require_initialized
   reject_partial_apply_args "$@"
-  local pass_args argument bootstrap_args=()
-  mapfile -t pass_args < <(lifecycle_pass_args)
+  local argument bootstrap_args=()
   for argument in "$@"; do
     if [[ "$argument" != -auto-approve ]]; then
       bootstrap_args+=("$argument")
     fi
   done
-  bootstrap "${bootstrap_args[@]}" "${pass_args[@]}"
-  tofu_cmd apply -input=false "$@" "${pass_args[@]}"
+  bootstrap "${bootstrap_args[@]}"
+  tofu_cmd apply -input=false "$@"
   write_outputs
   supplement gaps apply --outputs "$OUTPUTS_FILE"
   cmd_verify
@@ -262,8 +252,7 @@ validate)
 init) cmd_init "$@" ;;
 plan)
   require_initialized
-  mapfile -t pass_args < <(lifecycle_pass_args)
-  tofu_cmd plan -input=false -detailed-exitcode "$@" "${pass_args[@]}"
+  tofu_cmd plan -input=false -detailed-exitcode "$@"
   ;;
 apply) cmd_apply "$@" ;;
 gaps)

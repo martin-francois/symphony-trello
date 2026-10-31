@@ -13,8 +13,9 @@ commands for a fresh setup, a change, a drift repair, and a deliberate rebuild. 
 The [native erasure trial](telemetry-erasure-research.md#es256-and-jose-rejected) stopped at
 `BLOCKED_NATIVE_CAPABILITY`. Its `hog-probe` command uses this wrapper and selected private state,
 requires `SYMPHONY_TRELLO_POSTHOG_LIVE_PROBE=1`, and tests unsaved code with asynchronous calls
-mocked. It installs no handler and changes no managed resource. Automated erasure is defined but defaults to disabled for both roles; [ADR 0081](adr/0081-gate-automated-erasure-on-hosted-verification.md)
-records the gate for any future definition.
+mocked. It installs no handler and changes no managed resource. Automated erasure is defined and enabled through protected deployment variables; the generic
+module defaults to disabled until credentials are configured. [ADR 0150](adr/0150-report-erasure-complete-only-after-the-events-are-gone.md)
+records the current activation decision and supersedes the earlier investigation gate.
 
 | Item | Owner | Where |
 | --- | --- | --- |
@@ -241,15 +242,14 @@ Never replace or discard a key version while installations still use it. The API
 be restricted to the intended project with `person:read`, `person:write`, `feature_flag:read` and
 `feature_flag:write` and `query:read`. It must not be the infrastructure administrator's credential.
 
-Follow the normal plan, gaps diff, apply and verify sequence. Do not enable production until
-[the lifecycle gate](telemetry-erasure-implementation.md) passes. OpenTofu enforces this: a
-validation on `erasure_enabled` refuses `production = true` unless `erasure_lifecycle_pass` equals
-the SHA-256 of the current `erasure-service.hog.tftpl`. `scripts/posthog-infra plan` and `apply`
-pass that value only from a lifecycle ledger whose status is `TWO_PERIOD_LIFECYCLE_PASS` and whose
-every stage ran on this handler, so any handler change needs a new hosted run.
-`scripts/posthog-infra validate` runs the offline tests in `infra/posthog/tests` that prove the
-refusal against a mocked provider. Verification compares the
-managed handler hash, enabled state and merge filter with the canonical configuration.
+Set `erasure_enabled.production = true` in the protected deployment variables and follow the
+normal plan, gaps diff, apply and verify sequence. Provider completion and the hosted lifecycle
+ledger do not gate deployment, as decided in [ADR 0150](adr/0150-report-erasure-complete-only-after-the-events-are-gone.md).
+OpenTofu still refuses an enabled service without its scoped API credential and active master key.
+`scripts/posthog-infra validate` tests enabled and disabled plans and credential rejection against
+a mocked provider. Verification compares the managed handler hash, enabled state and identity
+merge filter with the canonical configuration. The [hosted lifecycle observation](telemetry-erasure-implementation.md)
+records the actual outcomes separately; pending evidence is never converted into a passing result.
 
 After production activation, the public release variables `POSTHOG_ERASURE_ENDPOINT` and
 `POSTHOG_ERASURE_AUDIENCE` carry the managed webhook URL and `symphony:<project-id>` audience.
@@ -257,7 +257,7 @@ Packaging validates and checks both in the application archive, and refuses an a
 than `symphony:<id>` with the ID in `infra/posthog/production-project-id`. `verify` checks that
 file against the production project. They contain no credential.
 Leaving both variables empty preserves the original profile. Setting only one fails packaging.
-Do not publish these variables before the deployment gate passes.
+Publish these variables only after the enabled deployment passes readback verification.
 
 Operational status flags are not configuration resources. `verify` fails its advisory
 `erasure.status_flags` check at 500 non-deleted flags, well below PostHog's 2,000-flag limit.

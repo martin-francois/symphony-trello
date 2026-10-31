@@ -16,7 +16,7 @@ export function erasureService(scope: string, project: number, versions: readonl
     .replaceAll("${master_key_references}", versions.map(v => `'${v}': inputs.master_${v}`).join(", "));
 }
 
-/** SHA-256 of the raw template file, the value OpenTofu's `filesha256` computes for the activation gate. */
+/** SHA-256 of the raw template file, binding hosted verification evidence to the handler that ran. */
 export function handlerTemplateSha256(): string {
   return createHash("sha256").update(readFileSync(HANDLER_TEMPLATE)).digest("hex");
 }

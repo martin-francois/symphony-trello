@@ -1,5 +1,4 @@
-# Production erasure deploys only with a hosted lifecycle pass for the exact handler template
-# (docs/telemetry-erasure-implementation.md). Offline: the provider is mocked and nothing is applied.
+# Production erasure does not wait for provider completion. These plans use a mocked provider.
 mock_provider "posthog" {}
 
 variables {
@@ -12,28 +11,10 @@ variables {
   }
 }
 
-run "production_without_a_pass_is_refused" {
+run "production_plans_without_a_lifecycle_ledger" {
   command = plan
   variables {
     erasure_enabled = { production = true, test = false }
-  }
-  expect_failures = [var.erasure_enabled]
-}
-
-run "production_with_a_pass_for_another_handler_is_refused" {
-  command = plan
-  variables {
-    erasure_enabled        = { production = true, test = false }
-    erasure_lifecycle_pass = "0000000000000000000000000000000000000000000000000000000000000000"
-  }
-  expect_failures = [var.erasure_enabled]
-}
-
-run "production_with_a_pass_for_this_handler_plans" {
-  command = plan
-  variables {
-    erasure_enabled        = { production = true, test = false }
-    erasure_lifecycle_pass = filesha256("erasure-service.hog.tftpl")
   }
 }
 
@@ -50,4 +31,36 @@ run "a_role_without_secrets_gets_the_module_default" {
     erasure_enabled = { production = false, test = false }
     erasure_secrets = {}
   }
+}
+
+run "enabled_service_without_credentials_is_refused" {
+  command = plan
+  module {
+    source = "./modules/project"
+  }
+  variables {
+    name            = "Symphony credential rejection test"
+    organization_id = "@current"
+    erasure_enabled = true
+    erasure_secrets = null
+  }
+  expect_failures = [posthog_hog_function.erasure]
+}
+
+run "enabled_service_without_its_active_master_is_refused" {
+  command = plan
+  module {
+    source = "./modules/project"
+  }
+  variables {
+    name            = "Symphony key rejection test"
+    organization_id = "@current"
+    erasure_enabled = true
+    erasure_secrets = {
+      active_key  = "k2"
+      master_keys = { k1 = "0000000000000000000000000000000000000000000000000000000000000001" }
+      api_key     = "phx_mock"
+    }
+  }
+  expect_failures = [posthog_hog_function.erasure]
 }

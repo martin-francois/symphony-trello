@@ -1,12 +1,11 @@
 // Readers for the local files scripts/posthog-infra consults before or around OpenTofu: the backend
-// record, `tofu show -json`, `tofu version -json`, the outputs file and the roles it describes, the
-// committed production project id, and the lifecycle ledger. None of them needs the personal API
+// record, `tofu show -json`, `tofu version -json`, the outputs file and the roles it describes, and the
+// committed production project id. None of them needs the personal API
 // key, so the wrapper calls the ones it uses without credentials.
 
 import {readFileSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
-import {authorizedHandlerSha256, type LifecycleOutcome} from "./erasure-lifecycle-ledger.ts";
 import {asObject, InfraError, type Json, type JsonObject} from "./posthog-api.ts";
 
 interface BackendRecord {
@@ -43,12 +42,6 @@ export function projectIdFromShow(show: Show, role: string): string {
     throw new StateFileError(`no ${address} in state`);
   }
   return String(resource.values.id);
-}
-
-/** The OpenTofu argument that passes the lifecycle pass on, or none when the ledger grants none. */
-export function lifecyclePassArguments(ledger: LifecycleOutcome): readonly string[] {
-  const sha256 = authorizedHandlerSha256(ledger);
-  return sha256 === undefined ? [] : [`-var=erasure_lifecycle_pass=${sha256}`];
 }
 
 export function tofuVersion(version: {readonly terraform_version: string}): string {
