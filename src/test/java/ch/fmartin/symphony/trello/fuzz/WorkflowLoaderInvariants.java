@@ -27,6 +27,7 @@ import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.composer.Composer;
+import org.yaml.snakeyaml.error.YAMLException;
 import org.yaml.snakeyaml.events.Event;
 import org.yaml.snakeyaml.events.ImplicitTuple;
 import org.yaml.snakeyaml.events.ScalarEvent;
@@ -40,6 +41,8 @@ import org.yaml.snakeyaml.parser.Parser;
 import org.yaml.snakeyaml.parser.ParserImpl;
 import org.yaml.snakeyaml.reader.StreamReader;
 import org.yaml.snakeyaml.resolver.Resolver;
+import org.yaml.snakeyaml.scanner.ScannerImpl;
+import org.yaml.snakeyaml.tokens.Token;
 
 /// Domain properties of [WorkflowLoader] shared by the standalone `WorkflowLoaderFuzzer` and the
 /// JUnit `WorkflowLoaderFuzzTest`. It throws [AssertionError] instead of using AssertJ because the
@@ -133,11 +136,15 @@ public final class WorkflowLoaderInvariants {
     /// independent of the loader. It resolves aliases into shared nodes, keeps merge keys as keys
     /// tagged `!!merge`, and keeps repeated keys, so each rule is visible in its node graph.
     private static void assertYamlRules(String frontMatter, LoadResult result) {
+        if (hasTrailingDocumentContent(frontMatter)) {
+            check(result.definition() == null, "front matter with several documents is rejected");
+            return;
+        }
         Node root;
         try {
             root = compose(frontMatter);
         } catch (RuntimeException notComposable) {
-            // Invalid YAML, several documents, or one of SnakeYAML's own limits: no oracle.
+            // Invalid YAML or one of SnakeYAML's own limits: no node oracle.
             return;
         }
         WorkflowDefinition definition = result.definition();
@@ -156,6 +163,32 @@ public final class WorkflowLoaderInvariants {
                     hasShape(root, definition.config()),
                     "an accepted config has the structure of the YAML with every alias resolved");
         }
+    }
+
+    /// Detects a second document or invalid content after the first document ends, independently of
+    /// the production reader. The differential corpus excludes these deliberately changed inputs.
+    public static boolean hasTrailingDocumentContent(String frontMatter) {
+        boolean documentStarted = false;
+        boolean documentEnded = false;
+        try {
+            var scanner = new ScannerImpl(new StreamReader(frontMatter), new LoaderOptions());
+            while (!scanner.checkToken(Token.ID.StreamEnd)) {
+                Token.ID token = scanner.getToken().getTokenId();
+                if (documentEnded
+                        || documentStarted && (token == Token.ID.DocumentStart || token == Token.ID.Directive)) {
+                    return true;
+                }
+                if (token == Token.ID.DocumentEnd) {
+                    documentEnded = true;
+                } else if (token != Token.ID.StreamStart && token != Token.ID.Directive) {
+                    documentStarted = true;
+                }
+            }
+        } catch (YAMLException | IllegalArgumentException invalidYaml) {
+            // SnakeYAML uses IllegalArgumentException for truncated or invalid Unicode escapes too.
+            return documentEnded;
+        }
+        return false;
     }
 
     /// Composes front matter with SnakeYAML, reading a scalar with the non-specific tag `!` as a

@@ -4,6 +4,7 @@ date: 2026-10-31
 decision-makers: [François Martin]
 consulted:
   - "[GitHub issue #786](https://github.com/martin-francois/symphony-trello/issues/786)"
+  - "[GitHub issue #1193](https://github.com/martin-francois/symphony-trello/issues/1193)"
   - "[GitHub changelog: Actions YAML anchors and non-public workflow templates](https://github.blog/changelog/2025-09-18-actions-yaml-anchors-and-non-public-workflow-templates/)"
   - "[actions/runner issue #1182: merge keys not supported by the new parser](https://github.com/actions/runner/issues/1182#issuecomment-2810242069)"
   - "[YAML 1.2.2 specification](https://yaml.org/spec/1.2.2/)"
@@ -51,7 +52,7 @@ the Java code implement it?
 
 * A workflow loads the config its YAML describes, or fails with a `workflow_parse_error` that names
   the problem and the key.
-* Front matter that loaded before and uses none of the four cases loads to exactly the same values
+* Front matter that loaded before and uses none of the five cases loads to exactly the same values
   and Java types: `yes` and `on` stay booleans, `0o17` stays a string, `1_000` stays an integer,
   timestamps stay strings, and keys stay strings.
 * A small file cannot expand into a huge config through nested aliases (billion laughs).
@@ -96,6 +97,24 @@ Chosen rules, as `SPEC.md` section 5.2 states them:
 4. Empty front matter, and front matter with only blank lines, spaces and comments, is an empty
    config, like `null`. A tab that starts a line, alone or before a comment, stays a YAML syntax
    error, as it was before.
+5. Front matter contains one YAML document. A second document, even when empty, or content after
+   an explicit document end fails with `workflow_parse_error` naming its front matter line.
+   A single document may retain an explicit start marker and a final `...` followed by comments.
+
+The fifth rule follows the maintainer's decision in
+[GitHub issue #1193](https://github.com/martin-francois/symphony-trello/issues/1193).
+Jackson previously returned the first document without inspecting the rest. Warning while ignoring
+later settings was rejected because the worker would still run with a different config from the
+one the operator wrote. Merging documents was rejected because it would add precedence rules.
+The reader enables Jackson's trailing-token check and inspects the source after the first document's
+end event. Only blank lines and comments are allowed there. SnakeYAML consumes trailing directives
+and repeated end markers without another document-start event, so counting document-start events
+alone misses forbidden content. Inspecting the remainder also finds the starting line of a malformed
+second document before its parser error points at a later line. Marks count Unicode code points;
+the source offset converts those to Java string indices. The remainder check does not parse values
+or perform a second YAML parse. It also covers a first document containing `null` or no entries.
+An invalid first document retains its existing error precedence, including the non-map error.
+The independent fuzz oracle inspects scanner tokens, including directives and end markers.
 
 Chosen implementation: `WorkflowFrontMatterYaml` subclasses Jackson's `YAMLFactory` and
 `YAMLParser`. Its parser overrides `getEvent()`, which Jackson documents as the hook "to influence
@@ -164,6 +183,8 @@ Alternatives for the limits:
 * Bad, because the replay and key checks are about 250 lines of code on Jackson 2.x internals
   (`getEvent()`, `_lastEvent`, `_yamlResolver`). A move to Jackson 3 must port them.
 * Bad, because a setup write that rewrites the front matter turns aliases into copies.
+* Bad, because a workflow with several documents now stops loading instead of ignoring later
+  settings. Remove its inner document markers and combine the settings into one document.
 * Neutral, because setup now reads a key without a value as `null`, as the loader always did.
   Regeneration writes such a Trello tool setting as `null` instead of `""`, and an empty
   `trello_tools:` section as `{}` where setup used to fail with `setup_workflow_invalid`.
@@ -178,6 +199,10 @@ Alternatives for the limits:
   an alias supplies, an anchor redefined later and inside its own node, an undefined alias, and
   both alias limits at and one past the threshold. Anchor names containing backslashes or quotes
   resolve by their raw name; diagnostic escaping never changes the lookup key.
+  Multiple documents fail even when the first or second document is empty or the second is malformed.
+  The error names the second document's line without quoting its settings. Startup port reads reject
+  the same inputs, and setup port updates leave the original file unchanged. Final document-end
+  markers and marker-like text in scalar blocks remain valid.
 * `WorkflowFrontMatterYamlCostTest` checks that anchors nested 200 deep allocate about what plain
   Jackson allocates for the same front matter. It also checks that a billion-laughs document, a
   long scalar copied by many aliases, and deep nesting fail within a bounded time as a
@@ -186,9 +211,10 @@ Alternatives for the limits:
   `WORKFLOW.example.md`, the fuzz seed corpus and the Java text blocks, plus hand-made scalars and
   structures, through plain Jackson and through `WorkflowFrontMatterYaml`, and requires the same
   values with the same Java types or a failure on both sides. SnakeYAML's own parser and composer
-  pick out the inputs that use one of the four rules, so the filter does not depend on the code
+  pick out the inputs that use one of the five rules, so the filter does not depend on the code
   under test.
-* `WorkflowLoaderInvariants` checks every fuzz input against SnakeYAML's composer: no content gives
+* `WorkflowLoaderInvariants` checks every fuzz input against SnakeYAML's parser and composer:
+  trailing document content fails, no content gives
   an empty config, a merge or repeated key fails, and an accepted config has the maps, lists and
   keys of the YAML with aliases resolved. `WorkflowConfigInvariants` checks that the startup port
   read agrees with the loader.

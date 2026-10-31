@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.workflow;
 
 import static ch.fmartin.symphony.trello.fuzz.WorkflowLoaderInvariants.MAX_MARKDOWN_BYTES;
 import static ch.fmartin.symphony.trello.fuzz.WorkflowLoaderInvariants.assertWorkflowLoaderProperties;
+import static ch.fmartin.symphony.trello.fuzz.WorkflowLoaderInvariants.hasTrailingDocumentContent;
 import static ch.fmartin.symphony.trello.fuzz.WorkflowLoaderInvariants.parse;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -27,6 +28,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.parallel.Isolated;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 @ExtendWith(FuzzIsolationExtension.class)
 @Isolated
@@ -40,6 +42,25 @@ final class WorkflowLoaderFuzzTest {
     Path tempDir;
 
     private final WorkflowLoader loader = new WorkflowLoader();
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\"\\x", "\"\\u", "\"\\U", "\"\\UFFFFFFFF\"", "\"\\U00110000\""})
+    void malformedEscapesDoNotCrashTheDocumentBoundaryOracle(String malformedYaml) {
+        // given
+        String afterDocumentEnd = "a: 1\n...\n" + malformedYaml;
+
+        // when
+        boolean malformedFirstDocument = hasTrailingDocumentContent(malformedYaml);
+        boolean malformedTrailingContent = hasTrailingDocumentContent(afterDocumentEnd);
+
+        // then
+        assertThat(malformedFirstDocument)
+                .as("an invalid first document does not imply trailing content")
+                .isFalse();
+        assertThat(malformedTrailingContent)
+                .as("malformed content after a document end remains trailing content")
+                .isTrue();
+    }
 
     @FuzzTest(maxDuration = "10s", maxExecutions = 20_000)
     void workflowLoaderHandlesArbitraryWorkflowBytes(FuzzedDataProvider data) {

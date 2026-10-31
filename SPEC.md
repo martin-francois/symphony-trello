@@ -474,6 +474,13 @@ Parsing rules:
 - Remaining lines become the prompt body.
 - If front matter is absent, treat the entire file as prompt body and use an empty config map.
 - YAML front matter MUST decode to a map/object; non-map YAML is an error.
+- Front matter MUST contain a single YAML document. A second document, including an empty one,
+  or content after an explicit `...` document end MUST fail with `workflow_parse_error` naming
+  the front matter line where the second document or trailing content starts. A final `...`
+  followed only by whitespace and comments remains valid. Remove inner document markers and
+  combine the settings into one document to migrate an affected workflow.
+  An invalid first document retains its existing error, including `workflow_front_matter_not_a_map`
+  for a sequence, before the reader inspects later documents.
 - Front matter that is empty, or whose lines hold only spaces and comments, decodes to an empty
   config map, the same as front matter that is the YAML value `null`. A tab that starts a line,
   alone or before a comment, is a YAML syntax error and so a `workflow_parse_error`.
@@ -4061,6 +4068,9 @@ that a second formatting pass leaves the source unchanged.
 - Invalid YAML front matter returns typed error
 - Front matter non-map returns typed error
 - Empty and comment-only front matter loads as an empty config
+- A second YAML document, even empty or after a null first document, returns `workflow_parse_error`
+  naming its starting line. The loader, startup configuration read and setup editor share this rule.
+  A final document end and markers inside scalar values remain valid.
 - Front matter aliases resolve to the anchored scalar, sequence, or map, including anchor names
   containing backslashes or quotes and names that differ from their diagnostic escapes; an undefined alias, an
   alias inside its own anchored node, and alias expansion past the node or character limit return

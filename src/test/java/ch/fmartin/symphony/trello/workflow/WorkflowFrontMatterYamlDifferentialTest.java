@@ -354,10 +354,13 @@ final class WorkflowFrontMatterYamlDifferentialTest {
         return cases;
     }
 
-    // Inputs that use a section 5.2 rule (an alias, a merge key, a repeated key, or no content) load
+    // Inputs that use a section 5.2 rule (aliases, merge keys, repeated keys, multiple documents or no content) load
     // differently on purpose; WorkflowFrontMatterYamlRulesTest owns them. SnakeYAML's own parser and
     // composer find them, independently of the code under test.
     private static boolean outsideTheDecidedRules(String yaml) {
+        if (WorkflowLoaderInvariants.hasTrailingDocumentContent(yaml)) {
+            return false;
+        }
         var snakeYaml = new Yaml();
         try {
             for (Event event : snakeYaml.parse(new StringReader(yaml))) {
@@ -367,7 +370,8 @@ final class WorkflowFrontMatterYamlDifferentialTest {
             }
             Node root = WorkflowLoaderInvariants.compose(yaml);
             return root != null && !WorkflowLoaderInvariants.hasMergeOrRepeatedKey(root);
-        } catch (YAMLException notOneValidDocument) {
+        } catch (YAMLException | IllegalArgumentException notOneValidDocument) {
+            // Malformed escapes stay in the corpus so both readers must agree on their rejection.
             return true;
         }
     }

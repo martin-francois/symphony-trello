@@ -1,0 +1,6 @@
+---
+a: 1
+--- # second document
+b: 2
+---
+Body
