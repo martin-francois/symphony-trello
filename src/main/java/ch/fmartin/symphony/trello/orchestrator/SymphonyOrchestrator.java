@@ -600,7 +600,7 @@ public class SymphonyOrchestrator {
             return;
         }
         try {
-            WatchService watchService = parent.getFileSystem().newWatchService();
+            WatchService watchService = parent.getFileSystem().newWatchService(); // NOPMD - the field owns it.
             workflowWatchService = watchService;
             parent.register(
                     watchService,
