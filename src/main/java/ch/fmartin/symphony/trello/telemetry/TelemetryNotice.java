@@ -16,7 +16,8 @@ public final class TelemetryNotice {
     public static final String PURPOSE_SENTENCE = MAINTAINER + " uses these reports only to improve " + PRODUCT_NAME
             + ", with processing through PostHog EU.";
     public static final String FIELD_SUMMARY =
-            "Includes a random ID, registration date, app version, OS/architecture, and board/import/create counts.";
+            "Includes a random ID, registration date, app version, OS/architecture, install-location override names,"
+                    + " and board/import/create counts.";
     public static final String ENABLE_COMMAND = "symphony-trello telemetry enable";
     /// The subcommand words, which the installers append to their own command name.
     public static final String DISABLE_ARGUMENTS = "telemetry disable";

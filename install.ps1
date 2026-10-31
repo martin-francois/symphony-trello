@@ -897,6 +897,25 @@ function Set-TelemetryEnvironmentPreference {
   Write-Status "WARN" "  Could not store the usage-reporting preference; processes that inherit SYMPHONY_TRELLO_TELEMETRY_DISABLED stay disabled."
 }
 
+# The names of the location inputs that shaped this installation, for the usage report: names
+# only, never values or paths. The command wrapper sets SYMPHONY_TRELLO_CONFIG_DIR,
+# SYMPHONY_TRELLO_WORKSPACE_ROOT and SYMPHONY_TRELLO_STATE_HOME for itself and marks that with
+# SYMPHONY_TRELLO_APP_HOME, so under the wrapper those three are not the user's inputs. This
+# installer resolves every location again on each run, so the current inputs are the record.
+function Get-InstallOverrideNames {
+  $names = @()
+  if ($env:SYMPHONY_HOME) { $names += "SYMPHONY_HOME" }
+  if (-not $env:SYMPHONY_TRELLO_APP_HOME) {
+    if ($env:SYMPHONY_TRELLO_CONFIG_DIR) { $names += "SYMPHONY_TRELLO_CONFIG_DIR" }
+    if ($env:SYMPHONY_TRELLO_WORKSPACE_ROOT) { $names += "SYMPHONY_TRELLO_WORKSPACE_ROOT" }
+    if ($env:SYMPHONY_TRELLO_STATE_HOME) { $names += "SYMPHONY_TRELLO_STATE_HOME" }
+  }
+  if ($ScriptBoundParameters.ContainsKey("SymphonyHome")) { $names += "--symphony-home" }
+  if ($ScriptBoundParameters.ContainsKey("Prefix")) { $names += "--prefix" }
+  if ($ScriptBoundParameters.ContainsKey("BinDir")) { $names += "--bin-dir" }
+  return ($names -join ",")
+}
+
 function Write-InstallContext {
   if ($DryRun) {
     return
@@ -931,6 +950,7 @@ function Write-InstallContext {
       "workspace_root=$WorkspaceRoot",
       "state_home=$StateHome",
       "bin_dir=$BinDir",
+      "install_overrides=$(Get-InstallOverrideNames)",
       "dry_run=$DryRun",
       "no_onboard=$NoOnboard",
       "codex_npm_prefix=$CodexNpmPrefix",

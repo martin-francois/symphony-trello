@@ -5865,10 +5865,20 @@ When this profile is used:
   the dedicated PostHog EU project endpoint with the body fields `api_key`, `event`, `distinct_id`,
   `uuid`, and `timestamp`, and a `properties` object containing exactly
   `telemetry_schema_version`, `registered_on`, `app_version`, `os_family`, `os_release`,
-  `linux_distribution`, `runtime_arch`, `connected_board_count`, `board_imports_total`,
-  `board_creations_total`, `$geoip_disable`, and `$process_person_profile`. No other event type,
+  `linux_distribution`, `runtime_arch`, `install_overrides`, `connected_board_count`,
+  `board_imports_total`, `board_creations_total`, `$geoip_disable`, and `$process_person_profile`.
+  No other event type,
   property, SDK metadata, identifier, name, path, credential, prompt, or error text MAY be sent, in
   plain or hashed form
+- `install_overrides` MUST be the list of install-location inputs the installer recorded by name
+  at install time, from the fixed list `SYMPHONY_HOME`, `SYMPHONY_TRELLO_CONFIG_DIR`,
+  `SYMPHONY_TRELLO_WORKSPACE_ROOT`, `SYMPHONY_TRELLO_STATE_HOME`, `--symphony-home`, `--prefix`,
+  `--bin-dir`, and `microos-var` for an automatically chosen MicroOS `/var` layout, in that order;
+  values and paths MUST NOT be sent, and names outside the list MUST be dropped, never guessed. An
+  installer run through the command wrapper MUST NOT count the variables the wrapper sets for
+  itself. An update that keeps the recorded locations MUST keep the recorded names; an install that
+  resolves the locations again MUST record the current inputs. A missing record MUST be reported as
+  `null`, and the field MUST pass the same stored-report re-validation as the platform fields
 - when automated erasure is configured, `distinct_id` MUST contain an issuer-selected random
   installation UUID, a dot, and a locally generated random reporting-period UUID. The client MUST
   persist its ownership credential before the first heartbeat. Lost issuance responses MAY be

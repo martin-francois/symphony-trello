@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.telemetry;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.OptionalInt;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
@@ -30,9 +31,11 @@ public final class HeartbeatSnapshots {
     /// entering the state lock so the locked transaction stays short.
     public Observation observe() {
         OptionalInt boards = installation.boards().distinctBoardCount();
+        InstallContext context = installation.installContext().get();
         return new Observation(
                 platform.platform(),
-                installation.installedVersion().get().orElse(null),
+                context.appVersion().orElse(null),
+                context.installOverrides().orElse(null),
                 boards.isPresent() ? boards.getAsInt() : null);
     }
 
@@ -46,14 +49,22 @@ public final class HeartbeatSnapshots {
                 detected.osRelease(),
                 detected.linuxDistribution(),
                 detected.runtimeArch().wireName(),
+                observation.installOverrides(),
                 observation.connectedBoardCount(),
                 state.boardImportsTotal(),
                 state.boardCreationsTotal());
     }
 
-    /// Platform, installed release, and board count as seen at one moment.
+    /// Platform, installer record, and board count as seen at one moment.
     public record Observation(
-            Platform platform, @Nullable String installedVersion, @Nullable Integer connectedBoardCount) {}
+            Platform platform,
+            @Nullable String installedVersion,
+            @Nullable List<String> installOverrides,
+            @Nullable Integer connectedBoardCount) {
+        public Observation {
+            installOverrides = installOverrides == null ? null : List.copyOf(installOverrides);
+        }
+    }
 
     /// A body built now for inspection. Missing identity fields stay `null`; such a body is not
     /// sendable and [HeartbeatEvent#requireSendable] rejects it.

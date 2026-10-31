@@ -51,8 +51,9 @@ For Windows, WSL2 is recommended. Run the Linux installer inside WSL2.
 Native Windows PowerShell is best effort; see [Installer Reference](#installer-reference).
 
 Installed copies send one small usage report per day while a worker runs: a random installation ID,
-the registration date, the app version, OS family, release and architecture, and how many boards
-are connected, imported, and created. It goes to the maintainer's PostHog EU project and is used only
+the registration date, the app version, OS family, release and architecture, which install-location
+overrides were set (names only, never paths), and how many boards are connected, imported, and
+created. It goes to the maintainer's PostHog EU project and is used only
 to improve Symphony for Trello. The first report is sent at the earliest five minutes after the
 first worker starts; after `symphony-trello telemetry enable`, the next report follows at the next
 worker check. `symphony-trello telemetry disable` turns it off, and setting

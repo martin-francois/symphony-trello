@@ -19,6 +19,7 @@ public enum HeartbeatField {
     OS_RELEASE(Names.OS_RELEASE, Envelope.PROPERTY),
     LINUX_DISTRIBUTION(Names.LINUX_DISTRIBUTION, Envelope.PROPERTY),
     RUNTIME_ARCH(Names.RUNTIME_ARCH, Envelope.PROPERTY),
+    INSTALL_OVERRIDES(Names.INSTALL_OVERRIDES, Envelope.PROPERTY),
     CONNECTED_BOARD_COUNT(Names.CONNECTED_BOARD_COUNT, Envelope.PROPERTY),
     BOARD_IMPORTS_TOTAL(Names.BOARD_IMPORTS_TOTAL, Envelope.PROPERTY),
     BOARD_CREATIONS_TOTAL(Names.BOARD_CREATIONS_TOTAL, Envelope.PROPERTY),
@@ -65,6 +66,7 @@ public enum HeartbeatField {
         public static final String OS_RELEASE = "os_release";
         public static final String LINUX_DISTRIBUTION = "linux_distribution";
         public static final String RUNTIME_ARCH = "runtime_arch";
+        public static final String INSTALL_OVERRIDES = "install_overrides";
         public static final String CONNECTED_BOARD_COUNT = "connected_board_count";
         public static final String BOARD_IMPORTS_TOTAL = "board_imports_total";
         public static final String BOARD_CREATIONS_TOTAL = "board_creations_total";

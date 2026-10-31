@@ -21,6 +21,11 @@ for project setup.
   and count installations, not operations.
 - `null` stays separate from `0`. `connected_board_count` is `null` when the manifest was
   unreadable; `app_version` is `null` for source builds. Show them as their own bucket.
+- `install_overrides` lists, by name only, which install-location inputs were set at install time
+  (`SYMPHONY_HOME`, `--prefix`, `microos-var`, and so on). Read it together with `os_family`,
+  `os_release`, `linux_distribution` and `runtime_arch`: a platform where installations need an
+  override is a platform whose default layout fails, and the fix is a better default, not a
+  documented override. No panel reads it yet; `[]` means no override, `null` means no record.
 - Every number is bounded by the observation window. An installation that stopped reporting before
   the window started is invisible, and a repeated old `registered_on` in a fresh event does not bring
   back installations that were erased from history. No panel proves an uninstall, satisfaction, or

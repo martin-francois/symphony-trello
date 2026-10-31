@@ -27,7 +27,18 @@ final class HeartbeatJsonTest {
                 DISTINCT_ID,
                 EVENT_UUID,
                 TIMESTAMP,
-                new HeartbeatProperties(1, "2026-09-22", "1.2.0", "linux", "24.04", "ubuntu", "arm64", 3, 4, 2));
+                new HeartbeatProperties(
+                        1,
+                        "2026-09-22",
+                        "1.2.0",
+                        "linux",
+                        "24.04",
+                        "ubuntu",
+                        "arm64",
+                        List.of("SYMPHONY_HOME", "--prefix"),
+                        3,
+                        4,
+                        2));
 
         // when
         String json = HeartbeatJson.serialize(event);
@@ -50,6 +61,7 @@ final class HeartbeatJsonTest {
                             "os_release" : "24.04",
                             "linux_distribution" : "ubuntu",
                             "runtime_arch" : "arm64",
+                            "install_overrides" : [ "SYMPHONY_HOME", "--prefix" ],
                             "connected_board_count" : 3,
                             "board_imports_total" : 4,
                             "board_creations_total" : 2,
@@ -75,7 +87,7 @@ final class HeartbeatJsonTest {
                 null,
                 EVENT_UUID,
                 TIMESTAMP,
-                new HeartbeatProperties(1, null, null, "windows", "11", null, "x64", null, 0, 0));
+                new HeartbeatProperties(1, null, null, "windows", "11", null, "x64", null, null, 0, 0));
 
         // when
         JsonNode parsed = JSON.readTree(HeartbeatJson.serialize(event));
@@ -91,6 +103,9 @@ final class HeartbeatJsonTest {
                 .as("unknown board count is null, not zero")
                 .isTrue();
         assertThat(parsed.get("properties").get("board_imports_total").asInt()).isZero();
+        assertThat(parsed.get("properties").get("install_overrides").isNull())
+                .as("an installer that left no record is null, not an empty list")
+                .isTrue();
         assertThat(parsed.get("properties").get("linux_distribution").isNull())
                 .as("non-Linux distribution is null")
                 .isTrue();
@@ -107,7 +122,7 @@ final class HeartbeatJsonTest {
             String scenario, String family, String release, String distribution, String arch) throws IOException {
         // given
         var properties =
-                new HeartbeatProperties(1, "2026-09-22", "1.2.0", family, release, distribution, arch, 1, 1, 0);
+                new HeartbeatProperties(1, "2026-09-22", "1.2.0", family, release, distribution, arch, null, 1, 1, 0);
         var event = new HeartbeatEvent(
                 "phc_token", HeartbeatEvent.EVENT_NAME, DISTINCT_ID, EVENT_UUID, TIMESTAMP, properties);
 
@@ -135,7 +150,7 @@ final class HeartbeatJsonTest {
                 null,
                 EVENT_UUID,
                 TIMESTAMP,
-                new HeartbeatProperties(1, null, null, "linux", "13", "debian", "x64", 0, 0, 0));
+                new HeartbeatProperties(1, null, null, "linux", "13", "debian", "x64", null, 0, 0, 0));
 
         // when
         ThrowingCallable send = placeholder::requireSendable;
@@ -160,7 +175,7 @@ final class HeartbeatJsonTest {
                 distinctId,
                 EVENT_UUID,
                 timestamp,
-                new HeartbeatProperties(1, registeredOn, null, "linux", "13", "debian", "x64", 0, 0, 0));
+                new HeartbeatProperties(1, registeredOn, null, "linux", "13", "debian", "x64", null, 0, 0, 0));
 
         // when
         ThrowingCallable send = event::requireSendable;
@@ -194,6 +209,7 @@ final class HeartbeatJsonTest {
                 "os_release",
                 "linux_distribution",
                 "runtime_arch",
+                "install_overrides",
                 "connected_board_count",
                 "board_imports_total",
                 "board_creations_total",

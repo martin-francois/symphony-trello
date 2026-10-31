@@ -40,6 +40,8 @@ BIN_DIR_FROM_CONTEXT=false
 SYSTEMD_USER_DIR_FROM_CONTEXT=false
 SYSTEMD_SERVICE_PATH_FROM_CONTEXT=false
 AUTOSTART_ENV_PATH_FROM_CONTEXT=false
+# Names of the location inputs an earlier install recorded; kept when its locations are reused.
+INSTALL_OVERRIDES_FROM_CONTEXT=""
 [[ -n "${SYMPHONY_HOME:-}" ]] && SYMPHONY_HOME_CONFIGURED=true
 [[ -n "${SYMPHONY_TRELLO_CONFIG_DIR:-}" ]] && CONFIG_DIR_CONFIGURED=true
 [[ -n "${SYMPHONY_TRELLO_WORKSPACE_ROOT:-}" ]] && WORKSPACE_ROOT_CONFIGURED=true
@@ -359,6 +361,37 @@ apply_telemetry_environment_preference() {
   fi
 }
 
+# The names of the location inputs that shaped this installation, for the usage report: names
+# only, never values or paths. Explicit inputs count, and so do the names an applied earlier
+# context recorded, because its locations are still in use. The command wrapper exports
+# SYMPHONY_TRELLO_CONFIG_DIR, SYMPHONY_TRELLO_WORKSPACE_ROOT and SYMPHONY_TRELLO_STATE_HOME for
+# itself and marks that with SYMPHONY_TRELLO_APP_HOME, so under the wrapper those three are not
+# the user's inputs.
+install_override_names() {
+  local names="" name
+  local under_wrapper=false
+  [[ -n "${SYMPHONY_TRELLO_APP_HOME:-}" ]] && under_wrapper=true
+  for name in SYMPHONY_HOME SYMPHONY_TRELLO_CONFIG_DIR SYMPHONY_TRELLO_WORKSPACE_ROOT SYMPHONY_TRELLO_STATE_HOME --prefix --bin-dir microos-var; do
+    local explicit=false
+    case "$name" in
+    SYMPHONY_HOME) [[ "$SYMPHONY_HOME_CONFIGURED" == true ]] && explicit=true ;;
+    SYMPHONY_TRELLO_CONFIG_DIR) [[ "$CONFIG_DIR_CONFIGURED" == true && "$under_wrapper" != true ]] && explicit=true ;;
+    SYMPHONY_TRELLO_WORKSPACE_ROOT) [[ "$WORKSPACE_ROOT_CONFIGURED" == true && "$under_wrapper" != true ]] && explicit=true ;;
+    SYMPHONY_TRELLO_STATE_HOME) [[ "$STATE_HOME_CONFIGURED" == true && "$under_wrapper" != true ]] && explicit=true ;;
+    --prefix) [[ "$PREFIX_CONFIGURED" == true ]] && explicit=true ;;
+    --bin-dir) [[ "$BIN_DIR_CONFIGURED" == true ]] && explicit=true ;;
+    microos-var) [[ "$LAYOUT_MODE" == "microos-var" ]] && explicit=true ;;
+    esac
+    case ",$INSTALL_OVERRIDES_FROM_CONTEXT," in
+    *",$name,"*) explicit=true ;;
+    esac
+    if [[ "$explicit" == true ]]; then
+      names="${names:+$names,}$name"
+    fi
+  done
+  printf '%s\n' "$names"
+}
+
 write_install_context() {
   if [[ "$DRY_RUN" == true ]]; then
     return
@@ -399,6 +432,7 @@ write_install_context() {
       printf 'autostart_env_path=%s\n' "$AUTOSTART_ENV_PATH"
       printf 'microos_var_root=%s\n' "$MICROOS_VAR_ROOT"
       printf 'created_microos_var_root=%s\n' "$MICROOS_VAR_ROOT_CREATED"
+      printf 'install_overrides=%s\n' "$(install_override_names)"
       printf 'dry_run=%s\n' "$DRY_RUN"
       printf 'no_onboard=%s\n' "$NO_ONBOARD"
       printf 'apt_updated=%s\n' "$APT_UPDATED"
@@ -760,6 +794,7 @@ install_context_replayable() {
 apply_install_context() {
   local context_file="$1" format_version value
   format_version="$(install_context_value "$context_file" install_format_version || true)"
+  INSTALL_OVERRIDES_FROM_CONTEXT="$(install_context_value "$context_file" install_overrides || true)"
   value="$(install_context_value "$context_file" layout_mode || true)"
   [[ -n "$value" ]] && LAYOUT_MODE="$value"
   value="$(install_context_value "$context_file" home_logical || true)"

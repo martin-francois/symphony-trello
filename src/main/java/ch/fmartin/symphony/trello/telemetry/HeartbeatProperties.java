@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
+import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
@@ -25,6 +26,7 @@ import org.jspecify.annotations.Nullable;
     Names.OS_RELEASE,
     Names.LINUX_DISTRIBUTION,
     Names.RUNTIME_ARCH,
+    Names.INSTALL_OVERRIDES,
     Names.CONNECTED_BOARD_COUNT,
     Names.BOARD_IMPORTS_TOTAL,
     Names.BOARD_CREATIONS_TOTAL,
@@ -39,12 +41,17 @@ public record HeartbeatProperties(
         @JsonProperty(Names.OS_RELEASE) String osRelease,
         @JsonProperty(Names.LINUX_DISTRIBUTION) @Nullable String linuxDistribution,
         @JsonProperty(Names.RUNTIME_ARCH) String runtimeArch,
+        @JsonProperty(Names.INSTALL_OVERRIDES) @Nullable List<String> installOverrides,
         @JsonProperty(Names.CONNECTED_BOARD_COUNT) @Nullable Integer connectedBoardCount,
         @JsonProperty(Names.BOARD_IMPORTS_TOTAL) long boardImportsTotal,
         @JsonProperty(Names.BOARD_CREATIONS_TOTAL) long boardCreationsTotal) {
 
     public static final int SCHEMA_VERSION = 1;
     private static final String UNKNOWN_PLATFORM_PROBLEM = "pending report has an unknown platform value";
+
+    public HeartbeatProperties {
+        installOverrides = installOverrides == null ? null : List.copyOf(installOverrides);
+    }
 
     /// Always true so PostHog adds no location data derived from the connection.
     @JsonProperty(Names.GEOIP_DISABLE)
@@ -63,6 +70,7 @@ public record HeartbeatProperties(
     public Optional<String> invariantProblem() {
         return schemaProblem()
                 .or(this::platformProblem)
+                .or(this::overridesProblem)
                 .or(this::versionProblem)
                 .or(this::countProblem)
                 .or(this::registrationProblem);
@@ -90,6 +98,18 @@ public record HeartbeatProperties(
         return normalized
                 ? Optional.empty()
                 : Optional.of("pending report has a platform release the normalizer never produces");
+    }
+
+    /// Every recorded override is a name from the fixed list, and none repeats.
+    private Optional<String> overridesProblem() {
+        if (installOverrides == null) {
+            return Optional.empty();
+        }
+        boolean known = installOverrides.stream()
+                .allMatch(name ->
+                        WireVocabulary.fromWireName(InstallOverride.class, name).isPresent());
+        boolean distinct = installOverrides.stream().distinct().count() == installOverrides.size();
+        return known && distinct ? Optional.empty() : Optional.of("pending report has an unknown install override");
     }
 
     private Optional<String> versionProblem() {

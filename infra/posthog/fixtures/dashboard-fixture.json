@@ -12,6 +12,7 @@
         "os_release": "24.04",
         "linux_distribution": "ubuntu",
         "runtime_arch": "x64",
+        "install_overrides": [],
         "connected_board_count": 3,
         "board_imports_total": 1,
         "board_creations_total": 1
@@ -54,6 +55,7 @@
         "os_release": "26",
         "linux_distribution": null,
         "runtime_arch": "arm64",
+        "install_overrides": ["SYMPHONY_HOME"],
         "connected_board_count": 1,
         "board_imports_total": 0,
         "board_creations_total": 1
@@ -81,6 +83,7 @@
         "os_release": "11",
         "linux_distribution": null,
         "runtime_arch": "x64",
+        "install_overrides": null,
         "connected_board_count": null,
         "board_imports_total": 0,
         "board_creations_total": 0
@@ -101,6 +104,7 @@
         "os_release": "26",
         "linux_distribution": null,
         "runtime_arch": "arm64",
+        "install_overrides": ["microos-var"],
         "connected_board_count": 2,
         "board_imports_total": 1,
         "board_creations_total": 0
@@ -125,6 +129,7 @@
         "os_release": "11",
         "linux_distribution": null,
         "runtime_arch": "x64",
+        "install_overrides": ["--prefix", "--bin-dir"],
         "connected_board_count": 1,
         "board_imports_total": 0,
         "board_creations_total": 0
