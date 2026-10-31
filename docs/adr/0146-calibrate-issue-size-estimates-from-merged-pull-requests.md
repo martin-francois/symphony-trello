@@ -155,7 +155,9 @@ one size label. Triage review checks that a new estimate follows the rules. To r
 calibration, repeat the study: pair closed issues with merged pull requests through GitHub's links,
 count each pull request with `scripts/size-labeler-sync-size-label.cjs`, take the issue's size label
 from its `LabeledEvent` and `UnlabeledEvent` timeline as it stood when the first pull request
-opened, drop issues without a label then and pairs whose scope changed, and compare the labels.
+opened, drop issues without a label then and pairs whose scope changed, set aside pairs whose
+scope cannot be judged either way as borderline and report them separately, and compare the labels
+of the remaining pairs.
 Update the rules and this ADR when a rule stops matching.
 
 ## Pros and Cons of the Options

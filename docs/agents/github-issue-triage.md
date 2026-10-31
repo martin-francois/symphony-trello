@@ -266,7 +266,8 @@ and apply triage labels. Spec-alignment auditing that may create issues lives in
   evidence and the sample size of each):
   - A test-only issue that adds a fuzz target, a test fake, a harness, or a snapshot suite is
     usually `size L` or larger.
-  - A flaky-test fix that stays inside one test is `size XS`. When the root cause is unknown, or
+  - A flaky-test fix that stays inside one test is `size XS`, unless you expect it to change more
+    than 49 lines; then size it by its lines as usual. When the root cause is unknown, or
     the fix changes a shared fixture or helper, use `size S`; when it rewrites a fixture or helper,
     use `size M`.
   - A change to `install.sh` usually changes `install.ps1` by about as many lines, and often
