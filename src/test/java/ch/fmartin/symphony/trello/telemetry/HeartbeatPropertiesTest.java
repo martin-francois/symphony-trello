@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.telemetry;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -69,7 +70,31 @@ final class HeartbeatPropertiesTest {
         assertThat(problem).isEmpty();
     }
 
+    @CsvSource({
+        "'', ",
+        "SYMPHONY_HOME, ",
+        "'SYMPHONY_HOME,--prefix,microos-var', ",
+        "SYMPHONY_HOME_VALUE=/home/alice, pending report has an unknown install override",
+        "'--prefix,--prefix', pending report has an unknown install override",
+        "/var/lib/symphony, pending report has an unknown install override"
+    })
+    @ParameterizedTest(name = "overrides [{0}] give problem [{1}]")
+    void storedOverridesMustBeDistinctNamesFromTheFixedList(String overrides, @Nullable String expected) {
+        // given
+        HeartbeatProperties stored = properties(List.of(overrides.isEmpty() ? new String[0] : overrides.split(",")));
+
+        // when
+        Optional<String> problem = stored.invariantProblem();
+
+        // then
+        assertThat(problem).isEqualTo(Optional.ofNullable(expected));
+    }
+
+    private static HeartbeatProperties properties(@Nullable List<String> overrides) {
+        return new HeartbeatProperties(1, "2026-09-22", "1.2.0", "linux", "24.04", "ubuntu", "x64", overrides, 3, 0, 0);
+    }
+
     private static HeartbeatProperties properties(String family, String release, @Nullable String distribution) {
-        return new HeartbeatProperties(1, "2026-09-22", "1.2.0", family, release, distribution, "x64", 3, 0, 0);
+        return new HeartbeatProperties(1, "2026-09-22", "1.2.0", family, release, distribution, "x64", null, 3, 0, 0);
     }
 }

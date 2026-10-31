@@ -81,7 +81,7 @@ final class TelemetryStateStoreTest {
         // given
         var store = new TelemetryStateStore(tempDir);
         var properties =
-                new HeartbeatProperties(1, "2026-09-22", "1.2.0", "linux", "13", "debian", "x64", 2, 1, 1);
+                new HeartbeatProperties(1, "2026-09-22", "1.2.0", "linux", "13", "debian", "x64", null, 2, 1, 1);
         TelemetryState full = TelemetryState.initial()
                 .withIdentity(UUID.fromString("74a69e87-089d-4fd1-8ac2-df8aab052cb1"), LocalDate.of(2026, 9, 22))
                 .withNotice(1, Instant.parse("2026-09-22T10:00:00Z"))
@@ -276,7 +276,7 @@ final class TelemetryStateStoreTest {
     private static TelemetryState validStoredState() {
         UUID eventUuid = UUID.fromString("95127c85-1c9e-460c-b652-0a3a7899cbde");
         var properties =
-                new HeartbeatProperties(1, "2026-09-22", "1.2.0", "linux", "13", "debian", "x64", 2, 1, 1);
+                new HeartbeatProperties(1, "2026-09-22", "1.2.0", "linux", "13", "debian", "x64", null, 2, 1, 1);
         return TelemetryState.initial()
                 .withIdentity(UUID.fromString("74a69e87-089d-4fd1-8ac2-df8aab052cb1"), LocalDate.of(2026, 9, 22))
                 .withNotice(1, Instant.parse("2026-09-22T10:00:00Z"))

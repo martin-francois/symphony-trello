@@ -48,6 +48,13 @@ Properties:
   `debian`, `fedora`, `arch`, `alpine`, `opensuse-leap`), `other` for an unlisted distribution, or
   `unknown`. On other systems it is `null`.
 - `runtime_arch`: the Java runtime architecture: `x64`, `arm64`, `x86`, `other`, or `unknown`.
+- `install_overrides`: the names of the install-location inputs that were set when the installer
+  ran, from a fixed list: `SYMPHONY_HOME`, `SYMPHONY_TRELLO_CONFIG_DIR`,
+  `SYMPHONY_TRELLO_WORKSPACE_ROOT`, `SYMPHONY_TRELLO_STATE_HOME`, `--symphony-home`, `--prefix`,
+  `--bin-dir`, and `microos-var` when the installer chose the MicroOS `/var` layout by itself. Names
+  only; the paths are never sent. An empty list means the installer recorded that none was set,
+  `null` means it left no record. With the platform fields this tells the maintainer on which
+  systems the default locations fail, so the defaults can be fixed instead of asking for overrides.
 - `connected_board_count`: how many distinct Trello boards are connected in the local manifest, or
   `null` when the manifest cannot be read. Board names and IDs are never sent.
 - `board_imports_total`: how many successful board imports this installation completed while

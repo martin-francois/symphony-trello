@@ -6,18 +6,22 @@ import java.util.Optional;
 import java.util.function.Supplier;
 
 /// The resolved installation context telemetry works in: where state lives, how boards are
-/// counted, which release is installed, and whether this process runs inside an installer-managed
+/// counted, what the installer recorded, and whether this process runs inside an installer-managed
 /// installation at all. Development, test, and CI runs resolve to a context that never sends.
 public record TelemetryInstallation(
         Optional<Path> stateDir,
         ConnectedBoardInventory boards,
-        Supplier<Optional<String>> installedVersion,
+        Supplier<InstallContext> installContext,
         TelemetryEnvironment environment,
         TelemetryDistribution distribution) {
 
     public static TelemetryInstallation absent(TelemetryEnvironment environment, TelemetryDistribution distribution) {
         return new TelemetryInstallation(
-                Optional.empty(), ConnectedBoardInventory.unavailable(), Optional::empty, environment, distribution);
+                Optional.empty(),
+                ConnectedBoardInventory.unavailable(),
+                () -> InstallContext.UNKNOWN,
+                environment,
+                distribution);
     }
 
     public static TelemetryInstallation of(
@@ -27,7 +31,7 @@ public record TelemetryInstallation(
             TelemetryDistribution distribution) {
         Path directory = stateDir.toAbsolutePath().normalize();
         return new TelemetryInstallation(
-                Optional.of(directory), boards, () -> InstalledVersion.read(directory), environment, distribution);
+                Optional.of(directory), boards, () -> InstallContext.read(directory), environment, distribution);
     }
 
     /// True only when the installer wrote its context into this state directory. That file is the

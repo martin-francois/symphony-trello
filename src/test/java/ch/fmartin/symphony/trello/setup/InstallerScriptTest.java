@@ -1915,6 +1915,65 @@ final class InstallerScriptTest {
     }
 
     @Test
+    void posixInstallerRecordsOverrideNamesAndKeepsThemWhenAnUpdateReusesTheLocations() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        Path installScript = Path.of("install.sh").toAbsolutePath();
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path home = temporaryDirectory.resolve("override-names-home");
+        Path app = temporaryDirectory.resolve("override-names-app");
+        Path config = temporaryDirectory.resolve("override-names-config");
+        Path state = home.resolve(".local/state/symphony-trello");
+        Path binDirectory = temporaryDirectory.resolve("override-names-bin");
+        Files.createDirectories(home);
+        Map<String, String> shared = Map.of(
+                "PATH",
+                fakeBin + File.pathSeparator + System.getenv("PATH"),
+                "HOME",
+                home.toString(),
+                "SYMPHONY_TRELLO_REPO_URL",
+                sourceRepository.toUri().toString(),
+                "SYMPHONY_TRELLO_REF",
+                "main",
+                "SYMPHONY_FAKE_LOG",
+                temporaryDirectory.resolve("override-names.log").toString());
+        Map<String, String> firstInstall = new LinkedHashMap<>(shared);
+        firstInstall.put("SYMPHONY_TRELLO_CONFIG_DIR", config.toString());
+        // An update launched under the command wrapper inherits the wrapper's own exports.
+        Map<String, String> updateUnderWrapper = new LinkedHashMap<>(shared);
+        updateUnderWrapper.put("SYMPHONY_TRELLO_APP_HOME", app.toString());
+        updateUnderWrapper.put("SYMPHONY_TRELLO_STATE_HOME", state.toString());
+
+        // when
+        ProcessResult installed = run(
+                firstInstall,
+                "bash",
+                installScript.toString(),
+                "--no-onboard",
+                "--no-update-path",
+                "--prefix",
+                app.toString(),
+                "--bin-dir",
+                binDirectory.toString());
+        installed.assertSuccess();
+        String firstContext = Files.readString(state.resolve(INSTALL_CONTEXT_PROPERTIES));
+        ProcessResult updated =
+                run(updateUnderWrapper, "bash", installScript.toString(), "--no-onboard", "--no-update-path");
+
+        // then
+        updated.assertSuccess();
+        assertThat(firstContext)
+                .as("names only, in catalog order, never the paths they point at")
+                .contains("install_overrides=SYMPHONY_TRELLO_CONFIG_DIR,--prefix,--bin-dir\n");
+        assertThat(state.resolve(INSTALL_CONTEXT_PROPERTIES))
+                .content(StandardCharsets.UTF_8)
+                .as("reused locations keep their names; the wrapper's state home does not count")
+                .contains("install_overrides=SYMPHONY_TRELLO_CONFIG_DIR,--prefix,--bin-dir\n", "config_dir=" + config);
+    }
+
+    @Test
     void posixInstallerPreservesRecordedAutostartSnapshotWhenConfigIsOverridden() throws Exception {
         // given
         assumeTrue(commandExists("bash"));
@@ -10872,6 +10931,54 @@ final class InstallerScriptTest {
                         "https://example.invalid/unrelated.git")
                 .assertSuccess();
         return checkout;
+    }
+
+    @Test
+    void powershellInstallerRecordsOverrideNamesWithoutTheirPathsWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        assumeTrue(commandExists("git"));
+        Path sourceRepository = createPowerShellSourceRepository(temporaryDirectory);
+        Path fakeBin = createPowerShellFakeToolchain(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve("ps-override-names-home");
+        Path config = temporaryDirectory.resolve("ps-override-names-config");
+        Path app = temporaryDirectory.resolve("ps-override-names-app");
+        Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
+        environment.put("PATH", fakeBin + File.pathSeparator + System.getenv("PATH"));
+        environment.put("SYMPHONY_HOME", symphonyHome.toString());
+        environment.put("SYMPHONY_TRELLO_CONFIG_DIR", config.toString());
+        environment.put("SYMPHONY_FAKE_JAVA", fakeBin.resolve("fake-java.ps1").toString());
+        environment.put(
+                "SYMPHONY_FAKE_LOG",
+                temporaryDirectory.resolve("ps-override-names.log").toString());
+
+        // when
+        ProcessResult result = run(
+                environment,
+                command(
+                                pwsh,
+                                "-NoProfile",
+                                "-File",
+                                "./install.ps1",
+                                "--no-onboard",
+                                "--from-source",
+                                "--repo",
+                                sourceRepository.toUri().toString(),
+                                "--ref",
+                                "main",
+                                "--prefix",
+                                app.toString())
+                        .toArray(String[]::new));
+
+        // then
+        result.assertSuccess();
+        assertThat(symphonyHome.resolve("state").resolve(INSTALL_CONTEXT_PROPERTIES))
+                .content(StandardCharsets.UTF_8)
+                .as("names only, in catalog order; the bin directory kept its default and is not named")
+                .contains(
+                        "install_overrides=SYMPHONY_HOME,SYMPHONY_TRELLO_CONFIG_DIR,--prefix",
+                        "config_dir=" + config.toRealPath());
     }
 
     private ProcessResult runPowerShellInstallIntoExistingCheckout(

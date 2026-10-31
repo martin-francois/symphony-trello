@@ -457,8 +457,9 @@ starting point.
 
 ### One self-contained heartbeat with cumulative counters and normalized platform fields
 
-The only event carries the registration date, installed release, platform fields, current board
-count, and cumulative successful import and create totals. Status: selected.
+The only event carries the registration date, installed release, platform fields, the names of
+the install-location inputs that were set at install time, current board count, and cumulative
+successful import and create totals. Status: selected.
 
 - Good, because any recent event is independently useful, with no dependency on older records
   surviving retention.
@@ -467,6 +468,10 @@ count, and cumulative successful import and create totals. Status: selected.
 - Good, because the installed release comes from the installer's `install-context.properties`,
   which is rewritten only after a successful install or update, not from whichever worker won the
   reporting lock.
+- Good, because the override names from the same file, read with the platform fields, show on
+  which systems the default locations fail, so the maintainer can install that system fresh and
+  fix the defaults instead of asking users for overrides. Only names from a fixed list are sent,
+  never a path.
 - Bad, because precise operation and upgrade timestamps and funnels are lost.
 - Bad, because zero means no operation observed while counting was enabled, not proven lifetime
   non-use; boards connected before telemetry have unknown history.

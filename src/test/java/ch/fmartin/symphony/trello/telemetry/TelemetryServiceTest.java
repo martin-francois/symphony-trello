@@ -381,7 +381,7 @@ final class TelemetryServiceTest {
         UUID pendingUuid = UUID.randomUUID();
         store.update(state -> Update.write(state.withIdentity(UUID.randomUUID(), LocalDate.of(2026, 9, 22)), null));
         var properties =
-                new HeartbeatProperties(1, "2026-09-22", "1.2.0", "linux", "24.04", "ubuntu", "x64", 3, 0, 0);
+                new HeartbeatProperties(1, "2026-09-22", "1.2.0", "linux", "24.04", "ubuntu", "x64", null, 3, 0, 0);
         store.update(state -> Update.write(
                 state.withReporting(
                         null,
@@ -553,7 +553,7 @@ final class TelemetryServiceTest {
         // given
         UUID id = UUID.randomUUID();
         var properties =
-                new HeartbeatProperties(1, "2026-09-21", "1.2.0", "linux", "24.04", "ubuntu", "x64", 3, 4, 2);
+                new HeartbeatProperties(1, "2026-09-21", "1.2.0", "linux", "24.04", "ubuntu", "x64", null, 3, 4, 2);
         store.update(state -> Update.write(
                 state.withIdentity(id, LocalDate.of(2026, 9, 1))
                         .withCounters(4, 2)
