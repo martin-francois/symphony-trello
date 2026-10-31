@@ -149,8 +149,7 @@ final class WorkflowConfigPromptTest {
         var card = TestCards.cardWithLabels("1", "TRELLO-abc", "Todo", List.of(ConfigDefaults.DEFAULT_NO_PR_LABEL));
 
         // when
-        // attempt 1 because the example fails to render with a null first attempt, see #843.
-        String renderedPrompt = prompts.render(definition.promptTemplate(), card, 1, config.github());
+        String renderedPrompt = prompts.render(definition.promptTemplate(), card, null, config.github());
 
         // then
         assertThat(config.github()).isEqualTo(EffectiveConfig.GitHubConfig.DEFAULTS);

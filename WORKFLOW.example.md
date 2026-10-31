@@ -803,7 +803,7 @@ labels such as "the requested path" and "the per-card workspace" instead.
 
 Card URL: {{ card.url }}
 
-{% if attempt %}
+{% if attempt is not null %}
 This is retry or continuation attempt {{ attempt }}. Inspect existing workspace state before making
 changes.
 {% endif %}
