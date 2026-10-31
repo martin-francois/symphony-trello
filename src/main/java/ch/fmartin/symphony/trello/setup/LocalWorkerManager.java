@@ -1354,9 +1354,7 @@ final class LocalWorkerManager {
     }
 
     private static ManagedProcessPlatform platformForCurrentOs() {
-        return PlatformEnvironment.isWindows(System.getProperty("os.name", ""))
-                ? new WindowsManagedProcessPlatform()
-                : new PosixManagedProcessPlatform();
+        return isWindows() ? new WindowsManagedProcessPlatform() : new PosixManagedProcessPlatform();
     }
 
     private static String javaExecutable() {
