@@ -20,7 +20,7 @@ that the lookup reported as `not_found`
 * A worker log line such as `workflow=<path> outcome=loaded`. The path is under the config directory,
   one of the known private roots. The child part of the known-root pattern accepts spaces, because
   directory names can contain them, so it ran to the end of the line. The token hashed the path plus
-  ` outcome=loaded`, and that text disappeared from the report.
+  `outcome=loaded`, and that text disappeared from the report.
 * The tool table. On a host where `docker` is the Podman shim, the first output line of
   `docker --version` is the notice `Emulate Docker CLI using podman. Create
   /etc/containers/nodocker to quiet msg.`. Diagnostics tokenizes that path, but no private-context
@@ -56,7 +56,7 @@ For paths in tool output:
 
 Chosen options: "Whitespace before a `key=` pair" and "Lookup reruns tool version probes".
 A known-root path ends only before a key-value log field or at the end of the matched line.
-Otherwise the whole match stays in one token. This keeps ` outcome=loaded` visible without
+Otherwise the whole match stays in one token. This keeps `outcome=loaded` visible without
 exposing `client/repo` from a missing `private client/repo` path when a directory named
 `private` exists.
 
@@ -91,15 +91,17 @@ already a token keeps that token, including quoted assignments.
   from a log field in unquoted text.
 * Bad, because the private-context report and every focused lookup now run the local tool version
   commands, which adds a short delay.
-* Bad, because the tool token for the Podman notice still covers ` to quiet msg.`, since that path
+* Bad, because the tool token for the Podman notice still covers `to quiet msg.`, since that path
   is outside the known roots and does not exist. The lookup shows that whole text as the value.
+  [ADR 0153](0153-end-diagnostics-paths-outside-known-roots-at-the-last-path-word.md) later gave
+  the complete Podman notice a recognized boundary, which keeps its fixed instruction visible.
 
 ### Confirmation
 
 `SetupDiagnosticReporterTest` covers both cases:
 
 * `privateContextLookupResolvesWorkerLogPathTokenFollowedByText` checks that the log line keeps
-  ` outcome=loaded`, that the emitted token resolves to the workflow path, and that a missing child
+  `outcome=loaded`, that the emitted token resolves to the workflow path, and that a missing child
   path with a space leaves no fragment in the report even when a shorter prefix exists.
 * `privateContextLookupResolvesPathTokensFromToolVersionOutput` checks that the docker and codex tool
   tokens from a `--deep` report resolve through a lookup and the full private report, and that the
@@ -176,10 +178,11 @@ Add mappings for the resolved tool executables and other known tool locations.
 
 ## More Information
 
-The generic absolute-path redaction for paths outside the known roots keeps its current end rule.
-Those paths are not in the private-context mapping unless a tool printed them. Preserving trailing
-text outside known roots and updating the bug-bash manifest after #809 are tracked in
-[GitHub issue #1030](https://github.com/martin-francois/symphony-trello/issues/1030).
+The generic absolute-path redaction for paths outside the known roots kept its end rule in this
+decision. Those paths are not in the private-context mapping unless a tool printed them.
+[ADR 0153](0153-end-diagnostics-paths-outside-known-roots-at-the-last-path-word.md) records the
+recognized-format boundaries added for [GitHub issue #1030](https://github.com/martin-francois/symphony-trello/issues/1030).
+Ambiguous unquoted tails remain hidden.
 
 The setup-failure report shows a longer tool list than `diagnostics`. The lookup maps only the
 `diagnostics` tool list, because the lookup is part of the `diagnostics` command.

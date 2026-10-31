@@ -1050,10 +1050,19 @@ and file-backed secret paths. It MUST NOT print the secret values stored in thos
 The private context SHOULD also map path tokens from the tool version lines of the public report, so
 `--lookup TOKEN` resolves them, without running auth-status probes.
 When a path under a known local directory, such as the home, config, state, or workspace directory,
-is followed by more text on the same line, its `<path:...>` token SHOULD cover only the part that
-exists as a path, so the following text stays visible and `--lookup` can resolve a mapped path.
-When no such part exists, the whole match MUST stay in one token so no fragment of a private path
-is shown.
+is followed by a structured `key=value` log field, its `<path:...>` token SHOULD stop before that
+field. Without an explicit boundary, the whole match MUST stay in one token so no fragment of a
+private path is shown. Filesystem existence does not establish a boundary.
+Paths outside those directories MUST keep ambiguous unquoted trailing text hidden. Filesystem
+existence and the presence of separators in later words MUST NOT decide which path fragments are
+public. Explicit quotes delimit outside-root paths; structured log-field boundaries apply only to
+known-root paths. The complete Podman shim notice,
+`Emulate Docker CLI using podman. Create PATH to quiet msg.`, provides a recognized boundary:
+its token MUST map to PATH alone and its fixed trailing text MUST stay visible. Other unquoted
+formats retain ambiguous surrounding text inside the token rather than guessing a path boundary.
+When the path behind a token is no longer in the current private context, for example because the
+file was moved or deleted after the report, `--lookup TOKEN` MUST report `not_found` and MUST NOT map
+the token to a different path.
 Malformed lookup tokens MUST be rejected without searching arbitrary private strings. Ambiguous token
 collisions MUST be reported instead of choosing a value silently. The command output MUST warn that
 it is local-only and not for public issue reports.

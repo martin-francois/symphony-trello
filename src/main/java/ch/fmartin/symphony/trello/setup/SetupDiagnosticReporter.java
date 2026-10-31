@@ -118,6 +118,8 @@ final class SetupDiagnosticReporter {
     private static final CharMatcher URL_AUTHORITY_TERMINATOR =
             CharMatcher.whitespace().or(CharMatcher.anyOf("/?#")).precomputed();
     private static final Pattern LOG_FIELD_BOUNDARY = Pattern.compile("\\s+(?=[\\p{L}_][\\p{L}\\p{N}_]*=)");
+    private static final Pattern PODMAN_NOTICE = Pattern.compile(
+            "(Emulate Docker CLI using podman\\. Create )((?:/|[A-Za-z]:\\\\)[^\\r\\n]+)( to quiet msg\\.)(?=\\s|$)");
     private static final String PATH_ROOT_BOUNDARY = "(?=$|[/\\\\\\r\\n\"'`<>|]|" + LOG_FIELD_BOUNDARY.pattern() + ")";
     private static final BiConsumer<String, String> IGNORE_PATH_TOKENS = (token, path) -> {};
     private static final CharMatcher TOKEN_TERMINATOR =
@@ -771,7 +773,8 @@ final class SetupDiagnosticReporter {
         if (matches.isEmpty()) {
             line(body, "lookup_status", "not_found");
             body.append("No private-context mapping matched this token in the current diagnostics context.\n");
-            body.append("Run full `diagnostics --show-private-context` if the token came from a different selector.\n");
+            body.append("The path may have been moved or deleted since the report, or the token came from a different"
+                    + " selector. Run full `diagnostics --show-private-context` to see the current mappings.\n");
             return;
         }
 
@@ -2366,6 +2369,9 @@ final class SetupDiagnosticReporter {
             return "";
         }
         String sanitized = redactQuotedCredentials(value);
+        sanitized = PODMAN_NOTICE
+                .matcher(sanitized)
+                .replaceAll(match -> match.group(1) + pathToken(match.group(2), pathTokens) + match.group(3));
         sanitized = QUOTED_WINDOWS_PATH
                 .matcher(sanitized)
                 .replaceAll(match -> match.group(1) + pathToken(match.group(2), pathTokens) + match.group(1));
@@ -2387,7 +2393,7 @@ final class SetupDiagnosticReporter {
         sanitized = PATH_ASSIGNMENT
                 .matcher(sanitized)
                 .replaceAll(match -> match.group(1) + pathToken(match.group(2), pathTokens));
-        sanitized = WINDOWS_PATH.matcher(sanitized).replaceAll(match -> pathToken(match.group(), pathTokens));
+        sanitized = redactWindowsPaths(sanitized, pathTokens);
         return CliInputValidation.safeDiagnosticsText(redactAbsolutePosixPaths(sanitized, pathTokens));
     }
 
@@ -2566,6 +2572,19 @@ final class SetupDiagnosticReporter {
             cursor = end;
         }
         return redacted.toString();
+    }
+
+    private String redactWindowsPaths(String value, BiConsumer<String, String> pathTokens) {
+        Matcher matcher = WINDOWS_PATH.matcher(value);
+        var redacted = new StringBuilder(value.length());
+        int cursor = 0;
+        while (matcher.find(cursor)) {
+            int end = matcher.end();
+            redacted.append(value, cursor, matcher.start())
+                    .append(pathToken(value.substring(matcher.start(), end), pathTokens));
+            cursor = end;
+        }
+        return redacted.append(value, cursor, value.length()).toString();
     }
 
     private static int nextAbsolutePosixPathStart(String value, int cursor) {
