@@ -259,6 +259,25 @@ and apply triage labels. Spec-alignment auditing that may create issues lives in
   pull requests when an issue deliberately requires more than one. Choose the smallest label whose
   upper bound contains the reasonable estimate. When the reasonable range crosses a label boundary,
   use the larger label. Re-evaluate the size whenever the accepted scope changes.
+- A closed issue keeps the size label it had when it closed. Don't relabel it to the size of the
+  pull request that closed it: the label is the estimate, and comparing estimates with pull request
+  sizes is how ADR 0146 measures and improves estimating.
+- Estimates here have been too small about three times as often as too large, mostly in test
+  lines. Estimate the whole change directly as above; a code-lines-times-a-factor formula did not
+  match better in a blind test. Then apply these rules for the kinds of work that missed most
+  ([ADR 0146](../adr/0146-calibrate-issue-size-estimates-from-merged-pull-requests.md) has the
+  evidence and the sample size of each):
+  - A test-only issue that adds a fuzz target, a test fake, a harness, or a snapshot suite is
+    usually `size L` or larger.
+  - A flaky-test fix that stays inside one test is `size XS`, unless you expect it to change more
+    than 49 lines; then size it by its lines as usual. When the root cause is unknown, or
+    the fix changes a shared fixture or helper, use `size S`; when it rewrites a fixture or helper,
+    use `size M`.
+  - A change to `install.sh` usually changes `install.ps1` by about as many lines, and often
+    `uninstall.sh` and `uninstall.ps1` too. Count every twin and its tests.
+
+  No script checks an estimate: `node scripts/audit-issue-labels.ts` only checks that each issue has
+  one size label. Triage review checks that a new estimate follows these rules.
 - Leave expected lines under `docs/adr/` out of the estimate, unless the rest of the issue's change
   has no lines, such as an ADR-only issue or an ADR plus an image; then count them all. Other
   documentation and tests count. For an issue split across several pull requests, apply this to the
