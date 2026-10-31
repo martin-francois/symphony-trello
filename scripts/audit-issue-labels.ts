@@ -1,5 +1,5 @@
 import {spawnSync} from "node:child_process";
-import {pathToFileURL} from "node:url";
+import {isEntryPoint} from "./entry-point.ts";
 
 // Checks every open issue against the mechanical rules of the Triage labels policy in
 // docs/agents/github-issue-triage.md. That page is the authority: when it changes, change RULES to
@@ -262,7 +262,7 @@ function fetchOpenIssues(repository: string): AuditIssue[] {
   ]));
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isEntryPoint(import.meta.url)) {
   const usage = "usage: node scripts/audit-issue-labels.ts [OWNER/REPO]";
   const [argument, ...extra] = process.argv.slice(2);
   if (argument === "--help" || argument === "-h") {
