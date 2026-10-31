@@ -1,6 +1,6 @@
 import {execFileSync, spawnSync} from "node:child_process";
 import {readFileSync} from "node:fs";
-import {pathToFileURL} from "node:url";
+import {isEntryPoint} from "./entry-point.ts";
 
 import {CommitParser} from "conventional-commits-parser";
 
@@ -361,7 +361,7 @@ function requiredEnvironment(name: string): string {
   return value;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isEntryPoint(import.meta.url)) {
   const mode = process.argv[2];
   const repository = requiredEnvironment("GITHUB_REPOSITORY");
   const serverUrl = process.env.GITHUB_SERVER_URL ?? "https://github.com";
