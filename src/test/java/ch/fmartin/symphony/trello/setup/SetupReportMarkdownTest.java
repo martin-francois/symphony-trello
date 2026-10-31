@@ -23,8 +23,11 @@ final class SetupReportMarkdownTest {
                 """)
     @ParameterizedTest
     void escapesHtmlStartsOutsideCodeSpans(String text, String escapedText) {
+        // given
+        String reportText = text;
+
         // when
-        String escaped = SetupReportMarkdown.escapeHtmlStart(text);
+        String escaped = SetupReportMarkdown.escapeHtmlStart(reportText);
 
         // then
         assertThat(escaped).isEqualTo(escapedText);
