@@ -1142,6 +1142,16 @@ configuration in the caller's directory no longer changes it. A failed migration
 stops the update and shows the failure; only successful help that lacks the migration command
 permits the unsupported version note and continuation.
 
+Other untracked files can stay in the app checkout. The installer refuses the update, before it
+stops workers, when the requested version tracks the same path as one of your untracked files, or
+needs a file where you have a directory, or the other way around. It names the conflicting path
+and leaves your files in place. Move or back up that path outside the app checkout and rerun the installer.
+Git names one path per run, so a rerun can name another. Ignored files at a path that the requested
+version tracks are not protected: the update replaces them, as `git checkout` does. With Git older
+than 2.34, a file ignored only through `.git/info/exclude` or `core.excludesFile` can keep the
+installer from checking for conflicts first. It then prints a note, and the checkout after the
+worker stop reports any conflict.
+
 ### Verify Release Downloads
 
 The release workflow signs every release asset, including the installer scripts and archives. The

@@ -1655,6 +1655,84 @@ function Prepare-SourceCheckout {
     throw "cannot read source project/version: expected an explicit semantic version in the root pom.xml Choose a source ref with a resolved project version, then rerun the installer."
   }
   $script:Version = $versions[0].InnerText.Trim()
+  if (Test-Path -LiteralPath (Join-Path $Prefix ".git")) {
+    Assert-SourceCheckoutTargetApplies
+  }
+}
+
+# Git before 2.34 reads only per-directory .gitignore files in read-tree, while git checkout also
+# replaces files ignored through .git/info/exclude or core.excludesFile. A refusal over such a path
+# proves no collision, so the checkout after the worker stop decides, as it did before preflight.
+function Test-CheckoutCollisionIgnored([string]$Kind, [string]$Path) {
+  if ($Kind -eq "directory") {
+    $untracked = @(& git --literal-pathspecs -C $Prefix ls-files --others --exclude-standard -- $Path 2>$null)
+    return ($LASTEXITCODE -eq 0) -and ($untracked.Count -eq 0)
+  }
+  & git -C $Prefix check-ignore -q -- $Path *> $null
+  return $LASTEXITCODE -eq 0
+}
+
+# Git reads this environment variable as a path list, with C-style quoting for each entry.
+function ConvertTo-GitObjectDirectoryEntry([string]$Path) {
+  $escaped = $Path.Replace('\', '\\').Replace('"', '\"').Replace("`a", '\a').Replace("`b", '\b').Replace("`t", '\t').Replace("`n", '\n').Replace([string][char]11, '\v').Replace("`f", '\f').Replace("`r", '\r')
+  return '"' + $escaped + '"'
+}
+
+function Assert-SourceCheckoutTargetApplies {
+  # Windows PowerShell turns native stderr into a terminating error under "Stop"; keep Git's output.
+  $ErrorActionPreference = "Continue"
+  $trees = @($SourceCommit)
+  # A checkout without commits switches from no tree, so Git checks the target tree alone.
+  & git -C $Prefix rev-parse --verify -q HEAD *> $null
+  if ($LASTEXITCODE -eq 0) {
+    $trees = @("HEAD", $SourceCommit)
+  }
+  # A dry-run merge makes the same overwrite checks as the later git checkout, including its
+  # permission to replace ignored files. Reading objects from the staged clone keeps the installed
+  # checkout unchanged until workers have stopped. LC_ALL=C keeps the refusal text parseable.
+  $previousAlternates = $env:GIT_ALTERNATE_OBJECT_DIRECTORIES
+  $previousLocale = $env:LC_ALL
+  $env:GIT_ALTERNATE_OBJECT_DIRECTORIES = ConvertTo-GitObjectDirectoryEntry (Join-Path (Join-Path $SourceCheckout ".git") "objects")
+  if ($previousAlternates) {
+    $env:GIT_ALTERNATE_OBJECT_DIRECTORIES += [System.IO.Path]::PathSeparator + $previousAlternates
+  }
+  $env:LC_ALL = "C"
+  try {
+    $output = & git -C $Prefix read-tree -n -m -u --exclude-per-directory=.gitignore @trees 2>&1
+    $applies = $LASTEXITCODE -eq 0
+  } finally {
+    $env:GIT_ALTERNATE_OBJECT_DIRECTORIES = $previousAlternates
+    $env:LC_ALL = $previousLocale
+  }
+  if ($applies) {
+    return
+  }
+  # Native stderr lines arrive as ErrorRecords; an empty line renders as the exception type name.
+  $refusal = @(
+    $output |
+      ForEach-Object { if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { "$_" } }
+  )
+  $gitLines = @($refusal | ForEach-Object { "  git: $_" })
+  $kind = $null
+  $path = $null
+  $diagnostic = $refusal -join "`n"
+  if ($diagnostic -cmatch '(?s)^error: Untracked working tree file ''(.+)'' would be (overwritten|removed) by merge\.$') {
+    $kind = "file"
+    $path = $Matches[1]
+  } elseif ($diagnostic -cmatch '(?s)^error: Updating ''(.+)'' would lose untracked files in it$') {
+    $kind = "directory"
+    $path = $Matches[1]
+  }
+  if ($null -eq $kind) {
+    $message = @('cannot check source checkout "local files": Git could not compare the requested version with the app checkout; fix the problem Git reports below, then rerun the installer; if Git names an index.lock file, make sure no other Git command runs in the app checkout before you delete that file; no local files were changed') + $gitLines
+    throw ($message -join "`n")
+  }
+  if (Test-CheckoutCollisionIgnored $kind $path) {
+    Write-Status "NOTE" "  This Git version cannot check ignored local files before workers stop; the checkout after the stop reports any collision. Git 2.34 or later checks this first."
+    return
+  }
+  $message = @('cannot update source checkout "local files": the requested version would overwrite or remove an untracked local path; move or back up the path Git names below, and any other path a rerun reports, outside the app checkout before retrying; no local files were changed') + $gitLines
+  throw ($message -join "`n")
 }
 
 function Install-SourceCheckout {

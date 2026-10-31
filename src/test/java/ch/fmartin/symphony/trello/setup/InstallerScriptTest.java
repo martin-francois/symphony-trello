@@ -8430,7 +8430,7 @@ final class InstallerScriptTest {
         // given
         List<String> launcher = installerLauncher(powershell);
         SourceDowngrade source = sourceDowngrade(false);
-        source.recordWorkerStopRequests();
+        source.recordWorkerRequests();
         source.installed().environment().put("SYMPHONY_FAKE_VERSION_MODE", mode);
 
         // when
@@ -8458,7 +8458,7 @@ final class InstallerScriptTest {
         // given
         List<String> launcher = installerLauncher(powershell);
         SourceDowngrade source = sourceDowngrade(false);
-        source.recordWorkerStopRequests();
+        source.recordWorkerRequests();
         source.installed().environment().put("SYMPHONY_FAKE_VERSION", version);
 
         // when
@@ -8488,7 +8488,7 @@ final class InstallerScriptTest {
         // given
         List<String> launcher = installerLauncher(powershell);
         SourceDowngrade source = sourceDowngrade(true);
-        source.recordWorkerStopRequests();
+        source.recordWorkerRequests();
         source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
         Path app = source.installed().appHome();
         Path localInput = app.resolve(relativePath);
@@ -8506,6 +8506,285 @@ final class InstallerScriptTest {
         assertThat(normalizedWhitespace(result.output())).contains("source checkout has untracked build inputs");
         assertThat(localInput).hasContent("local build input");
         source.assertAppUntouched();
+    }
+
+    @CsvSource({
+        "false, docs/collision.txt, docs/collision.txt, docs/collision.txt",
+        "true, docs/collision.txt, docs/collision.txt, docs/collision.txt",
+        "false, docs, docs/local-note.md, docs",
+        "true, docs, docs/local-note.md, docs",
+        "false, docs/collision.txt, docs, docs",
+        "true, docs/collision.txt, docs, docs"
+    })
+    @ParameterizedTest
+    void installersRefuseCheckoutCollisionsBeforeStoppingWorkers(
+            boolean powershell, String targetPath, String localPath, String reportedPath) throws Exception {
+        // given
+        List<String> launcher = installerLauncher(powershell);
+        SourceDowngrade source = sourceDowngrade(true);
+        source.recordWorkerRequests();
+        source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
+        addSourceRepositoryCommit(source.source(), targetPath, "tracked target file\n");
+        Path local = source.installed().appHome().resolve(localPath);
+        Files.createDirectories(local.getParent());
+        byte[] localBytes = "local untracked file\n".getBytes(StandardCharsets.UTF_8);
+        Files.write(local, localBytes);
+
+        // when
+        ProcessResult result = source.run(launcher);
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isNotZero();
+        assertThat(normalizedWhitespace(result.output()))
+                .contains(
+                        "cannot update source checkout \"local files\"",
+                        "move or back up the path Git names below",
+                        "'" + reportedPath + "'");
+        assertThat(local).hasBinaryContent(localBytes);
+        assertThat(Path.of(source.installed().environment().get("SYMPHONY_FAKE_LOG")))
+                .content(StandardCharsets.UTF_8)
+                .doesNotContain("build-cwd=", "migrate-workflows", "TrelloBoardSetupMain start", "\"start\"");
+        source.assertAppUntouched();
+    }
+
+    @CsvSource({"false, false", "true, false", "false, true", "true, true"})
+    @ParameterizedTest
+    void installersExplainCollisionsWithNewlinesInTheFilename(boolean powershell, boolean directory) throws Exception {
+        // given
+        assumeFalse(isWindows());
+        List<String> launcher = installerLauncher(powershell);
+        SourceDowngrade source = sourceDowngrade(true);
+        source.recordWorkerRequests();
+        source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
+        String filename = "docs/line\n\nbreak.txt";
+        addSourceRepositoryCommit(source.source(), filename, "tracked target file\n");
+        Path local = source.installed().appHome().resolve(directory ? filename + "/note.txt" : filename);
+        Files.createDirectories(local.getParent());
+        Files.writeString(local, "local untracked file\n");
+
+        // when
+        ProcessResult result = source.run(launcher);
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isNotZero();
+        assertThat(normalizedWhitespace(result.output()))
+                .contains("cannot update source checkout \"local files\"", "move or back up the path Git names below");
+        assertThat(result.output().replace("\r\n", "\n")).contains("docs/line\n  git: \n  git: break.txt");
+        assertThat(local).hasContent("local untracked file\n");
+        source.assertAppUntouched();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void installersPreserveInheritedObjectDirectories(boolean powershell) throws Exception {
+        // given
+        List<String> launcher = installerLauncher(powershell);
+        UntrackedSourceUpdate update = collisionFreeSourceUpdate();
+        SourceDowngrade source = update.source();
+        Path app = source.installed().appHome();
+        configureSourceRepositoryAuthor(app);
+        addSourceRepositoryCommit(app, "docs/installed-only.txt", "installed revision\n");
+        Path objects = app.resolve(".git/objects");
+        Path inheritedObjects = temporaryDirectory.resolve("inherited" + File.pathSeparator + "objects");
+        Files.move(objects, inheritedObjects);
+        Files.createDirectory(objects);
+        String alternates = "\"" + inheritedObjects.toString().replace("\\", "\\\\") + "\"";
+        source.installed().environment().put("GIT_ALTERNATE_OBJECT_DIRECTORIES", alternates);
+        if (powershell) {
+            launcher = powershellInstallerWithEnvironment(Map.of("GIT_ALTERNATE_OBJECT_DIRECTORIES", alternates));
+        }
+
+        // when
+        ProcessResult result = source.run(launcher);
+
+        // then
+        result.assertSuccess();
+        assertThat(app.resolve("docs/collision.txt")).hasContent("tracked target file\n");
+        assertThat(update.local()).hasContent("local untracked file\n");
+    }
+
+    @CsvSource({
+        "false, ORDINARY",
+        "true, ORDINARY",
+        "false, LIST_SEPARATOR",
+        "true, LIST_SEPARATOR",
+        "false, POSIX_QUOTING",
+        "true, POSIX_QUOTING"
+    })
+    @ParameterizedTest
+    void installersUpdateBesideUntrackedFilesThatDoNotCollide(boolean powershell, TemporaryPathKind temporaryPathKind)
+            throws Exception {
+        // given
+        List<String> launcher = installerLauncher(powershell);
+        UntrackedSourceUpdate update = collisionFreeSourceUpdate();
+        SourceDowngrade source = update.source();
+        Path local = update.local();
+        assumeFalse(isWindows() && temporaryPathKind == TemporaryPathKind.POSIX_QUOTING);
+        String stagingName =
+                switch (temporaryPathKind) {
+                    case ORDINARY -> "stage-objects";
+                    case LIST_SEPARATOR -> "stage" + File.pathSeparator + "objects";
+                    case POSIX_QUOTING -> "stage:\"\\\t\nobjects";
+                };
+        Path stagingRoot = Files.createDirectory(temporaryDirectory.resolve(stagingName));
+        source.installed().environment().put("TMPDIR", stagingRoot.toString());
+        source.installed().environment().put("TMP", stagingRoot.toString());
+        source.installed().environment().put("TEMP", stagingRoot.toString());
+        if (powershell) {
+            launcher = powershellInstallerWithEnvironment(Map.of(
+                    "TMPDIR", stagingRoot.toString(), "TEMP", stagingRoot.toString(), "TMP", stagingRoot.toString()));
+        }
+
+        // when
+        ProcessResult result = source.run(launcher);
+
+        // then
+        result.assertSuccess();
+        assertThat(source.installed().appHome().resolve("docs/collision.txt")).hasContent("tracked target file\n");
+        assertThat(local).hasContent("local untracked file\n");
+    }
+
+    @Test
+    void posixUpdateBesideUntrackedFilesStopsAndRestartsManagedWorkers() throws Exception {
+        // given
+        List<String> launcher = installerLauncher(false);
+        UntrackedSourceUpdate update = collisionFreeSourceUpdate();
+        SourceDowngrade source = update.source();
+        Path local = update.local();
+        source.recordWorkerRequests();
+
+        // when
+        ProcessResult result = source.run(launcher);
+
+        // then
+        result.assertSuccess();
+        assertThat(source.installed().binDirectory().resolve("symphony-trello.stop"))
+                .as("the update stops managed workers through the installed command")
+                .exists();
+        assertThat(Path.of(source.installed().environment().get("SYMPHONY_FAKE_LOG")))
+                .content(StandardCharsets.UTF_8)
+                .containsSubsequence(
+                        "build-cwd=", "TrelloBoardSetupMain migrate-workflows", "TrelloBoardSetupMain start");
+        assertThat(source.installed().appHome().resolve("docs/collision.txt")).hasContent("tracked target file\n");
+        assertThat(local).hasContent("local untracked file\n");
+    }
+
+    @CsvSource({
+        "false, .gitignore", "true, .gitignore",
+        "false, info/exclude", "true, info/exclude",
+        "false, core.excludesFile", "true, core.excludesFile"
+    })
+    @ParameterizedTest
+    void installersReplaceIgnoredFilesAtNewlyTrackedPaths(boolean powershell, String ignoreSource) throws Exception {
+        // given
+        List<String> launcher = installerLauncher(powershell);
+        SourceDowngrade source = sourceDowngrade(true);
+        source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
+        addSourceRepositoryCommit(source.source(), "docs/generated.log", "tracked target file\n");
+        Path app = source.installed().appHome();
+        ignoreInCheckout(app, ignoreSource, "docs/generated.log");
+        Path local = app.resolve("docs/generated.log");
+        Files.createDirectories(local.getParent());
+        Files.writeString(local, "ignored local file\n");
+
+        // when
+        ProcessResult result = source.run(launcher);
+
+        // then
+        result.assertSuccess();
+        assertThat(local)
+                .as("git checkout replaces an ignored file at a tracked path, so preflight must allow it")
+                .hasContent("tracked target file\n");
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void installersReportOtherGitFailuresBeforeStoppingWorkers(boolean powershell) throws Exception {
+        // given
+        List<String> launcher = installerLauncher(powershell);
+        SourceDowngrade source = sourceDowngrade(true);
+        source.recordWorkerRequests();
+        source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
+        Path lock = source.installed().appHome().resolve(".git/index.lock");
+        Files.writeString(lock, "");
+
+        // when
+        ProcessResult result = source.run(launcher);
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isNotZero();
+        assertThat(normalizedWhitespace(result.output()))
+                .contains(
+                        "cannot check source checkout \"local files\"",
+                        "fix the problem Git reports below",
+                        "index.lock': File exists.")
+                .doesNotContain("would overwrite or remove an untracked local path");
+        assertThat(lock).exists();
+        source.assertAppUntouched();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void installersLetTheCheckoutDecideWhenOlderGitRefusesAnIgnoredFile(boolean powershell) throws Exception {
+        // given
+        assumeFalse(isWindows());
+        List<String> launcher = installerLauncher(powershell);
+        SourceDowngrade source = sourceDowngrade(true);
+        source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
+        addSourceRepositoryCommit(source.source(), "docs/generated.log", "tracked target file\n");
+        Path app = source.installed().appHome();
+        ignoreInCheckout(app, "info/exclude", "docs/generated.log");
+        Path local = app.resolve("docs/generated.log");
+        Files.createDirectories(local.getParent());
+        Files.writeString(local, "ignored local file\n");
+        Path olderGit = temporaryDirectory.resolve("git-before-2.34");
+        Files.createDirectories(olderGit);
+        // Git before 2.34 reads only .gitignore files in read-tree and refuses this file, while its
+        // git checkout replaces it. Every other Git command runs the real Git further down PATH.
+        writeExecutable(
+                olderGit.resolve("git"),
+                """
+                #!/usr/bin/env bash
+                for arg in "$@"; do
+                  if [[ "$arg" == read-tree ]]; then
+                    echo "error: Untracked working tree file 'docs/generated.log' would be overwritten by merge." >&2
+                    exit 128
+                  fi
+                done
+                self="$(cd "$(dirname "$0")" && pwd -P)"
+                IFS=: read -ra entries <<<"$PATH"
+                for entry in "${entries[@]}"; do
+                  if [[ -x "$entry/git" && "$(cd "$entry" 2>/dev/null && pwd -P)" != "$self" ]]; then
+                    exec "$entry/git" "$@"
+                  fi
+                done
+                exit 127
+                """);
+        Map<String, String> environment = source.installed().environment();
+        environment.put("PATH", olderGit + File.pathSeparator + environment.get("PATH"));
+
+        // when
+        ProcessResult result = source.run(launcher);
+
+        // then
+        result.assertSuccess();
+        assertThat(normalizedWhitespace(result.output()))
+                .contains("This Git version cannot check ignored local files before workers stop");
+        assertThat(local).hasContent("tracked target file\n");
+    }
+
+    private static void ignoreInCheckout(Path app, String ignoreSource, String relativePath) throws Exception {
+        switch (ignoreSource) {
+            case ".gitignore" -> Files.writeString(app.resolve(".gitignore"), relativePath + "\n");
+            case "info/exclude" -> Files.writeString(app.resolve(".git/info/exclude"), relativePath + "\n");
+            case "core.excludesFile" -> {
+                Path excludes = app.resolveSibling("global-excludes");
+                Files.writeString(excludes, relativePath + "\n");
+                run(Map.of(), "git", "-C", app.toString(), "config", "core.excludesFile", excludes.toString())
+                        .assertSuccess();
+            }
+            default -> throw new IllegalArgumentException("unknown ignore source: " + ignoreSource);
+        }
     }
 
     @CsvSource({
@@ -8529,7 +8808,7 @@ final class InstallerScriptTest {
         assumeFalse(isWindows());
         List<String> launcher = installerLauncher(powershell);
         SourceDowngrade source = sourceDowngrade(true);
-        source.recordWorkerStopRequests();
+        source.recordWorkerRequests();
         source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
         Path external = temporaryDirectory.resolve("external-input");
         Path input = external.resolve(relativeInput);
@@ -8562,7 +8841,7 @@ final class InstallerScriptTest {
         // given
         List<String> launcher = installerLauncher(powershell);
         SourceDowngrade source = sourceDowngrade(true);
-        source.recordWorkerStopRequests();
+        source.recordWorkerRequests();
         source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
         Path repository = source.installed().appHome().resolve(relativeRepository);
         Files.createDirectories(repository);
@@ -8590,7 +8869,7 @@ final class InstallerScriptTest {
         assumeTrue(isWindows());
         List<String> launcher = installerLauncher(true);
         SourceDowngrade source = sourceDowngrade(true);
-        source.recordWorkerStopRequests();
+        source.recordWorkerRequests();
         source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
         Path app = source.installed().appHome();
         assertThat(app.resolve(".GIT"))
@@ -8622,7 +8901,7 @@ final class InstallerScriptTest {
         assumeTrue(isWindows());
         List<String> launcher = installerLauncher(true);
         SourceDowngrade initial = sourceDowngrade(true);
-        initial.recordWorkerStopRequests();
+        initial.recordWorkerRequests();
         initial.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
         Files.createDirectories(initial.source().resolve("src"));
         addSourceRepositoryCommit(initial.source(), "src/Tracked.java", "record Tracked() {}\n");
@@ -8660,7 +8939,7 @@ final class InstallerScriptTest {
         // given
         List<String> launcher = installerLauncher(powershell);
         SourceDowngrade source = sourceDowngrade(false);
-        source.recordWorkerStopRequests();
+        source.recordWorkerRequests();
         source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
         source.installed()
                 .environment()
@@ -8963,7 +9242,7 @@ final class InstallerScriptTest {
         // given
         List<String> launcher = installerLauncher(powershell);
         SourceDowngrade source = sourceDowngrade(true);
-        source.recordWorkerStopRequests();
+        source.recordWorkerRequests();
         source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
         addSourceRepositoryCommit(source.source(), "pom.xml", "<project><version>1.0.0</version></project>\n");
         Path app = source.installed().appHome();
@@ -9000,7 +9279,7 @@ final class InstallerScriptTest {
         assumeFalse(isWindows());
         List<String> launcher = installerLauncher(powershell);
         SourceDowngrade source = sourceDowngrade(true);
-        source.recordWorkerStopRequests();
+        source.recordWorkerRequests();
         source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
         ProcessResult gitLocation = run(Map.of(), "bash", "-c", "command -v git");
         gitLocation.assertSuccess();
@@ -9097,7 +9376,7 @@ final class InstallerScriptTest {
         assumeFalse(pwsh.isEmpty());
         assumeTrue(commandExists("git"));
         SourceDowngrade source = sourceDowngrade(false);
-        source.recordWorkerStopRequests();
+        source.recordWorkerRequests();
         String pom =
                 switch (scenario) {
                     case "invalid" -> "<project />";
@@ -9264,6 +9543,42 @@ final class InstallerScriptTest {
 
     record SourcePom(String xml, String expectedMessage) {}
 
+    private UntrackedSourceUpdate collisionFreeSourceUpdate() throws Exception {
+        SourceDowngrade source = sourceDowngrade(true);
+        source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
+        addSourceRepositoryCommit(source.source(), "docs/collision.txt", "tracked target file\n");
+        Path local = source.installed().appHome().resolve("docs/local-note.md");
+        Files.createDirectories(local.getParent());
+        Files.writeString(local, "local untracked file\n");
+        return new UntrackedSourceUpdate(source, local);
+    }
+
+    private List<String> powershellInstallerWithEnvironment(Map<String, String> environment) throws IOException {
+        Path launcher = temporaryDirectory.resolve("installer-with-environment.ps1");
+        var script = new StringBuilder();
+        for (var entry : environment.entrySet()) {
+            script.append("$env:")
+                    .append(entry.getKey())
+                    .append(" = ")
+                    .append(powerShellLiteral(entry.getValue()))
+                    .append('\n');
+        }
+        script.append("& ")
+                .append(powerShellLiteral(
+                        Path.of("install.ps1").toAbsolutePath().toString()))
+                .append(" @args\nexit $LASTEXITCODE\n");
+        Files.writeString(launcher, script);
+        return command(powershellCommand(), "-NoProfile", "-File", launcher.toString());
+    }
+
+    private record UntrackedSourceUpdate(SourceDowngrade source, Path local) {}
+
+    enum TemporaryPathKind {
+        ORDINARY,
+        LIST_SEPARATOR,
+        POSIX_QUOTING
+    }
+
     private SourceDowngrade sourceDowngrade(boolean existingCheckout) throws Exception {
         return sourceDowngrade(existingCheckout, "source-downgrade");
     }
@@ -9288,7 +9603,9 @@ final class InstallerScriptTest {
     }
 
     private record SourceDowngrade(ReleaseArchiveUpdate installed, Path source, Path sentinel, String originalHead) {
-        void recordWorkerStopRequests() throws IOException {
+        /// Makes the existing install look like it runs managed workers and replaces its command
+        /// with stubs that leave a `.stop` or `.start` file next to themselves when called.
+        void recordWorkerRequests() throws IOException {
             Path state = installed.appHome().resolveSibling("state");
             Files.createDirectories(state);
             Files.writeString(state.resolve("WORKFLOW.preflight.pid"), "999999\n");
@@ -9296,12 +9613,12 @@ final class InstallerScriptTest {
                     installed.binDirectory().resolve("symphony-trello"),
                     """
                     #!/usr/bin/env bash
-                    if [[ "${1:-}" == stop ]]; then : > "$0.stop"; fi
+                    case "${1:-}" in stop | start) : > "$0.$1" ;; esac
                     """);
             Files.writeString(
                     installed.binDirectory().resolve("symphony-trello.ps1"),
                     """
-                    if ($args[0] -eq 'stop') { Set-Content -LiteralPath "$PSCommandPath.stop" -Value 'stop requested' }
+                    if ($args[0] -in 'stop', 'start') { Set-Content -LiteralPath "$PSCommandPath.$($args[0])" -Value "$($args[0]) requested" }
                     """);
         }
 
@@ -9325,9 +9642,14 @@ final class InstallerScriptTest {
 
         void assertAppUntouched() throws Exception {
             assertThat(sentinel).hasContent("original app");
-            assertThat(installed.binDirectory().resolve("symphony-trello.stop")).doesNotExist();
-            assertThat(installed.binDirectory().resolve("symphony-trello.ps1.stop"))
-                    .doesNotExist();
+            assertThat(List.of(
+                            "symphony-trello.stop",
+                            "symphony-trello.start",
+                            "symphony-trello.ps1.stop",
+                            "symphony-trello.ps1.start"))
+                    .as("a refused update must neither stop nor start managed workers")
+                    .noneSatisfy(request -> assertThat(installed.binDirectory().resolve(request))
+                            .exists());
             installed.assertAppUntouched();
             if (!originalHead.isEmpty()) {
                 assertThat(InstallerScriptFixture.run(
