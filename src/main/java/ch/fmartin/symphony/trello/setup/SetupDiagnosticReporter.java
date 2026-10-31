@@ -231,7 +231,6 @@ final class SetupDiagnosticReporter {
             "--name",
             "--board-name",
             "--board",
-            "--existing-board-id",
             "--workspace-id",
             "--repository-url",
             "--active",
@@ -2247,7 +2246,11 @@ final class SetupDiagnosticReporter {
         }
     }
 
-    private static List<String> requestArguments(LocalSetupRequest request) {
+    /// Lists the setup-local options the parsed request carries, under the names the parser accepts.
+    /// The report redacts private values afterwards and leaves some options out, such as
+    /// `--max-agents`, so the result is not a command to run again. Derived request state, such as
+    /// `forceNewSetup`, has no option and stays out.
+    static List<String> requestArguments(LocalSetupRequest request) {
         List<String> args = new ArrayList<>();
         args.add("setup-local");
         switch (request.action()) {
@@ -2259,12 +2262,11 @@ final class SetupDiagnosticReporter {
         addFlag(args, request.dryRun(), "--dry-run");
         addFlag(args, request.nonInteractive(), "--non-interactive");
         addFlag(args, request.force(), "--force");
-        addFlag(args, request.forceNewSetup(), "--new-setup");
         request.githubMode().ifPresent(enabled -> args.add(enabled ? "--github" : "--no-github"));
         addOption(args, "--key", request.apiKey());
         addOption(args, "--token", request.apiToken());
         addOption(args, "--board-name", request.boardName());
-        addOption(args, "--existing-board-id", request.existingBoardId());
+        addOption(args, "--board", request.existingBoardId());
         addOption(args, "--workspace-id", request.workspaceId());
         addOption(args, "--repository-url", request.repositoryUrl());
         addOptions(args, "--active", request.activeStates());
@@ -2281,7 +2283,9 @@ final class SetupDiagnosticReporter {
         addFlag(args, request.allowAllPaths(), "--allow-all-paths");
         addFlag(args, request.dangerFullAccess(), "--danger-full-access");
         addFlag(args, request.noStart(), "--no-start");
-        addOption(args, "--endpoint", request.endpoint().toString());
+        if (!TrelloBoardSetup.DEFAULT_ENDPOINT.equals(request.endpoint())) {
+            addOption(args, "--endpoint", request.endpoint().toString());
+        }
         return args;
     }
 

@@ -5,14 +5,20 @@ import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.SSH;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.api.Assumptions.abort;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 import ch.fmartin.symphony.trello.testsupport.RecordingTerminal;
 import ch.fmartin.symphony.trello.testsupport.TestWorkflows;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.PrintStream;
+import java.io.StringReader;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -38,13 +44,28 @@ import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
+import picocli.CommandLine;
+import picocli.CommandLine.Model.OptionSpec;
 
 final class SetupDiagnosticReporterTest {
     private static final int OUT_OF_RANGE_PORT_LOW = -1;
     private static final int OUT_OF_RANGE_PORT_HIGH = 99_999;
     private static final String SYNTHETIC_BOARD_ID = "000000000000000000000001";
+    /// Accepted setup-local options the failure report does not print yet.
+    private static final List<String> OPTIONS_THE_REPORT_LEAVES_OUT = List.of(
+            "--no-in-progress",
+            "--max-agents",
+            "--codex-model",
+            "--codex-reasoning-effort",
+            CodexReviewerOverrides.MODEL_OPTION,
+            CodexReviewerOverrides.REASONING_EFFORT_OPTION);
+    /// Option pairs that setup-local rejects together.
+    private static final List<List<String>> EXCLUSIVE_SETUP_LOCAL_OPTIONS =
+            List.of(List.of("--github", "--no-github"), List.of("--board", "--board-name"));
     private static final String ANSI_ESCAPE_IN_LOG = "\u001B";
     private static final String TERMINAL_BELL_IN_LOG = "\u0007";
     private static final String SECRET_DIRECTORY = "secrets";
@@ -4128,6 +4149,56 @@ final class SetupDiagnosticReporterTest {
         assertThat(terminal.stderr()).contains("Troubleshooting report written:", "private context");
     }
 
+    @MethodSource("setupLocalSubcommands")
+    @ParameterizedTest
+    void setupFailureReportUsesOptionNamesTheParsedCommandAccepts(String subcommand) throws Exception {
+        // given
+        Path configDir = tempDir.resolve("parsed-config");
+        List<String> args = everyReportedSetupLocalOption(subcommand, false, configDir);
+        // A dry run deliberately writes no report; its arguments are covered by the round-trip test.
+        args.remove("--dry-run");
+        LocalSetupRequest request = parsedSetupLocalRequest(args);
+        Map<String, OptionSpec> acceptedOptions = setupLocalOptions(subcommand);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        Optional<Path> report = reporter.reportFailure(
+                new TrelloBoardSetupException("setup_workflow_write_failed", "Synthetic write failure"),
+                request,
+                new RecordingTerminal());
+
+        // then
+        List<String> tokens = reportedCommandTokens(Files.readString(report.orElseThrow()));
+        assertThat(tokens)
+                .startsWith(commandPrefix(subcommand).toArray(String[]::new))
+                .containsSubsequence("--board", "<redacted>")
+                .doesNotContain(SYNTHETIC_BOARD_ID, configDir.toString())
+                .filteredOn(token -> token.startsWith("--"))
+                .extracting(acceptedOptions::get)
+                .as("setup-local %s accepts every reported option", subcommand)
+                .doesNotContainNull()
+                .extracting(OptionSpec::hidden)
+                .containsOnly(false);
+    }
+
+    @MethodSource("setupLocalSubcommandsWithExclusiveChoices")
+    @ParameterizedTest
+    void reportedSetupLocalArgumentsParseBackToTheSameRequest(String subcommand, boolean alternative) {
+        // given
+        List<String> args =
+                everyReportedSetupLocalOption(subcommand, alternative, tempDir.resolve("round-trip-config"));
+        LocalSetupRequest request = parsedSetupLocalRequest(args);
+
+        // when
+        List<String> reported = SetupDiagnosticReporter.requestArguments(request);
+
+        // then
+        assertThat(reported).first().isEqualTo("setup-local");
+        assertThat(parsedSetupLocalRequest(reported.subList(1, reported.size())))
+                .as("setup-local %s parsed from %s", subcommand, reported)
+                .isEqualTo(request);
+    }
+
     @Test
     void dryRunFailureDoesNotWriteTroubleshootingReport() {
         // given
@@ -4722,6 +4793,139 @@ final class SetupDiagnosticReporterTest {
         } catch (InvalidKeyException e) {
             throw new IllegalStateException("Diagnostics token key is invalid", e);
         }
+    }
+
+    /// The root command, as an empty name, and every subcommand the setup-local parser declares.
+    private static List<String> setupLocalSubcommands() {
+        List<String> subcommands = new ArrayList<>();
+        subcommands.add("");
+        subcommands.addAll(setupLocalParser().getSubcommands().keySet());
+        return List.copyOf(subcommands);
+    }
+
+    private static List<Arguments> setupLocalSubcommandsWithExclusiveChoices() {
+        List<Arguments> cases = new ArrayList<>();
+        for (String subcommand : setupLocalSubcommands()) {
+            cases.add(Arguments.of(subcommand, false));
+            cases.add(Arguments.of(subcommand, true));
+        }
+        return List.copyOf(cases);
+    }
+
+    private static List<String> commandPrefix(String subcommand) {
+        return subcommand.isEmpty() ? List.of("setup-local") : List.of("setup-local", subcommand);
+    }
+
+    /// Arguments that pass every option the subcommand accepts and the report prints. From each
+    /// exclusive pair, the first option is used, or the second one when `alternative` is set and the
+    /// subcommand accepts it.
+    private List<String> everyReportedSetupLocalOption(String subcommand, boolean alternative, Path configDir) {
+        Map<String, OptionSpec> acceptedOptions = setupLocalOptions(subcommand);
+        Map<String, String> values = sampleOptionValues(configDir);
+        List<String> args = new ArrayList<>();
+        if (!subcommand.isEmpty()) {
+            args.add(subcommand);
+        }
+        for (Map.Entry<String, OptionSpec> entry : acceptedOptions.entrySet()) {
+            String name = entry.getKey();
+            OptionSpec option = entry.getValue();
+            if (!name.equals(option.longestName()) || option.hidden() || option.usageHelp() || option.versionHelp()) {
+                continue;
+            }
+            if (!OPTIONS_THE_REPORT_LEAVES_OUT.contains(name)
+                    && !excludedByExclusiveChoice(name, alternative, acceptedOptions)) {
+                addSampleOption(args, option, values);
+            }
+        }
+        return args;
+    }
+
+    private static boolean excludedByExclusiveChoice(
+            String name, boolean alternative, Map<String, OptionSpec> acceptedOptions) {
+        for (List<String> pair : EXCLUSIVE_SETUP_LOCAL_OPTIONS) {
+            int chosen = alternative && isVisible(acceptedOptions, pair.get(1)) ? 1 : 0;
+            if (pair.contains(name) && !pair.get(chosen).equals(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isVisible(Map<String, OptionSpec> acceptedOptions, String name) {
+        OptionSpec option = acceptedOptions.get(name);
+        return option != null && !option.hidden();
+    }
+
+    private static void addSampleOption(List<String> args, OptionSpec option, Map<String, String> values) {
+        args.add(option.longestName());
+        if (option.arity().max() > 0) {
+            assertThat(values).as("sample value for %s", option.longestName()).containsKey(option.longestName());
+            args.add(values.get(option.longestName()));
+        }
+    }
+
+    private Map<String, String> sampleOptionValues(Path configDir) {
+        return Map.ofEntries(
+                Map.entry("--key", "synthetic-key"),
+                Map.entry("--token", "synthetic-token"),
+                Map.entry("--board-name", "Synthetic Board"),
+                Map.entry("--board", SYNTHETIC_BOARD_ID),
+                Map.entry("--workspace-id", "syntheticworkspace"),
+                Map.entry("--repository-url", HTTPS),
+                Map.entry("--active", "Todo"),
+                Map.entry("--terminal", "Done"),
+                Map.entry("--in-progress", "Doing"),
+                Map.entry("--blocked", "Blocked"),
+                Map.entry("--workflow", configDir.resolve("WORKFLOW.md").toString()),
+                Map.entry(
+                        "--workspace-root",
+                        tempDir.resolve("round-trip-workspaces").toString()),
+                Map.entry("--config-dir", configDir.toString()),
+                Map.entry("--manifest", configDir.resolve("boards.json").toString()),
+                Map.entry("--server-port", "19300"),
+                Map.entry("--env", configDir.resolve(".env").toString()),
+                Map.entry("--add-path", "/"),
+                Map.entry("--endpoint", "http://127.0.0.1:9/1"));
+    }
+
+    /// Runs the real setup-local parser and captures the request it hands to setup, without running setup.
+    private static LocalSetupRequest parsedSetupLocalRequest(List<String> args) {
+        LocalSetup setup = mock();
+        try (var output = new PrintStream(OutputStream.nullOutputStream(), true, StandardCharsets.UTF_8)) {
+            int exitCode = new SetupLocalCommandFactory()
+                    .execute(
+                            args.toArray(String[]::new),
+                            setup,
+                            new BufferedReader(new StringReader("")),
+                            output,
+                            output);
+            assertThat(exitCode).as("setup-local %s parses", args).isZero();
+        }
+        ArgumentCaptor<LocalSetupRequest> request = ArgumentCaptor.forClass(LocalSetupRequest.class);
+        verify(setup).run(request.capture(), any(BufferedReader.class), any(PrintStream.class), any(PrintStream.class));
+        return request.getValue();
+    }
+
+    /// The user-facing parser; options a subcommand rejects are hidden there.
+    private static CommandLine setupLocalParser() {
+        try (var output = new PrintStream(OutputStream.nullOutputStream(), true, StandardCharsets.UTF_8)) {
+            var parser = new CommandLine(new SetupLocalCommandFactory.SetupLocalCommand(
+                    mock(), new BufferedReader(new StringReader("")), output, output));
+            SetupLocalCommandFactory.hideUnsupportedSubcommandOptions(parser);
+            return parser;
+        }
+    }
+
+    private static Map<String, OptionSpec> setupLocalOptions(String subcommand) {
+        CommandLine parser = setupLocalParser();
+        CommandLine command =
+                subcommand.isEmpty() ? parser : parser.getSubcommands().get(subcommand);
+        return command.getCommandSpec().optionsMap();
+    }
+
+    private static List<String> reportedCommandTokens(String report) {
+        String command = firstMatch(report, Pattern.compile("(?m)^- \\*\\*command:\\*\\* (.+)$"));
+        return List.of(command.split(" "));
     }
 
     private static String firstMatch(String value, Pattern pattern) {
