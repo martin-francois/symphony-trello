@@ -291,6 +291,8 @@ public class SymphonyOrchestrator {
                 startupComplete = true;
             } finally {
                 if (!startupComplete) {
+                    tickSchedule.markStoppingAndCancelTick();
+                    stopWorkflowWatcher();
                     releaseWorkflowProcessLock();
                 }
             }

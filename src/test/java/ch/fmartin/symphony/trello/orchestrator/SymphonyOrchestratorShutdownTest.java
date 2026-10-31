@@ -2,6 +2,8 @@ package ch.fmartin.symphony.trello.orchestrator;
 
 import static ch.fmartin.symphony.trello.orchestrator.SymphonyOrchestratorTestSupport.*;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -34,6 +36,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -481,6 +484,55 @@ final class SymphonyOrchestratorShutdownTest {
             watcherBeforeWait.resume();
             orchestrator.stop();
         }
+    }
+
+    @Test
+    void failedStartClosesItsWorkflowWatcher() throws Exception {
+        // given
+        SymphonyOrchestrator orchestrator = stoppedOrchestrator();
+        var watcherBeforeWait = new PausePoint("the watcher created by the failed start");
+        var watcherFailure = new AtomicReference<Throwable>();
+        orchestrator.workflowWatcherWaitHookForTests = () -> pauseWatcher(watcherBeforeWait, watcherFailure);
+
+        // when
+        try {
+            assertThatThrownBy(orchestrator::start).isInstanceOf(RejectedExecutionException.class);
+            watcherBeforeWait.awaitPaused();
+            watcherBeforeWait.resume();
+
+            // then
+            assertThat(watcherBeforeWait.pausedThread().join(WAIT_TIMEOUT))
+                    .as("failed startup must close its watch service and terminate its watcher")
+                    .isTrue();
+            assertThat(watcherFailure).hasNullValue();
+        } finally {
+            watcherBeforeWait.resume();
+            orchestrator.stop();
+        }
+    }
+
+    @Test
+    void failedStartLeavesRefreshStopped() throws Exception {
+        // given
+        SymphonyOrchestrator orchestrator = stoppedOrchestrator();
+
+        // when
+        try {
+            assertThatThrownBy(orchestrator::start).isInstanceOf(RejectedExecutionException.class);
+
+            // then
+            assertThatCode(orchestrator::requestRefresh).doesNotThrowAnyException();
+        } finally {
+            orchestrator.stop();
+        }
+    }
+
+    private SymphonyOrchestrator stoppedOrchestrator() throws Exception {
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "60000");
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, new FakeTracker(List.of()), mock());
+        orchestrator.stop();
+        return orchestrator;
     }
 
     private static void pauseWatcher(PausePoint pausePoint, AtomicReference<Throwable> failure) {
