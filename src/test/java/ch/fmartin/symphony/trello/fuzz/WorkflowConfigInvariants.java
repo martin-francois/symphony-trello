@@ -16,8 +16,10 @@ import ch.fmartin.symphony.trello.workflow.WorkflowException;
 import ch.fmartin.symphony.trello.workflow.WorkflowFrontMatterYaml;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -75,9 +77,9 @@ public final class WorkflowConfigInvariants {
         }
 
         @Override
-        public String readString(Path path) throws IOException {
+        public InputStream newInputStream(Path path) throws IOException {
             check(!OVERSIZED_SECRET_FILE.equals(fileName(path)), "a secret file over the size limit is never read");
-            return secret(path);
+            return new ByteArrayInputStream(secret(path).getBytes(UTF_8));
         }
     };
     private static final Pattern ERROR_CODE = Pattern.compile("[a-z]+(_[a-z]+)*");

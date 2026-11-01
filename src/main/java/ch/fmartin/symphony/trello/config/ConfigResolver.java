@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.config;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.workflow.CodexSandboxPolicy;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
@@ -8,8 +10,10 @@ import com.google.common.base.Splitter;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -504,14 +508,26 @@ public class ConfigResolver {
         try {
             long size = secretFiles.size(secretPath);
             if (size > MAX_SECRET_BYTES) {
-                throw new ConfigException(
-                        "secret_file_too_large", displayName + " secret file is too large: " + secretPath);
+                throw secretFileTooLarge(displayName, secretPath);
             }
-            return stripTrailingLineBreaks(secretFiles.readString(secretPath));
+            try (InputStream input = secretFiles.newInputStream(secretPath)) {
+                // Metadata can understate content, including devices, pipes, and growing files.
+                byte[] content = input.readNBytes(MAX_SECRET_BYTES + 1);
+                if (content.length > MAX_SECRET_BYTES) {
+                    throw secretFileTooLarge(displayName, secretPath);
+                }
+                String value =
+                        UTF_8.newDecoder().decode(ByteBuffer.wrap(content)).toString();
+                return stripTrailingLineBreaks(value);
+            }
         } catch (IOException e) {
             throw new ConfigException(
                     "secret_file_read_error", displayName + " secret file cannot be read: " + secretPath, e);
         }
+    }
+
+    private static ConfigException secretFileTooLarge(String displayName, Path secretPath) {
+        return new ConfigException("secret_file_too_large", displayName + " secret file is too large: " + secretPath);
     }
 
     private static String stripTrailingLineBreaks(String value) {
@@ -693,13 +709,14 @@ public class ConfigResolver {
             }
 
             @Override
-            public String readString(Path path) throws IOException {
-                return Files.readString(path);
+            public InputStream newInputStream(Path path) throws IOException {
+                return Files.newInputStream(path);
             }
         };
 
         long size(Path path) throws IOException;
 
-        String readString(Path path) throws IOException;
+        /// Opens a secret stream that the resolver owns and closes after its bounded read.
+        InputStream newInputStream(Path path) throws IOException;
     }
 }
