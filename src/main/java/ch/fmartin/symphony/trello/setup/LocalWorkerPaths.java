@@ -4,7 +4,20 @@ import java.nio.file.Path;
 import java.util.Map;
 import java.util.Optional;
 
-record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path stateHome) {
+record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path stateHome, Path manifestPath) {
+    LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path stateHome) {
+        this(appHome, configDir, workspaceRoot, stateHome, configDir.resolve(ConnectedBoardManifest.FILE_NAME));
+    }
+
+    LocalWorkerPaths withManifestPath(Path manifest) {
+        return new LocalWorkerPaths(
+                appHome,
+                configDir,
+                workspaceRoot,
+                stateHome,
+                manifest.toAbsolutePath().normalize());
+    }
+
     private static final String APP_HOME_PROPERTY = "symphony.trello.app.home";
     static final String CONFIG_DIR_ENV = "SYMPHONY_TRELLO_CONFIG_DIR";
     private static final String WORKSPACE_ROOT_ENV = "SYMPHONY_TRELLO_WORKSPACE_ROOT";
@@ -40,9 +53,12 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
                 .orElseGet(() -> Path.of("."))
                 .toAbsolutePath()
                 .normalize();
+        Path resolvedAppHome = appHome.orElseGet(() -> defaultAppHome(environment))
+                .toAbsolutePath()
+                .normalize();
         Path resolvedWorkspaceRoot = workspaceRoot
                 .or(() -> envPath(environment, WORKSPACE_ROOT_ENV))
-                .orElse(TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT)
+                .orElseGet(() -> TrelloBoardSetup.defaultWorkspaceRoot(resolvedConfigDir, resolvedAppHome))
                 .toAbsolutePath()
                 .normalize();
         Path resolvedStateHome = stateHome
@@ -51,16 +67,14 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
                 .orElseGet(() -> resolvedConfigDir.resolveSibling("state"))
                 .toAbsolutePath()
                 .normalize();
-        Path resolvedAppHome = appHome.or(LocalWorkerPaths::propertyAppHome)
-                .or(() -> envPath(environment, APP_HOME_ENV))
-                .orElseGet(() -> Path.of("."))
-                .toAbsolutePath()
-                .normalize();
         CliInputValidation.rejectExistingNonDirectoryPath("--config-dir", resolvedConfigDir);
         CliInputValidation.rejectExistingNonDirectoryPath("--workspace-root", resolvedWorkspaceRoot);
         CliInputValidation.rejectExistingNonDirectoryPath("--state-home", resolvedStateHome);
         CliInputValidation.rejectExistingNonDirectoryPath("--app-home", resolvedAppHome);
-        return new LocalWorkerPaths(resolvedAppHome, resolvedConfigDir, resolvedWorkspaceRoot, resolvedStateHome);
+        Path manifest = envPath(environment, "SYMPHONY_TRELLO_MANIFEST")
+                .orElseGet(() -> resolvedConfigDir.resolve(ConnectedBoardManifest.FILE_NAME));
+        return new LocalWorkerPaths(resolvedAppHome, resolvedConfigDir, resolvedWorkspaceRoot, resolvedStateHome)
+                .withManifestPath(manifest);
     }
 
     /// Managed workers inherit both directories from `LocalWorkerManager`; a process without them is
@@ -68,10 +82,6 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
     static boolean managedWorkerEnvironmentPresent(Map<String, String> environment) {
         return envPath(environment, CONFIG_DIR_ENV).isPresent()
                 && envPath(environment, STATE_HOME_ENV).isPresent();
-    }
-
-    Path manifestPath() {
-        return configDir.resolve(ConnectedBoardManifest.FILE_NAME);
     }
 
     /// Default connected-board manifest location for setup commands: the same configured or
@@ -87,6 +97,15 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
 
     Path defaultEnvPath() {
         return configDir.resolve(".env");
+    }
+
+    static Path defaultAppHome(Map<String, String> environment) {
+        return propertyAppHome().or(() -> envPath(environment, APP_HOME_ENV)).orElseGet(() -> Path.of("."));
+    }
+
+    static Path defaultWorkspaceRoot(Path configDir, Map<String, String> environment) {
+        return envPath(environment, WORKSPACE_ROOT_ENV)
+                .orElseGet(() -> TrelloBoardSetup.defaultWorkspaceRoot(configDir, defaultAppHome(environment)));
     }
 
     private static Optional<Path> propertyAppHome() {

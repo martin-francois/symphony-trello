@@ -75,7 +75,7 @@ The same CI run showed that spaces, `(`, `)`, `~`, `;`, `,`, `=`, `:`, `[`, `]`,
 
 `ProcessCommandRunner` (setup prerequisite probes and the interactive `codex login`),
 `CodexModelDefaultsResolver` (`codex app-server` for model defaults), and setup diagnostics use the
-resolver. The worker's Codex launch runs `bash -lc` with the configured `codex.command`, so bash
+resolver. The worker's Codex launch runs `bash -c` with the configured `codex.command`, so bash
 resolves the command there and the worker does not use the resolver.
 
 The command runner owns the wrapper and the tool it starts. Interruption of an interactive wait

@@ -2277,6 +2277,18 @@ has_managed_pid_files() {
   [[ -d "$STATE_HOME" ]] && find "$STATE_HOME" -maxdepth 1 -type f -name '*.pid' -print -quit | grep -q .
 }
 
+has_live_card_helper_pid() {
+  local ready pid
+  for ready in "$STATE_HOME"/card-helper/*/ready.json; do
+    [[ -f "$ready" && ! -L "$ready" && ! -L "${ready%/ready.json}" ]] || continue
+    pid="$(head -c 1024 "$ready" | sed -nE 's/.*"pid"[ ]*:[ ]*([0-9]+).*/\1/p')"
+    if [[ "$pid" =~ ^[1-9][0-9]*$ ]] && kill -0 "$pid" >/dev/null 2>&1; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 pid_command_line() {
   local pid="$1"
   if [[ -r "/proc/$pid/cmdline" ]]; then
@@ -3411,6 +3423,17 @@ if [[ "$INSTALL_SOURCE" == "source-checkout" ]]; then
   prepare_source_checkout
 fi
 reject_major_downgrade
+RESTART_CARD_HELPER=false
+if [[ -d "$STATE_HOME/card-helper" ]]; then
+  if [[ -x "$BIN_DIR/symphony-trello" ]]; then
+    run "$BIN_DIR/symphony-trello" card-helper stop --all --config-dir "$CONFIG_DIR" --state-home "$STATE_HOME"
+  elif has_live_card_helper_pid; then
+    echo "cannot stop card helper: launcher is missing and a recorded helper PID is still running." >&2
+    echo "Restore the launcher or verify and stop the recorded helper, then rerun the installer." >&2
+    exit 2
+  fi
+  RESTART_CARD_HELPER=true
+fi
 if [[ "$RESTART_MANAGED_WORKERS" == true ]]; then
   run "$BIN_DIR/symphony-trello" stop
   print_status OK "  Managed workers stopped for the update"
@@ -3491,6 +3514,9 @@ install_codex_skill
 write_install_context
 apply_telemetry_environment_preference
 check_generated_workflows
+if [[ "$RESTART_CARD_HELPER" == true ]]; then
+  run "$BIN_DIR/symphony-trello" card-helper start --all --config-dir "$CONFIG_DIR" --state-home "$STATE_HOME"
+fi
 
 offer_path_setup
 

@@ -19,8 +19,11 @@ import ch.fmartin.symphony.trello.TestCards;
 import ch.fmartin.symphony.trello.agent.AgentEvent;
 import ch.fmartin.symphony.trello.agent.AgentRunResult;
 import ch.fmartin.symphony.trello.agent.AgentRunner;
+import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.BlockerRef;
 import ch.fmartin.symphony.trello.domain.Card;
+import ch.fmartin.symphony.trello.setup.ConnectedWorkflowResolver;
+import ch.fmartin.symphony.trello.setup.TrelloBoardSetupException;
 import ch.fmartin.symphony.trello.testsupport.MutableClock;
 import ch.fmartin.symphony.trello.tracker.RateLimitPressure;
 import ch.fmartin.symphony.trello.workflow.WorkflowException;
@@ -106,6 +109,59 @@ final class SymphonyOrchestratorTest {
         assertThat(snapshot.counts().running()).isZero();
         assertThat(snapshot.counts().retrying()).isZero();
         assertThat(tracker.cardState("card-1").state()).isEqualTo("Human Review");
+    }
+
+    @Test
+    void sessionLaunchUsesTheCredentialSourcesResolvedAtThatMoment() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "60000");
+        Path lateBoardEnv = tempDir.resolve("late-board.env");
+        var tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
+        var launched = new AtomicReference<AgentRunner.AgentRunRequest>();
+        AgentRunner runner = mock();
+        when(runner.run(any())).thenAnswer(invocation -> {
+            launched.set(invocation.getArgument(0));
+            return AgentRunResult.ok();
+        });
+        ConnectedWorkflowResolver connectedWorkflows = connectedWorkflowResolver();
+        when(connectedWorkflows.protectSession(any())).thenAnswer(invocation -> {
+            EffectiveConfig config = invocation.getArgument(0);
+            return config.withCredentialSources(config.credentialSources().withFiles(Set.of(lateBoardEnv)));
+        });
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner, connectedWorkflows);
+
+        // when
+        orchestrator.start();
+        waitUntil(() -> launched.get() != null);
+        orchestrator.stop();
+
+        // then
+        assertThat(launched.get().config().credentialSources().files()).contains(lateBoardEnv);
+    }
+
+    @Test
+    void unresolvableConnectedBoardBlocksNewSessionsWithoutStoppingTheWorker() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "60000");
+        var tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
+        AgentRunner runner = mock();
+        ConnectedWorkflowResolver connectedWorkflows = connectedWorkflowResolver();
+        when(connectedWorkflows.protectSession(any()))
+                .thenThrow(new TrelloBoardSetupException(
+                        "setup_workflow_invalid", "cannot protect credentials of connected board 'Other'"));
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner, connectedWorkflows);
+
+        // when
+        orchestrator.start();
+        waitUntil(() -> tracker.candidateFetches.get() >= 1);
+        RuntimeSnapshot snapshot = orchestrator.snapshot();
+        orchestrator.stop();
+
+        // then
+        assertThat(snapshot.counts().running()).isZero();
+        verify(runner, never()).run(any());
     }
 
     @Test

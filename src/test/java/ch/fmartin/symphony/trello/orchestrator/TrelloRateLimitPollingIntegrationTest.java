@@ -83,6 +83,7 @@ final class TrelloRateLimitPollingIntegrationTest {
         var orchestrator = new SymphonyOrchestrator(
                 new WorkflowLoader(),
                 new ConfigResolver(),
+                SymphonyOrchestratorTestSupport.connectedWorkflowResolver(),
                 new TrelloClient(new ObjectMapper()),
                 mock(),
                 new PromptRenderer(),

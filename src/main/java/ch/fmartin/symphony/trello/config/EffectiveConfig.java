@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalInt;
+import java.util.Set;
 import java.util.regex.Pattern;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
@@ -23,7 +24,47 @@ public record EffectiveConfig(
         CodexConfig codex,
         TrelloToolsConfig trelloTools,
         ServerConfig server,
-        GitHubConfig github) {
+        GitHubConfig github,
+        CredentialSources credentialSources,
+        Set<Path> protectedLaunchPaths) {
+
+    public EffectiveConfig {
+        protectedLaunchPaths = Set.copyOf(protectedLaunchPaths);
+    }
+
+    public EffectiveConfig withProtectedLaunchPaths(Set<Path> paths) {
+        return new EffectiveConfig(
+                workflowPath,
+                tracker,
+                polling,
+                workspace,
+                repository,
+                hooks,
+                agent,
+                codex,
+                trelloTools,
+                server,
+                github,
+                credentialSources,
+                paths);
+    }
+
+    public EffectiveConfig withCredentialSources(CredentialSources sources) {
+        return new EffectiveConfig(
+                workflowPath,
+                tracker,
+                polling,
+                workspace,
+                repository,
+                hooks,
+                agent,
+                codex,
+                trelloTools,
+                server,
+                github,
+                sources,
+                protectedLaunchPaths);
+    }
 
     public EffectiveConfig withResolvedBoardId(String resolvedBoardId) {
         return new EffectiveConfig(
@@ -56,7 +97,9 @@ public record EffectiveConfig(
                 codex,
                 trelloTools,
                 server,
-                github);
+                github,
+                credentialSources,
+                protectedLaunchPaths);
     }
 
     public record TrackerConfig(

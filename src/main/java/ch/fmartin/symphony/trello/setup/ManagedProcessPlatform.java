@@ -5,11 +5,18 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 interface ManagedProcessPlatform {
     ManagedProcessHandle start(
             List<String> command, Path workingDirectory, Map<String, String> environment, Path stdout, Path stderr)
             throws IOException;
+
+    default Optional<List<String>> commandArguments(long pid) {
+        return ProcessHandle.of(pid)
+                .flatMap(handle -> handle.info().arguments())
+                .map(List::of);
+    }
 
     boolean isAlive(long pid);
 
