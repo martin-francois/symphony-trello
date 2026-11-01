@@ -3,14 +3,26 @@ package ch.fmartin.symphony.trello.config;
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_LINE_SEPARATOR;
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_NEXT_LINE;
 import static ch.fmartin.symphony.trello.testsupport.TestEndpointValues.FOREIGN_ENDPOINT;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.Pipe;
+import java.nio.charset.MalformedInputException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -38,9 +50,188 @@ final class ConfigResolverTest {
     private static final String BRACED_PARENT_REFERENCE = "${" + PARENT_VARIABLE + "}";
     private static final String NUL_IN_PATH = "\u0000";
     private static final String UNIT_SEPARATOR_IN_REPOSITORY_PATH = "\u001F";
+    private static final int SECRET_BYTE_LIMIT = 64 * 1024;
+    private static final String ACCENTED_E = "\u00E9";
 
     @TempDir
     Path tempDir;
+
+    @ParameterizedTest
+    @ValueSource(longs = {0, 1})
+    void rejectsSecretContentOverLimitEvenWhenReportedSizeIsSmall(long reportedSize) throws Exception {
+        // given
+        Path secret = tempDir.resolve("api-key");
+        var secretFiles = mock(ConfigResolver.SecretFiles.class);
+        when(secretFiles.size(secret)).thenReturn(reportedSize);
+        when(secretFiles.newInputStream(secret))
+                .thenAnswer(ignored -> new ByteArrayInputStream(
+                        "x".repeat(SECRET_BYTE_LIMIT + 1).getBytes(UTF_8)));
+        var resolver = new ConfigResolver(ignored -> Optional.empty(), secretFiles);
+        WorkflowDefinition workflow = workflowWithSecretFile();
+
+        // when
+        ConfigException error = catchThrowableOfType(ConfigException.class, () -> resolver.resolve(workflow));
+
+        // then
+        assertThat(error).isNotNull().hasMessageContaining("tracker.api_key");
+        assertThat(error.code()).isEqualTo("secret_file_too_large");
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1, SECRET_BYTE_LIMIT - 1, SECRET_BYTE_LIMIT, SECRET_BYTE_LIMIT + 1, SECRET_BYTE_LIMIT * 2})
+    void boundsSecretBytesReadAndClosesStream(int contentSize) throws Exception {
+        // given
+        byte[] content = "x".repeat(contentSize).getBytes(UTF_8);
+        try (var input = spy(new ByteArrayInputStream(content))) {
+            var resolver = resolverWithSecretStream(input);
+            WorkflowDefinition workflow = workflowWithSecretFile();
+
+            // when
+            Throwable error = catchThrowable(() -> resolver.resolve(workflow));
+
+            // then
+            if (contentSize > SECRET_BYTE_LIMIT) {
+                assertThat(error).isInstanceOf(ConfigException.class).hasMessageContaining("tracker.api_key");
+                assertThat(((ConfigException) error).code()).isEqualTo("secret_file_too_large");
+            } else {
+                assertThat(error).isNull();
+            }
+            assertThat(input.available()).isEqualTo(Math.max(0, contentSize - SECRET_BYTE_LIMIT - 1));
+            verify(input).close();
+        }
+    }
+
+    @Test
+    void rejectsKnownOversizedSecretWithoutOpeningStream() throws Exception {
+        // given
+        var secretFiles = mock(ConfigResolver.SecretFiles.class);
+        Path secret = tempDir.resolve("api-key");
+        when(secretFiles.size(secret)).thenReturn((long) SECRET_BYTE_LIMIT + 1);
+        var resolver = new ConfigResolver(ignored -> Optional.empty(), secretFiles);
+        WorkflowDefinition workflow = workflowWithSecretFile();
+
+        // when
+        ConfigException error = catchThrowableOfType(ConfigException.class, () -> resolver.resolve(workflow));
+
+        // then
+        assertThat(error.code()).isEqualTo("secret_file_too_large");
+        verify(secretFiles, never()).newInputStream(secret);
+    }
+
+    @Test
+    void acceptsFinitePipeSecretThatReportsZeroSize() throws Exception {
+        // given
+        Pipe pipe = Pipe.open();
+        try (InputStream input = Channels.newInputStream(pipe.source())) {
+            try (var producer = pipe.sink()) {
+                ByteBuffer content = UTF_8.encode("pipe-secret\r\n");
+                while (content.hasRemaining()) {
+                    producer.write(content);
+                }
+            }
+            var resolver = resolverWithSecretStream(input);
+
+            // when
+            EffectiveConfig config = resolver.resolve(workflowWithSecretFile());
+
+            // then
+            assertThat(config.tracker().apiKey()).isEqualTo("pipe-secret");
+            assertThat(pipe.source().isOpen())
+                    .as("resolution closes the finite pipe source")
+                    .isFalse();
+        }
+    }
+
+    @Test
+    void closesSecretStreamWhenReadingFails() throws Exception {
+        // given
+        try (InputStream input = mock()) {
+            var failure = new IOException("controlled read failure");
+            when(input.readNBytes(SECRET_BYTE_LIMIT + 1)).thenThrow(failure);
+            var resolver = resolverWithSecretStream(input);
+            WorkflowDefinition workflow = workflowWithSecretFile();
+
+            // when
+            ConfigException error = catchThrowableOfType(ConfigException.class, () -> resolver.resolve(workflow));
+
+            // then
+            assertThat(error.code()).isEqualTo("secret_file_read_error");
+            assertThat(error).hasCause(failure).hasMessageContaining("tracker.api_key");
+            verify(input).close();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, SECRET_BYTE_LIMIT})
+    void rejectsMalformedUtf8AndClosesSecretStream(int contentSize) throws Exception {
+        // given
+        byte[] content = "x".repeat(contentSize).getBytes(UTF_8);
+        content[content.length - 1] = (byte) 0xC3;
+        try (var input = spy(new ByteArrayInputStream(content))) {
+            var resolver = resolverWithSecretStream(input);
+            WorkflowDefinition workflow = workflowWithSecretFile();
+
+            // when
+            ConfigException error = catchThrowableOfType(ConfigException.class, () -> resolver.resolve(workflow));
+
+            // then
+            assertThat(error.code()).isEqualTo("secret_file_read_error");
+            assertThat(error).hasCauseInstanceOf(MalformedInputException.class);
+            verify(input).close();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"api_key", "api_token"})
+    void hostSecretReaderEnforcesByteLimitBeforeRemovingLineBreaks(String setting) throws Exception {
+        // given
+        String value = ACCENTED_E.repeat(SECRET_BYTE_LIMIT / ACCENTED_E.getBytes(UTF_8).length - 1);
+        Path secret = tempDir.resolve("api-key");
+        Files.writeString(secret, value + "\r\n");
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
+        WorkflowDefinition workflow = workflowWithSecretFile(setting);
+
+        // when
+        EffectiveConfig accepted = resolver.resolve(workflow);
+        Files.writeString(secret, value + "\r\n\n");
+        ConfigException error = catchThrowableOfType(ConfigException.class, () -> resolver.resolve(workflow));
+
+        // then
+        assertThat(
+                        setting.equals("api_key")
+                                ? accepted.tracker().apiKey()
+                                : accepted.tracker().apiToken())
+                .isEqualTo(value);
+        assertThat(error.code()).isEqualTo("secret_file_too_large");
+        assertThat(error).hasMessageContaining("tracker.%s", setting).hasMessageNotContaining(value);
+    }
+
+    private ConfigResolver resolverWithSecretStream(InputStream input) throws IOException {
+        var secretFiles = mock(ConfigResolver.SecretFiles.class);
+        when(secretFiles.newInputStream(tempDir.resolve("api-key"))).thenReturn(input);
+        return new ConfigResolver(ignored -> Optional.empty(), secretFiles);
+    }
+
+    private WorkflowDefinition workflowWithSecretFile() {
+        return workflowWithSecretFile("api_key");
+    }
+
+    private WorkflowDefinition workflowWithSecretFile(String setting) {
+        return new WorkflowDefinition(
+                tempDir.resolve("WORKFLOW.secret-file.md"),
+                Map.of(
+                        "tracker",
+                        Map.of(
+                                "kind",
+                                "trello",
+                                "api_key",
+                                setting.equals("api_key") ? "file:api-key" : "literal-key",
+                                "api_token",
+                                setting.equals("api_token") ? "file:api-key" : "literal-token",
+                                "board_id",
+                                "board-1")),
+                "Prompt");
+    }
 
     @Test
     void resolvesWorkflowEnvironmentReferencesForBoardScopeAndServerPort() throws Exception {

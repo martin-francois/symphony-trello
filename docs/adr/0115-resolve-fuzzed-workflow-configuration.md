@@ -66,7 +66,7 @@ added. The two operator overrides change which sandbox rules apply, so a single 
 leave those branches unreachable.
 
 `ConfigResolver` gains a constructor that takes a `ConfigResolver.SecretFiles` implementation. The
-default `SecretFiles.HOST` keeps the old `Files.size` and `Files.readString` calls. The fuzz harness
+default `SecretFiles.HOST` originally kept the `Files.size` and `Files.readString` calls. The fuzz harness
 passes in-memory files keyed by file name, including one that reports a size over the 64 KiB limit
 and fails the run if it is ever read.
 
@@ -86,12 +86,12 @@ as `ConfigException`, recorded in `SPEC.md` Section 6.4.
   the instrumented YAML library, so the hosted drop should be smaller. The first hosted batch after
   the merge shows the real figure. [GitHub issue #1032](https://github.com/martin-francois/symphony-trello/issues/1032)
   records that batch, its throughput, and the configuration-class coverage.
-* Bad, because `ConfigResolver` carries a public constructor whose only caller outside production is
-  the fuzz harness.
-* Neutral, because the in-memory seam means the harness never reaches device paths. `Files.size`
-  returns 0 for `/dev/zero`, so a `file:` secret on a device path still reads without the size
-  limit. [GitHub issue #834](https://github.com/martin-francois/symphony-trello/issues/834) tracks
-  that production question.
+* Bad, because `ConfigResolver` carries a public constructor for the fuzz harness and controlled
+  secret-reader tests.
+* Neutral, because the in-memory seam means the harness never reaches device paths.
+  [ADR 0159](0159-bound-file-backed-secret-reads.md) resolves the production size-limit gap from
+  [GitHub issue #834](https://github.com/martin-francois/symphony-trello/issues/834): the seam now
+  supplies input streams and the resolver bounds the bytes read independently of metadata.
 
 ### Confirmation
 
