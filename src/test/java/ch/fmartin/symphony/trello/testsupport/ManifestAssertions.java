@@ -163,7 +163,8 @@ public final class ManifestAssertions {
             int serverPort,
             boolean githubEnabled,
             List<Path> additionalWritableRoots,
-            boolean dangerFullAccess) {
+            boolean dangerFullAccess,
+            Path sourceWorkflowPath) {
         private ManifestBoard {
             additionalWritableRoots =
                     additionalWritableRoots == null ? List.of() : List.copyOf(additionalWritableRoots);

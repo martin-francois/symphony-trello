@@ -41,7 +41,8 @@ final class FakeCodexAppServerTest {
         // when
         try {
             try (var input = process.outputWriter(StandardCharsets.UTF_8)) {
-                input.write(first + second);
+                input.write("{\"id\":0,\"method\":\"thread/start\",\"params\":{\"permissions\":\"symphony-test\"}}\n"
+                        + first + second);
             }
             assertThat(process.waitFor(Duration.ofSeconds(30)))
                     .as("the fake completes both turns and exits after stdin closes")
@@ -55,9 +56,15 @@ final class FakeCodexAppServerTest {
         var json = new ObjectMapper();
         List<ToolCall> calls = new ArrayList<>();
         List<String> turns = new ArrayList<>();
+        List<String> profiles = new ArrayList<>();
         for (String line : Files.readAllLines(output)) {
             JsonNode message = json.readTree(line);
-            if (message.has("result")) {
+            if (message.path("result").has("activePermissionProfile")) {
+                profiles.add(message.path("result")
+                        .path("activePermissionProfile")
+                        .path("id")
+                        .asText());
+            } else if (message.has("result")) {
                 turns.add(message.path("result").path("turn").path("id").asText());
             } else if (message.path("method").asText().equals("item/tool/call")) {
                 JsonNode params = message.path("params");
@@ -67,6 +74,7 @@ final class FakeCodexAppServerTest {
                         params.path("tool").asText()));
             }
         }
+        assertThat(profiles).containsExactly("symphony-test");
         assertThat(turns)
                 .hasSize(2)
                 .doesNotHaveDuplicates()

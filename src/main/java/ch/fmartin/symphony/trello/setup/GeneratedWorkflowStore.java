@@ -120,6 +120,37 @@ final class GeneratedWorkflowStore {
                 .findAny();
     }
 
+    /// Copies source provenance without discarding newer JSON fields, or removes stale destination
+    /// provenance when an unversioned source replaces the generated workflow.
+    Optional<byte[]> copyRecord(Path source, Path destination) throws IOException {
+        ObjectNode document = load();
+        List<GeneratedWorkflowRecord> stored = records(document);
+        ObjectNode copied = null;
+        boolean removedDestination = false;
+        ArrayNode workflows = json.createArrayNode();
+        for (int index = 0; index < stored.size(); index++) {
+            JsonNode entry = document.path("workflows").get(index);
+            Path path = stored.get(index).workflowPath();
+            if (PathsEqual.samePath(path, source)) {
+                copied = ((ObjectNode) entry).deepCopy();
+                copied.set("workflowPath", json.valueToTree(destination));
+            }
+            if (!PathsEqual.samePath(path, destination)) {
+                workflows.add(entry);
+            } else {
+                removedDestination = true;
+            }
+        }
+        if (copied == null && !removedDestination) {
+            return Optional.empty();
+        }
+        if (copied != null) {
+            workflows.add(copied);
+        }
+        document.set("workflows", workflows);
+        return Optional.of(json.writerWithDefaultPrettyPrinter().writeValueAsBytes(document));
+    }
+
     /// Replaces the record for the same workflow path, or adds it.
     void put(GeneratedWorkflowRecord record) throws IOException {
         ObjectNode document = load();

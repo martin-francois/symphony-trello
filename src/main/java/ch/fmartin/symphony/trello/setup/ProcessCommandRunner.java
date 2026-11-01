@@ -28,12 +28,19 @@ final class ProcessCommandRunner implements CommandRunner {
 
     @Override
     public CommandResult run(String... command) {
+        try {
+            return run(new ProcessBuilder(executables.launchCommand(List.of(command))));
+        } catch (IOException e) {
+            return CommandResult.launchFailed(e.getMessage());
+        }
+    }
+
+    CommandResult run(ProcessBuilder builder) {
         Path outputFile = null;
         Process process = null;
         try {
             outputFile = Files.createTempFile("symphony-trello-command-", ".log");
-            process = new ProcessBuilder(executables.launchCommand(List.of(command)))
-                    .redirectErrorStream(true)
+            process = builder.redirectErrorStream(true)
                     .redirectOutput(outputFile.toFile())
                     .start();
             if (!process.waitFor(commandTimeout)) {

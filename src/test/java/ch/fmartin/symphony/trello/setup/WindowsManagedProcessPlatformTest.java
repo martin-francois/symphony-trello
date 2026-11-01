@@ -1,18 +1,73 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 final class WindowsManagedProcessPlatformTest {
     @TempDir
     Path tempDir;
+
+    @EnabledOnOs(OS.WINDOWS)
+    @Test
+    void nativeExitWaitTimesOutWithoutSignallingALiveProcess() {
+        // given
+        var process = ProcessHandle.current();
+        var platform = new WindowsManagedProcessPlatform();
+
+        // when
+        boolean exited = platform.awaitExited(List.of(process.pid()), Duration.ZERO);
+
+        // then
+        assertThat(exited).as("a live process has not signalled its exit").isFalse();
+        assertThat(process.isAlive()).as("waiting never signals the process").isTrue();
+    }
+
+    @Test
+    void longClasspathRemainsInTheLauncherEnvironment() {
+        // given
+        String classpath = "C:\\Users\\owner\\Symphony install\\lib\\dependency.jar;".repeat(400);
+
+        // when
+        ProcessBuilder launcher = WindowsManagedProcessPlatform.launcher(
+                List.of("java.exe", "HelperMain"),
+                tempDir,
+                Map.of("CLASSPATH", classpath),
+                tempDir.resolve("stdout.log"),
+                tempDir.resolve("stderr.log"));
+
+        // then
+        assertThat(launcher.environment().get("CLASSPATH")).isEqualTo(classpath);
+        assertThat(launcher.command().getLast()).hasSizeLessThan(32767);
+        assertThat(decode(launcher.command().getLast())).doesNotContain(classpath);
+    }
+
+    @Test
+    void readsProcessArgumentsThroughTheNativeQuery() {
+        // given
+        var runner = mock(CommandRunner.class);
+        when(runner.run(any(String[].class)))
+                .thenReturn(new CommandResult(0, "[\"java.exe\",\"-Dmarker=path with spaces\",\"HelperMain\"]"));
+        var platform = new WindowsManagedProcessPlatform(runner);
+
+        // when
+        var arguments = platform.commandArguments(12345);
+
+        // then
+        assertThat(arguments).hasValue(List.of("java.exe", "-Dmarker=path with spaces", "HelperMain"));
+    }
 
     @Test
     void launcherUsesDetachedStartProcessAndReturnsWorkerPid() {
@@ -42,6 +97,7 @@ final class WindowsManagedProcessPlatformTest {
         assertThat(script)
                 .contains(
                         "$ErrorActionPreference = 'Stop'",
+                        "$ProgressPreference = 'SilentlyContinue'",
                         "[System.Environment]::SetEnvironmentVariable('SYMPHONY_TRELLO_INSTALLER_COMPLETION', $null, 'Process')",
                         "[System.Environment]::SetEnvironmentVariable('SYMPHONY_TRELLO_DOTENV', 'C:/Users/Fran/config/.env', 'Process')",
                         "$process = Start-Process -FilePath 'C:/Program Files/Java/bin/java.exe'",

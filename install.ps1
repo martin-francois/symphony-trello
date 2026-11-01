@@ -1278,6 +1278,24 @@ function Get-ManagedPidFile {
     Select-Object -First 1
 }
 
+function Test-LiveCardHelperPid {
+  $helperHome = Join-Path $StateHome "card-helper"
+  foreach ($directory in @(Get-ChildItem -LiteralPath $helperHome -Directory -ErrorAction SilentlyContinue)) {
+    if ($directory.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
+    $readyPath = Join-Path $directory.FullName "ready.json"
+    $readyFile = Get-Item -LiteralPath $readyPath -ErrorAction SilentlyContinue
+    if (-not $readyFile -or $readyFile.PSIsContainer -or $readyFile.Length -gt 1024 -or
+        ($readyFile.Attributes -band [IO.FileAttributes]::ReparsePoint)) { continue }
+    try {
+      $ready = Get-Content -LiteralPath $readyPath -Raw | ConvertFrom-Json -ErrorAction Stop
+      $helperPid = 0
+      if ([int]::TryParse([string]$ready.pid, [ref]$helperPid) -and $helperPid -gt 0 -and
+          (Get-Process -Id $helperPid -ErrorAction SilentlyContinue)) { return $true }
+    } catch { continue }
+  }
+  return $false
+}
+
 function ConvertTo-PowerShellLiteral([string]$Value) {
   return "'" + ($Value -replace "'", "''") + "'"
 }
@@ -2133,6 +2151,14 @@ if ($InstallSource -eq "source-checkout") {
   Prepare-SourceCheckout
 }
 Assert-NoMajorDowngrade
+$RestartCardHelper = Test-Path -LiteralPath (Join-Path $StateHome "card-helper") -PathType Container
+if ($RestartCardHelper) {
+  if (Test-Path -LiteralPath "$BinDir\symphony-trello.ps1" -PathType Leaf) {
+    Invoke-Step "stop card helper before updating" { & "$BinDir\symphony-trello.ps1" card-helper stop --all --config-dir $ConfigDir --state-home $StateHome }
+  } elseif (Test-LiveCardHelperPid) {
+    throw "cannot stop card helper: launcher is missing and a recorded helper PID is still running. Restore the launcher or verify and stop the recorded helper, then rerun the installer."
+  }
+}
 if ($RestartManagedWorkers) {
   Invoke-Step "$BinDir\symphony-trello.ps1 stop" { & "$BinDir\symphony-trello.ps1" stop }
   Write-Status "OK" "  Managed workers stopped for the update"
@@ -2225,6 +2251,9 @@ Install-CodexSkill
 Write-InstallContext
 Set-TelemetryEnvironmentPreference
 Invoke-GeneratedWorkflowCheck
+if ($RestartCardHelper) {
+  Invoke-Step "restart card helper" { & "$BinDir\symphony-trello.ps1" card-helper start --all --config-dir $ConfigDir --state-home $StateHome }
+}
 
 Offer-PathSetup
 

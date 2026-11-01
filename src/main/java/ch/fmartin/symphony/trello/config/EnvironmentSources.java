@@ -1,7 +1,10 @@
 package ch.fmartin.symphony.trello.config;
 
+import java.nio.file.Path;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 
 /// The ordered sources a workflow's environment references resolve from: the first source that
@@ -22,6 +25,14 @@ public final class EnvironmentSources implements Function<String, Optional<Strin
     public EnvironmentSources snapshot() {
         return new EnvironmentSources(
                 sources.stream().map(EnvironmentSource::snapshot).toList());
+    }
+
+    public Set<Path> files() {
+        Set<Path> files = new HashSet<>();
+        for (EnvironmentSource source : sources) {
+            source.filePath().ifPresent(files::add);
+        }
+        return Set.copyOf(files);
     }
 
     public Optional<EnvironmentValue> lookup(String name) {

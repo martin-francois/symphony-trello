@@ -16,12 +16,15 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
 final class LocalWorkerManagerTestFixture {
+    private static final String IMPORTED_BOARD_NAME = "Imported Queue";
+    private final Map<String, String> canonicalBoardIds = new HashMap<>();
     final LocalWorkerPaths paths;
     final ManagedProcessPlatform platform;
     final LocalHealthChecker healthChecker;
@@ -37,13 +40,21 @@ final class LocalWorkerManagerTestFixture {
     }
 
     LocalWorkerManagerTestFixture(Path tempDir, Map<String, String> environment, WorkflowConfigEditor workflowConfig) {
+        this(tempDir, environment, workflowConfig, mock(ManagedProcessPlatform.class));
+    }
+
+    LocalWorkerManagerTestFixture(
+            Path tempDir,
+            Map<String, String> environment,
+            WorkflowConfigEditor workflowConfig,
+            ManagedProcessPlatform platform) {
         this.paths = LocalWorkerPaths.from(
                 Optional.of(tempDir.resolve("app")),
                 Optional.of(tempDir.resolve("config")),
                 Optional.of(tempDir.resolve("workspaces")),
                 Optional.of(tempDir.resolve("state")),
                 environment);
-        this.platform = mock();
+        this.platform = platform;
         when(platform.appendsToExistingLogs()).thenReturn(true);
         this.healthChecker = mock();
         when(healthChecker.boardHealth(any()))
@@ -62,7 +73,27 @@ final class LocalWorkerManagerTestFixture {
                         Optional.empty()));
         this.credentialPreflight = mock();
         this.manager = new LocalWorkerManager(
-                environment, workflowConfig, healthChecker, platform, new LocalLogTailer(), credentialPreflight);
+                environment,
+                workflowConfig,
+                healthChecker,
+                platform,
+                new LocalLogTailer(),
+                credentialPreflight,
+                mock(CardHelperManager.class),
+                new ManagedWorkflowImport(
+                        workflowConfig,
+                        environment,
+                        config -> new TrelloBoardSetup.BoardInfo(
+                                canonicalBoardIds.getOrDefault(
+                                        config.tracker().boardId(),
+                                        config.tracker().boardId()),
+                                config.tracker().boardId(),
+                                IMPORTED_BOARD_NAME,
+                                "https://trello.com/b/SYNTH001")));
+    }
+
+    Path importedWorkflowPath() {
+        return paths.configDir().resolve(WorkflowFileNames.generatedFileName(IMPORTED_BOARD_NAME, "board", 1));
     }
 
     WorkerRunResult start(StartWorkerRequest request) throws Exception {
@@ -372,6 +403,12 @@ final class LocalWorkerManagerTestFixture {
     void save(ConnectedBoard... boards) throws Exception {
         var manifest = new ConnectedBoardManifest(List.of(boards));
         new ConnectedBoardRepository(paths.manifestPath()).save(manifest);
+        canonicalBoardIds.clear();
+        for (ConnectedBoard board : boards) {
+            canonicalBoardIds.put(board.boardId(), board.boardId());
+            canonicalBoardIds.put(board.boardKey(), board.boardId());
+            canonicalBoardIds.put(TrelloBoardIds.parseStoredBoardUrl(board.boardUrl()), board.boardId());
+        }
     }
 
     private StartWorkerRequest startRequest(

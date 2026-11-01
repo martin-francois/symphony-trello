@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import ch.fmartin.symphony.trello.TestCards;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
+import ch.fmartin.symphony.trello.testsupport.FakeAppServerScripts;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -305,8 +306,9 @@ final class CodexAppServerClientTest {
                         AgentRunResult.fail("codex_protocol_error: {\"code\":-32000,\"message\":\"bad initialize\"}"));
     }
 
-    @Test
-    void sendsAdditionalWritableRootsAsWorkspaceWriteSandboxPolicy() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void sendsProtectedProfileWithWritableRootsAndNetworkPolicy(boolean networkAccess) throws Exception {
         // given
         Path capture = tempDir.resolve("turn-start.jsonl");
         Path appServer = writeExecutableScript(
@@ -316,10 +318,14 @@ final class CodexAppServerClientTest {
                 capture="$1"
                 while IFS= read -r line; do
                   case "$line" in
-                    *\\"method\\":\\"initialize\\"*) echo '{"id":1,"result":{"userAgent":"capture-test"}}' ;;
-                    *\\"method\\":\\"thread/start\\"*) echo '{"id":2,"result":{"thread":{"id":"thread-capture"}}}' ;;
-                    *\\"method\\":\\"turn/start\\"*)
+                    *\\"method\\":\\"initialize\\"*)
                       printf '%s\\n' "$line" > "$capture"
+                      echo '{"id":1,"result":{"userAgent":"capture-test"}}' ;;
+                    *\\"method\\":\\"thread/start\\"*)
+                      printf '%s\\n' "$line" >> "$capture"
+                      echo '{"id":2,"result":{"thread":{"id":"thread-capture"}}}' ;;
+                    *\\"method\\":\\"turn/start\\"*)
+                      printf '%s\\n' "$line" >> "$capture"
                       echo '{"id":3,"result":{"turn":{"id":"turn-capture"}}}'
                       echo '{"method":"turn/completed","params":{"threadId":"thread-capture","turn":{"id":"turn-capture","error":null}}}'
                       ;;
@@ -330,6 +336,8 @@ final class CodexAppServerClientTest {
         EffectiveConfig config = config(Map.of(
                 "command",
                 appServer + " " + capture,
+                "turn_sandbox_policy",
+                Map.of("type", "workspaceWrite", "networkAccess", networkAccess),
                 "additional_writable_roots",
                 List.of(extraRoot.toString()),
                 "read_timeout_ms",
@@ -351,71 +359,33 @@ final class CodexAppServerClientTest {
 
         // then
         assertThat(result).isEqualTo(AgentRunResult.ok());
-        assertThat(json.readTree(Files.readString(capture))
-                        .path("params")
-                        .path("sandboxPolicy")
-                        .path("writableRoots"))
-                .extracting(JsonNode::asText)
-                .contains(extraRoot.toAbsolutePath().normalize().toString());
-    }
-
-    @Test
-    void preservesWorkspaceWriteNetworkAccessWhenMergingWritableRoots() throws Exception {
-        // given
-        Path capture = tempDir.resolve("turn-start-network.jsonl");
-        Path appServer = writeExecutableScript(
-                "capturing-network-app-server.sh",
-                """
-                #!/usr/bin/env bash
-                capture="$1"
-                while IFS= read -r line; do
-                  case "$line" in
-                    *\\"method\\":\\"initialize\\"*) echo '{"id":1,"result":{"userAgent":"capture-test"}}' ;;
-                    *\\"method\\":\\"thread/start\\"*) echo '{"id":2,"result":{"thread":{"id":"thread-capture"}}}' ;;
-                    *\\"method\\":\\"turn/start\\"*)
-                      printf '%s\\n' "$line" > "$capture"
-                      echo '{"id":3,"result":{"turn":{"id":"turn-capture"}}}'
-                      echo '{"method":"turn/completed","params":{"threadId":"thread-capture","turn":{"id":"turn-capture","error":null}}}'
-                      ;;
-                  esac
-                done
-                """);
-        Path extraRoot = tempDir.resolve("allowed-project");
-        EffectiveConfig config = config(Map.of(
-                "command",
-                appServer + " " + capture,
-                "turn_sandbox_policy",
-                Map.of("type", "workspaceWrite", "networkAccess", true),
-                "additional_writable_roots",
-                List.of(extraRoot.toString()),
-                "read_timeout_ms",
-                TEST_PROTOCOL_TIMEOUT_MILLIS,
-                "turn_timeout_ms",
-                TEST_PROTOCOL_TIMEOUT_MILLIS));
-        Path workspace = config.workspace().root().resolve("TRELLO-capture-network");
-        Files.createDirectories(workspace);
-        var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
-
-        // when
-        AgentRunResult result = client.runTurn(
-                config,
-                TestCards.card("card-1", "TRELLO-capture-network", "Ready for Codex"),
-                workspace,
-                "Do a capture no-op turn.",
-                "worker-capture",
-                event -> {});
-
-        // then
-        assertThat(result).isEqualTo(AgentRunResult.ok());
-        JsonNode sandboxPolicy =
-                json.readTree(Files.readString(capture)).path("params").path("sandboxPolicy");
-        assertThat(sandboxPolicy.path("type").asText()).isEqualTo("workspaceWrite");
-        assertThat(sandboxPolicy.path("networkAccess"))
-                .as("workspace-write sandbox policy networkAccess")
-                .isEqualTo(json.getNodeFactory().booleanNode(true));
-        assertThat(sandboxPolicy.path("writableRoots"))
-                .extracting(JsonNode::asText)
-                .contains(extraRoot.toAbsolutePath().normalize().toString());
+        List<JsonNode> requests = capturedRequests(capture);
+        assertThat(requests).hasSize(3);
+        assertThat(requests.getFirst()
+                        .at("/params/capabilities/experimentalApi")
+                        .asBoolean())
+                .as("named permission profiles require experimental API capability without Trello tools")
+                .isTrue();
+        JsonNode thread = requests.get(1).path("params");
+        String profileId = thread.path("permissions").asText();
+        JsonNode profile = thread.path("config").path("permissions").path(profileId);
+        assertThat(profile.path("extends").asText()).isEqualTo(":workspace");
+        assertThat(profile.path("workspace_roots").path(extraRoot.toString()).asBoolean())
+                .as("additional writable root is in the protected profile")
+                .isTrue();
+        assertThat(profile.path("network").path("enabled").asBoolean()).isEqualTo(networkAccess);
+        assertThat(profile.path("filesystem")
+                        .path(config.workflowPath().toString())
+                        .asText())
+                .isEqualTo("deny");
+        assertThat(thread.has("sandbox"))
+                .as("thread omits legacy sandbox overrides")
+                .isFalse();
+        JsonNode turn = requests.getLast().path("params");
+        assertThat(turn.path("permissions").asText()).isEqualTo(profileId);
+        assertThat(turn.has("sandboxPolicy"))
+                .as("turn omits legacy sandbox overrides")
+                .isFalse();
     }
 
     @Test
@@ -1521,7 +1491,7 @@ final class CodexAppServerClientTest {
 
     private Path writeExecutableScript(String fileName, String content) throws Exception {
         Path script = tempDir.resolve(fileName);
-        Files.writeString(script, content);
+        Files.writeString(script, FakeAppServerScripts.acknowledgePermissions(content));
         script.toFile().setExecutable(true);
         return script;
     }

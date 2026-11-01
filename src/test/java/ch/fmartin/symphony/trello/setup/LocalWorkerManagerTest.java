@@ -62,6 +62,31 @@ final class LocalWorkerManagerTest {
     Path tempDir;
 
     @Test
+    void startPassesItsExplicitAppHomeInsteadOfTheInheritedInstallation() throws Exception {
+        // given
+        Path inheritedApp = Files.createDirectory(tempDir.resolve("inherited-app"));
+        var fixture =
+                new LocalWorkerManagerTestFixture(tempDir, Map.of("SYMPHONY_TRELLO_APP_HOME", inheritedApp.toString()));
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        fixture.stubHealthyStartedWorker(board, 42);
+
+        // when
+        WorkerRunResult result = fixture.start(fixture.startRequest("Queue"));
+
+        // then
+        result.assertSuccess();
+        verify(fixture.platform)
+                .start(
+                        any(),
+                        eq(fixture.paths.appHome()),
+                        argThat(values ->
+                                fixture.paths.appHome().toString().equals(values.get("SYMPHONY_TRELLO_APP_HOME"))),
+                        any(),
+                        any());
+    }
+
+    @Test
     void startLaunchesPackagedAppAndWritesManagedPid() throws Exception {
         // given
         var fixture = new LocalWorkerManagerTestFixture(tempDir);
@@ -122,6 +147,30 @@ final class LocalWorkerManagerTest {
         result.assertSuccess().stdoutContains("Started Symphony for Trello: \"Queue\"");
         assertThat(board.workflowPath()).content(StandardCharsets.UTF_8).isEqualTo(originalWorkflow);
         verify(fixture.platform).start(any(), eq(fixture.paths.appHome()), any(), any(), any());
+    }
+
+    @Test
+    void startUsesTheSelectedCustomManifestAndPassesItToTheWorker() throws Exception {
+        // given
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Path manifest = fixture.paths.configDir().resolve("custom-boards.json");
+        new ConnectedBoardRepository(manifest).save(new ConnectedBoardManifest(List.of(board)));
+        fixture.stubHealthyStartedWorker(board, 42);
+        try (var out = new PrintStream(OutputStream.nullOutputStream())) {
+
+            // when
+            fixture.manager.start(fixture.paths.withManifestPath(manifest), board, board.envPath(), out);
+
+            // then
+            verify(fixture.platform)
+                    .start(
+                            any(),
+                            eq(fixture.paths.appHome()),
+                            argThat(values -> manifest.toString().equals(values.get("SYMPHONY_TRELLO_MANIFEST"))),
+                            any(),
+                            any());
+        }
     }
 
     @Test
@@ -1442,7 +1491,7 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
-    void startWorkflowRejectsBoardAlreadyManagedByAnotherRunningWorkflow() throws Exception {
+    void startWorkflowPreservesTheConnectionWhenItsPreviousWorkerCannotStop() throws Exception {
         // given
         var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
@@ -1467,8 +1516,8 @@ final class LocalWorkerManagerTest {
 
         // then
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
-            assertThat(failure.code()).isEqualTo("setup_worker_board_already_managed");
-            assertThat(failure.getMessage()).contains("Queue", "already managed by a running worker");
+            assertThat(failure.code()).isEqualTo("setup_stop_failed");
+            assertThat(failure.getMessage()).contains("Managed process did not stop");
             assertThat(failure.getMessage())
                     .doesNotContain(board.workflowPath().toString(), staleWorkflow.toString(), tempDir.toString());
         });
@@ -1476,7 +1525,7 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
-    void startWorkflowRejectsBoardManagedThroughStoredUrlShortLink() throws Exception {
+    void startWorkflowPreservesShortLinkConnectionWhenItsPreviousWorkerCannotStop() throws Exception {
         // given
         var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Path rowWorkflow = fixture.paths.configDir().resolve("WORKFLOW.shortlink-row.md");
@@ -1525,8 +1574,8 @@ final class LocalWorkerManagerTest {
 
         // then
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
-            assertThat(failure.code()).isEqualTo("setup_worker_board_already_managed");
-            assertThat(failure.getMessage()).contains("Shortlink Queue", "already managed by a running worker");
+            assertThat(failure.code()).isEqualTo("setup_stop_failed");
+            assertThat(failure.getMessage()).contains("Managed process did not stop");
             assertThat(failure.getMessage())
                     .doesNotContain(rowWorkflow.toString(), staleWorkflow.toString(), tempDir.toString());
         });
@@ -2854,9 +2903,9 @@ final class LocalWorkerManagerTest {
 
         // then
         assertWorkflowInvalidForLaunch(start, "missing workflow file");
-        assertInvalidExplicitWorkflowSelector(status, "--workflow must point to an existing workflow file.");
-        assertInvalidExplicitWorkflowSelector(stop, "--workflow must point to an existing workflow file.");
-        assertInvalidExplicitWorkflowSelector(logs, "--workflow must point to an existing workflow file.");
+        assertUnconnectedWorkflowRejected(status);
+        assertUnconnectedWorkflowRejected(stop);
+        assertUnconnectedWorkflowRejected(logs);
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
 
@@ -2877,7 +2926,7 @@ final class LocalWorkerManagerTest {
         Throwable thrown = catchThrowable(() -> fixture.status(fixture.statusWorkflowRequest(workflow)));
 
         // then
-        assertMissingExplicitWorkflowRejected(thrown);
+        assertUnconnectedWorkflowRejected(thrown);
         before.assertUnchanged(files);
         verifyNoMissingWorkflowSideEffects(fixture);
     }
@@ -2899,7 +2948,7 @@ final class LocalWorkerManagerTest {
         Throwable thrown = catchThrowable(() -> fixture.stop(fixture.stopWorkflowRequest(workflow)));
 
         // then
-        assertMissingExplicitWorkflowRejected(thrown);
+        assertUnconnectedWorkflowRejected(thrown);
         before.assertUnchanged(files);
         verifyNoMissingWorkflowSideEffects(fixture);
     }
@@ -2921,7 +2970,7 @@ final class LocalWorkerManagerTest {
         Throwable thrown = catchThrowable(() -> fixture.logs(fixture.logsWorkflowRequest(workflow)));
 
         // then
-        assertMissingExplicitWorkflowRejected(thrown);
+        assertUnconnectedWorkflowRejected(thrown);
         before.assertUnchanged(files);
         verifyNoMissingWorkflowSideEffects(fixture);
     }
@@ -3009,10 +3058,7 @@ final class LocalWorkerManagerTest {
 
         // when
         assertLifecycleRejectsExplicitWorkflow(
-                fixture,
-                workflowDirectory,
-                "--workflow must point to a regular workflow file.",
-                "workflow path is not a regular workflow file");
+                fixture, workflowDirectory, "workflow path is not a regular workflow file");
 
         // then
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
@@ -3041,9 +3087,9 @@ final class LocalWorkerManagerTest {
             Throwable logs = catchThrowable(() -> fixture.logs(fixture.logsWorkflowRequest(workflow)));
 
             // then
-            assertMissingExplicitWorkflowRejected(status);
-            assertMissingExplicitWorkflowRejected(stop);
-            assertMissingExplicitWorkflowRejected(logs);
+            assertUnconnectedWorkflowRejected(status);
+            assertUnconnectedWorkflowRejected(stop);
+            assertUnconnectedWorkflowRejected(logs);
         }
         verifyNoMissingWorkflowSideEffects(fixture);
     }
@@ -3064,9 +3110,9 @@ final class LocalWorkerManagerTest {
         Throwable logs = catchThrowable(() -> fixture.logs(fixture.logsWorkflowRequest(link)));
 
         // then
-        assertMissingExplicitWorkflowRejected(status);
-        assertMissingExplicitWorkflowRejected(stop);
-        assertMissingExplicitWorkflowRejected(logs);
+        assertUnconnectedWorkflowRejected(status);
+        assertUnconnectedWorkflowRejected(stop);
+        assertUnconnectedWorkflowRejected(logs);
         verifyNoMissingWorkflowSideEffects(fixture);
     }
 
@@ -3088,9 +3134,9 @@ final class LocalWorkerManagerTest {
         Throwable logs = catchThrowable(() -> fixture.logs(fixture.logsWorkflowRequest(workflow)));
 
         // then
-        assertMissingExplicitWorkflowRejected(status);
-        assertMissingExplicitWorkflowRejected(stop);
-        assertMissingExplicitWorkflowRejected(logs);
+        assertUnconnectedWorkflowRejected(status);
+        assertUnconnectedWorkflowRejected(stop);
+        assertUnconnectedWorkflowRejected(logs);
         verifyNoMissingWorkflowSideEffects(fixture);
     }
 
@@ -3099,6 +3145,7 @@ final class LocalWorkerManagerTest {
         // given
         var fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
         Path link = fixture.paths.configDir().resolve("workflow-link.md");
         createSymbolicLinkOrSkip(link, board.workflowPath());
         assertThat(link).isSymbolicLink().isRegularFile();
@@ -3107,7 +3154,7 @@ final class LocalWorkerManagerTest {
         WorkerRunResult status = fixture.status(fixture.statusWorkflowRequest(link));
 
         // then
-        status.assertSuccess().stdoutContains("stopped \"workflow-link.md\"");
+        status.assertSuccess().stdoutContains("stopped \"Queue\"");
     }
 
     @Test
@@ -3121,11 +3168,7 @@ final class LocalWorkerManagerTest {
         assertThat(link).isSymbolicLink().isDirectory();
 
         // when
-        assertLifecycleRejectsExplicitWorkflow(
-                fixture,
-                link,
-                "--workflow must point to a regular workflow file.",
-                "workflow path is not a regular workflow file");
+        assertLifecycleRejectsExplicitWorkflow(fixture, link, "workflow path is not a regular workflow file");
 
         // then
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
@@ -3139,6 +3182,10 @@ final class LocalWorkerManagerTest {
         var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Files.createDirectories(fixture.paths.configDir());
         Path workflow = fixture.paths.configDir().resolve(invalidWorkflow.fileName());
+        fixture.save(ConnectedBoardBuilder.connectedBoard(workflow)
+                .withBoardName(workflow.getFileName().toString())
+                .withEnvPath(fixture.paths.defaultEnvPath())
+                .build());
         Files.writeString(workflow, invalidWorkflow.content());
 
         // when
@@ -3563,11 +3610,10 @@ final class LocalWorkerManagerTest {
                 .thenReturn(new BoardHealth(
                         BoardHealthKind.SAME_WORKFLOW,
                         19090,
-                        Optional.of(workflow.toString()),
+                        Optional.of(fixture.importedWorkflowPath().toString()),
                         Optional.of("direct-board")));
         when(fixture.platform.isAlive(42)).thenReturn(true);
-        when(fixture.platform.isManaged(
-                        42, fixture.paths.appHome(), workflow.toAbsolutePath().normalize()))
+        when(fixture.platform.isManaged(42, fixture.paths.appHome(), fixture.importedWorkflowPath()))
                 .thenReturn(true);
 
         // when
@@ -3616,11 +3662,10 @@ final class LocalWorkerManagerTest {
                 .thenReturn(new BoardHealth(
                         BoardHealthKind.SAME_WORKFLOW,
                         19092,
-                        Optional.of(workflow.toString()),
+                        Optional.of(fixture.importedWorkflowPath().toString()),
                         Optional.of("resolved-direct-board")));
         when(fixture.platform.isAlive(42)).thenReturn(true);
-        when(fixture.platform.isManaged(
-                        42, fixture.paths.appHome(), workflow.toAbsolutePath().normalize()))
+        when(fixture.platform.isManaged(42, fixture.paths.appHome(), fixture.importedWorkflowPath()))
                 .thenReturn(true);
 
         // when
@@ -3708,7 +3753,7 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
-    void statusHandlesExplicitWorkflowWithoutManifestEntryOrEnvPath() throws Exception {
+    void statusRejectsAnUnconnectedWorkflowWithoutAnEnvFile() throws Exception {
         // given
         var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Path workflow = fixture.paths.configDir().resolve("WORKFLOW.direct-status.md");
@@ -3728,14 +3773,15 @@ final class LocalWorkerManagerTest {
                 .thenReturn(new BoardHealth(BoardHealthKind.STOPPED, 19091, Optional.empty(), Optional.empty()));
 
         // when
-        WorkerRunResult result = fixture.status(fixture.statusWorkflowRequest(workflow));
+        Throwable failure = catchThrowable(() -> fixture.status(fixture.statusWorkflowRequest(workflow)));
 
         // then
-        result.assertSuccess().stdoutContains("stopped \"WORKFLOW.direct-status.md\"");
+        assertUnconnectedWorkflowRejected(failure);
+        verifyNoMissingWorkflowSideEffects(fixture);
     }
 
     @Test
-    void statusResolvesExplicitWorkflowFromDefaultEnvWhenManifestHasNoEntry() throws Exception {
+    void statusRejectsAnUnconnectedWorkflowBeforeResolvingItsEnvironment() throws Exception {
         // given
         var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Path workflow = fixture.paths.configDir().resolve("WORKFLOW.direct-status-env.md");
@@ -3762,14 +3808,15 @@ final class LocalWorkerManagerTest {
                 .thenReturn(new BoardHealth(BoardHealthKind.STOPPED, 19093, Optional.empty(), Optional.empty()));
 
         // when
-        WorkerRunResult result = fixture.status(fixture.statusWorkflowRequest(workflow));
+        Throwable failure = catchThrowable(() -> fixture.status(fixture.statusWorkflowRequest(workflow)));
 
         // then
-        result.assertSuccess().stdoutContains("stopped \"WORKFLOW.direct-status-env.md\"");
+        assertUnconnectedWorkflowRejected(failure);
+        verifyNoMissingWorkflowSideEffects(fixture);
     }
 
     @Test
-    void stopResolvesExplicitWorkflowFromDefaultEnvWhenManifestHasNoEntry() throws Exception {
+    void stopRejectsAnUnconnectedWorkflowDespiteItsManagedPid() throws Exception {
         // given
         var fixture = new LocalWorkerManagerTestFixture(tempDir);
         Path workflow = fixture.paths.configDir().resolve("WORKFLOW.direct-stop-env.md");
@@ -3810,10 +3857,11 @@ final class LocalWorkerManagerTest {
                 .thenReturn(true);
 
         // when
-        WorkerRunResult result = fixture.stop(fixture.stopWorkflowRequest(workflow));
+        Throwable failure = catchThrowable(() -> fixture.stop(fixture.stopWorkflowRequest(workflow)));
 
         // then
-        result.assertSuccess().stdoutContains("Stopped Symphony for Trello for \"WORKFLOW.direct-stop-env");
+        assertUnconnectedWorkflowRejected(failure);
+        verifyNoMissingWorkflowSideEffects(fixture);
     }
 
     @Test
@@ -4117,16 +4165,16 @@ final class LocalWorkerManagerTest {
     }
 
     private void assertLifecycleRejectsExplicitWorkflow(
-            LocalWorkerManagerTestFixture fixture, Path workflow, String expectedMessage, String expectedStartCause) {
+            LocalWorkerManagerTestFixture fixture, Path workflow, String expectedStartCause) {
         Throwable status = catchThrowable(() -> fixture.status(fixture.statusWorkflowRequest(workflow)));
         Throwable start = catchThrowable(() -> fixture.start(fixture.startWorkflowRequest(workflow)));
         Throwable stop = catchThrowable(() -> fixture.stop(fixture.stopWorkflowRequest(workflow)));
         Throwable logs = catchThrowable(() -> fixture.logs(fixture.logsWorkflowRequest(workflow)));
 
-        assertInvalidExplicitWorkflowSelector(status, expectedMessage);
+        assertUnconnectedWorkflowRejected(status);
         assertWorkflowInvalidForLaunch(start, expectedStartCause);
-        assertInvalidExplicitWorkflowSelector(stop, expectedMessage);
-        assertInvalidExplicitWorkflowSelector(logs, expectedMessage);
+        assertUnconnectedWorkflowRejected(stop);
+        assertUnconnectedWorkflowRejected(logs);
     }
 
     private void assertWorkflowInvalidForLaunch(Throwable thrown, String expectedCause) {
@@ -4136,16 +4184,12 @@ final class LocalWorkerManagerTest {
         });
     }
 
-    private void assertInvalidExplicitWorkflowSelector(Throwable thrown, String expectedMessage) {
+    private void assertUnconnectedWorkflowRejected(Throwable thrown) {
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
-            assertThat(failure.code()).isEqualTo("setup_invalid_arguments");
-            assertThat(failure).hasMessage(expectedMessage);
+            assertThat(failure.code()).isEqualTo("setup_worker_board_not_found");
+            assertThat(failure).hasMessageContaining("start --workflow PATH", "trusted terminal");
             assertThat(failure.getMessage()).doesNotContain(tempDir.toString());
         });
-    }
-
-    private void assertMissingExplicitWorkflowRejected(Throwable thrown) {
-        assertInvalidExplicitWorkflowSelector(thrown, "--workflow must point to an existing workflow file.");
     }
 
     private void verifyNoMissingWorkflowSideEffects(LocalWorkerManagerTestFixture fixture) throws Exception {

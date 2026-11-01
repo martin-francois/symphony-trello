@@ -167,126 +167,131 @@ public final class LocalSetup {
                 return 0;
             }
             telemetry(options).prepareForSetup(out);
-            ConnectedBoardRepository boards = connectedBoards(options);
-            ConnectedBoardManifest manifest = boards.loadForLifecycle();
-            rejectInvalidUnconnectedBoardSelector(manifest, options);
-            if (!manifest.boards().isEmpty() && !options.forceNewSetup()) {
-                ExistingSetupAction action = existingSetupAction(manifest, terminal, options);
-                if (action == ExistingSetupAction.DISCONNECT) {
-                    disconnectBoard(options, manifest, terminal);
-                    return 0;
-                }
-                if (action != ExistingSetupAction.CONNECT) {
-                    codexAuthFlow.ensureAuthenticated(prerequisites, options, terminal);
-                    if (action == ExistingSetupAction.KEEP) {
-                        out.println();
-                        out.println("Keeping connected Trello boards.");
-                        for (ConnectedBoard board : manifest.boards()) {
-                            configureFollowUpCards(options, board.workflowPath(), board.boardName(), terminal);
-                            configureCodexReview(options, board.workflowPath(), board.boardName(), terminal);
+            try (var _ = connectedBoards(options).lock()) {
+                ConnectedBoardRepository boards = connectedBoards(options);
+                ConnectedBoardManifest manifest = boards.loadForLifecycle();
+                rejectInvalidUnconnectedBoardSelector(manifest, options);
+                if (!manifest.boards().isEmpty() && !options.forceNewSetup()) {
+                    ExistingSetupAction action = existingSetupAction(manifest, terminal, options);
+                    if (action == ExistingSetupAction.DISCONNECT) {
+                        disconnectBoard(options, manifest, terminal);
+                        return 0;
+                    }
+                    if (action != ExistingSetupAction.CONNECT) {
+                        codexAuthFlow.ensureAuthenticated(prerequisites, options, terminal);
+                        if (action == ExistingSetupAction.KEEP) {
+                            out.println();
+                            out.println("Keeping connected Trello boards.");
+                            for (ConnectedBoard board : manifest.boards()) {
+                                configureFollowUpCards(options, board.workflowPath(), board.boardName(), terminal);
+                                configureCodexReview(options, board.workflowPath(), board.boardName(), terminal);
+                            }
+                            startExistingBoards(options, manifest, out);
+                            TutorialMention tutorialMention = options.nonInteractive()
+                                    ? TutorialMention.COMMAND
+                                    : TutorialMention.OFFER_AFTER_HANDOFF;
+                            boolean handoffPrinted =
+                                    printFinalHandoffUnlessDeferred(out, manifest, options.command(), tutorialMention);
+                            if (handoffPrinted && tutorialMention == TutorialMention.OFFER_AFTER_HANDOFF) {
+                                offerExistingBoardTutorial(options, manifest, terminal);
+                            }
+                            return 0;
                         }
-                        startExistingBoards(options, manifest, out);
-                        TutorialMention tutorialMention = options.nonInteractive()
-                                ? TutorialMention.COMMAND
-                                : TutorialMention.OFFER_AFTER_HANDOFF;
-                        boolean handoffPrinted =
-                                printFinalHandoffUnlessDeferred(out, manifest, options.command(), tutorialMention);
-                        if (handoffPrinted && tutorialMention == TutorialMention.OFFER_AFTER_HANDOFF) {
-                            offerExistingBoardTutorial(options, manifest, terminal);
+                        if (action == ExistingSetupAction.UPDATE_CODEX_ACCESS) {
+                            updateExistingCodexAccess(options, manifest, terminal);
+                            return 0;
                         }
-                        return 0;
-                    }
-                    if (action == ExistingSetupAction.UPDATE_CODEX_ACCESS) {
-                        updateExistingCodexAccess(options, manifest, terminal);
-                        return 0;
-                    }
-                    if (action == ExistingSetupAction.UPGRADE_GITHUB) {
-                        upgradeExistingBoardToGithub(options, manifest, terminal);
-                        return 0;
+                        if (action == ExistingSetupAction.UPGRADE_GITHUB) {
+                            upgradeExistingBoardToGithub(options, manifest, terminal);
+                            return 0;
+                        }
                     }
                 }
-            }
-            TrelloBoardConnector.BoardSetupChoice boardSetupChoice = boardConnector.chooseBoardSetup(options, terminal);
-            options = configureRepositoryUrl(options, terminal);
-            options = validatePreflightCodexReasoningEffort(options, prerequisites);
-            boardConnector.preflightRequestedServerPort(options, manifest);
-            codexAuthFlow.ensureAuthenticated(prerequisites, options, terminal);
-            options = validatePreflightCodexReasoningEffort(options);
+                TrelloBoardConnector.BoardSetupChoice boardSetupChoice =
+                        boardConnector.chooseBoardSetup(options, terminal);
+                options = configureRepositoryUrl(options, terminal);
+                options = validatePreflightCodexReasoningEffort(options, prerequisites);
+                boardConnector.preflightRequestedServerPort(options, manifest);
+                codexAuthFlow.ensureAuthenticated(prerequisites, options, terminal);
+                options = validatePreflightCodexReasoningEffort(options);
 
-            preflightLocalWorkflowWrite(options);
-            CredentialSelection credentialSelection = credentials(options, options.envPath(), terminal);
-            TrelloCredentials credentials = credentialSelection.credentials();
-            TrelloBoardSetup.MemberInfo memberInfo =
-                    boardSetup.getMemberInfo(new TrelloBoardSetup.MemberInfoRequest(options.endpoint(), credentials));
-            out.println();
-            out.println("Validating Trello...");
-            out.println("  OK  Connected to Trello as \"" + memberInfo.displayName() + "\"");
-            if (!credentialSelection.persist()) {
+                preflightLocalWorkflowWrite(options);
+                CredentialSelection credentialSelection = credentials(options, options.envPath(), terminal);
+                TrelloCredentials credentials = credentialSelection.credentials();
+                TrelloBoardSetup.MemberInfo memberInfo = boardSetup.getMemberInfo(
+                        new TrelloBoardSetup.MemberInfoRequest(options.endpoint(), credentials));
                 out.println();
-                out.println("Using Trello credentials...");
-                out.println(
-                        "  OK  Credentials loaded from " + credentialSelection.sourceDescription(options.envPath()));
-                out.println("  OK  Trello API key: " + TrelloCredentialStore.redact(credentials.apiKey()));
-                out.println("  OK  Trello token: " + TrelloCredentialStore.redact(credentials.apiToken()));
-            }
+                out.println("Validating Trello...");
+                out.println("  OK  Connected to Trello as \"" + memberInfo.displayName() + "\"");
+                if (!credentialSelection.persist()) {
+                    out.println();
+                    out.println("Using Trello credentials...");
+                    out.println("  OK  Credentials loaded from "
+                            + credentialSelection.sourceDescription(options.envPath()));
+                    out.println("  OK  Trello API key: " + TrelloCredentialStore.redact(credentials.apiKey()));
+                    out.println("  OK  Trello token: " + TrelloCredentialStore.redact(credentials.apiToken()));
+                }
 
-            Options githubOptions = options;
-            TrelloBoardConnector.GitHubIntegrationResolution githubIntegrationResolution =
-                    () -> resolveGitHubIntegration(githubOptions, prerequisites, terminal);
-            Path credentialEnvPath = options.envPath();
-            TrelloBoardConnector.CredentialPersistence credentialPersistence = credentialSelection.persist()
-                    ? () -> writeEnv(credentialSelection, credentialEnvPath, terminal)
-                    : () -> {};
-            SetupResult result = boardConnector.createOrConnectBoard(
-                    boardSetupChoice,
-                    options,
-                    credentials,
-                    githubIntegrationResolution,
-                    manifest,
-                    credentialPersistence,
-                    terminal);
-            GitHubIntegration githubIntegration = result.githubIntegration();
-            options = configureCodexAccess(options, terminal);
-            applyCodexAccess(options, result.workflowPath());
-            configureFollowUpCards(options, result.workflowPath(), result.boardName(), terminal);
-            configureCodexReview(options, result.workflowPath(), result.boardName(), terminal);
-            ConnectedBoard connectedBoard = ConnectedBoard.from(result, options, githubIntegration);
-            ConnectedBoardManifest.Registration registration = manifest.register(connectedBoard);
-            stopReplacedBoards(options, registration.replacedBoards());
-            workerManager.rotateLogsForReplacedBoards(
-                    localWorkerPaths(options), connectedBoard, registration.replacedBoards());
-            manifest = registration.manifest();
-            boards.save(manifest);
-            GeneratedWorkflowStore.recordGenerated(options.manifestPath(), result.workflowPath(), result.bodyInputs())
-                    .ifPresent(out::println);
-            registration.count(
-                    telemetry(options),
-                    boardSetupChoice == TrelloBoardConnector.BoardSetupChoice.NEW
-                            ? BoardOperation.CREATE
-                            : BoardOperation.IMPORT);
+                Options githubOptions = options;
+                TrelloBoardConnector.GitHubIntegrationResolution githubIntegrationResolution =
+                        () -> resolveGitHubIntegration(githubOptions, prerequisites, terminal);
+                Path credentialEnvPath = options.envPath();
+                TrelloBoardConnector.CredentialPersistence credentialPersistence = credentialSelection.persist()
+                        ? () -> writeEnv(credentialSelection, credentialEnvPath, terminal)
+                        : () -> {};
+                SetupResult result = boardConnector.createOrConnectBoard(
+                        boardSetupChoice,
+                        options,
+                        credentials,
+                        githubIntegrationResolution,
+                        manifest,
+                        credentialPersistence,
+                        terminal);
+                GitHubIntegration githubIntegration = result.githubIntegration();
+                options = configureCodexAccess(options, terminal);
+                applyCodexAccess(options, result.workflowPath());
+                configureFollowUpCards(options, result.workflowPath(), result.boardName(), terminal);
+                configureCodexReview(options, result.workflowPath(), result.boardName(), terminal);
+                ConnectedBoard connectedBoard = ConnectedBoard.from(result, options, githubIntegration);
+                ConnectedBoardManifest.Registration registration = manifest.register(connectedBoard);
+                stopReplacedBoards(options, registration.replacedBoards());
+                workerManager.rotateLogsForReplacedBoards(
+                        localWorkerPaths(options), connectedBoard, registration.replacedBoards());
+                manifest = registration.manifest();
+                boards.save(manifest);
+                GeneratedWorkflowStore.recordGenerated(
+                                options.manifestPath(), result.workflowPath(), result.bodyInputs())
+                        .ifPresent(out::println);
+                registration.count(
+                        telemetry(options),
+                        boardSetupChoice == TrelloBoardConnector.BoardSetupChoice.NEW
+                                ? BoardOperation.CREATE
+                                : BoardOperation.IMPORT);
 
-            out.println();
-            out.println("Trello board");
-            out.println("  OK  Board connected: " + DisplayNames.quotedName(result.boardName()));
-            out.println("  OK  Board lists: " + quoted(result.lists()));
-            out.println("  OK  Workflow written: "
-                    + result.workflowPath().toAbsolutePath().normalize());
-            RepositoryDefaultSummary.printGuided(
-                    out, workflowConfig.repositoryDefaults(result.workflowPath()), result.workflowPath());
-            out.println("  OK  Local server port selected for " + DisplayNames.quotedName(result.boardName()) + ": "
-                    + result.serverPort());
-            printWorkspaceAndSandboxSummary(options, out);
-            startBoard(options, connectedBoard, out);
-            out.println();
-            out.println("Board:");
-            out.println("  " + result.boardUrl());
-            TutorialMention tutorialMention =
-                    options.nonInteractive() ? TutorialMention.COMMAND : TutorialMention.OFFER_AFTER_HANDOFF;
-            boolean handoffPrinted = printFinalHandoffUnlessDeferred(out, manifest, options.command(), tutorialMention);
-            if (handoffPrinted && tutorialMention == TutorialMention.OFFER_AFTER_HANDOFF) {
-                offerTutorial(options, () -> credentials, githubIntegration.enabled(), terminal);
+                out.println();
+                out.println("Trello board");
+                out.println("  OK  Board connected: " + DisplayNames.quotedName(result.boardName()));
+                out.println("  OK  Board lists: " + quoted(result.lists()));
+                out.println("  OK  Workflow written: "
+                        + result.workflowPath().toAbsolutePath().normalize());
+                RepositoryDefaultSummary.printGuided(
+                        out, workflowConfig.repositoryDefaults(result.workflowPath()), result.workflowPath());
+                out.println("  OK  Local server port selected for " + DisplayNames.quotedName(result.boardName()) + ": "
+                        + result.serverPort());
+                printWorkspaceAndSandboxSummary(options, out);
+                startBoard(options, connectedBoard, out);
+                out.println();
+                out.println("Board:");
+                out.println("  " + result.boardUrl());
+                TutorialMention tutorialMention =
+                        options.nonInteractive() ? TutorialMention.COMMAND : TutorialMention.OFFER_AFTER_HANDOFF;
+                boolean handoffPrinted =
+                        printFinalHandoffUnlessDeferred(out, manifest, options.command(), tutorialMention);
+                if (handoffPrinted && tutorialMention == TutorialMention.OFFER_AFTER_HANDOFF) {
+                    offerTutorial(options, () -> credentials, githubIntegration.enabled(), terminal);
+                }
+                return 0;
             }
-            return 0;
         } catch (TrelloBoardSetupException | IllegalArgumentException | IOException e) {
             err.println("setup_failed code=%s message=%s"
                     .formatted(errorCode(e), SetupFailureCauses.commandBoundaryMessage(e)));
@@ -374,7 +379,8 @@ public final class LocalSetup {
     }
 
     private LocalWorkerPaths localWorkerPaths(Options options) {
-        return LocalWorkerPaths.fromSetup(options.configDir(), options.workspaceRoot(), environment);
+        return LocalWorkerPaths.fromSetup(options.configDir(), options.workspaceRoot(), environment)
+                .withManifestPath(options.manifestPath());
     }
 
     private int runCheck(Options options, Prerequisites prerequisites, PrintStream out) throws IOException {
@@ -576,6 +582,15 @@ public final class LocalSetup {
     }
 
     private int repairPort(Options options, PrintStream out) throws IOException {
+        if (options.dryRun()) {
+            return repairPortLocked(options, out);
+        }
+        try (var _ = connectedBoards(options).lock()) {
+            return repairPortLocked(options, out);
+        }
+    }
+
+    private int repairPortLocked(Options options, PrintStream out) throws IOException {
         ConnectedBoardRepository boards = connectedBoards(options);
         ConnectedBoardManifest manifest = boards.loadForLifecycle();
         if (manifest.boards().isEmpty()) {
@@ -586,11 +601,7 @@ public final class LocalSetup {
         String boardSelector = options.repairBoardName()
                 .orElseThrow(() -> new TrelloBoardSetupException(
                         "setup_repair_board_required", "repair-port requires --board NAME."));
-        ConnectedBoard board = selectedConnectedBoard(
-                manifest,
-                boardSelector,
-                "setup_repair_board_not_found",
-                "No connected Trello board matches \"" + boardSelector + "\".");
+        ConnectedBoard board = selectedConnectedBoard(manifest, boardSelector);
         healthChecker.externalHttpPortOverrideSource(board.envPath()).ifPresent(overrideSource -> {
             throw new TrelloBoardSetupException(
                     "setup_repair_port_http_override",
@@ -996,11 +1007,7 @@ public final class LocalSetup {
     }
 
     private static void rejectInvalidUnconnectedBoardSelector(ConnectedBoardManifest manifest, String selectedBoard) {
-        List<ConnectedBoard> connectedMatches = manifest.findAllByBoard(selectedBoard);
-        if (connectedMatches.size() > 1) {
-            throw ambiguousConnectedBoardSelector();
-        }
-        if (!connectedMatches.isEmpty()) {
+        if (manifest.selectBoardIfPresent(selectedBoard).isPresent()) {
             return;
         }
         try {
@@ -1014,9 +1021,7 @@ public final class LocalSetup {
     }
 
     private static void rejectAmbiguousConnectedBoardSelector(ConnectedBoardManifest manifest, String selector) {
-        if (manifest.findAllByBoard(selector).size() > 1) {
-            throw ambiguousConnectedBoardSelector();
-        }
+        manifest.selectBoardIfPresent(selector);
     }
 
     private static boolean hasSelectedGithubBoardCodexAccessTarget(ConnectedBoardManifest manifest, Options options) {
@@ -1148,29 +1153,7 @@ public final class LocalSetup {
     }
 
     private static ConnectedBoard selectedConnectedBoard(ConnectedBoardManifest manifest, String selector) {
-        return selectedConnectedBoard(
-                manifest,
-                selector,
-                "setup_board_selection_required",
-                "No connected Trello board matches \"" + selector + "\".");
-    }
-
-    private static ConnectedBoard selectedConnectedBoard(
-            ConnectedBoardManifest manifest, String selector, String notFoundCode, String notFoundMessage) {
-        List<ConnectedBoard> matches = manifest.findAllByBoard(selector);
-        if (matches.isEmpty()) {
-            throw new TrelloBoardSetupException(notFoundCode, notFoundMessage);
-        }
-        if (matches.size() > 1) {
-            throw ambiguousConnectedBoardSelector();
-        }
-        return matches.getFirst();
-    }
-
-    private static TrelloBoardSetupException ambiguousConnectedBoardSelector() {
-        return new TrelloBoardSetupException(
-                "setup_worker_board_ambiguous",
-                "Multiple connected boards match --board. Re-run with a board id or short link.");
+        return ConnectedWorkflowResolver.select(manifest, Optional.of(selector), Optional.empty(), "setup-local");
     }
 
     private static void rejectMixedCodexAccessUpdate(Options options) {
@@ -1309,7 +1292,8 @@ public final class LocalSetup {
                 result.serverPort(),
                 true,
                 access.additionalWritableRoots(),
-                access.dangerFullAccess());
+                access.dangerFullAccess(),
+                board.sourceWorkflowPath());
         connectedBoards(options).save(manifest.withBoard(upgraded));
         GeneratedWorkflowStore.recordGenerated(options.manifestPath(), board.workflowPath(), result.bodyInputs())
                 .ifPresent(out::println);
@@ -1386,31 +1370,7 @@ public final class LocalSetup {
     }
 
     private static ConnectedBoard nonGithubBoard(List<ConnectedBoard> candidates, String requested) {
-        List<ConnectedBoard> exactMatches = candidates.stream()
-                .filter(board -> board.boardName().equalsIgnoreCase(requested)
-                        || board.boardId().equalsIgnoreCase(requested)
-                        || board.boardKey().equalsIgnoreCase(requested))
-                .toList();
-        if (!exactMatches.isEmpty()) {
-            return singleNonGithubBoardMatch(exactMatches, requested);
-        }
-        String requestedBoardId = TrelloBoardIds.parse(requested);
-        List<ConnectedBoard> matches = candidates.stream()
-                .filter(board -> board.boardId().equalsIgnoreCase(requestedBoardId)
-                        || board.boardKey().equalsIgnoreCase(requestedBoardId))
-                .toList();
-        return singleNonGithubBoardMatch(matches, requested);
-    }
-
-    private static ConnectedBoard singleNonGithubBoardMatch(List<ConnectedBoard> matches, String requested) {
-        if (matches.isEmpty()) {
-            throw new TrelloBoardSetupException(
-                    "setup_github_upgrade_not_found", "No connected non-GitHub board matches \"" + requested + "\".");
-        }
-        if (matches.size() > 1) {
-            throw ambiguousConnectedBoardSelector();
-        }
-        return matches.getFirst();
+        return selectedConnectedBoard(new ConnectedBoardManifest(candidates), requested);
     }
 
     private void disconnectBoard(Options options, ConnectedBoardManifest manifest, Terminal terminal)
@@ -1428,8 +1388,17 @@ public final class LocalSetup {
         }
         int selected = parseChoice(answer, 1, manifest.boards().size());
         ConnectedBoard removed = manifest.boards().get(selected - 1);
-        stopBoard(options, removed.boardName(), removed.workflowPath());
-        connectedBoards(options).save(manifest.withoutBoard(removed.boardId()));
+        LocalWorkerPaths paths = localWorkerPaths(options);
+        workerManager.disconnect(
+                new StopWorkerRequest(
+                        Optional.of(removed.boardId()),
+                        Optional.empty(),
+                        Optional.of(paths.appHome()),
+                        Optional.of(paths.configDir()),
+                        Optional.of(paths.workspaceRoot()),
+                        Optional.of(paths.stateHome())),
+                options.manifestPath(),
+                out);
         out.println("  OK  Symphony will stop managing " + DisplayNames.quotedName(removed.boardName()));
         out.println("  Trello board unchanged: " + removed.boardUrl());
     }
@@ -1745,10 +1714,14 @@ public final class LocalSetup {
             boolean check = request.action() == LocalSetupRequest.Action.CHECK;
             boolean repairPort = request.action() == LocalSetupRequest.Action.REPAIR_PORT;
             boolean configureGithub = request.action() == LocalSetupRequest.Action.CONFIGURE_GITHUB;
-            Path configDir = request.configDir().orElseGet(() -> defaultConfigDir(environment));
+            Path configDir = request.configDir()
+                    .orElseGet(() -> defaultConfigDir(environment))
+                    .toAbsolutePath()
+                    .normalize();
             Path workflow = request.workflowPath().orElse(TrelloBoardSetup.DEFAULT_WORKFLOW_PATH);
             boolean workflowPathExplicit = request.workflowPath().isPresent();
-            Path workspaceRoot = request.workspaceRoot().orElseGet(() -> defaultWorkspaceRoot(environment));
+            Path workspaceRoot = request.workspaceRoot()
+                    .orElseGet(() -> LocalWorkerPaths.defaultWorkspaceRoot(configDir, environment));
             Path manifest = request.manifestPath().orElseGet(() -> Path.of(ConnectedBoardManifest.FILE_NAME));
             boolean manifestPathExplicit = request.manifestPath().isPresent();
             Path envPath = request.envPath().orElse(DEFAULT_ENV_PATH);
@@ -1760,7 +1733,6 @@ public final class LocalSetup {
             if (configureGithub) {
                 githubMode = true;
             }
-            configDir = configDir.toAbsolutePath().normalize();
             envPath = resolveUserDataPath(envPath, configDir);
             manifest = resolveUserDataPath(manifest, configDir);
             validateResolvedSetupPaths(configDir, manifest, manifestPathExplicit, request.action());
@@ -1944,11 +1916,6 @@ public final class LocalSetup {
             return configuredPath(environment, CALLER_DIR_ENV)
                     .map(path -> path.toAbsolutePath().normalize())
                     .orElseGet(() -> Path.of(".").toAbsolutePath().normalize());
-        }
-
-        private static Path defaultWorkspaceRoot(Map<String, String> environment) {
-            return configuredPath(environment, "SYMPHONY_TRELLO_WORKSPACE_ROOT")
-                    .orElse(TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT);
         }
 
         private static Optional<Path> configuredPath(Map<String, String> environment, String name) {

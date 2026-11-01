@@ -19,12 +19,14 @@ import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.BlockerRef;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
+import ch.fmartin.symphony.trello.setup.ConnectedWorkflowResolver;
 import ch.fmartin.symphony.trello.testsupport.BoundedWait;
 import ch.fmartin.symphony.trello.testsupport.MutableClock;
 import ch.fmartin.symphony.trello.time.ApplicationClock;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.RateLimitPressure;
 import ch.fmartin.symphony.trello.tracker.TrackerClient;
+import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import ch.fmartin.symphony.trello.workspace.HookRunner;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
@@ -62,6 +64,16 @@ import java.util.function.Predicate;
 import java.util.random.RandomGenerator;
 
 final class SymphonyOrchestratorTestSupport {
+    static ConnectedWorkflowResolver connectedWorkflowResolver() {
+        ConnectedWorkflowResolver resolver = mock();
+        when(resolver.resolveRuntime(any(), any())).thenAnswer(invocation -> {
+            WorkflowDefinition workflow = invocation.getArgument(0);
+            ConfigResolver config = invocation.getArgument(1);
+            return config.resolve(workflow);
+        });
+        return resolver;
+    }
+
     static final Instant COMMENT_TIME = Instant.parse("2026-01-01T00:00:00Z");
     /// Bound for every wait on a condition, pause or release; correct code finishes far sooner.
     static final Duration WAIT_TIMEOUT = Duration.ofSeconds(5);
@@ -629,7 +641,13 @@ final class SymphonyOrchestratorTestSupport {
     static SymphonyOrchestrator orchestrator(
             Path workflow, TrackerClient tracker, AgentRunner runner, WorkspaceManager workspaces) {
         var orchestrator = new SymphonyOrchestrator(
-                new WorkflowLoader(), new ConfigResolver(), tracker, runner, new PromptRenderer(), workspaces);
+                new WorkflowLoader(),
+                new ConfigResolver(),
+                connectedWorkflowResolver(),
+                tracker,
+                runner,
+                new PromptRenderer(),
+                workspaces);
         orchestrator.workflowPath = workflow;
         return orchestrator;
     }
@@ -639,6 +657,7 @@ final class SymphonyOrchestratorTestSupport {
         var orchestrator = new SymphonyOrchestrator(
                 new WorkflowLoader(),
                 new ConfigResolver(),
+                connectedWorkflowResolver(),
                 tracker,
                 runner,
                 new PromptRenderer(),
@@ -667,6 +686,7 @@ final class SymphonyOrchestratorTestSupport {
         var orchestrator = new SymphonyOrchestrator(
                 new WorkflowLoader(),
                 new ConfigResolver(),
+                connectedWorkflowResolver(),
                 tracker,
                 runner,
                 new PromptRenderer(),

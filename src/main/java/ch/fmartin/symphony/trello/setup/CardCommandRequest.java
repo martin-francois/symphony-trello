@@ -7,7 +7,12 @@ import java.util.Optional;
 /// One `symphony-trello card` command: which connected board it works on, whether it prints JSON,
 /// and the card operation itself.
 record CardCommandRequest(
-        Optional<String> board, Optional<Path> workflow, Optional<Path> configDir, boolean json, Operation operation) {
+        Optional<String> board,
+        Optional<Path> workflow,
+        Optional<Path> configDir,
+        Optional<Path> stateHome,
+        boolean json,
+        Operation operation) {
     static final String COMMAND = "card";
     static final String LIST = "list";
     static final String SHOW = "show";

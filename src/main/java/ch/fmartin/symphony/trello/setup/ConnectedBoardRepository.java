@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.module.SimpleModule;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
@@ -121,7 +122,19 @@ final class ConnectedBoardRepository {
         if (parent != null) {
             Files.createDirectories(parent);
         }
-        json.writerWithDefaultPrettyPrinter().writeValue(manifestPath.toFile(), manifest);
+        Path temporary = AtomicFiles.siblingTemporaryFile(manifestPath);
+        try {
+            json.writerWithDefaultPrettyPrinter().writeValue(temporary.toFile(), manifest);
+            AtomicFiles.replace(temporary, manifestPath);
+        } finally {
+            AtomicFiles.deleteQuietly(temporary);
+        }
+    }
+
+    ManagedFileLock lock() throws IOException {
+        Path directory = PathNames.requireParent(manifestPath.toAbsolutePath().normalize());
+        Files.createDirectories(directory);
+        return ManagedFileLock.acquire(directory.resolve(".connected-boards.lock"));
     }
 
     void validateWritable() throws IOException {
@@ -211,6 +224,7 @@ final class ConnectedBoardRepository {
             requireText(board, "boardName", label, warnings);
             requireText(board, "boardUrl", label, warnings);
             requireText(board, "workflowPath", label, warnings);
+            requireSourceWorkflowPath(board, label, warnings);
             requireText(board, "envPath", label, warnings);
             requireText(board, "workspaceRoot", label, warnings);
             requireBooleanIfPresent(board, "githubEnabled", label, warnings);
@@ -233,6 +247,26 @@ final class ConnectedBoardRepository {
         JsonNode value = board.get(field);
         if (value != null && !value.isBoolean()) {
             warnings.add("Connected-board manifest entry " + label + " field " + field + " must be true or false.");
+        }
+    }
+
+    private static void requireSourceWorkflowPath(JsonNode board, String label, List<String> warnings) {
+        JsonNode source = board.get("sourceWorkflowPath");
+        if (source == null || source.isNull()) {
+            return;
+        }
+        if (!source.isTextual() || !absolutePath(source.asText())) {
+            warnings.add("Connected-board manifest entry " + label
+                    + " field sourceWorkflowPath must be an absolute path or null.");
+        }
+    }
+
+    private static boolean absolutePath(String value) {
+        try {
+            return !value.isBlank() && Path.of(value).isAbsolute();
+        } catch (InvalidPathException ignored) {
+            // The caller reports a shape warning without including the invalid path's contents.
+            return false;
         }
     }
 

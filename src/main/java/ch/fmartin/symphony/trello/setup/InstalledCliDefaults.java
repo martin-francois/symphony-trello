@@ -56,9 +56,10 @@ final class InstalledCliDefaults {
         return switch (command) {
             case "setup-local" -> setupLocal(args, paths);
             case "new-board", "import-board" -> boardSetup(args, paths);
-            case "start", "stop", "status", "logs", "diagnostics", "telemetry" -> lifecycle(args, paths);
+            case "start", "stop", "disconnect", "status", "logs", "diagnostics", "telemetry" -> lifecycle(args, paths);
             case "migrate-workflows" -> configDirOnly(args, paths);
             case CardCommandRequest.COMMAND -> cardCommand(args, paths);
+            case CardHelperCommands.COMMAND -> cardHelper(args, paths);
             default -> args;
         };
     }
@@ -81,7 +82,7 @@ final class InstalledCliDefaults {
             explicitConfigDirValue.ifPresent(configDir -> {
                 Optional<String> workspaceRoot = paths.workspaceRootFromUserEnvironment()
                         ? paths.workspaceRoot()
-                        : Optional.of(isolatedWorkspaceRoot(configDir));
+                        : Optional.of(isolatedWorkspaceRoot(configDir, paths));
                 addIfMissing(defaults, args, "--workspace-root", workspaceRoot);
             });
         }
@@ -103,6 +104,16 @@ final class InstalledCliDefaults {
         return injectAfterCommand(args, defaults);
     }
 
+    private static List<String> cardHelper(List<String> args, InstalledPaths paths) {
+        // Explicit config uses LocalWorkerPaths' isolated state default and installed-state marker.
+        List<String> defaults = new ArrayList<>();
+        if (!hasOption(args, "--config-dir")) {
+            addIfMissing(defaults, args, "--config-dir", paths.configDir());
+            addIfMissing(defaults, args, "--state-home", paths.stateHome());
+        }
+        return injectAfterCommand(args, defaults);
+    }
+
     /// Card commands sit one level deeper, under `card`, so the config directory goes after the
     /// card subcommand name.
     private static List<String> cardCommand(List<String> args, InstalledPaths paths) {
@@ -111,7 +122,7 @@ final class InstalledCliDefaults {
         }
         List<String> result = new ArrayList<>(args.size() + 2);
         result.add(args.getFirst());
-        result.addAll(configDirOnly(args.subList(1, args.size()), paths));
+        result.addAll(cardHelper(args.subList(1, args.size()), paths));
         return List.copyOf(result);
     }
 
@@ -135,7 +146,7 @@ final class InstalledCliDefaults {
             explicitConfigDirValue.ifPresent(configDir -> {
                 Optional<String> workspaceRoot = paths.workspaceRootFromUserEnvironment()
                         ? paths.workspaceRoot()
-                        : Optional.of(isolatedWorkspaceRoot(configDir));
+                        : Optional.of(isolatedWorkspaceRoot(configDir, paths));
                 Optional<String> stateHome = paths.stateHomeFromUserEnvironment()
                         ? paths.stateHome()
                         : Optional.of(isolatedStateHome(configDir));
@@ -204,11 +215,9 @@ final class InstalledCliDefaults {
         return false;
     }
 
-    private static String isolatedWorkspaceRoot(String configDir) {
-        return Path.of(configDir)
-                .toAbsolutePath()
-                .normalize()
-                .resolve("workspaces")
+    private static String isolatedWorkspaceRoot(String configDir, InstalledPaths paths) {
+        return TrelloBoardSetup.defaultWorkspaceRoot(
+                        Path.of(configDir), paths.appHome().map(Path::of).orElseGet(() -> Path.of(".")))
                 .toString();
     }
 

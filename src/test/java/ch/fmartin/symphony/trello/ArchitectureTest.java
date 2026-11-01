@@ -122,6 +122,7 @@ final class ArchitectureTest {
             public boolean test(JavaClass input) {
                 return input.getPackageName().contains(".setup")
                         && !input.getName().contains("TrelloBoardSetupMain")
+                        && !input.getName().contains("CardHelperCommands")
                         && !input.getName().contains("SetupLocalCommandFactory")
                         && !input.getName().contains("GitHubMode")
                         && !input.getName().contains("CodexReviewerOptions");
@@ -149,6 +150,7 @@ final class ArchitectureTest {
             @Override
             public boolean test(JavaClass input) {
                 return input.getName().contains("TrelloBoardSetupMain")
+                        || input.getName().contains("CardHelperCommands")
                         || input.getName().contains("SetupLocalCommandFactory");
             }
         };

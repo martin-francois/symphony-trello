@@ -12,6 +12,7 @@ import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import ch.fmartin.symphony.trello.testsupport.BoundedWait;
+import ch.fmartin.symphony.trello.testsupport.FakeAppServerScripts;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.TrackerClient;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
@@ -81,7 +82,13 @@ final class UsageLimitPauseIntegrationTest {
         var codex = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
         var runner = new LocalAgentRunner(workspaces, new HookRunner(), codex, tracker, new PromptRenderer());
         var orchestrator = new SymphonyOrchestrator(
-                new WorkflowLoader(), new ConfigResolver(), tracker, runner, new PromptRenderer(), workspaces);
+                new WorkflowLoader(),
+                new ConfigResolver(),
+                SymphonyOrchestratorTestSupport.connectedWorkflowResolver(),
+                tracker,
+                runner,
+                new PromptRenderer(),
+                workspaces);
         orchestrator.workflowPath = workflow;
 
         // when
@@ -131,7 +138,8 @@ final class UsageLimitPauseIntegrationTest {
                       ;;
                   esac
                 done
-                """);
+                """
+                        .transform(FakeAppServerScripts::acknowledgePermissions));
         script.toFile().setExecutable(true);
         return script;
     }
