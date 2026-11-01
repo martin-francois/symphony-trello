@@ -65,7 +65,7 @@
     <picnic-refaster.namePattern>(CollectionRules[$]Collection(AddAllToCollectionBlock|Contains)|NullRules[$]RequireNonNullElseGet|PreconditionsRules[$]Check(Argument|State)WithMessage|PrimitiveRules[$]MathClampInt|StreamRules[$]StreamNoneMatch|StringBuilderRules[$]StringBuilderRepeat)</picnic-refaster.namePattern>
     <jacoco.version>0.8.15</jacoco.version>
     <mockito.version>5.24.0</mockito.version>
-    <oshi.version>7.6.1</oshi.version>
+    <oshi.version>7.7.2</oshi.version>
     <picocli.version>4.7.7</picocli.version>
     <findsecbugs.version>1.14.0</findsecbugs.version>
     <guava.version>33.7.2-jre</guava.version>
