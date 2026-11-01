@@ -421,6 +421,66 @@ final class TrelloClientTest {
                 Arguments.of("non-numeric", null, "a non-numeric idShort is rejected"));
     }
 
+    @Test
+    void nullResponseBodyFailsOnlyThatCardInStateLookup() {
+        // given
+        trello.on("/1/cards/null-body", exchange -> respond(exchange, "null"));
+        var client = new TrelloClient(new ObjectMapper());
+
+        // when
+        var results = client.fetchCardStatesByIds(config("lookup-input", Map.of()), List.of("null-body", "card-found"));
+
+        // then
+        assertThat(results.get("null-body"))
+                .isInstanceOfSatisfying(CardLookupResult.Failed.class, failed -> assertThat(failed.code())
+                        .isEqualTo("trello_unknown_payload"));
+        assertThat(results.get("card-found")).isInstanceOf(CardLookupResult.Found.class);
+    }
+
+    @Test
+    void nullResponseBodyFailsWorkpadLookup() {
+        // given
+        trello.on("/1/cards/null-body", exchange -> respond(exchange, "null"));
+        var client = new TrelloClient(new ObjectMapper());
+
+        // when
+        var result = client.fetchCardStateForWorkpad(config("lookup-input", Map.of()), "null-body");
+
+        // then
+        assertThat(result).isInstanceOfSatisfying(CardLookupResult.Failed.class, failed -> assertThat(failed.code())
+                .isEqualTo("trello_unknown_payload"));
+    }
+
+    @MethodSource("nullResponsePayloads")
+    @ParameterizedTest
+    void nullResponsePayloadFailsWithTypedError(String path, String payload) {
+        // given
+        trello.remove(path);
+        trello.on(path, exchange -> respond(exchange, payload));
+        var client = new TrelloClient(new ObjectMapper());
+
+        // when
+        Throwable failure = catchThrowable(() -> client.fetchCandidateCards(config("input", Map.of())));
+
+        // then
+        assertThat(failure).isInstanceOfSatisfying(TrelloException.class, exception -> assertThat(exception.code())
+                .isEqualTo("trello_unknown_payload"));
+    }
+
+    private static Arguments[] nullResponsePayloads() {
+        return new Arguments[] {
+            Arguments.of("/1/boards/input", "null"),
+            Arguments.of("/1/boards/board-1/cards/open", "null"),
+            Arguments.of("/1/boards/board-1/cards/open", "[null]"),
+            Arguments.of(
+                    "/1/boards/board-1/cards/open",
+                    "[null, {\"id\":\"valid\",\"name\":\"Valid\",\"idList\":\"list-todo\",\"idBoard\":\"board-1\"}]"),
+            Arguments.of("/1/boards/board-1/lists", "null"),
+            Arguments.of("/1/boards/board-1/lists", "[null]"),
+            Arguments.of("/1/boards/board-1/lists", "[{\"id\":\"valid\",\"name\":\"Valid\"}, null]")
+        };
+    }
+
     @EnumSource(MalformedCardField.class)
     @ParameterizedTest
     void malformedCardFieldFailsOnlyThatCardInStateLookup(MalformedCardField field) {

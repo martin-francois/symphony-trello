@@ -53,8 +53,9 @@ Quarkus injects into `TrelloClient`, so the parsed map has the same types as in 
 property is that mapping returns no card, a card with a non-blank id, name, and board id, or a
 `TrelloException` with code `trello_unknown_payload`. Any other exception is a finding. Input that
 Jackson cannot read as an object ends the execution, because the request layer reports it as
-`trello_api_request` before mapping starts. A JSON `null` body also ends it. The request layer passes
-that `null` on today, which [GitHub issue #833](https://github.com/martin-francois/symphony-trello/issues/833) tracks as a separate request-layer bug.
+`trello_api_request` before mapping starts. A JSON `null` body also ends it. The request layer reports
+that `null` as `trello_unknown_payload`, as specified in
+[ADR 0158](0158-reject-null-trello-responses.md). Fake-server tests cover this request-layer boundary.
 
 `TrelloCardPayloadFuzzer` is the standalone entry point and `TrelloCardPayloadFuzzTest` is the
 JUnit `@FuzzTest`. Both call the helper. Its configuration resolver receives an empty environment
