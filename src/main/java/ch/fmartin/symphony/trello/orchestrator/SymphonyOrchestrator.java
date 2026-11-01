@@ -18,6 +18,7 @@ import ch.fmartin.symphony.trello.config.StateNames;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.process.RuntimeProcessShutdown;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
+import ch.fmartin.symphony.trello.setup.ConnectedWorkflowResolver;
 import ch.fmartin.symphony.trello.time.ApplicationClock;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.TrackerClient;
@@ -94,6 +95,7 @@ public class SymphonyOrchestrator {
 
     private final WorkflowLoader workflowLoader;
     private final ConfigResolver configResolver;
+    private final ConnectedWorkflowResolver connectedWorkflows;
     private final TrackerClient tracker;
     private final AgentRunner agentRunner;
     private final PromptRenderer prompts;
@@ -188,6 +190,7 @@ public class SymphonyOrchestrator {
     public SymphonyOrchestrator(
             WorkflowLoader workflowLoader,
             ConfigResolver configResolver,
+            ConnectedWorkflowResolver connectedWorkflows,
             TrackerClient tracker,
             AgentRunner agentRunner,
             PromptRenderer prompts,
@@ -195,6 +198,7 @@ public class SymphonyOrchestrator {
         this(
                 workflowLoader,
                 configResolver,
+                connectedWorkflows,
                 tracker,
                 agentRunner,
                 prompts,
@@ -208,6 +212,7 @@ public class SymphonyOrchestrator {
     public SymphonyOrchestrator(
             WorkflowLoader workflowLoader,
             ConfigResolver configResolver,
+            ConnectedWorkflowResolver connectedWorkflows,
             TrackerClient tracker,
             AgentRunner agentRunner,
             PromptRenderer prompts,
@@ -217,6 +222,7 @@ public class SymphonyOrchestrator {
         this(
                 workflowLoader,
                 configResolver,
+                connectedWorkflows,
                 tracker,
                 agentRunner,
                 prompts,
@@ -231,6 +237,7 @@ public class SymphonyOrchestrator {
     SymphonyOrchestrator(
             WorkflowLoader workflowLoader,
             ConfigResolver configResolver,
+            ConnectedWorkflowResolver connectedWorkflows,
             TrackerClient tracker,
             AgentRunner agentRunner,
             PromptRenderer prompts,
@@ -241,6 +248,7 @@ public class SymphonyOrchestrator {
         this(
                 workflowLoader,
                 configResolver,
+                connectedWorkflows,
                 tracker,
                 agentRunner,
                 prompts,
@@ -254,6 +262,7 @@ public class SymphonyOrchestrator {
     SymphonyOrchestrator(
             WorkflowLoader workflowLoader,
             ConfigResolver configResolver,
+            ConnectedWorkflowResolver connectedWorkflows,
             TrackerClient tracker,
             AgentRunner agentRunner,
             PromptRenderer prompts,
@@ -266,6 +275,7 @@ public class SymphonyOrchestrator {
         this.handoffDeadlines = handoffDeadlines.orElseGet(Executors::newSingleThreadScheduledExecutor);
         this.workflowLoader = workflowLoader;
         this.configResolver = configResolver;
+        this.connectedWorkflows = connectedWorkflows;
         this.tracker = tracker;
         this.agentRunner = agentRunner;
         this.prompts = prompts;
@@ -443,7 +453,7 @@ public class SymphonyOrchestrator {
     private void reloadOrThrow() {
         workflow = workflowLoader.load(workflowPath);
         acquireWorkflowProcessLock(workflow.path());
-        config = resolveBoardScope(configResolver.resolve(workflow));
+        config = resolveBoardScope(connectedWorkflows.resolveRuntime(workflow, configResolver));
         configResolver.validateForDispatch(config);
         workflowLastModified = lastModified(workflow.path());
         if (config.tracker().activeListIds().isEmpty()
@@ -486,7 +496,8 @@ public class SymphonyOrchestrator {
         }
         try {
             WorkflowDefinition nextWorkflow = workflowLoader.load(config.workflowPath());
-            EffectiveConfig nextConfig = resolveBoardScope(configResolver.resolve(nextWorkflow));
+            EffectiveConfig nextConfig =
+                    resolveBoardScope(connectedWorkflows.resolveRuntime(nextWorkflow, configResolver));
             configResolver.validateForDispatch(nextConfig);
             applyValidReload(nextWorkflow, nextConfig, modified);
             LOG.infof("workflow=%s outcome=reloaded", nextWorkflow.path());

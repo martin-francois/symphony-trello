@@ -54,6 +54,7 @@ import picocli.CommandLine.Spec;
             TrelloBoardSetupMain.ListWorkspacesCommand.class,
             TrelloBoardSetupMain.StartCommand.class,
             TrelloBoardSetupMain.StopCommand.class,
+            TrelloBoardSetupMain.DisconnectCommand.class,
             TrelloBoardSetupMain.StatusCommand.class,
             TrelloBoardSetupMain.LogsCommand.class,
             TrelloBoardSetupMain.DiagnosticsCommand.class,
@@ -68,7 +69,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
     private final TrelloBoardSetupService boardSetup;
     private final LocalWorkerManager workerManager;
-    private final BoardCardCommands cardCommands;
+    private final CardCommandRunner cardCommands;
     private final BufferedReader input;
     private final PrintStream out;
     private final PrintStream err;
@@ -79,7 +80,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     TrelloBoardSetupMain(
             TrelloBoardSetupService boardSetup,
             LocalWorkerManager workerManager,
-            BoardCardCommands cardCommands,
+            CardCommandRunner cardCommands,
             BufferedReader input,
             PrintStream out,
             PrintStream err) {
@@ -159,14 +160,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             LocalWorkerManager workerManager,
             PrintStream out,
             PrintStream err) {
-        return run(
-                args,
-                boardSetup,
-                localSetup,
-                workerManager,
-                new BoardCardCommands(workerManager, System.getenv()),
-                out,
-                err);
+        return run(args, boardSetup, localSetup, workerManager, new CardHelperClient(System.getenv()), out, err);
     }
 
     static int run(
@@ -174,7 +168,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             TrelloBoardSetupService boardSetup,
             LocalSetup localSetup,
             LocalWorkerManager workerManager,
-            BoardCardCommands cardCommands,
+            CardCommandRunner cardCommands,
             PrintStream out,
             PrintStream err) {
         String[] effectiveArgs = InstalledCliDefaults.apply(args, System.getenv());
@@ -183,6 +177,9 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                         new TrelloBoardSetupMain(boardSetup, workerManager, cardCommands, input, out, err))
                 .addSubcommand(
                         "setup-local", new SetupLocalCommandFactory.SetupLocalCommand(localSetup, input, out, err))
+                .addSubcommand(
+                        CardHelperCommands.COMMAND,
+                        new CardHelperCommands(new CardHelperManager(), System.getenv(), out))
                 .setOut(new PrintWriter(out, true, StandardCharsets.UTF_8))
                 .setErr(new PrintWriter(err, true, StandardCharsets.UTF_8))
                 .setExecutionExceptionHandler((exception, ignored, parseResult) -> {
@@ -250,29 +247,32 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 }
                 parent.boardSetup.preflightConnectedBoardManifest(
                         options.manifestPath(parent.boardSetup.environment()));
-                parent.boardSetup.preflightRequestedServerPort(
-                        options.serverPort,
-                        options.workflowPath,
-                        options.force,
-                        options.manifestPath(parent.boardSetup.environment()));
-                NewBoardRequest request =
-                        options.newBoardRequest(boardName, workspaceId, parent.boardSetup.repositoryDefaults(options));
-                parent.boardSetup.prepareTelemetry(
-                        options.manifestPath(parent.boardSetup.environment()),
-                        options.workspaceRoot,
-                        options.runtimeEnvPath(),
-                        parent.out);
-                TrelloBoardSetup.NewBoardResult result = parent.boardSetup.createRecommendedBoard(request, options);
-                options.persistRuntimeCredentials(parent.input, parent.out, parent.err);
-                parent.boardSetup.persistConnectedBoard(
-                        result,
-                        options.runtimeEnvPath(),
-                        options.workspaceRoot,
-                        options.gitHubIntegration(),
-                        options.manifestPath(parent.boardSetup.environment()),
-                        parent.out);
-                printNewBoardResult(parent.out, result, options.runtimeEnvPath(), request.repositoryDefaults());
-                return 0;
+                try (var _ = parent.boardSetup.connectionTransaction(
+                        options.manifestPath(parent.boardSetup.environment()))) {
+                    parent.boardSetup.preflightRequestedServerPort(
+                            options.serverPort,
+                            options.workflowPath,
+                            options.force,
+                            options.manifestPath(parent.boardSetup.environment()));
+                    NewBoardRequest request = options.newBoardRequest(
+                            boardName, workspaceId, parent.boardSetup.repositoryDefaults(options));
+                    parent.boardSetup.prepareTelemetry(
+                            options.manifestPath(parent.boardSetup.environment()),
+                            options.workspaceRoot,
+                            options.runtimeEnvPath(),
+                            parent.out);
+                    TrelloBoardSetup.NewBoardResult result = parent.boardSetup.createRecommendedBoard(request, options);
+                    options.persistRuntimeCredentials(parent.input, parent.out, parent.err);
+                    parent.boardSetup.persistConnectedBoard(
+                            result,
+                            options.runtimeEnvPath(),
+                            options.workspaceRoot,
+                            options.gitHubIntegration(),
+                            options.manifestPath(parent.boardSetup.environment()),
+                            parent.out);
+                    printNewBoardResult(parent.out, result, options.runtimeEnvPath(), request.repositoryDefaults());
+                    return 0;
+                }
             } catch (TrelloBoardSetupException exception) {
                 throw options.withRuntimeEnvHint(exception);
             }
@@ -345,35 +345,38 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 parent.boardSetup.preflightWorkflowWrite(options.workflowPath, options.force);
                 parent.boardSetup.preflightConnectedBoardManifest(
                         options.manifestPath(parent.boardSetup.environment()));
-                parent.boardSetup.preflightRequestedServerPort(
-                        options.serverPort,
-                        options.workflowPath,
-                        options.force,
-                        options.manifestPath(parent.boardSetup.environment()));
-                ImportBoardRequest request = options.importBoardRequest(
-                        TrelloBoardIds.parseImportBoardSelector(boardId),
-                        activeStates,
-                        terminalStates,
-                        inProgressState,
-                        !noInProgress && inProgressState == null,
-                        blockedState,
-                        parent.boardSetup.repositoryDefaults(options));
-                parent.boardSetup.prepareTelemetry(
-                        options.manifestPath(parent.boardSetup.environment()),
-                        options.workspaceRoot,
-                        options.runtimeEnvPath(),
-                        parent.out);
-                TrelloBoardSetup.ImportBoardResult result = parent.boardSetup.importExistingBoard(request, options);
-                options.persistRuntimeCredentials(parent.input, parent.out, parent.err);
-                parent.boardSetup.persistConnectedBoard(
-                        result,
-                        options.runtimeEnvPath(),
-                        options.workspaceRoot,
-                        options.gitHubIntegration(),
-                        options.manifestPath(parent.boardSetup.environment()),
-                        parent.out);
-                printImportBoardResult(parent.out, result, options.runtimeEnvPath(), request.repositoryDefaults());
-                return 0;
+                try (var _ = parent.boardSetup.connectionTransaction(
+                        options.manifestPath(parent.boardSetup.environment()))) {
+                    parent.boardSetup.preflightRequestedServerPort(
+                            options.serverPort,
+                            options.workflowPath,
+                            options.force,
+                            options.manifestPath(parent.boardSetup.environment()));
+                    ImportBoardRequest request = options.importBoardRequest(
+                            TrelloBoardIds.parseImportBoardSelector(boardId),
+                            activeStates,
+                            terminalStates,
+                            inProgressState,
+                            !noInProgress && inProgressState == null,
+                            blockedState,
+                            parent.boardSetup.repositoryDefaults(options));
+                    parent.boardSetup.prepareTelemetry(
+                            options.manifestPath(parent.boardSetup.environment()),
+                            options.workspaceRoot,
+                            options.runtimeEnvPath(),
+                            parent.out);
+                    TrelloBoardSetup.ImportBoardResult result = parent.boardSetup.importExistingBoard(request, options);
+                    options.persistRuntimeCredentials(parent.input, parent.out, parent.err);
+                    parent.boardSetup.persistConnectedBoard(
+                            result,
+                            options.runtimeEnvPath(),
+                            options.workspaceRoot,
+                            options.gitHubIntegration(),
+                            options.manifestPath(parent.boardSetup.environment()),
+                            parent.out);
+                    printImportBoardResult(parent.out, result, options.runtimeEnvPath(), request.repositoryDefaults());
+                    return 0;
+                }
             } catch (TrelloBoardSetupException exception) {
                 throw options.withRuntimeEnvHint(exception);
             }
@@ -496,6 +499,33 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         public Integer call() throws Exception {
             options.validateCliPaths();
             return parent.workerManager.stop(
+                    new StopWorkerRequest(
+                            options.board,
+                            options.workflow,
+                            options.appHome,
+                            options.configDir,
+                            options.workspaceRoot,
+                            options.stateHome),
+                    parent.out);
+        }
+    }
+
+    @Command(
+            name = "disconnect",
+            description = "Stop a board worker and remove its local connection.",
+            versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
+            mixinStandardHelpOptions = true)
+    static final class DisconnectCommand implements Callable<Integer> {
+        @ParentCommand
+        TrelloBoardSetupMain parent;
+
+        @Mixin
+        LifecycleOptions options = new LifecycleOptions();
+
+        @Override
+        public Integer call() throws IOException {
+            options.validateCliPaths();
+            return parent.workerManager.disconnect(
                     new StopWorkerRequest(
                             options.board,
                             options.workflow,
@@ -890,7 +920,13 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         private int run(CardOptions options, CardCommandRequest.Operation operation) throws IOException {
             options.validate();
             return parent.cardCommands.run(
-                    new CardCommandRequest(options.board, options.workflow, options.configDir, options.json, operation),
+                    new CardCommandRequest(
+                            options.board,
+                            options.workflow,
+                            options.configDir,
+                            options.stateHome,
+                            options.json,
+                            operation),
                     parent.out);
         }
     }
@@ -1066,6 +1102,9 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     }
 
     static final class CardOptions {
+        @Option(names = "--state-home", description = "Managed runtime state directory for the card helper.")
+        Optional<Path> stateHome = Optional.empty();
+
         @Option(names = "--board", description = "Connected Trello board name, id, short link, or board URL.")
         Optional<String> board = Optional.empty();
 
@@ -1079,6 +1118,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         boolean json;
 
         private void validate() {
+            CliInputValidation.rejectBlankPath("--state-home", stateHome, "--state-home must not be empty.");
+            CliInputValidation.rejectControlCharacters("--state-home", stateHome);
             CliInputValidation.rejectBlankBoardSelector(board);
             CliInputValidation.rejectBlankWorkflowSelector(workflow);
             CliInputValidation.rejectControlCharactersInText("--board", board);
@@ -1406,7 +1447,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             this.workflowPathExplicit = true;
         }
 
-        Path workspaceRoot = TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT;
+        Path workspaceRoot = defaultWorkspaceRoot();
 
         boolean workspaceRootExplicit;
 
@@ -1540,7 +1581,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                     exception);
         }
 
-        private Path manifestPath(Map<String, String> environment) {
+        Path manifestPath(Map<String, String> environment) {
             return manifest.map(path -> path.toAbsolutePath().normalize())
                     .or(TrelloBoardSetupMain::configuredConfigDirManifestPath)
                     .orElseGet(() -> LocalWorkerPaths.defaultManifestPath(environment));
@@ -1659,6 +1700,14 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             return Optional.empty();
         }
         return Optional.of(Path.of(configDir).toAbsolutePath().normalize().resolve(ConnectedBoardManifest.FILE_NAME));
+    }
+
+    private static Path defaultWorkspaceRoot() {
+        String configured = property(CONFIG_DIR_PROPERTY);
+        Path configDir = configured == null || configured.isBlank()
+                ? Path.of(System.getenv().getOrDefault("SYMPHONY_TRELLO_CONFIG_DIR", "."))
+                : Path.of(configured);
+        return LocalWorkerPaths.defaultWorkspaceRoot(configDir, System.getenv());
     }
 
     private static Path defaultWorkflowPath() {

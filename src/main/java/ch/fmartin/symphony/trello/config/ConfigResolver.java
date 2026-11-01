@@ -15,12 +15,14 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
@@ -77,10 +79,15 @@ public class ConfigResolver {
     }
 
     public EffectiveConfig resolve(WorkflowDefinition workflow) {
-        return new ConfigResolver(environment.snapshot(), secretFiles).resolveSnapshot(workflow);
+        return resolve(workflow, workflow.path().getParent());
     }
 
-    private EffectiveConfig resolveSnapshot(WorkflowDefinition workflow) {
+    /// Managed snapshots keep relative paths anchored to the source workflow's directory.
+    public EffectiveConfig resolve(WorkflowDefinition workflow, Path referenceDirectory) {
+        return new ConfigResolver(environment.snapshot(), secretFiles).resolveSnapshot(workflow, referenceDirectory);
+    }
+
+    private EffectiveConfig resolveSnapshot(WorkflowDefinition workflow, Path referenceDirectory) {
         Map<String, Object> root = workflow.config();
         Map<String, Object> tracker = object(root, "tracker");
         Map<String, Object> workspace = object(root, "workspace");
@@ -108,17 +115,15 @@ public class ConfigResolver {
         String endpoint = string(tracker, "endpoint", TrelloCredentialEndpoint.TRELLO_API);
         validateEndpoint(endpoint);
         endpoint = TrelloCredentialEndpoint.canonical(endpoint).orElseThrow().toString();
-        Secret apiKey =
-                secret(workflow.path().getParent(), tracker, "api_key", "tracker.api_key", TrelloEnvironment.API_KEY);
-        Secret apiToken = secret(
-                workflow.path().getParent(), tracker, "api_token", "tracker.api_token", TrelloEnvironment.API_TOKEN);
+        Secret apiKey = secret(referenceDirectory, tracker, "api_key", "tracker.api_key", TrelloEnvironment.API_KEY);
+        Secret apiToken =
+                secret(referenceDirectory, tracker, "api_token", "tracker.api_token", TrelloEnvironment.API_TOKEN);
         TrelloCredentialEndpoint.requireBoundTo(
                 environmentCredentials(apiKey, apiToken), endpoint, "the workflow's tracker.endpoint");
         String boardId = environmentString(tracker, "board_id", null);
         String resolvedBoardId = environmentString(tracker, "resolved_board_id", boardId);
-        List<Path> codexAdditionalWritableRoots = codexDangerFullAccess
-                ? List.of()
-                : additionalWritableRoots(workflow.path().getParent(), codex);
+        List<Path> codexAdditionalWritableRoots =
+                codexDangerFullAccess ? List.of() : additionalWritableRoots(referenceDirectory, codex);
         try {
             CodexSandboxPolicy.validateResolvedPolicy(
                     codex.get("turn_sandbox_policy"), codexAdditionalWritableRoots, codexDangerFullAccess);
@@ -161,8 +166,8 @@ public class ConfigResolver {
                 new EffectiveConfig.PollingConfig(positiveMillis(
                         typedWorkflow.pollingIntervalMs(), "interval_ms", ConfigDefaults.DEFAULT_POLLING_INTERVAL_MS)),
                 new EffectiveConfig.WorkspaceConfig(pathFailingOnMissingVariable(
-                        workflow.path().getParent(), "workspace.root", string(workspace, "root", systemTempRoot()))),
-                repositoryConfig(workflow.path().getParent(), repository, typedWorkflow),
+                        referenceDirectory, "workspace.root", string(workspace, "root", systemTempRoot()))),
+                repositoryConfig(referenceDirectory, repository, typedWorkflow),
                 new EffectiveConfig.HooksConfig(
                         string(hooks, "after_create", null),
                         string(hooks, "before_run", null),
@@ -212,7 +217,9 @@ public class ConfigResolver {
                         bool(trelloTools, "assume_write_scope", false),
                         followUpCards(object(trelloTools, "follow_up_cards"))),
                 new EffectiveConfig.ServerConfig(optionalInt(typedWorkflow.serverPort())),
-                github);
+                github,
+                credentialSources(workflow.path(), apiKey, apiToken),
+                Set.of());
     }
 
     public void validateForDispatch(EffectiveConfig config) {
@@ -457,16 +464,34 @@ public class ConfigResolver {
     }
 
     private Secret environmentSecret(String name) {
-        return environment.lookup(name).map(Secret::fromEnvironment).orElse(Secret.NONE);
+        return environment
+                .lookup(name)
+                .map(Secret::fromEnvironment)
+                .orElseGet(() -> new Secret(null, null, null, name));
     }
 
     private Secret configuredSecret(Path workflowDirectory, String displayName, @Nullable String configured) {
         if (configured != null && configured.startsWith(FILE_SECRET_PREFIX)) {
-            return new Secret(
-                    fileSecret(workflowDirectory, displayName, configured.substring(FILE_SECRET_PREFIX.length())),
-                    null);
+            Path path = pathFailingOnMissingVariable(
+                    workflowDirectory, displayName + " secret file", configured.substring(FILE_SECRET_PREFIX.length()));
+            return new Secret(fileSecret(displayName, path), null, path, null);
         }
-        return new Secret(configured, null);
+        return new Secret(configured, null, null, null);
+    }
+
+    private CredentialSources credentialSources(Path workflow, Secret... secrets) {
+        Set<Path> files = new HashSet<>(environment.files());
+        files.add(workflow);
+        Set<String> variables = new HashSet<>(Set.of(TrelloEnvironment.API_KEY, TrelloEnvironment.API_TOKEN));
+        for (Secret secret : secrets) {
+            if (secret.file() != null) {
+                files.add(secret.file());
+            }
+            if (secret.environmentVariable() != null) {
+                variables.add(secret.environmentVariable());
+            }
+        }
+        return new CredentialSources(files, variables);
     }
 
     /// The credentials an environment source supplied, which the endpoint binding covers. A literal
@@ -479,11 +504,13 @@ public class ConfigResolver {
 
     /// A resolved `tracker.api_key` or `tracker.api_token`, with the environment value behind it
     /// when the setting referenced one.
-    private record Secret(@Nullable String value, @Nullable EnvironmentValue origin) {
-        static final Secret NONE = new Secret(null, null);
-
-        static Secret fromEnvironment(EnvironmentValue environmentValue) {
-            return new Secret(environmentValue.value(), environmentValue);
+    private record Secret(
+            @Nullable String value,
+            @Nullable EnvironmentValue origin,
+            @Nullable Path file,
+            @Nullable String environmentVariable) {
+        static Secret fromEnvironment(EnvironmentValue value) {
+            return new Secret(value.value(), value, null, value.name());
         }
 
         Optional<EnvironmentValue> environmentValue() {
@@ -499,8 +526,7 @@ public class ConfigResolver {
         return environmentResolver.apply(environmentName);
     }
 
-    private String fileSecret(Path workflowDirectory, String displayName, String configuredPath) {
-        Path secretPath = pathFailingOnMissingVariable(workflowDirectory, displayName + " secret file", configuredPath);
+    private String fileSecret(String displayName, Path secretPath) {
         try {
             long size = secretFiles.size(secretPath);
             if (size > MAX_SECRET_BYTES) {

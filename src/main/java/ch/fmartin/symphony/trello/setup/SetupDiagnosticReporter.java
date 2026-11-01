@@ -143,6 +143,7 @@ final class SetupDiagnosticReporter {
             "setup_broad_path_requires_confirmation",
             "setup_card_archive_title_mismatch",
             "setup_card_archived",
+            "setup_card_helper_unavailable",
             "setup_card_invalid_reference",
             "setup_card_list_ambiguous",
             "setup_card_list_not_found",
@@ -154,6 +155,7 @@ final class SetupDiagnosticReporter {
             "setup_card_workflow_not_connected",
             "setup_codex_auth_required",
             "setup_codex_login_failed",
+            "setup_connection_conflict",
             "setup_credentials_endpoint_mismatch",
             "setup_credentials_environment_reference",
             "setup_env_path_not_ignored",
@@ -196,10 +198,12 @@ final class SetupDiagnosticReporter {
             "setup_trello_board_limit",
             "setup_tutorial_card_missing",
             "setup_workflow_invalid",
+            "setup_workflow_board_mismatch",
             "setup_worker_board_already_managed",
             "setup_worker_board_ambiguous",
             "setup_worker_board_not_found",
             "setup_worker_board_required",
+            "setup_worker_identity_unavailable",
             "setup_worker_missing_api_key",
             "setup_worker_missing_api_token",
             "setup_worker_missing_trello_credentials",
@@ -733,7 +737,8 @@ final class SetupDiagnosticReporter {
 
                             section(body, "Workflow Identifiers");
                             appendLocalWorkflowIdentifiers(body, context.privateContextWorkflowPaths());
-                            appendLocalSecretFileIdentifiers(body, context.privateContextWorkflowPaths());
+                            appendLocalSecretFileIdentifiers(
+                                    body, context.privateContextWorkflowPaths(), context.selectedManifest());
 
                             section(body, "Log Identifiers");
                             appendLocalLogIdentifiers(
@@ -812,7 +817,7 @@ final class SetupDiagnosticReporter {
                 context.manifestSnapshot().status(),
                 context.paths().defaultEnvPath());
         addWorkflowMappings(mappings, context.privateContextWorkflowPaths());
-        addSecretFileMappings(mappings, context.privateContextWorkflowPaths());
+        addSecretFileMappings(mappings, context.privateContextWorkflowPaths(), context.selectedManifest());
         addLogMappings(mappings, context.paths().stateHome(), context.selectedWorkflowPaths(), context.selected());
         addProcessStateMappings(
                 mappings, context.paths().stateHome(), context.selectedWorkflowPaths(), context.selected());
@@ -930,8 +935,9 @@ final class SetupDiagnosticReporter {
         }
     }
 
-    private void addSecretFileMappings(List<PrivateContextMapping> mappings, SequencedSet<Path> workflowPaths) {
-        for (SecretFileMapping secretFile : secretFileMappings(workflowPaths)) {
+    private void addSecretFileMappings(
+            List<PrivateContextMapping> mappings, SequencedSet<Path> workflowPaths, ConnectedBoardManifest manifest) {
+        for (SecretFileMapping secretFile : secretFileMappings(workflowPaths, manifest)) {
             addMapping(
                     mappings,
                     "secret_file",
@@ -1024,8 +1030,7 @@ final class SetupDiagnosticReporter {
                 .orElseGet(paths::manifestPath);
         ManifestSnapshot manifestSnapshot = manifest(manifestPath);
         ConnectedBoardManifest manifest = manifestSnapshot.manifest();
-        DiagnosticsSelection selection =
-                selectDiagnostics(manifest, request.board(), request.workflow(), paths.configDir());
+        DiagnosticsSelection selection = selectDiagnostics(manifest, request.board(), request.workflow());
         tokenHasher = sharedTokenHasher.orElseGet(() -> diagnosticsTokenHasher(request, paths));
         var selectedManifest = new ConnectedBoardManifest(selection.boards());
         boolean selected = selection.kind() != DiagnosticsSelectorKind.NONE;
@@ -1556,62 +1561,20 @@ final class SetupDiagnosticReporter {
         }
     }
 
-    private DiagnosticsSelection selectDiagnostics(
-            ConnectedBoardManifest manifest,
-            Optional<String> selectedBoard,
-            Optional<Path> selectedWorkflow,
-            Path configDir) {
+    private static DiagnosticsSelection selectDiagnostics(
+            ConnectedBoardManifest manifest, Optional<String> selectedBoard, Optional<Path> selectedWorkflow) {
         CliInputValidation.rejectBlankBoardSelector(selectedBoard);
         CliInputValidation.rejectBlankWorkflowSelector(selectedWorkflow);
-        if (selectedBoard.isPresent() && selectedWorkflow.isPresent()) {
-            throw new TrelloBoardSetupException(
-                    "setup_invalid_arguments", "--board and --workflow cannot be used together.");
+        ConnectedWorkflowResolver.requireSingleSelector(selectedBoard, selectedWorkflow);
+        if (selectedBoard.isEmpty() && selectedWorkflow.isEmpty()) {
+            return new DiagnosticsSelection(DiagnosticsSelectorKind.NONE, manifest.boards(), Optional.empty());
         }
-        return selectedBoard
-                .map(boardSelector -> selectBoardDiagnostics(manifest, boardSelector))
-                .orElseGet(() -> selectedWorkflow
-                        .map(workflow -> selectWorkflowDiagnostics(manifest, workflow, configDir))
-                        .orElseGet(() -> new DiagnosticsSelection(
-                                DiagnosticsSelectorKind.NONE, manifest.boards(), Optional.empty())));
-    }
-
-    private static DiagnosticsSelection selectBoardDiagnostics(ConnectedBoardManifest manifest, String boardSelector) {
-        List<ConnectedBoard> matches = manifest.findAllByBoard(boardSelector);
-        if (matches.size() > 1) {
-            throw new TrelloBoardSetupException(
-                    "setup_invalid_arguments",
-                    "Multiple connected boards match --board. Re-run with a board id or short link.");
-        }
-        return new DiagnosticsSelection(DiagnosticsSelectorKind.BOARD, matches, Optional.empty());
-    }
-
-    private DiagnosticsSelection selectWorkflowDiagnostics(
-            ConnectedBoardManifest manifest, Path selectedWorkflow, Path configDir) {
-        Path workflow = resolveWorkflowPathOption(selectedWorkflow, configDir, WorkflowPathResolution.CONFIG_DIR);
-        rejectUnusableSelectedWorkflow(
-                workflow, workflowEnvironmentResolver(manifest, workflow, configDir.resolve(".env")));
-        List<ConnectedBoard> matches = manifest.findAllByWorkflow(workflow);
-        if (matches.size() > 1) {
-            throw new TrelloBoardSetupException(
-                    "setup_invalid_arguments",
-                    "Multiple connected-board rows reference --workflow. Repair "
-                            + ConnectedBoardManifest.FILE_NAME
-                            + ", then rerun the command.");
-        }
-        return new DiagnosticsSelection(DiagnosticsSelectorKind.WORKFLOW, matches, Optional.of(workflow));
-    }
-
-    private static void rejectUnusableSelectedWorkflow(
-            Path workflow, Function<String, Optional<String>> environmentResolver) {
-        // Out-of-range server ports stay selectable: diagnostics is the inspection tool for such
-        // workflows and reports the invalid port safely instead of refusing the selector.
-        WorkflowValidation validation =
-                new WorkflowConfigEditor().diagnosticsValidation(workflow, environmentResolver, false);
-        if (!validation.ok()) {
-            throw new TrelloBoardSetupException(
-                    "setup_invalid_arguments",
-                    "--workflow must reference a readable workflow file with usable workflow front matter.");
-        }
+        ConnectedBoard board =
+                ConnectedWorkflowResolver.select(manifest, selectedBoard, selectedWorkflow, "diagnostics");
+        return new DiagnosticsSelection(
+                selectedWorkflow.isPresent() ? DiagnosticsSelectorKind.WORKFLOW : DiagnosticsSelectorKind.BOARD,
+                List.of(board),
+                selectedWorkflow.map(ignored -> board.workflowPath()));
     }
 
     private static void appendSelectionMatch(StringBuilder body, DiagnosticsSelection selection) {
@@ -1793,8 +1756,9 @@ final class SetupDiagnosticReporter {
         table.appendTo(body);
     }
 
-    private void appendLocalSecretFileIdentifiers(StringBuilder body, SequencedSet<Path> workflowPaths) {
-        List<SecretFileMapping> secretFiles = secretFileMappings(workflowPaths);
+    private void appendLocalSecretFileIdentifiers(
+            StringBuilder body, SequencedSet<Path> workflowPaths, ConnectedBoardManifest manifest) {
+        List<SecretFileMapping> secretFiles = secretFileMappings(workflowPaths, manifest);
         if (secretFiles.isEmpty()) {
             return;
         }
@@ -1812,14 +1776,20 @@ final class SetupDiagnosticReporter {
         table.appendTo(body);
     }
 
-    private List<SecretFileMapping> secretFileMappings(SequencedSet<Path> workflowPaths) {
+    private List<SecretFileMapping> secretFileMappings(
+            SequencedSet<Path> workflowPaths, ConnectedBoardManifest manifest) {
         var editor = new WorkflowConfigEditor();
         List<SecretFileMapping> secretFiles = new ArrayList<>();
         for (Path workflow : workflowPaths) {
+            // Imported snapshots keep their source base; other paths retain the selected alias spelling.
+            Path referenceDirectory = manifest.selectWorkflow(workflow)
+                    .filter(board -> board.sourceWorkflowPath() != null)
+                    .map(ConnectedBoard::referenceDirectory)
+                    .orElseGet(() -> workflowDirectory(workflow));
             editor.trackerCredentialReferences(workflow).ifPresent(credentials -> {
-                secretFileMapping(workflow, "tracker.api_key", credentials.apiKey())
+                secretFileMapping(workflow, referenceDirectory, "tracker.api_key", credentials.apiKey())
                         .ifPresent(secretFiles::add);
-                secretFileMapping(workflow, "tracker.api_token", credentials.apiToken())
+                secretFileMapping(workflow, referenceDirectory, "tracker.api_token", credentials.apiToken())
                         .ifPresent(secretFiles::add);
             });
         }
@@ -1827,13 +1797,13 @@ final class SetupDiagnosticReporter {
     }
 
     private Optional<SecretFileMapping> secretFileMapping(
-            Path workflow, String credential, Optional<String> configuredValue) {
+            Path workflow, Path referenceDirectory, String credential, Optional<String> configuredValue) {
         return configuredValue
-                .flatMap(value -> secretFilePath(workflow, value))
+                .flatMap(value -> secretFilePath(referenceDirectory, value))
                 .map(path -> new SecretFileMapping(workflow, credential, path));
     }
 
-    private Optional<Path> secretFilePath(Path workflow, String configuredValue) {
+    private Optional<Path> secretFilePath(Path referenceDirectory, String configuredValue) {
         String prefix = "file:";
         if (!configuredValue.startsWith(prefix)) {
             return Optional.empty();
@@ -1841,8 +1811,7 @@ final class SetupDiagnosticReporter {
         try {
             Path configuredPath = Path.of(
                     ConfigResolver.expandPath(configuredValue.substring(prefix.length()), platformEnvironment::value));
-            Path workflowDirectory = workflowDirectory(workflow);
-            Path secretFile = configuredPath.isAbsolute() ? configuredPath : workflowDirectory.resolve(configuredPath);
+            Path secretFile = configuredPath.isAbsolute() ? configuredPath : referenceDirectory.resolve(configuredPath);
             return Optional.of(secretFile.toAbsolutePath().normalize());
         } catch (InvalidPathException e) {
             return Optional.empty();

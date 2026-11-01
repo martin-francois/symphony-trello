@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 final class InstalledCliDefaultsTest {
     private final Path configDir = Path.of("/opt/symphony/config");
@@ -64,7 +66,16 @@ final class InstalledCliDefaultsTest {
 
         // then
         assertThat(installed)
-                .containsExactly("card", "move", "--config-dir", configDir.toString(), "abc12345", "--to", "Done");
+                .containsExactly(
+                        "card",
+                        "move",
+                        "--config-dir",
+                        configDir.toString(),
+                        "--state-home",
+                        stateHome.toString(),
+                        "abc12345",
+                        "--to",
+                        "Done");
         assertThat(explicit).containsExactly("card", "list", "--config-dir", "/tmp/other-config");
         assertThat(help).containsExactly("card", "--help");
     }
@@ -92,28 +103,36 @@ final class InstalledCliDefaultsTest {
                         "status");
     }
 
-    @Test
-    void derivesIsolatedLifecycleDefaultsFromExplicitConfigDir() {
+    @ParameterizedTest
+    @ValueSource(strings = {"diagnostics", "setup-local"})
+    void derivesIsolatedLifecycleDefaultsFromExplicitConfigDir(String command) {
         // given
         InstalledCliDefaults.InstalledPaths paths = installedPaths();
         Path isolatedConfigDir = Path.of("/tmp/isolated-config");
 
         // when
         List<String> args =
-                InstalledCliDefaults.apply(List.of("diagnostics", "--config-dir", isolatedConfigDir.toString()), paths);
+                InstalledCliDefaults.apply(List.of(command, "--config-dir", isolatedConfigDir.toString()), paths);
 
         // then
         assertThat(args)
-                .containsExactly(
-                        "diagnostics",
+                .containsSubsequence(
                         "--workspace-root",
-                        isolatedConfigDir.resolve("workspaces").toString(),
-                        "--state-home",
-                        isolatedConfigDir.resolveSibling("state").toString(),
-                        "--app-home",
-                        appHome.toString(),
-                        "--config-dir",
-                        isolatedConfigDir.toString());
+                        isolatedConfigDir.resolveSibling("workspaces").toString());
+        assertThat(args).containsSubsequence("--config-dir", isolatedConfigDir.toString());
+        if ("diagnostics".equals(command)) {
+            assertThat(args)
+                    .containsExactly(
+                            command,
+                            "--workspace-root",
+                            isolatedConfigDir.resolveSibling("workspaces").toString(),
+                            "--state-home",
+                            isolatedConfigDir.resolveSibling("state").toString(),
+                            "--app-home",
+                            appHome.toString(),
+                            "--config-dir",
+                            isolatedConfigDir.toString());
+        }
     }
 
     @Test

@@ -73,7 +73,8 @@ runtime_is_podman() {
 }
 
 # Preserve redirected callers; a container terminal requires both terminal streams.
-container_terminal=()
+# Keep piped prompt answers attached even when no terminal is allocated.
+container_terminal=(-i)
 if [[ -t 0 && -t 1 ]]; then
   container_terminal=(-i -t)
 fi

@@ -11,6 +11,10 @@ informed: [Future maintainers, Contributors]
 
 # Manage board cards through CLI commands and a Codex skill
 
+[ADR 0157](0157-connect-workflows-and-isolate-card-credentials.md) supersedes the direct credential
+access and unconnected-start behavior. Card commands now use an independent trusted helper, and
+explicit start imports a registered managed snapshot. Endpoint binding remains unchanged.
+
 ## Context and Problem Statement
 
 Outside a worker run, a user wants to ask an agent about the cards on a connected board, or to have

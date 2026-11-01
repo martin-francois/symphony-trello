@@ -515,8 +515,8 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         result.assertFailure(SETUP_FAILURE)
                 .stdoutContains("Connected-board manifest entry 1 field boardName must be a non-blank string.")
                 .stderrContains(
-                        "setup_failed code=setup_board_selection_required",
-                        "No connected Trello board matches \"missing-private-selector\".")
+                        "setup_failed code=setup_worker_board_not_found",
+                        "cannot resolve connected board: run symphony-trello start --workflow PATH from a trusted terminal")
                 .stderrDoesNotContain("Troubleshooting report written");
     }
 

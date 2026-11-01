@@ -27,6 +27,14 @@ public sealed interface EnvironmentSource {
         return this;
     }
 
+    default Optional<Path> filePath() {
+        return switch (this) {
+            case EnvFile file -> Optional.of(file.path());
+            case Snapshot snapshot -> snapshot.source().filePath();
+            case ShellEnvironment _ -> Optional.empty();
+        };
+    }
+
     /// The endpoint that this source's Trello key and token belong to.
     default String trelloEndpoint() {
         return value(TrelloEnvironment.API_ENDPOINT).orElse(TrelloCredentialEndpoint.TRELLO_API);

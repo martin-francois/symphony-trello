@@ -54,6 +54,22 @@ final class ProcessCommandRunnerTest {
     }
 
     @Test
+    void preparedLauncherPreservesItsEnvironmentAndWorkingDirectory(@TempDir Path directory) {
+        // given
+        var runner = new ProcessCommandRunner(Duration.ofSeconds(2));
+        var builder = new ProcessBuilder(BASH, "-c", "printf '%s\\n' \"$SYMPHONY_TEST_LAUNCH_VALUE\"; pwd")
+                .directory(directory.toFile());
+        builder.environment().put("SYMPHONY_TEST_LAUNCH_VALUE", "launch value with spaces");
+
+        // when
+        CommandResult result = runner.run(builder);
+
+        // then
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.output()).isEqualTo("launch value with spaces\n%s\n", directory);
+    }
+
+    @Test
     void runStopsGrandchildProcessesWhenTheCommandTimesOut(@TempDir Path workDirectory) throws Exception {
         // given
         Path pidFile = workDirectory.resolve("grandchild.pid");

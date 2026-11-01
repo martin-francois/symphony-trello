@@ -64,6 +64,25 @@ final class LocalSetupTestFixture implements AutoCloseable {
                 })
                 .when(workerManager)
                 .stop(any(), any(), any());
+        doAnswer(invocation -> {
+                    StopWorkerRequest request = invocation.getArgument(0);
+                    Path manifestPath = invocation.getArgument(1);
+                    PrintStream out = invocation.getArgument(2);
+                    var repository = new ConnectedBoardRepository(manifestPath);
+                    var manifest = repository.loadForLifecycle();
+                    ConnectedBoard board = manifest.selectBoard(request.board().orElseThrow());
+                    var paths = LocalWorkerPaths.from(
+                            request.appHome(),
+                            request.configDir(),
+                            request.workspaceRoot(),
+                            request.stateHome(),
+                            Map.of());
+                    workerManager.stop(paths, board, out);
+                    repository.save(manifest.withoutBoard(board.boardId()));
+                    return 0;
+                })
+                .when(workerManager)
+                .disconnect(any(), any(), any());
         setup = new LocalSetup(
                 new TrelloBoardSetup(new ObjectMapper()),
                 commands,
