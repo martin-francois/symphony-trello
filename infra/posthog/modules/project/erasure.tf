@@ -19,12 +19,13 @@ variable "erasure_secrets" {
 
 locals {
   erasure_scope = "symphony:${posthog_project.this.id}"
-  erasure_hog = templatefile("${path.module}/../../erasure-service.hog.tftpl", {
+  # PostHog trims source on write; the provider requires the readback to match this value.
+  erasure_hog = trimspace(templatefile("${path.module}/../../erasure-service.hog.tftpl", {
     scope                 = local.erasure_scope
     project               = posthog_project.this.id
     active_key            = var.erasure_secrets.active_key
     master_key_references = join(", ", [for version in keys(var.erasure_secrets.master_keys) : "'${version}': inputs.master_${version}"])
-  })
+  }))
 }
 
 resource "posthog_hog_function" "merge_filter" {
@@ -33,7 +34,7 @@ resource "posthog_hog_function" "merge_filter" {
   type            = "transformation"
   name            = "Symphony identity merge filter"
   description     = "Drops identity-changing events. This is a mitigation, not a fail-closed security boundary."
-  hog             = file("${path.module}/../../merge-filter.hog")
+  hog             = trimspace(file("${path.module}/../../merge-filter.hog"))
   filters_json    = jsonencode({ source = "events" })
   execution_order = 0
   enabled         = true
