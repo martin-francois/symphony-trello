@@ -83,6 +83,7 @@ final class CodexModelDefaultsResolver {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
+            LOG.log(System.Logger.Level.DEBUG, "Codex model catalog unavailable, using fallback defaults", e);
             return CodexModelSelectionDefaults.of(CodexModelDefaults.unsupportedFirstClassFields());
         }
     }
