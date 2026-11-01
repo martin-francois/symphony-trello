@@ -251,6 +251,13 @@ a mocked provider. Verification compares the managed handler hash, enabled state
 merge filter with the canonical configuration. The [hosted lifecycle observation](telemetry-erasure-implementation.md)
 records the actual outcomes separately; pending evidence is never converted into a passing result.
 
+PostHog trims leading and trailing whitespace from Hog source. The module sends normalized source
+so the provider's post-apply comparison matches the API response. If an older definition reports
+`Provider produced inconsistent result after apply`, inspect the live functions before retrying.
+Verify their project, identity, enabled state and canonical source, then clear only the matching
+resources' taints and re-plan with the corrected definition. Do not recreate verified functions
+or ignore source changes to hide the mismatch.
+
 After production activation, the public release variables `POSTHOG_ERASURE_ENDPOINT` and
 `POSTHOG_ERASURE_AUDIENCE` carry the managed webhook URL and `symphony:<project-id>` audience.
 Packaging validates and checks both in the application archive, and refuses an audience other
