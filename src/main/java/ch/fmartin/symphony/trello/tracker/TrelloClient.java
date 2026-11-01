@@ -1399,7 +1399,12 @@ public class TrelloClient implements TrackerClient {
     }
 
     private List<Map<String, Object>> getList(EffectiveConfig config, String path, Map<String, String> query) {
-        return request("GET", config, path, query, LIST_MAP_TYPE, true);
+        List<Map<String, Object>> payload = request("GET", config, path, query, LIST_MAP_TYPE, true);
+        if (payload.contains(null)) {
+            throw new TrelloException(
+                    "trello_unknown_payload", "cannot read Trello response list: expected non-null elements");
+        }
+        return payload;
     }
 
     private Map<String, Object> postMap(EffectiveConfig config, String path, Map<String, String> query) {
@@ -1433,7 +1438,12 @@ public class TrelloClient implements TrackerClient {
             boolean retry) {
         String body = requestBody(method, config, path, query, retry);
         try {
-            return json.readValue(body, type);
+            T payload = json.readValue(body, type);
+            if (payload == null) {
+                throw new TrelloException(
+                        "trello_unknown_payload", "cannot read Trello response: expected a non-null object or list");
+            }
+            return payload;
         } catch (IOException e) {
             throw new TrelloException("trello_api_request", "Trello request failed", e);
         }
