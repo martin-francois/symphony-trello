@@ -662,6 +662,16 @@ Fields:
   - Default: `1000`
   - Base delay for retryable Trello API errors.
 
+For both file-backed tracker secrets, this Java implementation MAY reject a reported size over
+65,536 bytes before opening the file. It MUST read at most 65,537 bytes regardless of reported
+size and return `secret_file_too_large` when the content exceeds 65,536 bytes, before stripping
+trailing CR/LF characters. Accepted content MUST be decoded as strict UTF-8; malformed input or
+an I/O failure returns `secret_file_read_error`. Both errors name the setting and path without
+printing secret content. Opened streams MUST be closed on success and failure. Devices and pipes
+are permitted under the same byte limit. This is a byte bound, not a read deadline: opening a
+pipe with no writer or reading a stalled producer can still block. Operators SHOULD use regular
+files or producers that supply the secret and reach EOF.
+
 #### 5.3.2 `polling` (object)
 
 Fields:
@@ -4093,6 +4103,14 @@ that a second formatting pass leaves the source unchanged.
 - `tracker.kind` validation enforces currently supported kind (`trello`)
 - `tracker.api_key` works, including `$VAR` indirection
 - `tracker.api_token` works, including `$VAR` indirection
+- File-backed tracker secrets enforce the 65,536-byte limit independently of metadata, accept the
+  exact boundary and finite pipe-like content, preserve strict UTF-8 and trailing CR/LF behavior,
+  and close streams on success and failure. Overflow returns `secret_file_too_large`; malformed
+  UTF-8 and I/O failures return `secret_file_read_error` naming the setting without secret values.
+  `ConfigResolverTest` owns controlled zero/understated-size and stream-lifecycle checks plus real
+  filesystem byte-boundary checks; `WorkflowConfigPromptTest` owns loaded-workflow secret behavior,
+  and `WorkflowLoaderFuzzTest` retains the in-memory secret seam. The byte limit imposes no deadline
+  on a pipe with no writer or a stalled producer.
 - `$VAR` resolution works for tracker API key, tracker API token, and path values
 - A key or token from the shell environment or a dotenv file is refused for a `tracker.endpoint`
   other than the one the same source binds it to, a literal workflow value needs no binding, the
