@@ -78,6 +78,15 @@ targeted apply and the one import in the workflow, and it needs no historical id
 rejects a project name that already exists in the organization, so a rebuild must rename or retire
 the old project before the new one can be created; the entry point offers `retire-project`.
 
+The CI action input and mise tool pin use the same unprefixed OpenTofu version. Renovate's built-in
+GitHub Actions manager owns `tofu_version`; the mise manager owns the local tool pin. A package rule
+groups both owners and extracts the version from the GitHub release tag for both. The former regex
+manager duplicated the built-in action owner, whose unnormalized tag produced `v1.13.2` alongside
+the mise pin `1.13.2`. Removing the duplicate and normalizing releases at the shared rule keeps one
+owner per declaration. The agreement test retains exact comparison so drift cannot hide behind
+normalization at test time. See Renovate's
+[version extraction contract](https://docs.renovatebot.com/configuration-options/#extractversion).
+
 ### Consequences
 
 - Good, because a fork runs six documented commands with its own key and inputs and gets the same

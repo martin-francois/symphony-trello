@@ -179,20 +179,6 @@
       "depNameTemplate": "hyperframes",
       "versioningTemplate": "semver",
       "description": "The HyperFrames CLI that renders the README demo. The repository has no package.json for the demo, so no built-in manager sees this pin. The version file is hashed as a render input with its version literal normalized, and the render manifest records the version that rendered the committed media, so a version-only update passes the README demo freshness check; the HyperFrames Renovate automation workflow renders the demo with the new version on the pull request and compares it with the README video attachment. See ADR 0149."
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": [
-        "/^\\.github/workflows/ci\\.yml$/"
-      ],
-      "matchStrings": [
-        "tofu_version:\\s*(?<currentValue>\\d+\\.\\d+\\.\\d+)"
-      ],
-      "datasourceTemplate": "github-releases",
-      "depNameTemplate": "opentofu/opentofu",
-      "extractVersionTemplate": "^v(?<version>.+)$",
-      "versioningTemplate": "semver",
-      "description": "The OpenTofu version the CI validation job installs through setup-opentofu. The action input is not read by any built-in manager; the mise manager owns the same version in infra/posthog/mise.toml, and both must move together so CI validates with the tested release."
     }
   ],
   "customDatasources": {
@@ -404,14 +390,15 @@
       ]
     },
     {
-      "description": "The mise pin in infra/posthog/mise.toml and the tofu_version input in the posthog-infra CI job carry the same OpenTofu release, and a governance test requires them to match, so one pull request must move both.",
+      "description": "The GitHub Actions manager owns tofu_version and the mise manager owns infra/posthog/mise.toml. Both pins use the release version without its tag prefix and must move together.",
       "matchDatasources": [
         "github-releases"
       ],
       "matchPackageNames": [
         "opentofu/opentofu"
       ],
-      "groupName": "OpenTofu"
+      "groupName": "OpenTofu",
+      "extractVersion": "^v(?<version>.+)$"
     }
   ]
 }
