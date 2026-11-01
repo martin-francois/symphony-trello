@@ -64,3 +64,28 @@ run "enabled_service_without_its_active_master_is_refused" {
   }
   expect_failures = [posthog_hog_function.erasure]
 }
+
+run "hog_source_matches_api_whitespace_normalization" {
+  command = plan
+  module {
+    source = "./modules/project"
+  }
+  variables {
+    name            = "Symphony source normalization test"
+    organization_id = "@current"
+    erasure_enabled = true
+    erasure_secrets = {
+      active_key  = "k1"
+      master_keys = { k1 = "0000000000000000000000000000000000000000000000000000000000000001" }
+      api_key     = "phx_mock"
+    }
+  }
+  assert {
+    condition     = posthog_hog_function.erasure[0].hog == trimspace(posthog_hog_function.erasure[0].hog)
+    error_message = "Erasure source must match the PostHog API's trimmed source to avoid an inconsistent apply result."
+  }
+  assert {
+    condition     = posthog_hog_function.merge_filter[0].hog == trimspace(posthog_hog_function.merge_filter[0].hog)
+    error_message = "Merge-filter source must match the PostHog API's trimmed source to avoid an inconsistent apply result."
+  }
+}

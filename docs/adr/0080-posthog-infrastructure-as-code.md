@@ -78,6 +78,16 @@ targeted apply and the one import in the workflow, and it needs no historical id
 rejects a project name that already exists in the organization, so a rebuild must rename or retire
 the old project before the new one can be created; the entry point offers `retire-project`.
 
+The first production erasure activation on 2026-11-01 exposed another provider boundary.
+PostHog trims leading and trailing whitespace from Hog source before returning it. Provider
+1.0.21 compares that response with the configured string and fails the apply when they differ,
+even though it created and enabled the functions. The module supplies trimmed source for the
+erasure handler and identity merge filter. The canonical files and their behavior stay intact;
+source drift remains visible. Ignoring changes to `hog` would hide real handler changes and is
+not an acceptable repair. A mocked-provider plan asserts that both configured sources already
+match the API's normalization. Recovery of a failed creation requires live identity and source
+verification before clearing its taint; it does not require destroying the created function.
+
 ### Consequences
 
 - Good, because a fork runs six documented commands with its own key and inputs and gets the same
