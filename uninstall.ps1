@@ -755,6 +755,42 @@ function Get-WorkerLabel {
   return $PidFileBaseName
 }
 
+function Stop-CardHelper {
+  $helperHome = Join-Path $StateHome "card-helper"
+  foreach ($directory in @(Get-ChildItem -LiteralPath $helperHome -Directory -ErrorAction SilentlyContinue)) {
+    if ($directory.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
+    $readyPath = Join-Path $directory.FullName "ready.json"
+    $readyFile = Get-Item -LiteralPath $readyPath -ErrorAction SilentlyContinue
+    if (-not $readyFile -or $readyFile.PSIsContainer -or $readyFile.Length -gt 1024 -or
+        ($readyFile.Attributes -band [IO.FileAttributes]::ReparsePoint)) { continue }
+    try {
+      $ready = Get-Content -LiteralPath $readyPath -Raw | ConvertFrom-Json -ErrorAction Stop
+      $helperPid = 0
+      if (-not [int]::TryParse([string]$ready.pid, [ref]$helperPid) -or $helperPid -le 0) { continue }
+    } catch { continue }
+    $process = $null
+    try {
+      $process = Get-CimInstance Win32_Process -Filter "ProcessId = $helperPid" -ErrorAction Stop
+    } catch { $process = $null }
+    if (-not $process -or [string]::IsNullOrWhiteSpace($process.CommandLine)) {
+      if (Get-Process -Id $helperPid -ErrorAction SilentlyContinue) {
+        throw "cannot verify card helper: inspect the recorded process from a trusted terminal before retrying uninstall"
+      }
+      continue
+    }
+    $marker = "-Dsymphony.trello.card_helper_root=$($directory.FullName)"
+    if (-not (Test-CommandLineArgument $process.CommandLine $marker) -or
+        -not (Test-CommandLineArgument $process.CommandLine "ch.fmartin.symphony.trello.setup.CardHelperMain") -or
+        -not (Test-CommandLineArgument $process.CommandLine $ConfigDir)) { continue }
+    if ($DryRun) {
+      Write-Status "WOULD STOP" "  trusted card helper pid=$helperPid"
+    } else {
+      Write-Status "STOP" "  trusted card helper pid=$helperPid"
+      Stop-AndWaitManagedProcess $helperPid
+    }
+  }
+}
+
 function Stop-ManagedProcesses {
   $pidFiles = @(Get-ChildItem -Path $StateHome -Filter "*.pid" -ErrorAction SilentlyContinue)
   foreach ($pidFile in $pidFiles) {
@@ -862,6 +898,7 @@ if (Confirm-Step "Remove installer-managed app files and CLI executable?" $Yes) 
     throw "Refusing to remove app directory without Symphony installer marker: $Prefix"
   }
   Assert-AppRemovalPreservesCurrentData
+  Stop-CardHelper
   Stop-ManagedProcesses
   Remove-WindowsAutostart
   Remove-ManagedPath "$BinDir\symphony-trello.ps1"

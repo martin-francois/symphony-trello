@@ -13,6 +13,10 @@ informed: [Future maintainers, Contributors]
 
 # Bind Trello credentials to an endpoint
 
+[ADR 0157](0157-connect-workflows-and-isolate-card-credentials.md) supersedes the direct credential
+access and unconnected-start behavior. Card commands now use an independent trusted helper, and
+explicit start imports a registered managed snapshot. Endpoint binding remains unchanged.
+
 ## Context and Problem Statement
 
 `symphony-trello start --workflow PATH` accepts a workflow file that is not in the connected-board

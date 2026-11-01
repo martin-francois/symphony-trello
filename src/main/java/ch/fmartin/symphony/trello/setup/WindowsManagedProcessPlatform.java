@@ -6,18 +6,42 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 final class WindowsManagedProcessPlatform extends ProcessHandleManagedProcessPlatform {
+    private final CommandRunner processQuery;
+
+    WindowsManagedProcessPlatform() {
+        this(new ProcessCommandRunner());
+    }
+
+    WindowsManagedProcessPlatform(CommandRunner processQuery) {
+        this.processQuery = processQuery;
+    }
+
     @Override
     public ManagedProcessHandle start(
             List<String> command, Path workingDirectory, Map<String, String> environment, Path stdout, Path stderr)
             throws IOException {
         createParentDirectories(stdout);
         createParentDirectories(stderr);
+        ProcessBuilder builder = launcher(command, workingDirectory, environment, stdout, stderr);
+        CommandResult result = new ProcessCommandRunner().run(builder);
+        if (!result.success()) {
+            throw new IOException("cannot start Windows worker: launcher exited with code " + result.exitCode()
+                    + "; check PowerShell availability and worker logs");
+        }
+        return new ManagedProcessHandle(parsePid(result.output()));
+    }
+
+    static ProcessBuilder launcher(
+            List<String> command, Path workingDirectory, Map<String, String> environment, Path stdout, Path stderr) {
         Map<String, String> workerEnvironment = withoutInstallerCompletionEnvironment(environment);
         ProcessBuilder builder = new ProcessBuilder(
                         powershellExecutable(),
@@ -26,20 +50,37 @@ final class WindowsManagedProcessPlatform extends ProcessHandleManagedProcessPla
                         "-ExecutionPolicy",
                         "Bypass",
                         "-EncodedCommand",
-                        encodedStartProcessScript(command, workingDirectory, workerEnvironment, stdout, stderr))
+                        encodedStartProcessScript(command, workingDirectory, Map.of(), stdout, stderr))
                 .redirectErrorStream(true);
-        configureWorkerEnvironment(builder.environment(), Map.of());
-        Process launcher = builder.start();
-        var output = new String(launcher.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        try {
-            int exitCode = launcher.waitFor();
-            if (exitCode != 0) {
-                throw new IOException("Windows worker launcher failed with exit code " + exitCode + ": " + output);
+        configureWorkerEnvironment(builder.environment(), workerEnvironment);
+        return builder;
+    }
+
+    @Override
+    public Optional<List<String>> commandArguments(long pid) {
+        if (pid <= 0) {
+            return Optional.empty();
+        }
+        try (var input = WindowsManagedProcessPlatform.class.getResourceAsStream("/windows-process-arguments.ps1")) {
+            if (input == null) {
+                return Optional.empty();
             }
-            return new ManagedProcessHandle(parsePid(output));
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            throw new IOException("Interrupted while starting Windows worker", exception);
+            String script = new String(input.readAllBytes(), StandardCharsets.UTF_8)
+                    .replace("@PROCESS_ID@", Long.toString(pid));
+            CommandResult result = processQuery.run(
+                    powershellExecutable(),
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-EncodedCommand",
+                    Base64.getEncoder().encodeToString(script.getBytes(StandardCharsets.UTF_16LE)));
+            if (!result.success()) {
+                return Optional.empty();
+            }
+            var arguments = ConnectedBoardRepository.jsonMapper().readValue(result.output(), String[].class);
+            return arguments == null ? Optional.empty() : Optional.of(List.of(arguments));
+        } catch (IOException | IllegalArgumentException ignored) {
+            // An unavailable process identity never authorizes stopping a process.
+            return Optional.empty();
         }
     }
 
@@ -48,11 +89,50 @@ final class WindowsManagedProcessPlatform extends ProcessHandleManagedProcessPla
         return false;
     }
 
+    @Override
+    public boolean stop(long pid, Duration gracefulTimeout, Duration forcedTimeout) {
+        List<Long> processIds = Stream.concat(
+                        Stream.of(pid),
+                        ProcessHandle.of(pid).stream()
+                                .flatMap(ProcessHandle::descendants)
+                                .map(ProcessHandle::pid))
+                .toList();
+        if (!super.stop(pid, gracefulTimeout, forcedTimeout)) {
+            return false;
+        }
+        return awaitExited(processIds, forcedTimeout);
+    }
+
+    boolean awaitExited(List<Long> processIds, Duration timeout) {
+        try (var input = WindowsManagedProcessPlatform.class.getResourceAsStream("/windows-wait-for-exit.ps1")) {
+            if (input == null) {
+                return false;
+            }
+            String script = new String(input.readAllBytes(), StandardCharsets.UTF_8)
+                    .replace(
+                            "@PROCESS_IDS@",
+                            processIds.stream().map(String::valueOf).collect(Collectors.joining(",")))
+                    .replace("@TIMEOUT_MS@", Long.toString(Math.clamp(timeout.toMillis(), 0, Integer.MAX_VALUE)));
+            // An exit code alone does not establish that Windows has released the process's handles.
+            return new ProcessCommandRunner(timeout.plusSeconds(10))
+                    .run(
+                            powershellExecutable(),
+                            "-NoProfile",
+                            "-NonInteractive",
+                            "-EncodedCommand",
+                            Base64.getEncoder().encodeToString(script.getBytes(StandardCharsets.UTF_16LE)))
+                    .success();
+        } catch (IOException failure) {
+            return false;
+        }
+    }
+
     static String encodedStartProcessScript(
             List<String> command, Path workingDirectory, Map<String, String> environment, Path stdout, Path stderr) {
         checkArgument(!command.isEmpty(), "command must not be empty");
         var script = new StringBuilder();
         script.append("$ErrorActionPreference = 'Stop'\n");
+        script.append("$ProgressPreference = 'SilentlyContinue'\n");
         script.append("[System.Environment]::SetEnvironmentVariable(")
                 .append(powerShellString(LocalSetup.INSTALLER_COMPLETION_ENV))
                 .append(", $null, 'Process')\n");

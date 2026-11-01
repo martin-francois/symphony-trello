@@ -335,6 +335,45 @@ final class WorkflowConfigEditor {
             EnvironmentSources environmentResolver,
             boolean validateServerPort,
             Optional<Path> diagnosticsConfigDir) {
+        return prepareLaunchWorkflow(
+                workflowPath,
+                environmentResolver,
+                validateServerPort,
+                diagnosticsConfigDir,
+                workflowPath.toAbsolutePath().normalize().getParent());
+    }
+
+    EffectiveConfig prepareConnectedWorkflow(
+            ConnectedBoard board, EnvironmentSources environmentResolver, boolean validateServerPort, Path configDir) {
+        EffectiveConfig config = prepareLaunchWorkflow(
+                board.workflowPath(),
+                environmentResolver,
+                validateServerPort,
+                Optional.of(configDir),
+                board.referenceDirectory());
+        return ConnectedWorkflowResolver.protectCredentials(config, board, configDir);
+    }
+
+    EffectiveConfig prepareWorkflowSnapshot(
+            Path snapshot,
+            Path source,
+            EnvironmentSources environmentResolver,
+            boolean validateServerPort,
+            Path configDir) {
+        return prepareLaunchWorkflow(
+                snapshot,
+                environmentResolver,
+                validateServerPort,
+                Optional.of(configDir),
+                source.toAbsolutePath().normalize().getParent());
+    }
+
+    private EffectiveConfig prepareLaunchWorkflow(
+            Path workflowPath,
+            EnvironmentSources environmentResolver,
+            boolean validateServerPort,
+            Optional<Path> diagnosticsConfigDir,
+            Path referenceDirectory) {
         requireLaunchableWorkflowFile(workflowPath);
         ReadWorkflow readWorkflow = readWorkflowForLaunch(workflowPath);
         try {
@@ -343,7 +382,7 @@ final class WorkflowConfigEditor {
                     workflowPath.toAbsolutePath().normalize(),
                     yaml,
                     readWorkflow.frontMatter().body().trim());
-            EffectiveConfig config = new ConfigResolver(environmentResolver).resolve(workflow);
+            EffectiveConfig config = new ConfigResolver(environmentResolver).resolve(workflow, referenceDirectory);
             validateStartEnvironmentReferences(yaml, environmentResolver, validateServerPort);
             return config;
         } catch (IOException e) {

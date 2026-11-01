@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.CliExitCodes;
 import ch.fmartin.symphony.trello.TestHttpExchange;
+import ch.fmartin.symphony.trello.testsupport.BoundedWait;
 import ch.fmartin.symphony.trello.testsupport.CliRunResult;
 import ch.fmartin.symphony.trello.testsupport.CredentialSentinels;
 import ch.fmartin.symphony.trello.testsupport.FakeTrelloBoard;
@@ -13,14 +14,21 @@ import ch.fmartin.symphony.trello.tracker.SymphonyCommentFooter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.BooleanNode;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -67,6 +75,58 @@ final class BoardCardCommandsTest {
         if (foreignServer != null) {
             foreignServer.close();
         }
+    }
+
+    @Test
+    void replacementWithoutProvenanceUsesItsCurrentReviewList() throws Exception {
+        // given
+        Path config = connectBoard(DEFAULT_TRELLO_TOOLS);
+        var store = GeneratedWorkflowStore.besideManifest(config.resolve(ConnectedBoardManifest.FILE_NAME));
+        var stale = new GeneratedWorkflowBodyInputs(
+                List.of("Ready for Codex"), List.of("Done"), "In Progress", "Old Review", "Blocked", null, false);
+        store.put(new GeneratedWorkflowRecord(workflowPath(config), "1.0.0", stale, "Old instructions"));
+        Path source = tempDir.resolve("replacement.md");
+        Files.writeString(source, workflow(BOARD_ID, DEFAULT_TRELLO_TOOLS, List.of("Done")));
+
+        // when
+        importWorkflow(config, source);
+        CliRunResult result = runCard(config, "list", "--list", "human-review");
+
+        // then
+        result.assertSuccess().stdoutContains("List \"Human Review\"  roles: human-review");
+        assertThat(GeneratedWorkflowStore.find(store.records(), workflowPath(config)))
+                .isEmpty();
+    }
+
+    @Test
+    void firstImportInfersMergingRoleFromTheImportedWorkflow() throws Exception {
+        // given
+        Path config = connectBoard(DEFAULT_TRELLO_TOOLS);
+        new ConnectedBoardRepository(config.resolve(ConnectedBoardManifest.FILE_NAME))
+                .save(new ConnectedBoardManifest(List.of()));
+        board.list("list-merging", "Merging");
+        Path source = tempDir.resolve("github.md");
+        Files.writeString(
+                source,
+                workflow(BOARD_ID, DEFAULT_TRELLO_TOOLS, List.of("Done"))
+                        .replace("    - Ready for Codex\n", "    - Ready for Codex\n    - Merging\n"));
+
+        // when
+        importWorkflow(config, source);
+        CliRunResult result = runCard(config, "list", "--list", "Merging");
+
+        // then
+        result.assertSuccess().stdoutContains("List \"Merging\"  roles: merging");
+    }
+
+    private void importWorkflow(Path config, Path source) throws IOException {
+        var paths = new LocalWorkerPaths(tempDir, config, tempDir.resolve("workspaces"), tempDir.resolve("state"));
+        new ManagedWorkflowImport(
+                        new WorkflowConfigEditor(),
+                        Map.of(),
+                        ignored -> new TrelloBoardSetup.BoardInfo(
+                                BOARD_ID, "SYNTH001", "Queue", "https://trello.com/b/SYNTH001"))
+                .connect(paths, source, Optional.empty(), ignored -> {});
     }
 
     @Test
@@ -583,8 +643,7 @@ final class BoardCardCommandsTest {
 
         // then
         assertFailure(unselected, "setup_worker_board_required");
-        unselected.stderrContains(
-                "Multiple Trello boards are connected. Re-run with --board NAME or --workflow PATH for card list.");
+        unselected.stderrContains("cannot select connected board: use --board or --workflow for card list");
         selected.assertSuccess().stdoutContains("Board \"Queue\"");
         byWorkflow.assertSuccess().stdoutContains("Board \"Queue\"");
         assertFailure(conflicting, "setup_worker_selection_conflict");
@@ -604,7 +663,7 @@ final class BoardCardCommandsTest {
         CliRunResult result = runCard(configDir, "list", "--workflow", unconnected.toString());
 
         // then
-        assertFailure(result, "setup_card_workflow_not_connected");
+        assertFailure(result, "setup_worker_board_not_found");
         assertThat(foreignBoard.requests()).isEmpty();
         assertThat(board.requests()).isEmpty();
     }
@@ -621,7 +680,7 @@ final class BoardCardCommandsTest {
         CliRunResult result = runCard(configDir, "list", "--workflow", unconnected.toString());
 
         // then
-        assertFailure(result, "setup_card_workflow_not_connected");
+        assertFailure(result, "setup_worker_board_not_found");
         assertThat(board.requests()).isEmpty();
     }
 
@@ -678,9 +737,74 @@ final class BoardCardCommandsTest {
         CliRunResult result = runCard(configDir, "list");
 
         // then
-        assertFailure(result, "setup_card_workflow_board_mismatch");
+        assertFailure(result, "setup_workflow_board_mismatch");
         result.stderrContains("\"Queue\"");
         assertThat(board.requests()).isEmpty();
+    }
+
+    @Test
+    void disconnectWaitsForAnAcceptedCardWriteBeforeRemovingItsConnection() throws Exception {
+        // given
+        Path configDir = connectBoard(DEFAULT_TRELLO_TOOLS);
+        var card = board.card("card0001", "SYNTH101", "Fix redirect", "list-inbox");
+        var accepted = new CountDownLatch(1);
+        var respond = new CountDownLatch(1);
+        server.on("/1/cards/card0001/actions/comments", exchange -> {
+            accepted.countDown();
+            awaitCardResponse(respond);
+            board.handle(exchange);
+        });
+        var fixture = new LocalWorkerManagerTestFixture(tempDir);
+        try (var executor = Executors.newFixedThreadPool(2);
+                var bytes = new ByteArrayOutputStream();
+                var out = new PrintStream(bytes, false, StandardCharsets.UTF_8)) {
+            var writing = executor.submit(() -> runCard(configDir, "comment", "card0001", "--text", "Accepted write"));
+            var disconnectThread = new AtomicReference<Thread>();
+            assertThat(accepted.await(5, TimeUnit.SECONDS))
+                    .as("the card write reaches Trello before disconnect starts")
+                    .isTrue();
+            var disconnecting = executor.submit(() -> {
+                disconnectThread.set(Thread.currentThread());
+                return fixture.manager.disconnect(fixture.stopRequest("Queue"), out);
+            });
+
+            // when
+            try {
+                BoundedWait.until(
+                        Duration.ofSeconds(5),
+                        () -> disconnecting.isDone()
+                                || (disconnectThread.get() != null
+                                        && disconnectThread.get().getState() == Thread.State.WAITING),
+                        "disconnect reaching the active card operation");
+
+                // then
+                assertThat(new ConnectedBoardRepository(fixture.paths.manifestPath())
+                                .loadForLifecycle()
+                                .boards())
+                        .as("the board remains connected until its accepted write finishes")
+                        .hasSize(1);
+            } finally {
+                respond.countDown();
+            }
+            writing.get(5, TimeUnit.SECONDS).assertSuccess();
+            assertThat(disconnecting.get(5, TimeUnit.SECONDS)).isZero();
+            assertThat(new ConnectedBoardRepository(fixture.paths.manifestPath())
+                            .loadForLifecycle()
+                            .boards())
+                    .isEmpty();
+            assertThat(card.comments()).containsExactly(SymphonyCommentFooter.append("Accepted write"));
+        }
+    }
+
+    private static void awaitCardResponse(CountDownLatch respond) throws IOException {
+        try {
+            assertThat(respond.await(5, TimeUnit.SECONDS))
+                    .as("the test releases the accepted Trello write before its deadline")
+                    .isTrue();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IOException("cannot complete synthetic card write: test execution was interrupted", interrupted);
+        }
     }
 
     @Test

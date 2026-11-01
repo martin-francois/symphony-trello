@@ -2,11 +2,14 @@ package ch.fmartin.symphony.trello.workspace;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
+import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.time.Duration;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -19,7 +22,7 @@ final class HookRunnerTest {
     @Test
     void requiredHookFailureIncludesExitCodeAndOutput() {
         // given
-        EffectiveConfig.HooksConfig config = hooksConfig();
+        EffectiveConfig config = hooksConfig();
 
         // when
         Throwable thrown =
@@ -36,7 +39,7 @@ final class HookRunnerTest {
     @Test
     void requiredHookRunsInWorkspaceWithNonLoginShell() throws Exception {
         // given
-        EffectiveConfig.HooksConfig config = hooksConfig();
+        EffectiveConfig config = hooksConfig();
 
         // when
         hooks.runRequired(
@@ -51,12 +54,27 @@ final class HookRunnerTest {
     }
 
     @Test
+    void removesInheritedCustomCredentialVariableBeforeRunningHook() throws Exception {
+        // given
+        assumeTrue(System.getenv("HOME") != null, "HOME provides an inherited variable for this boundary test");
+        var config = new ConfigResolver()
+                .resolve(new WorkflowDefinition(
+                        tempDir.resolve("WORKFLOW.md"), Map.of("tracker", Map.of("api_token", "$HOME")), ""));
+
+        // when
+        hooks.runRequired("before_run", "printf '%s' \"${HOME-unset}\" > inherited.txt", tempDir, config);
+
+        // then
+        assertThat(tempDir.resolve("inherited.txt")).hasContent("unset");
+    }
+
+    @Test
     void bestEffortHookIgnoresBlankScriptMissingDirectoryAndFailures() {
         // Expected WARN in the build log (issue #354): logging the failed best-effort hook is the
         // production behavior under test; muting shared logger categories would be JVM-global
         // state and is unsafe with parallel test execution.
         // given
-        EffectiveConfig.HooksConfig config = hooksConfig();
+        EffectiveConfig config = hooksConfig();
 
         // when
         Throwable thrown = catchThrowable(() -> {
@@ -69,7 +87,9 @@ final class HookRunnerTest {
         assertThat(thrown).isNull();
     }
 
-    private static EffectiveConfig.HooksConfig hooksConfig() {
-        return new EffectiveConfig.HooksConfig(null, null, null, null, Duration.ofSeconds(2));
+    private EffectiveConfig hooksConfig() {
+        return new ConfigResolver()
+                .resolve(new WorkflowDefinition(
+                        tempDir.resolve("WORKFLOW.md"), Map.of("hooks", Map.of("timeout_ms", 2000)), ""));
     }
 }

@@ -275,7 +275,8 @@ It also writes a workflow that:
 - Dispatches from `Ready for Codex`, `In Progress`, and `Merging`.
 - Treats `Done` as the terminal list.
 - Lets Codex move cards to `In Progress`, `Human Review`, `Blocked`, and `Done`.
-- Uses `./workspaces` as the local workspace directory.
+- Uses a `workspaces` directory beside config storage, or beside the source checkout when config
+  is inside it. Installed wrappers supply their configured workspace directory.
 - Chooses a stable HTTP status port.
 - Sets `max_concurrent_agents: 1`, so Symphony starts one card at a time from this board.
 
@@ -283,6 +284,13 @@ With `--no-github`, `Merging` is not created. The active lists are `Ready for Co
 `In Progress`, and the workflow does not require PR publication or merging.
 During guided `setup-local`, `--no-in-progress` can create a local board without `In Progress`; in
 that case picked-up cards stay in the active list until they move to review or blocked.
+
+Starting an external file with `start --workflow PATH` now imports a managed snapshot and connects
+its board before launch. Use `start --workflow PATH` again to import later source edits. Starting
+the managed path keeps the existing snapshot. Relative file references retain their original base
+directory. Status, logs, stop, disconnect and diagnostics accept the managed path or its original
+source alias, including after a workflow or credential file becomes unreadable. Run connection and
+policy administration from a trusted terminal. Restricted agents use the card helper instead.
 
 The first run writes `WORKFLOW.md`. If that file already exists and you did not pass `--workflow`,
 Symphony keeps the existing file and writes a board-specific file instead. For a board named
@@ -393,8 +401,9 @@ Common setup command options:
   when you want to choose the exact file name yourself. If that file exists, Symphony stops unless
   you also pass `--force`.
 - `--workspace-root PATH`: choose where Symphony creates the local work directory for each Trello
-  card. The generated workflow uses `./workspaces`; choose another path when you want those
-  checkouts on a different disk or clearly separated from the repository.
+  card. Source setup defaults to a `workspaces` directory outside config storage and the application
+  checkout. Choose an absolute path to use another disk; restricted workers require it to remain
+  outside protected directories.
 - `--repository-url URL`: save the workflow's usual clone source in `repository.default_url`.
   `setup-local`, `new-board`, and `import-board` accept credential-free HTTP(S), username-only
   `ssh://`, SCP-style SSH, and `file://` URLs without query strings or fragments. Setup validates
@@ -797,8 +806,8 @@ symphony-trello card comment abc12345 --text "Waiting for the API key."
 symphony-trello card archive abc12345 --confirm-title "Fix the login redirect"
 ```
 
-Each command reads the board's Trello key and token the same way the worker does and never prints
-them, so the agent does not need to see them. Name a card by its id, its short link, or its
+Each command sends a typed request to a trusted local helper. The helper reads the board's Trello
+key and token, applies its workflow policy, and returns the result without the credentials. Name a card by its id, its short link, or its
 `https://trello.com/c/` URL. Name a list by its name or by its role in the workflow: `active`,
 `in-progress`, `human-review`, `blocked`, `merging`, or `terminal`. With one connected board you can
 leave out `--board`. With several, pass the board name, id, short link, or URL, or pass
@@ -806,6 +815,25 @@ leave out `--board`. With several, pass the board name, id, short link, or URL, 
 agent can read. The commands send the key and token only to the endpoint the credentials are bound
 to, like every other command (see the `.env` note under [Trello Setup](#trello-setup)), so a
 workflow with another `tracker.endpoint` fails before any request.
+
+The helper works while board workers are stopped. From a trusted terminal, run
+`symphony-trello card-helper start`, then `symphony-trello card-helper profile`. Merge the printed
+TOML into the external agent's Codex configuration and select its printed `default_permissions`
+profile before starting the agent. The generated profile denies config and credential reads,
+permits request submission, and keeps responses and installed code read-only. Start the agent
+without Trello credentials or aliases in its environment. Keep its working directory outside the
+installation, config and runtime directories. Regenerate the profile after changing credential
+sources. An already-running parent agent cannot be confined by a CLI command it launches.
+
+`symphony-trello start` also starts the helper. `stop` stops board workers only;
+`card-helper stop` stops card access. If setup used `--manifest`, set
+`SYMPHONY_TRELLO_MANIFEST` to that path for subsequent lifecycle and card commands.
+
+Updates stop and restart all initialized helpers for the installation, including custom manifests.
+`card-helper start --all` and `card-helper stop --all` perform those lifecycle operations from a trusted
+terminal. Uninstall stops helpers before removing installed code. `setup_card_helper_unavailable` means a trusted terminal must start
+the helper. After `setup_card_helper_outcome_unknown`, inspect the board before retrying a write.
+The helper never retries it automatically.
 
 Writes follow the board's workflow, like the worker's Trello tools in
 [Trello Write Controls](#trello-write-controls). The commands write only when
@@ -826,24 +854,24 @@ and exits with status 2.
 
 These failure codes have a fix on your side:
 
-- `setup_card_workflow_not_connected`: the `--workflow` file is not the workflow of a board that
-  `symphony-trello status` lists. Pass that workflow, or pass `--board` instead.
+- `setup_worker_board_not_found`: the selector does not identify a connected board. From a trusted
+  terminal, run `symphony-trello start --workflow PATH` to connect it, or select an existing board.
 - `setup_credentials_endpoint_mismatch`: the workflow's `tracker.endpoint` is not the endpoint the
-  board's credentials are bound to. The message prints the `TRELLO_API_ENDPOINT` line to add to the
-  `.env` file, or remove the setting.
-- `setup_card_workflow_board_mismatch`: the workflow's `tracker.board_id` names another board than
+  board's credentials are bound to. From a trusted terminal, set `TRELLO_API_ENDPOINT` in the credential source to the intended
+  endpoint, or restore the workflow endpoint.
+- `setup_workflow_board_mismatch`: the workflow's `tracker.board_id` names another board than
   the connected one. Fix the setting, or connect the board again.
 - `setup_worker_missing_trello_credentials`, `setup_worker_missing_api_key`,
   `setup_worker_missing_api_token`, or `trello_auth_failed`: the board's Trello key or token is
-  missing or rejected. The failure output names the credential file to fix.
+  missing or rejected. Inspect the credential source from a trusted terminal.
 - `trello_tools_disabled`, `trello_writes_disabled`, `trello_comments_disabled`,
   `trello_move_not_allowed`, `trello_move_allowlist_required`, or `trello_create_list_not_allowed`:
-  a `trello_tools` setting refused the write. The message says which rule refused it.
+  a `trello_tools` setting refused the write. The error code identifies the rule. Inspect the
+  managed workflow from a trusted terminal.
 
 The installer puts a Codex skill named `symphony-trello-board-cards` into
 `~/.codex/skills`, or into `$CODEX_HOME/skills` when you set `CODEX_HOME`, so Codex knows these
-commands. The skill tells Codex to check `symphony-trello status` first, to pass `--board` when more
-than one board is connected, to add `--json` when it reads the output, never to read the credential
+commands. The skill tells Codex to start with `card list`, to ask for `--board` when selection is ambiguous, to add `--json` when it reads the output, never to read the credential
 files, to ask you which list to use when the request names none that fits, and to ask you before it
 archives a card. If that
 directory already holds a skill with the same name that the installer did not create, the installer
@@ -1266,7 +1294,7 @@ tracker:
   terminal_states:
     - Done
 workspace:
-  root: ./workspaces
+  root: ../workspaces
 repository:
   default_url: https://github.com/OWNER/REPO.git
   default_path: null
@@ -1531,7 +1559,7 @@ tracker:
   in_progress_state: In Progress
   terminal_states: [Done, Archived, ArchivedList, ArchivedBoard, Deleted]
 workspace:
-  root: ./workspaces
+  root: ../workspaces
 server:
   port: 18080
 polling:
@@ -1644,9 +1672,9 @@ Each Trello card runs in its own workspace. By default, Codex can write there an
 unrelated host files. Keep that default until a card needs another local file or folder.
 
 During guided setup, you can add allowed host paths. In `WORKFLOW.md`, those become
-`codex.additional_writable_roots`. Relative paths resolve relative to the workflow file. The runtime
-adds those paths to a Codex `workspaceWrite` sandbox policy unless the workflow already uses
-`dangerFullAccess`. Generated workflows use `workspaceWrite` so Codex can write inside each card's
+`codex.additional_writable_roots`. Relative paths retain the source workflow directory for imported
+workflows. The runtime adds these roots to its protected named permission profile unless the
+workflow explicitly uses `dangerFullAccess`. Generated workflows use `workspaceWrite` so Codex can write inside each card's
 workspace, and they set `networkAccess: true` so selected repository URLs can be cloned while
 keeping the filesystem sandbox enabled.
 
@@ -2178,7 +2206,8 @@ report smaller. Without a selector, the report covers every connected Trello boa
 workflow files in the config directory that are not connected to any board in a separate
 Unconnected Workflow Files section, without probing their ports. `--board` and `--workflow` are
 mutually exclusive; if multiple connected Trello boards have the same name, use the Trello board id
-or short link. The command prints sanitized local
+or short link. Selected workflows must be registered, but their files and credentials need not be
+valid for diagnostics. Relative selectors resolve from the current working directory. The command prints sanitized local
 setup, workflow, health, and recent log context without Trello, GitHub, or Codex network calls by
 default. Add `--deep` when the default report does not include enough context; it runs deeper
 public-safe checks such as local Codex and GitHub auth-status commands. Review the output before
@@ -2260,10 +2289,15 @@ HTTP requests rather than prompts. Hooks and Codex still execute trusted local c
 deployments should use a dedicated OS user, a dedicated workspace volume, narrowly scoped Trello
 credentials, and Codex approval/sandbox settings appropriate to the board's trust level.
 
-Approval and sandbox values are passed through from [`WORKFLOW.md`](#workflow-contract) to the
-installed Codex app-server schema. When additional writable roots are configured, this implementation
-adds them to a `workspaceWrite` turn sandbox policy unless the workflow already uses
-`dangerFullAccess`. Generated workflows use `workspaceWrite` so Codex can write inside each card's
+Approval settings come from [`WORKFLOW.md`](#workflow-contract). Restricted workers use a named
+Codex permission profile on both thread and turn requests. It preserves configured workspace and
+additional writable roots while denying config, runtime state and actual credential sources.
+Installed code and wrapper directories stay read-only, and the child environment excludes credential
+variables and aliases. On Linux, Codex refuses a protected wrapper directory that crosses a writable
+symlink. Use a real installation directory outside that symlink path.
+Custom launcher programs and hooks remain trusted operator code; protect any launcher dependencies
+outside the installation yourself. Explicit `danger-full-access` remains available and permits
+credential reads and config writes. Generated workflows use `workspaceWrite` so Codex can write inside each card's
 workspace, and they enable network access so Codex can clone selected repository URLs or publish
 pull requests without disabling the filesystem sandbox. User-input and unsupported dynamic tool requests
 are answered without waiting indefinitely.

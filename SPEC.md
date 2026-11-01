@@ -737,8 +737,10 @@ Fields:
 
 For Codex-owned config values such as `approval_policy`, `thread_sandbox`, and
 `turn_sandbox_policy`, supported values are defined by the targeted Codex app-server version.
-Implementors SHOULD treat them as pass-through Codex config values rather than relying on a
-hand-maintained enum in this spec. The Java implementation maps `codex.model` to the app-server
+Implementors SHOULD use the installed Codex schema when interpreting these values. The Java
+implementation translates supported sandbox settings into the protected named profile described
+below and refuses unsupported restricted policies. It does not pass legacy sandbox overrides
+alongside that profile. The Java implementation maps `codex.model` to the app-server
 `model` field and `codex.reasoning_effort` to the app-server turn `effort` field. To inspect the
 installed Codex schema, run
 `codex app-server generate-json-schema --out <dir>` and inspect the generated definitions. The
@@ -844,7 +846,7 @@ precedence.
   - Default: implementation-defined.
 - `additional_writable_roots` (list of path strings, OPTIONAL Java implementation extension)
   - Additional files or folders to merge into a Codex `workspaceWrite` turn sandbox policy.
-  - Relative paths resolve relative to the workflow file.
+  - Relative paths resolve relative to the source workflow directory for managed imports.
   - When no `turn_sandbox_policy` is configured, the Java implementation builds a `workspaceWrite`
     policy containing these roots. When a `workspaceWrite` policy is configured, the roots are
     merged into its writable roots. When `dangerFullAccess` is configured or forced, the roots are
@@ -1007,6 +1009,10 @@ This Java implementation provides:
 - `start [--board NAME | --workflow PATH]`: starts managed local workers; without a selector, starts
   all connected workers. `--env PATH` requires `--board` or `--workflow` because one dotenv file
   cannot safely imply every connected Trello board's credentials.
+- `card-helper start|stop|status|profile`: trusted administration of the independent card helper.
+  `profile` prints the external agent's named Codex permission profile for the selected installation.
+- `disconnect [--board NAME | --workflow PATH]`: stops the selected worker and removes its connection.
+  A stop failure MUST preserve the connection. Existing credentials, workflows and Trello data remain.
 - `stop [--board NAME | --workflow PATH]`: stops one managed local worker, or all connected workers
   when no selector is provided
 - `status [--board NAME | --workflow PATH]`: reports the current runtime state of every selected
@@ -1049,6 +1055,35 @@ This Java implementation provides:
   interactive terminal before changing the stored preference. `erase` persistently disables
   reporting and requests deletion of the installation's analytics; `erase-status` checks or retries
   a pending deletion. Section 19.9 defines both.
+
+`start --workflow PATH` MUST validate and copy an external workflow into the active config directory,
+register its canonical board, and then start the managed copy. Relative credential and workspace
+paths retain their source-directory meaning. The original path remains a selector alias. Starting
+that original path again imports a fresh snapshot; starting the managed path does not reread the
+original. A worker launch failure leaves the connection available for repair. Replacement MUST
+stop the previous worker before publishing its replacement. Connection and policy changes MUST
+serialize with accepted card operations and worker startup. A concurrent start MUST NOT launch the
+stopped connection before its replacement is published. Retargeting an external source to an
+unconnected board MUST stop and remove the source's previous registration.
+
+For worker lifecycle, card operations and selected diagnostics, workflow selection MUST resolve
+registered metadata except for this explicit start import. Trusted `migrate-workflows --workflow`
+retains its documented ability to repair an unconnected file before it is imported. Unconnected
+selectors fail with `setup_worker_board_not_found` and a trusted-start instruction. `stop`, `status`,
+`logs`, `disconnect` and selected diagnostics MUST remain usable when the registered workflow or
+credentials are missing or malformed. Relative workflow selectors resolve from the current working
+directory. Workers MUST execute the managed path and reject a changed `tracker.board_id` that no
+longer identifies their registered board, including on reload.
+
+Restricted workers MUST select the same protected named Codex permission profile on thread and turn
+requests and MUST NOT combine it with legacy sandbox overrides. The profile MUST deny the config
+directory, runtime state, source workflow, dotenv sources and resolved credential files, including
+canonical aliases. It MUST keep the installation read-only and refuse workspace grants nested in
+protected paths. Child environments MUST remove credential source variables, aliases containing the
+resolved key or token, and shell startup injection variables. Explicit `danger-full-access` remains
+supported and permits credential reads and configuration writes. Hooks and custom launcher programs
+remain operator-trusted code; a custom launcher's dependencies outside the installation require
+operator protection. Named-profile support and acknowledgement are required before a restricted turn.
 
 During guided `setup-local` board creation or import, when `--max-agents` is omitted, the Java
 implementation prompts for the per-board concurrency value before writing the workflow. A blank
@@ -4422,6 +4457,53 @@ that a second formatting pass leaves the source unchanged.
   and token. Credential binding tests distinguish encoded path separators from literal separators,
   exclude credential-bearing endpoint values from errors, and refuse automatic dotenv rebinding
   when custom variables remain unchecked.
+- Custom-manifest selection MUST survive trusted setup, worker launch and runtime resolution.
+  `SYMPHONY_TRELLO_MANIFEST` selects that manifest for lifecycle and card-helper commands. Helpers
+  for different manifests MUST use separate transport directories. Profiles MUST deny the selected
+  manifest. Automatic workspace defaults MUST remain outside protected config storage and the application
+  directory, including source-mode setup with config in the checkout.
+  Installer updates MUST stop and restart every initialized helper for the selected config directory,
+  preserving each manifest identity and leaving helpers for other config directories running.
+  Stop and disconnect MUST preserve the connection when an occupied status port does not return
+  a verifiable worker identity and no owned process can be stopped. Helper shutdown MUST remain
+  usable after the config directory is moved or deleted, using retained process identity.
+  Windows helper directories MUST reject inherited grants to other principals at creation;
+  native Windows tests MUST exercise a parent with inheritable grants and validate the result.
+  Retained helper state after uninstall MUST permit reinstallation without the old launcher when
+  no recorded helper PID is live. Without that launcher, a live recorded PID MUST stop installation
+  before code replacement and produce recovery guidance. Installer process tests cover both paths.
+  Windows launchers MUST carry expanded Java classpaths in the environment rather than the encoded
+  PowerShell command line.
+- A source that targets a different already connected board MUST be refused before worker stop or
+  publication; the operator disconnects its previous connection before retargeting it.
+  Replacement lookup MUST use the API-resolved board ID, never a board name that equals another
+  board's ID. First-time imports MUST create managed config storage even when the selected manifest
+  lives elsewhere. Forced board-setup restarts MUST preserve the explicitly selected manifest.
+  Replacement and reserved-port checks MUST recognize the same managed paths and original source
+  aliases as workflow selection. Forced setup through an imported source alias MUST stop the old
+  worker before replacing its registration, or preserve the old registration when stopping fails.
+  Importing an unversioned replacement MUST remove the managed destination's obsolete provenance.
+  Imported integration metadata and card-list roles MUST reflect the imported snapshot.
+  Retargeting an external registered source to an unconnected board MUST replace its old registration
+  and stop its old worker. `ManagedWorkflowImportTest` covers that source-selector boundary.
+  `ConnectedBoardStartupTest` MUST prevent a competing start between worker stop and publication.
+  Imports MUST resolve a stable positive effective HTTP port before stopping workers or publishing
+  files, including environment overrides that supersede an unresolved workflow-port variable.
+  Reusing a managed path for another board MUST rotate its
+  old logs; reimporting the same board MUST retain them. `ManagedWorkflowImportTest` covers both
+  boundaries alongside the existing local lifecycle tests.
+- Connected-workflow and helper tests MUST cover snapshot imports, source aliases, relative credential
+  resolution, raw-worker refusal, recovery with missing or malformed configuration, disconnect and
+  policy-edit races, and helper shutdown during an accepted write. Mutation checks MUST show that
+  removing each lock or shutdown guard fails its owning race test.
+- Helper process tests MUST execute card commands without a worker, reject linked, special,
+  malformed and oversized messages, refuse replay after restart, and clean up a child whose ready
+  handshake fails. Helper lifecycle commands MUST fail when a recorded PID is alive but its arguments
+  cannot be inspected, without signalling that unverified process or reporting it stopped.
+  Real Codex turns MUST exercise the built client with its generated profile and
+  the built worker, verifying denied credentials and config writes, read-only installation inputs,
+  allowed workspace writes and explicit unrestricted mode. Native Windows and macOS require native
+  verification; Linux or PowerShell-on-Linux evidence does not substitute for it.
 - If the board card commands of Section 19.8 are implemented, deterministic tests drive them against
   a stateful fake Trello API and cover board selection with one board, several boards, `--board`,
   `--workflow`, and an unknown board; an unconnected workflow, refused before its credentials are
@@ -5764,7 +5846,7 @@ Commands:
   Section 10.5, like `trello_add_comment`.
 - `card archive CARD --confirm-title TITLE` archives a card.
 
-Every command accepts `--board SELECTOR`, `--workflow PATH`, `--config-dir PATH`, and `--json`.
+Every command accepts `--board SELECTOR`, `--workflow PATH`, `--config-dir PATH`, `--state-home PATH`, and `--json`.
 
 Board selection:
 
@@ -5774,12 +5856,12 @@ Board selection:
 - With no selector and one connected board, the command MUST use that board. With no selector and
   several connected boards, it MUST fail with the lifecycle commands' selection error.
 - `--workflow` MUST name the workflow of a connected-board manifest row. Unlike `start`, a card
-  command MUST fail with `setup_card_workflow_not_connected` for any other workflow, before it reads
-  credentials.
+  command MUST fail with `setup_worker_board_not_found` for any other workflow, before it reads
+  credentials. Original source paths of managed imports remain valid selector aliases.
 - The selected workflow's `tracker.board_id` MUST name the selected board, by the id, short link, or
   board URL the manifest row records. Otherwise the command MUST fail with
-  `setup_card_workflow_board_mismatch` before any Trello request.
-- The command MUST read the selected board's Trello credentials the same way a worker start does,
+  `setup_workflow_board_mismatch` before any Trello request.
+- The trusted helper MUST read the selected board's Trello credentials the same way a worker start does,
   including the board's `.env` file and the workflow's credential settings. It MUST NOT print the
   key, the token, or a credential file's content, including in failure output.
 - The command MUST send the key and token only to the endpoint they are bound to (Section 6.1),
@@ -5787,6 +5869,31 @@ Board selection:
   workflow whose `tracker.endpoint` is not that endpoint MUST fail with
   `setup_credentials_endpoint_mismatch` before any Trello request. The connected-workflows rule
   above limits which boards an agent may change; it does not decide where the credentials go.
+
+Credential boundary and lifecycle:
+
+- The CLI MUST submit only a typed card operation to a separately running helper. The helper MUST
+  accept only the six operations above, resolve credentials and policy from its fixed installation,
+  and reject unknown fields, stale requests, links, special files and oversized frames.
+- The helper MUST work while board workers are stopped. Trusted `start` starts it; stopping workers
+  MUST NOT stop it. Trusted `card-helper stop` and uninstall stop it. Updates stop it before replacing
+  the installed code and restart it afterwards when it had been initialized.
+- Restricted external agents MUST use the operator-generated profile before starting their session.
+  It grants writes only to the request directory within runtime state, keeps replies and installation
+  files read-only, and denies credentials, config and helper-private state. Both restricted worker
+  and external profiles MUST protect the installed wrapper directory and canonical launch-path
+  aliases, including wrappers installed outside the application directory. The operator MUST launch
+  the external agent without credential-bearing environment variables, keep its workspace outside
+  protected directories, and regenerate the profile when credential sources change. A CLI child
+  cannot retrofit restrictions onto its parent agent.
+- Worker profiles MUST deny helper access so a worker's current-card tools do not gain board-wide
+  command authority. The helper MUST NOT expose lifecycle, arbitrary filesystem or HTTP operations.
+- A claimed request MUST NOT execute again after a helper restart. Timeout or uncertain completion
+  MUST NOT trigger an automatic write retry. The caller inspects the board before deciding to retry.
+- Helper shutdown MUST retain exclusive installation ownership until an active card operation ends.
+  Disconnect and policy edits MUST share the connection transaction with card execution.
+  When a live recorded worker's command arguments are unavailable, lifecycle operations MUST
+  retain its PID record and connection, refuse signalling it, and report the inspection failure.
 
 Card and list arguments:
 
@@ -5828,9 +5935,10 @@ Output:
 - `--json` prints one JSON object with snake_case field names. Reads report `status: "ok"`; writes
   report `card_created`, `card_moved`, `comment_added`, or `card_archived`. Every object has `board`
   with `name`, `id`, `url`, and `workflow`.
-- A failure prints `setup_failed code=CODE message=MESSAGE` and exits with status 2. Selector and
-  list failures use the `setup_card_*` codes; policy refusals keep the worker tool codes, such as
-  `trello_writes_disabled` or `trello_move_not_allowed`. These failures are expected setup failures
+- A failure prints `setup_failed code=CODE message=MESSAGE` and exits with status 2. List failures
+  use the `setup_card_*` codes; selector failures share lifecycle codes. Policy refusals keep the
+  worker tool codes, such as `trello_writes_disabled` or `trello_move_not_allowed`. A stopped or
+  never-started helper returns `setup_card_helper_unavailable`. These failures are expected setup failures
   and MUST NOT write a troubleshooting report. Diagnostics MUST redact every argument after
   `card SUBCOMMAND` that is not an option name: the `CARD` argument and every option value, such as
   titles, descriptions, comment text, and board and list names.
@@ -5891,7 +5999,9 @@ When this profile is used:
   home and MUST be `null` when that value is not a plain release. `connected_board_count` MUST be
   the number of distinct boards in a readable manifest and `null` otherwise. The counters MUST
   count only successful import or create operations that register a board that was not connected
-  before, MUST be frozen while reporting is disabled, and MUST NOT decrease on disconnect
+  before, MUST be frozen while reporting is disabled, and MUST NOT decrease on disconnect.
+  A `start --workflow` import MUST count only after successful connection publication. Re-importing
+  the same board or starting its managed snapshot MUST NOT increment the import counter
 - `os_family` MUST be one of `windows`, `macos`, `linux`, `other`, `unknown`; `os_release` MUST be
   a coarse product release (`10`, `11`, `server_YYYY`; the macOS major release; a support-relevant
   Linux release or `rolling`) or `unknown`; `linux_distribution` MUST be an allowlisted ID,

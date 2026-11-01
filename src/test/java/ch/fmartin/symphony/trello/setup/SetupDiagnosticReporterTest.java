@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.setup;
 import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.HTTPS;
 import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.SSH;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.api.Assumptions.abort;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
@@ -85,6 +86,10 @@ final class SetupDiagnosticReporterTest {
     void reportsOnlyUnexpectedSetupFailures() {
         // given
         List<String> expectedFailureCodes = List.of(
+                "setup_card_helper_unavailable",
+                "setup_connection_conflict",
+                "setup_worker_identity_unavailable",
+                "setup_workflow_board_mismatch",
                 "setup_ambiguous_active_state",
                 "setup_invalid_arguments",
                 "setup_invalid_repository_url",
@@ -107,6 +112,9 @@ final class SetupDiagnosticReporterTest {
                 "trello_permission_denied",
                 "trello_write_outcome_unknown");
         List<String> unexpectedFailureCodes = List.of(
+                "setup_card_helper_outcome_unknown",
+                "setup_card_helper_invalid_request",
+                "setup_card_helper_response_too_large",
                 "setup_workflow_write_failed",
                 "setup_workflow_scan_failed",
                 "setup_start_unhealthy",
@@ -241,6 +249,8 @@ final class SetupDiagnosticReporterTest {
                 DiagnosticsFixture.create(tempDir, "front-matter-port-" + (port < 0 ? "negative" : port));
         Path workflow =
                 fixture.workflow("WORKFLOW.front-matter-port.md", TestWorkflows.diagnosticsWorkflowWithPort(port));
+
+        fixture.saveSyntheticBoard(workflow, 20990);
 
         // when
         String report = fixture.renderWorkflow(workflow);
@@ -442,7 +452,7 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
-    void selectedUnconnectedWorkflowDiagnosticsProbeEnvironmentResolvedPort() throws Exception {
+    void selectedConnectedWorkflowDiagnosticsProbeEnvironmentResolvedPort() throws Exception {
         // given
         Path configDir = tempDir.resolve("selected-env-port-config");
         Path stateHome = tempDir.resolve("state");
@@ -457,6 +467,8 @@ final class SetupDiagnosticReporterTest {
                 BOARD_STATUS_PORT=20728
                 """);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        saveSyntheticBoard(configDir, workflow, 20728);
 
         // when
         String report = renderWorkflowDiagnostics(reporter, configDir, stateHome, workflow);
@@ -551,6 +563,8 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.minimal.md");
         Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(20986));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        saveSyntheticBoard(configDir, workflow, 20986);
 
         // when
         String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
@@ -1035,7 +1049,7 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
-    void selectedWorkflowDiagnosticsTolerateEmptyManifestBoardRow() throws Exception {
+    void selectedWorkflowDiagnosticsRejectEmptyManifestBoardRow() throws Exception {
         // given
         Path configDir = tempDir.resolve("empty-row-config");
         Path workspaceRoot = tempDir.resolve("empty-row-workspaces");
@@ -1052,16 +1066,18 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, workflow);
+        Throwable thrown = catchThrowable(
+                () -> renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, workflow));
 
         // then
-        assertThat(report)
-                .contains("selector:** workflow", "selected_workflow_in_manifest:** false")
-                .doesNotContain("Cannot invoke", "NullPointerException", tempDir.toString());
+        assertThat(thrown)
+                .isInstanceOf(TrelloBoardSetupException.class)
+                .hasMessage(
+                        "cannot resolve connected board: run symphony-trello start --workflow PATH from a trusted terminal");
     }
 
     @Test
-    void selectedWorkflowDiagnosticsKeepPartialManifestRowFieldsPrivate() throws Exception {
+    void selectedWorkflowDiagnosticsRejectPartialManifestRowWithoutPrivateContext() throws Exception {
         // given
         int privateRowPort = 18199;
         Path configDir = tempDir.resolve("partial-row-config");
@@ -1081,13 +1097,14 @@ final class SetupDiagnosticReporterTest {
                 Map.of(), new FakeCommandRunner(), Files::list, clockWithPortInTimeUtc(privateRowPort));
 
         // when
-        String report = renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, workflow);
+        Throwable thrown = catchThrowable(
+                () -> renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, workflow));
 
         // then
-        assertThat(report)
-                .contains("selector:** workflow", "selected_workflow_in_manifest:** false")
-                .doesNotContain("Cannot invoke", "NullPointerException", "Private Board", tempDir.toString())
-                .doesNotContain(renderedPortForms(privateRowPort));
+        assertThat(thrown)
+                .isInstanceOf(TrelloBoardSetupException.class)
+                .hasMessage(
+                        "cannot resolve connected board: run symphony-trello start --workflow PATH from a trusted terminal");
     }
 
     @ParameterizedTest
@@ -1285,8 +1302,11 @@ final class SetupDiagnosticReporterTest {
 
         // then
         assertThat(thrown)
-                .isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> assertThat(failure.getMessage())
-                        .contains("--workflow must reference a readable workflow file"));
+                .isInstanceOfSatisfying(
+                        TrelloBoardSetupException.class,
+                        failure -> assertThat(failure.getMessage())
+                                .contains(
+                                        "cannot resolve connected board: run symphony-trello start --workflow PATH from a trusted terminal"));
     }
 
     @Test
@@ -2395,8 +2415,8 @@ final class SetupDiagnosticReporterTest {
             new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                     .save(new ConnectedBoardManifest(List.of(board)));
         }
-        String report = renderWorkflowDiagnostics(
-                new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner()), configDir, stateHome, workflow);
+        String report = renderGlobalDiagnostics(
+                new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner()), configDir, stateHome);
         String emittedToken =
                 firstMatch(report, Pattern.compile("\\| \\\\(<path:[0-9a-f]{12}>) \\| [0-9a-f]{12} \\| 19207 \\|"));
         String beforeDeletion = lookupDiagnostics(
@@ -2646,6 +2666,54 @@ final class SetupDiagnosticReporterTest {
                         "literal-secret-token",
                         "lookup-secret-key",
                         "https://trello.com/b/lookup-secret-key/lookup-secret-board");
+    }
+
+    @Test
+    void importedCredentialDiagnosticsUseTheSourceDirectoryWithoutReadingSecrets() throws Exception {
+        // given
+        Path config = Files.createDirectory(tempDir.resolve("imported-config"));
+        Path source = Files.createDirectory(tempDir.resolve("imported-source"));
+        Path state = tempDir.resolve("imported-state");
+        Path workflow = Files.writeString(
+                config.resolve("WORKFLOW.queue.md"),
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: board-1
+                  api_key: file:key.txt
+                ---
+                Queue
+                """);
+        Path secret = Files.writeString(source.resolve("key.txt"), "synthetic-credential-content");
+        new ConnectedBoardRepository(config.resolve(ConnectedBoardManifest.FILE_NAME))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "board-1",
+                        "SYNTH001",
+                        "Queue",
+                        "https://trello.com/b/SYNTH001",
+                        workflow,
+                        config.resolve(".env"),
+                        tempDir.resolve("workspaces"),
+                        19204,
+                        false,
+                        List.of(),
+                        false,
+                        source.resolve("source.md")))));
+        DiagnosticsTokenHasher.load(config);
+        String token = pathToken(diagnosticsKey(config), secret);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+        var request = privateContextRequest(config, state, Optional.of(workflow), token);
+
+        // when
+        String report = reporter.renderReport(request, true);
+        String sanitized = reporter.renderReport(request, false);
+
+        // then
+        assertThat(report)
+                .contains("lookup_status:** found", secret.toString())
+                .doesNotContain(config.resolve("key.txt").toString(), "synthetic-credential-content");
+        assertThat(sanitized).doesNotContain(secret.toString(), "synthetic-credential-content");
     }
 
     @Test
@@ -3534,7 +3602,7 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
-    void diagnosticsSelectsManifestBoardForRelativeWorkflowFromConfigDirectory() throws Exception {
+    void diagnosticsSelectsManifestBoardForRelativeWorkflowFromCurrentDirectory() throws Exception {
         // given
         int otherBoardPort = 19185;
         Path configDir = tempDir.resolve("relative-config");
@@ -3580,7 +3648,11 @@ final class SetupDiagnosticReporterTest {
 
         // when
         String report = renderWorkflowDiagnostics(
-                reporter, configDir, workspaceRoot, stateHome, Path.of("WORKFLOW.relative.md"));
+                reporter,
+                configDir,
+                workspaceRoot,
+                stateHome,
+                Path.of("").toAbsolutePath().relativize(workflow));
 
         // then
         assertThat(report)
@@ -3657,7 +3729,7 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
-    void diagnosticsIncludesWorkflowOutsideManifestWithoutUnrelatedBoardContext() throws Exception {
+    void diagnosticsRejectsWorkflowOutsideManifestWithoutPrivateContext() throws Exception {
         // given
         int manifestBoardPort = 19186;
         Path configDir = tempDir.resolve("external-workflow-config");
@@ -3690,25 +3762,14 @@ final class SetupDiagnosticReporterTest {
                 Map.of(), new FakeCommandRunner(), Files::list, clockWithPortInTimeUtc(manifestBoardPort));
 
         // when
-        String report = renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, requestedWorkflow);
+        Throwable thrown = catchThrowable(
+                () -> renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, requestedWorkflow));
 
         // then
-        assertThat(report)
-                .contains(
-                        "selector:** workflow",
-                        "selected_workflow_in_manifest:** false",
-                        "selected_manifest_board_count:** 0",
-                        "board_count:** 0",
-                        "19187",
-                        "requested workflow log")
-                .doesNotContain(
-                        "Manifest Board",
-                        "manifest-board-id",
-                        "SYNTH201",
-                        "https://trello.com/b/SYNTH201/manifest-board",
-                        "manifest workflow log",
-                        tempDir.toString())
-                .doesNotContain(renderedPortForms(manifestBoardPort));
+        assertThat(thrown)
+                .isInstanceOf(TrelloBoardSetupException.class)
+                .hasMessage(
+                        "cannot resolve connected board: run symphony-trello start --workflow PATH from a trusted terminal");
     }
 
     @Test
@@ -3761,11 +3822,13 @@ final class SetupDiagnosticReporterTest {
 
         // then
         assertThat(thrown)
-                .isInstanceOfSatisfying(TrelloBoardSetupException.class, exception -> assertThat(exception)
-                        .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
-                        .containsExactly(
-                                "setup_invalid_arguments",
-                                "Multiple connected boards match --board. Re-run with a board id or short link."))
+                .isInstanceOfSatisfying(
+                        TrelloBoardSetupException.class,
+                        exception -> assertThat(exception)
+                                .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
+                                .containsExactly(
+                                        "setup_worker_board_ambiguous",
+                                        "Multiple connected boards match --board. Re-run with a board id, short link, or --workflow."))
                 .hasMessageContaining("Multiple connected boards match --board")
                 .satisfies(exception -> assertThat(exception.getMessage())
                         .doesNotContain(
@@ -3833,7 +3896,7 @@ final class SetupDiagnosticReporterTest {
                 .isInstanceOfSatisfying(TrelloBoardSetupException.class, exception -> assertThat(exception)
                         .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
                         .containsExactly(
-                                "setup_invalid_arguments",
+                                "setup_worker_workflow_ambiguous",
                                 "Multiple connected-board rows reference --workflow. Repair "
                                         + ConnectedBoardManifest.FILE_NAME + ", then rerun the command."))
                 .hasMessageContaining("Multiple connected-board rows reference --workflow")
@@ -3881,7 +3944,9 @@ final class SetupDiagnosticReporterTest {
         // then
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, exception -> assertThat(exception)
                 .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
-                .containsExactly("setup_invalid_arguments", "--board and --workflow cannot be used together."));
+                .containsExactly(
+                        "setup_worker_selection_conflict",
+                        "cannot select connected board: use either --board or --workflow"));
         assertThat(configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME)).doesNotExist();
     }
 
@@ -3952,63 +4017,21 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
-    void diagnosticsRejectsUnusableWorkflowSelectorsAtReporterBoundary() throws Exception {
+    void diagnosticsInspectsRegisteredMissingAndBrokenWorkflows() throws Exception {
         // given
-        Path configDir = tempDir.resolve("unusable-workflow-selector-config");
-        Path workspaceRoot = tempDir.resolve("unusable-workflow-selector-workspaces");
-        Path stateHome = tempDir.resolve("unusable-workflow-selector-state");
-        Path directory = configDir.resolve("WORKFLOW.directory.md");
-        Path missing = configDir.resolve("WORKFLOW.missing.md");
-        Path empty = configDir.resolve("WORKFLOW.empty.md");
-        Path noFrontMatter = configDir.resolve("WORKFLOW.no-frontmatter.md");
-        Path invalidPort = configDir.resolve("WORKFLOW.invalid-port.md");
-        Files.createDirectories(directory);
-        Files.createDirectories(stateHome);
-        Files.writeString(empty, "");
-        Files.writeString(noFrontMatter, "Body only\n");
-        Files.writeString(
-                invalidPort,
-                """
-                ---
-                tracker:
-                  board_id: "private-board-id"
-                server:
-                  port: "not-a-port"
-                ---
-                Body
-                """);
-        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
-        // Invalid server.port values stay selectable: diagnostics is the inspection tool for
-        // such workflows and reports the port problem inside the rendered report instead.
-        List<Path> unusableSelectors = List.of(directory, missing, empty, noFrontMatter);
+        DiagnosticsFixture fixture = DiagnosticsFixture.create(tempDir, "broken-registered");
+        Path workflow = fixture.configDir().resolve("WORKFLOW.missing.md");
+        fixture.saveSyntheticBoard(workflow, 20990);
 
         // when
-        List<Throwable> thrown = unusableSelectors.stream()
-                .map(workflow -> catchThrowable(
-                        () -> renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, workflow)))
-                .toList();
+        String missingReport = fixture.renderWorkflow(workflow);
+        Files.writeString(workflow, "---\ntracker: [broken\n---\nBody\n");
+        String brokenReport = fixture.renderWorkflow(workflow);
 
         // then
-        assertThat(thrown).allSatisfy(exception -> assertThat(exception)
-                .isInstanceOfSatisfying(
-                        TrelloBoardSetupException.class,
-                        setupException -> assertThat(setupException)
-                                .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
-                                .containsExactly(
-                                        "setup_invalid_arguments",
-                                        "--workflow must reference a readable workflow file with usable workflow front matter."))
-                .satisfies(error -> assertThat(error.getMessage())
-                        .doesNotContain(
-                                tempDir.toString(),
-                                configDir.toString(),
-                                directory.toString(),
-                                missing.toString(),
-                                empty.toString(),
-                                noFrontMatter.toString(),
-                                "private-board-id")));
-        String invalidPortReport =
-                renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, invalidPort);
-        assertThat(invalidPortReport).contains("invalid server.port");
+        assertThat(missingReport)
+                .contains("selected_workflow_missing_count:** 1", "selected_workflow_in_manifest:** true");
+        assertThat(brokenReport).contains("selected_workflow_in_manifest:** true", "invalid");
     }
 
     @Test
@@ -4656,6 +4679,8 @@ final class SetupDiagnosticReporterTest {
         Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithMaxAgents(maxAgentsValue));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
+        saveSyntheticBoard(configDir, workflow, 20731);
+
         // when
         String report = renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, workflow);
 
@@ -4802,6 +4827,8 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(stateHome);
         Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithRoutingLists(routingListValue));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        saveSyntheticBoard(configDir, workflow, 20722);
 
         // when
         String report = renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, workflow);
@@ -5069,8 +5096,6 @@ final class SetupDiagnosticReporterTest {
         // when
         String broadLookup = reporter.renderReport(
                 privateContextRequest(configDir, stateHome, Optional.empty(), secretFileToken), true);
-        String selectedLookup = reporter.renderReport(
-                privateContextRequest(configDir, stateHome, Optional.of(workflow), secretFileToken), true);
 
         // then
         assertThat(broadLookup)
@@ -5078,9 +5103,10 @@ final class SetupDiagnosticReporterTest {
                 .contains(
                         "- **lookup_status:** found",
                         "| secret_file | tracker.api_token | \\" + secretFileToken + " | " + secretPath + " |");
-        assertThat(selectedLookup)
-                .as("the selected workflow still maps its own secret file")
-                .contains("- **lookup_status:** found");
+        assertThatThrownBy(() -> reporter.renderReport(
+                        privateContextRequest(configDir, stateHome, Optional.of(workflow), secretFileToken), true))
+                .isInstanceOf(TrelloBoardSetupException.class)
+                .hasMessageContaining("cannot resolve connected board");
     }
 
     @Test

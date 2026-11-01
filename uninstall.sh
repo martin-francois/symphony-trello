@@ -1610,6 +1610,50 @@ stop_managed_processes() {
   done
 }
 
+process_has_arg() {
+  local pid="$1" expected="$2" arg command_line inspected=false
+  if [[ -r "/proc/$pid/cmdline" ]]; then
+    while IFS= read -r -d '' arg; do
+      inspected=true
+      [[ "$arg" == "$expected" ]] && return 0
+    done <"/proc/$pid/cmdline"
+    [[ "$inspected" == true ]] || return 2
+    return 1
+  fi
+  command_line="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  [[ -n "${command_line//[[:space:]]/}" ]] || return 2
+  command_line_has_arg "$command_line" "$expected"
+}
+
+stop_card_helper() {
+  local ready root pid inspection_status
+  for ready in "$STATE_HOME"/card-helper/*/ready.json; do
+    [[ -f "$ready" && ! -L "$ready" ]] || continue
+    root="${ready%/ready.json}"
+    [[ ! -L "$root" ]] || continue
+    pid="$(head -c 1024 "$ready" | sed -nE 's/.*"pid"[ ]*:[ ]*([0-9]+).*/\1/p')"
+    [[ "$pid" =~ ^[1-9][0-9]*$ ]] || continue
+    kill -0 "$pid" >/dev/null 2>&1 || continue
+    if process_has_arg "$pid" "-Dsymphony.trello.card_helper_root=$root" &&
+      process_has_arg "$pid" "ch.fmartin.symphony.trello.setup.CardHelperMain" &&
+      process_has_arg "$pid" "$CONFIG_DIR"; then
+      if [[ "$DRY_RUN" == true ]]; then
+        print_status "WOULD STOP" "  trusted card helper pid=$pid"
+      else
+        print_status STOP "  trusted card helper pid=$pid"
+        kill "$pid" >/dev/null 2>&1 || true
+        wait_for_exit "$pid"
+      fi
+    else
+      inspection_status=$?
+      if [[ "$inspection_status" -eq 2 ]] && kill -0 "$pid" >/dev/null 2>&1; then
+        echo "cannot verify card helper: inspect the recorded process from a trusted terminal before retrying uninstall" >&2
+        exit 2
+      fi
+    fi
+  done
+}
+
 remove_user_systemd_service() {
   if [[ ! -e "$SYSTEMD_SERVICE_PATH" && ! -L "$SYSTEMD_SERVICE_PATH" ]]; then
     return
@@ -1766,6 +1810,7 @@ if confirm "Remove installer-managed app files and CLI executable?" "$YES"; then
     exit 2
   fi
   assert_app_removal_preserves_current_data
+  stop_card_helper
   stop_managed_processes
   remove_user_systemd_service
   remove_launch_agent

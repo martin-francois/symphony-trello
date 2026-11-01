@@ -151,6 +151,14 @@ jobs:
       - name: PowerShell static analysis
         shell: pwsh
         run: ./scripts/check-powershell-scripts.ps1
+      - name: Card helper process and filesystem tests
+        if: ${{ env.ISOLATE_OPENREWRITE != 'true' }}
+        timeout-minutes: 10
+        run: .\mvnw.cmd -B -ntp '-Dsurefire.timeout=180' '-Djunit.parallel.enabled=false' '-Dtest=CardHelperProcessTest,CardHelperServerTest,CardHelperFilesTest,CardHelperManagerTest,WindowsManagedProcessPlatformTest' test
+      - name: Card helper timeout thread dumps
+        if: ${{ failure() && env.ISOLATE_OPENREWRITE != 'true' }}
+        shell: pwsh
+        run: Get-ChildItem target/surefire-reports -Filter '*.dump' -ErrorAction SilentlyContinue | Get-Content
       - name: PowerShell installer option tests
         if: ${{ env.ISOLATE_OPENREWRITE != 'true' }}
         run: .\mvnw.cmd -q '-Djunit.parallel.enabled=false' '-Dtest=InstallerScriptTest#*powershell*+*powerShell*,InstallerProgressOutputTest#powershell*' test
