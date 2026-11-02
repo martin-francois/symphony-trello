@@ -320,6 +320,7 @@ export function runCommand(
     let stderr = "";
     let timedOut = false;
     let settled = false;
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
     const finish = (status: number | null, extra = "") => {
       if (!settled) {
         settled = true;
@@ -338,8 +339,10 @@ export function runCommand(
       }
     };
     const cancel = () => {
+      if (killTimer !== undefined) return;
       signalGroup("SIGTERM");
-      setTimeout(() => signalGroup("SIGKILL"), KILL_GRACE_MS).unref();
+      killTimer = setTimeout(() => signalGroup("SIGKILL"), KILL_GRACE_MS);
+      killTimer.unref();
     };
     options.signal?.addEventListener("abort", cancel, {once: true});
     child.stdout.setEncoding("utf8").on("data", (chunk: string) => (stdout += chunk));
@@ -351,7 +354,12 @@ export function runCommand(
     child.on("error", (error) => finish(null, error.message));
     // A background process that inherited the pipes can keep them open after the child exits.
     child.on("exit", (status) => setTimeout(() => finish(status), KILL_GRACE_MS).unref());
-    child.on("close", (status) => finish(status));
+    child.on("close", (status) => {
+      // Only closed pipes establish that no descendant still needs escalation. The exit grace
+      // may resolve while descendants remain, so finish() must leave the kill timer alone.
+      clearTimeout(killTimer);
+      finish(status);
+    });
     child.stdin.on("error", (error: NodeJS.ErrnoException) => {
       // Early child exit closes its input pipe; preserve its exit status instead of crashing the runner.
       if (error.code !== "EPIPE") stderr += error.message;

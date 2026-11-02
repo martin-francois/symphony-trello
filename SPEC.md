@@ -4533,7 +4533,9 @@ network access, or external service permissions are unavailable.
   from passes, and archives every run-owned Trello board it registered.
 - Java implementation extension: A harness interruption MUST cancel active scenario operations
   and wait for them to settle before final cleanup. Cleanup MUST remain available after scenario
-  cancellation. Failed board discovery or an unsuccessful private-context
+  cancellation. Command cancellation MUST discard pending process-group escalation when the child
+  closes its inherited output pipes. The leader-exit grace alone MUST NOT discard pending escalation
+  while descendants still hold those pipes. Failed board discovery or an unsuccessful private-context
   scan MUST prevent a successful run result. Results MUST distinguish verified source revisions
   from unverified existing installations. Resume MUST rerun a row when that revision differs from
   the current target or is unavailable. Direct Codex
