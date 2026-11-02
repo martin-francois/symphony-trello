@@ -2273,8 +2273,42 @@ activate_managed_codex_path() {
   path_contains "$BIN_DIR" || export PATH="$BIN_DIR:$PATH"
 }
 
+managed_pid_files() {
+  local state_root="$1" pid_file pid
+  [[ -d "$state_root" ]] || return 0
+  while IFS= read -r -d '' pid_file; do
+    if [[ "$(normalize_path "$state_root")" != "$(normalize_path "$STATE_HOME")" ]]; then
+      [[ "${pid_file##*/}" =~ ^.+\.[0-9a-f]{12}\.pid$ ]] || continue
+      pid="$(tr -d '[:space:]' <"$pid_file" 2>/dev/null || true)"
+      if [[ "$pid" =~ ^[0-9]+$ && ! "$pid" =~ ^0+$ ]] &&
+        ps -p "$pid" -o pid= >/dev/null 2>&1 && ! is_live_managed_pid "$pid"; then
+        continue
+      fi
+    fi
+    printf '%s\0' "$pid_file"
+  done < <(find -H "$state_root" -maxdepth 1 -type f -name '*.pid' -print0)
+}
+
 has_managed_pid_files() {
-  [[ -d "$STATE_HOME" ]] && find "$STATE_HOME" -maxdepth 1 -type f -name '*.pid' -print -quit | grep -q .
+  local pid_file
+  while IFS= read -r -d '' pid_file; do
+    return 0
+  done < <(managed_pid_files "$1")
+  return 1
+}
+
+legacy_state_home() {
+  printf '%s/state\n' "$(path_parent "$CONFIG_DIR")"
+}
+
+managed_state_roots_with_pid() {
+  local legacy_state
+  legacy_state="$(legacy_state_home)"
+  has_managed_pid_files "$STATE_HOME" && printf '%s\n' "$STATE_HOME"
+  if [[ "$(normalize_path "$legacy_state")" != "$(normalize_path "$STATE_HOME")" ]]; then
+    has_managed_pid_files "$legacy_state" && printf '%s\n' "$legacy_state"
+  fi
+  return 0
 }
 
 pid_command_line() {
@@ -2300,8 +2334,8 @@ is_live_managed_pid() {
 }
 
 has_live_managed_pid_files() {
-  local pid_file pid
-  if [[ ! -d "$STATE_HOME" ]]; then
+  local state_root="$1" pid_file pid
+  if [[ ! -d "$state_root" ]]; then
     return 1
   fi
   while IFS= read -r -d '' pid_file; do
@@ -2309,13 +2343,23 @@ has_live_managed_pid_files() {
     if is_live_managed_pid "$pid"; then
       return 0
     fi
-  done < <(find "$STATE_HOME" -maxdepth 1 -type f -name '*.pid' -print0)
+  done < <(managed_pid_files "$state_root")
+  return 1
+}
+
+any_live_managed_pid_files() {
+  local state_root
+  for state_root in "$@"; do
+    if has_live_managed_pid_files "$state_root"; then
+      return 0
+    fi
+  done
   return 1
 }
 
 remove_stale_managed_pid_files() {
-  local pid_file pid
-  if [[ ! -d "$STATE_HOME" ]]; then
+  local state_root="$1" pid_file pid
+  if [[ ! -d "$state_root" ]]; then
     return
   fi
   while IFS= read -r -d '' pid_file; do
@@ -2323,7 +2367,38 @@ remove_stale_managed_pid_files() {
     if ! is_live_managed_pid "$pid"; then
       rm -f "$pid_file"
     fi
-  done < <(find "$STATE_HOME" -maxdepth 1 -type f -name '*.pid' -print0)
+  done < <(managed_pid_files "$state_root")
+}
+
+# Old commands enumerate all PID files when no boards are connected. Keep them away from shared state.
+stop_legacy_managed_workers() (
+  local state_root="$1" temporary_state pid_file copied_pid
+  temporary_state="$(mktemp -d)"
+  trap 'rm -rf "$temporary_state"' EXIT
+  mkdir "$temporary_state/config" "$temporary_state/state" "$temporary_state/original"
+  while IFS= read -r -d '' pid_file; do
+    cp "$pid_file" "$temporary_state/original/"
+    cp "$pid_file" "$temporary_state/state/"
+  done < <(managed_pid_files "$state_root")
+  run "$BIN_DIR/symphony-trello" stop --config-dir "$temporary_state/config" --state-home "$temporary_state/state"
+  for copied_pid in "$temporary_state/original/"*.pid; do
+    [[ -f "$copied_pid" ]] || continue
+    pid_file="$state_root/${copied_pid##*/}"
+    if [[ -e "$temporary_state/state/${copied_pid##*/}" ]] || ! cmp -s "$pid_file" "$copied_pid"; then
+      echo "cannot migrate managed worker state: stop left a PID record or its original changed; inspect the legacy state directory before retrying" >&2
+      exit 2
+    fi
+    rm -f "$pid_file"
+  done
+)
+
+stop_managed_workers_in_root() {
+  local state_root="$1"
+  if [[ "$(normalize_path "$state_root")" == "$(normalize_path "$STATE_HOME")" ]]; then
+    run "$BIN_DIR/symphony-trello" stop --state-home "$state_root"
+  else
+    stop_legacy_managed_workers "$state_root"
+  fi
 }
 
 user_systemd_available() {
@@ -3245,8 +3320,14 @@ UPDATING_EXISTING_APP=false
 if [[ -d "$APP_DIR" ]]; then
   UPDATING_EXISTING_APP=true
 fi
+MANAGED_STATE_ROOTS=()
+if [[ "$UPDATING_EXISTING_APP" == true ]]; then
+  while IFS= read -r state_root; do
+    [[ -n "$state_root" ]] && MANAGED_STATE_ROOTS+=("$state_root")
+  done < <(managed_state_roots_with_pid)
+fi
 RESTART_MANAGED_WORKERS=false
-if [[ "$UPDATING_EXISTING_APP" == true ]] && has_managed_pid_files && [[ -x "$BIN_DIR/symphony-trello" ]]; then
+if [[ "${#MANAGED_STATE_ROOTS[@]}" -gt 0 && -x "$BIN_DIR/symphony-trello" ]]; then
   RESTART_MANAGED_WORKERS=true
 fi
 if [[ "$UPDATING_EXISTING_APP" == true ]]; then
@@ -3412,15 +3493,22 @@ if [[ "$INSTALL_SOURCE" == "source-checkout" ]]; then
 fi
 reject_major_downgrade
 if [[ "$RESTART_MANAGED_WORKERS" == true ]]; then
-  run "$BIN_DIR/symphony-trello" stop
+  # Temporary state-root migration tracked by https://github.com/martin-francois/symphony-trello/issues/678.
+  for state_root in "${MANAGED_STATE_ROOTS[@]}"; do
+    stop_managed_workers_in_root "$state_root"
+  done
   print_status OK "  Managed workers stopped for the update"
-elif [[ "$UPDATING_EXISTING_APP" == true ]] && has_managed_pid_files; then
-  if has_live_managed_pid_files; then
+elif [[ "$UPDATING_EXISTING_APP" == true && "${#MANAGED_STATE_ROOTS[@]}" -gt 0 ]]; then
+  if any_live_managed_pid_files "${MANAGED_STATE_ROOTS[@]}"; then
     echo "Cannot stop managed workers because the installed command is missing: $BIN_DIR/symphony-trello" >&2
     echo "Stop the running Symphony worker processes manually, then rerun the installer." >&2
     exit 2
   fi
-  remove_stale_managed_pid_files
+  if [[ "$DRY_RUN" == false ]]; then
+    for state_root in "${MANAGED_STATE_ROOTS[@]}"; do
+      remove_stale_managed_pid_files "$state_root"
+    done
+  fi
   print_status OK "  Removed stale managed worker pid files"
 fi
 if [[ "$INSTALL_SOURCE" == "source-checkout" ]]; then

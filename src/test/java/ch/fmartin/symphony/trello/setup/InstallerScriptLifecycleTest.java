@@ -19,13 +19,20 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.StringJoiner;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.parallel.ResourceLock;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
+@ExtendWith(WindowsUserPathGuard.class)
+@ResourceLock("windows-user-path")
 final class InstallerScriptLifecycleTest {
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final TypeReference<LinkedHashMap<String, Object>> JSON_OBJECT = new TypeReference<>() {};
+    private static final TypeReference<Map<String, Object>> JSON_OBJECT = new TypeReference<>() {};
 
     @TempDir
     Path temporaryDirectory;
@@ -41,12 +48,12 @@ final class InstallerScriptLifecycleTest {
         Path sourceRepository = createSourceRepository(temporaryDirectory);
         Path fakeBin = createFakeToolchain(temporaryDirectory);
         Path homeDirectory = temporaryDirectory.resolve("installer-home");
-        Path symphonyHome = temporaryDirectory.resolve("home");
+        Path symphonyHome = temporaryDirectory.resolve("data-home/symphony-trello");
         Path installPrefix = symphonyHome.resolve("app");
-        Path configDirectory = symphonyHome.resolve("config");
+        Path configDirectory = temporaryDirectory.resolve("config-home/symphony-trello");
         Path workspaceRoot = symphonyHome.resolve("workspaces");
         Path binDirectory = temporaryDirectory.resolve("bin");
-        Path stateHome = symphonyHome.resolve("state");
+        Path stateHome = temporaryDirectory.resolve("state-home/symphony-trello");
         Path userService = homeDirectory.resolve(".config/systemd/user/symphony-trello.service");
         Path autostartEnvironment = configDirectory.resolve("autostart.env");
         Path fakeLog = temporaryDirectory.resolve("fake-tools.log");
@@ -71,6 +78,9 @@ final class InstallerScriptLifecycleTest {
                 "runtime-key-100%",
                 "TRELLO_API_TOKEN",
                 "runtime-token"));
+        environment.put("SYMPHONY_TRELLO_CONFIG_DIR", configDirectory.toString());
+        environment.put("SYMPHONY_TRELLO_WORKSPACE_ROOT", workspaceRoot.toString());
+        environment.put("SYMPHONY_TRELLO_STATE_HOME", stateHome.toString());
         environment.put("SYMPHONY_TRELLO_INSTALLER_COMPLETION", "preexisting");
         environment.put(TelemetryEnvironment.DISABLED_VARIABLE, "1");
 
@@ -165,8 +175,18 @@ final class InstallerScriptLifecycleTest {
         Path telemetryState = stateHome.resolve("telemetry.json");
         String telemetryPreference = "{\"format_version\":1,\"mode\":\"DISABLED\",\"preference_revision\":1}\n";
         Files.writeString(telemetryState, telemetryPreference);
+        LegacyStateFiles legacyStateFiles =
+                moveManagedStateFilesToLegacy(configDirectory, stateHome, List.of(".log", ".log.err"));
         ProcessResult update = run(
                 environment, "bash", installScript.toString(), "--no-onboard", "--bin-dir", binDirectory.toString());
+        assertThat(update.exitCode()).as(update.output()).isZero();
+        MigrationObservation migration = observeMigration(legacyStateFiles, stateHome);
+        ProcessResult logsAfterMigration = run(
+                environment,
+                installedCommand.toString(),
+                "logs",
+                "--workflow",
+                configDirectory.resolve("WORKFLOW.lifecycle-board.md").toString());
         addSourceRepositoryCommit(sourceRepository, "UPGRADE_MARKER", "updated\n");
         ProcessResult secondUpdate = run(
                 environment, "bash", installScript.toString(), "--no-onboard", "--bin-dir", binDirectory.toString());
@@ -268,6 +288,10 @@ final class InstallerScriptLifecycleTest {
                 .as(isolatedStatusWithEnvironmentRoots.output())
                 .isZero();
         assertThat(update.exitCode()).isZero();
+        assertSuccessfulMigration(migration, "POSIX");
+        assertThat(logsAfterMigration.exitCode())
+                .as(logsAfterMigration.output())
+                .isZero();
         assertThat(secondUpdate.exitCode()).isZero();
         assertThat(install.transcript()).doesNotContain("Checking generated workflows...");
         assertThat(update.output()).contains("Checking generated workflows...");
@@ -354,6 +378,7 @@ final class InstallerScriptLifecycleTest {
                         "dotenv=" + configDirectory.resolve(".env"),
                         "definitely-not-a-command",
                         "mvnw -q -f " + installPrefix.resolve("pom.xml") + " -DskipTests clean package",
+                        "completion_mode=defer",
                         "jar-start",
                         "app-present-before-exit",
                         "jar-stopped")
@@ -365,7 +390,7 @@ final class InstallerScriptLifecycleTest {
                 .filter(line -> line.contains(" --workflow ") || line.contains(" --all "))
                 .toList();
         assertThat(managedStartInvocations).isNotEmpty().allSatisfy(line -> assertThat(line)
-                .contains("completion_mode=")
+                .contains("--state-home " + stateHome, "completion_mode=")
                 .doesNotContain("completion_mode=preexisting", "completion_mode=defer", "completion_mode=print"));
         List<String> isolatedInvocations = Files.readString(fakeLog)
                 .lines()
@@ -397,7 +422,7 @@ final class InstallerScriptLifecycleTest {
                 .contains("--workspace-root " + isolatedConfigDirectory.resolve("workspaces"))
                 .doesNotContain(
                         "--workspace-root " + isolatedConfigArgument.resolve("workspaces"),
-                        "state_env=" + isolatedConfigDirectory.resolveSibling("state"),
+                        " state_env=" + isolatedConfigDirectory.resolveSibling("state") + " ",
                         "--workspace-root " + workspaceRoot));
         List<String> isolatedSetupLocalCheckInvocations = Files.readString(fakeLog)
                 .lines()
@@ -494,6 +519,245 @@ final class InstallerScriptLifecycleTest {
         }
     }
 
+    private static String scriptFunctions(String script, String... names) {
+        var selected = new StringJoiner(", ");
+        for (String name : names) {
+            selected.add(powerShellLiteral(name));
+        }
+        return """
+                $ErrorActionPreference = 'Stop'
+                $tokens = $null
+                $errors = $null
+                $ast = [Management.Automation.Language.Parser]::ParseFile(%s, [ref]$tokens, [ref]$errors)
+                $names = @(%s)
+                foreach ($function in $ast.FindAll({ param($node)
+                  $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -in $names
+                }, $false)) { . ([scriptblock]::Create($function.Extent.Text)) }
+                """
+                .formatted(powerShellLiteral(Path.of(script).toAbsolutePath().toString()), selected);
+    }
+
+    @Test
+    void powershellInstallerStartsWorkersWithoutWaitingForAScheduledTaskOnWindows() throws Exception {
+        // given
+        assumeTrue(isWindows());
+        Path script = temporaryDirectory.resolve("immediate-start.ps1");
+        Path proof = temporaryDirectory.resolve("started.txt");
+        Path bin = Files.createDirectory(temporaryDirectory.resolve("bin"));
+        Files.writeString(
+                bin.resolve("symphony-trello.ps1"),
+                "[IO.File]::WriteAllText(" + powerShellLiteral(proof.toString()) + ", ($args -join ' '))");
+        Files.writeString(
+                script,
+                """
+                %s
+                function Write-AutostartLauncher {}
+                function Install-ScheduledTaskAutostart { return '' }
+                function Start-ScheduledTask {}
+                function Write-Status {}
+                function Invoke-Step($Label, $Action) { & $Action }
+                $DryRun = $false
+                $ScheduledTaskName = 'Synthetic deferred task'
+                $BinDir = %s
+                Start-ManagedWorkers
+                """
+                        .formatted(
+                                scriptFunctions("install.ps1", "Enable-WindowsAutostart", "Start-ManagedWorkers"),
+                                powerShellLiteral(bin.toString())));
+
+        // when
+        ProcessResult result = run(Map.of(), "pwsh", "-NoProfile", "-File", script.toString());
+
+        // then
+        result.assertSuccess();
+        assertThat(proof).hasContent("start --all");
+    }
+
+    @CsvSource({"pwsh,false", "pwsh,true", "powershell.exe,false", "powershell.exe,true"})
+    @ParameterizedTest
+    void powershellLegacyMigrationRejectsAnotherConfigurationBeforeStoppingOnWindows(
+            String launcher, boolean normalizedCommand) throws Exception {
+        // given
+        assumeTrue(isWindows());
+        Path script = temporaryDirectory.resolve("shared-legacy.ps1");
+        Path proof = temporaryDirectory.resolve("stop-invoked.txt");
+        Files.writeString(
+                script,
+                """
+                $ErrorActionPreference = 'Stop'
+                %s
+                function Test-WindowsPlatform { return $true }
+                function Get-Process { return @{ Id = 42 } }
+                function Get-CimInstance($Class, $Filter) {
+                  $workflow = if ($Filter -match '41$') { $WorkflowA } else { $WorkflowB }
+                  if ($NormalizeWorkflow) { $workflow = [IO.Path]::GetFullPath($workflow) }
+                  return @{ CommandLine = 'java "-Dsymphony.trello.managed.app_home=' + $Prefix +
+                    '" -jar "' + (Join-Path $Prefix 'target\\quarkus-app\\quarkus-run.jar') + '" "' + $workflow + '"' }
+                }
+                function Invoke-Step($Label, $Action) { [IO.File]::WriteAllText(%s, 'stop called') }
+                $Prefix = Join-Path %s 'app'
+                $NormalizeWorkflow = %s
+                $ConfigDir = Join-Path %s 'config-a é'
+                $ConfigB = Join-Path %s 'config-b'
+                $StateHome = Join-Path %s 'new-state'
+                $Legacy = Join-Path %s 'state'
+                $BinDir = Join-Path $Prefix 'bin'
+                $WorkflowA = Join-Path $ConfigDir '.\\WORKFLOW.md'
+                $WorkflowB = Join-Path $ConfigB 'WORKFLOW.md'
+                New-Item -ItemType Directory -Path $ConfigDir, $ConfigB, $Legacy | Out-Null
+                [IO.File]::WriteAllText((Join-Path $ConfigDir 'connected-boards.json'),
+                  (@{ boards = @(@{ workflowPath = $WorkflowA }) } | ConvertTo-Json -Depth 4))
+                [IO.File]::WriteAllText((Join-Path $ConfigB 'connected-boards.json'),
+                  (@{ boards = @(@{ workflowPath = $WorkflowB }) } | ConvertTo-Json -Depth 4))
+                $PidA = Join-Path $Legacy 'WORKFLOW.a.aaaaaaaaaaaa.pid'
+                $PidB = Join-Path $Legacy 'WORKFLOW.b.bbbbbbbbbbbb.pid'
+                [IO.File]::WriteAllText($PidA, '41')
+                [IO.File]::WriteAllText($PidB, '42')
+                if (-not (Test-LegacyPidOwnership $PidA)) { throw 'cannot select owned worker: expected configuration A' }
+                try { Stop-LegacyManagedWorkers $Legacy } catch { Write-Output $_.Exception.Message; exit 0 }
+                throw 'cannot validate migration: expected refusal before invoking stop'
+                """
+                        .formatted(
+                                scriptFunctions(
+                                        "install.ps1",
+                                        "Test-LegacyPidOwnership",
+                                        "Get-ManagedPidFiles",
+                                        "Stop-LegacyManagedWorkers"),
+                                powerShellLiteral(proof.toString()),
+                                powerShellLiteral(temporaryDirectory.toString()),
+                                normalizedCommand ? "$true" : "$false",
+                                powerShellLiteral(temporaryDirectory.toString()),
+                                powerShellLiteral(temporaryDirectory.toString()),
+                                powerShellLiteral(temporaryDirectory.toString()),
+                                powerShellLiteral(temporaryDirectory.toString())));
+
+        Files.writeString(script, "\uFEFF" + Files.readString(script));
+
+        // when
+        ProcessResult result =
+                run(Map.of(), launcher, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script.toString());
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output()).contains("cannot migrate managed worker state", "selected configuration");
+        assertThat(proof).doesNotExist();
+        assertThat(temporaryDirectory.resolve("state/WORKFLOW.a.aaaaaaaaaaaa.pid"))
+                .hasContent("41");
+        assertThat(temporaryDirectory.resolve("state/WORKFLOW.b.bbbbbbbbbbbb.pid"))
+                .hasContent("42");
+    }
+
+    @Test
+    void powershellCodexShimPreservesUnicodePrefixAndArgumentsOnWindows() throws Exception {
+        // given
+        assumeTrue(isWindows());
+        assumeTrue(commandExists("pwsh"));
+        Path script = temporaryDirectory.resolve("codex-shim-probe.ps1");
+        Path proof = temporaryDirectory.resolve("arguments.txt");
+        Path binDirectory = temporaryDirectory.resolve("bin é & (demo)");
+        Path npmPrefix = temporaryDirectory.resolve("npm O'Brien é & (demo)");
+        Path npmPackage = Files.createDirectories(npmPrefix.resolve("node_modules/@openai/codex"));
+        Files.writeString(npmPackage.resolve("package.json"), "{\"bin\":{\"codex\":\"cli.mjs\"}}");
+        Files.writeString(
+                npmPackage.resolve("cli.mjs"),
+                "import fs from 'node:fs'; fs.writeFileSync(" + JSON.writeValueAsString(proof.toString())
+                        + ", process.argv.slice(2).join('|')); process.exit(17);");
+        Files.writeString(
+                script,
+                """
+                %s
+                function Test-Command { return $true }
+                function Invoke-VisibleStep {}
+                function Invoke-Step($Label, $Action) { & $Action }
+                $BinDir = Join-Path %s 'bin é & (demo)'
+                $CodexNpmPrefix = %s
+                Install-CodexWithUserLocalNpm
+                %s
+                foreach ($wrapper in @('codex.cmd', 'codex.ps1')) {
+                  if (-not (Test-ManagedCodexWrapper (Join-Path $BinDir $wrapper))) {
+                    throw "The uninstaller did not recognize its generated $wrapper shim."
+                  }
+                }
+                $CodexNpmPrefix = Join-Path $CodexNpmPrefix 'unrelated'
+                foreach ($wrapper in @('codex.cmd', 'codex.ps1')) {
+                  if (Test-ManagedCodexWrapper (Join-Path $BinDir $wrapper)) {
+                    throw "The uninstaller claimed a $wrapper shim for another installation."
+                  }
+                }
+                """
+                        .formatted(
+                                scriptFunctions(
+                                        "install.ps1",
+                                        "Write-PowerShellScript",
+                                        "ConvertTo-PowerShellLiteral",
+                                        "Install-CodexWithUserLocalNpm",
+                                        "Get-CodexNpmInstallCommand"),
+                                powerShellLiteral(temporaryDirectory.toString()),
+                                powerShellLiteral(npmPrefix.toString()),
+                                scriptFunctions("uninstall.ps1", "Test-ManagedCodexWrapper")));
+
+        run(Map.of(), "pwsh", "-NoProfile", "-File", script.toString()).assertSuccess();
+
+        // when
+        ProcessResult result = run(
+                Map.of(),
+                "cmd.exe",
+                "/d",
+                "/s",
+                "/c",
+                "\"\"" + binDirectory.resolve("codex.cmd") + "\" --version \"two words\" é \"\" model=\\\"gpt-5\\\"\"");
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(17);
+        assertThat(proof).hasContent("--version|two words|é||model=\"gpt-5\"");
+    }
+
+    @Test
+    void powershellStartupFallbackPreservesUnicodePathsOnWindows() throws Exception {
+        // given
+        assumeTrue(isWindows());
+        assumeTrue(commandExists("pwsh"));
+        Path script = temporaryDirectory.resolve("startup-probe.ps1");
+        Path proof = temporaryDirectory.resolve("started.txt");
+        Files.writeString(
+                script,
+                """
+                %s
+                function Write-AutostartEnvironmentFile {}
+                function Write-Status {}
+                $DryRun = $false
+                $BinDir = Join-Path %s 'bin é & (demo)'
+                $StartupFolder = Join-Path %s 'startup é'
+                $AutostartScriptPath = Join-Path $BinDir 'symphony-trello-autostart.ps1'
+                $AutostartEnvironmentPath = Join-Path $BinDir 'absent-env.ps1'
+                $StartupCommandPath = Join-Path $StartupFolder 'symphony-trello.cmd'
+                New-Item -ItemType Directory -Path $BinDir | Out-Null
+                "[IO.File]::WriteAllText(%s, (`$args -join ' '))" |
+                  Write-PowerShellScript -Path (Join-Path $BinDir 'symphony-trello.ps1')
+                Install-StartupFolderCommand | Out-Null
+                & $StartupCommandPath
+                exit $LASTEXITCODE
+                """
+                        .formatted(
+                                scriptFunctions(
+                                        "install.ps1",
+                                        "Write-PowerShellScript",
+                                        "ConvertTo-PowerShellLiteral",
+                                        "Write-AutostartLauncher",
+                                        "Get-StartAllCommand",
+                                        "Install-StartupFolderCommand"),
+                                powerShellLiteral(temporaryDirectory.toString()),
+                                powerShellLiteral(temporaryDirectory.toString()),
+                                powerShellLiteral(proof.toString())));
+
+        // when
+        ProcessResult result = run(Map.of(), "pwsh", "-NoProfile", "-File", script.toString());
+
+        // then
+        result.assertSuccess();
+        assertThat(proof).hasContent("start --all");
+    }
+
     @Test
     void powershellInstallerLifecycleInstallsStartsStopsAndUninstallsWithFakeJavaOnWindows() throws Exception {
         // given
@@ -506,9 +770,9 @@ final class InstallerScriptLifecycleTest {
         Path fakeBin = createFakeWindowsToolchain(temporaryDirectory);
         Path symphonyHome = temporaryDirectory.resolve("home $value & (demo)");
         Path installPrefix = symphonyHome.resolve("app");
-        Path configDirectory = symphonyHome.resolve("config");
+        Path configDirectory = temporaryDirectory.resolve("config home $value/symphony-trello");
         Path workspaceRoot = symphonyHome.resolve("workspaces");
-        Path stateHome = symphonyHome.resolve("state");
+        Path stateHome = temporaryDirectory.resolve("state home $value/symphony-trello");
         Path binDirectory = temporaryDirectory.resolve("bin $value & (demo) é");
         Path workflow = temporaryDirectory.resolve("WORKFLOW $value & (demo).md");
         Path envFile = temporaryDirectory.resolve(".env $value & (demo)");
@@ -516,7 +780,9 @@ final class InstallerScriptLifecycleTest {
         Map<String, String> environment = Map.of(
                 "PATH", fakeBin + System.getProperty("path.separator") + System.getenv("PATH"),
                 "SYMPHONY_FAKE_LOG", fakeLog.toString(),
-                "SYMPHONY_FAKE_JAVA", fakeBin.resolve("fake-java.ps1").toString());
+                "SYMPHONY_FAKE_JAVA", fakeBin.resolve("fake-java.ps1").toString(),
+                "SYMPHONY_TRELLO_CONFIG_DIR", configDirectory.toString(),
+                "SYMPHONY_TRELLO_STATE_HOME", stateHome.toString());
 
         // when
         ProcessResult install = run(
@@ -608,15 +874,7 @@ final class InstallerScriptLifecycleTest {
                         + " logs --workflow "
                         + powerShellLiteral(workflow.toString())
                         + " | Select-Object -First 1");
-        ProcessResult stop = run(
-                environment,
-                "pwsh",
-                "-NoProfile",
-                "-File",
-                installedScript.toString(),
-                "stop",
-                "--workflow",
-                workflow.toString());
+        LegacyStateFiles legacyStateFiles = moveManagedStateFilesToLegacy(configDirectory, stateHome, List.of(".log"));
         ProcessResult update = run(
                 environment,
                 "pwsh",
@@ -634,6 +892,20 @@ final class InstallerScriptLifecycleTest {
                 sourceRepository.toUri().toString(),
                 "--ref",
                 "main");
+        assertThat(update.exitCode()).as(update.output()).isZero();
+        assertThat(stateHome.resolve("WORKFLOW.md.abcdef123456.pid"))
+                .as("the installer restores managed PID tracking before returning")
+                .isRegularFile();
+        MigrationObservation migration = observeMigration(legacyStateFiles, stateHome);
+        ProcessResult stop = run(
+                environment,
+                "pwsh",
+                "-NoProfile",
+                "-File",
+                installedScript.toString(),
+                "stop",
+                "--workflow",
+                workflow.toString());
         ProcessResult uninstall = run(
                 environment,
                 "pwsh",
@@ -663,8 +935,9 @@ final class InstallerScriptLifecycleTest {
         assertThat(start.exitCode()).as(start.output()).isZero();
         assertThat(status.output()).contains("running WORKFLOW $value & (demo).md");
         assertThat(logs.output()).contains("fake wrapper log");
-        assertThat(stop.output()).contains("Stopped WORKFLOW $value & (demo).md");
         assertThat(update.exitCode()).as(update.output()).isZero();
+        assertSuccessfulMigration(migration, "PowerShell");
+        assertThat(stop.output()).contains("Stopped WORKFLOW $value & (demo).md");
         assertThat(install.output()).doesNotContain("Checking generated workflows...");
         assertThat(update.output()).contains("Checking generated workflows...");
         String fakeLogContent = Files.readString(fakeLog);
@@ -672,11 +945,11 @@ final class InstallerScriptLifecycleTest {
                 .contains("migrate-workflows --from-version " + FAKE_APP_VERSION + " --non-interactive");
         Map<String, Object> powerShellSetup = setupCliEvent(fakeLogContent, "new-board", "Wrapper Dispatch Board");
         assertThat(String.valueOf(powerShellSetup.get("cwd"))).contains("windows caller");
-        assertThat(String.valueOf(powerShellSetup.get("dotenv"))).contains("home $value & (demo)\\config\\.env");
+        assertThat(String.valueOf(powerShellSetup.get("dotenv"))).contains("config home $value\\symphony-trello\\.env");
         assertThat(eventArguments(powerShellSetup))
                 .contains(
                         "-Dsymphony.trello.config.dir=",
-                        "home $value & (demo)\\config",
+                        "config home $value\\symphony-trello",
                         "-Dsymphony.trello.shell=powershell",
                         "new-board --name Wrapper Dispatch Board",
                         "--workflow relative workflow.md",
@@ -684,11 +957,12 @@ final class InstallerScriptLifecycleTest {
         Map<String, Object> commandPromptSetup =
                 setupCliEvent(fakeLogContent, "new-board", "Command Prompt Wrapper Dispatch Board");
         assertThat(String.valueOf(commandPromptSetup.get("cwd"))).contains("windows caller");
-        assertThat(String.valueOf(commandPromptSetup.get("dotenv"))).contains("home $value & (demo)\\config\\.env");
+        assertThat(String.valueOf(commandPromptSetup.get("dotenv")))
+                .contains("config home $value\\symphony-trello\\.env");
         assertThat(eventArguments(commandPromptSetup))
                 .contains(
                         "-Dsymphony.trello.config.dir=",
-                        "home $value & (demo)\\config",
+                        "config home $value\\symphony-trello",
                         "-Dsymphony.trello.shell=cmd",
                         "new-board --name Command Prompt Wrapper Dispatch Board",
                         "--workflow cmd workflow.md",
@@ -760,4 +1034,50 @@ final class InstallerScriptLifecycleTest {
         assertThat(args).as("structured fake-tool event args").isInstanceOf(List.class);
         return ((List<?>) args).stream().map(String::valueOf).collect(Collectors.joining(" "));
     }
+
+    private static LegacyStateFiles moveManagedStateFilesToLegacy(
+            Path configDirectory, Path stateHome, List<String> logSuffixes) throws IOException {
+        Path legacyStateHome = configDirectory.resolveSibling("state");
+        Files.createDirectories(legacyStateHome);
+        Path currentPid = singleFile(stateHome, ".pid");
+        Path legacyPid = legacyStateHome.resolve(currentPid.getFileName());
+        Files.move(currentPid, legacyPid);
+        List<Path> legacyLogs = new ArrayList<>();
+        for (String suffix : logSuffixes) {
+            Path currentLog = singleFile(stateHome, suffix);
+            Path legacyLog = legacyStateHome.resolve(currentLog.getFileName());
+            Files.move(currentLog, legacyLog);
+            legacyLogs.add(legacyLog);
+        }
+        return new LegacyStateFiles(legacyPid, List.copyOf(legacyLogs));
+    }
+
+    private static MigrationObservation observeMigration(LegacyStateFiles legacyStateFiles, Path stateHome)
+            throws IOException {
+        boolean legacyLogsPreserved = true;
+        for (Path legacyLog : legacyStateFiles.logs()) {
+            legacyLogsPreserved &= Files.isRegularFile(legacyLog);
+        }
+        return new MigrationObservation(
+                Files.notExists(legacyStateFiles.pid()),
+                Files.isRegularFile(singleFile(stateHome, ".pid")),
+                legacyLogsPreserved);
+    }
+
+    private static void assertSuccessfulMigration(MigrationObservation migration, String platform) {
+        assertThat(migration.legacyPidRemoved())
+                .as("the %s update removes legacy managed-worker PID tracking", platform)
+                .isTrue();
+        assertThat(migration.configuredPidCreated())
+                .as("the %s update restarts managed-worker PID tracking in the configured state home", platform)
+                .isTrue();
+        assertThat(migration.legacyLogsPreserved())
+                .as("the %s update keeps legacy worker logs as history", platform)
+                .isTrue();
+    }
+
+    private record LegacyStateFiles(Path pid, List<Path> logs) {}
+
+    private record MigrationObservation(
+            boolean legacyPidRemoved, boolean configuredPidCreated, boolean legacyLogsPreserved) {}
 }

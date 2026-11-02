@@ -23,11 +23,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.StringJoiner;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+@ExtendWith(WindowsUserPathGuard.class)
+@ResourceLock("windows-user-path")
 final class InstallerTutorialOfferTest {
     private static final String BOARD_NAME = "Installed queue";
     private static final String HANDOFF = "You're good to go - your Trello board is now a queue for Codex work.";

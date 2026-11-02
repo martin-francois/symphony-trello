@@ -11,8 +11,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 final class ManagedProcessStore {
+    private static final Pattern MANAGED_STATE_NAME = Pattern.compile(".+\\.[0-9a-f]{12}\\.(?:pid|workflow)");
     private static final String WORKFLOW_PATH_SUFFIX = ".workflow";
 
     private final Path stateHome;
@@ -31,7 +33,8 @@ final class ManagedProcessStore {
             return List.of();
         }
         try (var stream = Files.list(stateHome)) {
-            return stream.filter(path -> PathNames.fileName(path).endsWith(".pid"))
+            return stream.filter(ManagedProcessStore::isProcessStateFile)
+                    .filter(path -> PathNames.fileName(path).endsWith(".pid"))
                     .sorted()
                     .toList();
         }
@@ -53,7 +56,7 @@ final class ManagedProcessStore {
 
     private static boolean isProcessStateFile(Path path) {
         String name = PathNames.fileName(path);
-        return name.endsWith(".pid") || name.endsWith(WORKFLOW_PATH_SUFFIX);
+        return MANAGED_STATE_NAME.matcher(name).matches() && Files.isRegularFile(path);
     }
 
     private ManagedProcessFiles filesFromStateFile(Path path) {
