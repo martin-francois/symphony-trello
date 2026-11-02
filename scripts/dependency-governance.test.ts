@@ -205,7 +205,7 @@ test("the OpenTofu version is pinned once per owner and the owners agree", () =>
   };
   const miseConfig = readFileSync("infra/posthog/mise.toml", "utf8");
   const renovateConfig = JSON.parse(readFileSync("renovate.json", "utf8")) as {
-    customManagers?: Array<{depNameTemplate?: string; matchStrings?: string[]; datasourceTemplate?: string}>;
+    customManagers?: Array<{depNameTemplate?: string}>;
   };
 
   // when
@@ -222,8 +222,11 @@ test("the OpenTofu version is pinned once per owner and the owners agree", () =>
   // then
   assert.deepEqual(registryRule?.registryUrls, ["https://registry.opentofu.org"]);
   assert.equal(workflowVersion, miseVersion);
-  assert.equal(manager?.datasourceTemplate, "github-releases");
-  assert.ok(manager?.matchStrings?.some((pattern) => new RegExp(pattern).test(`tofu_version: ${String(workflowVersion)}`)));
+  assert.equal(manager, undefined, "the built-in GitHub Actions manager owns the action input");
+  const releaseRule = RENOVATE_CONFIG.packageRules.find(({matchPackageNames}) => matchPackageNames?.includes("opentofu/opentofu"));
+  const extraction = (releaseRule as {extractVersion?: string} | undefined)?.extractVersion;
+  assert.ok(extraction, "both owners must extract the version from the release tag");
+  assert.equal(new RegExp(extraction).exec("v99.1.2")?.groups?.["version"], "99.1.2");
 });
 
 test("one Renovate group moves both OpenTofu pins, since each alone would fail the agreement test", () => {
@@ -234,12 +237,10 @@ test("one Renovate group moves both OpenTofu pins, since each alone would fail t
     packageRules?: Array<Record<string, unknown>>;
   };
   // Renovate's mise manager reports the `opentofu` tool as package opentofu/opentofu from GitHub
-  // releases; the custom manager's depName doubles as its package name.
+  // releases; the built-in GitHub Actions manager reports the same package for tofu_version.
   const pins = [
     {source: "infra/posthog/mise.toml", present: /^opentofu\s*=/m.test(miseConfig), packageName: "opentofu/opentofu", datasource: "github-releases"},
-    ...(renovateConfig.customManagers ?? [])
-      .filter(({depNameTemplate}) => depNameTemplate === "opentofu/opentofu")
-      .map(({depNameTemplate, datasourceTemplate}) => ({source: "ci.yml custom manager", present: true, packageName: String(depNameTemplate), datasource: String(datasourceTemplate)})),
+    {source: ".github/workflows/ci.yml", present: /tofu_version:\s*\d+\.\d+\.\d+/.test(CI_WORKFLOW), packageName: "opentofu/opentofu", datasource: "github-releases"},
   ];
 
   // when
