@@ -65,6 +65,7 @@ final class SetupDiagnosticReporter {
     private static final Duration PROBE_TIMEOUT = Duration.ofSeconds(2);
     private static final String HTTP_SCHEME = "http://";
     private static final String HTTPS_SCHEME = "https://";
+    private static final String FILE_SCHEME = "file://";
     private static final String SSH_SCHEME = "ssh://";
     private static final String GITHUB_SSH_HOST = "git@github.com";
     private static final int BODY_LIMIT = 4_000;
@@ -111,6 +112,10 @@ final class SetupDiagnosticReporter {
     private static final Pattern QUOTED_POSIX_PATH = Pattern.compile("([\"'`])(/[^\"'`\\r\\n]+)\\1");
     private static final Pattern QUOTED_WINDOWS_PATH = Pattern.compile("(?i)([\"'`])([A-Z]:\\\\[^\"'`\\r\\n]+)\\1");
     private static final Pattern WINDOWS_PATH = Pattern.compile("(?i)\\b[A-Z]:\\\\[^\\r\\n:'\"<>|]+");
+    private static final Pattern QUOTED_REMOTE_PATH =
+            Pattern.compile("(?i)([\"'`])((?:\\\\\\\\|file://)(?:(?!\\1)[^\\r\\n])+)\\1");
+    private static final Pattern UNC_PATH = Pattern.compile("(?<![A-Za-z0-9_.:/\\\\-])\\\\\\\\[^\\r\\n<>|]+");
+    private static final Pattern FILE_URL_PATH = Pattern.compile("(?i)(?<![A-Za-z0-9_.:/\\\\-])file://[^\\r\\n<>|]+");
     private static final Pattern PRIVATE_CONTEXT_LOOKUP_TOKEN = Pattern.compile("(?:[0-9a-f]{12}|<path:[0-9a-f]{12}>)");
     private static final Pattern TRELLO_OBJECT_ID = Pattern.compile("\\b[0-9a-f]{24}\\b", Pattern.CASE_INSENSITIVE);
     private static final Splitter LINE_BREAK_SPLITTER = Splitter.onPattern("\\R");
@@ -2378,6 +2383,12 @@ final class SetupDiagnosticReporter {
         sanitized = PODMAN_NOTICE
                 .matcher(sanitized)
                 .replaceAll(match -> match.group(1) + pathToken(match.group(2), pathTokens) + match.group(3));
+        // Capture the whole remote path before known-root matching can replace only its suffix.
+        sanitized = QUOTED_REMOTE_PATH
+                .matcher(sanitized)
+                .replaceAll(match -> match.group(1) + pathToken(match.group(2), pathTokens) + match.group(1));
+        sanitized = UNC_PATH.matcher(sanitized).replaceAll(match -> pathToken(match.group(), pathTokens));
+        sanitized = FILE_URL_PATH.matcher(sanitized).replaceAll(match -> pathToken(match.group(), pathTokens));
         sanitized = QUOTED_WINDOWS_PATH
                 .matcher(sanitized)
                 .replaceAll(match -> match.group(1) + pathToken(match.group(2), pathTokens) + match.group(1));
@@ -2470,12 +2481,12 @@ final class SetupDiagnosticReporter {
         var redacted = new StringBuilder(value.length());
         int cursor = 0;
         while (cursor < value.length()) {
-            int schemeStart = nextHttpScheme(value, cursor);
+            int schemeStart = nextRedactedUrlScheme(value, cursor);
             if (schemeStart < 0) {
                 redacted.append(value, cursor, value.length());
                 break;
             }
-            int authorityStart = schemeStart + httpSchemeLength(value, schemeStart);
+            int authorityStart = schemeStart + redactedUrlSchemeLength(value, schemeStart);
             int authorityEnd = urlAuthorityEnd(value, authorityStart);
             int at = value.indexOf('@', authorityStart, authorityEnd);
             if (at < 0) {
@@ -2490,18 +2501,22 @@ final class SetupDiagnosticReporter {
         return redacted.toString();
     }
 
-    private int nextHttpScheme(String value, int start) {
+    private int nextRedactedUrlScheme(String value, int start) {
         int maxStart = value.length() - HTTP_SCHEME.length();
         for (int index = Math.max(0, start); index <= maxStart; index++) {
             if (startsWithAsciiIgnoreCase(value, index, HTTP_SCHEME)
-                    || startsWithAsciiIgnoreCase(value, index, HTTPS_SCHEME)) {
+                    || startsWithAsciiIgnoreCase(value, index, HTTPS_SCHEME)
+                    || startsWithAsciiIgnoreCase(value, index, FILE_SCHEME)) {
                 return index;
             }
         }
         return -1;
     }
 
-    private static int httpSchemeLength(String value, int schemeStart) {
+    private static int redactedUrlSchemeLength(String value, int schemeStart) {
+        if (startsWithAsciiIgnoreCase(value, schemeStart, FILE_SCHEME)) {
+            return FILE_SCHEME.length();
+        }
         return startsWithAsciiIgnoreCase(value, schemeStart, HTTPS_SCHEME)
                 ? HTTPS_SCHEME.length()
                 : HTTP_SCHEME.length();
