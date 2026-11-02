@@ -30,7 +30,6 @@ const REVIEW_SECTION_ERROR = "Provide exactly one visible Review Checklist secti
 const UNDERSTOOD_CHECKBOX_ERROR =
   `Put the \`- [ ] ${UNDERSTOOD}\` line from the pull request template in the Review Checklist, once; it moved there from the AI Assistance section.`;
 const AI_CHOICE_ERROR = `Tick exactly one AI assistance choice: \`${NO_AI_ASSISTANCE}\` or \`${AI_ASSISTED}\`.`;
-const UNDERSTOOD_ERROR = `Tick \`${UNDERSTOOD}\`.`;
 const RATIONALE_ERROR = "Provide a non-placeholder `Because ...` compatibility rationale.";
 const SELECTION_ERROR = "Select exactly one current option in the Compatibility Decision section.";
 const HISTORY_SELECTION_ERROR = "Select exactly one current option in the Commit History in Main section.";
@@ -598,10 +597,10 @@ test("accepts a ticked understanding confirmation in the Review Checklist", () =
   assert.deepEqual(evaluateUnderstandingConfirmation(body), []);
 });
 
-test("the confirmation is required whether or not AI helped", () => {
-  assert.deepEqual(evaluateUnderstandingConfirmation(select(TEMPLATE, NO_AI_ASSISTANCE)), [UNDERSTOOD_ERROR]);
-  assert.deepEqual(evaluateUnderstandingConfirmation(select(TEMPLATE, AI_ASSISTED)), [UNDERSTOOD_ERROR]);
-  assert.deepEqual(evaluateUnderstandingConfirmation(TEMPLATE), [UNDERSTOOD_ERROR]);
+test("an unchecked confirmation passes whether or not AI helped", () => {
+  assert.deepEqual(evaluateUnderstandingConfirmation(select(TEMPLATE, NO_AI_ASSISTANCE)), []);
+  assert.deepEqual(evaluateUnderstandingConfirmation(select(TEMPLATE, AI_ASSISTED)), []);
+  assert.deepEqual(evaluateUnderstandingConfirmation(TEMPLATE), []);
 });
 
 test("the confirmation line lives in the Review Checklist, not in the AI Assistance section", () => {
@@ -627,10 +626,10 @@ test("rejects a missing or duplicated Review Checklist section", () => {
   assert.deepEqual(evaluateUnderstandingConfirmation(fenced), [REVIEW_SECTION_ERROR]);
 });
 
-test("the template comment above the box carries the rule and a ticked copy inside it does not count", () => {
+test("the template preserves the author declaration rule and permits an unchecked visible box", () => {
   assert.ok(TEMPLATE.includes("An AI agent may\ntick it for you only after asking"), "the template carries the rule");
   const tickedInComment = replaceExactly(TEMPLATE, `-->\n\n- [ ] ${UNDERSTOOD}`, `- [x] ${UNDERSTOOD}\n-->\n\n- [ ] ${UNDERSTOOD}`);
-  assert.deepEqual(evaluateUnderstandingConfirmation(tickedInComment), [UNDERSTOOD_ERROR]);
+  assert.deepEqual(evaluateUnderstandingConfirmation(tickedInComment), []);
   assert.deepEqual(evaluateUnderstandingConfirmation(select(TEMPLATE, UNDERSTOOD)), []);
 });
 
@@ -652,7 +651,7 @@ test("rejects a removed, reworded, duplicated, or commented-out confirmation che
   }
 });
 
-test("a ticked confirmation inside a fence, a comment, a blockquote, or a nested list does not count", () => {
+test("hidden ticked copies do not change acceptance of the visible unchecked declaration", () => {
   for (const hidden of [
     `\`\`\`text\n- [x] ${UNDERSTOOD}\n\`\`\`\n- [ ] ${UNDERSTOOD}`,
     `<!-- - [x] ${UNDERSTOOD} -->\n- [ ] ${UNDERSTOOD}`,
@@ -661,15 +660,15 @@ test("a ticked confirmation inside a fence, a comment, a blockquote, or a nested
   ]) {
     assert.deepEqual(
       evaluateUnderstandingConfirmation(replaceExactly(TEMPLATE, `- [ ] ${UNDERSTOOD}`, hidden)),
-      [UNDERSTOOD_ERROR],
+      [],
       JSON.stringify(hidden),
     );
   }
 });
 
 test("treats CRLF and LF Review Checklist sections identically", () => {
-  assert.deepEqual(evaluateUnderstandingConfirmation(TEMPLATE.replaceAll("\n", "\r\n")), [UNDERSTOOD_ERROR]);
-  assert.deepEqual(evaluateUnderstandingConfirmation(TEMPLATE), [UNDERSTOOD_ERROR]);
+  assert.deepEqual(evaluateUnderstandingConfirmation(TEMPLATE.replaceAll("\n", "\r\n")), []);
+  assert.deepEqual(evaluateUnderstandingConfirmation(TEMPLATE), []);
 });
 
 test("the script and the CodeRabbit check quote the same AI Assistance lines", () => {

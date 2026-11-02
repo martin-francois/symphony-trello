@@ -139,6 +139,7 @@ module.exports = async ({ github, context, core }) => {
       reopens: "Adding it back",
       box: false,
     },
+    // Retained so existing automation markers can be reconciled after ADR 0161.
     boxUnticked: {
       fix: `Please tick \`${confirmation}\` in the description.`,
       closed: `\`${confirmation}\` has been unticked`,
@@ -174,7 +175,7 @@ module.exports = async ({ github, context, core }) => {
     if (understood === undefined) {
       return "boxLineMissing";
     }
-    return understood ? null : "boxUnticked";
+    return null;
   }
 
   function isHandledAuthor(pullRequest) {

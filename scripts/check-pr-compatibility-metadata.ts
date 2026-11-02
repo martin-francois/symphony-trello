@@ -45,7 +45,6 @@ const UNDERSTANDING_CHECKBOX_ERROR =
   `Put the \`- [ ] ${UNDERSTANDING_CONFIRMATION}\` line from the pull request template in the Review Checklist, once; it moved there from the AI Assistance section.`;
 const AI_ASSISTANCE_CHOICE_ERROR =
   `Tick exactly one AI assistance choice: \`${NO_AI_ASSISTANCE_CHOICE}\` or \`${AI_ASSISTED_CHOICE}\`.`;
-const UNDERSTANDING_CONFIRMATION_ERROR = `Tick \`${UNDERSTANDING_CONFIRMATION}\`.`;
 const COMMIT_HISTORY_SELECTION_ERROR =
   "Select exactly one current option in the Commit History in Main section.";
 
@@ -160,7 +159,7 @@ export function evaluateAiAssistanceDisclosure(body: string): string[] {
   return noAssistance === assisted ? [AI_ASSISTANCE_CHOICE_ERROR] : [];
 }
 
-// Every author confirms they understand the change, whether or not AI helped (ADR 0144).
+// Keep the author declaration present and truthful; its tick is advisory (ADR 0161).
 export function evaluateUnderstandingConfirmation(body: string): string[] {
   const section = visibleSection(visibleMarkdownLines(body), REVIEW_CHECKLIST_HEADING);
   if (!section) {
@@ -170,7 +169,7 @@ export function evaluateUnderstandingConfirmation(body: string): string[] {
   if (understood === undefined) {
     return [UNDERSTANDING_CHECKBOX_ERROR];
   }
-  return understood ? [] : [UNDERSTANDING_CONFIRMATION_ERROR];
+  return [];
 }
 
 function selectedDecision(section: readonly string[]): CompatibilityKind | undefined {

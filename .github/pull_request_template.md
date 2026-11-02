@@ -98,6 +98,7 @@ explain why.
 ## Review Checklist
 
 <!--
+The first box is advisory; leaving it empty does not block maintainer review or merge.
 Tick the first box only if you've read and understand every change in this PR. An AI agent may
 tick it for you only after asking whether you read the code changes and understand them, getting
 your explicit yes, and being told it may tick the box. See CONTRIBUTING.md, "Understanding box".

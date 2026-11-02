@@ -20,4 +20,6 @@ AI-assisted contributions are welcome when they are transparent, reviewable, and
 ## Maintainer Review
 
 Maintainers review AI-assisted changes by the same standard as any other contribution. Disclosure is
-not a substitute for tests, documentation, or careful review.
+not a substitute for tests, documentation, or careful review. The author's understanding checkbox
+is advisory. Maintainers may finish and merge a valuable contribution after review and validation
+without ticking that personal declaration on the author's behalf.

@@ -45,8 +45,8 @@ reviews:
           Fail when neither disclosure choice is ticked or both choices are ticked. Name both
           disclosure choices and say that exactly one must be ticked.
 
-          Fail when "I confirm I understand what the code does" is not ticked. Say that the author
-          has to tick it before merging, whether or not AI helped.
+          Accept "I confirm I understand what the code does" checked or unchecked. The declaration
+          is advisory; maintainer review decides readiness, whether or not AI helped.
 
           Pass otherwise.
 

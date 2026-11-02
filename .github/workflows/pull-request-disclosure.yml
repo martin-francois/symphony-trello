@@ -20,8 +20,8 @@ permissions: read-all
 jobs:
   disclosure:
     # Bots (Renovate, Release Please) and martinfrancois never see this check: their bodies are
-    # generated or his agent ticks the box (ADR 0132). Every other author is handled, collaborators
-    # included, because the box is required on every pull request (ADR 0144). The base-repository
+    # generated or maintained under his standing authorization. Every other author is handled,
+    # collaborators included. The author understanding tick is advisory (ADR 0161). The base-repository
     # comparison matches openrewrite-renovate.yml; on pull_request_target it is always true, so it
     # is not a guard. The script repeats the author skips for the scheduled run. Branch names are
     # no guard either: a fork can reuse any of them.

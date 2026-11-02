@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: "superseded by [ADR 0161](0161-make-author-understanding-advisory.md)"
 date: 2026-10-31
 decision-makers: [François Martin]
 consulted:
@@ -14,6 +14,9 @@ informed: [Contributors, Reviewers, Future maintainers]
 ---
 
 # Require the understanding box on every pull request
+
+PR tick enforcement is superseded by [ADR 0161](0161-make-author-understanding-advisory.md). The issue-form confirmation
+requirements below remain in force.
 
 ## Context and Problem Statement
 

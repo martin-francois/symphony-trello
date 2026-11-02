@@ -557,14 +557,14 @@ merged pull requests. If you want to work on an issue, say so in a comment on it
 
 CodeRabbit checks the description against the template, the AI Assistance section, the
 `I confirm I understand what the code does` box in the Review Checklist, and the Compatibility
-Decision. Tick that box on every PR, whether or not AI helped: you're saying you understand what
-your change does. While one of those checks fails, CodeRabbit requests changes and the PR cannot
-merge. Fix the description, then comment `@coderabbitai run pre-merge checks` to rerun them.
+Decision. Keep the understanding line present and tick it only when it is true. The tick is
+advisory; leaving it empty does not block maintainer review or merge. Missing template structure
+or invalid disclosure still fails the checks. Fix the description, then comment
+`@coderabbitai run pre-merge checks` to rerun them.
 
-The description is also checked the moment you open or edit the PR. If `I confirm I understand
-what the code does` isn't ticked, or the AI Assistance section is missing or has no single choice,
-a comment says what to fix, the PR gets `waiting-for-author`, and nobody reviews it until you fix
-the description. If it's still incomplete on the date that comment gives, 14 days on, the PR is
+The description is also checked when you open or edit the PR. Missing required sections or
+checkbox lines, or an AI Assistance section without exactly one choice, trigger a comment and
+`waiting-for-author`. An unchecked understanding box alone does not trigger that workflow. If it's still incomplete on the date that comment gives, 14 days on, the PR is
 closed automatically. Fixing the description reopens it; don't force-push or rebase the branch
 while it's closed, because GitHub can't reopen a PR whose head moved.
 
@@ -752,8 +752,10 @@ whether or not AI helped. Tick it only after you've read every change in the PR 
 what it does. An AI agent may tick it for you only after it asked you whether you read the code
 changes and understand them, you said yes explicitly in that conversation, and you told it that it
 may tick the box. Silence, "looks good", or approving a plan isn't that yes. Without all three,
-the agent leaves the box unticked and asks you to review the change and tick it. The same holds
-for `I confirm I understand and reviewed this ...` in the issue forms, which is required whenever
+the agent leaves the box unticked. Maintainers may still review, fix, and merge a valuable change
+once it satisfies the project's review and validation requirements. They do not tick your box
+for you. The confirmation rules for `I confirm I understand and reviewed this ...` in the issue
+forms remain mandatory whenever
 `AI-assisted issue` is ticked. No check can tell who ticked a box; the maintainer's review is the
 check.
 

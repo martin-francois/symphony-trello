@@ -87,8 +87,8 @@ and apply triage labels. Spec-alignment auditing that may create issues lives in
   maintainer account's 👍 reaction or is hidden (GraphQL `isMinimized`), for example as spam. Read
   both in the same GraphQL query that lists the comments:
   `reactionGroups { content viewerHasReacted }` shows whether the authenticated account has reacted
-  with `THUMBS_UP`, and works for issue, pull request, and Discussion comments and bodies. Skip an
-  outside contributor's pull request whose understanding box is unticked; see
+  with `THUMBS_UP`, and works for issue, pull request, and Discussion comments and bodies. An
+  unchecked author understanding box does not exclude an outside pull request from triage; see
   [Outside contributor pull requests](default-workflow.md#outside-contributor-pull-requests).
 - Reply where the comment asks a question, offers help, gives a status update, points to a fix, or
   reports a new problem. The reply becomes the maintainer account's last comment in the thread, so
@@ -299,7 +299,7 @@ and apply triage labels. Spec-alignment auditing that may create issues lives in
   already open when the workflow was introduced.
 - `missing-confirmation` is a pull-request label that `.github/workflows/pull-request-disclosure.yml`
   adds beside `waiting-for-author` while a pull request's description is incomplete (the
-  understanding box unticked, no single AI choice, or those sections missing), for every author
+  no single AI choice, missing checkbox lines, or missing sections), for every author
   except martinfrancois and bots, and removes when the body is fixed. The first daily run 14 days
   after the flag closes the pull request, and the workflow reopens it once fixed
   ([ADR 0142](../adr/0142-flag-and-close-pull-requests-with-an-incomplete-ai-disclosure.md)).

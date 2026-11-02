@@ -99,7 +99,7 @@ const EVENT_TIME = "2026-10-30T12:00:00Z";
 // The first daily run at or after EVENT_TIME plus 14 days.
 const CLOSE_DATE = "2026-11-13 UTC";
 const DUE = "2026-11-13T13:17:00Z";
-const FLAG_MARKER = flagMarker("boxUnticked");
+const FLAG_MARKER = flagMarker("neitherChoice");
 const RESOLVED_MARKER = "<!-- symphony-trello:missing-confirmation resolved -->";
 const CLOSED_MARKER = `<!-- symphony-trello:missing-confirmation closed flagged-at=${EVENT_TIME} -->`;
 const REOPEN_FAILED_MARKER = "<!-- symphony-trello:missing-confirmation reopen-failed -->";
@@ -129,7 +129,7 @@ function drop(body: string, text: string): string {
 }
 
 const VALID_BODY = tick(tick(TEMPLATE, NO_AI_ASSISTANCE), UNDERSTOOD);
-const UNTICKED_BODY = tick(TEMPLATE, NO_AI_ASSISTANCE);
+const INCOMPLETE_BODY = tick(TEMPLATE, UNDERSTOOD);
 
 function pullRequest(body: string | null, overrides: Partial<PullRequestNode> = {}): PullRequestNode {
   return {body, head: {ref: "feature"}, number: 42, state: "open", updated_at: EVENT_TIME, user: AUTHOR, ...overrides};
@@ -251,7 +251,7 @@ async function run(eventName: "pull_request_target" | "schedule", options: RunOp
             throw options.pullRequestReadFailure;
           }
           const fromList = allPullRequests.find(({number}) => number === pull_number);
-          return {data: options.pullRequest ?? fromList ?? pullRequest(UNTICKED_BODY)};
+          return {data: options.pullRequest ?? fromList ?? pullRequest(INCOMPLETE_BODY)};
         },
         list,
         update: async ({pull_number, state}: {readonly pull_number: number; readonly state: string}): Promise<void> => {
@@ -305,7 +305,7 @@ test("the workflow is metadata-only, least-privilege, pinned, and scheduled outs
   assert.doesNotMatch(WORKFLOW, /actions\/cache|cache:|cache-mode|secrets\./);
 });
 
-test("an unticked box is flagged once with labels and the approved comment", async () => {
+test("a missing AI choice is flagged once with labels and the approved comment", async () => {
   const result = await run("pull_request_target");
 
   assert.deepEqual(result.added, [MISSING_LABEL, WAITING_LABEL]);
@@ -313,9 +313,9 @@ test("an unticked box is flagged once with labels and the approved comment", asy
   assert.deepEqual(result.warnings, []);
   assert.deepEqual(result.comments, [[
     FLAG_MARKER,
-    `Thanks for the pull request, @octocat! Please tick \`${UNDERSTOOD}\` in the description. Until then it has the \`${WAITING_LABEL}\` label and won't be reviewed.`,
+    `Thanks for the pull request, @octocat! Please tick one AI assistance choice in the description: \`${NO_AI_ASSISTANCE}\` or \`${AI_ASSISTED}\`. Until then it has the \`${WAITING_LABEL}\` label and won't be reviewed.`,
     "",
-    `If it's still unticked on ${CLOSE_DATE}, it closes automatically. Ticking the box later reopens it.`,
+    `If it's still incomplete on ${CLOSE_DATE}, it closes automatically. Fixing the description later reopens it.`,
   ].join("\n")]);
 });
 
@@ -325,17 +325,17 @@ test("the close date is the date of the first daily run at or after 14 days, at 
   const sweep = Date.UTC(2026, 10, 13, hour, minute);
   const flaggedAt = (offsetMinutes: number): string => new Date(sweep - 14 * 24 * 60 * 60 * 1000 + offsetMinutes * 60 * 1000).toISOString();
   for (const [offsetMinutes, date] of [[-1, "2026-11-13"], [0, "2026-11-13"], [1, "2026-11-14"]] as const) {
-    const result = await run("pull_request_target", {pullRequest: pullRequest(UNTICKED_BODY, {updated_at: flaggedAt(offsetMinutes)})});
+    const result = await run("pull_request_target", {pullRequest: pullRequest(INCOMPLETE_BODY, {updated_at: flaggedAt(offsetMinutes)})});
     assert.match(
       result.comments[0] ?? "",
-      new RegExp(`still unticked on ${date} UTC, it closes`),
+      new RegExp(`still incomplete on ${date} UTC, it closes`),
       `14 days end ${offsetMinutes} minute(s) from the ${cron} run on 2026-11-13, so the run that closes it is on ${date}`,
     );
   }
 });
 
 test("the close warning is its own paragraph in every flag comment", async () => {
-  for (const [name, body] of [["unticked", UNTICKED_BODY], ["neither choice", tick(TEMPLATE, UNDERSTOOD)]] as const) {
+  for (const [name, body] of [["missing AI choice", INCOMPLETE_BODY], ["both AI choices", tick(VALID_BODY, AI_ASSISTED)]] as const) {
     const result = await run("pull_request_target", {pullRequest: pullRequest(body)});
     const paragraphs = (result.comments[0] ?? "").split("\n").slice(1).join("\n").split("\n\n");
     assert.equal(paragraphs.length, 2, name);
@@ -351,7 +351,6 @@ test("the missing label is created when the repository does not have it yet", as
 });
 
 const PROBLEMS: readonly (readonly [string, string, string, RegExp, RegExp])[] = [
-  ["unticked box", "boxUnticked", UNTICKED_BODY, /Please tick `I confirm I understand what the code does` in the description\./, /^Closing: `I confirm I understand what the code does` has been unticked for 14 days\. Ticking it reopens this pull request automatically\. /],
   ["neither choice", "neitherChoice", tick(TEMPLATE, UNDERSTOOD), /Please tick one AI assistance choice in the description/, /^Closing: neither AI assistance choice has been ticked for 14 days\. Ticking one reopens this pull request automatically\. /],
   ["both choices", "bothChoices", tick(VALID_BODY, AI_ASSISTED), /Please tick only one of the two AI assistance choices/, /^Closing: both AI assistance choices have been ticked for 14 days\. Ticking only one reopens this pull request automatically\. /],
   ["AI section missing", "aiSectionMissing", VALID_BODY.split("## AI Assistance (if used)")[0] ?? "", /Please add the `## AI Assistance \(if used\)` section/, /^Closing: the AI Assistance section has been missing from the description for 14 days\. Adding it back reopens this pull request automatically\. /],
@@ -390,7 +389,7 @@ test("a later edit that is still incomplete keeps the flag time and flagged prob
   const result = await run("pull_request_target", {
     existingComments: [flagComment(`${FLAG_MARKER}\nold text`)],
     existingLabels: [MISSING_LABEL, WAITING_LABEL],
-    pullRequest: pullRequest(drop(UNTICKED_BODY, "## Review Checklist\n"), {updated_at: "2026-11-02T08:00:00Z"}),
+    pullRequest: pullRequest(drop(VALID_BODY, "## Review Checklist\n"), {updated_at: "2026-11-02T08:00:00Z"}),
   });
 
   assert.deepEqual(result.comments, []);
@@ -495,12 +494,12 @@ test("a pull request that becomes incomplete again gets a new flag time, even af
   const result = await run("pull_request_target", {
     existingComments: [flagComment(`${RESOLVED_MARKER}\nThanks`)],
     issueEvents: [unlabeled(MAINTAINER)],
-    pullRequest: pullRequest(UNTICKED_BODY, {updated_at: "2026-12-01T09:30:00Z"}),
+    pullRequest: pullRequest(INCOMPLETE_BODY, {updated_at: "2026-12-01T09:30:00Z"}),
   });
 
   assert.deepEqual(result.added, [MISSING_LABEL, WAITING_LABEL]);
   assert.ok(result.updatedComments[0]?.body.includes("flagged-at=2026-12-01T09:30:00Z"), result.updatedComments[0]?.body ?? "no update");
-  assert.match(result.updatedComments[0]?.body ?? "", /still unticked on 2026-12-15 UTC, it closes/);
+  assert.match(result.updatedComments[0]?.body ?? "", /still incomplete on 2026-12-15 UTC, it closes/);
 });
 
 test("a flagged pull request whose missing-confirmation label a maintainer removed is left alone on the next edit", async () => {
@@ -520,7 +519,7 @@ test("the daily run does not close a pull request whose missing-confirmation lab
     existingLabels: [WAITING_LABEL],
     issueEvents: [unlabeled(MAINTAINER)],
     now: "2026-12-01T00:00:00Z",
-    openPullRequests: [pullRequest(UNTICKED_BODY, {labels: [{name: MISSING_LABEL}]})],
+    openPullRequests: [pullRequest(INCOMPLETE_BODY, {labels: [{name: MISSING_LABEL}]})],
   });
 
   assert.deepEqual(result, {...NOTHING, listed: ["open", "closed"]});
@@ -556,7 +555,7 @@ test("an author's own copy of the marker is ignored", async () => {
 
 test("a fork branch named like Release Please is checked like any other", async () => {
   const result = await run("pull_request_target", {
-    pullRequest: pullRequest(UNTICKED_BODY, {head: {ref: "release-please--branches--main"}}),
+    pullRequest: pullRequest(INCOMPLETE_BODY, {head: {ref: "release-please--branches--main"}}),
   });
 
   assert.deepEqual(result.added, [MISSING_LABEL, WAITING_LABEL]);
@@ -564,22 +563,22 @@ test("a fork branch named like Release Please is checked like any other", async 
 
 test("bots and martinfrancois are skipped", async () => {
   for (const user of [{login: "renovate[bot]"}, {login: "github-actions[bot]"}, {login: "martinfrancois"}]) {
-    const result = await run("pull_request_target", {pullRequest: pullRequest(UNTICKED_BODY, {user})});
+    const result = await run("pull_request_target", {pullRequest: pullRequest(INCOMPLETE_BODY, {user})});
     assert.deepEqual(result, NOTHING, user.login);
   }
 });
 
-test("the daily run closes a pull request flagged 14 days ago that is still unticked with the approved comment", async () => {
+test("the daily run closes a pull request flagged 14 days ago that is still incomplete with the approved comment", async () => {
   const result = await run("schedule", {
     existingComments: [flagComment(`${FLAG_MARKER}\nold text`)],
     now: DUE,
-    openPullRequests: [pullRequest(UNTICKED_BODY, {labels: [{name: MISSING_LABEL}, {name: WAITING_LABEL}]})],
+    openPullRequests: [pullRequest(INCOMPLETE_BODY, {labels: [{name: MISSING_LABEL}, {name: WAITING_LABEL}]})],
   });
 
   assert.deepEqual(result.closed, [42]);
   assert.deepEqual(result.comments, [[
     CLOSED_MARKER,
-    `Closing: \`${UNDERSTOOD}\` has been unticked for 14 days. Ticking it reopens this pull request automatically. ${FORCE_PUSH_WARNING}`,
+    `Closing: neither AI assistance choice has been ticked for 14 days. Ticking one reopens this pull request automatically. ${FORCE_PUSH_WARNING}`,
   ].join("\n")]);
   assert.deepEqual(result.updatedComments, []);
 });
@@ -588,7 +587,7 @@ test("a close whose problem changed since the flag says the description was inco
   const result = await run("schedule", {
     existingComments: [flagComment(`${FLAG_MARKER}\nold text`)],
     now: DUE,
-    openPullRequests: [pullRequest(drop(UNTICKED_BODY, "## Review Checklist\n"), {labels: [{name: MISSING_LABEL}]})],
+    openPullRequests: [pullRequest(drop(VALID_BODY, "## Review Checklist\n"), {labels: [{name: MISSING_LABEL}]})],
   });
 
   assert.deepEqual(result.closed, [42]);
@@ -603,7 +602,7 @@ test("the daily run leaves a pull request alone before the first run at or after
     existingComments: [flagComment(`${FLAG_MARKER}\nold text`)],
     existingLabels: [MISSING_LABEL, WAITING_LABEL],
     now: "2026-11-13T13:16:00Z",
-    openPullRequests: [pullRequest(UNTICKED_BODY, {labels: [{name: MISSING_LABEL}, {name: WAITING_LABEL}]})],
+    openPullRequests: [pullRequest(INCOMPLETE_BODY, {labels: [{name: MISSING_LABEL}, {name: WAITING_LABEL}]})],
   });
 
   assert.deepEqual(result.closed, []);
@@ -612,18 +611,18 @@ test("the daily run leaves a pull request alone before the first run at or after
 
 test("a late daily run on the day the 14 days end does not close before the date in the comment", async () => {
   const lateRun = await run("schedule", {
-    existingComments: [flagComment(`${flagMarker("boxUnticked", "2026-10-30T13:30:00Z")}\nold text`)],
+    existingComments: [flagComment(`${flagMarker("neitherChoice", "2026-10-30T13:30:00Z")}\nold text`)],
     existingLabels: [MISSING_LABEL, WAITING_LABEL],
     now: "2026-11-13T13:45:00Z",
-    openPullRequests: [pullRequest(UNTICKED_BODY, {labels: [{name: MISSING_LABEL}]})],
+    openPullRequests: [pullRequest(INCOMPLETE_BODY, {labels: [{name: MISSING_LABEL}]})],
   });
   assert.deepEqual(lateRun.closed, [], "the comment promised 2026-11-14 UTC");
 
   const nextRun = await run("schedule", {
-    existingComments: [flagComment(`${flagMarker("boxUnticked", "2026-10-30T13:30:00Z")}\nold text`)],
+    existingComments: [flagComment(`${flagMarker("neitherChoice", "2026-10-30T13:30:00Z")}\nold text`)],
     existingLabels: [MISSING_LABEL, WAITING_LABEL],
     now: "2026-11-14T13:17:00Z",
-    openPullRequests: [pullRequest(UNTICKED_BODY, {labels: [{name: MISSING_LABEL}]})],
+    openPullRequests: [pullRequest(INCOMPLETE_BODY, {labels: [{name: MISSING_LABEL}]})],
   });
   assert.deepEqual(nextRun.closed, [42]);
 });
@@ -632,7 +631,7 @@ test("the daily run counts from the flag time, not from later activity", async (
   const result = await run("schedule", {
     existingComments: [flagComment(`${FLAG_MARKER}\nold text`)],
     now: "2026-11-20T00:00:00Z",
-    openPullRequests: [pullRequest(UNTICKED_BODY, {labels: [{name: MISSING_LABEL}], updated_at: "2026-11-19T00:00:00Z"})],
+    openPullRequests: [pullRequest(INCOMPLETE_BODY, {labels: [{name: MISSING_LABEL}], updated_at: "2026-11-19T00:00:00Z"})],
   });
 
   assert.deepEqual(result.closed, [42]);
@@ -643,7 +642,7 @@ test("the daily run re-reads the pull request before closing and resolves a fix 
     existingComments: [flagComment(`${FLAG_MARKER}\nold text`)],
     existingLabels: [MISSING_LABEL, WAITING_LABEL],
     now: "2026-12-01T00:00:00Z",
-    openPullRequests: [pullRequest(UNTICKED_BODY, {labels: [{name: MISSING_LABEL}]})],
+    openPullRequests: [pullRequest(INCOMPLETE_BODY, {labels: [{name: MISSING_LABEL}]})],
     pullRequest: pullRequest(VALID_BODY),
   });
 
@@ -655,7 +654,7 @@ test("a close that failed after its comment is retried without a second comment"
   const result = await run("schedule", {
     existingComments: [flagComment(`${FLAG_MARKER}\nold text`), closedComment()],
     now: "2026-12-01T00:00:00Z",
-    openPullRequests: [pullRequest(UNTICKED_BODY, {labels: [{name: MISSING_LABEL}]})],
+    openPullRequests: [pullRequest(INCOMPLETE_BODY, {labels: [{name: MISSING_LABEL}]})],
   });
 
   assert.deepEqual(result.closed, [42]);
@@ -667,8 +666,8 @@ test("the daily run touches only pull requests that carry the label", async () =
     existingComments: [flagComment(`${FLAG_MARKER}\nold text`)],
     now: "2026-12-01T00:00:00Z",
     openPullRequests: [
-      pullRequest(UNTICKED_BODY, {labels: [{name: WAITING_LABEL}]}),
-      pullRequest(UNTICKED_BODY, {labels: [{name: MISSING_LABEL}], number: 43, user: {login: "martinfrancois"}}),
+      pullRequest(INCOMPLETE_BODY, {labels: [{name: WAITING_LABEL}]}),
+      pullRequest(INCOMPLETE_BODY, {labels: [{name: MISSING_LABEL}], number: 43, user: {login: "martinfrancois"}}),
     ],
   });
 
@@ -679,7 +678,7 @@ test("a flagged pull request whose comment was deleted is flagged again instead 
   const result = await run("schedule", {
     existingLabels: [MISSING_LABEL, WAITING_LABEL],
     now: "2026-12-01T00:00:00Z",
-    openPullRequests: [pullRequest(UNTICKED_BODY, {labels: [{name: MISSING_LABEL}, {name: WAITING_LABEL}]})],
+    openPullRequests: [pullRequest(INCOMPLETE_BODY, {labels: [{name: MISSING_LABEL}, {name: WAITING_LABEL}]})],
   });
 
   assert.deepEqual(result.closed, []);
@@ -704,7 +703,7 @@ test("a closed pull request that is still incomplete is left closed", async () =
   const result = await run("pull_request_target", {
     action: "edited",
     existingComments: [flagComment(`${FLAG_MARKER}\nold text`), closedComment()],
-    pullRequest: pullRequest(UNTICKED_BODY, {state: "closed"}),
+    pullRequest: pullRequest(INCOMPLETE_BODY, {state: "closed"}),
   });
 
   assert.deepEqual(result, NOTHING);
@@ -724,7 +723,7 @@ test("a pull request a person closed after this automation reopened it is not re
 test("a pull request closed during a later flag cycle is not reopened on an earlier cycle's closed marker", async () => {
   const result = await run("pull_request_target", {
     action: "edited",
-    existingComments: [flagComment(`${flagMarker("boxUnticked", "2026-12-01T09:30:00Z")}\nold text`), closedComment()],
+    existingComments: [flagComment(`${flagMarker("neitherChoice", "2026-12-01T09:30:00Z")}\nold text`), closedComment()],
     issueEvents: [CLOSED_BY_BOT, REOPENED_BY_BOT, CLOSED_BY_BOT],
     pullRequest: pullRequest(VALID_BODY, {state: "closed"}),
   });
@@ -783,7 +782,7 @@ test("the daily run skips a pull request whose reopen GitHub refused", async () 
     existingComments: [flagComment(`${FLAG_MARKER}\nold text`), closedComment(), reopenFailed],
     existingLabels: [MISSING_LABEL, WAITING_LABEL],
     now: "2026-12-01T00:00:00Z",
-    openPullRequests: [pullRequest(UNTICKED_BODY, {labels: [{name: MISSING_LABEL}]})],
+    openPullRequests: [pullRequest(INCOMPLETE_BODY, {labels: [{name: MISSING_LABEL}]})],
   });
 
   assert.deepEqual(result, {...NOTHING, listed: ["open", "closed"]});
@@ -806,7 +805,7 @@ test("the daily run leaves an unfixed closed pull request, a maintainer-closed o
     existingComments: [flagComment(`${FLAG_MARKER}\nold text`), closedComment()],
     now: "2026-12-01T00:00:00Z",
     closedPullRequests: [
-      pullRequest(UNTICKED_BODY, {labels: [{name: MISSING_LABEL}], state: "closed", updated_at: "2026-11-25T00:00:00Z"}),
+      pullRequest(INCOMPLETE_BODY, {labels: [{name: MISSING_LABEL}], state: "closed", updated_at: "2026-11-25T00:00:00Z"}),
       pullRequest(VALID_BODY, {labels: [], number: 43, state: "closed", updated_at: "2026-11-24T00:00:00Z"}),
       pullRequest(VALID_BODY, {labels: [{name: MISSING_LABEL}], merged_at: "2026-11-23T00:00:00Z", number: 44, state: "closed", updated_at: "2026-11-23T00:00:00Z"}),
       pullRequest(VALID_BODY, {labels: [{name: MISSING_LABEL}], number: 45, state: "closed", updated_at: "2026-08-01T00:00:00Z"}),
@@ -875,7 +874,7 @@ test("a failed close warns and leaves the pull request open", async () => {
   const result = await run("schedule", {
     existingComments: [flagComment(`${FLAG_MARKER}\nold text`)],
     now: "2026-12-01T00:00:00Z",
-    openPullRequests: [pullRequest(UNTICKED_BODY, {labels: [{name: MISSING_LABEL}]})],
+    openPullRequests: [pullRequest(INCOMPLETE_BODY, {labels: [{name: MISSING_LABEL}]})],
     updateFailure: new Error("close down"),
   });
   assert.deepEqual(result.closed, []);
@@ -932,9 +931,45 @@ test("no contributor-facing text contains an em dash", async () => {
   const closed = await run("schedule", {
     existingComments: [flagComment(`${FLAG_MARKER}\nold text`)],
     now: DUE,
-    openPullRequests: [pullRequest(UNTICKED_BODY, {labels: [{name: MISSING_LABEL}]})],
+    openPullRequests: [pullRequest(INCOMPLETE_BODY, {labels: [{name: MISSING_LABEL}]})],
   });
   for (const text of [...flagged.comments, ...resolved.updatedComments.map(({body}) => body), ...closed.comments]) {
     assert.doesNotMatch(text, /—|–/);
+  }
+});
+
+
+test("an unchecked author declaration neither flags nor closes a complete PR", async () => {
+  const body = tick(TEMPLATE, NO_AI_ASSISTANCE);
+  assert.deepEqual(await run("pull_request_target", {pullRequest: pullRequest(body)}), NOTHING);
+  const result = await run("schedule", {
+    now: DUE,
+    openPullRequests: [pullRequest(body)],
+  });
+  assert.deepEqual(result.added, []);
+  assert.deepEqual(result.closed, []);
+});
+
+test("old tick-only flags clear without changing the author's declaration", async () => {
+  const result = await run("pull_request_target", {
+    existingComments: [flagComment(`${flagMarker("boxUnticked")}\nold text`)],
+    existingLabels: [MISSING_LABEL, WAITING_LABEL],
+    pullRequest: pullRequest(tick(TEMPLATE, NO_AI_ASSISTANCE)),
+  });
+  assert.deepEqual(result.removed, [MISSING_LABEL, WAITING_LABEL]);
+  assert.match(result.updatedComments[0]?.body ?? "", /the description is complete now/);
+  assert.deepEqual(result.closed, []);
+});
+
+test("tick-only closures reopen only when the automation owns the last closure", async () => {
+  for (const [event, expected] of [[CLOSED_BY_BOT, [42]], [CLOSED_BY_MAINTAINER, []]] as const) {
+    const result = await run("pull_request_target", {
+      action: "edited",
+      existingComments: [flagComment(`${flagMarker("boxUnticked")}\nold text`), closedComment()],
+      existingLabels: [MISSING_LABEL, WAITING_LABEL],
+      issueEvents: [event],
+      pullRequest: pullRequest(tick(TEMPLATE, NO_AI_ASSISTANCE), {state: "closed"}),
+    });
+    assert.deepEqual(result.reopened, expected);
   }
 });
