@@ -69,8 +69,10 @@ from the credential that publishes a branch.
 Chosen option: "Keep the Renovate source branch untouched and publish generated changes through a
 derived pull request with a short-lived GitHub App token".
 
-Renovate groups OpenRewrite engine, plugin, catalog, Error Prone Core, and selected Picnic recipe
-updates under the `OpenRewrite toolchain` group. Error Prone Core remains in the same group as the
+Renovate groups OpenRewrite engine, plugin, catalog, Error Prone Core and annotations, and selected Picnic recipe
+updates under the `OpenRewrite toolchain` group. Both Error Prone artifacts share
+`error-prone.version`; grouping only Core creates two branches for the same POM edit and leaves the
+annotations branch outside coordinated validation. Core and annotations remain in the same group as the
 Picnic annotation processor and Refaster runner because Picnic's serialized Refaster templates
 require the Error Prone version used to produce them. Renovate creates the pull request without
 dependency-dashboard approval, keeps it rebased on `main`, and enables Renovate-controlled
