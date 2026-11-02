@@ -696,6 +696,83 @@ test("a fork branch cannot impersonate a generated pull request", async () => {
   assert.ok(result.statuses.every(({state}) => state === "success"));
 });
 
+const SOURCE_SCRIPT = loadWorkflowScript(OPENREWRITE_WORKFLOW_FILE, "Validate source pull request metadata");
+const WORKFLOW_SHA = "2222222222222222222222222222222222222222";
+
+/** Exercise the real source validator without fetching or executing pull request files. */
+async function validateSource(
+  eventName: string,
+  overrides: Partial<PullRequest> & {readonly base?: PullRequest["base"] & {readonly sha?: string}} = {},
+) {
+  const candidate = {...CANDIDATE, base: {...CANDIDATE.base, sha: WORKFLOW_SHA}, ...overrides};
+  const failures: string[] = [];
+  const outputs = new Map<string, string>();
+  const fetched: string[] = [];
+  const listFiles = Symbol("files");
+  const listCommits = Symbol("commits");
+  await withEnvironment({SOURCE_PULL_REQUEST: "42"}, () => SOURCE_SCRIPT({
+    context: {repo: {owner: "owner", repo: "repo"}, sha: WORKFLOW_SHA, eventName},
+    core: {
+      setFailed: (message: string) => failures.push(message),
+      setOutput: (name: string, value: string) => outputs.set(name, value),
+    },
+    github: {
+      rest: {pulls: {get: async () => ({data: candidate}), listFiles, listCommits}},
+      paginate: async (method: symbol) => {
+        fetched.push(method === listFiles ? "files" : "commits");
+        return method === listFiles ? [{filename: "pom.xml"}] : [{
+          author: {login: "renovate[bot]"}, sha: candidate.head.sha,
+          parents: [{sha: candidate.base.sha}],
+        }];
+      },
+    },
+  }));
+  return {failures, outputs, fetched};
+}
+
+for (const eventName of ["pull_request_target", "schedule", "workflow_dispatch"]) {
+  test(`${eventName} accepts a source based on the workflow commit`, async () => {
+    const result = await validateSource(eventName);
+    assert.deepEqual(result.failures, []);
+    assert.equal(result.outputs.get("state"), "open");
+    assert.deepEqual(result.fetched.sort(), ["commits", "files"]);
+  });
+
+  test(`${eventName} rejects a stale base before publishing executable source state`, async () => {
+    const result = await validateSource(eventName, {
+      base: {...CANDIDATE.base, sha: "3333333333333333333333333333333333333333"},
+    });
+    assert.equal(result.failures.length, 1);
+    assert.match(result.failures[0] ?? "", /rebase.*rerun/i);
+    assert.equal(result.outputs.get("state"), undefined);
+    assert.deepEqual(result.fetched, []);
+  });
+}
+
+test("source validation rejects forks and skips retargeted pull requests", async () => {
+  const fork = await validateSource("schedule", {
+    head: {...CANDIDATE.head, repo: {full_name: "outsider/repo"}},
+  });
+  assert.equal(fork.failures.length, 1);
+  assert.equal(fork.outputs.get("state"), undefined);
+  assert.deepEqual(fork.fetched, []);
+  const retargeted = await validateSource("workflow_dispatch", {
+    base: {...CANDIDATE.base, ref: "other", sha: WORKFLOW_SHA},
+  });
+  assert.deepEqual(retargeted.failures, []);
+  assert.equal(retargeted.outputs.get("state"), "ineligible");
+  assert.deepEqual(retargeted.fetched, []);
+});
+
+test("both execution checkouts use the immutable workflow commit", () => {
+  const document = parse(WORKFLOW) as WorkflowDocument;
+  const checkouts = document.jobs?.["generate"]?.steps?.filter(
+    (step) => step.with?.["path"] === "trusted" || step.with?.["path"] === "source",
+  );
+  assert.equal(checkouts?.length, 2);
+  assert.deepEqual(checkouts?.map((step) => step.with?.["ref"]), ["${{ github.sha }}", "${{ github.sha }}"]);
+});
+
 test("write credentials are isolated from recipe execution", () => {
   const invalidationStart = WORKFLOW.indexOf("\n  invalidate-derived-source:");
   const verificationStart = WORKFLOW.indexOf("\n  verify-derived-source:");

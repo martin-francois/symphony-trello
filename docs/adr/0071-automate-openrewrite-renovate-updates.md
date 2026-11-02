@@ -91,11 +91,14 @@ source:
 2. It accepts only a same-repository pull request authored by `renovate[bot]` on the explicit
    `renovate/openrewrite-toolchain` branch, based on `main`, labelled `openrewrite`, and containing
    one Renovate-authored commit directly on the current base that changes only `pom.xml`.
+   The base must equal the immutable `github.sha` that supplied the workflow. A mismatch fails
+   before exporting executable source state or fetching source files. Rebase the source and start
+   a fresh run from `main`; rerunning an old workflow commit does not advance its baseline.
 3. Trusted code from the base branch proves that the POM diff changes one or more exact
    OpenRewrite toolchain version properties and nothing else. The allowlist includes the Error
    Prone Core property and the compiler-side Picnic property that Renovate extracts from the
    annotation-processor and Refaster runner declarations without a Maven dependency type.
-4. A read-only job checks out only the trusted base, materializes the exact validated Renovate
+4. A read-only job checks out `github.sha` for both trusted and execution sources, materializes the exact validated Renovate
    `pom.xml`, and establishes that tree as a local baseline. It discovers recipes, applies
    OpenRewrite, applies Spotless, repeats the ordered pipeline, compares the two patches, and runs
    the full Maven gate without checking out source-branch code. Maven executes inside a pinned,
@@ -157,6 +160,12 @@ Workflow behavior tests parse the workflow with the directly declared `yaml` dev
 and select `actions/github-script` content through the exact step name and `with.script` structure.
 They do not infer YAML structure from source indentation. This dependency runs only in repository
 test tooling; it is not part of the application or GitHub Actions runtime.
+
+The checkout refs use the workflow commit directly instead of passing an API-provided base SHA
+through step outputs. Both identify the same baseline after validation, but the direct expression
+also exposes that trust boundary to CodeQL. Checking out current `main` by branch name was rejected
+because it advances between steps. Keeping the metadata-derived checkout was rejected because it
+leaves the cache-poisoning analyzer unable to establish the trusted execution source.
 
 ### Consequences
 

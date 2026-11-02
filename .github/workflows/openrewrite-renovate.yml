@@ -215,7 +215,7 @@ jobs:
         with:
           path: trusted
           persist-credentials: false
-          ref: ${{ steps.source.outputs.base_sha }}
+          ref: ${{ github.sha }}
 
       - name: Checkout trusted execution source
         if: ${{ steps.source.outputs.state == 'open' }}
@@ -223,7 +223,7 @@ jobs:
         with:
           path: source
           persist-credentials: false
-          ref: ${{ steps.source.outputs.base_sha }}
+          ref: ${{ github.sha }}
 
       - name: Materialize the exact Renovate POM
         if: ${{ steps.source.outputs.state == 'open' }}
