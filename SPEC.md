@@ -2873,6 +2873,11 @@ RECOMMENDED error categories:
 - `trello_card_not_found`
 - `trello_board_closed`
 
+When an object or list response is expected, JSON `null` bodies and null elements in response lists
+MUST produce `trello_unknown_payload` at the response boundary. A null element fails the whole list response.
+Per-card lookups report this error for the affected card and preserve successful results for other
+cards; candidate and terminal fetches fail as a whole for these invalid list responses.
+
 Orchestrator behavior on tracker errors:
 
 - Candidate fetch failure: log and skip dispatch for this tick.
@@ -4155,6 +4160,10 @@ that a second formatting pass leaves the source unchanged.
 
 ### 17.3 Trello Tracker Client
 
+- JSON `null` bodies where an object or list is expected, and null response-list elements, produce
+  `trello_unknown_payload`
+- A null list element fails the whole response, while a null per-card response preserves other
+  successful lookup results
 - Candidate card fetch uses active states/list names and board ID
 - Candidate card fetch treats `active_list_ids` as authoritative for list-backed open cards when
   configured
