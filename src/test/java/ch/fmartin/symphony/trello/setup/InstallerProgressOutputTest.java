@@ -14,10 +14,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.parallel.ResourceLock;
 
 /// Transcript-order contract for installer progress output: one plan, numbered phases, one result line per milestone,
 /// and a named failed phase. ADR 0122 records the contract; SPEC.md Section 19.4 states it.
+@ExtendWith(WindowsUserPathGuard.class)
+@ResourceLock("windows-user-path")
 final class InstallerProgressOutputTest {
     private static final String RELEASE_VERSION = "9.9.9";
     private static final String HANDOFF = "You're good to go - your Trello board is now a queue for Codex work.";

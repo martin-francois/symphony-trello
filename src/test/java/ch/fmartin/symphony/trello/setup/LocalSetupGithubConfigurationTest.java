@@ -11,6 +11,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
     @Test
@@ -141,11 +143,13 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
         assertThat(commands.startedWorkflows).containsExactly(firstWorkflow.toString());
     }
 
-    @Test
-    void configureGithubWithNoStartDoesNotStopAlreadyRunningBoard() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void configureGithubWithNoStartPreservesWorkerStateAndRestartHint(boolean running) throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.local-no-start.md");
         Path env = tempDir.resolve(".env");
+        Path stateHome = tempDir.resolve("custom state");
         SetupRunResult firstResult = runSetup(
                 "--non-interactive",
                 "--endpoint",
@@ -167,13 +171,29 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
         commands.stoppedWorkflows.clear();
         trello.createdLists().clear();
 
+        if (!running) {
+            commands.stopHealthServer(workflow.toString());
+        }
+
         // when
-        SetupRunResult result =
-                runSetup("--non-interactive", "--endpoint", endpoint(), "configure-github", "--no-start");
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "configure-github",
+                "--no-start",
+                "--state-home",
+                stateHome.toString());
 
         // then
         firstResult.assertSuccess();
-        result.assertSuccess().stdoutContains("Restart skipped.");
+        result.assertSuccess()
+                .stdoutContains(
+                        running ? "Restart skipped." : "Restart:",
+                        "start --env '" + env + "' --workflow '" + workflow + "' --state-home '" + stateHome + "'");
+        if (running) {
+            result.stdoutContains("stop --workflow '" + workflow + "' --state-home '" + stateHome + "'");
+        }
         assertThatWorkflow(workflow).hasGithubFlow().hasMerging();
         assertThat(commands.stoppedWorkflows).isEmpty();
         assertThat(commands.startedWorkflows).isEmpty();

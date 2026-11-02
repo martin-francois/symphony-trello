@@ -14,20 +14,25 @@ import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.PseudoTerminalRes
 import ch.fmartin.symphony.trello.telemetry.TelemetryEnvironment;
 import ch.fmartin.symphony.trello.telemetry.TelemetryNotice;
 import ch.fmartin.symphony.trello.testsupport.JavaLauncherEnvironment;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableList;
 import com.google.errorprone.annotations.Immutable;
 import com.sun.net.httpserver.HttpServer;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -35,7 +40,9 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -43,6 +50,8 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+@ExtendWith(WindowsUserPathGuard.class)
+@ResourceLock("windows-user-path")
 final class InstallerScriptTest {
     private static final String NATIVE_WINDOWS = "native-windows";
     private static final String INSTALL_CONTEXT_PROPERTIES = "install-context.properties";
@@ -108,12 +117,12 @@ final class InstallerScriptTest {
                 .containsSubsequence(
                         "setup-deferred",
                         "autostart-registered",
-                        "autostart-started",
+                        "workers-started",
                         "handoff-complete",
                         "tutorial-waiting");
         assertThat(result.transcript())
                 .content(StandardCharsets.UTF_8)
-                .contains("Windows Scheduled Task started managed workers.", "tutorial --offer")
+                .contains("Managed workers started", "tutorial --offer")
                 .doesNotContain("Installer stopped during");
         assertThat(result.bin().resolve("symphony-trello.ps1")).isRegularFile();
         assertThat(result.bin().resolve("symphony-trello-autostart.ps1")).isRegularFile();
@@ -6216,7 +6225,7 @@ final class InstallerScriptTest {
                         "WOULD write autostart environment snapshot:",
                         "WOULD write Windows autostart launcher:",
                         "WOULD create Windows Scheduled Task:",
-                        "WOULD start managed workers through Windows Scheduled Task")
+                        "symphony-trello.ps1 start --all")
                 .doesNotContain("You're good to go");
     }
 
@@ -7853,7 +7862,6 @@ final class InstallerScriptTest {
                         "Scheduled Task",
                         "Register-ScheduledTask",
                         "New-ScheduledTaskAction",
-                        "Start-ScheduledTask",
                         "Protect-PrivateFile",
                         "SetAccessRuleProtection($true, $false)",
                         "symphony-trello-autostart.ps1",
@@ -7867,8 +7875,7 @@ final class InstallerScriptTest {
                         "Start-ManagedWorkersWithoutInstallerCompletion",
                         "Set-InstallerCompletionMode \"print\"",
                         "Restore-InstallerCompletionEnvironment",
-                        "Scheduled Task was installed but could not be started immediately",
-                        "if (Install-StartupFolderCommand) {",
+                        "return Install-StartupFolderCommand",
                         "Microsoft\\Windows\\Start Menu\\Programs\\Startup",
                         "Invoke-Step \"$BinDir\\symphony-trello.ps1 setup-local\"",
                         "Invoke-Step \"$BinDir\\symphony-trello.ps1 start --all\"",
@@ -7901,7 +7908,6 @@ final class InstallerScriptTest {
                         "Get-DefaultEnv",
                         "Stop-AndWaitManagedProcess",
                         "Start-Process -FilePath \"java\"",
-                        "-Dsymphony.trello.managed.app_home",
                         "Test-ManagedPid");
         assertThat(posixUninstaller)
                 .contains(
@@ -9929,6 +9935,514 @@ final class InstallerScriptTest {
             unrelated.destroyForcibly();
         }
     }
+
+    @CsvSource({"false,false", "false,true", "true,false", "true,true"})
+    @ParameterizedTest
+    void posixLegacyMigrationPreservesForeignFiles(boolean installedCommandPresent, boolean symlinkedState)
+            throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("sleep"));
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve("migration-app");
+        Path configDir = temporaryDirectory.resolve("shared-config/symphony-trello");
+        Path bin = temporaryDirectory.resolve("migration-bin");
+        Path installScript = Path.of("install.sh").toAbsolutePath();
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin + System.getProperty("path.separator") + System.getenv("PATH"),
+                "SYMPHONY_TRELLO_REPO_URL", sourceRepository.toUri().toString(),
+                "SYMPHONY_HOME", symphonyHome.toString(),
+                "SYMPHONY_TRELLO_CONFIG_DIR", configDir.toString(),
+                "SYMPHONY_FAKE_LOG",
+                        temporaryDirectory.resolve("migration-tools.log").toString());
+        ProcessResult install =
+                run(environment, "bash", installScript.toString(), "--no-onboard", "--bin-dir", bin.toString());
+        assertThat(install.exitCode()).as(install.output()).isZero();
+        Path command = bin.resolve("symphony-trello");
+        if (installedCommandPresent) {
+            // Emulate the old no-manifest stop command, which removes every PID file in its state root.
+            writeExecutable(
+                    command,
+                    """
+                    #!/usr/bin/env bash
+                    if [[ "${1:-}" == "--version" ]]; then
+                      echo 'symphony-trello %s'
+                      exit 0
+                    fi
+                    if [[ "${1:-}" == "stop" ]]; then
+                      while [[ $# -gt 0 ]]; do
+                        if [[ "$1" == "--state-home" ]]; then
+                          shift
+                          find "$1" -maxdepth 1 -type f -name '*.pid' -delete
+                        fi
+                        shift
+                      done
+                    fi
+                    """
+                            .formatted(FAKE_APP_VERSION));
+        } else {
+            Files.delete(command);
+        }
+        Process unrelated = new ProcessBuilder("sleep", "60").start();
+        try {
+            String foreignPidContent = unrelated.pid() + "\n";
+            LegacyMigrationFiles legacy = legacyMigrationFiles(configDir, foreignPidContent);
+            Path unrelatedManagedName =
+                    configDir.resolveSibling("state").resolve("WORKFLOW.foreign.md.abcdef123456.pid");
+            Files.writeString(unrelatedManagedName, foreignPidContent);
+            if (symlinkedState) {
+                Path stateDirectory = configDir.resolveSibling("state");
+                Path movedState = temporaryDirectory.resolve("linked-legacy-state");
+                Files.move(stateDirectory, movedState);
+                Files.createSymbolicLink(stateDirectory, movedState);
+            }
+
+            // when
+            ProcessResult update =
+                    run(environment, "bash", installScript.toString(), "--no-onboard", "--bin-dir", bin.toString());
+
+            // then
+            assertThat(update.exitCode()).as(update.output()).isZero();
+            assertThat(legacy.managedPid()).doesNotExist();
+            assertThat(legacy.foreignPid()).content().isEqualTo(foreignPidContent);
+            assertThat(legacy.foreignLog()).content().isEqualTo("unrelated log\n");
+            assertThat(unrelatedManagedName).content().isEqualTo(foreignPidContent);
+            assertThat(unrelated.isAlive())
+                    .as("migration must preserve unrelated running processes")
+                    .isTrue();
+        } finally {
+            unrelated.destroyForcibly();
+        }
+    }
+
+    @Test
+    void posixLegacyMigrationRefusesAnotherConfigurationsLiveWorkerBeforeStopping() throws Exception {
+        // given
+        List<Process> workers = new ArrayList<>();
+        try {
+            SharedLegacyState state = sharedLegacyState(OtherWorker.LIVE, workers);
+
+            // when
+            ProcessResult update = runUpdate(state);
+
+            // then
+            assertThat(update.exitCode()).as(update.output()).isNotZero();
+            assertThat(update.output())
+                    .contains("cannot migrate managed worker state", "outside the selected configuration");
+            assertThat(state.bin().resolve("symphony-trello.stop"))
+                    .as("the refusal must come before any worker is stopped")
+                    .doesNotExist();
+            assertThat(state.pidA()).hasContent(state.pidAContent());
+            assertThat(state.pidB()).hasContent(state.pidBContent());
+            assertThat(state.otherWorker().orElseThrow().isAlive())
+                    .as("the other configuration's worker keeps running")
+                    .isTrue();
+        } finally {
+            workers.forEach(InstallerScriptTest::destroyWithDescendants);
+            stopFakeWorkersRecordedUnder(temporaryDirectory);
+        }
+    }
+
+    @Test
+    void posixLegacyMigrationRemovesAnotherConfigurationsStaleRecordWithTheSelectedWorker() throws Exception {
+        // given
+        List<Process> workers = new ArrayList<>();
+        try {
+            SharedLegacyState state = sharedLegacyState(OtherWorker.EXITED, workers);
+
+            // when
+            ProcessResult update = runUpdate(state);
+
+            // then
+            assertThat(update.exitCode()).as(update.output()).isZero();
+            assertThat(update.output())
+                    .contains("Managed workers stopped for the update")
+                    .doesNotContain("outside the selected configuration");
+            assertThat(state.pidA()).doesNotExist();
+            assertThat(state.pidB()).doesNotExist();
+        } finally {
+            workers.forEach(InstallerScriptTest::destroyWithDescendants);
+            stopFakeWorkersRecordedUnder(temporaryDirectory);
+        }
+    }
+
+    @Test
+    void posixLegacyMigrationRefusesAnotherConfigurationsWorkerStartedAfterThePlanCheck() throws Exception {
+        // given
+        List<Process> workers = new ArrayList<>();
+        try {
+            SharedLegacyState state = sharedLegacyState(OtherWorker.STARTS_DURING_UPDATE, workers);
+
+            // when
+            ProcessResult update = runUpdate(state);
+
+            // then
+            assertThat(update.exitCode()).as(update.output()).isNotZero();
+            assertThat(update.output())
+                    .contains("cannot migrate managed worker state", "outside the selected configuration");
+            assertThat(state.bin().resolve("symphony-trello.stop"))
+                    .as("the refusal must come before any worker is stopped")
+                    .doesNotExist();
+            assertThat(state.pidA()).hasContent(state.pidAContent());
+            assertThat(recordedPid(state.pidB()).flatMap(ProcessHandle::of))
+                    .as("the worker started during the update keeps running")
+                    .hasValueSatisfying(process -> assertThat(process.isAlive())
+                            .as("the late worker is alive")
+                            .isTrue());
+        } finally {
+            workers.forEach(InstallerScriptTest::destroyWithDescendants);
+            stopFakeWorkersRecordedUnder(temporaryDirectory);
+        }
+    }
+
+    /// Installs into an application prefix and legacy state directory that two configurations share,
+    /// then records a live worker of the selected configuration and one of the other configuration,
+    /// live or exited, in the legacy directory.
+    private SharedLegacyState sharedLegacyState(OtherWorker otherWorkerState, List<Process> workers) throws Exception {
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("sleep"));
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve("shared-app");
+        Path appHome = symphonyHome.resolve("app").toAbsolutePath().normalize();
+        Path configA = temporaryDirectory.resolve("shared-config/symphony-trello");
+        Path configB = temporaryDirectory.resolve("shared-config/other-config");
+        Path legacyState = configA.resolveSibling("state");
+        // The selected manifest spells the workflow with characters JSON escapes, a dot segment and a
+        // doubled slash. start --all launches the worker with Path.of's spelling, which keeps the dot.
+        String manifestWorkflowA =
+                temporaryDirectory.resolve("workflows \"A\" back\\slash é O'Brien/.") + "//WORKFLOW.a.md";
+        Path workflowA = Path.of(manifestWorkflowA);
+        Path workflowB = configB.resolve("WORKFLOW.b.md");
+        Path bin = temporaryDirectory.resolve("shared-bin");
+        Path installScript = Path.of("install.sh").toAbsolutePath();
+        Path updateBin = Files.createDirectories(temporaryDirectory.resolve("update-bin"));
+        String pathSeparator = System.getProperty("path.separator");
+        Map<String, String> environment = Map.of(
+                "PATH", updateBin + pathSeparator + fakeBin + pathSeparator + System.getenv("PATH"),
+                "SYMPHONY_TRELLO_REPO_URL", sourceRepository.toUri().toString(),
+                "SYMPHONY_HOME", symphonyHome.toString(),
+                "SYMPHONY_TRELLO_CONFIG_DIR", configA.toString(),
+                "SYMPHONY_FAKE_LOG",
+                        temporaryDirectory.resolve("shared-tools.log").toString());
+        ProcessResult install =
+                run(environment, "bash", installScript.toString(), "--no-onboard", "--bin-dir", bin.toString());
+        assertThat(install.exitCode()).as(install.output()).isZero();
+        Path command = bin.resolve("symphony-trello");
+        // Emulate the old stop command, which removes every PID file in its state root.
+        writeExecutable(
+                command,
+                """
+                #!/usr/bin/env bash
+                if [[ "${1:-}" == "--version" ]]; then
+                  echo 'symphony-trello %s'
+                  exit 0
+                fi
+                if [[ "${1:-}" == "stop" ]]; then
+                  : > "$0.stop"
+                  while [[ $# -gt 0 ]]; do
+                    if [[ "$1" == "--state-home" ]]; then
+                      shift
+                      find "$1" -maxdepth 1 -type f -name '*.pid' -delete
+                    fi
+                    shift
+                  done
+                fi
+                """
+                        .formatted(FAKE_APP_VERSION));
+        Files.createDirectories(configB);
+        Files.createDirectories(legacyState);
+        ObjectMapper manifestJson = ConnectedBoardRepository.jsonMapper();
+        Files.writeString(
+                configA.resolve("connected-boards.json"),
+                manifestJson
+                        .writerWithDefaultPrettyPrinter()
+                        .writeValueAsString(Map.of(
+                                "boards",
+                                // A board name that equals the key must not read as a workflow path.
+                                List.of(
+                                        Map.of("boardName", "workflowPath"),
+                                        Map.of("workflowPath", manifestWorkflowA)))));
+        Files.writeString(
+                configB.resolve("connected-boards.json"),
+                manifestJson.writeValueAsString(
+                        Map.of("boards", List.of(Map.of("workflowPath", workflowB.toString())))));
+        Path pidA = legacyState.resolve("WORKFLOW.a.md.aaaaaaaaaaaa.pid");
+        Path pidB = legacyState.resolve("WORKFLOW.b.md.bbbbbbbbbbbb.pid");
+        Process workerA = startFakeManagedWorker(appHome, workflowA);
+        workers.add(workerA);
+        String pidAContent = workerA.pid() + "\n";
+        Files.writeString(pidA, pidAContent);
+        Optional<Process> otherWorker = Optional.empty();
+        String pidBContent = "";
+        switch (otherWorkerState) {
+            case LIVE -> {
+                Process workerB = startFakeManagedWorker(appHome, workflowB);
+                workers.add(workerB);
+                otherWorker = Optional.of(workerB);
+                pidBContent = workerB.pid() + "\n";
+                Files.writeString(pidB, pidBContent);
+            }
+            case EXITED -> {
+                // Without the other worker, its record is stale and migrates with the selected one.
+                pidBContent = exitedProcessPid() + "\n";
+                Files.writeString(pidB, pidBContent);
+            }
+            case STARTS_DURING_UPDATE ->
+                startOtherWorkerWhenInstallerReadsTheVersion(updateBin, fakeBin, appHome, workflowB, pidB);
+        }
+        return new SharedLegacyState(
+                environment, installScript, bin, pidA, pidAContent, pidB, pidBContent, otherWorker);
+    }
+
+    /// The installer reads the installed version through java after its plan check and before it stops
+    /// workers, so a java wrapper can start the other configuration's worker inside that window.
+    private static void startOtherWorkerWhenInstallerReadsTheVersion(
+            Path updateBin, Path fakeBin, Path appHome, Path workflow, Path pidFile) throws IOException {
+        writeExecutable(
+                updateBin.resolve("java"),
+                """
+                #!/usr/bin/env bash
+                if [[ "$*" == *"TrelloBoardSetupMain --version"* && ! -e %s ]]; then
+                  bash -c 'sleep 60; :' symphony-worker %s %s %s >/dev/null 2>&1 &
+                  printf '%%s\\n' "$!" > %s
+                  # A copy outside the legacy root lets cleanup find the worker if the update deletes its record.
+                  printf '%%s\\n' "$!" > %s
+                fi
+                exec %s "$@"
+                """
+                        .formatted(
+                                shellQuote(pidFile.toString()),
+                                shellQuote("-Dsymphony.trello.managed.app_home=" + appHome),
+                                shellQuote(appHome.resolve("target/quarkus-app/quarkus-run.jar")
+                                        .toString()),
+                                shellQuote(workflow.toString()),
+                                shellQuote(pidFile.toString()),
+                                shellQuote(updateBin.resolve("late-worker.pid").toString()),
+                                shellQuote(fakeBin.resolve("java").toString())));
+    }
+
+    private enum OtherWorker {
+        LIVE,
+        EXITED,
+        STARTS_DURING_UPDATE
+    }
+
+    private static ProcessResult runUpdate(SharedLegacyState state) throws Exception {
+        return run(
+                state.environment(),
+                "bash",
+                state.installScript().toString(),
+                "--no-onboard",
+                "--bin-dir",
+                state.bin().toString());
+    }
+
+    private record SharedLegacyState(
+            Map<String, String> environment,
+            Path installScript,
+            Path bin,
+            Path pidA,
+            String pidAContent,
+            Path pidB,
+            String pidBContent,
+            Optional<Process> otherWorker) {}
+
+    /// A PID that no live process is likely to hold, unlike a fixed number on a busy host.
+    private static long exitedProcessPid() throws IOException, InterruptedException {
+        Process exited = new ProcessBuilder("true").start();
+        exited.waitFor();
+        return exited.pid();
+    }
+
+    private static void destroyWithDescendants(Process process) {
+        destroyHandleWithDescendants(process.toHandle());
+    }
+
+    /// Passes the workflow as the last argument without normalizing it, as start --all does.
+    private static Process startFakeManagedWorker(Path appHome, Path workflow) throws IOException {
+        // The trailing no-op keeps bash alive so the worker arguments stay in its command line.
+        return new ProcessBuilder(
+                        "bash",
+                        "-c",
+                        "sleep 60; :",
+                        "symphony-worker",
+                        "-Dsymphony.trello.managed.app_home=" + appHome,
+                        appHome.resolve("target/quarkus-app/quarkus-run.jar").toString(),
+                        workflow.toString())
+                .start();
+    }
+
+    /// The update restarts workers through the fake CLI, which records them in PID files. Only
+    /// processes that name this test's directory are killed, in case a recorded PID was reused.
+    private static void stopFakeWorkersRecordedUnder(Path root) throws IOException {
+        Files.walkFileTree(root, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
+                if (PathNames.fileName(file).endsWith(".pid")) {
+                    recordedPid(file)
+                            .flatMap(ProcessHandle::of)
+                            .filter(process -> commandLineMentions(process, root))
+                            .ifPresent(InstallerScriptTest::destroyHandleWithDescendants);
+                }
+                return FileVisitResult.CONTINUE;
+            }
+        });
+    }
+
+    private static boolean commandLineMentions(ProcessHandle process, Path root) {
+        return process.info()
+                .commandLine()
+                .filter(line -> line.contains(root.toString()))
+                .isPresent();
+    }
+
+    private static void destroyHandleWithDescendants(ProcessHandle process) {
+        process.descendants().forEach(ProcessHandle::destroyForcibly);
+        process.destroyForcibly();
+    }
+
+    private static Optional<Long> recordedPid(Path pidFile) {
+        try {
+            return Optional.of(Long.parseLong(Files.readString(pidFile).strip()));
+        } catch (IOException | NumberFormatException exception) {
+            return Optional.empty();
+        }
+    }
+
+    @Test
+    void powershellLegacyMigrationPreservesForeignFilesWhenAvailable() throws Exception {
+        // given
+        List<String> launcher = installerLauncher(true);
+        SourceDowngrade source = sourceDowngrade(false);
+        source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
+        Path configDir = temporaryDirectory.resolve("shared-config/symphony-trello");
+        source.installed().environment().put("SYMPHONY_TRELLO_CONFIG_DIR", configDir.toString());
+        LegacyMigrationFiles legacy = legacyMigrationFiles(configDir, "42\n");
+        Files.writeString(
+                source.installed().binDirectory().resolve("symphony-trello.ps1"),
+                """
+                if ($args[0] -eq 'stop') {
+                  for ($index = 0; $index -lt $args.Count; $index++) {
+                    if ($args[$index] -eq '--state-home') {
+                      Get-ChildItem -LiteralPath $args[$index + 1] -Filter '*.pid' -File | Remove-Item -Force
+                    }
+                  }
+                }
+                """);
+
+        // Stop after migration: this boundary check does not configure Windows autostart on Linux.
+        addSourceRepositoryCommit(
+                source.source(), "mvnw.cmd", isWindows() ? "@exit /b 23\r\n" : "#!/usr/bin/env bash\nexit 23\n");
+
+        Path foreignManagedName = configDir.resolveSibling("state").resolve("WORKFLOW.foreign.md.abcdef123456.pid");
+        Path launcherScript = temporaryDirectory.resolve("migration-with-foreign-process.ps1");
+        Files.writeString(
+                launcherScript,
+                """
+                $ErrorActionPreference = 'Stop'
+                [IO.File]::WriteAllText($env:SYMPHONY_FAKE_FOREIGN_PID_FILE, [string]$PID)
+                & ./install.ps1 @args
+                exit $LASTEXITCODE
+                """);
+        source.installed().environment().put("SYMPHONY_FAKE_FOREIGN_PID_FILE", foreignManagedName.toString());
+        launcher = command(powershellCommand(), "-NoProfile", "-File", launcherScript.toString());
+
+        // when
+        ProcessResult update = source.run(launcher);
+
+        // then
+        assertThat(update.exitCode()).as(update.output()).isOne();
+        assertThat(update.output()).contains("mvnw.cmd", "23");
+        assertThat(legacy.managedPid()).doesNotExist();
+        assertThat(legacy.foreignPid()).content().isEqualTo("42\n");
+        assertThat(legacy.foreignLog()).content().isEqualTo("unrelated log\n");
+        assertThat(foreignManagedName).content().matches("[0-9]+");
+    }
+
+    @CsvSource({"false,changed", "false,retained", "true,changed", "true,retained"})
+    @ParameterizedTest
+    void legacyMigrationRefusesChangedOrRetainedPidRecords(boolean powershell, String outcome) throws Exception {
+        // given
+        List<String> launcher = installerLauncher(powershell);
+        SourceDowngrade source = sourceDowngrade(false);
+        source.installed().environment().put("SYMPHONY_FAKE_VERSION", FAKE_APP_VERSION);
+        Path configDir = temporaryDirectory.resolve("guard-config/symphony-trello");
+        LegacyMigrationFiles legacy = legacyMigrationFiles(configDir, "42\n");
+        Path temporaryStateRecord = temporaryDirectory.resolve("migration-temporary-state.txt");
+        source.installed().environment().put("SYMPHONY_TRELLO_CONFIG_DIR", configDir.toString());
+        source.installed()
+                .environment()
+                .put("SYMPHONY_FAKE_MIGRATION_ORIGINAL_PID", legacy.managedPid().toString());
+        source.installed()
+                .environment()
+                .put("SYMPHONY_FAKE_MIGRATION_TEMPORARY_STATE", temporaryStateRecord.toString());
+        source.installed().environment().put("SYMPHONY_FAKE_MIGRATION_OUTCOME", outcome);
+        writeExecutable(
+                source.installed().binDirectory().resolve("symphony-trello"),
+                """
+                #!/usr/bin/env bash
+                if [[ "${1:-}" == "stop" ]]; then
+                  while [[ $# -gt 0 ]]; do
+                    if [[ "$1" == "--state-home" ]]; then
+                      shift
+                      printf '%s' "$1" > "$SYMPHONY_FAKE_MIGRATION_TEMPORARY_STATE"
+                      if [[ "$SYMPHONY_FAKE_MIGRATION_OUTCOME" == "changed" ]]; then
+                        printf '888888\n' > "$SYMPHONY_FAKE_MIGRATION_ORIGINAL_PID"
+                        find "$1" -maxdepth 1 -type f -name '*.pid' -delete
+                      fi
+                    fi
+                    shift
+                  done
+                fi
+                """);
+        Files.writeString(
+                source.installed().binDirectory().resolve("symphony-trello.ps1"),
+                """
+                if ($args[0] -eq 'stop') {
+                  for ($index = 0; $index -lt $args.Count; $index++) {
+                    if ($args[$index] -eq '--state-home') {
+                      $state = $args[$index + 1]
+                      [IO.File]::WriteAllText($env:SYMPHONY_FAKE_MIGRATION_TEMPORARY_STATE, $state)
+                      if ($env:SYMPHONY_FAKE_MIGRATION_OUTCOME -eq 'changed') {
+                        [IO.File]::WriteAllText($env:SYMPHONY_FAKE_MIGRATION_ORIGINAL_PID, "888888`n")
+                        Get-ChildItem -LiteralPath $state -Filter '*.pid' -File | Remove-Item -Force
+                      }
+                    }
+                  }
+                }
+                """);
+
+        // when
+        ProcessResult update = source.run(launcher);
+
+        // then
+        assertThat(update.exitCode()).as(update.output()).isNotZero();
+        assertThat(update.output()).contains("cannot migrate managed worker state");
+        assertThat(legacy.managedPid()).content().isEqualTo(outcome.equals("changed") ? "888888\n" : "999999\n");
+        assertThat(legacy.foreignPid()).content().isEqualTo("42\n");
+        assertThat(legacy.foreignLog()).content().isEqualTo("unrelated log\n");
+        assertThat(Path.of(Files.readString(temporaryStateRecord)).getParent()).doesNotExist();
+        source.assertAppUntouched();
+    }
+
+    private static LegacyMigrationFiles legacyMigrationFiles(Path configDir, String foreignPidContent)
+            throws IOException {
+        Path legacyState = configDir.resolveSibling("state");
+        Files.createDirectories(legacyState);
+        Path managedPid = legacyState.resolve("WORKFLOW.legacy.md.abcdef123456.pid");
+        Path foreignPid = legacyState.resolve("other-app.pid");
+        Path foreignLog = legacyState.resolve("other-app.log");
+        Files.writeString(managedPid, "999999\n");
+        Files.writeString(foreignPid, foreignPidContent);
+        Files.writeString(foreignLog, "unrelated log\n");
+        return new LegacyMigrationFiles(managedPid, foreignPid, foreignLog);
+    }
+
+    private record LegacyMigrationFiles(Path managedPid, Path foreignPid, Path foreignLog) {}
 
     @Test
     void posixInstallerGeneratedCommandHandlesPathsWithShellMetacharacters() throws Exception {
