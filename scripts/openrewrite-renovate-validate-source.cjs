@@ -23,6 +23,12 @@ module.exports = async ({ github, context, core }) => {
   const isEligible =
     pullRequest.base.ref === "main"
     && pullRequest.labels.some(({ name }) => name === "openrewrite");
+  if (pullRequest.state === "open" && isEligible && pullRequest.base.sha !== context.sha) {
+    core.setFailed(
+      `cannot generate update for pull request "${pullRequestNumber}": rebase onto the workflow commit and rerun from main`,
+    );
+    return;
+  }
   core.setOutput(
     "state",
     pullRequest.state === "open" && !isEligible ? "ineligible" : pullRequest.state,

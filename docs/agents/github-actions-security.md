@@ -146,7 +146,7 @@ The script test keeps the table complete; update a row when its workflow changes
 | `continuous-fuzzing.yml` | `pull_request`, push `main`, dispatch | default branch or PR head, no token | none | `security-events: write` in `code-change`, read-only in fork runs; `CLUSTERFUZZLITE_STORAGE_TOKEN`, `issues`, `security-events` and `actions: write` in jobs gated to `refs/heads/main` and dispatch | OK |
 | `dependency-submission.yml` | push `main` | `main`, no token | `maven`, `main` scope | `contents: write` | OK; no pull request trigger, see [ADR 0148](../adr/0148-submit-maven-dependencies-only-from-main.md) |
 | `hyperframes-renovate.yml` | `pull_request` by `renovate[bot]` on same-repository `renovate/hyperframes` branches, skipped for forks | PR merge commit in the render, `base.sha` in `report`, no token | none | `contents: read` in the render; `pull-requests: write` in `report` | OK, see [Workflows added after the audit](#workflows-added-after-the-audit) |
-| `openrewrite-renovate.yml` | `pull_request_target`, schedule, dispatch | `github.sha` for its scripts, `base_sha` for the recipe run, no token outside `publish` | none | `statuses: write` in six jobs; App token in `publish` only | OK, see below |
+| `openrewrite-renovate.yml` | `pull_request_target`, schedule, dispatch | `github.sha` for its scripts and recipe run, no token outside `publish` | none | `statuses: write` in six jobs; App token in `publish` only | OK, see below |
 | `private-context.yml` | `pull_request`, push `main` | PR head plus base scanner, plus the merge commit's comparison script, no token | none | none, `contents: read` | OK |
 | `pull-request-author-handoff.yml` | `pull_request_target`, `issue_comment` | `github.sha`, sparse: its script, no token | none | `issues: write` | OK, metadata only |
 | `pull-request-disclosure.yml` | `pull_request_target`, schedule, dispatch | `github.sha`, sparse: its script, no token | none | `issues`, `pull-requests: write` | OK, metadata only |
@@ -156,9 +156,11 @@ The script test keeps the table complete; update a row when its workflow changes
 | `size-labeler.yml` | `pull_request_target`, `workflow_run`, schedule | `github.sha`, sparse: its script, no token | none | `pull-requests: write` | OK, metadata only |
 
 `openrewrite-renovate.yml` in detail. Every job that loads a `scripts/*.cjs` module first checks
-it out at `github.sha`, sparse and without the token. `generate` then checks out `base_sha`
-twice, the head of `main` that Renovate's pull request is based on, as reported by the API;
-nothing checks out the source head. The only pull request content that reaches a step is
+it out at `github.sha`, sparse and without the token. `generate` uses that same immutable
+workflow commit for both full checkouts. Source validation requires the pull request's base SHA
+to equal the workflow commit before exporting executable source state or fetching source files.
+A stale base fails with instructions to rebase and start a fresh run from `main`; nothing checks
+out the source head. The only pull request content that reaches a step is
 `pom.xml` from the source head, read through the contents API and accepted only when
 `trusted/scripts/openrewrite-renovate.ts` from the
 base shows that it differs from the base `pom.xml` in allowlisted version properties alone. Maven
