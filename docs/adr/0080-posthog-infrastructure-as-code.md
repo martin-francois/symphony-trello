@@ -87,6 +87,16 @@ owner per declaration. The agreement test retains exact comparison so drift cann
 normalization at test time. See Renovate's
 [version extraction contract](https://docs.renovatebot.com/configuration-options/#extractversion).
 
+The first production erasure activation on 2026-11-01 exposed another provider boundary.
+PostHog trims leading and trailing whitespace from Hog source before returning it. Provider
+1.0.21 compares that response with the configured string and fails the apply when they differ,
+even though it created and enabled the functions. The module supplies trimmed source for the
+erasure handler and identity merge filter. The canonical files and their behavior stay intact;
+source drift remains visible. Ignoring changes to `hog` would hide real handler changes and is
+not an acceptable repair. A mocked-provider plan asserts that both configured sources already
+match the API's normalization. Recovery of a failed creation requires live identity and source
+verification before clearing its taint; it does not require destroying the created function.
+
 ### Consequences
 
 - Good, because a fork runs six documented commands with its own key and inputs and gets the same
