@@ -234,6 +234,13 @@ property allowlist, key order, and null-versus-zero behavior. `PostHogCaptureCli
 against a loopback fake server, including a server that sends headers and then withholds the
 body; no test contacts PostHog.
 
+`BoundedHttpTest.responseHeadersSurviveABodyFailureBeforeTheResponseFutureCompletes` forces the
+header callback and failed-future ordering on a separate thread for HTTP 200, 401, and 429,
+including the retry header. Removing header retention makes all three cases fail. The existing
+immediate-EOF loopback test also exercises the real JDK transport. This regression follows
+[GitHub issue #1253](https://github.com/martin-francois/symphony-trello/issues/1253), reproduced
+with Temurin 25.0.4+7 under two-CPU affinity.
+
 Repairs made after an external review of the first implementation, each with its own regression:
 the stalled-body timeout (reproduced first on Java 25 against the real client, which stayed blocked
 past three seconds with a 500 ms budget), one in-flight delivery per worker, per-attempt claim
@@ -367,6 +374,14 @@ lifecycle requirement or demonstrated abuse.
 `PostHogCaptureClient` posts exactly the serialized body with two explicit headers, never follows
 redirects, bounds timeouts and response size, and maps responses to accepted, quota-limited,
 transient, or permanent outcomes. Status: selected.
+
+The shared `BoundedHttp` adapter records response headers in its body-handler callback. The JDK
+can report an incomplete body by failing the response future after that callback, before it
+publishes the input-stream response. Such a failure retains the received status and headers and
+reports an unreadable body. A failed future with no received headers remains an unanswered
+request. This preserves status-based rejection and `Retry-After` handling without parsing
+exception text. Treating every failed future as a connection failure loses known response data;
+delaying the fake server's close would only hide this production ordering.
 
 - Good, because one event, a small retry policy, and exact-body inspection need no SDK queueing
   or lifecycle.

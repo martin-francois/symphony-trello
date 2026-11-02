@@ -4573,6 +4573,10 @@ These checks are REQUIRED only when the installation telemetry profile in Sectio
   deadline has passed, transient failures use
   bounded backoff with a valid bounded `Retry-After`, a report pending across midnight is replaced
   by a fresh observation, retries keep the report ID and timestamp, and no offline backlog exists
+- If installation telemetry is implemented, a body failure after response headers preserves the
+  status and retry metadata even when the HTTP response future fails before yielding a body
+  stream. An incomplete HTTP 200 body never counts as acceptance. Deterministic callback-order
+  coverage in `BoundedHttpTest` and loopback coverage in `PostHogCaptureClientTest` own this check
 - If installation telemetry is implemented, separate JVM processes create one identity, share one
   daily claim and the counters, recover from a dead claim owner, ignore late completions after a
   preference change, tolerate lock contention, refuse to report on invalid state, and preserve the
