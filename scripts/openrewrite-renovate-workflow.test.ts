@@ -1017,6 +1017,7 @@ test("the OpenRewrite rule selects exact toolchain packages across Maven depende
   assert.equal(rule?.matchDepTypes, undefined);
   for (const packageName of [
     "com.google.errorprone:error_prone_core",
+    "com.google.errorprone:error_prone_annotations",
     "tech.picnic.error-prone-support:error-prone-contrib",
     "tech.picnic.error-prone-support:refaster-runner",
   ]) {
