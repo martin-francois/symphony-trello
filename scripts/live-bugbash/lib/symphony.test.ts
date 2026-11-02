@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import {execFileSync, spawnSync} from "node:child_process";
 import test from "node:test";
-import {existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
+import {existsSync, mkdtempSync, readFileSync, rmSync, watch, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
+import {setImmediate as nextTurn} from "node:timers/promises";
 import {RunRoot} from "./run-root.ts";
 import {installFromSource, pollUntil, runCommand, TimeoutError, waitFor} from "./symphony.ts";
 
@@ -84,6 +85,113 @@ test("cancelling a command stops its process group before cleanup awaits the ins
     rmSync(directory, {recursive: true, force: true});
   }
 });
+
+for (const cancellation of ["abort", "timeout", "abort then timeout"] as const) {
+  test(`${cancellation} does not send SIGKILL after the command group closes`, {timeout: 10_000}, async (t) => {
+    // given
+    const directory = mkdtempSync(join(tmpdir(), "bugbash-late-kill-"));
+    const readiness = processReadiness(directory);
+    const controller = new AbortController();
+    const realKill = process.kill.bind(process);
+    let ownedGroupPid: number | undefined;
+    let completed = false;
+    const kill = t.mock.method(process, "kill", (pid: number, signal?: NodeJS.Signals | number) => {
+      // Observe a stale signal without ever sending it to a possibly reused process-group number.
+      if (ownedGroupPid !== undefined && pid === -ownedGroupPid && signal === "SIGKILL") return true;
+      return realKill(pid, signal);
+    });
+    t.mock.timers.enable({apis: ["setTimeout"]});
+    const program = 'require("node:fs").writeFileSync(process.argv[1], `${process.pid}\\n`); setInterval(() => {}, 60_000);';
+    const command = runCommand(process.execPath, ["-e", program, readiness.path], {
+      cwd: directory,
+      timeoutMs: 1_000,
+      signal: controller.signal,
+    }).then((outcome) => {
+      completed = true;
+      return outcome;
+    });
+    try {
+      ownedGroupPid = await readiness.ready;
+
+      // when
+      if (cancellation !== "timeout") controller.abort();
+      if (cancellation !== "abort") t.mock.timers.tick(1_000);
+      const outcome = await command;
+      t.mock.timers.tick(5_000);
+
+      // then
+      assert.notEqual(outcome.status, 0);
+      assert.equal(outcome.timedOut, cancellation !== "abort");
+      assert.deepEqual(kill.mock.calls.map(({arguments: args}) => args), [[-ownedGroupPid, "SIGTERM"]], "a closed group must receive no delayed escalation");
+    } finally {
+      if (!completed && ownedGroupPid !== undefined && ownedGroupPid > 1) {
+        try { realKill(-ownedGroupPid, "SIGKILL"); } catch { /* The test-owned group already exited. */ }
+      }
+      t.mock.timers.reset();
+      readiness.close();
+      await command;
+      rmSync(directory, {recursive: true, force: true});
+    }
+  });
+}
+
+test("the exit grace keeps cancellation escalation while a descendant holds output pipes", {timeout: 10_000}, async (t) => {
+  // given
+  const directory = mkdtempSync(join(tmpdir(), "bugbash-held-pipes-"));
+  const readiness = processReadiness(directory);
+  const controller = new AbortController();
+  const realKill = process.kill.bind(process);
+  const kill = t.mock.method(process, "kill");
+  t.mock.timers.enable({apis: ["setTimeout"]});
+  const timers = t.mock.method(globalThis, "setTimeout");
+  const descendant = 'process.on("SIGTERM", () => {}); require("node:fs").writeFileSync(process.argv[1], `${process.argv[2]}\\n`); setInterval(() => {}, 60_000);';
+  const program = 'const child = require("node:child_process").spawn(process.execPath, ["-e", process.argv[1], process.argv[2], String(process.pid)], {stdio: ["ignore", 1, 2]}); child.unref();';
+  let ownedGroupPid: number | undefined;
+  const command = runCommand(process.execPath, ["-e", program, descendant, readiness.path], {
+    cwd: directory,
+    timeoutMs: 30_000,
+    signal: controller.signal,
+  });
+  try {
+    ownedGroupPid = await readiness.ready;
+    // Wait for the real leader's exit event to arm its grace before cancellation arms escalation.
+    while (!timers.mock.calls.some(({arguments: args}) => args[1] === 5_000)) await nextTurn();
+
+    // when
+    t.mock.timers.tick(1_000);
+    controller.abort();
+    t.mock.timers.tick(4_000);
+    const outcome = await command;
+
+    // then
+    assert.equal(outcome.status, 0, "the leader's normal exit still resolves at the exit grace");
+    assert.deepEqual(kill.mock.calls.map(({arguments: args}) => args), [[-ownedGroupPid, "SIGTERM"]]);
+    t.mock.timers.tick(1_000);
+    assert.deepEqual(kill.mock.calls.map(({arguments: args}) => args), [[-ownedGroupPid, "SIGTERM"], [-ownedGroupPid, "SIGKILL"]], "open descendant pipes must retain the pending escalation after resolution");
+  } finally {
+    if (ownedGroupPid !== undefined && ownedGroupPid > 1) {
+      try { realKill(-ownedGroupPid, "SIGKILL"); } catch { /* The test-owned group already exited. */ }
+    }
+    t.mock.timers.reset();
+    readiness.close();
+    await command;
+    rmSync(directory, {recursive: true, force: true});
+  }
+});
+
+function processReadiness(directory: string): {path: string; ready: Promise<number>; close: () => void} {
+  const path = join(directory, "ready");
+  const watcher = watch(directory);
+  const ready = new Promise<number>((resolve) => {
+    watcher.on("change", () => {
+      if (!existsSync(path)) return;
+      const marker = readFileSync(path, "utf8");
+      const pid = Number(marker.trim());
+      if (marker.endsWith("\n") && Number.isSafeInteger(pid) && pid > 1) resolve(pid);
+    });
+  });
+  return {path, ready, close: () => watcher.close()};
+}
 
 test("source installation keeps each prepared revision immutable across resume", async () => {
   // given
