@@ -16,6 +16,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.jboss.logging.Logger;
+import org.jspecify.annotations.Nullable;
 
 /// The JSON POST exchange every telemetry client uses: no redirects, fixed headers, one time budget
 /// for the headers and the body, and a size bound on the answer. Callers see a status and a body
@@ -51,8 +52,8 @@ final class BoundedHttp {
                 .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8));
         requestHeaders().forEach(request::header);
         long deadline = System.nanoTime() + timeout.toNanos();
-        CompletableFuture<HttpResponse<InputStream>> exchange =
-                http.sendAsync(request.build(), HttpResponse.BodyHandlers.ofInputStream());
+        var bodyHandler = new ResponseBodyHandler();
+        CompletableFuture<HttpResponse<InputStream>> exchange = http.sendAsync(request.build(), bodyHandler);
         HttpResponse<InputStream> response;
         try {
             response = exchange.get(remaining(deadline), TimeUnit.NANOSECONDS);
@@ -60,7 +61,7 @@ final class BoundedHttp {
             exchange.cancel(true);
             return new Exchange.Unanswered(Failure.TIMED_OUT);
         } catch (ExecutionException exception) {
-            return new Exchange.Unanswered(
+            return bodyHandler.failed(
                     exception.getCause() instanceof HttpTimeoutException
                             ? Failure.TIMED_OUT
                             : Failure.CONNECTION_FAILED);
@@ -70,6 +71,25 @@ final class BoundedHttp {
             return new Exchange.Unanswered(Failure.INTERRUPTED);
         }
         return new Exchange.Answered(response.statusCode(), response.headers(), readBounded(response.body(), deadline));
+    }
+
+    /// Headers arrive before the response future completes. If the body fails in between,
+    /// preserve those headers instead of reporting that no response arrived.
+    private static final class ResponseBodyHandler implements HttpResponse.BodyHandler<InputStream> {
+        private volatile HttpResponse.@Nullable ResponseInfo responseInfo;
+
+        @Override
+        public HttpResponse.BodySubscriber<InputStream> apply(HttpResponse.ResponseInfo info) {
+            responseInfo = info;
+            return HttpResponse.BodySubscribers.ofInputStream();
+        }
+
+        Exchange failed(Failure failure) {
+            HttpResponse.ResponseInfo info = responseInfo;
+            return info == null
+                    ? new Exchange.Unanswered(failure)
+                    : new Exchange.Answered(info.statusCode(), info.headers(), new BodyRead.Failed(BODY_UNREADABLE));
+        }
     }
 
     private static long remaining(long deadline) {
