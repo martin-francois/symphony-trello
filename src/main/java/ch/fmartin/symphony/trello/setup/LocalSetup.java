@@ -1,6 +1,9 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.TextCharacterMatchers.ISO_CONTROL_CHARACTERS;
+import static ch.fmartin.symphony.trello.setup.SetupCliOptionNames.STATE_HOME;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.CONFIG_DIR_ENV;
+import static ch.fmartin.symphony.trello.setup.SetupEnvironmentVariables.WORKSPACE_ROOT_ENV;
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
 
 import ch.fmartin.symphony.trello.CliExitCodes;
@@ -39,7 +42,6 @@ public final class LocalSetup {
             CharMatcher.anyOf("\"\\$`!%").or(ISO_CONTROL_CHARACTERS).precomputed();
     private static final Path DEFAULT_ENV_PATH = Path.of(".env");
     static final String DEFAULT_COMMAND = "symphony-trello";
-    private static final String CONFIG_DIR_ENV = "SYMPHONY_TRELLO_CONFIG_DIR";
     static final String COMMAND_ENV = "SYMPHONY_TRELLO_COMMAND";
     private static final String CALLER_DIR_ENV = "SYMPHONY_TRELLO_CALLER_DIR";
     static final String INSTALLER_COMPLETION_ENV = "SYMPHONY_TRELLO_INSTALLER_COMPLETION";
@@ -141,8 +143,7 @@ public final class LocalSetup {
         try {
             options = Options.from(request, environment);
             if (completionOnly) {
-                printFinalHandoff(
-                        out, connectedBoards(options).loadForLifecycle(), options.command(), TutorialMention.COMMAND);
+                printFinalHandoff(out, connectedBoards(options).loadForLifecycle(), options, TutorialMention.COMMAND);
                 return 0;
             }
 
@@ -190,7 +191,7 @@ public final class LocalSetup {
                                 ? TutorialMention.COMMAND
                                 : TutorialMention.OFFER_AFTER_HANDOFF;
                         boolean handoffPrinted =
-                                printFinalHandoffUnlessDeferred(out, manifest, options.command(), tutorialMention);
+                                printFinalHandoffUnlessDeferred(out, manifest, options, tutorialMention);
                         if (handoffPrinted && tutorialMention == TutorialMention.OFFER_AFTER_HANDOFF) {
                             offerExistingBoardTutorial(options, manifest, terminal);
                         }
@@ -282,7 +283,7 @@ public final class LocalSetup {
             out.println("  " + result.boardUrl());
             TutorialMention tutorialMention =
                     options.nonInteractive() ? TutorialMention.COMMAND : TutorialMention.OFFER_AFTER_HANDOFF;
-            boolean handoffPrinted = printFinalHandoffUnlessDeferred(out, manifest, options.command(), tutorialMention);
+            boolean handoffPrinted = printFinalHandoffUnlessDeferred(out, manifest, options, tutorialMention);
             if (handoffPrinted && tutorialMention == TutorialMention.OFFER_AFTER_HANDOFF) {
                 offerTutorial(options, () -> credentials, githubIntegration.enabled(), terminal);
             }
@@ -305,11 +306,11 @@ public final class LocalSetup {
 
     /// Returns whether it printed the handoff. The installer prints it itself in deferred mode.
     private boolean printFinalHandoffUnlessDeferred(
-            PrintStream out, ConnectedBoardManifest manifest, String cliCommand, TutorialMention tutorialMention) {
+            PrintStream out, ConnectedBoardManifest manifest, Options options, TutorialMention tutorialMention) {
         if (installerCompletionMode(INSTALLER_COMPLETION_DEFER)) {
             return false;
         }
-        printFinalHandoff(out, manifest, cliCommand, tutorialMention);
+        printFinalHandoff(out, manifest, options, tutorialMention);
         return true;
     }
 
@@ -374,7 +375,7 @@ public final class LocalSetup {
     }
 
     private LocalWorkerPaths localWorkerPaths(Options options) {
-        return LocalWorkerPaths.fromSetup(options.configDir(), options.workspaceRoot(), environment);
+        return LocalWorkerPaths.from(options, environment);
     }
 
     private int runCheck(Options options, Prerequisites prerequisites, PrintStream out) throws IOException {
@@ -506,8 +507,7 @@ public final class LocalSetup {
         }
         if (health.kind() == BoardHealthKind.STOPPED) {
             out.println("  WARN  " + DisplayNames.quotedName(board.boardName()) + " local server is not running");
-            out.println("        Start: " + options.command() + " start --env " + board.envPath() + " --workflow "
-                    + board.workflowPath());
+            out.println("        Start: " + startCommand(options, board));
             return;
         }
         if (health.kind() == BoardHealthKind.PORT_USED) {
@@ -623,8 +623,7 @@ public final class LocalSetup {
             if (wasRunning) {
                 out.println("  WOULD   restart Symphony for " + DisplayNames.quotedName(reconciledBoard.boardName()));
             } else {
-                out.println("          Restart: " + options.command() + " start --env " + reconciledBoard.envPath()
-                        + " --workflow " + reconciledBoard.workflowPath());
+                out.println("          Restart: " + startCommand(options, reconciledBoard));
             }
             return 0;
         }
@@ -639,8 +638,7 @@ public final class LocalSetup {
         if (wasRunning) {
             startBoard(options, reconciledBoard.withServerPort(port), out);
         } else {
-            out.println("          Restart: " + options.command() + " start --env " + reconciledBoard.envPath()
-                    + " --workflow " + reconciledBoard.workflowPath());
+            out.println("          Restart: " + startCommand(options, reconciledBoard));
         }
         return 0;
     }
@@ -1056,14 +1054,12 @@ public final class LocalSetup {
         } else if (health.kind() == BoardHealthKind.SAME_WORKFLOW) {
             out.println();
             out.println("Restart skipped. Restart Symphony for the updated workflow when you are ready:");
-            out.println("  " + options.command() + " stop --workflow " + board.workflowPath());
-            out.println("  " + options.command() + " start --env " + board.envPath() + " --workflow "
-                    + board.workflowPath());
+            out.println("  " + stopCommand(options, board));
+            out.println("  " + startCommand(options, board));
         } else {
             out.println();
             out.println("Start Symphony for the updated workflow:");
-            out.println("  " + options.command() + " start --env " + board.envPath() + " --workflow "
-                    + board.workflowPath());
+            out.println("  " + startCommand(options, board));
         }
     }
 
@@ -1321,12 +1317,10 @@ public final class LocalSetup {
         } else if (previousHealth.kind() == BoardHealthKind.SAME_WORKFLOW) {
             out.println();
             out.println("Restart skipped. Restart Symphony for the updated workflow when you are ready:");
-            out.println("  " + options.command() + " stop --workflow " + board.workflowPath());
-            out.println("  " + options.command() + " start --env " + board.envPath() + " --workflow "
-                    + board.workflowPath());
+            out.println("  " + stopCommand(options, board));
+            out.println("  " + startCommand(options, board));
         } else {
-            out.println("          Restart: " + options.command() + " start --env " + board.envPath() + " --workflow "
-                    + board.workflowPath());
+            out.println("          Restart: " + startCommand(options, board));
         }
     }
 
@@ -1444,8 +1438,7 @@ public final class LocalSetup {
         if (options.noStart()) {
             out.println();
             out.println("Start skipped. Start Symphony before moving Trello cards:");
-            out.println("  " + options.command() + " start --env " + board.envPath() + " --workflow "
-                    + board.workflowPath());
+            out.println("  " + startCommand(options, board));
             return;
         }
         out.println();
@@ -1625,7 +1618,7 @@ public final class LocalSetup {
     }
 
     private static void printFinalHandoff(
-            PrintStream out, ConnectedBoardManifest manifest, String cliCommand, TutorialMention tutorialMention) {
+            PrintStream out, ConnectedBoardManifest manifest, Options options, TutorialMention tutorialMention) {
         if (manifest.boards().isEmpty()) {
             throw new TrelloBoardSetupException(
                     "setup_manifest_unavailable",
@@ -1652,7 +1645,7 @@ public final class LocalSetup {
                     "Create a Trello card with a clear task and move it to the matching workflow's configured queue list.");
         }
         String shell = SetupSystemProperties.get(ShellCommandRenderer.SHELL_PROPERTY);
-        String command = ShellCommandRenderer.executable(cliCommand, shell);
+        String command = ShellCommandRenderer.executable(options.command(), shell);
         if (tutorialMention == TutorialMention.COMMAND) {
             out.println();
             out.println("To practice the card flow on a temporary Trello board first, run:");
@@ -1660,7 +1653,7 @@ public final class LocalSetup {
         }
         out.println();
         out.println("Useful commands:");
-        out.println("  " + command + " status");
+        out.println("  " + command + " status" + stateHomeArgument(options, shell));
         manifest.boards()
                 .forEach(board -> out.println("  " + command + " logs --workflow "
                         + ShellCommandRenderer.argument(
@@ -1668,7 +1661,29 @@ public final class LocalSetup {
                                         .toAbsolutePath()
                                         .normalize()
                                         .toString(),
-                                shell)));
+                                shell)
+                        + stateHomeArgument(options, shell)));
+    }
+
+    private static String stopCommand(Options options, ConnectedBoard board) {
+        String shell = SetupSystemProperties.get(ShellCommandRenderer.SHELL_PROPERTY);
+        return ShellCommandRenderer.executable(options.command(), shell) + " stop --workflow "
+                + ShellCommandRenderer.argument(board.workflowPath().toString(), shell)
+                + stateHomeArgument(options, shell);
+    }
+
+    private static String startCommand(Options options, ConnectedBoard board) {
+        String shell = SetupSystemProperties.get(ShellCommandRenderer.SHELL_PROPERTY);
+        return ShellCommandRenderer.executable(options.command(), shell) + " start --env "
+                + ShellCommandRenderer.argument(board.envPath().toString(), shell) + " --workflow "
+                + ShellCommandRenderer.argument(board.workflowPath().toString(), shell)
+                + stateHomeArgument(options, shell);
+    }
+
+    private static String stateHomeArgument(Options options, String shell) {
+        return options.stateHome()
+                .map(path -> " " + STATE_HOME + " " + ShellCommandRenderer.argument(path.toString(), shell))
+                .orElse("");
     }
 
     private static String errorCode(Exception e) {
@@ -1724,6 +1739,7 @@ public final class LocalSetup {
             Path workspaceRoot,
             boolean workspaceRootExplicit,
             Path configDir,
+            Optional<Path> stateHome,
             Path manifestPath,
             Optional<Integer> serverPort,
             int maxAgents,
@@ -1761,6 +1777,9 @@ public final class LocalSetup {
                 githubMode = true;
             }
             configDir = configDir.toAbsolutePath().normalize();
+            Optional<Path> stateHome =
+                    request.stateHome().map(path -> path.toAbsolutePath().normalize());
+            stateHome.ifPresent(path -> CliInputValidation.rejectExistingNonDirectoryPath(STATE_HOME, path));
             envPath = resolveUserDataPath(envPath, configDir);
             manifest = resolveUserDataPath(manifest, configDir);
             validateResolvedSetupPaths(configDir, manifest, manifestPathExplicit, request.action());
@@ -1802,6 +1821,7 @@ public final class LocalSetup {
                     workspaceRoot,
                     workspaceRootExplicit,
                     configDir,
+                    stateHome,
                     manifest,
                     request.serverPort(),
                     request.maxAgents(),
@@ -1837,93 +1857,13 @@ public final class LocalSetup {
         }
 
         Options withCodexAccess(List<Path> additionalWritableRoots, boolean dangerFullAccess) {
-            return new Options(
-                    check,
-                    dryRun,
-                    repairPort,
-                    nonInteractive,
-                    force,
-                    forceNewSetup,
-                    configureGithub,
-                    githubMode,
-                    apiKey,
-                    apiToken,
-                    boardName,
-                    existingBoardId,
-                    workspaceId,
-                    repositoryUrl,
-                    activeStates,
-                    terminalStates,
-                    inProgressState,
-                    detectInProgressState,
-                    blockedState,
-                    workflowPath,
-                    workflowPathExplicit,
-                    workspaceRoot,
-                    workspaceRootExplicit,
-                    configDir,
-                    manifestPath,
-                    serverPort,
-                    maxAgents,
-                    maxAgentsExplicit,
-                    codexModel,
-                    codexReasoningEffort,
-                    codexReviewer,
-                    codexModelCatalog,
-                    codexModelDefaults,
-                    envPath,
-                    additionalWritableRoots,
-                    allowAllPaths,
-                    dangerFullAccess,
-                    noStart,
-                    command,
-                    endpoint,
-                    callerDirectory);
+            return new OptionsCopy(this)
+                    .withCodexAccess(additionalWritableRoots, dangerFullAccess)
+                    .build();
         }
 
         Options withRepositoryUrl(Optional<String> repositoryUrl) {
-            return new Options(
-                    check,
-                    dryRun,
-                    repairPort,
-                    nonInteractive,
-                    force,
-                    forceNewSetup,
-                    configureGithub,
-                    githubMode,
-                    apiKey,
-                    apiToken,
-                    boardName,
-                    existingBoardId,
-                    workspaceId,
-                    repositoryUrl,
-                    activeStates,
-                    terminalStates,
-                    inProgressState,
-                    detectInProgressState,
-                    blockedState,
-                    workflowPath,
-                    workflowPathExplicit,
-                    workspaceRoot,
-                    workspaceRootExplicit,
-                    configDir,
-                    manifestPath,
-                    serverPort,
-                    maxAgents,
-                    maxAgentsExplicit,
-                    codexModel,
-                    codexReasoningEffort,
-                    codexReviewer,
-                    codexModelCatalog,
-                    codexModelDefaults,
-                    envPath,
-                    additionalWritableRoots,
-                    allowAllPaths,
-                    dangerFullAccess,
-                    noStart,
-                    command,
-                    endpoint,
-                    callerDirectory);
+            return new OptionsCopy(this).withRepositoryUrl(repositoryUrl).build();
         }
 
         private static Path resolveUserDataPath(Path path, Path configDir) {
@@ -1947,8 +1887,7 @@ public final class LocalSetup {
         }
 
         private static Path defaultWorkspaceRoot(Map<String, String> environment) {
-            return configuredPath(environment, "SYMPHONY_TRELLO_WORKSPACE_ROOT")
-                    .orElse(TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT);
+            return configuredPath(environment, WORKSPACE_ROOT_ENV).orElse(TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT);
         }
 
         private static Optional<Path> configuredPath(Map<String, String> environment, String name) {
@@ -2007,93 +1946,103 @@ public final class LocalSetup {
         }
 
         Options withCodexModelCatalog(CodexModelSelectionDefaults catalog) {
-            return new Options(
-                    check,
-                    dryRun,
-                    repairPort,
-                    nonInteractive,
-                    force,
-                    forceNewSetup,
-                    configureGithub,
-                    githubMode,
-                    apiKey,
-                    apiToken,
-                    boardName,
-                    existingBoardId,
-                    workspaceId,
-                    repositoryUrl,
-                    activeStates,
-                    terminalStates,
-                    inProgressState,
-                    detectInProgressState,
-                    blockedState,
-                    workflowPath,
-                    workflowPathExplicit,
-                    workspaceRoot,
-                    workspaceRootExplicit,
-                    configDir,
-                    manifestPath,
-                    serverPort,
-                    maxAgents,
-                    maxAgentsExplicit,
-                    codexModel,
-                    codexReasoningEffort,
-                    codexReviewer,
-                    Optional.of(catalog),
-                    codexModelDefaults,
-                    envPath,
-                    additionalWritableRoots,
-                    allowAllPaths,
-                    dangerFullAccess,
-                    noStart,
-                    command,
-                    endpoint,
-                    callerDirectory);
+            return new OptionsCopy(this).withCodexModelCatalog(catalog).build();
         }
 
         Options withCodexModelSelection(CodexModelSelectionFlow.Selection selected) {
-            return new Options(
-                    check,
-                    dryRun,
-                    repairPort,
-                    nonInteractive,
-                    force,
-                    forceNewSetup,
-                    configureGithub,
-                    githubMode,
-                    apiKey,
-                    apiToken,
-                    boardName,
-                    existingBoardId,
-                    workspaceId,
-                    repositoryUrl,
-                    activeStates,
-                    terminalStates,
-                    inProgressState,
-                    detectInProgressState,
-                    blockedState,
-                    workflowPath,
-                    workflowPathExplicit,
-                    workspaceRoot,
-                    workspaceRootExplicit,
-                    configDir,
-                    manifestPath,
-                    serverPort,
-                    maxAgents,
-                    maxAgentsExplicit,
-                    codexModel.or(selected::modelOverride),
-                    codexReasoningEffort.or(selected::reasoningEffortOverride),
-                    codexReviewer,
-                    codexModelCatalog,
-                    Optional.of(selected.defaults()),
-                    envPath,
-                    additionalWritableRoots,
-                    allowAllPaths,
-                    dangerFullAccess,
-                    noStart,
-                    command,
-                    endpoint,
-                    callerDirectory);
+            return new OptionsCopy(this).withCodexModelSelection(selected).build();
+        }
+
+        private static final class OptionsCopy {
+            private final Options source;
+            private Optional<String> repositoryUrl;
+            private Optional<String> codexModel;
+            private Optional<String> codexReasoningEffort;
+            private Optional<CodexModelSelectionDefaults> codexModelCatalog;
+            private Optional<TrelloBoardSetup.CodexModelDefaults> codexModelDefaults;
+            private List<Path> additionalWritableRoots;
+            private boolean dangerFullAccess;
+
+            private OptionsCopy(Options source) {
+                this.source = source;
+                repositoryUrl = source.repositoryUrl();
+                codexModel = source.codexModel();
+                codexReasoningEffort = source.codexReasoningEffort();
+                codexModelCatalog = source.codexModelCatalog();
+                codexModelDefaults = source.codexModelDefaults();
+                additionalWritableRoots = source.additionalWritableRoots();
+                dangerFullAccess = source.dangerFullAccess();
+            }
+
+            private OptionsCopy withCodexAccess(
+                    List<Path> replacementAdditionalWritableRoots, boolean replacementDangerFullAccess) {
+                additionalWritableRoots = replacementAdditionalWritableRoots;
+                dangerFullAccess = replacementDangerFullAccess;
+                return this;
+            }
+
+            private OptionsCopy withRepositoryUrl(Optional<String> replacementRepositoryUrl) {
+                repositoryUrl = replacementRepositoryUrl;
+                return this;
+            }
+
+            private OptionsCopy withCodexModelCatalog(CodexModelSelectionDefaults catalog) {
+                codexModelCatalog = Optional.of(catalog);
+                return this;
+            }
+
+            private OptionsCopy withCodexModelSelection(CodexModelSelectionFlow.Selection selected) {
+                codexModel = source.codexModel().or(selected::modelOverride);
+                codexReasoningEffort = source.codexReasoningEffort().or(selected::reasoningEffortOverride);
+                codexModelDefaults = Optional.of(selected.defaults());
+                return this;
+            }
+
+            private Options build() {
+                return new Options(
+                        source.check(),
+                        source.dryRun(),
+                        source.repairPort(),
+                        source.nonInteractive(),
+                        source.force(),
+                        source.forceNewSetup(),
+                        source.configureGithub(),
+                        source.githubMode(),
+                        source.apiKey(),
+                        source.apiToken(),
+                        source.boardName(),
+                        source.existingBoardId(),
+                        source.workspaceId(),
+                        repositoryUrl,
+                        source.activeStates(),
+                        source.terminalStates(),
+                        source.inProgressState(),
+                        source.detectInProgressState(),
+                        source.blockedState(),
+                        source.workflowPath(),
+                        source.workflowPathExplicit(),
+                        source.workspaceRoot(),
+                        source.workspaceRootExplicit(),
+                        source.configDir(),
+                        source.stateHome(),
+                        source.manifestPath(),
+                        source.serverPort(),
+                        source.maxAgents(),
+                        source.maxAgentsExplicit(),
+                        codexModel,
+                        codexReasoningEffort,
+                        source.codexReviewer(),
+                        codexModelCatalog,
+                        codexModelDefaults,
+                        source.envPath(),
+                        additionalWritableRoots,
+                        source.allowAllPaths(),
+                        dangerFullAccess,
+                        source.noStart(),
+                        source.command(),
+                        source.endpoint(),
+                        source.callerDirectory());
+            }
         }
     }
 

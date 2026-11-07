@@ -1046,7 +1046,7 @@ final class InstallerScriptFixture {
                   }
                   setup_local_value_option() {
                     case "$1" in
-                      --key|--token|--board-name|--board|--workspace-id|--active|--terminal|--in-progress|--blocked|--workflow|--workspace-root|--config-dir|--manifest|--server-port|--max-agents|--codex-model|--codex-reasoning-effort|--env|--add-path|--endpoint)
+                      --key|--token|--board-name|--board|--workspace-id|--active|--terminal|--in-progress|--blocked|--workflow|--workspace-root|--config-dir|--state-home|--manifest|--server-port|--max-agents|--codex-model|--codex-reasoning-effort|--env|--add-path|--endpoint)
                         return 0
                         ;;
                       *)
@@ -1098,6 +1098,9 @@ final class InstallerScriptFixture {
                           if [[ -n "$workspace_root" ]] && ! has_option --workspace-root "${raw_cli_args[@]}"; then
                             defaults+=("--workspace-root" "$workspace_root")
                           fi
+                          if [[ -n "$state_home" ]] && ! has_option --state-home "${raw_cli_args[@]}"; then
+                            defaults+=("--state-home" "$state_home")
+                          fi
                         else
                           if [[ "$workspace_from_user_environment" == true ]]; then
                             if ! has_option --workspace-root "${raw_cli_args[@]}"; then
@@ -1106,6 +1109,15 @@ final class InstallerScriptFixture {
                           else
                             if ! has_option --workspace-root "${raw_cli_args[@]}"; then
                               defaults+=("--workspace-root" "$(/usr/bin/readlink -m "$explicit_config")/workspaces")
+                            fi
+                          fi
+                          if [[ "$state_from_user_environment" == true ]]; then
+                            if ! has_option --state-home "${raw_cli_args[@]}"; then
+                              defaults+=("--state-home" "$state_home")
+                            fi
+                          else
+                            if ! has_option --state-home "${raw_cli_args[@]}"; then
+                              defaults+=("--state-home" "$(dirname "$(/usr/bin/readlink -m "$explicit_config")")/state")
                             fi
                           fi
                         fi
@@ -1285,7 +1297,12 @@ final class InstallerScriptFixture {
 	                      exit 0
 	                      ;;
 	                    stop)
-	                      if [[ -f "$pid_file" ]]; then
+	                      candidate_pid_files=("$pid_file")
+                      if [[ -z "$workflow" ]]; then
+                        candidate_pid_files=("$state_home/"*.pid)
+                      fi
+                      for pid_file in "${candidate_pid_files[@]}"; do
+                      if [[ -f "$pid_file" ]]; then
 	                        worker_pid="$(cat "$pid_file")"
 	                        # Same TERM grace and KILL fallback as LocalWorkerManager, so "Stopped" always
 	                        # means the worker is gone and no late TERM-handler output can land after it.
@@ -1306,7 +1323,8 @@ final class InstallerScriptFixture {
 	                        fi
 	                        rm -f "$pid_file"
 	                      fi
-	                      echo "Stopped $display_name"
+	                      done
+                      echo "Stopped $display_name"
 	                      exit 0
 	                      ;;
 	                    logs)
@@ -1330,6 +1348,7 @@ final class InstallerScriptFixture {
                 fi
 	                if [[ "${effective_cli_args[0]:-}" == "setup-local" ]]; then
                   config_dir="."
+                  state_home="."
                   cli_args=("${effective_cli_args[@]}")
                   for ((index = 1; index < ${#cli_args[@]}; index++)); do
                     if [[ "${cli_args[$index]}" == "--config-dir" && $((index + 1)) -lt ${#cli_args[@]} ]]; then
@@ -1337,6 +1356,11 @@ final class InstallerScriptFixture {
                       index=$((index + 1))
                     elif [[ "${cli_args[$index]}" == "--config-dir="* ]]; then
                       config_dir="${cli_args[$index]#--config-dir=}"
+                    elif [[ "${cli_args[$index]}" == "--state-home" && $((index + 1)) -lt ${#cli_args[@]} ]]; then
+                      state_home="${cli_args[$((index + 1))]}"
+                      index=$((index + 1))
+                    elif [[ "${cli_args[$index]}" == "--state-home="* ]]; then
+                      state_home="${cli_args[$index]#--state-home=}"
                     else
                       :
                     fi
@@ -1382,7 +1406,7 @@ final class InstallerScriptFixture {
                   printf -- '---\\ntracker:\\n  kind: trello\\n---\\n# %s\\n' "$board" > "$workflow"
                   printf '{"boards":[{"boardId":"board-1","boardName":"%s","workflowPath":"%s","envPath":"%s/.env"}]}\\n' "$board" "$workflow" "$config_dir" > "$config_dir/connected-boards.json"
 	                  echo "setup-local key=$key token=$token board=$board" >> "${SYMPHONY_FAKE_LOG:?}"
-	                  env -u SYMPHONY_TRELLO_INSTALLER_COMPLETION "${SYMPHONY_TRELLO_COMMAND:?}" start --env "$config_dir/.env" --workflow "$workflow"
+	                  env -u SYMPHONY_TRELLO_INSTALLER_COMPLETION "${SYMPHONY_TRELLO_COMMAND:?}" start --config-dir "$config_dir" --state-home "$state_home" --env "$config_dir/.env" --workflow "$workflow"
                   if [[ "${SYMPHONY_TRELLO_INSTALLER_COMPLETION:-}" != "defer" ]]; then
                     echo "You're good to go - your Trello board is now a queue for Codex work."
                   fi
@@ -1684,16 +1708,16 @@ final class InstallerScriptFixture {
 	                    $mainIndex = [Array]::IndexOf($args, "ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain")
 	                    $cliArgs = $args[($mainIndex + 1)..($args.Count - 1)]
 	                    $command = $cliArgs[0]
-	                    $stateHome = "."
-	                    $workflow = "WORKFLOW.md"
-	                    for ($i = 1; $i -lt $cliArgs.Count; $i++) {
+                    $stateHome = if ($env:SYMPHONY_TRELLO_STATE_HOME) { $env:SYMPHONY_TRELLO_STATE_HOME } else { "." }
+                    $workflow = ""
+                    for ($i = 1; $i -lt $cliArgs.Count; $i++) {
 	                      switch ($cliArgs[$i]) {
 	                        "--state-home" { $i++; $stateHome = $cliArgs[$i] }
 	                        "--workflow" { $i++; $workflow = $cliArgs[$i] }
 	                      }
 	                    }
 	                    New-Item -ItemType Directory -Force -Path $stateHome | Out-Null
-	                    $displayName = Split-Path -Leaf $workflow
+	                    $displayName = if ($workflow) { Split-Path -Leaf $workflow } else { "WORKFLOW.md" }
 	                    $stateName = "$displayName.abcdef123456"
 	                    $pidFile = Join-Path $stateHome "$stateName.pid"
 	                    $logFile = Join-Path $stateHome "$stateName.log"
@@ -1708,7 +1732,11 @@ final class InstallerScriptFixture {
 	                      exit 0
 	                    }
 	                    if ($command -eq "stop") {
-	                      Remove-Item -Force -ErrorAction SilentlyContinue $pidFile
+	                      if ($workflow) {
+                        Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
+                      } else {
+                        Get-ChildItem -LiteralPath $stateHome -Filter "*.pid" -File | Remove-Item -Force
+                      }
 	                      Write-Output "Stopped $displayName"
 	                      exit 0
 	                    }

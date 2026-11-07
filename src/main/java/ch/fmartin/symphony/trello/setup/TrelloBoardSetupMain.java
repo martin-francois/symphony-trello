@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.setup.SetupCliOptionNames.STATE_HOME;
+
 import ch.fmartin.symphony.trello.CliExitCodes;
 import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
@@ -1299,7 +1301,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         @Option(names = "--workspace-root", description = "Directory for per-card workspaces.")
         Optional<Path> workspaceRoot = Optional.empty();
 
-        @Option(names = "--state-home", description = "Directory for managed worker PID and log files.")
+        @Option(names = STATE_HOME, description = "Directory for managed worker PID and log files.")
         Optional<Path> stateHome = Optional.empty();
 
         @Option(names = "--app-home", hidden = true)
@@ -1339,7 +1341,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         @Option(names = "--workspace-root", description = "Directory for per-card workspaces.")
         Optional<Path> workspaceRoot = Optional.empty();
 
-        @Option(names = "--state-home", description = "Directory for managed worker PID and log files.")
+        @Option(names = STATE_HOME, description = "Directory for managed worker PID and log files.")
         Optional<Path> stateHome = Optional.empty();
 
         @Option(names = "--manifest", description = "Connected-board manifest path.")
@@ -1361,12 +1363,12 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             CliInputValidation.rejectControlCharactersInText("--board", board());
             rejectBlankDiagnosticsPath("--config-dir", configDir);
             rejectBlankDiagnosticsPath("--workspace-root", workspaceRoot);
-            rejectBlankDiagnosticsPath("--state-home", stateHome);
+            rejectBlankDiagnosticsPath(STATE_HOME, stateHome);
             rejectBlankDiagnosticsPath("--manifest", manifest);
             CliInputValidation.rejectBlankWorkflowSelector(workflow());
             CliInputValidation.rejectControlCharacters("--config-dir", configDir);
             CliInputValidation.rejectControlCharacters("--workspace-root", workspaceRoot);
-            CliInputValidation.rejectControlCharacters("--state-home", stateHome);
+            CliInputValidation.rejectControlCharacters(STATE_HOME, stateHome);
             CliInputValidation.rejectControlCharacters("--manifest", manifest);
             CliInputValidation.rejectControlCharacters("--app-home", appHome);
             CliInputValidation.rejectControlCharacters("--workflow", workflow());

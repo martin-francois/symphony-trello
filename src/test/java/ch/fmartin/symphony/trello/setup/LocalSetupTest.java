@@ -5455,6 +5455,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path manifest = config.resolve(ConnectedBoardManifest.FILE_NAME);
         writeOldBoardManifest(manifest, workflow);
         Path env = tempDir.resolve(".env");
+        Path stateHome = tempDir.resolve("explicit state");
 
         // when
         SetupRunResult result = runSetup(
@@ -5473,10 +5474,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 env.toString(),
                 "--force",
                 "--no-start",
+                "--state-home",
+                stateHome.toString(),
                 "--no-github");
 
         // then
-        result.assertSuccess();
+        result.assertSuccess()
+                .stdoutContains(
+                        " start --env '" + env + "' --workflow '" + workflow + "' --state-home '" + stateHome + "'",
+                        " status --state-home '" + stateHome + "'",
+                        " logs --workflow '" + workflow + "' --state-home '" + stateHome + "'");
         assertThatManifest(manifest)
                 .hasBoardCount(1)
                 .hasBoard("Imported Queue")
@@ -5839,6 +5846,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.repair-occupied.md");
         Path env = tempDir.resolve(".env.repair-occupied");
+        Path stateHome = tempDir.resolve("repair state");
         Path manifest = tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME);
         int occupiedPort = firstAvailableManagedPort();
         SetupRunResult firstResult = runSetup(
@@ -5877,7 +5885,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                     .isTrue();
 
             // when
-            SetupRunResult result = runSetup("repair-port", "--board", "Occupied Repair Queue");
+            SetupRunResult result =
+                    runSetup("repair-port", "--board", "Occupied Repair Queue", "--state-home", stateHome.toString());
 
             // then
             int updatedPort = new WorkflowConfigEditor().serverPort(workflow).orElseThrow();
@@ -5887,6 +5896,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                             "No port repair needed.",
                             "already configured for an available port",
                             "http://127.0.0.1:" + occupiedPort);
+            result.stdoutContains(
+                    "start --env '" + env + "' --workflow '" + workflow + "' --state-home '" + stateHome + "'");
             assertThat(updatedPort).isNotEqualTo(occupiedPort);
             assertThatWorkflow(workflow).hasServerPort(updatedPort).doesNotHaveServerPort(occupiedPort);
             assertThatManifest(manifest).hasBoardWithPort("Occupied Repair Queue", updatedPort);
