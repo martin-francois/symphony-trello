@@ -3,6 +3,10 @@ package ch.fmartin.symphony.trello.process;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import ch.fmartin.symphony.trello.config.ConfigResolver;
+import ch.fmartin.symphony.trello.config.EnvironmentSource;
+import ch.fmartin.symphony.trello.config.EnvironmentSources;
+import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -33,6 +37,33 @@ final class ProcessEnvironmentTest {
 
     @TempDir
     Path tempDir;
+
+    @Test
+    void removesCustomCredentialNamesAndAliasesContainingResolvedValues() {
+        // given
+        Map<String, String> environment = new HashMap<>(Map.of(
+                "PATH",
+                "/usr/bin",
+                "CUSTOM_TOKEN",
+                "synthetic-token",
+                "ALIASED_TOKEN",
+                "prefix-synthetic-token-suffix",
+                "ALIASED_KEY",
+                "synthetic-key",
+                "TRELLO_API_KEY",
+                "unused-key"));
+        var resolver = new ConfigResolver(EnvironmentSources.of(EnvironmentSource.shellEnvironment(environment)));
+        var config = resolver.resolve(new WorkflowDefinition(
+                tempDir.resolve("WORKFLOW.md"),
+                Map.of("tracker", Map.of("api_key", "synthetic-key", "api_token", "$CUSTOM_TOKEN")),
+                ""));
+
+        // when
+        ProcessEnvironment.removeSecrets(environment, config);
+
+        // then
+        assertThat(environment).containsExactlyEntriesOf(Map.of("PATH", "/usr/bin"));
+    }
 
     @Test
     void limitGitDiscoverySetsCeilingDirectory() {

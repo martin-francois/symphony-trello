@@ -126,6 +126,7 @@ final class TrelloBoardConnector {
         MaxAgentsSelection maxAgents = configureMaxAgents(options, workflowPath, terminal);
         credentialPersistence.persist();
         TrelloBoardSetup.ImportBoardResult result = boardSetup(options)
+                .withReplacedConnection(manifest, workflowPath, options.force())
                 .importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
                         options.endpoint(),
                         credentials,
@@ -180,6 +181,7 @@ final class TrelloBoardConnector {
         credentialPersistence.persist();
         return LocalSetup.SetupResult.from(
                 boardSetup(options)
+                        .withReplacedConnection(manifest, workflowPath, options.force())
                         .createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
                                 options.endpoint(),
                                 credentials,
@@ -547,15 +549,13 @@ final class TrelloBoardConnector {
 
     private boolean canStopManagedWorkflow(
             LocalSetup.Options options, ConnectedBoardManifest manifest, Path workflowPath, int port) {
-        List<ConnectedBoard> matches = manifest.boards().stream()
-                .filter(board -> board.serverPort() == port)
-                .filter(board -> PathsEqual.samePath(board.workflowPath(), workflowPath))
-                .toList();
-        if (matches.isEmpty()) {
+        Optional<ConnectedBoard> selected =
+                manifest.selectWorkflow(workflowPath).filter(board -> board.serverPort() == port);
+        if (selected.isEmpty()) {
             return false;
         }
         try {
-            return workerManager.canStopManagedWorker(localWorkerPaths(options), matches.getFirst());
+            return workerManager.canStopManagedWorker(localWorkerPaths(options), selected.get());
         } catch (IOException e) {
             return false;
         }
@@ -563,11 +563,12 @@ final class TrelloBoardConnector {
 
     private LocalWorkerPaths localWorkerPaths(LocalSetup.Options options) {
         return LocalWorkerPaths.from(
-                Optional.empty(),
-                Optional.of(options.configDir()),
-                Optional.of(options.workspaceRoot()),
-                Optional.empty(),
-                environment);
+                        Optional.empty(),
+                        Optional.of(options.configDir()),
+                        Optional.of(options.workspaceRoot()),
+                        Optional.empty(),
+                        environment)
+                .withManifestPath(options.manifestPath());
     }
 
     private static Set<Integer> reservedWorkflowServerPorts(
@@ -576,18 +577,23 @@ final class TrelloBoardConnector {
             boolean replacingTarget,
             WorkflowConfigEditor editor,
             Function<String, Optional<String>> environmentResolver) {
-        Set<Integer> reservedPorts = manifest.boards().stream()
-                .filter(board -> !PathsEqual.samePath(board.workflowPath(), workflowPath))
+        Optional<ConnectedBoard> selected = manifest.selectWorkflow(workflowPath);
+        ConnectedBoardManifest otherBoards =
+                selected.map(board -> manifest.withoutBoard(board.boardId())).orElse(manifest);
+        Set<Integer> reservedPorts = otherBoards.boards().stream()
                 .map(ConnectedBoard::serverPort)
                 // Keep this mutable because sibling workflow ports are merged before returning the
                 // reserved-port set to setup validation.
                 .collect(Collectors.toCollection(HashSet::new));
-        reservedPorts.addAll(siblingWorkflowServerPorts(workflowPath, replacingTarget, editor, environmentResolver));
+        Path managedPath = selected.map(ConnectedBoard::workflowPath).orElse(workflowPath);
+        reservedPorts.addAll(
+                siblingWorkflowServerPorts(workflowPath, managedPath, replacingTarget, editor, environmentResolver));
         return reservedPorts;
     }
 
     private static Set<Integer> siblingWorkflowServerPorts(
             Path workflowPath,
+            Path managedPath,
             boolean replacingTarget,
             WorkflowConfigEditor editor,
             Function<String, Optional<String>> environmentResolver) {
@@ -600,12 +606,16 @@ final class TrelloBoardConnector {
             return stream.filter(path -> PathNames.fileName(path).matches("WORKFLOW(\\..*)?\\.md"))
                     .map(Path::toAbsolutePath)
                     .map(Path::normalize)
-                    .filter(path -> !replacingTarget || !path.equals(absolute))
+                    .filter(path -> !replacingTarget || !isReplacedWorkflowFile(path, absolute, managedPath))
                     .flatMap(path -> editor.serverPort(path, environmentResolver).stream())
                     .collect(Collectors.toUnmodifiableSet());
         } catch (IOException ignored) {
             return Set.of();
         }
+    }
+
+    private static boolean isReplacedWorkflowFile(Path candidate, Path source, Path managed) {
+        return PathsEqual.samePath(candidate, source) || PathsEqual.samePath(candidate, managed);
     }
 
     static String slug(String value) {

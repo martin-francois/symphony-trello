@@ -3878,6 +3878,150 @@ final class InstallerScriptTest {
         }
     }
 
+    @CsvSource({"false,false", "false,true", "true,false", "true,true"})
+    @ParameterizedTest
+    void uninstallRequiresInspectableIdentityForLiveHelpers(boolean powershell, boolean inspectable) throws Exception {
+        // given
+        Path home = Files.createDirectories(temporaryDirectory.resolve("inspection-home"));
+        Path installation = temporaryDirectory.resolve("inspection-install");
+        Path app = Files.createDirectories(installation.resolve("app"));
+        Path bin = Files.createDirectories(installation.resolve("bin"));
+        Path wrapper = Files.writeString(
+                bin.resolve(powershell ? "symphony-trello.cmd" : "symphony-trello"), "synthetic wrapper");
+        Path ready = Files.createDirectories(installation.resolve("state/card-helper/installation"))
+                .resolve("ready.json");
+        Files.createDirectories(installation.resolve("config"));
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker");
+        Files.writeString(ready, "{\"pid\":123456789}");
+        Path signal = temporaryDirectory.resolve("unexpected-signal");
+        List<String> launcher = uninspectableHelperUninstallLauncher(powershell, inspectable, signal);
+        Map<String, String> environment = withEnvironment(
+                nonWindowsPowerShellEnvironment(),
+                Map.of("HOME", home.toString(), "SYMPHONY_HOME", installation.toString()));
+
+        // when
+        ProcessResult result = runUnchecked(
+                environment,
+                command(launcher, "--yes", "--prefix", app.toString(), "--bin-dir", bin.toString())
+                        .toArray(String[]::new));
+
+        // then
+        assertThat(signal).doesNotExist();
+        if (inspectable) {
+            result.assertSuccess();
+            assertThat(app).doesNotExist();
+            assertThat(wrapper).doesNotExist();
+        } else {
+            assertThat(result.exitCode()).as(result.output()).isNotZero();
+            assertThat(normalizedWhitespace(result.output())).contains("cannot verify card helper");
+            assertThat(app).isDirectory();
+            assertThat(wrapper).isRegularFile();
+            assertThat(ready).isRegularFile();
+        }
+    }
+
+    private List<String> uninspectableHelperUninstallLauncher(boolean powershell, boolean inspectable, Path signal)
+            throws IOException {
+        if (powershell) {
+            List<String> launcher = powershellCommand();
+            assumeFalse(launcher.isEmpty());
+            Path script = temporaryDirectory.resolve("helper-inspection.ps1");
+            String commandLine = inspectable ? "'unrelated-program'" : "$null";
+            Files.writeString(
+                    script,
+                    """
+                    function Get-CimInstance {
+                      [CmdletBinding()] param($ClassName, $Filter)
+                      [pscustomobject]@{ CommandLine = %s }
+                    }
+                    function Get-Process {
+                      [CmdletBinding()] param($Id)
+                      if ($Id -eq 123456789) { [pscustomobject]@{ Id = $Id } }
+                      else { Microsoft.PowerShell.Management\\Get-Process @PSBoundParameters }
+                    }
+                    function Stop-Process {
+                      [CmdletBinding()] param($Id, [switch]$Force)
+                      Set-Content -LiteralPath %s -Value 'unexpected signal'
+                      throw 'cannot signal fixture process: expected inspection to prevent signalling'
+                    }
+                    & %s @args
+                    exit $LASTEXITCODE
+                    """
+                            .formatted(
+                                    commandLine,
+                                    powerShellLiteral(signal.toString()),
+                                    powerShellLiteral(Path.of("uninstall.ps1")
+                                            .toAbsolutePath()
+                                            .toString())));
+            return command(launcher, "-NoProfile", "-File", script.toString());
+        }
+        assumeTrue(commandExists("bash"));
+        Path script = temporaryDirectory.resolve("helper-inspection.sh");
+        Files.writeString(
+                script,
+                """
+                #!/usr/bin/env bash
+                kill() {
+                  if [[ "$1" == -0 && "$2" == 123456789 ]]; then return 0; fi
+                  printf 'unexpected signal' > %s
+                  return 1
+                }
+                ps() { %s; }
+                source %s "$@"
+                """
+                        .formatted(
+                                shellQuote(signal.toString()),
+                                inspectable ? "printf 'unrelated-program\\n'" : "return 1",
+                                shellQuote(
+                                        Path.of("uninstall.sh").toAbsolutePath().toString())));
+        return List.of("bash", script.toString());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void posixUninstallStopsOnlyOwnedCardHelperWithoutTheInstalledCli(boolean belongsToInstall) throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = Files.createDirectories(temporaryDirectory.resolve("helper-home"));
+        Path symphonyHome = temporaryDirectory.resolve("helper-install");
+        Path app = Files.createDirectories(symphonyHome.resolve("app"));
+        Path config = Files.createDirectories(symphonyHome.resolve("config"));
+        Path helper = Files.createDirectories(symphonyHome.resolve("state/card-helper/installation"));
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker");
+        Process process = new ProcessBuilder(
+                        "bash",
+                        "-c",
+                        "while :; do sleep 1; done",
+                        "--",
+                        "-Dsymphony.trello.card_helper_root="
+                                + (belongsToInstall ? helper : temporaryDirectory.resolve("another-helper")),
+                        CardHelperMain.class.getName(),
+                        config.toString(),
+                        helper.toString())
+                .start();
+        try {
+            Files.writeString(helper.resolve("ready.json"), "{\"pid\":" + process.pid() + "}");
+
+            // when
+            ProcessResult result = runUnchecked(
+                    Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString()),
+                    "bash",
+                    "uninstall.sh",
+                    "--yes",
+                    "--prefix",
+                    app.toString());
+
+            // then
+            assertThat(result.exitCode()).as(result.output()).isZero();
+            assertThat(process.isAlive())
+                    .as("uninstall stops only an owned helper, without requiring Java or its wrapper")
+                    .isNotEqualTo(belongsToInstall);
+            assertThat(config).isDirectory();
+        } finally {
+            process.destroyForcibly();
+        }
+    }
+
     @Test
     void posixUninstallSkipsStaleUnmanagedPidWithHashFreeLabelWithoutStoppingIt() throws Exception {
         // given
@@ -4540,6 +4684,59 @@ final class InstallerScriptTest {
         assertThat(result.output())
                 .contains("Repository: https://<redacted>@example.com/org/repo.git")
                 .doesNotContain("user:secret-token");
+    }
+
+    @CsvSource({"false, false", "true, false", "false, true", "true, true"})
+    @ParameterizedTest
+    void installersRecoverRetainedHelperStateWithoutLauncher(boolean powershell, boolean livePid) throws Exception {
+        // given
+        List<String> launcher = installerLauncher(powershell);
+        SourceDowngrade source = sourceDowngrade(false);
+        ReleaseArchiveUpdate installed = source.installed();
+        Files.delete(source.sentinel());
+        Files.delete(installed.appHome().resolve(".symphony-trello-install"));
+        Files.delete(installed.appHome());
+        Files.delete(installed.binDirectory().resolve("symphony-trello"));
+        Path ready = Files.createDirectories(installed.appHome().resolveSibling("state/card-helper/retained"))
+                .resolve("ready.json");
+        if (livePid) {
+            launcher = liveHelperReinstallLauncher(powershell, launcher, ready);
+        }
+
+        // when
+        ProcessResult result = source.run(launcher);
+
+        // then
+        if (livePid) {
+            assertThat(result.exitCode()).as(result.output()).isNotZero();
+            assertThat(normalizedWhitespace(result.output()))
+                    .contains("cannot stop card helper", "launcher is missing");
+            assertThat(installed.appHome()).doesNotExist();
+        } else {
+            result.assertSuccess();
+            assertThat(installed.appHome().resolve("target/quarkus-app/quarkus-run.jar"))
+                    .isRegularFile();
+            assertThat(Path.of(installed.environment().get("SYMPHONY_FAKE_LOG")))
+                    .content(StandardCharsets.UTF_8)
+                    .contains("card-helper start --all");
+        }
+    }
+
+    private List<String> liveHelperReinstallLauncher(boolean powershell, List<String> launcher, Path ready)
+            throws IOException {
+        if (!powershell) {
+            Files.writeString(ready, "{\"pid\":" + ProcessHandle.current().pid() + "}");
+            return launcher;
+        }
+        Path script = temporaryDirectory.resolve("live-helper-reinstall.ps1");
+        Files.writeString(
+                script,
+                "Set-Content -LiteralPath " + powerShellLiteral(ready.toString())
+                        + " -Value ('{\"pid\":' + $PID + '}')\n& "
+                        + powerShellLiteral(
+                                Path.of("install.ps1").toAbsolutePath().toString())
+                        + " @args\nexit $LASTEXITCODE\n");
+        return command(powershellCommand(), "-NoProfile", "-File", script.toString());
     }
 
     @Test

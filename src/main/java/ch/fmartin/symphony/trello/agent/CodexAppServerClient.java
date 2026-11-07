@@ -5,7 +5,6 @@ import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.process.ProcessEnvironment;
 import ch.fmartin.symphony.trello.process.RuntimeProcessShutdown;
 import ch.fmartin.symphony.trello.time.ApplicationClock;
-import ch.fmartin.symphony.trello.workflow.CodexSandboxPolicy;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -78,10 +77,10 @@ public class CodexAppServerClient {
         Process process;
         try {
             ProcessBuilder processBuilder = new ProcessBuilder(
-                            "bash", "-lc", config.codex().command())
+                            "bash", "-c", config.codex().command())
                     .directory(workspace.toFile())
                     .redirectError(ProcessBuilder.Redirect.PIPE);
-            ProcessEnvironment.removeDefaultSecrets(processBuilder);
+            ProcessEnvironment.removeSecrets(processBuilder, config);
             ProcessEnvironment.limitGitDiscovery(
                     processBuilder, config.workspace().root());
             process = processBuilder.start();
@@ -90,10 +89,9 @@ public class CodexAppServerClient {
         }
 
         try (var session = new AppServerSession(process, config, card, workerIdentity, listener)) {
+            var permissions = new CodexPermissions(json, config, workspace);
             ObjectNode capabilities = object();
-            if (trelloTools.shouldEnableExperimentalApi(config)) {
-                capabilities.put("experimentalApi", true);
-            }
+            capabilities.put("experimentalApi", true);
             session.start();
             JsonNode init = request(
                     session,
@@ -112,8 +110,9 @@ public class CodexAppServerClient {
             JsonNode thread = request(
                     session,
                     "thread/start",
-                    threadStartParams(config, workspace),
+                    threadStartParams(config, workspace, permissions),
                     config.codex().readTimeout());
+            permissions.requireSelected(thread);
             String threadId = thread.at("/thread/id").asText(null);
             if (threadId == null) {
                 return AgentRunResult.fail("codex_protocol_error: missing thread id");
@@ -127,7 +126,7 @@ public class CodexAppServerClient {
                 JsonNode turn = request(
                         session,
                         "turn/start",
-                        turnStartParams(config, threadId, workspace, nextPrompt),
+                        turnStartParams(config, threadId, workspace, nextPrompt, permissions),
                         config.codex().readTimeout());
                 String turnId = turn.at("/turn/id").asText(null);
                 if (turnId == null) {
@@ -223,10 +222,10 @@ public class CodexAppServerClient {
         private JsonNode latest;
     }
 
-    private ObjectNode threadStartParams(EffectiveConfig config, Path workspace) {
+    private ObjectNode threadStartParams(EffectiveConfig config, Path workspace, CodexPermissions permissions) {
         ObjectNode params = object("cwd", workspace.toString(), "serviceName", "symphony-trello", "ephemeral", true);
         putIfPresent(params, "approvalPolicy", config.codex().approvalPolicy());
-        putIfPresent(params, "sandbox", config.codex().threadSandbox());
+        permissions.applyThread(params);
         putIfPresent(params, "model", config.codex().model());
         var toolSpecs = trelloTools.toolSpecs(config);
         if (!toolSpecs.isEmpty()) {
@@ -235,22 +234,15 @@ public class CodexAppServerClient {
         return params;
     }
 
-    private ObjectNode turnStartParams(EffectiveConfig config, String threadId, Path workspace, String prompt) {
+    private ObjectNode turnStartParams(
+            EffectiveConfig config, String threadId, Path workspace, String prompt, CodexPermissions permissions) {
         ObjectNode params = object("threadId", threadId, "cwd", workspace.toString());
         params.set("input", json.createArrayNode().add(object("type", "text", "text", prompt)));
         putIfPresent(params, "approvalPolicy", config.codex().approvalPolicy());
         putIfPresent(params, "model", config.codex().model());
         putIfPresent(params, "effort", config.codex().reasoningEffort());
-        putIfPresent(params, "sandboxPolicy", sandboxPolicy(config));
+        permissions.applyTurn(params);
         return params;
-    }
-
-    private JsonNode sandboxPolicy(EffectiveConfig config) {
-        return CodexSandboxPolicy.effectivePolicy(
-                json,
-                config.codex().turnSandboxPolicy(),
-                config.codex().additionalWritableRoots(),
-                config.codex().forceDangerFullAccess());
     }
 
     private void putIfPresent(ObjectNode node, String key, Object value) {

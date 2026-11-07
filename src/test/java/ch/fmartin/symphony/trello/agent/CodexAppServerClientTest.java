@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import ch.fmartin.symphony.trello.TestCards;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
+import ch.fmartin.symphony.trello.testsupport.FakeAppServerScripts;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -54,7 +55,7 @@ final class CodexAppServerClientTest {
                 #!/usr/bin/env bash
                 # Absolute output path: the codex launch uses a login shell, and hosted CI login
                 # profiles can change the working directory before the script body runs.
-                printf '%s' "$GIT_CEILING_DIRECTORIES" > '__CEILING_OUTPUT__'
+                printf '%s' "$GIT_CEILING_DIRECTORIES" > __CEILING_OUTPUT__
                 while IFS= read -r line; do
                   case "$line" in
                     *\\"method\\":\\"initialize\\"*) echo '{"id":1,"result":{"userAgent":"ceiling-test"}}' ;;
@@ -66,7 +67,7 @@ final class CodexAppServerClientTest {
                   esac
                 done
                 """
-                        .replace("__CEILING_OUTPUT__", ceilingOutput.toString()));
+                        .replace("__CEILING_OUTPUT__", FakeAppServerScripts.shellPath(ceilingOutput)));
         EffectiveConfig config = config(appServer);
         Path workspace = config.workspace().root().resolve("TRELLO-ceiling");
         Files.createDirectories(workspace);
@@ -119,7 +120,7 @@ final class CodexAppServerClientTest {
                         .replace("__REDIRECT__", redirect));
         EffectiveConfig config = config(Map.of(
                 "command",
-                appServer.toString(),
+                FakeAppServerScripts.command(appServer),
                 "read_timeout_ms",
                 TEST_PROTOCOL_TIMEOUT_MILLIS,
                 "turn_timeout_ms",
@@ -159,7 +160,7 @@ final class CodexAppServerClientTest {
                 """);
         EffectiveConfig config = config(Map.of(
                 "command",
-                appServer.toString(),
+                FakeAppServerScripts.command(appServer),
                 "read_timeout_ms",
                 TEST_PROTOCOL_TIMEOUT_MILLIS,
                 "turn_timeout_ms",
@@ -246,7 +247,7 @@ final class CodexAppServerClientTest {
                 """);
         EffectiveConfig config = config(Map.of(
                 "command",
-                appServer.toString(),
+                FakeAppServerScripts.command(appServer),
                 "read_timeout_ms",
                 TEST_PROTOCOL_TIMEOUT_MILLIS,
                 "turn_timeout_ms",
@@ -305,8 +306,9 @@ final class CodexAppServerClientTest {
                         AgentRunResult.fail("codex_protocol_error: {\"code\":-32000,\"message\":\"bad initialize\"}"));
     }
 
-    @Test
-    void sendsAdditionalWritableRootsAsWorkspaceWriteSandboxPolicy() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void sendsProtectedProfileWithWritableRootsAndNetworkPolicy(boolean networkAccess) throws Exception {
         // given
         Path capture = tempDir.resolve("turn-start.jsonl");
         Path appServer = writeExecutableScript(
@@ -316,10 +318,14 @@ final class CodexAppServerClientTest {
                 capture="$1"
                 while IFS= read -r line; do
                   case "$line" in
-                    *\\"method\\":\\"initialize\\"*) echo '{"id":1,"result":{"userAgent":"capture-test"}}' ;;
-                    *\\"method\\":\\"thread/start\\"*) echo '{"id":2,"result":{"thread":{"id":"thread-capture"}}}' ;;
-                    *\\"method\\":\\"turn/start\\"*)
+                    *\\"method\\":\\"initialize\\"*)
                       printf '%s\\n' "$line" > "$capture"
+                      echo '{"id":1,"result":{"userAgent":"capture-test"}}' ;;
+                    *\\"method\\":\\"thread/start\\"*)
+                      printf '%s\\n' "$line" >> "$capture"
+                      echo '{"id":2,"result":{"thread":{"id":"thread-capture"}}}' ;;
+                    *\\"method\\":\\"turn/start\\"*)
+                      printf '%s\\n' "$line" >> "$capture"
                       echo '{"id":3,"result":{"turn":{"id":"turn-capture"}}}'
                       echo '{"method":"turn/completed","params":{"threadId":"thread-capture","turn":{"id":"turn-capture","error":null}}}'
                       ;;
@@ -329,7 +335,9 @@ final class CodexAppServerClientTest {
         Path extraRoot = tempDir.resolve("allowed-project");
         EffectiveConfig config = config(Map.of(
                 "command",
-                appServer + " " + capture,
+                FakeAppServerScripts.command(appServer, capture),
+                "turn_sandbox_policy",
+                Map.of("type", "workspaceWrite", "networkAccess", networkAccess),
                 "additional_writable_roots",
                 List.of(extraRoot.toString()),
                 "read_timeout_ms",
@@ -351,71 +359,33 @@ final class CodexAppServerClientTest {
 
         // then
         assertThat(result).isEqualTo(AgentRunResult.ok());
-        assertThat(json.readTree(Files.readString(capture))
-                        .path("params")
-                        .path("sandboxPolicy")
-                        .path("writableRoots"))
-                .extracting(JsonNode::asText)
-                .contains(extraRoot.toAbsolutePath().normalize().toString());
-    }
-
-    @Test
-    void preservesWorkspaceWriteNetworkAccessWhenMergingWritableRoots() throws Exception {
-        // given
-        Path capture = tempDir.resolve("turn-start-network.jsonl");
-        Path appServer = writeExecutableScript(
-                "capturing-network-app-server.sh",
-                """
-                #!/usr/bin/env bash
-                capture="$1"
-                while IFS= read -r line; do
-                  case "$line" in
-                    *\\"method\\":\\"initialize\\"*) echo '{"id":1,"result":{"userAgent":"capture-test"}}' ;;
-                    *\\"method\\":\\"thread/start\\"*) echo '{"id":2,"result":{"thread":{"id":"thread-capture"}}}' ;;
-                    *\\"method\\":\\"turn/start\\"*)
-                      printf '%s\\n' "$line" > "$capture"
-                      echo '{"id":3,"result":{"turn":{"id":"turn-capture"}}}'
-                      echo '{"method":"turn/completed","params":{"threadId":"thread-capture","turn":{"id":"turn-capture","error":null}}}'
-                      ;;
-                  esac
-                done
-                """);
-        Path extraRoot = tempDir.resolve("allowed-project");
-        EffectiveConfig config = config(Map.of(
-                "command",
-                appServer + " " + capture,
-                "turn_sandbox_policy",
-                Map.of("type", "workspaceWrite", "networkAccess", true),
-                "additional_writable_roots",
-                List.of(extraRoot.toString()),
-                "read_timeout_ms",
-                TEST_PROTOCOL_TIMEOUT_MILLIS,
-                "turn_timeout_ms",
-                TEST_PROTOCOL_TIMEOUT_MILLIS));
-        Path workspace = config.workspace().root().resolve("TRELLO-capture-network");
-        Files.createDirectories(workspace);
-        var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
-
-        // when
-        AgentRunResult result = client.runTurn(
-                config,
-                TestCards.card("card-1", "TRELLO-capture-network", "Ready for Codex"),
-                workspace,
-                "Do a capture no-op turn.",
-                "worker-capture",
-                event -> {});
-
-        // then
-        assertThat(result).isEqualTo(AgentRunResult.ok());
-        JsonNode sandboxPolicy =
-                json.readTree(Files.readString(capture)).path("params").path("sandboxPolicy");
-        assertThat(sandboxPolicy.path("type").asText()).isEqualTo("workspaceWrite");
-        assertThat(sandboxPolicy.path("networkAccess"))
-                .as("workspace-write sandbox policy networkAccess")
-                .isEqualTo(json.getNodeFactory().booleanNode(true));
-        assertThat(sandboxPolicy.path("writableRoots"))
-                .extracting(JsonNode::asText)
-                .contains(extraRoot.toAbsolutePath().normalize().toString());
+        List<JsonNode> requests = capturedRequests(capture);
+        assertThat(requests).hasSize(3);
+        assertThat(requests.getFirst()
+                        .at("/params/capabilities/experimentalApi")
+                        .asBoolean())
+                .as("named permission profiles require experimental API capability without Trello tools")
+                .isTrue();
+        JsonNode thread = requests.get(1).path("params");
+        String profileId = thread.path("permissions").asText();
+        JsonNode profile = thread.path("config").path("permissions").path(profileId);
+        assertThat(profile.path("extends").asText()).isEqualTo(":workspace");
+        assertThat(profile.path("workspace_roots").path(extraRoot.toString()).asBoolean())
+                .as("additional writable root is in the protected profile")
+                .isTrue();
+        assertThat(profile.path("network").path("enabled").asBoolean()).isEqualTo(networkAccess);
+        assertThat(profile.path("filesystem")
+                        .path(config.workflowPath().toString())
+                        .asText())
+                .isEqualTo("deny");
+        assertThat(thread.has("sandbox"))
+                .as("thread omits legacy sandbox overrides")
+                .isFalse();
+        JsonNode turn = requests.getLast().path("params");
+        assertThat(turn.path("permissions").asText()).isEqualTo(profileId);
+        assertThat(turn.has("sandboxPolicy"))
+                .as("turn omits legacy sandbox overrides")
+                .isFalse();
     }
 
     @Test
@@ -445,7 +415,7 @@ final class CodexAppServerClientTest {
                 """);
         EffectiveConfig config = config(Map.of(
                 "command",
-                appServer + " " + capture,
+                FakeAppServerScripts.command(appServer, capture),
                 "model",
                 "gpt-5.5",
                 "reasoning_effort",
@@ -505,7 +475,7 @@ final class CodexAppServerClientTest {
                 """);
         EffectiveConfig config = config(Map.of(
                 "command",
-                appServer + " " + capture,
+                FakeAppServerScripts.command(appServer, capture),
                 "read_timeout_ms",
                 TEST_PROTOCOL_TIMEOUT_MILLIS,
                 "turn_timeout_ms",
@@ -570,7 +540,7 @@ final class CodexAppServerClientTest {
                 """);
         EffectiveConfig config = config(Map.of(
                 "command",
-                appServer + " " + capture,
+                FakeAppServerScripts.command(appServer, capture),
                 "read_timeout_ms",
                 TEST_PROTOCOL_TIMEOUT_MILLIS,
                 "turn_timeout_ms",
@@ -632,7 +602,7 @@ final class CodexAppServerClientTest {
                 """);
         EffectiveConfig config = config(Map.of(
                 "command",
-                appServer.toString(),
+                FakeAppServerScripts.command(appServer),
                 "read_timeout_ms",
                 TEST_PROTOCOL_TIMEOUT_MILLIS,
                 "turn_timeout_ms",
@@ -673,7 +643,7 @@ final class CodexAppServerClientTest {
                 """);
         EffectiveConfig config = config(Map.of(
                 "command",
-                appServer.toString(),
+                FakeAppServerScripts.command(appServer),
                 "read_timeout_ms",
                 TEST_PROTOCOL_TIMEOUT_MILLIS,
                 "turn_timeout_ms",
@@ -1117,32 +1087,32 @@ final class CodexAppServerClientTest {
                 sessionRoleByWorkspace(firstSession, "primary", "secondary"),
                 """
                 if [ "$session" = primary ]; then
-                  touch '__PRIMARY_READY__'
+                  touch __PRIMARY_READY__
                 else
-                  touch '__SECONDARY_READY__'
+                  touch __SECONDARY_READY__
                 fi
-                while [ ! -f '__PRIMARY_READY__' ] || [ ! -f '__SECONDARY_READY__' ]; do sleep 0.01; done
+                while [ ! -f __PRIMARY_READY__ ] || [ ! -f __SECONDARY_READY__ ]; do sleep 0.01; done
                 if [ "$session" = primary ]; then
                   echo '{"method":"account/rateLimits/updated","params":{"rateLimits":{"primary":{"usedPercent":100,"resetsAt":__PRIMARY_RESET__}}}}'
                 else
                   echo '{"method":"account/rateLimits/updated","params":{"rateLimits":{"secondary":{"usedPercent":100,"resetsAt":__SECONDARY_RESET__}}}}'
                 fi
-                while [ ! -f '__PRIMARY_OBSERVED__' ] || [ ! -f '__SECONDARY_OBSERVED__' ]; do sleep 0.01; done
+                while [ ! -f __PRIMARY_OBSERVED__ ] || [ ! -f __SECONDARY_OBSERVED__ ]; do sleep 0.01; done
                 if [ "$session" = primary ]; then
                   echo '{"method":"turn/completed","params":{"threadId":"thread-usage","turn":{"id":"turn-usage","items":[],"status":"completed","error":null}}}'
                 else
                   echo '{"method":"turn/completed","params":{"threadId":"thread-usage","turn":{"id":"turn-usage","items":[],"status":"failed","error":{"message":"Usage is unavailable.","codexErrorInfo":"usageLimitExceeded"}}}}'
                 fi
                 """
-                        .replace("__PRIMARY_READY__", primaryReady.toString())
-                        .replace("__SECONDARY_READY__", secondaryReady.toString())
-                        .replace("__PRIMARY_OBSERVED__", primaryObserved.toString())
-                        .replace("__SECONDARY_OBSERVED__", secondaryObserved.toString())
+                        .replace("__PRIMARY_READY__", FakeAppServerScripts.shellPath(primaryReady))
+                        .replace("__SECONDARY_READY__", FakeAppServerScripts.shellPath(secondaryReady))
+                        .replace("__PRIMARY_OBSERVED__", FakeAppServerScripts.shellPath(primaryObserved))
+                        .replace("__SECONDARY_OBSERVED__", FakeAppServerScripts.shellPath(secondaryObserved))
                         .replace("__PRIMARY_RESET__", Long.toString(laterPrimaryReset.getEpochSecond()))
                         .replace("__SECONDARY_RESET__", Long.toString(earlierSecondaryReset.getEpochSecond())));
         EffectiveConfig config = config(Map.of(
                 "command",
-                appServer.toString(),
+                FakeAppServerScripts.command(appServer),
                 "read_timeout_ms",
                 TEST_PROTOCOL_TIMEOUT_MILLIS,
                 "turn_timeout_ms",
@@ -1216,15 +1186,15 @@ final class CodexAppServerClientTest {
                   echo '{"method":"account/rateLimits/updated","params":{"rateLimits":{"primary":{"usedPercent":100,"resetsAt":__RESET__}}}}'
                   echo '{"method":"turn/completed","params":{"threadId":"thread-usage","turn":{"id":"turn-usage","status":"completed","error":null}}}'
                 else
-                  while [ ! -f '__ACCEPTANCE_ENTERED__' ]; do sleep 0.01; done
+                  while [ ! -f __ACCEPTANCE_ENTERED__ ]; do sleep 0.01; done
                   echo '{"method":"turn/completed","params":{"threadId":"thread-usage","turn":{"id":"turn-usage","status":"failed","error":{"message":"Usage is unavailable.","codexErrorInfo":"usageLimitExceeded"}}}}'
                 fi
                 """
-                        .replace("__ACCEPTANCE_ENTERED__", acceptanceEntered.toString())
+                        .replace("__ACCEPTANCE_ENTERED__", FakeAppServerScripts.shellPath(acceptanceEntered))
                         .replace("__RESET__", Long.toString(reset.getEpochSecond())));
         EffectiveConfig config = config(Map.of(
                 "command",
-                appServer.toString(),
+                FakeAppServerScripts.command(appServer),
                 "read_timeout_ms",
                 TEST_PROTOCOL_TIMEOUT_MILLIS,
                 "turn_timeout_ms",
@@ -1414,7 +1384,7 @@ final class CodexAppServerClientTest {
     private EffectiveConfig config(Path appServer) {
         return config(Map.of(
                 "command",
-                appServer.toString(),
+                FakeAppServerScripts.command(appServer),
                 "read_timeout_ms",
                 TEST_PROTOCOL_TIMEOUT_MILLIS,
                 "turn_timeout_ms",
@@ -1520,8 +1490,9 @@ final class CodexAppServerClientTest {
     }
 
     private Path writeExecutableScript(String fileName, String content) throws Exception {
-        Path script = tempDir.resolve(fileName);
-        Files.writeString(script, content);
+        Path script = Files.createDirectories(tempDir.resolve("shell paths with spaces and 'quotes'"))
+                .resolve(fileName);
+        Files.writeString(script, FakeAppServerScripts.acknowledgePermissions(content));
         script.toFile().setExecutable(true);
         return script;
     }

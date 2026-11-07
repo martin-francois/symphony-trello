@@ -7,7 +7,6 @@ import jakarta.enterprise.context.ApplicationScoped;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.List;
 import org.jboss.logging.Logger;
 import org.jspecify.annotations.Nullable;
@@ -17,35 +16,34 @@ public class HookRunner {
     private static final Logger LOG = Logger.getLogger(HookRunner.class);
     private static final int LOG_OUTPUT_LIMIT = 4_096;
 
-    public void runRequired(String name, @Nullable String script, Path cwd, EffectiveConfig.HooksConfig hooks) {
+    public void runRequired(String name, @Nullable String script, Path cwd, EffectiveConfig config) {
         if (script == null || script.isBlank()) {
             return;
         }
-        HookResult result = run(name, script, cwd, hooks.timeout());
+        HookResult result = run(name, script, cwd, config);
         if (!result.success()) {
             throw new WorkspaceException("hook_failed", "Hook " + name + " failed: " + result.summary());
         }
     }
 
-    public void runBestEffort(
-            String name, @Nullable String script, @Nullable Path cwd, EffectiveConfig.HooksConfig hooks) {
+    public void runBestEffort(String name, @Nullable String script, @Nullable Path cwd, EffectiveConfig config) {
         if (script == null || script.isBlank() || cwd == null) {
             return;
         }
-        HookResult result = run(name, script, cwd, hooks.timeout());
+        HookResult result = run(name, script, cwd, config);
         if (!result.success()) {
             LOG.warnf("hook=%s outcome=failed reason=%s", name, result.summary());
         }
     }
 
-    private HookResult run(String name, String script, Path cwd, Duration timeout) {
+    private HookResult run(String name, String script, Path cwd, EffectiveConfig config) {
         LOG.infof("hook=%s cwd=%s outcome=started", name, cwd);
         Process process;
         try {
             ProcessBuilder processBuilder = new ProcessBuilder(List.of("bash", "-c", script))
                     .directory(cwd.toFile())
                     .redirectErrorStream(true);
-            ProcessEnvironment.removeDefaultSecrets(processBuilder);
+            ProcessEnvironment.removeSecrets(processBuilder, config);
             Path workspaceParent = cwd.toAbsolutePath().normalize().getParent();
             if (workspaceParent != null) {
                 ProcessEnvironment.limitGitDiscovery(processBuilder, workspaceParent);
@@ -55,9 +53,10 @@ public class HookRunner {
             return HookResult.failure("start_failed: " + e.getMessage());
         }
         try {
-            boolean finished = process.waitFor(timeout);
+            boolean finished = process.waitFor(config.hooks().timeout());
             if (!finished) {
-                return HookResult.failure("timeout after " + timeout.toMillis() + " ms");
+                return HookResult.failure(
+                        "timeout after " + config.hooks().timeout().toMillis() + " ms");
             }
             String output = truncate(new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8));
             if (process.exitValue() == 0) {
