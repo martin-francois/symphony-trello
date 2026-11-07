@@ -1145,8 +1145,7 @@ final class SymphonyOrchestratorHandoffTest {
     private Path workflow(Path appServer, String target, int timeoutMillis, String extraCodexConfig) throws Exception {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Files.writeString(
-                workflow,
-                """
+                workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1169,16 +1168,13 @@ final class SymphonyOrchestratorHandoffTest {
                   turn_timeout_ms: %d
                 %s---
                 Finish the handoff and its final response.
-                """
-                        .formatted(ACTIVE_STATE, target, appServer, timeoutMillis, extraCodexConfig.indent(2)));
+                """.formatted(ACTIVE_STATE, target, appServer, timeoutMillis, extraCodexConfig.indent(2)));
         return workflow;
     }
 
     private Path appServer(Path releaseFinal, Path finalStarted, String target) throws Exception {
         Path script = tempDir.resolve("handoff-app-server.sh");
-        Files.writeString(
-                script,
-                """
+        Files.writeString(script, """
                 #!/usr/bin/env bash
                 set -eu
                 while IFS= read -r line; do
@@ -1203,10 +1199,9 @@ final class SymphonyOrchestratorHandoffTest {
                       ;;
                   esac
                 done
-                """
-                        .formatted(target)
-                        .replace("__FINAL_STARTED__", finalStarted.toString())
-                        .replace("__RELEASE_FINAL__", releaseFinal.toString()));
+                """.formatted(target)
+                .replace("__FINAL_STARTED__", finalStarted.toString())
+                .replace("__RELEASE_FINAL__", releaseFinal.toString()));
         return script;
     }
 }

@@ -18,9 +18,7 @@ final class SymphonyMainTest {
     void parsesServerPortFromWorkflowFrontMatterBeforeQuarkusStarts() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -41,9 +39,7 @@ final class SymphonyMainTest {
     void parsesServerPortWithYamlInlineCommentsBeforeQuarkusStarts() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 server:
                   port: 9090 # local Symphony status port
@@ -61,8 +57,7 @@ final class SymphonyMainTest {
     @Test
     void readsAnAliasedServerPortBeforeQuarkusStarts() {
         // given
-        String aliased =
-                """
+        String aliased = """
                 ports:
                   status: &status 9090
                 server:
@@ -79,8 +74,7 @@ final class SymphonyMainTest {
     @Test
     void ignoresFrontMatterThatBreaksAYamlRuleBeforeQuarkusStarts() {
         // given
-        String repeated =
-                """
+        String repeated = """
                 server:
                   port: 9090
                   port: 9091
@@ -102,8 +96,7 @@ final class SymphonyMainTest {
                 server:
                   port: 18080.0
                 """;
-        String envBackedFloat =
-                """
+        String envBackedFloat = """
                 server:
                   port: $SYMPHONY_FLOAT_PORT
                 """;
@@ -127,8 +120,7 @@ final class SymphonyMainTest {
                 server:
                   port: 18080.5
                 """;
-        String envBackedFraction =
-                """
+        String envBackedFraction = """
                 server:
                   port: $SYMPHONY_FRACTION_PORT
                 """;
@@ -152,8 +144,7 @@ final class SymphonyMainTest {
     @Test
     void rejectsWholeButTooLargeServerPortBeforeQuarkusStarts() {
         // given
-        String tooLarge =
-                """
+        String tooLarge = """
                 server:
                   port: 99999999999999999999999
                 """;
@@ -171,8 +162,7 @@ final class SymphonyMainTest {
     @Test
     void resolvesServerPortEnvironmentReferenceBeforeQuarkusStarts() {
         // given
-        String frontMatter =
-                """
+        String frontMatter = """
                 server:
                   port: $SYMPHONY_TEST_PORT
                 """;
@@ -188,8 +178,7 @@ final class SymphonyMainTest {
     @Test
     void rejectsUnresolvedServerPortEnvironmentReferenceBeforeQuarkusStarts() {
         // given
-        String frontMatter =
-                """
+        String frontMatter = """
                 server:
                   port: $SYMPHONY_TEST_PORT
                 """;
@@ -219,9 +208,7 @@ final class SymphonyMainTest {
     void externalQuarkusPortOverridesWorkflowPort() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 server:
                   port: 9090
@@ -241,9 +228,7 @@ final class SymphonyMainTest {
     void cliPortStillWinsOverExternalQuarkusPort() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 server:
                   port: 9090

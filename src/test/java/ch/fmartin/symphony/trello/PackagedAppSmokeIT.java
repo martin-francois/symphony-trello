@@ -152,8 +152,7 @@ final class PackagedAppSmokeIT {
                   command: codex app-server
                 ---
                 Smoke test workflow.
-                """
-                .formatted(trelloPort, BOARD_ID, workspaceRoot, appPort);
+                """.formatted(trelloPort, BOARD_ID, workspaceRoot, appPort);
     }
 
     private static int freePort() throws IOException {

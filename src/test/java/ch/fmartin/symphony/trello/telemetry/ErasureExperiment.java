@@ -320,9 +320,12 @@ final class ErasureExperiment {
 
     private void verifyErasure() {
         List<Subject> erased = List.of(checkpoint.subject(SUBJECT_A), checkpoint.subject(SUBJECT_B));
-        Observation observation = awaitObservation("event deletion", DELETION_WAIT, current -> erased.stream()
-                .allMatch(subject ->
-                        erasedAndVerified(current, subject, subject.baselinePersonUuid(), requireErasure(subject))));
+        Observation observation = awaitObservation(
+                "event deletion",
+                DELETION_WAIT,
+                current -> erased.stream()
+                        .allMatch(subject -> erasedAndVerified(
+                                current, subject, subject.baselinePersonUuid(), requireErasure(subject))));
         require(
                 observation
                         .uuidsFor(checkpoint.subject(CONTROL))
@@ -397,11 +400,15 @@ final class ErasureExperiment {
     /// not, after a bounded propagation window.
     private void observeReuse() {
         List<Subject> reused = List.of(checkpoint.subject(SUBJECT_A), checkpoint.subject(SUBJECT_B));
-        awaitObservation("reuse ingestion", INGESTION_WAIT, current -> reused.stream()
-                .allMatch(subject -> current.uuidsFor(subject).containsAll(subject.newEventUuids())));
-        Observation observation =
-                awaitObservationOrLast("reuse profile propagation", PROPAGATION_WAIT, current -> reused.stream()
-                        .allMatch(subject -> mappingResolved(current, subject)));
+        awaitObservation(
+                "reuse ingestion",
+                INGESTION_WAIT,
+                current -> reused.stream()
+                        .allMatch(subject -> current.uuidsFor(subject).containsAll(subject.newEventUuids())));
+        Observation observation = awaitObservationOrLast(
+                "reuse profile propagation",
+                PROPAGATION_WAIT,
+                current -> reused.stream().allMatch(subject -> mappingResolved(current, subject)));
         ExperimentCheckpoint updated = checkpoint;
         for (Subject subject : reused) {
             updated = updated.withSubject(recordReuse(subject, observation), now());
@@ -629,11 +636,14 @@ final class ErasureExperiment {
         List<Subject> all =
                 List.of(checkpoint.subject(SUBJECT_A), checkpoint.subject(SUBJECT_B), checkpoint.subject(CONTROL));
         // The control subject had no cleanup deletion to verify; the others need their record verified.
-        Observation observation = awaitObservation("cleanup deletion", DELETION_WAIT, current -> all.stream()
-                .allMatch(subject -> subject.fact(CLEANUP_PERSON_UUID).isEmpty()
-                        ? erased(current, subject)
-                        : erasedAndVerified(
-                                current, subject, subject.fact(CLEANUP_PERSON_UUID), requireCleanup(subject))));
+        Observation observation = awaitObservation(
+                "cleanup deletion",
+                DELETION_WAIT,
+                current -> all.stream()
+                        .allMatch(subject -> subject.fact(CLEANUP_PERSON_UUID).isEmpty()
+                                ? erased(current, subject)
+                                : erasedAndVerified(
+                                        current, subject, subject.fact(CLEANUP_PERSON_UUID), requireCleanup(subject))));
         ExperimentCheckpoint updated = checkpoint;
         for (Subject subject : all) {
             String verifiedAt = subject.fact(CLEANUP_PERSON_UUID).isEmpty()
@@ -1151,9 +1161,10 @@ final class ErasureExperiment {
         }
         if (!checkpoint.notes().isEmpty()) {
             text.append("\nNotes:\n\n");
-            checkpoint.notes().forEach(note -> text.append("- ")
-                    .append(log().redact(note))
-                    .append('\n'));
+            checkpoint
+                    .notes()
+                    .forEach(
+                            note -> text.append("- ").append(log().redact(note)).append('\n'));
         }
         try {
             Files.writeString(binding.experimentDir().resolve("summary.md"), text.toString());

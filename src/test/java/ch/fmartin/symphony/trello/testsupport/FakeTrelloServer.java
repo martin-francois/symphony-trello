@@ -176,15 +176,13 @@ public final class FakeTrelloServer implements AutoCloseable {
     public static String memberJson(String id, String username, String fullName) {
         return """
                 {"id":%s,"username":%s,"fullName":%s}
-                """
-                .formatted(jsonValue(id), jsonValue(username), jsonValue(fullName));
+                """.formatted(jsonValue(id), jsonValue(username), jsonValue(fullName));
     }
 
     public static String workspaceJson(String id, String name, String displayName, String urlSlug) {
         return """
                 {"id":%s,"name":%s,"displayName":%s,"url":"https://trello.com/w/%s"}
-                """
-                .formatted(jsonValue(id), jsonValue(name), jsonValue(displayName), jsonEscaped(urlSlug));
+                """.formatted(jsonValue(id), jsonValue(name), jsonValue(displayName), jsonEscaped(urlSlug));
     }
 
     public static String workspacesJson(String... workspaces) {
@@ -198,16 +196,14 @@ public final class FakeTrelloServer implements AutoCloseable {
     public static String boardJson(String id, String name, boolean closed) {
         return """
                 {"id":%s,"name":%s,"closed":%s}
-                """
-                .formatted(jsonValue(id), jsonValue(name), closed);
+                """.formatted(jsonValue(id), jsonValue(name), closed);
     }
 
     public static String boardJson(String id, String name, String shortLink, String url, Boolean closed) {
         String closedField = closed == null ? "" : ",\"closed\":" + closed;
         return """
                 {"id":%s,"name":%s,"shortLink":%s,"url":%s%s}
-                """
-                .formatted(jsonValue(id), jsonValue(name), jsonValue(shortLink), jsonValue(url), closedField);
+                """.formatted(jsonValue(id), jsonValue(name), jsonValue(shortLink), jsonValue(url), closedField);
     }
 
     public static String createdListJson(String id) {
@@ -229,8 +225,7 @@ public final class FakeTrelloServer implements AutoCloseable {
         for (TrelloListJson list : lists) {
             jsonLists.add("""
                     {"id":%s,"name":%s,"closed":%s,"pos":%d}
-                    """
-                    .formatted(jsonValue(list.id()), jsonValue(list.name()), list.closed(), list.pos()));
+                    """.formatted(jsonValue(list.id()), jsonValue(list.name()), list.closed(), list.pos()));
         }
         return "[\n" + String.join(",\n", jsonLists) + "\n]";
     }

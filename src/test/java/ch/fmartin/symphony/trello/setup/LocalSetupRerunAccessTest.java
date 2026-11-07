@@ -210,20 +210,18 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
         Path allowedPath = tempDir.resolve("selected path");
         writeWorkflow(firstWorkflow, "board-1", 18101);
         writeWorkflow(secondWorkflow, "board-2", 18102);
-        writeManifest(
-                """
+        writeManifest("""
                 {"boards":[
                   {"boardId":"board-1","boardKey":"one","boardName":"First Access","boardUrl":"https://trello.example/one","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":18101,"githubEnabled":false,"additionalWritableRoots":[],"dangerFullAccess":false},
                   {"boardId":"board-2","boardKey":"two","boardName":"Second Access","boardUrl":"https://trello.example/two","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":18102,"githubEnabled":false,"additionalWritableRoots":[],"dangerFullAccess":false}
                 ]}
-                """
-                        .formatted(
-                                json(firstWorkflow),
-                                json(firstEnv),
-                                json(tempDir.resolve("workspaces-one")),
-                                json(secondWorkflow),
-                                json(secondEnv),
-                                json(tempDir.resolve("workspaces-two"))));
+                """.formatted(
+                        json(firstWorkflow),
+                        json(firstEnv),
+                        json(tempDir.resolve("workspaces-one")),
+                        json(secondWorkflow),
+                        json(secondEnv),
+                        json(tempDir.resolve("workspaces-two"))));
 
         // when
         SetupRunResult result = runSetupWithInput("2\n", "--add-path", allowedPath.toString(), "--no-github");
@@ -242,20 +240,18 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
         Path allowedPath = tempDir.resolve("docs selected path");
         writeWorkflow(firstWorkflow, "board-1", 18111);
         writeWorkflow(secondWorkflow, "board-2", 18112);
-        writeManifest(
-                """
+        writeManifest("""
                 {"boards":[
                   {"boardId":"board-1","boardKey":"one","boardName":"First Queue","boardUrl":"https://trello.example/one","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":18111,"githubEnabled":false,"additionalWritableRoots":[],"dangerFullAccess":false},
                   {"boardId":"board-2","boardKey":"two","boardName":"Docs Queue","boardUrl":"https://trello.example/two","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":18112,"githubEnabled":false,"additionalWritableRoots":[],"dangerFullAccess":false}
                 ]}
-                """
-                        .formatted(
-                                json(firstWorkflow),
-                                json(tempDir.resolve(".env.first-selector-access")),
-                                json(tempDir.resolve("workspaces-one")),
-                                json(secondWorkflow),
-                                json(tempDir.resolve(".env.docs-selector-access")),
-                                json(tempDir.resolve("workspaces-two"))));
+                """.formatted(
+                        json(firstWorkflow),
+                        json(tempDir.resolve(".env.first-selector-access")),
+                        json(tempDir.resolve("workspaces-one")),
+                        json(secondWorkflow),
+                        json(tempDir.resolve(".env.docs-selector-access")),
+                        json(tempDir.resolve("workspaces-two"))));
 
         // when
         SetupRunResult result = runSetup(
@@ -280,20 +276,18 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
         Path secondWorkflow = tempDir.resolve("WORKFLOW.second-danger-selector.md");
         writeWorkflow(firstWorkflow, "board-1", 18121);
         writeWorkflow(secondWorkflow, "board-2", 18122);
-        writeManifest(
-                """
+        writeManifest("""
                 {"boards":[
                   {"boardId":"board-1","boardKey":"one","boardName":"First Danger","boardUrl":"https://trello.example/one","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":18121,"githubEnabled":false,"additionalWritableRoots":[],"dangerFullAccess":false},
                   {"boardId":"board-2","boardKey":"two","boardName":"Second Danger","boardUrl":"https://trello.example/two","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":18122,"githubEnabled":false,"additionalWritableRoots":[],"dangerFullAccess":false}
                 ]}
-                """
-                        .formatted(
-                                json(firstWorkflow),
-                                json(tempDir.resolve(".env.first-danger-selector")),
-                                json(tempDir.resolve("workspaces-one")),
-                                json(secondWorkflow),
-                                json(tempDir.resolve(".env.second-danger-selector")),
-                                json(tempDir.resolve("workspaces-two"))));
+                """.formatted(
+                        json(firstWorkflow),
+                        json(tempDir.resolve(".env.first-danger-selector")),
+                        json(tempDir.resolve("workspaces-one")),
+                        json(secondWorkflow),
+                        json(tempDir.resolve(".env.second-danger-selector")),
+                        json(tempDir.resolve("workspaces-two"))));
         commands.startHealthServer(secondWorkflow, "board-2");
 
         // when
@@ -319,20 +313,18 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
         Path allowedPath = tempDir.resolve("needs selector path");
         writeWorkflow(firstWorkflow, "board-1", 18131);
         writeWorkflow(secondWorkflow, "board-2", 18132);
-        writeManifest(
-                """
+        writeManifest("""
                 {"boards":[
                   {"boardId":"board-1","boardKey":"one","boardName":"First Required","boardUrl":"https://trello.example/one","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":18131,"githubEnabled":false,"additionalWritableRoots":[],"dangerFullAccess":false},
                   {"boardId":"board-2","boardKey":"two","boardName":"Second Required","boardUrl":"https://trello.example/two","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":18132,"githubEnabled":false,"additionalWritableRoots":[],"dangerFullAccess":false}
                 ]}
-                """
-                        .formatted(
-                                json(firstWorkflow),
-                                json(tempDir.resolve(".env.first-required-selector")),
-                                json(tempDir.resolve("workspaces-one")),
-                                json(secondWorkflow),
-                                json(tempDir.resolve(".env.second-required-selector")),
-                                json(tempDir.resolve("workspaces-two"))));
+                """.formatted(
+                        json(firstWorkflow),
+                        json(tempDir.resolve(".env.first-required-selector")),
+                        json(tempDir.resolve("workspaces-one")),
+                        json(secondWorkflow),
+                        json(tempDir.resolve(".env.second-required-selector")),
+                        json(tempDir.resolve("workspaces-two"))));
 
         // when
         SetupRunResult result = runSetup("--non-interactive", "--add-path", allowedPath.toString(), "--no-github");
@@ -350,16 +342,14 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
         Path workflow = tempDir.resolve("WORKFLOW.mixed-access-update.md");
         Path allowedPath = tempDir.resolve("mixed access path");
         writeWorkflow(workflow, "board-1", 18133);
-        writeManifest(
-                """
+        writeManifest("""
                 {"boards":[
                   {"boardId":"board-1","boardKey":"one","boardName":"Mixed Access","boardUrl":"https://trello.example/one","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":18133,"githubEnabled":false,"additionalWritableRoots":[],"dangerFullAccess":false}
                 ]}
-                """
-                        .formatted(
-                                json(workflow),
-                                json(tempDir.resolve(".env.mixed-access-update")),
-                                json(tempDir.resolve("workspaces-one"))));
+                """.formatted(
+                        json(workflow),
+                        json(tempDir.resolve(".env.mixed-access-update")),
+                        json(tempDir.resolve("workspaces-one"))));
 
         // when
         SetupRunResult result = runSetup(
@@ -448,16 +438,12 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
     private Path givenRunningAccessUpdateWorker(String name) throws Exception {
         Path workflow = tempDir.resolve("WORKFLOW." + name + ".md");
         writeWorkflow(workflow, "board-1", 18134);
-        writeManifest(
-                """
+        writeManifest("""
                 {"boards":[
                   {"boardId":"board-1","boardKey":"one","boardName":"Access Update","boardUrl":"https://trello.example/one","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":18134,"githubEnabled":false,"additionalWritableRoots":[],"dangerFullAccess":false}
                 ]}
-                """
-                        .formatted(
-                                json(workflow),
-                                json(tempDir.resolve(".env." + name)),
-                                json(tempDir.resolve("workspaces-one"))));
+                """.formatted(
+                json(workflow), json(tempDir.resolve(".env." + name)), json(tempDir.resolve("workspaces-one"))));
         commands.startHealthServer(workflow, "board-1");
         return workflow;
     }

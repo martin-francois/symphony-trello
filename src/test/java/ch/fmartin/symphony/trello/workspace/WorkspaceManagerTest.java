@@ -81,10 +81,14 @@ final class WorkspaceManagerTest {
                 catchThrowable(() -> WorkspaceManager.requireInsideRoot(root, tempDir.resolve("root-sibling/card")));
 
         // then
-        assertThat(rootItself).isInstanceOfSatisfying(WorkspaceException.class, error -> assertThat(error.code())
-                .isEqualTo("workspace_outside_root"));
-        assertThat(siblingPrefix).isInstanceOfSatisfying(WorkspaceException.class, error -> assertThat(error.code())
-                .isEqualTo("workspace_outside_root"));
+        assertThat(rootItself)
+                .isInstanceOfSatisfying(
+                        WorkspaceException.class,
+                        error -> assertThat(error.code()).isEqualTo("workspace_outside_root"));
+        assertThat(siblingPrefix)
+                .isInstanceOfSatisfying(
+                        WorkspaceException.class,
+                        error -> assertThat(error.code()).isEqualTo("workspace_outside_root"));
     }
 
     @Test
@@ -149,7 +153,9 @@ final class WorkspaceManagerTest {
         Throwable thrown = catchThrowable(() -> WorkspaceManager.sanitize(blankIdentifier));
 
         // then
-        assertThat(thrown).isInstanceOfSatisfying(WorkspaceException.class, error -> assertThat(error.code())
-                .isEqualTo("workspace_identifier_missing"));
+        assertThat(thrown)
+                .isInstanceOfSatisfying(
+                        WorkspaceException.class,
+                        error -> assertThat(error.code()).isEqualTo("workspace_identifier_missing"));
     }
 }

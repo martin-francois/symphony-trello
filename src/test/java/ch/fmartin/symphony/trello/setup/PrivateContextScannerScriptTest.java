@@ -60,13 +60,10 @@ final class PrivateContextScannerScriptTest {
         assumeToolsAvailable();
 
         // when
-        ProcessResult result = runScanner(
-                """
+        ProcessResult result = runScanner("""
                 board url: %s
                 board id: %s
-                """
-                        .formatted(SYNTHETIC_TRELLO_URL, SYNTHETIC_TRELLO_ID),
-                "--stdin");
+                """.formatted(SYNTHETIC_TRELLO_URL, SYNTHETIC_TRELLO_ID), "--stdin");
 
         // then
         result.assertSuccess();

@@ -201,7 +201,8 @@ public final class TelemetryStateStore {
     }
 
     /// The outcome of a transaction: the state to persist (or `null` for no write) and a result.
-    public record Update<T extends @Nullable Object>(@Nullable TelemetryState next, T result) {
+    public record Update<T extends @Nullable Object>(
+            @Nullable TelemetryState next, T result) {
         public static <T extends @Nullable Object> Update<T> unchanged(T result) {
             return new Update<>(null, result);
         }

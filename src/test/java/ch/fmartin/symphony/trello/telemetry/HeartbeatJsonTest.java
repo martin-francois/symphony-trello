@@ -44,9 +44,7 @@ final class HeartbeatJsonTest {
         String json = HeartbeatJson.serialize(event);
 
         // then
-        assertThat(json)
-                .isEqualTo(
-                        """
+        assertThat(json).isEqualTo("""
                         {
                           "api_key" : "phc_token",
                           "event" : "installation_heartbeat",

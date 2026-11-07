@@ -281,7 +281,11 @@ public record Card(
         return values;
     }
 
-    public record Comment(@Nullable String id, String text, @Nullable String author, @Nullable Instant createdAt) {}
+    public record Comment(
+            @Nullable String id,
+            String text,
+            @Nullable String author,
+            @Nullable Instant createdAt) {}
 
     public record Checklist(@Nullable String id, @Nullable String name, List<ChecklistItem> items) {
         public Checklist(@Nullable String id, @Nullable String name, @Nullable List<ChecklistItem> items) {
@@ -291,9 +295,13 @@ public record Card(
         }
     }
 
-    public record ChecklistItem(@Nullable String id, @Nullable String text, boolean complete) {}
+    public record ChecklistItem(
+            @Nullable String id, @Nullable String text, boolean complete) {}
 
-    public record Attachment(@Nullable String id, @Nullable String name, @Nullable String url) {}
+    public record Attachment(
+            @Nullable String id,
+            @Nullable String name,
+            @Nullable String url) {}
 
     public record TrelloReference(
             String source,
@@ -306,5 +314,6 @@ public record Card(
             String status,
             @Nullable Boolean terminal) {}
 
-    public record PrerequisiteProblem(String code, String message, @Nullable String checklist) {}
+    public record PrerequisiteProblem(
+            String code, String message, @Nullable String checklist) {}
 }
