@@ -71,7 +71,7 @@
     <findsecbugs.version>1.14.0</findsecbugs.version>
     <guava.version>33.7.2-jre</guava.version>
     <jazzer.version>0.30.0</jazzer.version>
-    <jreleaser.version>1.26.0</jreleaser.version>
+    <jreleaser.version>1.27.0</jreleaser.version>
     <jspecify.version>1.0.1</jspecify.version>
     <json-schema-validator.version>2.0.8</json-schema-validator.version>
     <maven-central.staging-directory>${project.build.directory}/staging-deploy</maven-central.staging-directory>
