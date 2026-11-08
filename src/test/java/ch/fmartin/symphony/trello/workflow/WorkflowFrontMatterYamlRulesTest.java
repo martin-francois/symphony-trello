@@ -198,6 +198,11 @@ final class WorkflowFrontMatterYamlRulesTest {
                 arguments(named("merge key after other keys", "c:\n  t: 1\n  <<: {t: 5}\n"), mergeKey("c.<<", 3)),
                 arguments(named("merge key with an explicit tag", "c:\n  !!merge <<: {t: 5}\n"), mergeKey("c.<<", 2)),
                 arguments(
+                        named(
+                                "merge key with a percent-escaped verbatim tag",
+                                "c:\n  !<tag:yaml.org,2002:merg%65> x: 1\n"),
+                        mergeKey("c.x", 2)),
+                arguments(
                         named("merge key inside an anchored mapping", "base: &d {<<: {t: 5}}\nc: *d\n"),
                         mergeKey("base.<<", 1)),
                 arguments(
@@ -294,6 +299,39 @@ final class WorkflowFrontMatterYamlRulesTest {
         assertThat(loaded.config())
                 .as("YAML reads a scalar tagged ! as a string, so ! << is the key \"<<\"")
                 .containsExactlyInAnyOrderEntriesOf(Map.of("c", Map.of("<<", Map.of("a", 1))));
+    }
+
+    @Test
+    void aKeyTagThatEndsInATruncatedEscapeIsInvalidYaml() {
+        // given
+        // SnakeYAML decodes the "%0" at the end of the input to a NUL character, so the key's tag
+        // ends in a control character.
+        byte[] workflow = workflow("{!%0\n");
+
+        // when
+        WorkflowException failure =
+                catchThrowableOfType(WorkflowException.class, () -> loader.parse(WORKFLOW, workflow));
+
+        // then
+        assertThat(failure)
+                .hasMessage("Workflow front matter is invalid YAML")
+                .extracting(WorkflowException::code)
+                .isEqualTo(PARSE_ERROR);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"!<x%20> a: 1\n", "!<%20x> a: 1\n", "!x%09 a: 1\n", "!<tag:yaml.org,2002:merge%20> a: 1\n"})
+    void aKeyWithACustomTagThatStartsOrEndsInWhitespaceLoadsLikeAnyCustomTaggedKey(String frontMatter) {
+        // given
+        byte[] workflow = workflow(frontMatter);
+
+        // when
+        WorkflowDefinition loaded = loader.parse(WORKFLOW, workflow);
+
+        // then
+        assertThat(loaded.config())
+                .as("only the exact !!merge tag makes a merge key; other tags on a key are ignored")
+                .containsExactlyInAnyOrderEntriesOf(Map.of("a", 1));
     }
 
     @Test

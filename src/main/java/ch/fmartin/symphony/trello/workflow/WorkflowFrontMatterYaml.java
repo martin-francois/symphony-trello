@@ -378,17 +378,21 @@ public final class WorkflowFrontMatterYaml {
         }
 
         // A merge key is the plain scalar `<<` or a key tagged `!!merge`. A quoted "<<", or one with
-        // the non-specific tag `!`, which YAML reads as a string, is an ordinary string key.
+        // the non-specific tag `!`, which YAML reads as a string, is an ordinary string key. An
+        // explicit tag is compared as text because `new Tag(...)` throws IllegalArgumentException for
+        // tags the YAML reader accepts, such as one whose percent escape decodes to a space, and the
+        // loader would then crash instead of reporting `workflow_parse_error`.
         private boolean isMergeKey(String key) {
             if (!(_lastEvent instanceof ScalarEvent scalar)) {
                 return false;
             }
             String explicitTag = scalar.getTag();
-            Tag tag = explicitTag == null
-                    ? _yamlResolver.resolve(
-                            NodeId.scalar, key, scalar.getImplicit().canOmitTagInPlainScalar())
-                    : new Tag(explicitTag);
-            return Tag.MERGE.equals(tag);
+            String tag = explicitTag == null
+                    ? _yamlResolver
+                            .resolve(NodeId.scalar, key, scalar.getImplicit().canOmitTagInPlainScalar())
+                            .getValue()
+                    : explicitTag;
+            return Tag.MERGE.getValue().equals(tag);
         }
 
         private RuleViolation violation(String problem, Object... arguments) {
