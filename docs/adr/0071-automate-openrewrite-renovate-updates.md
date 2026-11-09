@@ -74,7 +74,16 @@ updates under the `OpenRewrite toolchain` group. Both Error Prone artifacts shar
 `error-prone.version`; grouping only Core creates two branches for the same POM edit and leaves the
 annotations branch outside coordinated validation. Core and annotations remain in the same group as the
 Picnic annotation processor and Refaster runner because Picnic's serialized Refaster templates
-require the Error Prone version used to produce them. Renovate creates the pull request without
+require the Error Prone version used to produce them. While Picnic error-prone-support 0.30.0 is
+pinned, a Renovate `allowedVersions` hold keeps Error Prone below 2.51, because 0.30.0 loads a class
+that Error Prone 2.51 removed
+([GitHub issue #1277](https://github.com/martin-francois/symphony-trello/issues/1277)). The hold
+breaks the lockstep: a Picnic release built for Error Prone 2.51 arrives without the Error Prone
+update, and its build fails while the hold stays. The script test `Renovate holds Error Prone below
+2.51 while Picnic error-prone-support is 0.30.0` fails on that pull request and names the steps.
+The hold is removed in a separate pull request from `main`, because the source rules below reject
+an edited Renovate pull request; Renovate then adds Error Prone 2.51 to its own pull request.
+Renovate creates the pull request without
 dependency-dashboard approval, keeps it rebased on `main`, and enables Renovate-controlled
 automerge for non-major updates. Native platform auto-merge is disabled for this group, so Renovate
 requires every branch status to pass before merging rather than relying only on repository-required

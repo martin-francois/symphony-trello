@@ -118,6 +118,16 @@ requirements.
   remove the hold and follow
   [GitHub issue #1119](https://github.com/martin-francois/symphony-trello/issues/1119). See
   [ADR 0088](../adr/0088-validate-dynamic-tool-arguments-with-json-schema.md).
+- Error Prone stays below 2.51 through a Renovate `allowedVersions` hold, because Picnic
+  error-prone-support 0.30.0 loads a class that Error Prone 2.51 removed and the build no longer
+  compiles. The script test `Renovate holds Error Prone below 2.51 while Picnic error-prone-support
+  is 0.30.0` fails on the Renovate pull request that changes the Picnic version, and that pull
+  request's build is expected to fail while Error Prone stays held. Do not edit the Renovate pull
+  request: the OpenRewrite automation accepts only an unmodified Renovate commit. Remove the hold,
+  the test and this note in a separate pull request from `main`; Renovate then adds Error Prone
+  2.51 to its pull request. Close
+  [GitHub issue #1277](https://github.com/martin-francois/symphony-trello/issues/1277) once both
+  land. See [ADR 0071](../adr/0071-automate-openrewrite-renovate-updates.md).
 - This public repository groups dependencies by release or compatibility contract. Unrelated
   non-major updates have separate pull requests and no weekly update schedule. The one exception
   is the `gcr.io/oss-fuzz-base` digest updates above, which would otherwise open a pull request
