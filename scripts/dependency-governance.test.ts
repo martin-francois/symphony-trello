@@ -165,22 +165,26 @@ test("Renovate validation is reproducible and permits only required builds", () 
   assert.equal(validationCommand, expectedCommand);
 });
 
-test("Renovate holds json-schema-validator on 2.x while Quarkus is on Jackson 2", () => {
-  // given
-  const quarkusVersion = /<quarkus\.platform\.version>([^<]+)<\/quarkus\.platform\.version>/u.exec(POM)?.[1];
-  assert.match(quarkusVersion ?? "", /^\d+\./u, "pom.xml must declare a numeric quarkus.platform.version");
-
-  // when
-  const holds = RENOVATE_CONFIG.packageRules
+function allowedVersionsHoldsFor(packageName: string): Array<string | undefined> {
+  return RENOVATE_CONFIG.packageRules
     .filter(
       ({ allowedVersions, enabled, matchDatasources, matchPackageNames }) =>
         allowedVersions !== undefined &&
         enabled !== false &&
         (matchDatasources === undefined || matchDatasources.includes("maven")) &&
         matchPackageNames !== undefined &&
-        matchesRegexOrGlobList(matchPackageNames, "com.networknt:json-schema-validator"),
+        matchesRegexOrGlobList(matchPackageNames, packageName),
     )
     .map(({ allowedVersions }) => allowedVersions);
+}
+
+test("Renovate holds json-schema-validator on 2.x while Quarkus is on Jackson 2", () => {
+  // given
+  const quarkusVersion = /<quarkus\.platform\.version>([^<]+)<\/quarkus\.platform\.version>/u.exec(POM)?.[1];
+  assert.match(quarkusVersion ?? "", /^\d+\./u, "pom.xml must declare a numeric quarkus.platform.version");
+
+  // when
+  const holds = allowedVersionsHoldsFor("com.networknt:json-schema-validator");
 
   // then
   // The hold expires with Quarkus 4, so this check fails first and says what to do.
@@ -195,6 +199,33 @@ test("Renovate holds json-schema-validator on 2.x while Quarkus is on Jackson 2"
     holds,
     ["(,3.0)"],
     "restore the (,3.0) json-schema-validator hold in renovate.json: 3.x requires Jackson 3, which Quarkus 3 does not use",
+  );
+});
+
+test("Renovate holds Error Prone below 2.51 while Picnic error-prone-support is 0.30.0", () => {
+  // given
+  const picnicVersion = /<error-prone-support\.version>([^<]+)<\/error-prone-support\.version>/u.exec(POM)?.[1];
+  assert.ok(picnicVersion, "pom.xml must declare error-prone-support.version");
+  const errorProneHold = "(,2.51.0)";
+
+  // when
+  const coreHolds = allowedVersionsHoldsFor("com.google.errorprone:error_prone_core");
+  const annotationHolds = allowedVersionsHoldsFor("com.google.errorprone:error_prone_annotations");
+
+  // then
+  // A newer Picnic release may support Error Prone 2.51, so this check fails first and says what to do.
+  assert.equal(
+    picnicVersion,
+    "0.30.0",
+    `Picnic error-prone-support is now ${picnicVersion}: if it supports Error Prone 2.51, remove the Error Prone ` +
+      "hold from renovate.json, this test, and its notes in ADR 0071 and docs/agents/dependency-updates.md in a " +
+      "separate pull request from main (the OpenRewrite automation rejects an edited Renovate pull request), " +
+      "then close https://github.com/martin-francois/symphony-trello/issues/1277",
+  );
+  assert.deepEqual(
+    [coreHolds, annotationHolds],
+    [[errorProneHold], [errorProneHold]],
+    `restore the ${errorProneHold} Error Prone hold in renovate.json: Picnic 0.30.0 does not compile with Error Prone 2.51`,
   );
 });
 

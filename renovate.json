@@ -330,6 +330,17 @@
       ]
     },
     {
+      "description": "Picnic error-prone-support 0.30.0 loads com.google.errorprone.SubContext, which Error Prone 2.51.0 removed, so the build fails to compile with that pair. Error Prone stays below 2.51 until a Picnic release supports it; see https://github.com/martin-francois/symphony-trello/issues/1277.",
+      "matchDatasources": [
+        "maven"
+      ],
+      "matchPackageNames": [
+        "com.google.errorprone:error_prone_core",
+        "com.google.errorprone:error_prone_annotations"
+      ],
+      "allowedVersions": "(,2.51.0)"
+    },
+    {
       "description": "json-schema-validator 3.x requires Jackson 3, while Quarkus 3 runs on Jackson 2, and ADR 0088 rules out a second Jackson stack. The validator stays on 2.x until the Quarkus 4 upgrade moves the app to Jackson 3; see https://github.com/martin-francois/symphony-trello/issues/1119.",
       "matchDatasources": [
         "maven"
