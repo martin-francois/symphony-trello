@@ -4,7 +4,7 @@ set -euo pipefail
 # Runs the terminal-output snapshot tests in a Linux Java 25 container, so contributors on other
 # platforms can verify the install.sh and pseudo-terminal baselines. Extra arguments go to Maven,
 # for example -Dsymphony.snapshots.update=true to rewrite baselines after reviewing a change.
-image="docker.io/library/maven:3.10.0-eclipse-temurin-25@sha256:9b5f82b7166db6112eb123ba310a9e010ec3fe95022ac0728f491121563dfbab"
+image="docker.io/library/maven:3.10.0-eclipse-temurin-25@sha256:047a82fc82c613266cfb1b66fd920be9c8ba51fd67edc68245e4542768f45e36"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd -- "$script_dir/.." && pwd -P)"
 container_runtime="${SYMPHONY_TRELLO_CONTAINER_RUNTIME:-docker}"
