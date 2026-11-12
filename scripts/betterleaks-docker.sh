@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # The pinned-betterleaks-image check sets the override to scan a pull request with the image it pins.
-image="${SYMPHONY_TRELLO_BETTERLEAKS_IMAGE:-ghcr.io/betterleaks/betterleaks:v1.9.0@sha256:e3b95b0db6c2735db17165c009b0ad6d9cef34fb4578659232b98f69d7346cac}"
+image="${SYMPHONY_TRELLO_BETTERLEAKS_IMAGE:-ghcr.io/betterleaks/betterleaks:v1.10.0@sha256:c6dfa75145fe5b31fdaf02feff18a73f1e11df8ca04876522f87f857656c83ca}"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 project_root="$(cd "$script_dir/.." && pwd -P)"
 scan_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"
