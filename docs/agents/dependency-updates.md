@@ -14,7 +14,9 @@ requirements.
   explicit custom manager. The Renovate config validator and script tests enforce native and
   nonstandard declarations. A new nonstandard declaration MUST add manager and regression coverage
   in the same change.
-- Keep `pinDigests` enabled. Renovate MUST keep digest updates enabled and use the matched version's
+- Keep `pinDigests` enabled. The one exception is the OpenTofu group rule: its two version pins have
+  no digest, and the digest lookup would drop the CI pin's update (see the custom managers
+  paragraph below). Renovate MUST keep digest updates enabled and use the matched version's
   release timestamp when its datasource provides one. With
   `minimumReleaseAgeBehaviour: "timestamp-required"`, a digest update without that evidence remains
   pending. Do not use the publisher-controlled OCI `org.opencontainers.image.created` annotation as
@@ -164,9 +166,11 @@ or a regex custom manager in `renovate.json` plus a regression test in
 job's command). The custom managers in `renovate.json` name the known nonstandard declarations,
 each with its reason: the Spotless formatter version in `pom.xml`, the Tessl tile, the Renovate
 validator, the commitlint versions, the container images in the `*-docker.sh` scripts, the
-OSS-Fuzz base images, the HyperFrames version, and the OpenTofu version in the `posthog-infra` CI
-job (paired with the mise pin in `infra/posthog/mise.toml` by a governance test, and grouped with
-it in `renovate.json` so one pull request updates both). Enforcement: the validator in CI, the
+OSS-Fuzz base images, and the HyperFrames version. The built-in GitHub Actions manager owns the
+OpenTofu version in the `posthog-infra` CI job, and a governance test pairs it with the mise pin
+in `infra/posthog/mise.toml`. `renovate.json` groups the two so one pull request updates both, and
+turns `pinDigests` off for them: neither pin has a digest, and the digest lookup for the CI pin
+fails on OpenTofu's `v` tag prefix and drops its update. Enforcement: the validator in CI, the
 governance tests in `pnpm run verify:scripts`, and this dry run cited in the pull request when a
 declaration changed.
 

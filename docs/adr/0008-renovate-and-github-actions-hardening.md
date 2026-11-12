@@ -108,7 +108,8 @@ Run `pnpm dlx --package renovate renovate-config-validator renovate.json` and
 repository-wide seven-day cooldown, timestamp-less releases remain ineligible, and strict internal
 checks prevent early branch creation. Tests also confirm that digest updates and security-improving
 pins remain enabled, executable tool images use Renovate-owned digests, and Renovate does not publish
-a redundant minimum-release-age status. Review should also confirm `.github/workflows/*.yml` uses
+a redundant minimum-release-age status. A separate test confirms that the OpenTofu version pins turn
+`pinDigests` off. Review should also confirm `.github/workflows/*.yml` uses
 full action SHAs with version comments and commitlint package pins are Renovate-managed.
 
 ## Pros and Cons of the Options
@@ -167,4 +168,10 @@ and rejects package-level overrides. Renovate resolves a digest update's matched
 that version's timestamp when the datasource provides one. The `timestamp-required` behavior keeps
 updates pending for registries without that evidence. Publisher-controlled OCI creation annotations
 are not accepted as release-age evidence. Pins remain enabled because they make the currently
-resolved dependency immutable without selecting newer code.
+resolved dependency immutable without selecting newer code. The OpenTofu group rule turns
+`pinDigests` off for its two version pins, which carry no digest: the digest lookup for the CI
+`tofu_version` input asks for tag `X.Y.Z` while OpenTofu tags `vX.Y.Z`, so the lookup fails and
+Renovate drops that update. Renovate does not retry with the prefix on purpose
+([Renovate PR #47155](https://github.com/renovatebot/renovate/pull/47155)). Turning `pinDigests`
+off for the whole repository would also fix it, but would stop Renovate pinning digests everywhere
+else.

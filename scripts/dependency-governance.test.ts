@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { parse } from "yaml";
 import { applyRegexUpdate, extractRegexDependencies } from "./test-support/renovate-regex-manager.ts";
-import { RENOVATE_CONFIG, matchesRegexOrGlobList } from "./test-support/renovate-config.ts";
+import { RENOVATE_CONFIG, matchesRegexOrGlobList, type RenovatePackageRule } from "./test-support/renovate-config.ts";
 
 const POM = readFileSync(new URL("../pom.xml", import.meta.url), "utf8");
 const CONFIDENCE_MAP = readFileSync(
@@ -260,38 +260,62 @@ test("the OpenTofu version is pinned once per owner and the owners agree", () =>
   assert.equal(new RegExp(extraction).exec("v99.1.2")?.groups?.["version"], "99.1.2");
 });
 
+// Renovate's mise manager reports the `opentofu` tool as package opentofu/opentofu from GitHub
+// releases; the built-in GitHub Actions manager reports the same package for tofu_version.
+const OPENTOFU_PINS = [
+  {source: "infra/posthog/mise.toml", declaration: /^opentofu\s*=/m, manager: "mise", depType: "tools", packageName: "opentofu/opentofu", datasource: "github-releases"},
+  {source: ".github/workflows/ci.yml", declaration: /tofu_version:\s*\d+\.\d+\.\d+/, manager: "github-actions", depType: "uses-with", packageName: "opentofu/opentofu", datasource: "github-releases"},
+] as const;
+
+type OpenTofuPin = (typeof OPENTOFU_PINS)[number];
+
+const OPENTOFU_PIN_MATCHERS = {
+  matchPackageNames: (pin: OpenTofuPin) => pin.packageName,
+  matchDatasources: (pin: OpenTofuPin) => pin.datasource,
+  matchManagers: (pin: OpenTofuPin) => pin.manager,
+  matchDepTypes: (pin: OpenTofuPin) => pin.depType,
+} as const satisfies Partial<Record<keyof RenovatePackageRule, (pin: OpenTofuPin) => string>>;
+
+// A rule can reach the pin unless one of the matchers above excludes it; other matchers, such as
+// update types, are assumed to match, so a broad rule counts against the pinDigests guard below.
+function ruleCanReach(rule: RenovatePackageRule, pin: OpenTofuPin): boolean {
+  return Object.entries(OPENTOFU_PIN_MATCHERS).every(([key, value]) => {
+    const patterns = rule[key as keyof typeof OPENTOFU_PIN_MATCHERS];
+    return patterns === undefined || matchesRegexOrGlobList(patterns, value(pin));
+  });
+}
+
+// Renovate applies package rules in order, so the last rule that sets the option wins.
+function openTofuPinSetting<K extends keyof RenovatePackageRule>(pin: OpenTofuPin, option: K): RenovatePackageRule[K] | undefined {
+  return RENOVATE_CONFIG.packageRules.filter((rule) => option in rule && ruleCanReach(rule, pin)).at(-1)?.[option];
+}
+
 test("one Renovate group moves both OpenTofu pins, since each alone would fail the agreement test", () => {
   // given
-  const miseConfig = readFileSync("infra/posthog/mise.toml", "utf8");
-  const renovateConfig = JSON.parse(readFileSync("renovate.json", "utf8")) as {
-    customManagers?: Array<{depNameTemplate?: string; datasourceTemplate?: string}>;
-    packageRules?: Array<Record<string, unknown>>;
-  };
-  // Renovate's mise manager reports the `opentofu` tool as package opentofu/opentofu from GitHub
-  // releases; the built-in GitHub Actions manager reports the same package for tofu_version.
-  const pins = [
-    {source: "infra/posthog/mise.toml", present: /^opentofu\s*=/m.test(miseConfig), packageName: "opentofu/opentofu", datasource: "github-releases"},
-    {source: ".github/workflows/ci.yml", present: /tofu_version:\s*\d+\.\d+\.\d+/.test(CI_WORKFLOW), packageName: "opentofu/opentofu", datasource: "github-releases"},
-  ];
+  for (const pin of OPENTOFU_PINS) {
+    assert.match(readFileSync(pin.source, "utf8"), pin.declaration, `${pin.source} no longer declares the OpenTofu version`);
+  }
 
   // when
-  const groupOf = (pin: (typeof pins)[number]) => {
-    let group: unknown;
-    for (const rule of renovateConfig.packageRules ?? []) {
-      const names = rule["matchPackageNames"] as string[] | undefined;
-      const datasources = rule["matchDatasources"] as string[] | undefined;
-      const otherMatchers = Object.keys(rule).filter((key) => key.startsWith("match") && key !== "matchPackageNames" && key !== "matchDatasources");
-      if (names?.includes(pin.packageName) && (datasources === undefined || datasources.includes(pin.datasource)) && otherMatchers.length === 0 && "groupName" in rule) {
-        group = rule["groupName"];
-      }
-    }
-    return group;
-  };
-  const groups = pins.map(groupOf);
+  const groups = OPENTOFU_PINS.map((pin) => openTofuPinSetting(pin, "groupName"));
 
   // then
-  assert.equal(pins.length, 2);
-  assert.ok(pins.every(({present}) => present));
-  assert.equal(typeof groups[0], "string");
+  assert.equal(typeof groups[0], "string", "the OpenTofu pins need a Renovate group");
   assert.equal(groups[1], groups[0]);
+});
+
+test("Renovate looks up no digest for the OpenTofu pins, so the tofu_version update is not dropped", () => {
+  // given
+  // With pinDigests on, Renovate looks up the commit of tag X.Y.Z for tofu_version, but OpenTofu
+  // tags its releases vX.Y.Z. The lookup fails and Renovate drops that update while the mise pin
+  // still moves, which fails the agreement test above. Neither pin has a digest, and Renovate does
+  // not retry with the prefix (https://github.com/renovatebot/renovate/pull/47155).
+  const repositoryDefault = RENOVATE_CONFIG.pinDigests;
+
+  // when
+  const pinDigests = OPENTOFU_PINS.map((pin) => openTofuPinSetting(pin, "pinDigests") ?? repositoryDefault);
+
+  // then
+  assert.equal(repositoryDefault, true, "the OpenTofu pinDigests override exists only because digest pinning is on by default");
+  assert.deepEqual(pinDigests, [false, false], "the last package rule that reaches each OpenTofu pin must set pinDigests to false");
 });

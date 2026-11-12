@@ -26,6 +26,7 @@ export interface RenovatePackageRule {
   readonly matchUpdateTypes?: readonly string[];
   readonly minimumReleaseAge?: string;
   readonly minimumReleaseAgeBehaviour?: string;
+  readonly pinDigests?: boolean;
   readonly platformAutomerge?: boolean;
   readonly prBodyNotes?: readonly string[];
   readonly schedule?: readonly string[];
