@@ -402,7 +402,7 @@
       ]
     },
     {
-      "description": "The GitHub Actions manager owns tofu_version and the mise manager owns infra/posthog/mise.toml. Both pins use the release version without its tag prefix and must move together.",
+      "description": "The GitHub Actions manager owns tofu_version and the mise manager owns infra/posthog/mise.toml. Both pins use the release version without its tag prefix and must move together. pinDigests is off because neither pin has a digest: with it on, Renovate looks up the commit of tag X.Y.Z for tofu_version, finds none because OpenTofu tags vX.Y.Z, and drops that update, so the mise pin would move alone.",
       "matchDatasources": [
         "github-releases"
       ],
@@ -410,7 +410,8 @@
         "opentofu/opentofu"
       ],
       "groupName": "OpenTofu",
-      "extractVersion": "^v(?<version>.+)$"
+      "extractVersion": "^v(?<version>.+)$",
+      "pinDigests": false
     }
   ]
 }
