@@ -4407,7 +4407,15 @@ that a second formatting pass leaves the source unchanged.
   PowerShell POM tests use real Git output under non-UTF-8 console encodings and verify encoding
   restoration after successful and failed reads. Literal mojibake prefixes remain invalid XML.
   The native Windows wrapper lifecycle checks the exact build directory under a path containing
-  command metacharacters
+  command metacharacters and non-ASCII characters. It requires managed PID tracking immediately
+  after update using the installer's selected Java search path. A deferred-task fixture MUST verify
+  immediate startup even when task submission succeeds without running its action. A native Startup
+  fallback test executes its generated command through Windows PowerShell 5 and verifies Unicode
+  launcher paths survive PowerShell 7 generation. The Codex batch shim test checks a Unicode npm
+  prefix, arguments containing spaces and Unicode, and the child exit status.
+  Native installer suites MUST restore the persistent user PATH after success or test failure;
+  suites that modify it MUST share a JUnit resource lock. Migration ownership tests MUST read
+  Java-written BOM-less UTF-8 manifests correctly under Windows PowerShell 5 and PowerShell 7.
 - If native Windows `setup-local` (Section 19.4) is implemented, it finds tools it starts by bare
   name through `PATH` and `PATHEXT`, starts a `.cmd` or `.bat` match such as the npm `codex.cmd`
   shim through `cmd.exe` with each argument and the exit status unchanged, and fails the launch
@@ -4463,6 +4471,11 @@ that a second formatting pass leaves the source unchanged.
   directory, removal on uninstall, a user-made skill directory that the scripts and their dry runs
   keep, and a linked skill directory, marker, or `SKILL.md`. They also cover a `CODEX_HOME` on a
   drive that does not exist for `install.ps1`.
+- installed-wrapper defaults keep the installed workspace and state roots when the installed config
+  directory is passed explicitly
+- installer-managed setup forwards the configured state home to managed worker startup
+- installer updates stop workers tracked in configured and legacy state roots, restart them in the
+  configured root, and leave legacy logs available as history
 
 ### 17.8 Trello Workflow Conformance
 
@@ -5099,6 +5112,21 @@ When this profile is used:
 - on generic Linux, macOS, and WSL2 installs, default local paths SHOULD follow the user's XDG-style
   homes: app and workspaces under the data home, config under the config home, state/logs under the
   state home, and dependency caches under the cache home
+- installer-managed `setup-local` MUST pass its selected state home to managed worker startup.
+  Direct advanced `setup-local --state-home PATH` use MUST store managed worker PID files and logs
+  below `PATH`. Setup handoff commands MUST retain an explicit state-home selection. The option
+  applies to that command and does not change the installed default. When an installed wrapper
+  receives its own installed config directory explicitly,
+  it MUST retain the installed workspace and state roots unless the user explicitly overrides them
+- until the migration contract tracked by
+  [GitHub issue #678](https://github.com/martin-francois/symphony-trello/issues/678) is removed, an
+  update MUST inspect both the configured state home and the former config-sibling `state` directory
+  for managed worker PID files, stop managed workers tracked in either location, and restart them in
+  the configured state home. It MUST NOT silently use the legacy directory for new PID files or logs,
+  and it MUST preserve existing legacy logs as historical data. It MUST preserve unrelated processes
+  and their state files in the shared legacy directory. A live worker with the selected app-home
+  marker MUST also match a workflow in the selected configuration's manifest. Otherwise,
+  the installer MUST refuse the update before stopping workers or replacing application files
 - on openSUSE MicroOS-like Linux hosts, and on other Linux hosts with the same storage topology,
   where the user's home is on the small root-backed filesystem and `/var` is a separate larger
   mutable filesystem, the POSIX installer SHOULD place heavy Symphony app, workspace, state, config,
@@ -5244,6 +5272,10 @@ When this profile is used:
   Startup-folder command when task creation is denied
 - installer-managed autostart SHOULD preserve prefixed runtime environment variables needed by
   connected workflows without copying them into the user's `.env` credential file
+  On Windows, the private snapshot MUST also preserve `PATH` and `JAVA_HOME` from the validated
+  installer environment so scheduled tasks use the same toolchain. Updates MUST refresh these values.
+  Install and update MUST start workers directly through the installed wrapper and check its result
+  before reporting success; scheduled-task submission alone does not confirm startup.
 - hosts without supported service-manager autostart MUST keep `start --all` as the manual recovery
   path after restart or login
 - local uninstall MUST stop managed processes before deleting installer-managed files

@@ -124,7 +124,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
                         },
                         (test, workflow, env) -> new String[] {
                             "WARN  \"Stopped Queue\" local server is not running",
-                            "Start: symphony-trello start --env " + env
+                            "Start: symphony-trello start --env '" + env + "'"
                         },
                         "setup-local repair-port",
                         "OK    \"Stopped Queue\" local server"));
