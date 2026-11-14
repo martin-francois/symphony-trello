@@ -36,7 +36,7 @@ public class WorkspaceManager {
             }
             var workspace = new Workspace(workspacePath, key, created);
             if (created) {
-                hooks.runRequired("after_create", config.hooks().afterCreate(), workspacePath, config.hooks());
+                hooks.runRequired("after_create", config.hooks().afterCreate(), workspacePath, config);
             }
             return workspace;
         } catch (IOException e) {
@@ -55,7 +55,7 @@ public class WorkspaceManager {
         if (!Files.exists(workspacePath)) {
             return;
         }
-        hooks.runBestEffort("before_remove", config.hooks().beforeRemove(), workspacePath, config.hooks());
+        hooks.runBestEffort("before_remove", config.hooks().beforeRemove(), workspacePath, config);
         try (var paths = Files.walk(workspacePath)) {
             paths.sorted(Comparator.reverseOrder()).forEach(path -> {
                 try {

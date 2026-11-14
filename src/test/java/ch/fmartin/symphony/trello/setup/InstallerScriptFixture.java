@@ -154,6 +154,11 @@ final class InstallerScriptFixture {
         return run(environment, new ProcessBuilder(command));
     }
 
+    static ProcessResult runWithInput(Map<String, String> environment, String input, String... command)
+            throws IOException, InterruptedException {
+        return runWithTestEnvironment(environment, new ProcessBuilder(command), input);
+    }
+
     static ProcessResult run(Map<String, String> environment, Path workingDirectory, String... command)
             throws IOException, InterruptedException {
         var processBuilder = new ProcessBuilder(command);

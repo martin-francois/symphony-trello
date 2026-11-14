@@ -95,17 +95,34 @@ record ConnectedBoardManifest(List<ConnectedBoard> boards) {
     /// The one connected board that a `--board` selector names; no match or several matches are
     /// expected selector errors.
     ConnectedBoard selectBoard(String selector) {
+        return selectBoardIfPresent(selector).orElseThrow(ConnectedWorkflowResolver::notConnected);
+    }
+
+    Optional<ConnectedBoard> selectBoardIfPresent(String selector) {
         List<ConnectedBoard> matches = findAllByBoard(selector);
         if (matches.isEmpty()) {
-            throw new TrelloBoardSetupException(
-                    "setup_worker_board_not_found", "No connected Trello board matches \"" + selector + "\".");
+            return Optional.empty();
         }
         if (matches.size() > 1) {
             throw new TrelloBoardSetupException(
                     "setup_worker_board_ambiguous",
                     "Multiple connected boards match --board. Re-run with a board id, short link, or --workflow.");
         }
-        return matches.getFirst();
+        return Optional.of(matches.getFirst());
+    }
+
+    /// An API-resolved identifier is never a user-facing board name or alias.
+    Optional<ConnectedBoard> selectBoardIdIfPresent(String boardId) {
+        List<ConnectedBoard> matches = boards.stream()
+                .filter(board -> boardId.equals(board.boardId()))
+                .limit(2)
+                .toList();
+        if (matches.size() > 1) {
+            throw new TrelloBoardSetupException(
+                    "setup_worker_board_ambiguous",
+                    "cannot resolve connected board: repair duplicate board identifiers in the manifest");
+        }
+        return matches.stream().findFirst();
     }
 
     /// The connected board that a `--workflow` selector names, or empty for a workflow outside the
@@ -128,13 +145,20 @@ record ConnectedBoardManifest(List<ConnectedBoard> boards) {
 
     List<ConnectedBoard> findAllByWorkflow(Path workflowPath) {
         return boards.stream()
-                .filter(board ->
-                        board.workflowPath() != null && PathsEqual.samePath(board.workflowPath(), workflowPath))
+                .filter(board -> matchesWorkflow(board, workflowPath))
                 .toList();
+    }
+
+    private static boolean matchesWorkflow(ConnectedBoard board, Path workflowPath) {
+        Path managed = board.workflowPath();
+        Path source = board.sourceWorkflowPath();
+        return (managed != null && PathsEqual.samePath(managed, workflowPath))
+                || (source != null && PathsEqual.samePath(source, workflowPath));
     }
 
     private static boolean sameBoardOrWorkflow(ConnectedBoard first, ConnectedBoard second) {
         return first.boardId().equals(second.boardId())
-                || PathsEqual.samePath(first.workflowPath(), second.workflowPath());
+                || matchesWorkflow(first, second.workflowPath())
+                || (second.sourceWorkflowPath() != null && matchesWorkflow(first, second.sourceWorkflowPath()));
     }
 }

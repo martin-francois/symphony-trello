@@ -39,7 +39,7 @@ import java.util.stream.Stream;
 public final class TrelloBoardSetup {
     public static final URI DEFAULT_ENDPOINT = URI.create(TrelloCredentialEndpoint.TRELLO_API);
     public static final Path DEFAULT_WORKFLOW_PATH = Path.of("WORKFLOW.md");
-    public static final Path DEFAULT_WORKSPACE_ROOT = Path.of("./workspaces");
+    public static final Path DEFAULT_WORKSPACE_ROOT = defaultWorkspaceRoot(Path.of("."), Path.of("."));
     public static final int DEFAULT_MAX_CONCURRENT_AGENTS = ConfigDefaults.DEFAULT_SETUP_MAX_CONCURRENT_AGENTS;
     // Documented setup bound: each concurrent card runs its own Codex agent plus builds and tests,
     // so unbounded values can overload the host and make Trello ordering assumptions unsafe.
@@ -103,6 +103,25 @@ public final class TrelloBoardSetup {
     private final Optional<String> codexModelOverride;
     private final Optional<String> codexReasoningEffortOverride;
     private final IntPredicate portInUse;
+    private final Optional<Path> replacedWorkflow;
+
+    static Path defaultWorkspaceRoot(Path configDir, Path appHome) {
+        Path config = configDir.toAbsolutePath().normalize();
+        Path app = appHome.toAbsolutePath().normalize();
+        Path anchor = config.startsWith(app) ? app : config;
+        Path parent = anchor.getParent();
+        if (parent == null) {
+            // A protected filesystem root has no outside sibling; restricted permission validation rejects it.
+            return anchor.resolve("workspaces");
+        }
+        Path candidate = parent.resolve("workspaces");
+        int suffix = 2;
+        while (candidate.startsWith(config) || candidate.startsWith(app)) {
+            candidate = parent.resolve("workspaces-" + suffix);
+            suffix++;
+        }
+        return candidate;
+    }
 
     public TrelloBoardSetup(ObjectMapper json) {
         this(json, CodexModelDefaults.fallback());
@@ -119,7 +138,8 @@ public final class TrelloBoardSetup {
                 Optional.of(codexModelSelectionDefaults),
                 Optional.empty(),
                 Optional.empty(),
-                LocalHealthChecker::portAcceptsConnections);
+                LocalHealthChecker::portAcceptsConnections,
+                Optional.empty());
     }
 
     TrelloBoardSetup(ObjectMapper json, Supplier<CodexModelSelectionDefaults> codexModelSelectionDefaults) {
@@ -129,7 +149,8 @@ public final class TrelloBoardSetup {
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
-                LocalHealthChecker::portAcceptsConnections);
+                LocalHealthChecker::portAcceptsConnections,
+                Optional.empty());
     }
 
     private TrelloBoardSetup(
@@ -138,7 +159,8 @@ public final class TrelloBoardSetup {
             Optional<CodexModelSelectionDefaults> codexModelSelectionDefaultsForDryRun,
             Optional<String> codexModelOverride,
             Optional<String> codexReasoningEffortOverride,
-            IntPredicate portInUse) {
+            IntPredicate portInUse,
+            Optional<Path> replacedWorkflow) {
         this.json = json;
         this.yaml = new ObjectMapper(new YAMLFactory());
         this.trello = new TrelloSetupApi(json);
@@ -150,6 +172,7 @@ public final class TrelloBoardSetup {
         this.codexReasoningEffortOverride =
                 Objects.requireNonNull(codexReasoningEffortOverride, "codexReasoningEffortOverride");
         this.portInUse = Objects.requireNonNull(portInUse, "portInUse");
+        this.replacedWorkflow = Objects.requireNonNull(replacedWorkflow, "replacedWorkflow");
     }
 
     /// Returns a copy whose port-availability checks use the given probe. Port-selection behavior
@@ -162,7 +185,21 @@ public final class TrelloBoardSetup {
                 codexModelSelectionDefaultsForDryRun,
                 codexModelOverride,
                 codexReasoningEffortOverride,
-                probe);
+                probe,
+                replacedWorkflow);
+    }
+
+    TrelloBoardSetup withReplacedConnection(ConnectedBoardManifest manifest, Path workflowPath, boolean force) {
+        Optional<Path> replaced =
+                force ? manifest.selectWorkflow(workflowPath).map(ConnectedBoard::workflowPath) : Optional.empty();
+        return new TrelloBoardSetup(
+                json,
+                codexModelSelectionDefaults,
+                codexModelSelectionDefaultsForDryRun,
+                codexModelOverride,
+                codexReasoningEffortOverride,
+                portInUse,
+                replaced);
     }
 
     /// Whether something on the loopback interface already accepts connections on the port.
@@ -178,7 +215,8 @@ public final class TrelloBoardSetup {
                 Optional.of(selectionDefaults),
                 codexModelOverride,
                 codexReasoningEffortOverride,
-                portInUse);
+                portInUse,
+                replacedWorkflow);
     }
 
     TrelloBoardSetup withCodexModelOverrides(
@@ -199,7 +237,8 @@ public final class TrelloBoardSetup {
                 Optional.of(codexModelSelectionDefaults),
                 codexModelOverride,
                 codexReasoningEffortOverride,
-                portInUse);
+                portInUse,
+                replacedWorkflow);
     }
 
     public NewBoardResult createRecommendedBoard(NewBoardRequest request) {
@@ -761,7 +800,7 @@ public final class TrelloBoardSetup {
                 "No workflow HTTP port is available between %d and %d".formatted(DEFAULT_SERVER_PORT, LocalPort.MAX));
     }
 
-    private static List<Path> siblingWorkflowFiles(Path workflowPath) {
+    private List<Path> siblingWorkflowFiles(Path workflowPath) {
         Path absolute = workflowPath.toAbsolutePath().normalize();
         Path parent = absolute.getParent();
         if (parent == null || !Files.isDirectory(parent)) {
@@ -772,12 +811,19 @@ public final class TrelloBoardSetup {
                     .map(Path::normalize)
                     .filter(Files::isRegularFile)
                     .filter(path -> PathNames.fileName(path).endsWith(".md"))
-                    .filter(path -> !path.equals(absolute))
+                    .filter(path -> !PathsEqual.samePath(path, absolute))
+                    .filter(path -> !isReplacedWorkflow(path))
                     .toList();
         } catch (IOException e) {
             throw SetupFailureCauses.setupFailure(
                     "setup_workflow_scan_failed", "Could not scan workflow directory: " + parent, e);
         }
+    }
+
+    private boolean isReplacedWorkflow(Path candidate) {
+        return replacedWorkflow
+                .map(path -> PathsEqual.samePath(path, candidate))
+                .orElse(false);
     }
 
     private Optional<Integer> workflowServerPortReservation(Path workflowPath, Path envPath) {

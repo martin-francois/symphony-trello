@@ -46,16 +46,29 @@ abstract class ProcessHandleManagedProcessPlatform implements ManagedProcessPlat
 
     @Override
     public boolean isManaged(long pid, Path appHome) {
-        return commandArguments(pid)
-                .filter(arguments -> isManagedCommand(arguments, appHome, Optional.empty()))
-                .isPresent();
+        return isManaged(pid, appHome, Optional.empty());
     }
 
     @Override
     public boolean isManaged(long pid, Path appHome, Path workflowPath) {
+        return isManaged(pid, appHome, Optional.of(workflowPath));
+    }
+
+    private boolean isManaged(long pid, Path appHome, Optional<Path> workflowPath) {
         return commandArguments(pid)
-                .filter(arguments -> isManagedCommand(arguments, appHome, Optional.of(workflowPath)))
-                .isPresent();
+                .filter(arguments -> !arguments.isEmpty())
+                .map(arguments -> isManagedCommand(arguments, appHome, workflowPath))
+                .orElseGet(() -> unavailableIdentity(pid));
+    }
+
+    private boolean unavailableIdentity(long pid) {
+        if (isAlive(pid)) {
+            throw new TrelloBoardSetupException(
+                    "setup_worker_identity_unavailable",
+                    "cannot inspect worker \"" + pid
+                            + "\": retry from a trusted terminal or verify and stop the process manually");
+        }
+        return false;
     }
 
     static boolean isManagedCommand(List<String> arguments, Path appHome, Optional<Path> workflowPath) {
@@ -112,12 +125,6 @@ abstract class ProcessHandleManagedProcessPlatform implements ManagedProcessPlat
         if (parent != null) {
             Files.createDirectories(parent);
         }
-    }
-
-    private static Optional<List<String>> commandArguments(long pid) {
-        return ProcessHandle.of(pid)
-                .flatMap(handle -> handle.info().arguments())
-                .map(List::of);
     }
 
     private static boolean waitForExit(ProcessHandle handle, Duration timeout) {

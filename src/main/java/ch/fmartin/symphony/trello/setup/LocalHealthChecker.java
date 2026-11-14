@@ -154,12 +154,26 @@ final class LocalHealthChecker {
     }
 
     int managedHealthPort(Path workflowPath, int fallbackPort, Path envPath) {
-        return externalHttpPortOverride(envPath)
-                .map(LocalHealthChecker::requireStableExternalPort)
-                .orElseGet(() -> stableWorkflowPort(workflowPath, fallbackPort, envPath));
+        return resolveManagedPort(workflowConfig, environment, workflowPath, fallbackPort, envPath);
     }
 
-    private int stableWorkflowPort(Path workflowPath, int fallbackPort, Path envPath) {
+    static int resolveManagedPort(
+            WorkflowConfigEditor workflowConfig,
+            Map<String, String> environment,
+            Path workflowPath,
+            int fallbackPort,
+            Path envPath) {
+        return externalHttpPortOverride(environment, envPath)
+                .map(LocalHealthChecker::requireStableExternalPort)
+                .orElseGet(() -> stableWorkflowPort(workflowConfig, environment, workflowPath, fallbackPort, envPath));
+    }
+
+    private static int stableWorkflowPort(
+            WorkflowConfigEditor workflowConfig,
+            Map<String, String> environment,
+            Path workflowPath,
+            int fallbackPort,
+            Path envPath) {
         int port = workflowConfig
                 .serverPort(workflowPath, WorkflowEnvironmentResolver.resolver(environment, envPath))
                 .orElse(fallbackPort);
@@ -211,7 +225,7 @@ final class LocalHealthChecker {
         return "http://" + LOOPBACK_HOST + ":" + port;
     }
 
-    private Optional<Integer> externalHttpPortOverride(Path envPath) {
+    private static Optional<Integer> externalHttpPortOverride(Map<String, String> environment, Path envPath) {
         Path dotenv = envPath == null ? Path.of(".env") : envPath;
         return LocalEnvironment.firstPresent(dotenv, environment, HTTP_PORT_ENVIRONMENT_NAMES.toArray(String[]::new))
                 .filter(value -> !blank(value))

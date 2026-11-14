@@ -110,6 +110,7 @@ final class SymphonyOrchestratorHandoffCleanupTest {
             var orchestrator = new SymphonyOrchestrator(
                     new WorkflowLoader(),
                     new ConfigResolver(),
+                    connectedWorkflowResolver(),
                     tracker,
                     runner,
                     new PromptRenderer(),

@@ -6,8 +6,36 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 final class ConnectedBoardManifestTest {
+    @CsvSource({"false,false", "false,true", "true,false", "true,true"})
+    @ParameterizedTest
+    void replacementAndSelectionUseTheSameWorkflowAliases(boolean firstSourceAlias, boolean secondSourceAlias) {
+        // given
+        Path shared = Path.of("shared.md");
+        ConnectedBoard first = ConnectedBoardBuilder.connectedBoard(firstSourceAlias ? Path.of("managed-a.md") : shared)
+                .withBoardId("board-a")
+                .withSourceWorkflowPath(firstSourceAlias ? shared : null)
+                .build();
+        ConnectedBoard second = ConnectedBoardBuilder.connectedBoard(
+                        secondSourceAlias ? Path.of("managed-b.md") : shared)
+                .withBoardId("board-b")
+                .withSourceWorkflowPath(secondSourceAlias ? shared : null)
+                .build();
+        var manifest = new ConnectedBoardManifest(List.of(first));
+
+        // when
+        List<ConnectedBoard> replaced = manifest.boardsReplacedBy(second);
+        ConnectedBoardManifest updated = manifest.withBoard(second);
+
+        // then
+        assertThat(replaced).containsExactly(first);
+        assertThat(updated.boards()).containsExactly(second);
+        assertThat(updated.selectWorkflow(shared)).hasValue(second);
+    }
+
     @Test
     void findByBoardHandlesMissingBoardKey() {
         // given

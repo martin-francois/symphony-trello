@@ -10,6 +10,7 @@ Commands:
   list-workspaces    List Trello Workspaces visible to the token.
   start              Start managed local Symphony workers.
   stop               Stop managed local Symphony workers.
+  disconnect         Stop a board worker and remove its local connection.
   status             Show the current runtime state of selected Symphony
                        workflows.
   logs               Show managed local Symphony worker logs.
@@ -22,4 +23,6 @@ Commands:
                        a connected Trello board.
   telemetry          Show, preview, or change optional usage reporting.
   setup-local        Set up local Trello-driven Codex automation.
+  card-helper        Manage the trusted card helper independently of board
+                       workers.
 --- stderr ---

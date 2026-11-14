@@ -275,7 +275,7 @@ final class ContainerRuntimeScriptTest {
         if (redirection.isEmpty()) {
             assertThat(arguments).containsSubsequence("-i", "-t");
         } else {
-            assertThat(arguments).doesNotContain("-i", "-t");
+            assertThat(arguments).contains("-i").doesNotContain("-t");
         }
     }
 
