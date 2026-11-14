@@ -389,7 +389,10 @@ public final class HeartbeatReporter {
     }
 
     private record Decision(
-            CheckResult result, boolean printNotice, @Nullable Instant deadline, @Nullable Dispatch dispatch) {
+            CheckResult result,
+            boolean printNotice,
+            @Nullable Instant deadline,
+            @Nullable Dispatch dispatch) {
         static Decision of(CheckResult result) {
             return new Decision(result, false, null, null);
         }

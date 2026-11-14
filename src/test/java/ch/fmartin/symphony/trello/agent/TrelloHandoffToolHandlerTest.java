@@ -324,9 +324,7 @@ final class TrelloHandoffToolHandlerTest {
         trello.remove("/1/cards/card-1/checklists").on("/1/cards/card-1/checklists", exchange -> {
             checklistRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             assertThat(exchange.getRequestMethod()).isEqualTo("GET");
-            respond(
-                    exchange,
-                    """
+            respond(exchange, """
                                     [
                                       {
                                         "id":"checklist-existing",
@@ -824,16 +822,14 @@ final class TrelloHandoffToolHandlerTest {
     void verticalTabAndFormFeedDoNotCreateNewLogicalLinesForBlockerClassification(String escapedControl) {
         // given
         TrelloHandoffToolHandler handler = handler();
-        cardResponse.set(cardJson(actionsJson(
-                """
+        cardResponse.set(cardJson(actionsJson("""
                 {
                   "id":"action-human",
                   "data":{"text":"Blocked by%sdiscussion that is not an exact status prefix"},
                   "date":"2026-05-05T00:00:00.000Z",
                   "memberCreator":{"fullName":"Codex"}
                 }
-                """
-                        .formatted(escapedControl))));
+                """.formatted(escapedControl))));
 
         // when
         JsonNode result = updateBlockerRecheckStatus(handler, "checking");
@@ -1455,9 +1451,7 @@ final class TrelloHandoffToolHandlerTest {
     void updatesExistingWorkpadCommentInsteadOfCreatingDuplicate() {
         // given
         TrelloHandoffToolHandler handler = handler();
-        cardResponse.set(
-                cardJson(
-                        """
+        cardResponse.set(cardJson("""
                 [
                   {
                     "id":"action-workpad",
@@ -1879,9 +1873,7 @@ final class TrelloHandoffToolHandlerTest {
     void dropsAnEchoedCleanupNoteOnceTheDuplicatesAreGone() {
         // given
         TrelloHandoffToolHandler handler = handler();
-        cardResponse.set(
-                cardJson(
-                        """
+        cardResponse.set(cardJson("""
                 [
                   {
                     "id":"action-workpad",
@@ -2013,9 +2005,7 @@ final class TrelloHandoffToolHandlerTest {
         // be JVM-global state and is unsafe with parallel test execution.
         // given
         TrelloHandoffToolHandler handler = handler();
-        cardResponse.set(
-                cardJson(
-                        """
+        cardResponse.set(cardJson("""
                 [
                   {
                     "id":"action-workpad",
@@ -3328,8 +3318,7 @@ final class TrelloHandoffToolHandlerTest {
                   "pos":1,
                   "actions":%s
                 }
-                """
-                .formatted(jsonEscaped(title), actionsJson);
+                """.formatted(jsonEscaped(title), actionsJson);
     }
 
     private static String actionsJson(String... actions) {
@@ -3345,8 +3334,7 @@ final class TrelloHandoffToolHandlerTest {
                   "date":"2026-05-05T00:00:00.000Z",
                   "memberCreator":{"fullName":"Codex"}
                 }
-                """
-                .formatted(id, jsonEscaped(text));
+                """.formatted(id, jsonEscaped(text));
     }
 
     private static String managedRecheckAction(String actionId, String visibleStatus, String blockerActionId) {
@@ -3423,16 +3411,14 @@ final class TrelloHandoffToolHandlerTest {
 
     private static String commentActions(int count) {
         return IntStream.range(0, count)
-                .mapToObj(index ->
-                        """
+                .mapToObj(index -> """
                         {
                           "id":"action-%d",
                           "data":{"text":"Regular comment %d"},
                           "date":"2026-05-05T00:00:00.000Z",
                           "memberCreator":{"fullName":"Codex"}
                         }
-                        """
-                                .formatted(index, index))
+                        """.formatted(index, index))
                 .collect(Collectors.joining(",", "[", "]"));
     }
 }

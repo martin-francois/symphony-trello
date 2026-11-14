@@ -32,8 +32,7 @@ final class BoardCardCommandsTest {
     private static final String BOARD_ID = "board-1";
     private static final String TERMINAL_ESCAPE = "\u001B";
     private static final Path BOARD_CARDS_SKILL = Path.of(".codex/skills/symphony-trello-board-cards/SKILL.md");
-    private static final String DEFAULT_TRELLO_TOOLS =
-            """
+    private static final String DEFAULT_TRELLO_TOOLS = """
             trello_tools:
               enabled: true
               allow_writes: true
@@ -151,14 +150,12 @@ final class BoardCardCommandsTest {
         // then
         result.assertSuccess();
         assertThat(result.stdout().strip())
-                .isEqualTo(
-                        """
+                .isEqualTo("""
                         {"status":"ok","board":{"name":"Queue","id":"board-1","url":"https://trello.com/b/SYNTH001",\
                         "workflow":%s},"lists":[{"list":{"id":"list-review","name":"Human Review",\
                         "roles":["human-review"],"move_allowed":true,"create_allowed":true},\
                         "cards":[{"id":"card0001","short_link":"SYNTH101","url":"https://trello.com/c/SYNTH101",\
-                        "title":"Fix the login redirect"}]}]}"""
-                                .formatted(jsonString(workflowPath(configDir).toString())));
+                        "title":"Fix the login redirect"}]}]}""".formatted(jsonString(workflowPath(configDir).toString())));
     }
 
     @Test
@@ -307,14 +304,12 @@ final class BoardCardCommandsTest {
         result.assertSuccess();
         assertThat(card.listId()).isEqualTo("list-review");
         assertThat(result.stdout().strip())
-                .isEqualTo(
-                        """
+                .isEqualTo("""
                         {"status":"card_moved","board":{"name":"Queue","id":"board-1","url":"https://trello.com/b/SYNTH001",\
                         "workflow":%s},"card":{"id":"card0001","short_link":"SYNTH101",\
                         "url":"https://trello.com/c/SYNTH101","title":"Fix the login redirect"},\
                         "list":{"id":"list-review","name":"Human Review","roles":["human-review"],\
-                        "move_allowed":true,"create_allowed":true}}"""
-                                .formatted(jsonString(workflowPath(configDir).toString())));
+                        "move_allowed":true,"create_allowed":true}}""".formatted(jsonString(workflowPath(configDir).toString())));
     }
 
     @Test
@@ -336,8 +331,7 @@ final class BoardCardCommandsTest {
     void moveRequiresAMoveAllowlist() throws Exception {
         // given
         FakeTrelloBoard.FakeCard card = board.card("card0001", "SYNTH101", "Fix the login redirect", "list-inbox");
-        Path configDir = connectBoard(
-                """
+        Path configDir = connectBoard("""
                 trello_tools:
                   enabled: true
                   allow_writes: true
@@ -702,8 +696,9 @@ final class BoardCardCommandsTest {
                 runCard(configDir, "archive", "SYNTH101", "--confirm-title", "Fix the login redirect"));
 
         // then
-        assertThat(results).allSatisfy(result -> assertThat(result.stdout() + result.stderr())
-                .doesNotContain(CredentialSentinels.TRELLO_API_KEY, CredentialSentinels.TRELLO_API_TOKEN));
+        assertThat(results)
+                .allSatisfy(result -> assertThat(result.stdout() + result.stderr())
+                        .doesNotContain(CredentialSentinels.TRELLO_API_KEY, CredentialSentinels.TRELLO_API_TOKEN));
     }
 
     @Test
@@ -804,8 +799,7 @@ final class BoardCardCommandsTest {
                   terminal_states:
                 %s%s---
                 # Queue
-                """
-                .formatted(endpoint, boardId, terminal, trelloTools);
+                """.formatted(endpoint, boardId, terminal, trelloTools);
     }
 
     /// Starts a second Trello API that the card commands must never call, and returns its endpoint.

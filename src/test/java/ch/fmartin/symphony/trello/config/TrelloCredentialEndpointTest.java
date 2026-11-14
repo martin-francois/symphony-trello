@@ -108,12 +108,14 @@ final class TrelloCredentialEndpointTest {
                 TrelloCredentialEndpoint.mismatch(credentials(defaultSource), unsafeEndpoint, TARGET);
 
         // then
-        assertThat(sourceRefusal).hasValueSatisfying(message -> assertThat(message)
-                .contains(TrelloEnvironment.API_ENDPOINT)
-                .doesNotContain(unsafeEndpoint, "password", "synthetic-token"));
-        assertThat(targetRefusal).hasValueSatisfying(message -> assertThat(message)
-                .contains(TARGET)
-                .doesNotContain(unsafeEndpoint, "password", "synthetic-token"));
+        assertThat(sourceRefusal)
+                .hasValueSatisfying(message -> assertThat(message)
+                        .contains(TrelloEnvironment.API_ENDPOINT)
+                        .doesNotContain(unsafeEndpoint, "password", "synthetic-token"));
+        assertThat(targetRefusal)
+                .hasValueSatisfying(message -> assertThat(message)
+                        .contains(TARGET)
+                        .doesNotContain(unsafeEndpoint, "password", "synthetic-token"));
     }
 
     @Test
@@ -148,11 +150,12 @@ final class TrelloCredentialEndpointTest {
                 TrelloCredentialEndpoint.mismatch(credentials(source), TrelloCredentialEndpoint.TRELLO_API, TARGET);
 
         // then
-        assertThat(refusal).hasValueSatisfying(message -> assertThat(message)
-                .startsWith("TRELLO_API_KEY and TRELLO_API_TOKEN from the env file " + envFile + " belong to "
-                        + FOREIGN_ENDPOINT + ", the TRELLO_API_ENDPOINT of the env file " + envFile
-                        + ", but the workflow's tracker.endpoint is https://api.trello.com/1.")
-                .endsWith("TRELLO_API_ENDPOINT=https://api.trello.com/1"));
+        assertThat(refusal)
+                .hasValueSatisfying(message -> assertThat(message)
+                        .startsWith("TRELLO_API_KEY and TRELLO_API_TOKEN from the env file " + envFile + " belong to "
+                                + FOREIGN_ENDPOINT + ", the TRELLO_API_ENDPOINT of the env file " + envFile
+                                + ", but the workflow's tracker.endpoint is https://api.trello.com/1.")
+                        .endsWith("TRELLO_API_ENDPOINT=https://api.trello.com/1"));
     }
 
     @Test
@@ -247,9 +250,10 @@ final class TrelloCredentialEndpointTest {
         Optional<String> refusal = TrelloCredentialEndpoint.mismatch(credentials, FOREIGN_ENDPOINT, TARGET);
 
         // then
-        assertThat(refusal).hasValueSatisfying(message -> assertThat(message)
-                .startsWith("TRELLO_API_TOKEN from the env file ")
-                .doesNotContain("TRELLO_API_KEY"));
+        assertThat(refusal)
+                .hasValueSatisfying(message -> assertThat(message)
+                        .startsWith("TRELLO_API_TOKEN from the env file ")
+                        .doesNotContain("TRELLO_API_KEY"));
     }
 
     private static List<EnvironmentValue> credentials(EnvironmentSource source) {

@@ -81,8 +81,9 @@ final class TelemetryMultiJvmTest {
         TelemetryState state = store.read().stateOrInitial();
 
         // then
-        assertThat(outputs).allSatisfy(output -> assertThat(output)
-                .endsWith(state.installationId().toString()));
+        assertThat(outputs)
+                .allSatisfy(output ->
+                        assertThat(output).endsWith(state.installationId().toString()));
         assertThat(outputs)
                 .filteredOn(output -> output.startsWith(CheckResult.DISPATCHED.name()))
                 .as("exactly one process wins the daily claim; the rest wait or see it done")

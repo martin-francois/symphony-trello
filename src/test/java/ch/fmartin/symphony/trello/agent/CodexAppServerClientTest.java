@@ -49,8 +49,7 @@ final class CodexAppServerClientTest {
         // given
         Path ceilingOutput = tempDir.resolve("ceiling.txt");
         Path appServer = writeExecutableScript(
-                "ceiling-app-server.sh",
-                """
+                "ceiling-app-server.sh", """
                 #!/usr/bin/env bash
                 # Absolute output path: the codex launch uses a login shell, and hosted CI login
                 # profiles can change the working directory before the script body runs.
@@ -65,8 +64,7 @@ final class CodexAppServerClientTest {
                       ;;
                   esac
                 done
-                """
-                        .replace("__CEILING_OUTPUT__", ceilingOutput.toString()));
+                """.replace("__CEILING_OUTPUT__", ceilingOutput.toString()));
         EffectiveConfig config = config(appServer);
         Path workspace = config.workspace().root().resolve("TRELLO-ceiling");
         Files.createDirectories(workspace);
@@ -95,9 +93,8 @@ final class CodexAppServerClientTest {
             throws Exception {
         // given
         int silenceLimitMillis = 2_500;
-        Path appServer = writeExecutableScript(
-                "streaming-app-server-" + stream + ".sh",
-                """
+        Path appServer =
+                writeExecutableScript("streaming-app-server-" + stream + ".sh", """
                 #!/usr/bin/env bash
                 while IFS= read -r line; do
                   case "$line" in
@@ -115,8 +112,7 @@ final class CodexAppServerClientTest {
                       ;;
                   esac
                 done
-                """
-                        .replace("__REDIRECT__", redirect));
+                """.replace("__REDIRECT__", redirect));
         EffectiveConfig config = config(Map.of(
                 "command",
                 appServer.toString(),
@@ -145,9 +141,7 @@ final class CodexAppServerClientTest {
     void failsATurnWithTurnTimeoutAfterTheAppServerStaysSilent() throws Exception {
         // given
         int silenceLimitMillis = 300;
-        Path appServer = writeExecutableScript(
-                "silent-app-server.sh",
-                """
+        Path appServer = writeExecutableScript("silent-app-server.sh", """
                 #!/usr/bin/env bash
                 while IFS= read -r line; do
                   case "$line" in
@@ -185,9 +179,7 @@ final class CodexAppServerClientTest {
     @Test
     void handlesTurnCompletedArrivingBeforeAwaiterIsRegistered() throws Exception {
         // given
-        Path appServer = writeExecutableScript(
-                "fast-app-server.sh",
-                """
+        Path appServer = writeExecutableScript("fast-app-server.sh", """
                 #!/usr/bin/env bash
                 while IFS= read -r line; do
                   case "$line" in
@@ -227,9 +219,7 @@ final class CodexAppServerClientTest {
     @Test
     void keepsQueuedTurnCompletionWhenAppServerExitsBeforeAwaiterIsRegistered() throws Exception {
         // given
-        Path appServer = writeExecutableScript(
-                "completed-then-exit-app-server.sh",
-                """
+        Path appServer = writeExecutableScript("completed-then-exit-app-server.sh", """
                 #!/usr/bin/env bash
                 while IFS= read -r line; do
                   [[ "$line" =~ \\"id\\":([0-9]+) ]] && id="${BASH_REMATCH[1]}"
@@ -271,9 +261,7 @@ final class CodexAppServerClientTest {
     @Test
     void preservesAppServerErrorResponseMessage() throws Exception {
         // given
-        Path appServer = writeExecutableScript(
-                "error-response-app-server.sh",
-                """
+        Path appServer = writeExecutableScript("error-response-app-server.sh", """
                 #!/usr/bin/env bash
                 while IFS= read -r line; do
                   [[ "$line" =~ \\"id\\":([0-9]+) ]] && id="${BASH_REMATCH[1]}"
@@ -309,9 +297,7 @@ final class CodexAppServerClientTest {
     void sendsAdditionalWritableRootsAsWorkspaceWriteSandboxPolicy() throws Exception {
         // given
         Path capture = tempDir.resolve("turn-start.jsonl");
-        Path appServer = writeExecutableScript(
-                "capturing-app-server.sh",
-                """
+        Path appServer = writeExecutableScript("capturing-app-server.sh", """
                 #!/usr/bin/env bash
                 capture="$1"
                 while IFS= read -r line; do
@@ -363,9 +349,7 @@ final class CodexAppServerClientTest {
     void preservesWorkspaceWriteNetworkAccessWhenMergingWritableRoots() throws Exception {
         // given
         Path capture = tempDir.resolve("turn-start-network.jsonl");
-        Path appServer = writeExecutableScript(
-                "capturing-network-app-server.sh",
-                """
+        Path appServer = writeExecutableScript("capturing-network-app-server.sh", """
                 #!/usr/bin/env bash
                 capture="$1"
                 while IFS= read -r line; do
@@ -422,9 +406,7 @@ final class CodexAppServerClientTest {
     void sendsConfiguredModelAndReasoningEffortToCodexAppServer() throws Exception {
         // given
         Path capture = tempDir.resolve("model-requests.jsonl");
-        Path appServer = writeExecutableScript(
-                "model-capturing-app-server.sh",
-                """
+        Path appServer = writeExecutableScript("model-capturing-app-server.sh", """
                 #!/usr/bin/env bash
                 capture="$1"
                 : > "$capture"
@@ -482,9 +464,7 @@ final class CodexAppServerClientTest {
     void omitsModelAndReasoningEffortWhenWorkflowDoesNotConfigureThem() throws Exception {
         // given
         Path capture = tempDir.resolve("default-model-requests.jsonl");
-        Path appServer = writeExecutableScript(
-                "default-model-capturing-app-server.sh",
-                """
+        Path appServer = writeExecutableScript("default-model-capturing-app-server.sh", """
                 #!/usr/bin/env bash
                 capture="$1"
                 : > "$capture"
@@ -533,24 +513,26 @@ final class CodexAppServerClientTest {
                 .satisfiesExactly(
                         request -> assertThat(request.path("params"))
                                 .as("thread/start params")
-                                .isInstanceOfSatisfying(ObjectNode.class, params -> assertThat(params.path("model"))
-                                        .as("thread/start omitted model")
-                                        .isEqualTo(json.missingNode())),
+                                .isInstanceOfSatisfying(
+                                        ObjectNode.class,
+                                        params -> assertThat(params.path("model"))
+                                                .as("thread/start omitted model")
+                                                .isEqualTo(json.missingNode())),
                         request -> assertThat(request.path("params"))
                                 .as("turn/start params")
-                                .isInstanceOfSatisfying(ObjectNode.class, params -> assertThatObject(params)
-                                        .as("turn/start omitted [model, effort]")
-                                        .extracting(node -> node.path("model"), node -> node.path("effort"))
-                                        .containsExactly(json.missingNode(), json.missingNode())));
+                                .isInstanceOfSatisfying(
+                                        ObjectNode.class,
+                                        params -> assertThatObject(params)
+                                                .as("turn/start omitted [model, effort]")
+                                                .extracting(node -> node.path("model"), node -> node.path("effort"))
+                                                .containsExactly(json.missingNode(), json.missingNode())));
     }
 
     @Test
     void continuesMultipleTurnsOnOneThreadWhenControllerRequestsIt() throws Exception {
         // given
         Path capture = tempDir.resolve("turns.jsonl");
-        Path appServer = writeExecutableScript(
-                "multi-turn-app-server.sh",
-                """
+        Path appServer = writeExecutableScript("multi-turn-app-server.sh", """
                 #!/usr/bin/env bash
                 capture="$1"
                 turn_count=0
@@ -614,9 +596,7 @@ final class CodexAppServerClientTest {
     @Test
     void failsPromptlyWhenAppServerExitsBeforeTurnCompletion() throws Exception {
         // given
-        Path appServer = writeExecutableScript(
-                "exiting-app-server.sh",
-                """
+        Path appServer = writeExecutableScript("exiting-app-server.sh", """
                 #!/usr/bin/env bash
                 while IFS= read -r line; do
                   [[ "$line" =~ \\"id\\":([0-9]+) ]] && id="${BASH_REMATCH[1]}"
@@ -659,9 +639,7 @@ final class CodexAppServerClientTest {
     @Test
     void failsPromptlyWhenAppServerExitsBeforeRequestResponse() throws Exception {
         // given
-        Path appServer = writeExecutableScript(
-                "exiting-before-request-response-app-server.sh",
-                """
+        Path appServer = writeExecutableScript("exiting-before-request-response-app-server.sh", """
                 #!/usr/bin/env bash
                 while IFS= read -r line; do
                   [[ "$line" =~ \\"id\\":([0-9]+) ]] && id="${BASH_REMATCH[1]}"
@@ -700,9 +678,7 @@ final class CodexAppServerClientTest {
     @Test
     void failsTurnWhenAppServerEmitsTurnFailureNotification() throws Exception {
         // given
-        Path appServer = writeExecutableScript(
-                "failed-turn-app-server.sh",
-                """
+        Path appServer = writeExecutableScript("failed-turn-app-server.sh", """
                 #!/usr/bin/env bash
                 while IFS= read -r line; do
                   [[ "$line" =~ \\"id\\":([0-9]+) ]] && id="${BASH_REMATCH[1]}"
@@ -737,9 +713,7 @@ final class CodexAppServerClientTest {
     @Test
     void preservesGenericTurnFailureFormattingForNestedBadRequest() throws Exception {
         // given
-        Path appServer = writeExecutableScript(
-                "nested-bad-request-app-server.sh",
-                """
+        Path appServer = writeExecutableScript("nested-bad-request-app-server.sh", """
                 #!/usr/bin/env bash
                 while IFS= read -r line; do
                   case "$line" in
@@ -767,9 +741,7 @@ final class CodexAppServerClientTest {
     @Test
     void failsTurnWhenAppServerEmitsTerminalErrorNotification() throws Exception {
         // given
-        Path appServer = writeExecutableScript(
-                "terminal-error-app-server.sh",
-                """
+        Path appServer = writeExecutableScript("terminal-error-app-server.sh", """
                 #!/usr/bin/env bash
                 while IFS= read -r line; do
                   [[ "$line" =~ \\"id\\":([0-9]+) ]] && id="${BASH_REMATCH[1]}"
@@ -807,14 +779,12 @@ final class CodexAppServerClientTest {
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
         Instant primaryReset = now.plusSeconds(60);
         Instant secondaryReset = now.plusSeconds(120);
-        Path appServer = writeUsageFixtureScript(
-                "completed-usage-limit-app-server.sh",
-                """
+        Path appServer = writeUsageFixtureScript("completed-usage-limit-app-server.sh", """
                 echo '{"method":"account/rateLimits/updated","params":{"rateLimits":{"primary":{"usedPercent":100,"resetsAt":__PRIMARY_RESET__},"secondary":{"usedPercent":101,"resetsAt":__SECONDARY_RESET__}}}}'
                 echo '{"method":"turn/completed","params":{"threadId":"thread-usage","turn":{"id":"turn-usage","items":[],"status":"failed","error":{"message":"Usage is unavailable.","additionalDetails":"private account payload","codexErrorInfo":"usageLimitExceeded"}}}}'
-                """
-                        .replace("__PRIMARY_RESET__", Long.toString(primaryReset.getEpochSecond()))
-                        .replace("__SECONDARY_RESET__", Long.toString(secondaryReset.getEpochSecond())));
+                """.replace(
+                        "__PRIMARY_RESET__", Long.toString(primaryReset.getEpochSecond()))
+                .replace("__SECONDARY_RESET__", Long.toString(secondaryReset.getEpochSecond())));
 
         // when
         List<AgentEvent> events = new CopyOnWriteArrayList<>();
@@ -839,13 +809,11 @@ final class CodexAppServerClientTest {
         // given
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
         Instant rejectedReset = now.plusSeconds(120);
-        Path appServer = writeUsageFixtureScript(
-                "rejected-rate-limit-app-server.sh",
-                """
+        Path appServer = writeUsageFixtureScript("rejected-rate-limit-app-server.sh", """
                 echo '{"method":"account/rateLimits/updated","params":{"rateLimits":{"primary":{"usedPercent":100,"resetsAt":__RESET__}}}}'
                 echo '{"method":"turn/completed","params":{"threadId":"thread-usage","turn":{"id":"turn-usage","status":"failed","error":{"message":"Usage is unavailable.","codexErrorInfo":"usageLimitExceeded"}}}}'
-                """
-                        .replace("__RESET__", Long.toString(rejectedReset.getEpochSecond())));
+                """.replace(
+                        "__RESET__", Long.toString(rejectedReset.getEpochSecond())));
         List<AgentEvent> acceptedEvents = new CopyOnWriteArrayList<>();
         AgentEventListener listener = new AgentEventListener() {
             @Override
@@ -878,13 +846,11 @@ final class CodexAppServerClientTest {
         // given
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
         Instant farFutureReset = Instant.ofEpochSecond(Instant.MAX.getEpochSecond() - 1);
-        Path appServer = writeUsageFixtureScript(
-                "far-future-usage-limit-app-server.sh",
-                """
+        Path appServer = writeUsageFixtureScript("far-future-usage-limit-app-server.sh", """
                 echo '{"method":"account/rateLimits/updated","params":{"rateLimits":{"primary":{"usedPercent":100,"resetsAt":__RESET__},"secondary":null}}}'
                 echo '{"method":"turn/completed","params":{"threadId":"thread-usage","turn":{"id":"turn-usage","items":[],"status":"failed","error":{"message":"Usage is unavailable.","codexErrorInfo":"usageLimitExceeded"}}}}'
-                """
-                        .replace("__RESET__", Long.toString(farFutureReset.getEpochSecond())));
+                """.replace(
+                        "__RESET__", Long.toString(farFutureReset.getEpochSecond())));
 
         // when
         AgentRunResult result = runFailureTurn(appServer, Clock.fixed(now, ZoneOffset.UTC), "far-future-usage");
@@ -901,16 +867,14 @@ final class CodexAppServerClientTest {
         Instant laterPrimaryReset = now.plusSeconds(120);
         Instant earlierSecondaryReset = now.plusSeconds(60);
         List<JsonNode> publishedRateLimits = new ArrayList<>();
-        Path appServer = writeUsageFixtureScript(
-                "sparse-rate-limit-updates-app-server.sh",
-                """
+        Path appServer = writeUsageFixtureScript("sparse-rate-limit-updates-app-server.sh", """
                 echo '{"method":"account/rateLimits/updated","params":{"rateLimits":{"primary":{"usedPercent":100,"resetsAt":__PRIMARY_RESET__}}}}'
                 echo '{"method":"account/rateLimits/updated","params":{"rateLimits":{"primary":null,"secondary":{"usedPercent":100,"resetsAt":__SECONDARY_RESET__}}}}'
                 echo '{"method":"account/rateLimits/updated","params":{"rateLimits":{"primary":{"usedPercent":100,"resetsAt":null}}}}'
                 echo '{"method":"turn/completed","params":{"threadId":"thread-usage","turn":{"id":"turn-usage","items":[],"status":"failed","error":{"message":"Usage is unavailable.","codexErrorInfo":"usageLimitExceeded"}}}}'
-                """
-                        .replace("__PRIMARY_RESET__", Long.toString(laterPrimaryReset.getEpochSecond()))
-                        .replace("__SECONDARY_RESET__", Long.toString(earlierSecondaryReset.getEpochSecond())));
+                """.replace(
+                        "__PRIMARY_RESET__", Long.toString(laterPrimaryReset.getEpochSecond()))
+                .replace("__SECONDARY_RESET__", Long.toString(earlierSecondaryReset.getEpochSecond())));
 
         // when
         AgentRunResult result =
@@ -936,13 +900,11 @@ final class CodexAppServerClientTest {
         // given
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
         Instant reset = now.plusSeconds(120);
-        String notifications =
-                """
+        String notifications = """
                 echo '{"method":"account/rateLimits/updated","params":{"rateLimits":{"primary":{"usedPercent":100,"resetsAt":__RESET__},"planType":"team"}}}'
                 echo '{"method":"account/rateLimits/updated","params":{__MALFORMED_RATE_LIMITS__}}'
-                """
-                        .replace("__RESET__", Long.toString(reset.getEpochSecond()))
-                        .replace("__MALFORMED_RATE_LIMITS__", malformedRateLimits);
+                """.replace("__RESET__", Long.toString(reset.getEpochSecond()))
+                .replace("__MALFORMED_RATE_LIMITS__", malformedRateLimits);
         Path appServer = writeRateLimitNotificationScript(
                 "malformed-after-valid-" + Integer.toUnsignedString(malformedRateLimits.hashCode()) + ".sh",
                 notifications);
@@ -973,11 +935,9 @@ final class CodexAppServerClientTest {
     void malformedFirstRateLimitUpdatePublishesAbsentCanonicalState(String malformedRateLimits) throws Exception {
         // given
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
-        String notifications =
-                """
+        String notifications = """
                 echo '{"method":"account/rateLimits/updated","params":{__MALFORMED_RATE_LIMITS__}}'
-                """
-                        .replace("__MALFORMED_RATE_LIMITS__", malformedRateLimits);
+                """.replace("__MALFORMED_RATE_LIMITS__", malformedRateLimits);
         Path appServer = writeRateLimitNotificationScript(
                 "malformed-first-" + Integer.toUnsignedString(malformedRateLimits.hashCode()) + ".sh", notifications);
         List<JsonNode> publishedRateLimits = new ArrayList<>();
@@ -1017,8 +977,7 @@ final class CodexAppServerClientTest {
                   echo '{"method":"account/rateLimits/updated","params":{"rateLimits":{"primary":null,"secondary":{"usedPercent":100,"resetsAt":__SECONDARY_RESET__},"credits":null,"limitId":null,"limitName":"Updated limit","individualLimit":null,"rateLimitReachedType":null,"futureMetadata":null,"futureAdded":"available"}}}'
                   echo '{"method":"turn/completed","params":{"threadId":"thread-usage","turn":{"id":"turn-usage","items":[],"status":"failed","error":{"message":"Usage is unavailable.","codexErrorInfo":"usageLimitExceeded"}}}}'
                 fi
-                """
-                        .replace("__PRIMARY_RESET__", Long.toString(laterPrimaryReset.getEpochSecond()))
+                """.replace("__PRIMARY_RESET__", Long.toString(laterPrimaryReset.getEpochSecond()))
                         .replace("__SECONDARY_RESET__", Long.toString(earlierSecondaryReset.getEpochSecond())));
         EffectiveConfig config = config(appServer);
         var client = new CodexAppServerClient(
@@ -1058,20 +1017,16 @@ final class CodexAppServerClientTest {
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
         Instant firstAccountReset = now.plusSeconds(120);
         Instant secondAccountReset = now.plusSeconds(60);
-        Path firstAppServer = writeUsageFixtureScript(
-                "first-account-rate-limit-app-server.sh",
-                """
+        Path firstAppServer = writeUsageFixtureScript("first-account-rate-limit-app-server.sh", """
                 echo '{"method":"account/rateLimits/updated","params":{"rateLimits":{"primary":{"usedPercent":100,"resetsAt":__FIRST_RESET__},"planType":"first-account"}}}'
                 echo '{"method":"turn/completed","params":{"threadId":"thread-usage","turn":{"id":"turn-usage","items":[],"status":"completed","error":null}}}'
-                """
-                        .replace("__FIRST_RESET__", Long.toString(firstAccountReset.getEpochSecond())));
-        Path secondAppServer = writeUsageFixtureScript(
-                "second-account-rate-limit-app-server.sh",
-                """
+                """.replace(
+                        "__FIRST_RESET__", Long.toString(firstAccountReset.getEpochSecond())));
+        Path secondAppServer = writeUsageFixtureScript("second-account-rate-limit-app-server.sh", """
                 echo '{"method":"account/rateLimits/updated","params":{"rateLimits":{"secondary":{"usedPercent":100,"resetsAt":__SECOND_RESET__}}}}'
                 echo '{"method":"turn/completed","params":{"threadId":"thread-usage","turn":{"id":"turn-usage","items":[],"status":"failed","error":{"message":"Usage is unavailable.","codexErrorInfo":"usageLimitExceeded"}}}}'
-                """
-                        .replace("__SECOND_RESET__", Long.toString(secondAccountReset.getEpochSecond())));
+                """.replace(
+                        "__SECOND_RESET__", Long.toString(secondAccountReset.getEpochSecond())));
         EffectiveConfig firstConfig = config(firstAppServer);
         EffectiveConfig secondConfig = config(secondAppServer);
         List<JsonNode> publishedRateLimits = new ArrayList<>();
@@ -1094,10 +1049,12 @@ final class CodexAppServerClientTest {
         assertThat(publishedRateLimits)
                 .hasSize(2)
                 .element(1)
-                .isInstanceOfSatisfying(ObjectNode.class, snapshot -> assertThatObject(snapshot)
-                        .as("second rate-limit snapshot omitted [primary, planType]")
-                        .extracting(node -> node.path("primary"), node -> node.path("planType"))
-                        .containsExactly(json.missingNode(), json.missingNode()));
+                .isInstanceOfSatisfying(
+                        ObjectNode.class,
+                        snapshot -> assertThatObject(snapshot)
+                                .as("second rate-limit snapshot omitted [primary, planType]")
+                                .extracting(node -> node.path("primary"), node -> node.path("planType"))
+                                .containsExactly(json.missingNode(), json.missingNode()));
     }
 
     @Test
@@ -1133,8 +1090,7 @@ final class CodexAppServerClientTest {
                 else
                   echo '{"method":"turn/completed","params":{"threadId":"thread-usage","turn":{"id":"turn-usage","items":[],"status":"failed","error":{"message":"Usage is unavailable.","codexErrorInfo":"usageLimitExceeded"}}}}'
                 fi
-                """
-                        .replace("__PRIMARY_READY__", primaryReady.toString())
+                """.replace("__PRIMARY_READY__", primaryReady.toString())
                         .replace("__SECONDARY_READY__", secondaryReady.toString())
                         .replace("__PRIMARY_OBSERVED__", primaryObserved.toString())
                         .replace("__SECONDARY_OBSERVED__", secondaryObserved.toString())
@@ -1219,8 +1175,7 @@ final class CodexAppServerClientTest {
                   while [ ! -f '__ACCEPTANCE_ENTERED__' ]; do sleep 0.01; done
                   echo '{"method":"turn/completed","params":{"threadId":"thread-usage","turn":{"id":"turn-usage","status":"failed","error":{"message":"Usage is unavailable.","codexErrorInfo":"usageLimitExceeded"}}}}'
                 fi
-                """
-                        .replace("__ACCEPTANCE_ENTERED__", acceptanceEntered.toString())
+                """.replace("__ACCEPTANCE_ENTERED__", acceptanceEntered.toString())
                         .replace("__RESET__", Long.toString(reset.getEpochSecond())));
         EffectiveConfig config = config(Map.of(
                 "command",
@@ -1295,12 +1250,10 @@ final class CodexAppServerClientTest {
         // given
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
         Path appServer = writeUsageFixtureScript(
-                "terminal-usage-limit-app-server.sh",
-                """
+                "terminal-usage-limit-app-server.sh", """
                 echo '{"method":"account/rateLimits/updated","params":{"rateLimits":{"primary":{"usedPercent":100,"resetsAt":__OVERSIZED_RESET__},"secondary":{"usedPercent":2147483648,"resetsAt":4102444800}}}}'
                 echo '{"method":"error","params":{"threadId":"thread-usage","turnId":"turn-usage","willRetry":false,"error":{"message":"Try again tomorrow at a localized time.","additionalDetails":"private provider payload","codexErrorInfo":"usageLimitExceeded"}}}'
-                """
-                        .replace("__OVERSIZED_RESET__", "9".repeat(24)));
+                """.replace("__OVERSIZED_RESET__", "9".repeat(24)));
 
         // when
         List<AgentEvent> events = new CopyOnWriteArrayList<>();
@@ -1323,9 +1276,7 @@ final class CodexAppServerClientTest {
     @Test
     void keepsMessageOnlyUsageWordingGeneric() throws Exception {
         // given
-        Path appServer = writeUsageFixtureScript(
-                "message-only-usage-app-server.sh",
-                """
+        Path appServer = writeUsageFixtureScript("message-only-usage-app-server.sh", """
                 echo '{"method":"turn/completed","params":{"threadId":"thread-usage","turn":{"id":"turn-usage","items":[],"status":"failed","error":{"message":"You have hit your usage limit."}}}}'
                 """);
 
@@ -1340,9 +1291,7 @@ final class CodexAppServerClientTest {
     @Test
     void failsTurnWhenAppServerEmitsTurnCancellationNotification() throws Exception {
         // given
-        Path appServer = writeExecutableScript(
-                "cancelled-turn-app-server.sh",
-                """
+        Path appServer = writeExecutableScript("cancelled-turn-app-server.sh", """
                 #!/usr/bin/env bash
                 while IFS= read -r line; do
                   [[ "$line" =~ \\"id\\":([0-9]+) ]] && id="${BASH_REMATCH[1]}"
@@ -1377,9 +1326,7 @@ final class CodexAppServerClientTest {
     @Test
     void failsTurnWhenAppServerCompletesTurnAsInterrupted() throws Exception {
         // given
-        Path appServer = writeExecutableScript(
-                "interrupted-turn-app-server.sh",
-                """
+        Path appServer = writeExecutableScript("interrupted-turn-app-server.sh", """
                 #!/usr/bin/env bash
                 while IFS= read -r line; do
                   [[ "$line" =~ \\"id\\":([0-9]+) ]] && id="${BASH_REMATCH[1]}"
@@ -1476,8 +1423,7 @@ final class CodexAppServerClientTest {
                 else
                   session=__OTHER_ROLE__
                 fi
-                """
-                .replace(
+                """.replace(
                         "__ROLE_WORKSPACE__",
                         workspace(workspaceIdentifier).getFileName().toString())
                 .replace("__MATCHING_ROLE__", role)
@@ -1485,13 +1431,10 @@ final class CodexAppServerClientTest {
     }
 
     private Path writeRateLimitNotificationScript(String fileName, String notifications) throws Exception {
-        return writeUsageFixtureScript(
-                fileName,
-                """
+        return writeUsageFixtureScript(fileName, """
                 __RATE_LIMIT_NOTIFICATIONS__
                 echo '{"method":"turn/completed","params":{"threadId":"thread-usage","turn":{"id":"turn-usage","items":[],"status":"completed","error":null}}}'
-                """
-                        .replace("__RATE_LIMIT_NOTIFICATIONS__", notifications));
+                """.replace("__RATE_LIMIT_NOTIFICATIONS__", notifications));
     }
 
     private Path writeUsageFixtureScript(String fileName, String turnResponses) throws Exception {
@@ -1500,8 +1443,7 @@ final class CodexAppServerClientTest {
 
     private Path writeUsageFixtureScript(String fileName, String setup, String turnResponses) throws Exception {
         return writeExecutableScript(
-                fileName,
-                """
+                fileName, """
                 #!/usr/bin/env bash
                 __SETUP__
                 while IFS= read -r line; do
@@ -1514,9 +1456,7 @@ final class CodexAppServerClientTest {
                       ;;
                   esac
                 done
-                """
-                        .replace("__SETUP__", setup)
-                        .replace("__TURN_RESPONSES__", turnResponses));
+                """.replace("__SETUP__", setup).replace("__TURN_RESPONSES__", turnResponses));
     }
 
     private Path writeExecutableScript(String fileName, String content) throws Exception {

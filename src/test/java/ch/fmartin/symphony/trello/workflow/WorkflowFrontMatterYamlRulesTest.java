@@ -35,9 +35,7 @@ final class WorkflowFrontMatterYamlRulesTest {
 
     private final WorkflowLoader loader = new WorkflowLoader();
 
-    @CsvSource(
-            textBlock =
-                    """
+    @CsvSource(textBlock = """
             a: 1, '--- # second', 'b: 2', 2
             null, '--- # second', 'b: 2', 2
             {}, '--- # second', 'b: 2', 2

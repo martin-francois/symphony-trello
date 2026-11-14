@@ -217,16 +217,15 @@ final class TrelloFollowUpCardTool {
                 card.id(),
                 followUpUrl,
                 FOLLOW_UP_ATTACHMENT_PREFIX + plan.request().title());
-        Optional<TrelloClient.BoardList> movedTo =
-                switch (relationship.prerequisiteSide()) {
-                    case FOLLOW_UP_CARD -> {
-                        trello.addChecklistItemIfMissing(config, followUp.id(), PREREQUISITE_CHECKLIST_NAME, sourceUrl);
-                        yield Optional.empty();
-                    }
-                    case SOURCE_CARD -> recordCurrentCardPrerequisite(plan, followUpUrl);
-                    // A related follow-up has no required order, so it gets no prerequisite checklist.
-                    case NONE -> Optional.empty();
-                };
+        Optional<TrelloClient.BoardList> movedTo = switch (relationship.prerequisiteSide()) {
+            case FOLLOW_UP_CARD -> {
+                trello.addChecklistItemIfMissing(config, followUp.id(), PREREQUISITE_CHECKLIST_NAME, sourceUrl);
+                yield Optional.empty();
+            }
+            case SOURCE_CARD -> recordCurrentCardPrerequisite(plan, followUpUrl);
+            // A related follow-up has no required order, so it gets no prerequisite checklist.
+            case NONE -> Optional.empty();
+        };
         // LinkedHashMap keeps model-visible tool result fields in a stable diagnostic order.
         Map<String, String> payload = new LinkedHashMap<>();
         payload.put("status", status);

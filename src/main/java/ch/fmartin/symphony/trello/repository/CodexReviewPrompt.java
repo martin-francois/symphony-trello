@@ -44,8 +44,7 @@ public final class CodexReviewPrompt {
                         REASONING_EFFORT_CONFIG_KEY,
                         reviewerSetting(codexReview.reasoningEffort(), codex.reasoningEffort()))
                 + " - < <brief-file>";
-        return Optional.of(
-                """
+        return Optional.of("""
                 %s
 
                 This workflow sets `%s: %d`, `%s: %d`, and `%s: %d`.
@@ -150,24 +149,22 @@ public final class CodexReviewPrompt {
                 with both positions.
 
                 %s
-                """
-                        .formatted(
-                                HEADING,
-                                EffectiveConfig.CodexReviewConfig.MAX_ROUNDS_PATH,
-                                codexReview.maxRounds(),
-                                EffectiveConfig.CodexReviewConfig.EXTENDED_MAX_ROUNDS_PATH,
-                                codexReview.extendedMaxRounds(),
-                                EffectiveConfig.CodexReviewConfig.TIMEOUT_MS_PATH,
-                                codexReview.timeout().toMillis(),
-                                CodexReviewTiming.budgetBullet(codexReview),
-                                CodexReviewTiming.COMMAND_TIME_LIMIT,
-                                reviewCommand,
-                                sandboxRule(workflowBypassesSandbox),
-                                CodexReviewTiming.waitRule(codex),
-                                rounds(codexReview.maxRounds()),
-                                extendedRoundsRule(codexReview),
-                                unfinishedReviewRule(codexReview))
-                        .stripTrailing());
+                """.formatted(
+                HEADING,
+                EffectiveConfig.CodexReviewConfig.MAX_ROUNDS_PATH,
+                codexReview.maxRounds(),
+                EffectiveConfig.CodexReviewConfig.EXTENDED_MAX_ROUNDS_PATH,
+                codexReview.extendedMaxRounds(),
+                EffectiveConfig.CodexReviewConfig.TIMEOUT_MS_PATH,
+                codexReview.timeout().toMillis(),
+                CodexReviewTiming.budgetBullet(codexReview),
+                CodexReviewTiming.COMMAND_TIME_LIMIT,
+                reviewCommand,
+                sandboxRule(workflowBypassesSandbox),
+                CodexReviewTiming.waitRule(codex),
+                rounds(codexReview.maxRounds()),
+                extendedRoundsRule(codexReview),
+                unfinishedReviewRule(codexReview)).stripTrailing());
     }
 
     /// The reviewer follows the workflow's own model and effort unless the review keys name one. A
@@ -197,8 +194,7 @@ public final class CodexReviewPrompt {
     private static String unfinishedReviewRule(EffectiveConfig.CodexReviewConfig codexReview) {
         return """
                 When the round limit or the time budget ends the loop, still hand off the normal way in step 4,
-                with the open findings as caveats. An unfinished review does not block the handoff. %s"""
-                .formatted(CodexReviewTiming.budgetEndedNote(codexReview));
+                with the open findings as caveats. An unfinished review does not block the handoff. %s""".formatted(CodexReviewTiming.budgetEndedNote(codexReview));
     }
 
     private static String extendedRoundsRule(EffectiveConfig.CodexReviewConfig codexReview) {
@@ -207,8 +203,7 @@ public final class CodexReviewPrompt {
         }
         return """
                 After round %d, start another round, up to %s in total, only while a `blocker` or `should` finding
-                  about %s stays open with evidence."""
-                .formatted(
+                  about %s stays open with evidence.""".formatted(
                         codexReview.maxRounds(),
                         rounds(codexReview.extendedMaxRounds()),
                         EffectiveConfig.CodexReviewConfig.HIGH_RISK_TOPICS);
@@ -223,7 +218,6 @@ public final class CodexReviewPrompt {
         return """
                 Do not add `%s` or change sandbox settings to make it run. A Codex
                    session inside a `workspaceWrite` sandbox often cannot start a nested `codex review` because the
-                   Codex home directory is read-only there."""
-                .formatted(SANDBOX_BYPASS_FLAG);
+                   Codex home directory is read-only there.""".formatted(SANDBOX_BYPASS_FLAG);
     }
 }

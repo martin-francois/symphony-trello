@@ -153,18 +153,15 @@ final class TutorialCommandProcessTest {
     void connectedGithubBoardSelectsTheGithubWalkthrough(boolean configuredProperty) throws Exception {
         // given
         Path configDir = Files.createDirectories(tempDir.resolve("config"));
-        Files.writeString(
-                configDir.resolve(ConnectedBoardManifest.FILE_NAME),
-                """
+        Files.writeString(configDir.resolve(ConnectedBoardManifest.FILE_NAME), """
                 {"boards":[{"boardId":"000000000000000000000001","boardKey":"SYNTH001","boardName":"GitHub Queue",\
                 "boardUrl":"https://trello.com/b/SYNTH001/synthetic-board","workflowPath":"%s","envPath":"%s",\
                 "workspaceRoot":"%s","serverPort":18080,"githubEnabled":true,"additionalWritableRoots":[],\
                 "dangerFullAccess":false}]}
-                """
-                        .formatted(
-                                json(configDir.resolve("WORKFLOW.md")),
-                                json(configDir.resolve(".env")),
-                                json(tempDir.resolve("workspaces"))));
+                """.formatted(
+                        json(configDir.resolve("WORKFLOW.md")),
+                        json(configDir.resolve(".env")),
+                        json(tempDir.resolve("workspaces"))));
         Process process = configuredProperty
                 ? startTutorialWithProperty(configDir.toString())
                 : startTutorial("--config-dir", configDir.toString());

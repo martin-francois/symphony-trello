@@ -71,8 +71,7 @@ final class WorkflowFollowUpCardsSettingsTest {
         // given
         Path workflow = existingWorkflow();
         Map<Object, Object> expectedTools = new HashMap<>(tools(workflow));
-        String generated =
-                """
+        String generated = """
                 ---
                 tracker:
                   kind: trello
@@ -103,9 +102,7 @@ final class WorkflowFollowUpCardsSettingsTest {
     void explicitRegenerationKeepsAliasedToolSettingsAsTheirAnchoredValues() throws IOException {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -148,9 +145,7 @@ final class WorkflowFollowUpCardsSettingsTest {
     void explicitRegenerationKeepsAnEmptyToolSettingAsNullLikeTheLoader() throws IOException {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -180,9 +175,7 @@ final class WorkflowFollowUpCardsSettingsTest {
     void explicitRegenerationKeepsAnEmptyToolsSectionAsAnEmptyMap() throws IOException {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -228,9 +221,7 @@ final class WorkflowFollowUpCardsSettingsTest {
 
     private Path existingWorkflow() throws IOException {
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello

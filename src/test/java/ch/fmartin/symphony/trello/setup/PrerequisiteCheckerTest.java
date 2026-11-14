@@ -39,8 +39,9 @@ final class PrerequisiteCheckerTest {
 
         // then
         assertThat(prerequisites)
-                .extracting(value -> value.codex().available(), value -> value.codexAuth()
-                        .available())
+                .extracting(
+                        value -> value.codex().available(),
+                        value -> value.codexAuth().available())
                 .containsExactly(false, false);
     }
 
@@ -68,33 +69,21 @@ final class PrerequisiteCheckerTest {
                 Arguments.of("runtime without javac", "openjdk version \"25.0.1\"", null, false),
                 Arguments.of("java 24 rejected", "openjdk version \"24.0.2\"", "javac 24.0.2", false),
                 Arguments.of("java 25 accepted", "openjdk version \"25.0.1\"", "javac 25.0.1", true),
-                Arguments.of(
-                        "leading Java option diagnostics ignored",
-                        """
+                Arguments.of("leading Java option diagnostics ignored", """
                         Picked up JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8
                         openjdk version "25.0.1"
-                        """,
-                        """
+                        """, """
                         NOTE: Picked up JDK_JAVA_OPTIONS: -Xmx2g
                         javac 25.0.1
-                        """,
-                        true),
-                Arguments.of(
-                        "first Java version line is authoritative",
-                        """
+                        """, true),
+                Arguments.of("first Java version line is authoritative", """
                         openjdk version "24.0.2"
                         openjdk version "25.0.1"
-                        """,
-                        "javac 25.0.1",
-                        false),
-                Arguments.of(
-                        "first javac version line is authoritative",
-                        "openjdk version \"25.0.1\"",
-                        """
+                        """, "javac 25.0.1", false),
+                Arguments.of("first javac version line is authoritative", "openjdk version \"25.0.1\"", """
                         javac 24.0.2
                         javac 25.0.1
-                        """,
-                        false),
+                        """, false),
                 Arguments.of("newer java accepted", "openjdk version \"26.0.1\"", "javac 26.0.1", true));
     }
 
