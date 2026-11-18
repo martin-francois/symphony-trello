@@ -4,7 +4,7 @@ set -euo pipefail
 # Microsoft documents the .NET SDK images as the current PowerShell-in-Docker path.
 # The pinned-powershell-image check runs the PowerShell tests through this wrapper whenever a pull
 # request changes it, so keep the image pinned here and nowhere else (ADR 0127).
-IMAGE="${SYMPHONY_TRELLO_PWSH_DOCKER_IMAGE:-mcr.microsoft.com/dotnet/sdk:10.0@sha256:de4fe90a98845d75910b9769662465c84de1a934665c431279d1382b2bddc02b}"
+IMAGE="${SYMPHONY_TRELLO_PWSH_DOCKER_IMAGE:-mcr.microsoft.com/dotnet/sdk:10.0@sha256:fe0fd4e93bd2fbb47c883b7a6369e5c8d3db8bf01cdc5981f6ee35fbdf3ff4fb}"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd -- "$script_dir/.." && pwd -P)"
 container_runtime="${SYMPHONY_TRELLO_CONTAINER_RUNTIME:-docker}"
