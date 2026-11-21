@@ -13,12 +13,11 @@ public final class RepositorySourcePrompt {
     }
 
     public static String render(RepositorySourceSelection selection, EffectiveConfig.RepositoryConfig repository) {
-        String sourceContext =
-                switch (selection.status()) {
-                    case SELECTED -> selected(selection.source());
-                    case INVALID_SELECTED -> invalid(selection.problem(), selection.invalidWorkflowFallback());
-                    case NONE -> none();
-                };
+        String sourceContext = switch (selection.status()) {
+            case SELECTED -> selected(selection.source());
+            case INVALID_SELECTED -> invalid(selection.problem(), selection.invalidWorkflowFallback());
+            case NONE -> none();
+        };
         if (selection.status() == RepositorySourceSelection.Status.INVALID_SELECTED
                 && !selection.invalidWorkflowFallback()) {
             return sourceContext;
@@ -56,8 +55,7 @@ public final class RepositorySourcePrompt {
 
                 If a selected local repository cannot be read, fetched, or used to create the required task worktree,
                 block with path-safe guidance instead of silently cloning another copy or editing an arbitrary checkout.
-                """
-                .stripTrailing();
+                """.stripTrailing();
     }
 
     private static String configuredCheckoutCandidate(
@@ -215,12 +213,10 @@ public final class RepositorySourcePrompt {
         return switch (source.kind()) {
             case REMOTE ->
                 "- This selected remote source supplies repository identity for repository-relative references, but it does not by itself make the task repository-changing.";
-            case LOCAL_PATH ->
-                """
+            case LOCAL_PATH -> """
                 - For a repository-relative issue or pull request reference, use this local source only when read-only inspection finds exactly one explicit, unambiguous compatible remote that supplies repository identity.
                 - If no such remote supplies identity, block instead of deriving identity from the local path, directory name, or branch. Request a fully qualified repository URL together with the issue or pull request number.
-                """
-                        .stripTrailing();
+                """.stripTrailing();
         };
     }
 

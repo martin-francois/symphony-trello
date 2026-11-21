@@ -52,8 +52,6 @@ public class PromptRenderer {
                 Do not repeat the full task prompt. Re-check the card state when useful, finish any remaining implementation and verification work, and hand off according to WORKFLOW.md.
 
                 This is continuation turn %d of at most %d in this worker session.
-                """
-                .formatted(turnNumber, maxTurns)
-                .trim();
+                """.formatted(turnNumber, maxTurns).trim();
     }
 }

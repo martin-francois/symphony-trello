@@ -51,8 +51,7 @@ final class ReleasePackagingScriptTest {
             mkdir -p target/quarkus-app/app
             printf 'app' > target/quarkus-app/application.txt
             jar --create --file %s --no-manifest -C src/main/resources %s
-            """
-                    .formatted(PACKAGED_JAR, TelemetryDistribution.RESOURCE);
+            """.formatted(PACKAGED_JAR, TelemetryDistribution.RESOURCE);
     private static final Map<String, String> ERASURE_FOR_ANOTHER_PROJECT = Map.of(
             TELEMETRY_TOKEN_VARIABLE,
             SYNTHETIC_TOKEN,
@@ -619,9 +618,7 @@ final class ReleasePackagingScriptTest {
         Path testTools = root.resolve("test-tools");
         Files.createDirectories(testTools);
         Path zip = testTools.resolve("zip");
-        Files.writeString(
-                zip,
-                """
+        Files.writeString(zip, """
                 #!/usr/bin/env bash
                 set -euo pipefail
                 [[ "${1:-}" == "-qr" && "$#" -eq 3 ]]
@@ -633,16 +630,12 @@ final class ReleasePackagingScriptTest {
                 .as("the fake zip command is executable")
                 .isTrue();
         Files.copy(Path.of("scripts/package-release-assets.sh"), root.resolve("scripts/package-release-assets.sh"));
-        Files.writeString(
-                root.resolve("install.sh"),
-                """
+        Files.writeString(root.resolve("install.sh"), """
                 #!/usr/bin/env bash
                 DEFAULT_VERSION="0.0.0" # x-release-please-version
                 echo install
                 """);
-        Files.writeString(
-                root.resolve("install.ps1"),
-                """
+        Files.writeString(root.resolve("install.ps1"), """
                 param(
                   [string]$Version = $(if ($env:SYMPHONY_TRELLO_VERSION) { $env:SYMPHONY_TRELLO_VERSION } else { "0.0.0" }), # x-release-please-version
                   [string]$Ref = $(if ($env:SYMPHONY_TRELLO_REF) { $env:SYMPHONY_TRELLO_REF } else { "v0.0.0" }), # x-release-please-version
@@ -747,8 +740,7 @@ final class ReleasePackagingScriptTest {
 
     private record TestProject(Path root) {
         void writeSuccessfulMavenWrapper() throws IOException {
-            writeMavenWrapper(
-                    """
+            writeMavenWrapper("""
                     #!/usr/bin/env bash
                     set -euo pipefail
                     echo "$*" >> mvnw.log
@@ -759,8 +751,7 @@ final class ReleasePackagingScriptTest {
         }
 
         void writeFailingMavenWrapper() throws IOException {
-            writeMavenWrapper(
-                    """
+            writeMavenWrapper("""
                     #!/usr/bin/env bash
                     set -euo pipefail
                     echo "$*" >> mvnw.log

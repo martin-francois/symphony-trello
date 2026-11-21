@@ -117,7 +117,9 @@ final class RunningEntry {
     }
 
     private record Lifecycle(
-            boolean removedFromRunning, boolean handoffProtected, @Nullable Instant handoffCancelledAt) {
+            boolean removedFromRunning,
+            boolean handoffProtected,
+            @Nullable Instant handoffCancelledAt) {
         static final Lifecycle RUNNING = new Lifecycle(false, true, null);
 
         boolean claimable() {

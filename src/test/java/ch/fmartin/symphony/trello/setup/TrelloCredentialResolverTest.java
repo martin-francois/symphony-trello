@@ -99,9 +99,9 @@ final class TrelloCredentialResolverTest {
         TrelloCredentialResolver resolver = resolver(null, fileValue);
 
         // when
-        TrelloBoardSetupException thrown =
-                catchThrowableOfType(TrelloBoardSetupException.class, () -> resolver.resolve(NAME, Optional.empty())
-                        .requireLiteralCredentialFileValue());
+        TrelloBoardSetupException thrown = catchThrowableOfType(
+                TrelloBoardSetupException.class,
+                () -> resolver.resolve(NAME, Optional.empty()).requireLiteralCredentialFileValue());
 
         // then
         assertThat(thrown)

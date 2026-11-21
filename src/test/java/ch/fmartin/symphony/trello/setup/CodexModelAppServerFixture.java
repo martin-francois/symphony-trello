@@ -10,9 +10,7 @@ final class CodexModelAppServerFixture {
     private CodexModelAppServerFixture() {}
 
     static Path createPaginated(Path directory, String firstPageData, String secondPageData) throws IOException {
-        return create(
-                directory,
-                """
+        return create(directory, """
                 while IFS= read -r line; do
                   case "$line" in
                     *'"method":"initialize"'*)
@@ -26,9 +24,8 @@ final class CodexModelAppServerFixture {
                       ;;
                   esac
                 done
-                """
-                        .replace("__FIRST_PAGE_DATA__", firstPageData.strip())
-                        .replace("__SECOND_PAGE_DATA__", secondPageData.strip()));
+                """.replace("__FIRST_PAGE_DATA__", firstPageData.strip())
+                .replace("__SECOND_PAGE_DATA__", secondPageData.strip()));
     }
 
     private static final String PROBE_VARIABLE = "SYMPHONY_TRELLO_FIXTURE_PROBE";

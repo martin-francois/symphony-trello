@@ -9,11 +9,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 final class SetupReportMarkdownTest {
-    @CsvSource(
-            delimiter = '|',
-            quoteCharacter = '"',
-            textBlock =
-                    """
+    @CsvSource(delimiter = '|', quoteCharacter = '"', textBlock = """
                 # text                                          | escaped text
                 start --config-dir <redacted> --app-home <path:5c43464e7e19> | start --config-dir \\<redacted> --app-home \\<path:5c43464e7e19>
                 <id:0123456789ab> and <value:0123456789ab>      | \\<id:0123456789ab> and \\<value:0123456789ab>
@@ -36,10 +32,7 @@ final class SetupReportMarkdownTest {
         assertThat(escaped).isEqualTo(escapedText);
     }
 
-    @CsvSource(
-            delimiter = '|',
-            textBlock =
-                    """
+    @CsvSource(delimiter = '|', textBlock = """
                 command | start --config-dir <redacted> | - **command:** start --config-dir \\<redacted>
                 lookup_token | <path:5c43464e7e19> | - **lookup_token:** \\<path:5c43464e7e19>
                 port | 19300 | - **port:** 19300
@@ -70,9 +63,10 @@ final class SetupReportMarkdownTest {
         List<String> rendered = renderListAndTable(value);
 
         // then
-        assertThat(rendered).allSatisfy(html -> assertThat(html)
-                .contains(backslashes + "&lt;" + marker + "&gt;")
-                .doesNotContain("<redacted>", "<a "));
+        assertThat(rendered)
+                .allSatisfy(html -> assertThat(html)
+                        .contains(backslashes + "&lt;" + marker + "&gt;")
+                        .doesNotContain("<redacted>", "<a "));
     }
 
     @MethodSource("backtickCases")

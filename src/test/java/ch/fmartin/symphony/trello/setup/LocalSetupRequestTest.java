@@ -35,8 +35,10 @@ final class LocalSetupRequestTest {
         Throwable thrown = catchThrowable(() -> request(zeroMaxAgents));
 
         // then
-        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> assertThat(failure.code())
-                .isEqualTo("setup_invalid_max_agents"));
+        assertThat(thrown)
+                .isInstanceOfSatisfying(
+                        TrelloBoardSetupException.class,
+                        failure -> assertThat(failure.code()).isEqualTo("setup_invalid_max_agents"));
     }
 
     private static LocalSetupRequest request(int maxAgents) {

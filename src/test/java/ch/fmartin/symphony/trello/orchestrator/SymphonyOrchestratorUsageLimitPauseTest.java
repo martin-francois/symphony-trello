@@ -123,18 +123,16 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         // then
         assertThat(paused.dispatchPause())
                 .isEqualTo(new RuntimeSnapshot.DispatchPause("CODEX_USAGE_LIMIT", now, farFutureReset));
-        assertThat(paused.retrying()).singleElement().satisfies(retry -> assertThat(retry.dueAt())
-                .isEqualTo(farFutureReset));
+        assertThat(paused.retrying())
+                .singleElement()
+                .satisfies(retry -> assertThat(retry.dueAt()).isEqualTo(farFutureReset));
     }
 
     @Test
     void activeUsagePauseDefersExistingRetryWithoutAttemptOrTrelloIo() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        writeWorkflow(
-                workflow,
-                "60000",
-                """
+        writeWorkflow(workflow, "60000", """
                 agent:
                   max_retry_backoff_ms: 60000
                 """);
@@ -179,10 +177,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void usageDeadlineDoesNotRunGenericRetryBeforeItsOwnLaterBackoff() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        writeWorkflow(
-                workflow,
-                "60000",
-                """
+        writeWorkflow(workflow, "60000", """
                 agent:
                   max_concurrent_agents: 2
                   max_retry_backoff_ms: 60000
@@ -251,10 +246,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void usageDeadlineRechecksOnceExtendsOnRepeatAndClearsOnSuccess() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        writeWorkflow(
-                workflow,
-                "60000",
-                """
+        writeWorkflow(workflow, "60000", """
                 agent:
                   max_retry_backoff_ms: 60000
                 """);
@@ -304,8 +296,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         // then
         assertThat(repeated.dispatchPause())
                 .isEqualTo(new RuntimeSnapshot.DispatchPause("CODEX_USAGE_LIMIT", now, now.plusSeconds(120)));
-        assertThat(repeated.retrying()).singleElement().satisfies(retry -> assertThat(retry.attempt())
-                .isEqualTo(2));
+        assertThat(repeated.retrying())
+                .singleElement()
+                .satisfies(retry -> assertThat(retry.attempt()).isEqualTo(2));
         assertThat(sections)
                 .anySatisfy(section -> assertThat(section).contains("Rechecking Codex usage availability."))
                 .anySatisfy(section -> assertThat(section).contains("2026-07-10T12:02:00Z"));
@@ -362,9 +355,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void reconciledUsageProbeRearmsAndItsLateTypedResultIsIgnored() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -451,10 +442,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void permanentlyReconciledUsageProbeTransfersImmediatelyAndIgnoresItsLateTypedResult() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        writeWorkflow(
-                workflow,
-                "60000",
-                """
+        writeWorkflow(workflow, "60000", """
                 agent:
                   max_retry_backoff_ms: 60000
                 """);
@@ -547,10 +535,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void genericRetryCreatedByAnAlreadyRunningWorkerIsClampedToActivePause() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        writeWorkflow(
-                workflow,
-                "60000",
-                """
+        writeWorkflow(workflow, "60000", """
                 agent:
                   max_concurrent_agents: 2
                   max_retry_backoff_ms: 60000
@@ -706,10 +691,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void usageDeadlineWaitsForAnInFlightOrchestratorOperation() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        writeWorkflow(
-                workflow,
-                "60000",
-                """
+        writeWorkflow(workflow, "60000", """
                 agent:
                   max_concurrent_agents: 2
                   max_retry_backoff_ms: 60000
@@ -812,10 +794,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void deadlineWithoutUsageRetryRunsOneControlledCandidateProbeBeforeClearing() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        writeWorkflow(
-                workflow,
-                "60000",
-                """
+        writeWorkflow(workflow, "60000", """
                 agent:
                   max_retry_backoff_ms: 60000
                 """);
@@ -861,8 +840,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
 
         // then
         assertThat(probing.dispatchPause()).isNotNull();
-        assertThat(probing.running()).singleElement().satisfies(row -> assertThat(row.cardIdentifier())
-                .isEqualTo("TRELLO-second"));
+        assertThat(probing.running())
+                .singleElement()
+                .satisfies(row -> assertThat(row.cardIdentifier()).isEqualTo("TRELLO-second"));
         assertThat(runs).hasValue(2);
     }
 
@@ -870,10 +850,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void permanentlyIneligibleUsageRetryTransfersProbeToNextCandidate() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        writeWorkflow(
-                workflow,
-                "60000",
-                """
+        writeWorkflow(workflow, "60000", """
                 agent:
                   max_retry_backoff_ms: 60000
                 """);
@@ -906,9 +883,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         String trackerConstraint =
                 "labels".equals(constraint) ? "required_labels: [Ready for Codex]" : "blocker_enforced_states: [Todo]";
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -927,8 +902,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                   command: fake
                 ---
                 {{ card.title }}
-                """
-                        .formatted(trackerConstraint));
+                """.formatted(trackerConstraint));
         Instant now = Instant.parse("2026-07-10T12:00:00Z");
         var clock = new MutableClock(now);
         Card first = "labels".equals(constraint)
@@ -970,9 +944,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void deeplyBlockedUsageRetryTransfersProbeWhenShallowRefreshStillLooksEligible() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker:
                   kind: trello
@@ -1027,10 +999,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void deadlineWithoutAnyEligibleProbeRearmsWithSafetyFloor() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        writeWorkflow(
-                workflow,
-                "60000",
-                """
+        writeWorkflow(workflow, "60000", """
                 agent:
                   max_retry_backoff_ms: 0
                 """);
@@ -1132,10 +1101,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void laterBoundedUsageFailureNeverShortensPauseOrCancelsAlreadyRunningWorker() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        writeWorkflow(
-                workflow,
-                "60000",
-                """
+        writeWorkflow(workflow, "60000", """
                 agent:
                   max_concurrent_agents: 2
                   max_retry_backoff_ms: 60000
@@ -1191,10 +1157,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void supersededRetryCallbackCannotConsumeReplacementEntry() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        writeWorkflow(
-                workflow,
-                "60000",
-                """
+        writeWorkflow(workflow, "60000", """
                 agent:
                   max_concurrent_agents: 2
                   max_retry_backoff_ms: 60000
@@ -1266,10 +1229,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void lateConcurrentUsageResultPreservesTheBoundProbeThatCanClearTheExtendedPause() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        writeWorkflow(
-                workflow,
-                "60000",
-                """
+        writeWorkflow(workflow, "60000", """
                 agent:
                   max_concurrent_agents: 2
                   max_retry_backoff_ms: 60000
@@ -1450,10 +1410,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void validCodexCommandReloadClearsOldPauseRetriesWithNewCommandAndCleansWithCurrentConfig() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        writeWorkflowWithCommand(
-                workflow,
-                "command-a",
-                """
+        writeWorkflowWithCommand(workflow, "command-a", """
                 agent:
                   max_retry_backoff_ms: 60000
                 """);
@@ -1492,10 +1449,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         orchestrator.start();
         waitUntil(() -> orchestrator.snapshot().dispatchPause() != null
                 && containsRetryingCard(orchestrator.snapshot(), "TRELLO-retry"));
-        rewriteWorkflowWithCommand(
-                workflow,
-                "command-b",
-                """
+        rewriteWorkflowWithCommand(workflow, "command-b", """
                 agent:
                   max_concurrent_agents: 2
                 """);
@@ -1519,10 +1473,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     void commandReloadRestoresGenericRetryNaturalDeadlineWhileRearmingUsageRetry() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        writeWorkflowWithCommand(
-                workflow,
-                "command-a",
-                """
+        writeWorkflowWithCommand(workflow, "command-a", """
                 agent:
                   max_concurrent_agents: 2
                   max_retry_backoff_ms: 60000
@@ -1574,10 +1525,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         releaseUsage.countDown();
         waitUntil(() -> orchestrator.snapshot().dispatchPause() != null
                 && orchestrator.snapshot().retrying().size() == 2);
-        rewriteWorkflowWithCommand(
-                workflow,
-                "command-b",
-                """
+        rewriteWorkflowWithCommand(workflow, "command-b", """
                 agent:
                   max_concurrent_agents: 2
                 """);
@@ -1658,10 +1606,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
 
     private static AgentRunner.AgentRunRequest dispatchCommandB(Path workflow, ConcurrentCommandScenario scenario)
             throws Exception {
-        rewriteWorkflowWithCommand(
-                workflow,
-                "command-b",
-                """
+        rewriteWorkflowWithCommand(workflow, "command-b", """
                 agent:
                   max_concurrent_agents: 2
                 """);
@@ -1729,8 +1674,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
 
         // then
         assertThat(afterLateResult.dispatchPause()).isNull();
-        assertThat(afterLateResult.retrying()).singleElement().satisfies(retry -> assertThat(retry.dueAt())
-                .isEqualTo(now.plusSeconds(10)));
+        assertThat(afterLateResult.retrying())
+                .singleElement()
+                .satisfies(retry -> assertThat(retry.dueAt()).isEqualTo(now.plusSeconds(10)));
         assertThat(workpadCommands).isEmpty();
     }
 
@@ -1759,9 +1705,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         waitUntil(() -> orchestrator.snapshot().dispatchPause() != null);
         RuntimeSnapshot beforeReload = orchestrator.snapshot();
         long previousModified = Files.getLastModifiedTime(workflow).toMillis();
-        Files.writeString(
-                workflow,
-                """
+        Files.writeString(workflow, """
                 ---
                 tracker: []
                 workspace:

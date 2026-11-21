@@ -61,8 +61,9 @@ final class TrelloBoardConnector {
     }
 
     void preflightRequestedServerPort(LocalSetup.Options options, ConnectedBoardManifest manifest) {
-        options.serverPort().ifPresent(ignored -> preflightWorkflowPath(options)
-                .ifPresent(workflowPath -> localSetupServerPort(options, manifest, workflowPath)));
+        options.serverPort()
+                .ifPresent(ignored -> preflightWorkflowPath(options)
+                        .ifPresent(workflowPath -> localSetupServerPort(options, manifest, workflowPath)));
     }
 
     void rejectDryRunNewBoardInProgress(LocalSetup.Options options) {
