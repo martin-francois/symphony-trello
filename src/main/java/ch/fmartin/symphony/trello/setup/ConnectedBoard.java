@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.setup;
 
 import java.nio.file.Path;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 record ConnectedBoard(
         String boardId,
@@ -14,7 +15,35 @@ record ConnectedBoard(
         int serverPort,
         boolean githubEnabled,
         List<Path> additionalWritableRoots,
-        boolean dangerFullAccess) {
+        boolean dangerFullAccess,
+        @Nullable Path sourceWorkflowPath) {
+    ConnectedBoard(
+            String boardId,
+            String boardKey,
+            String boardName,
+            String boardUrl,
+            Path workflowPath,
+            Path envPath,
+            Path workspaceRoot,
+            int serverPort,
+            boolean githubEnabled,
+            List<Path> additionalWritableRoots,
+            boolean dangerFullAccess) {
+        this(
+                boardId,
+                boardKey,
+                boardName,
+                boardUrl,
+                workflowPath,
+                envPath,
+                workspaceRoot,
+                serverPort,
+                githubEnabled,
+                additionalWritableRoots,
+                dangerFullAccess,
+                null);
+    }
+
     ConnectedBoard {
         additionalWritableRoots = additionalWritableRoots == null ? List.of() : List.copyOf(additionalWritableRoots);
     }
@@ -91,7 +120,24 @@ record ConnectedBoard(
                 serverPort,
                 githubEnabled,
                 additionalWritableRoots,
-                dangerFullAccess);
+                dangerFullAccess,
+                sourceWorkflowPath);
+    }
+
+    ConnectedBoard withWorkflowPath(Path path) {
+        return new ConnectedBoard(
+                boardId,
+                boardKey,
+                boardName,
+                boardUrl,
+                path,
+                envPath,
+                workspaceRoot,
+                serverPort,
+                githubEnabled,
+                additionalWritableRoots,
+                dangerFullAccess,
+                sourceWorkflowPath);
     }
 
     ConnectedBoard withCodexAccess(List<Path> additionalWritableRoots, boolean dangerFullAccess) {
@@ -106,6 +152,14 @@ record ConnectedBoard(
                 serverPort,
                 githubEnabled,
                 additionalWritableRoots,
-                dangerFullAccess);
+                dangerFullAccess,
+                sourceWorkflowPath);
+    }
+
+    Path referenceDirectory() {
+        return (sourceWorkflowPath == null ? workflowPath : sourceWorkflowPath)
+                .toAbsolutePath()
+                .normalize()
+                .getParent();
     }
 }

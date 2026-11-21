@@ -906,7 +906,7 @@ validate_app_paths() {
     echo "--prefix must be a directory." >&2
     exit 2
   fi
-  for root in "$CONFIG_DIR" "$WORKSPACE_ROOT" "$STATE_HOME"; do
+  for root in "$CONFIG_DIR" "$WORKSPACE_ROOT" "$STATE_HOME" "$CARD_REQUESTS_HOME"; do
     root_resolved="$(canonicalize_existing_or_future_path "$root")"
     root="$(normalize_path "$root")"
     if is_broad_system_path "$root_resolved"; then
@@ -923,13 +923,13 @@ validate_app_paths() {
       [[ "$SYMPHONY_HOME_CONFIGURED" == true || "$WORKSPACE_ROOT_CONFIGURED" == true || "$WORKSPACE_ROOT_FROM_CONTEXT" == true ]] &&
         root_explicit=true
       ;;
-    "$(normalize_path "$STATE_HOME")")
+    "$(normalize_path "$STATE_HOME")" | "$(normalize_path "$CARD_REQUESTS_HOME")")
       [[ "$SYMPHONY_HOME_CONFIGURED" == true || "$STATE_HOME_CONFIGURED" == true || "$STATE_HOME_FROM_CONTEXT" == true ]] &&
         root_explicit=true
       ;;
     esac
     validate_symlinked_path_target "$root" "Symphony config, workspace, and state paths must resolve inside the user home or Symphony MicroOS data root." "$root_explicit"
-    if [[ ! -e "$root" && ! -L "$root" ]] &&
+    if [[ "$root" != "$(normalize_path "$CARD_REQUESTS_HOME")" && ! -e "$root" && ! -L "$root" ]] &&
       (same_or_inside_path "$app_dir_resolved" "$root_resolved" || same_or_inside_path "$root_resolved" "$app_dir_resolved"); then
       echo "--prefix must not overlap Symphony config, workspace, or state directories." >&2
       exit 2
@@ -952,7 +952,7 @@ validate_app_paths() {
   [[ "$SYMPHONY_HOME_CONFIGURED" == true ]] && cache_explicit=true
   validate_symlinked_path_target "$CACHE_DIR" "Symphony cache and managed npm paths must resolve inside the user home or Symphony MicroOS data root." "$cache_explicit"
   validate_symlinked_path_target "$CODEX_NPM_PREFIX" "Symphony cache and managed npm paths must resolve inside the user home or Symphony MicroOS data root." "$cache_explicit"
-  for root in "$APP_DIR" "$CONFIG_DIR" "$WORKSPACE_ROOT" "$STATE_HOME"; do
+  for root in "$APP_DIR" "$CONFIG_DIR" "$WORKSPACE_ROOT" "$STATE_HOME" "$CARD_REQUESTS_HOME"; do
     root_resolved="$(canonicalize_existing_or_future_path "$root")"
     if [[ "$root_resolved" == "$app_dir_resolved" &&
       "$SYMPHONY_HOME_CONFIGURED" == true &&
@@ -996,7 +996,7 @@ validate_command_directory() {
     echo "--bin-dir must be a directory." >&2
     exit 2
   fi
-  for root in "$APP_DIR" "$CONFIG_DIR" "$WORKSPACE_ROOT" "$STATE_HOME"; do
+  for root in "$APP_DIR" "$CONFIG_DIR" "$WORKSPACE_ROOT" "$STATE_HOME" "$CARD_REQUESTS_HOME"; do
     root_resolved="$(canonicalize_existing_or_future_path "$root")"
     if same_or_inside_path "$bin_dir_resolved" "$root_resolved" || same_or_inside_path "$root_resolved" "$bin_dir_resolved"; then
       echo "--bin-dir must not overlap Symphony app, config, workspace, or state directories." >&2
@@ -1033,6 +1033,7 @@ APP_DIR="$(absolutize_path "$APP_DIR")"
 CONFIG_DIR="$(absolutize_path "$CONFIG_DIR")"
 WORKSPACE_ROOT="$(absolutize_path "$WORKSPACE_ROOT")"
 STATE_HOME="$(absolutize_path "$STATE_HOME")"
+CARD_REQUESTS_HOME="$(normalize_path "$STATE_HOME")-card-requests"
 BIN_DIR="$(absolutize_path "$BIN_DIR")"
 CACHE_DIR="$(absolutize_path "$CACHE_DIR")"
 CODEX_NPM_PREFIX="$(absolutize_path "$CODEX_NPM_PREFIX")"
@@ -1111,6 +1112,17 @@ safe_removal_path() {
   printf '%s\n' "$normalized"
 }
 
+assert_state_cleanup_preserves_data() {
+  local preserved="$1" scope="$2" selected
+  for selected in "$STATE_HOME" "$CARD_REQUESTS_HOME"; do
+    if same_or_inside_lexical_or_resolved_path "$selected" "$preserved" ||
+      same_or_inside_lexical_or_resolved_path "$preserved" "$selected"; then
+      echo "State cleanup overlaps preserved local data: $preserved. Select and confirm $scope, or use separate directories." >&2
+      exit 2
+    fi
+  done
+}
+
 validate_requested_removal_paths() {
   if [[ "$REMOVE_CONFIG" == true ]]; then
     safe_removal_path "$CONFIG_DIR" >/dev/null
@@ -1120,6 +1132,13 @@ validate_requested_removal_paths() {
   fi
   if [[ "$REMOVE_STATE" == true ]]; then
     safe_removal_path "$STATE_HOME" >/dev/null
+    safe_removal_path "$CARD_REQUESTS_HOME" >/dev/null
+    if [[ "$REMOVE_CONFIG" != true ]]; then
+      assert_state_cleanup_preserves_data "$CONFIG_DIR" "--remove-config"
+    fi
+    if [[ "$REMOVE_WORKSPACES" != true ]]; then
+      assert_state_cleanup_preserves_data "$WORKSPACE_ROOT" "--remove-workspaces"
+    fi
   fi
 }
 
@@ -1504,11 +1523,14 @@ assert_app_removal_preserves_current_data() {
   elif [[ "$YES_LOCAL_DATA" == false ]] && path_exists "$WORKSPACE_ROOT" && same_or_inside_lexical_or_resolved_path "$WORKSPACE_ROOT" "$APP_DIR"; then
     cleanup_paths+=("WORKSPACES $WORKSPACE_ROOT")
   fi
-  if [[ "$REMOVE_STATE" == false ]]; then
-    if path_exists "$STATE_HOME" && same_or_inside_lexical_or_resolved_path "$STATE_HOME" "$APP_DIR"; then conflicts+=("STATE/LOGS $STATE_HOME"); fi
-  elif [[ "$YES_LOCAL_DATA" == false ]] && path_exists "$STATE_HOME" && same_or_inside_lexical_or_resolved_path "$STATE_HOME" "$APP_DIR"; then
-    cleanup_paths+=("STATE/LOGS $STATE_HOME")
-  fi
+  local state_path
+  for state_path in "$STATE_HOME" "$CARD_REQUESTS_HOME"; do
+    if [[ "$REMOVE_STATE" == false ]]; then
+      if path_exists "$state_path" && same_or_inside_lexical_or_resolved_path "$state_path" "$APP_DIR"; then conflicts+=("STATE/LOGS $state_path"); fi
+    elif [[ "$YES_LOCAL_DATA" == false ]] && path_exists "$state_path" && same_or_inside_lexical_or_resolved_path "$state_path" "$APP_DIR"; then
+      cleanup_paths+=("STATE/LOGS $state_path")
+    fi
+  done
   if ((${#conflicts[@]} > 0)); then
     echo "Refusing to remove app directory because it contains current local data that is preserved by default:" >&2
     printf '  %s\n' "${conflicts[@]}" >&2
@@ -1606,6 +1628,50 @@ stop_managed_processes() {
       print_status SKIP "  stale pid does not belong to this install: $(worker_label "$pid_file") pid=$pid"
     elif [[ "$DRY_RUN" == false ]]; then
       rm -f "$pid_file"
+    fi
+  done
+}
+
+process_has_arg() {
+  local pid="$1" expected="$2" arg command_line inspected=false
+  if [[ -r "/proc/$pid/cmdline" ]]; then
+    while IFS= read -r -d '' arg; do
+      inspected=true
+      [[ "$arg" == "$expected" ]] && return 0
+    done <"/proc/$pid/cmdline"
+    [[ "$inspected" == true ]] || return 2
+    return 1
+  fi
+  command_line="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  [[ -n "${command_line//[[:space:]]/}" ]] || return 2
+  command_line_has_arg "$command_line" "$expected"
+}
+
+stop_card_helper() {
+  local ready root pid inspection_status
+  for ready in "$STATE_HOME"/card-helper/*/ready.json; do
+    [[ -f "$ready" && ! -L "$ready" ]] || continue
+    root="${ready%/ready.json}"
+    [[ ! -L "$root" ]] || continue
+    pid="$(head -c 1024 "$ready" | sed -nE 's/.*"pid"[ ]*:[ ]*([0-9]+).*/\1/p')"
+    [[ "$pid" =~ ^[1-9][0-9]*$ ]] || continue
+    kill -0 "$pid" >/dev/null 2>&1 || continue
+    if process_has_arg "$pid" "-Dsymphony.trello.card_helper_root=$root" &&
+      process_has_arg "$pid" "ch.fmartin.symphony.trello.setup.CardHelperMain" &&
+      process_has_arg "$pid" "$CONFIG_DIR"; then
+      if [[ "$DRY_RUN" == true ]]; then
+        print_status "WOULD STOP" "  trusted card helper pid=$pid"
+      else
+        print_status STOP "  trusted card helper pid=$pid"
+        kill "$pid" >/dev/null 2>&1 || true
+        wait_for_exit "$pid"
+      fi
+    else
+      inspection_status=$?
+      if [[ "$inspection_status" -eq 2 ]] && kill -0 "$pid" >/dev/null 2>&1; then
+        echo "cannot verify card helper: inspect the recorded process from a trusted terminal before retrying uninstall" >&2
+        exit 2
+      fi
     fi
   done
 }
@@ -1742,6 +1808,7 @@ if [[ "$REMOVE_WORKSPACES" == true ]]; then
 fi
 if [[ "$REMOVE_STATE" == true ]]; then
   print_status "STATE/LOGS" "      $STATE_HOME"
+  print_status "CARD REQUESTS" "   $CARD_REQUESTS_HOME"
 fi
 echo
 print_heading "Will preserve:"
@@ -1753,6 +1820,7 @@ if [[ "$REMOVE_WORKSPACES" == false ]]; then
 fi
 if [[ "$REMOVE_STATE" == false ]]; then
   print_status "STATE/LOGS" "      $STATE_HOME"
+  print_status "CARD REQUESTS" "   $CARD_REQUESTS_HOME"
 fi
 print_status AUTH "            Codex login/auth files and GitHub auth"
 print_status TRELLO "          Trello boards are not deleted or archived"
@@ -1766,6 +1834,7 @@ if confirm "Remove installer-managed app files and CLI executable?" "$YES"; then
     exit 2
   fi
   assert_app_removal_preserves_current_data
+  stop_card_helper
   stop_managed_processes
   remove_user_systemd_service
   remove_launch_agent
@@ -1797,10 +1866,19 @@ if [[ "$REMOVE_WORKSPACES" == true && (-e "$WORKSPACE_ROOT" || -L "$WORKSPACE_RO
   fi
 fi
 
-if [[ "$REMOVE_STATE" == true && (-e "$STATE_HOME" || -L "$STATE_HOME") ]]; then
+if [[ "$REMOVE_STATE" == true ]] && { path_exists "$STATE_HOME" || path_exists "$CARD_REQUESTS_HOME"; }; then
   echo
   if confirm "Remove local state and logs?" "$YES_LOCAL_DATA"; then
+    if [[ "$DRY_RUN" != true ]]; then
+      if path_exists "$CONFIG_DIR"; then
+        assert_state_cleanup_preserves_data "$CONFIG_DIR" "--remove-config"
+      fi
+      if path_exists "$WORKSPACE_ROOT"; then
+        assert_state_cleanup_preserves_data "$WORKSPACE_ROOT" "--remove-workspaces"
+      fi
+    fi
     remove_path "$STATE_HOME"
+    remove_path "$CARD_REQUESTS_HOME"
   else
     echo "Kept local state and logs: $STATE_HOME"
   fi

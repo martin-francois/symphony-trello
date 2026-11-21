@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
+import ch.fmartin.symphony.trello.setup.ConnectedWorkflowFixtures;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.ImportBoardRequest;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.NewBoardRequest;
@@ -76,10 +77,14 @@ final class LiveTrelloE2eIT {
 
         try {
             var setup = new TrelloBoardSetup(json);
-            Path boardAWorkflow = runDir.resolve("board-a.WORKFLOW.md");
-            Path importedAWorkflow = runDir.resolve("imported-a.WORKFLOW.md");
-            Path boardBWorkflow = runDir.resolve("board-b.WORKFLOW.md");
-            Path customWorkflow = runDir.resolve("custom-import.WORKFLOW.md");
+            Path boardAWorkflow =
+                    Files.createDirectories(runDir.resolve("config")).resolve("board-a.WORKFLOW.md");
+            Path importedAWorkflow =
+                    Files.createDirectories(runDir.resolve("config")).resolve("imported-a.WORKFLOW.md");
+            Path boardBWorkflow =
+                    Files.createDirectories(runDir.resolve("config")).resolve("board-b.WORKFLOW.md");
+            Path customWorkflow =
+                    Files.createDirectories(runDir.resolve("config")).resolve("custom-import.WORKFLOW.md");
             Path completions = runDir.resolve("fake-codex-completions.log");
 
             var boardA = setup.createRecommendedBoard(
@@ -257,7 +262,7 @@ final class LiveTrelloE2eIT {
 
         try {
             var setup = new TrelloBoardSetup(json);
-            Path workflow = runDir.resolve("external-docker.WORKFLOW.md");
+            Path workflow = Files.createDirectories(runDir.resolve("config")).resolve("external-docker.WORKFLOW.md");
             Path completions = runDir.resolve("fake-codex-external-completions.log");
 
             var board = setup.createRecommendedBoard(
@@ -324,7 +329,7 @@ final class LiveTrelloE2eIT {
 
         try {
             var setup = new TrelloBoardSetup(json);
-            Path workflow = runDir.resolve("real-codex-docker.WORKFLOW.md");
+            Path workflow = Files.createDirectories(runDir.resolve("config")).resolve("real-codex-docker.WORKFLOW.md");
 
             var board = setup.createRecommendedBoard(
                     newBoard(runId + " real codex docker", credentials, workspaceId, workflow, workspaceRoot, 1));
@@ -784,6 +789,7 @@ final class LiveTrelloE2eIT {
 
     private SymphonyProcess startProcess(Path runDir, Path workflow, int port, Map<String, String> environment)
             throws IOException {
+        ConnectedWorkflowFixtures.register(workflow, port);
         Path stdout = runDir.resolve("symphony-" + port + ".out.log");
         Path stderr = runDir.resolve("symphony-" + port + ".err.log");
         ProcessBuilder builder = new ProcessBuilder(List.of(
@@ -798,6 +804,18 @@ final class LiveTrelloE2eIT {
                 .redirectOutput(stdout.toFile())
                 .redirectError(stderr.toFile());
         builder.environment().putAll(environment);
+        builder.environment()
+                .put(
+                        "SYMPHONY_TRELLO_CONFIG_DIR",
+                        workflow.toAbsolutePath().getParent().toString());
+        builder.environment()
+                .put(
+                        "SYMPHONY_TRELLO_STATE_HOME",
+                        runDir.resolve("state").toAbsolutePath().toString());
+        builder.environment()
+                .put(
+                        "SYMPHONY_TRELLO_APP_HOME",
+                        QUARKUS_RUNNER.toAbsolutePath().getParent().toString());
         Process process = builder.start();
         return new SymphonyProcess(process, port);
     }

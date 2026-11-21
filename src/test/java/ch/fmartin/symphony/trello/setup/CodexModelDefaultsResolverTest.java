@@ -375,6 +375,7 @@ final class CodexModelDefaultsResolverTest {
     }
 
     @Test
+    // TODO Flaky: #1227
     void selectsCatalogDefaultModelWithoutInventingReasoningRecommendation() throws Exception {
         // given
         Path appServer = appServerScript(

@@ -110,7 +110,7 @@ final class WorkflowBodyMigration {
 
     private static MigrationTarget explicitTarget(ConnectedBoardManifest manifest, Path workflow) {
         return manifest.selectWorkflow(workflow)
-                .map(board -> new MigrationTarget(board.boardName(), workflow, Optional.of(board.githubEnabled())))
+                .map(MigrationTarget::of)
                 .orElseGet(() -> new MigrationTarget(PathNames.fileName(workflow), workflow, Optional.empty()));
     }
 

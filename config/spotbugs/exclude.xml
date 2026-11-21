@@ -12,6 +12,13 @@
     <Class name="~ch\.fmartin\.symphony\.trello\.(agent\.CodexAppServerClient|setup\.(CodexModelDefaultsResolver|ProcessCodexInvestigationRunner|ProcessCommandRunner|ProcessHandleManagedProcessPlatform|WindowsManagedProcessPlatform)|workspace\.HookRunner)"/>
   </Match>
 
+  <!-- The process-exit waiter runs a bundled PowerShell resource with only decimal long substitutions for process IDs and a bounded timeout. No caller-provided script text reaches the command. -->
+  <Match>
+    <Bug pattern="COMMAND_INJECTION"/>
+    <Class name="ch.fmartin.symphony.trello.process.WindowsProcessExit"/>
+    <Method name="awaitExited"/>
+  </Match>
+
   <!-- These methods generate stable HTML, Markdown, YAML, or prompt text that must use LF separators independent of the host platform. -->
   <Match>
     <Bug pattern="VA_FORMAT_STRING_USES_NEWLINE"/>

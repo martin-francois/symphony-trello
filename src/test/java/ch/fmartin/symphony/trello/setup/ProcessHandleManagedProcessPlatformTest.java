@@ -1,6 +1,10 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -9,10 +13,48 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 final class ProcessHandleManagedProcessPlatformTest {
     @TempDir
     Path tempDir;
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void unavailableIdentityRefusesLiveWorkers(boolean workflowScoped) {
+        // given
+        var platform = mock(ProcessHandleManagedProcessPlatform.class, CALLS_REAL_METHODS);
+        doReturn(true).when(platform).isAlive(42);
+        doReturn(Optional.empty()).when(platform).commandArguments(42);
+
+        // when
+        Throwable thrown = catchThrowable(() -> inspectWorker(platform, workflowScoped));
+
+        // then
+        assertThat(thrown).isInstanceOf(TrelloBoardSetupException.class).hasMessageContaining("cannot inspect worker");
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void unavailableIdentityRecognizesExitedProcesses(boolean workflowScoped) {
+        // given
+        var platform = mock(ProcessHandleManagedProcessPlatform.class, CALLS_REAL_METHODS);
+        doReturn(false).when(platform).isAlive(42);
+        doReturn(Optional.empty()).when(platform).commandArguments(42);
+
+        // when
+        boolean managed = inspectWorker(platform, workflowScoped);
+
+        // then
+        assertThat(managed).as("an exited process is not a managed worker").isFalse();
+    }
+
+    private boolean inspectWorker(ManagedProcessPlatform platform, boolean workflowScoped) {
+        return workflowScoped
+                ? platform.isManaged(42, tempDir, tempDir.resolve("WORKFLOW.md"))
+                : platform.isManaged(42, tempDir);
+    }
 
     @Test
     void managedWorkerEnvironmentDropsInstallerCompletionMode() {

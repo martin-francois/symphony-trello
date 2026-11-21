@@ -70,6 +70,14 @@ including startup and terminal/missing retry cleanup. Pending runner completion 
 Claims, normalized-path dispatch checks and the 128-key threshold include both forms of ownership.
 Startup stops starting removal hooks at that threshold; unrelated cards continue below it.
 
+On native Windows, an observed exit code precedes release of the process's working-directory handle.
+The app-server fixture reproduced a successful turn followed by a locked workspace during cleanup.
+Foreground runtime shutdown therefore also waits for the native process objects to signal, using the
+same bounded PowerShell helper as managed-worker shutdown. Checking `ProcessHandle.isAlive()` alone
+was rejected because it does not establish that Windows released those handles. The shared native
+wait adds at most two seconds of process waiting and ten seconds for PowerShell startup; failures
+retain the workspace. Interruptions remain deferred until confirmation finishes.
+
 The owned process set is a shutdown-time snapshot, not an operating-system containment boundary.
 Configured commands and hooks must remain foreground processes, keep their children attached and
 not spawn replacements during shutdown. Detached or reparented processes and hostile fork loops

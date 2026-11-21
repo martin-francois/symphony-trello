@@ -33,6 +33,7 @@ WORKFLOW.md
 WORKFLOW.*.md
 !WORKFLOW.example.md
 connected-boards.json
+.connected-boards.lock
 .symphony-trello-locks/
 .symphony-trello-diagnostics-key
 .secrets/

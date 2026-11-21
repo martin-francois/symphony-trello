@@ -16,6 +16,7 @@ final class ConnectedBoardBuilder {
     private boolean githubEnabled;
     private List<Path> additionalWritableRoots = List.of();
     private boolean dangerFullAccess;
+    private Path sourceWorkflowPath;
 
     private ConnectedBoardBuilder(Path workflowPath) {
         this.workflowPath = workflowPath;
@@ -39,7 +40,8 @@ final class ConnectedBoardBuilder {
                 .withServerPort(board.serverPort())
                 .withGithubEnabled(board.githubEnabled())
                 .withAdditionalWritableRoots(board.additionalWritableRoots())
-                .withDangerFullAccess(board.dangerFullAccess());
+                .withDangerFullAccess(board.dangerFullAccess())
+                .withSourceWorkflowPath(board.sourceWorkflowPath());
     }
 
     ConnectedBoardBuilder withBoardId(String boardId) {
@@ -92,6 +94,11 @@ final class ConnectedBoardBuilder {
         return this;
     }
 
+    ConnectedBoardBuilder withSourceWorkflowPath(Path path) {
+        sourceWorkflowPath = path;
+        return this;
+    }
+
     ConnectedBoard build() {
         return new ConnectedBoard(
                 boardId,
@@ -104,6 +111,7 @@ final class ConnectedBoardBuilder {
                 serverPort,
                 githubEnabled,
                 additionalWritableRoots,
-                dangerFullAccess);
+                dangerFullAccess,
+                sourceWorkflowPath);
     }
 }

@@ -27,6 +27,7 @@ import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import ch.fmartin.symphony.trello.testsupport.BoundedWait;
+import ch.fmartin.symphony.trello.testsupport.FakeAppServerScripts;
 import ch.fmartin.symphony.trello.testsupport.MutableClock;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
@@ -981,6 +982,7 @@ final class SymphonyOrchestratorHandoffTest {
             orchestrator = new SymphonyOrchestrator(
                     new WorkflowLoader(),
                     new ConfigResolver(),
+                    connectedWorkflowResolver(),
                     tracker,
                     runner,
                     new PromptRenderer(),
@@ -1206,7 +1208,8 @@ final class SymphonyOrchestratorHandoffTest {
                 """
                         .formatted(target)
                         .replace("__FINAL_STARTED__", finalStarted.toString())
-                        .replace("__RELEASE_FINAL__", releaseFinal.toString()));
+                        .replace("__RELEASE_FINAL__", releaseFinal.toString())
+                        .transform(FakeAppServerScripts::acknowledgePermissions));
         return script;
     }
 }

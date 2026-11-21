@@ -92,11 +92,7 @@ public class LocalAgentRunner implements AgentRunner {
         try {
             recording = finalResponses.begin(request);
             workspace = workspaceManager.createForCard(request.card().identifier(), request.config());
-            hooks.runRequired(
-                    "before_run",
-                    request.config().hooks().beforeRun(),
-                    workspace.path(),
-                    request.config().hooks());
+            hooks.runRequired("before_run", request.config().hooks().beforeRun(), workspace.path(), request.config());
             boolean installBundledSkills = usesBundledCodexSkills(request.prompt());
             String prompt = withRuntimeContext(request);
             if (installBundledSkills) {
@@ -159,11 +155,7 @@ public class LocalAgentRunner implements AgentRunner {
     private void runAfterHook(AgentRunRequest request, Workspace workspace) {
         boolean interrupted = Thread.interrupted();
         try {
-            hooks.runBestEffort(
-                    "after_run",
-                    request.config().hooks().afterRun(),
-                    workspace.path(),
-                    request.config().hooks());
+            hooks.runBestEffort("after_run", request.config().hooks().afterRun(), workspace.path(), request.config());
         } finally {
             if (interrupted) {
                 Thread.currentThread().interrupt();

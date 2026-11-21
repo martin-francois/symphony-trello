@@ -36,6 +36,7 @@ public class FakeCodexAppServer {
     private static final Pattern ID = Pattern.compile("\"id\"\\s*:\\s*(\\d+)");
     private static final Pattern METHOD = Pattern.compile("\"method\"\\s*:\\s*\"([^\"]+)\"");
     private static final Pattern THREAD_ID = Pattern.compile("\"threadId\"\\s*:\\s*\"([^\"]+)\"");
+    private static final Pattern PERMISSIONS = Pattern.compile("\"permissions\"\\s*:\\s*\"([^\"]+)\"");
     private static final String DEFAULT_COMMENT =
             "Symphony live E2E fake Codex handoff: summary and verification complete.";
     private static final String SCRIPT_SUFFIX = ".script";
@@ -65,8 +66,9 @@ public class FakeCodexAppServer {
                     // Notification from Symphony. No response is expected.
                 }
                 case "thread/start" -> send(
-                        "{\"id\":%d,\"result\":{\"thread\":{\"id\":\"thread-fake-%s\"}}}"
-                                .formatted(id.orElseThrow(), UUID.randomUUID()));
+                        "{\"id\":%d,\"result\":{\"thread\":{\"id\":\"thread-fake-%s\"},\"activePermissionProfile\":{\"id\":\"%s\"}}}"
+                                .formatted(id.orElseThrow(), UUID.randomUUID(),
+                                        jsonString(capture(PERMISSIONS, line).orElse(":workspace"))));
                 case "turn/start" -> handleTurn(id.orElseThrow(), line);
                 default -> id.ifPresent(requestId -> send(
                         "{\"id\":%d,\"error\":{\"code\":-32601,\"message\":\"Unsupported method: %s\"}}"

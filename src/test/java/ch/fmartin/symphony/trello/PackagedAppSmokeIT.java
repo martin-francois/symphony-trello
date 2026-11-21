@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
+import ch.fmartin.symphony.trello.setup.ConnectedWorkflowFixtures;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
@@ -48,11 +49,13 @@ final class PackagedAppSmokeIT {
                 .isRegularFile();
         int trelloPort = freePort();
         int appPort = freePortExcept(trelloPort);
-        Path workflow = tempDir.resolve("WORKFLOW.smoke.md");
+        Path workflow = Files.createDirectory(tempDir.resolve("config")).resolve("WORKFLOW.smoke.md");
         Path workspaceRoot = tempDir.resolve("workspaces");
         Path stdout = tempDir.resolve("symphony.log");
         Path stderr = tempDir.resolve("symphony.err");
         Files.writeString(workflow, workflow(trelloPort, appPort, workspaceRoot));
+
+        ConnectedWorkflowFixtures.register(workflow, appPort);
 
         FakeTrelloEndpoint trello = FakeTrelloEndpoint.start(trelloPort);
         try (trello) {
@@ -80,6 +83,14 @@ final class PackagedAppSmokeIT {
                         java.toString(), "-jar", QUARKUS_RUNNER.toString(), workflow.toString())
                 .redirectOutput(stdout.toFile())
                 .redirectError(stderr.toFile());
+        builder.environment()
+                .put("SYMPHONY_TRELLO_CONFIG_DIR", workflow.getParent().toString());
+        builder.environment()
+                .put("SYMPHONY_TRELLO_STATE_HOME", tempDir.resolve("state").toString());
+        builder.environment()
+                .put(
+                        "SYMPHONY_TRELLO_APP_HOME",
+                        QUARKUS_RUNNER.toAbsolutePath().getParent().toString());
         builder.environment().remove("SYMPHONY_HTTP_PORT");
         builder.environment().remove("QUARKUS_HTTP_PORT");
         return builder.start();

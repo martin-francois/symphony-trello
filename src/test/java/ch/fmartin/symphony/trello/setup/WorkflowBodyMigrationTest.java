@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import ch.fmartin.symphony.trello.setup.WorkflowMigrationFixture.GeneratedWorkflow;
 import ch.fmartin.symphony.trello.setup.WorkflowMigrationFixture.MigrationRun;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -492,6 +493,29 @@ final class WorkflowBodyMigrationTest {
                 .doesNotContain("Replace the generated body");
         assertThat(outside).hasContent(original);
         assertThat(configDir.resolve("outside")).isDirectoryNotContaining("glob:**/real.md.*");
+    }
+
+    @Test
+    void sourceAliasMigratesTheManagedSnapshotWithoutChangingTheSource() throws Exception {
+        // given
+        GeneratedWorkflow managed =
+                fixture.generatedBy(OLDER_VERSION, "Imported", NON_GITHUB_INPUTS, UnaryOperator.identity());
+        Path source = configDir.resolve("source.md");
+        Files.writeString(source, managed.content());
+        fixture.record(source, OLDER_VERSION, NON_GITHUB_INPUTS, otherVersionBody(NON_GITHUB_INPUTS));
+        Path manifest = configDir.resolve(ConnectedBoardManifest.FILE_NAME);
+        var json = ConnectedBoardRepository.jsonMapper();
+        var document = json.readTree(manifest.toFile());
+        ((ObjectNode) document.path("boards").get(0)).put("sourceWorkflowPath", source.toString());
+        json.writeValue(manifest.toFile(), document);
+
+        // when
+        MigrationRun run = fixture.run(fixture.explicitWorkflow(source, false), "y");
+
+        // then
+        assertThat(run.exitCode()).as(run.output()).isZero();
+        assertThat(managed.path()).hasContent(workflowFile(NON_GITHUB_INPUTS, targetBody(NON_GITHUB_INPUTS)));
+        assertThat(source).hasContent(managed.content());
     }
 
     @Test

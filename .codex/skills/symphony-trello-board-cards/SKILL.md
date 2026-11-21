@@ -9,20 +9,20 @@ description: >
 
 # Symphony Board Cards
 
-The `symphony-trello card` commands read the board's Trello key and token
-themselves and never print them. Work only through these commands: the `.env`
-files and any secret file a workflow names stay unread, because the commands
-never need you to see a credential.
+The `symphony-trello card` commands use a trusted helper that owns credentials and policy.
+Use only these commands for card work. The operator starts the helper and configures the external
+agent's permission profile before the session. Never read credential files or change that profile.
 
 ## Steps
 
-1. Run `symphony-trello status` to see the connected boards. When more than
-   one board is connected, pass `--board NAME` to every card command, with a
-   board name that status shows.
-2. Run `symphony-trello card list --board NAME --json` to learn the lists,
-   their roles, where moves and new cards are allowed, and the open cards.
-3. Run the card command the request needs. Add `--json` whenever you read the
-   output, and name each card by its title and URL in your answer.
+1. Run `symphony-trello card list --json`, adding `--board NAME` when the user names a board.
+   If several connected boards match, ask the user for the board id, short link or registered path.
+   Do not read the manifest or run lifecycle administration to discover it.
+2. Use the returned lists, roles and write permissions to choose the requested operation.
+3. Run the card command. Add `--json` when reading output, and name each card by its title and URL.
+4. If the helper is unavailable, ask the operator to run `symphony-trello card-helper start` from a
+   trusted terminal. Do not start it inside the restricted session or fall back to direct Trello
+   requests. After an uncertain outcome, inspect the board before proposing a write retry.
 
 ## Commands
 
@@ -54,7 +54,7 @@ an open list name or a role: `active`, `in-progress`, `human-review`,
   `trello_writes_disabled`, `trello_comments_disabled`,
   `trello_move_not_allowed`, `trello_move_allowlist_required`, and
   `trello_create_list_not_allowed`. For them, tell the user which setting
-  refused the write; edit the workflow only when the user asks for that.
+  refused the write. Workflow changes belong in a trusted operator terminal.
 - Any other code, such as `trello_auth_failed` or `trello_api_request`, is not
   a workflow setting. Tell the user the message and the `Next step:` line that
   follows it, and leave `trello_tools` alone.
